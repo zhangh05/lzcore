@@ -19,6 +19,7 @@ from extensions.network_operations.device_tools import (
     normalize_read_only_commands,
     resolve_source_address,
 )
+from extensions.network_operations.command_semantics import classify_raw_command, raw_command_semantics
 
 
 def _setup(monkeypatch, tmp_path):
@@ -764,6 +765,14 @@ def test_write_commands_are_rejected():
     assert device_is_read_only_command("ip address", "generic") is False
     with pytest.raises(ValueError, match="commands_must_be_read_only"):
         service.commands_for({"vendor": "h3c"}, ["reboot"])
+
+
+def test_raw_command_semantics_is_the_shared_executor_contract():
+    semantics = raw_command_semantics()
+    assert semantics["rules"]["read_command_starters"] == ["display", "show", "ping"]
+    assert classify_raw_command("ping 20.0.0.2").action == "read"
+    assert classify_raw_command("system-view").action == "configure"
+    assert classify_raw_command("display version; reboot").action == "configure"
 
 
 def test_read_only_command_boundary_requires_an_array_and_matches_vendor():

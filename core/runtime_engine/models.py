@@ -159,6 +159,10 @@ class SSOTRuntimeConfig:
     parallel_layer_timeout_ms: int = 300_000
     single_node_timeout_ms: int = 120_000
     planner_timeout_ms: int = 20_000
+    # Per-provider-call transport guard.  This is not a task/loop deadline:
+    # the QueryLoop preserves all state and retries after a provider failure.
+    llm_call_timeout_ms: int = 120_000
+    llm_call_guard_ms: int = 15_000
     # The runtime must not terminate model-directed work due to an arbitrary
     # turn count. Zero is unbounded in every environment.
     max_query_loop_iterations: int = 0

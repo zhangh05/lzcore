@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from extensions.network_operations.cli_runtime import CLICommandResult, InteractiveCLISession
+from extensions.network_operations.command_semantics import is_raw_observation
 from extensions.network_operations.device_drivers import resolve_driver
 
 READ_ONLY_DENY = re.compile(
@@ -148,14 +149,8 @@ def fingerprint_for_key(key: Any) -> str:
 
 
 def is_read_only_command(command: str, vendor: str = "") -> bool:
-    value = str(command or "").strip()
-    if not value or any(marker in value for marker in ("\n", "\r", ";", "&&", "`", "$(", ">", "<")):
-        return False
-    # The runtime owns exactly one read/write classifier: a command is read
-    # only when its first verb is display, show, or ping. Every other command is a
-    # device operation and therefore follows the configure/approval path.
-    del vendor
-    return bool(re.match(r"^(?:display|show|ping)(?:\s|$)", value, re.IGNORECASE))
+    """Compatibility wrapper for the shared raw-command semantics contract."""
+    return is_raw_observation(command, vendor)
 
 
 def normalize_read_only_commands(commands: list[str] | tuple[str, ...] | None, vendor: str = "") -> list[str]:

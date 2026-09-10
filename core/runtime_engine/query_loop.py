@@ -79,14 +79,6 @@ from .tracking import extract_tracking_payload, normalize_tracking_payload
 QUERY_LOOP_SYSTEM_PROMPT = RUNTIME_SYSTEM_PROMPT
 SYNTHESIS_CHECKPOINT_MARKER = "[SYNTHESIS_CHECKPOINT]"
 FINAL_SYNTHESIS_CHECKPOINT_MARKER = "[FINAL_SYNTHESIS_CHECKPOINT]"
-# The provider adapter receives 120 seconds for one model request.  Keep a
-# small outer allowance for a provider that does not honour its own timeout,
-# then return control to the recovery loop.  This is deliberately a per-call
-# transport guard, not a task/iteration deadline: the accumulated history and
-# evidence remain intact and the task retries until it succeeds or is stopped
-# by the user.
-LLM_PROVIDER_CALL_TIMEOUT_SECONDS = 120
-LLM_PROVIDER_GUARD_SECONDS = 15
 
 def _redact_tool_error(error: Any) -> str:
     """Return complete, redacted tool or orchestration error text for model context."""
@@ -2462,6 +2454,8 @@ class QueryLoop:
         to guarantee a hard timeout and prevent event-loop blocking.
         """
         try:
+            provider_timeout_seconds = max(1.0, self._config.llm_call_timeout_ms / 1000.0)
+            provider_guard_seconds = max(0.0, self._config.llm_call_guard_ms / 1000.0)
             system_prompt, stream_scope, stream_to_user = self._llm_call_mode(messages, ctx)
             self._refresh_cognitive_prompt_state(messages, ctx)
             # Response nudges are an instruction to synthesize now, not a
@@ -2478,7 +2472,7 @@ class QueryLoop:
                         user=self._messages_to_user_text(messages),
                         messages=list(messages),
                         temperature=0.2,
-                        timeout=LLM_PROVIDER_CALL_TIMEOUT_SECONDS,
+                        timeout=provider_timeout_seconds,
                         tools=tools_for_call,
                         workspace_id=ctx.workspace_id,
                         session_id=ctx.session_id,
@@ -2503,7 +2497,7 @@ class QueryLoop:
                             "evidence_parts": evidence_for_call,
                         },
                     ),
-                    timeout=(LLM_PROVIDER_CALL_TIMEOUT_SECONDS + LLM_PROVIDER_GUARD_SECONDS),
+                    timeout=(provider_timeout_seconds + provider_guard_seconds),
                 )
                 response = self._coerce_llm_response(raw)
                 if isinstance(response.usage, dict):

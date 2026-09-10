@@ -403,9 +403,8 @@ def device_manage(invocation):
     requested_facts = [str(item) for item in (args.get("facts") or [])]
     if action == "collect" and not requested_facts:
         return {"ok": False, "error": "facts are required for collect"}
-    # The command classifier is server-owned so a model cannot mislabel a
-    # write as an observation.  `display`, `show`, and device-originated
-    # `ping` batches are reads; every other command batch is configure.
+    # The raw-command semantics contract, shared with the tool schema and
+    # Skill prompt, is server-owned so a model cannot mislabel a write.
     effective_action = action
     if action in {"read", "configure"} and isinstance(raw_commands, list):
         from extensions.network_operations.device_tools import is_read_only_command
@@ -782,7 +781,7 @@ def register():
             {
                 "tool_id": "network.operations.device.manage",
                 "name": "网络设备命令执行",
-                "description": "在当前已授权 connection_id 上执行模型提供的原始设备命令。read、collect 与 probe 用于观察；configure 用于设备配置，已发布并选中的 Skill 默认可用。一次 configure 调用只放同一写入序列（可含进入/退出配置视图命令）；一次 read 调用只能放 `display`、`show` 或设备原生 `ping` 等只读命令。端到端连通性验证直接使用 `action=read, commands=[\"ping <目的地址>\"]`；H3C VPN 示例：`ping -vpn-instance vpn1 20.0.0.2`。绝不能把 return、quit、system-view、interface、shutdown 等控制/写入命令混入 read。运行时会在下一次调用前复位遗留配置视图，因此不要为只读回读额外发送 return/end。需要“写前、写后”证据时，使用彼此独立的 read → configure → read 调用。目标已有充分的终态证据后立即形成结论，不要为重复确认继续调用。运行时只负责连接、分页、提示符和编码，不改写、不审核、不裁剪模型命令或设备输出。设备账号与 Skill 的设备、连接、工具范围是唯一权限边界。",
+                "description": "在当前已授权 connection_id 上执行模型提供的原始设备命令。命令语义、执行 action 和读写边界均由服务端 `raw_command_semantics` 契约统一解析；Skill 上下文会给出同一份契约。一次 configure 调用只放同一写入序列（可含进入/退出配置视图命令）；read 只能放契约分类为 observation 的命令。运行时会在下一次调用前复位遗留配置视图，因此不要为只读回读额外发送 return/end。需要“写前、写后”证据时，使用彼此独立的 read → configure → read 调用。目标已有充分的终态证据后立即形成结论，不要为重复确认继续调用。运行时只负责连接、分页、提示符和编码，不改写、不审核、不裁剪模型命令或设备输出。设备账号与 Skill 的设备、连接、工具范围是唯一权限边界。",
                 "category": "ops",
                 "risk_level": "medium",
                 "permission_action": "network",
