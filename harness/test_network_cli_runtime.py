@@ -693,6 +693,7 @@ def test_prompt_makes_autonomous_commands_the_default_not_templates():
     assert 'device.manage(action="read", connection_id="…", commands=["ping <destination>"])' in prompt
     assert "ping -vpn-instance vpn1 20.0.0.2" in prompt
     assert "separate ping tool or shell channel is required" in prompt
+    assert "Do not volunteer an MPLS L3VPN Option A/B/C classification" in prompt
     assert "exact command text and order" in prompt
     assert "continue until the objective is answered" in prompt
     assert "Never end a response with a future-work promise" in prompt
