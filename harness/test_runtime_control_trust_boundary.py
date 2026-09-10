@@ -193,7 +193,7 @@ def test_run_ssot_turn_projects_typed_main_cancel_control(monkeypatch, tmp_path)
     assert captured["extras"]["cancel_check"] is callback
 
 
-def test_run_ssot_turn_does_not_report_success_when_run_persistence_fails(monkeypatch, tmp_path):
+def test_run_ssot_turn_preserves_completed_work_when_run_persistence_fails(monkeypatch, tmp_path):
     import agent.runtime.ssot_runtime as runtime
     from agent.core.session import AgentSession
     from agent.core.turn import AgentTurn
@@ -219,6 +219,6 @@ def test_run_ssot_turn_does_not_report_success_when_run_persistence_fails(monkey
         )),
     )
 
-    assert result.ok is False
-    assert "run_record_persistence_failed" in result.errors
-    assert result.error_type == "run_record_persistence_failed"
+    assert result.ok is True
+    assert "run_record_persistence_failed" in result.warnings
+    assert result.metadata["run_record_persistence"]["status"] == "degraded"

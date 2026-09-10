@@ -15,6 +15,7 @@ def _isolate_provider_store(monkeypatch, tmp_path):
 
 class TestLLMProviderSettings:
     def test_resolve_uses_active_provider(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("LZCORE_LLM_ENABLED", "true")
         providers = _isolate_provider_store(monkeypatch, tmp_path)
         providers.mkdir(parents=True)
         (providers / "minimax.json").write_text(json.dumps({
@@ -63,6 +64,7 @@ class TestLLMProviderSettings:
         assert load_llm_settings()["model"] == "MiniMax-M3"
 
     def test_effective_config_has_key_source(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("LZCORE_LLM_ENABLED", "true")
         _isolate_provider_store(monkeypatch, tmp_path)
         from agent.llm.settings import resolve_effective_llm_config, save_llm_settings
 
@@ -75,6 +77,24 @@ class TestLLMProviderSettings:
 
         cfg = resolve_effective_llm_config()
         assert cfg["key_source"] == "ui_settings"
+
+    def test_explicit_env_disable_overrides_active_provider(self, monkeypatch, tmp_path):
+        providers = _isolate_provider_store(monkeypatch, tmp_path)
+        providers.mkdir(parents=True)
+        (providers / "minimax.json").write_text(json.dumps({
+            "enabled": True,
+            "provider": "minimax",
+            "model": "MiniMax-M3",
+            "api_key": "sk-test12345678",
+        }))
+        (providers / "_active").write_text("minimax")
+        monkeypatch.setenv("LZCORE_LLM_ENABLED", "false")
+
+        from agent.llm.config import resolve_provider_config
+        from agent.llm.settings import resolve_effective_llm_config
+
+        assert resolve_provider_config()["provider_type"] == "disabled"
+        assert resolve_effective_llm_config()["enabled"] is False
 
     def test_legacy_minimax_base_is_migrated_without_changing_key(self, monkeypatch, tmp_path):
         providers = _isolate_provider_store(monkeypatch, tmp_path)

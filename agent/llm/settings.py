@@ -78,8 +78,12 @@ def mask_key(key: str) -> Optional[str]:
 
 def resolve_effective_llm_config() -> dict:
     from agent.llm.config import load_llm_config
+    from agent.llm.config import _disabled_provider_config, _llm_disabled_by_env
     from agent.llm.key_resolver import get_key_source, is_key_loaded, resolve_api_key
     from agent.llm.provider_store import get_active_config, get_active_provider
+
+    if _llm_disabled_by_env():
+        return _disabled_provider_config()
 
     active_id = get_active_provider()
     active_cfg = dict(get_active_config() or {})

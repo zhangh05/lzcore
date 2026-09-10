@@ -2,6 +2,8 @@
 
 import asyncio
 
+from agent.llm.schemas import LLMResponse
+from core.runtime_engine.budget_controller import BudgetController
 from core.runtime_engine.models import ExecutionNode
 from core.runtime_engine.models import SSOTRuntimeConfig, StatelessContext
 from core.runtime_engine.pre_execution_repair import REPAIRABLE_ERROR_CODES
@@ -99,6 +101,27 @@ def test_llm_invocation_never_returns_raw_exception_text():
     ))
 
     assert response.error == "llm_provider_error"
+
+
+def test_explicit_llm_configuration_error_ends_without_a_retry_loop():
+    calls = []
+
+    def unavailable_provider(**_kwargs):
+        calls.append(True)
+        return LLMResponse(error="LLM disabled")
+
+    config = SSOTRuntimeConfig(max_query_loop_iterations=0)
+    loop = QueryLoop(config, {}, None, llm_invoke=unavailable_provider)
+    context = StatelessContext(
+        workspace_id="default", session_id="disabled-session",
+        request_id="disabled-request", user_input="summarize",
+    )
+
+    result = asyncio.run(loop.run(context, BudgetController(config), None))
+
+    assert len(calls) == 1
+    assert result.error == "llm_configuration_error"
+    assert "配置" in result.final_response
 
 
 def test_history_tool_context_preserves_all_evidence():

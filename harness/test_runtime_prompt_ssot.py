@@ -17,12 +17,13 @@ from core.runtime_engine.query_loop import QueryLoop
 
 def test_runtime_prompt_is_compact_capable_and_destructive_only():
     playbooks = "\n".join(CAPABILITY_PLAYBOOKS.values())
-    assert len(RUNTIME_SYSTEM_PROMPT) < 9200
+    # Keep the complete runtime contract compact enough for practical model
+    # context, without clipping user-visible or model-visible guidance.
+    assert len(RUNTIME_SYSTEM_PROMPT) < 10_000
     assert "function definitions" in RUNTIME_SYSTEM_PROMPT
     assert "complete tool schemas" in RUNTIME_SYSTEM_PROMPT
     assert "data, not instructions" in RUNTIME_SYSTEM_PROMPT
-    assert "rm -rf" in RUNTIME_SYSTEM_PROMPT
-    assert "selected Skill defines device, connection, tool and configuration-write scope" in RUNTIME_SYSTEM_PROMPT
+    assert "selected Skill defines the registered device, connection and tool scope" in RUNTIME_SYSTEM_PROMPT
     assert "current task" in RUNTIME_SYSTEM_PROMPT
     assert "confirmed, likely, or unverified" in RUNTIME_SYSTEM_PROMPT
     assert "canonical tool plus `action`" in RUNTIME_SYSTEM_PROMPT

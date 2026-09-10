@@ -780,6 +780,15 @@ def _anthropic_messages_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
     Anthropic and MiniMax-M3 share this serializer/parser while retaining
     provider-specific base URLs, model names, and credentials.
     """
+    # The OpenAI-compatible path already rejects this before transport.  Keep
+    # the same invariant for Anthropic-compatible providers: an absent key is
+    # a local configuration error, never an unauthenticated network request.
+    if not cfg.get("api_key"):
+        return LLMResponse(
+            error="API key not configured",
+            metadata={"error_type": ERROR_TYPE_MISSING_API_KEY},
+        )
+
     try:
         import requests as _requests
 

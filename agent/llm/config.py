@@ -38,6 +38,12 @@ def resolve_provider_config(llm_config: dict = None) -> dict:
     
     Priority: active provider config > env/file fallback > default.
     """
+    # An explicit environment disable is an operational kill switch.  It must
+    # win over persisted UI settings as well as YAML, otherwise a test runner
+    # or an emergency deployment cannot reliably prevent outbound model calls.
+    if _llm_disabled_by_env():
+        return _disabled_provider_config()
+
     # ═══ First: try UI settings (highest priority) ═══
     try:
         from agent.llm.settings import resolve_effective_llm_config as _resolve_ui
@@ -217,6 +223,35 @@ def _default_config() -> dict:
         "enabled": False, "default_provider": "disabled", "safe_mode": True,
         "prompt_cache_enabled": True,
         "timeout_seconds": 90, "providers": {},
+    }
+
+
+def _llm_disabled_by_env() -> bool:
+    """Whether the operator explicitly disabled all LLM invocation."""
+    return os.environ.get("LZCORE_LLM_ENABLED", "").strip().lower() in {
+        "0", "false", "no",
+    }
+
+
+def _disabled_provider_config() -> dict:
+    """Return the complete runtime shape used when LLM is explicitly off."""
+    return {
+        "enabled": False,
+        "default_provider": "disabled",
+        "safe_mode": True,
+        "prompt_cache_enabled": True,
+        "provider_type": "disabled",
+        "provider": "disabled",
+        "base_url": "",
+        "api_key": "",
+        "model": "",
+        "timeout": 0,
+        "temperature": 0.2,
+        "max_tokens": 4096,
+        "config_source": "env",
+        "key_loaded": False,
+        "key_source": "none",
+        "enabled_by_ui": None,
     }
 
 

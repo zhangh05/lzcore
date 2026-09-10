@@ -1146,13 +1146,11 @@ def _invoke_llm_for_ssot_runtime(**kwargs):
             _LOG.debug("record_llm_call failed", exc_info=True)
 
     if resp.error:
-        # If streaming produced partial content before error, return it
-        # instead of failing entirely (common with timeout on slow providers).
-        # v4.1: accept ANY non-empty content — even a single character is
-        # better than a generic fallback.
-        if resp.content and resp.content.strip():
-            return resp
-        raise RuntimeError(resp.error)
+        # Preserve the provider's typed error for QueryLoop.  Raising here
+        # discarded distinctions such as disabled/misconfigured credentials
+        # and made the loop treat them as a recoverable generic outage.
+        # Partial stream content is already retained on this same response.
+        return resp
     # Preserve finish_reason, usage, and truncation metadata. QueryLoop accepts
     # only provider-native tool calls; plain JSON remains ordinary assistant text.
     return resp

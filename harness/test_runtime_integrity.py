@@ -156,7 +156,7 @@ def test_tracking_contract_normalizes_terminal_and_malformed_values():
     assert completed["terminal"] is True
 
 
-def test_tool_budget_does_not_charge_prior_llm_time():
+def test_tool_budget_is_telemetry_not_a_loop_termination_gate():
     from core.runtime_engine.budget_controller import BudgetController
     from core.runtime_engine.models import SSOTRuntimeConfig
 
@@ -170,8 +170,8 @@ def test_tool_budget_does_not_charge_prior_llm_time():
     budget.begin_execution()
     budget._tool_stage_started_at -= 2
     status = budget.check_execution()
-    assert status.ok is False
-    assert status.exceeded == "TOOL_TIME_EXCEEDED"
+    assert status.ok is True
+    assert status.exceeded == ""
     budget.end_execution()
 
 

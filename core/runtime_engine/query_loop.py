@@ -103,7 +103,10 @@ def _normalize_llm_error(error: Any) -> str:
         return "llm_rate_limited"
     if any(marker in value for marker in ("401", "403", "unauthorized", "authentication", "api key", "invalid key")):
         return "llm_auth_failed"
-    if any(marker in value for marker in ("model not found", "invalid model", "configuration", "config")):
+    if any(marker in value for marker in (
+        "llm disabled", "llm is disabled", "disabled by user", "disabled_by_user",
+        "model not found", "invalid model", "configuration", "config",
+    )):
         return "llm_configuration_error"
     return "llm_provider_error"
 
@@ -1812,6 +1815,25 @@ class QueryLoop:
                     "error": provider_error,
                     "tool_results_preserved": len(all_results),
                 })
+                # A provider can recover from transport errors without losing
+                # the agent's loop.  Explicit disablement, missing credentials,
+                # and invalid model configuration cannot: retrying the exact
+                # same request only creates a busy loop.  Return the complete
+                # already-collected evidence and a typed operator-facing state.
+                if provider_error in {"llm_auth_failed", "llm_configuration_error"}:
+                    final_response = (
+                        self._build_tool_result_fallback(ctx, all_results)
+                        if all_results else _llm_failure_message(provider_error)
+                    )
+                    ctx.extras["response_outcome"] = "llm_configuration_unavailable"
+                    return finish(
+                        final_response=final_response,
+                        tool_results=all_results,
+                        iterations=iterations,
+                        total_tool_calls=len(all_results),
+                        llm_calls=budget.llm_calls,
+                        error=provider_error,
+                    )
                 # A positive loop setting is an explicit compatibility
                 # profile (principally deterministic/offline callers).  The
                 # production runtime sets it to zero and therefore retries
