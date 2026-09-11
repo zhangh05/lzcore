@@ -1047,6 +1047,7 @@ def _invoke_llm_for_ssot_runtime(**kwargs):
             content=message.content,
             tool_call_id=message.tool_call_id,
             tool_calls=list(message.tool_calls or []) or None,
+            protocol=message.protocol,
         )
         for message in runtime_messages
     ] if isinstance(runtime_messages, list) and all(
@@ -1872,20 +1873,25 @@ def _append_context_message(messages: list[dict[str, Any]], seen: set[str], raw:
     if key in seen:
         return
     seen.add(key)
-    # Persisted assistant messages can carry a compact, redacted execution
-    # breadcrumb. Keep it with the assistant turn; do not recreate protocol
-    # tool messages or inject raw tool output into later model context.
+    # Public stage history and redacted tool facts remain complete. These
+    # are not native reasoning blocks and must not impersonate tool messages.
     metadata = raw.get("metadata") or {}
+    if role == "assistant":
+        stages = [str(stage.get("text") or "") for stage in
+                  (metadata.get("stage_outputs") or []) if isinstance(stage, dict)]
+        stages = [stage for stage in stages if stage and stage.strip() != content]
+        if stages:
+            content = "[Earlier assistant stages]\n" + "\n\n".join(stages) + "\n\n[Final response]\n" + content
     tool_context = (metadata.get("tool_context") or [])
     if role == "assistant" and isinstance(tool_context, list):
         facts = []
-        for item in tool_context[:8]:
+        for item in tool_context:
             if not isinstance(item, dict):
                 continue
-            tool_id = str(item.get("tool_id") or "tool")[:120]
+            tool_id = str(item.get("tool_id") or "tool")
             status = "succeeded" if item.get("ok") else "failed"
-            summary = str(item.get("summary") or "").strip().replace("\n", " ")[:300]
-            errors = "; ".join(str(error)[:160] for error in list(item.get("errors") or [])[:2])
+            summary = str(item.get("summary") or "").strip()
+            errors = "; ".join(str(error) for error in list(item.get("errors") or []))
             detail = summary or errors
             facts.append(f"- {tool_id}: {status}" + (f" — {detail}" if detail else ""))
         if facts:

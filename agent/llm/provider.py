@@ -57,6 +57,8 @@ def _finalize_provider_response(
     """Attach provider-neutral prompt/cache facts to every transport result."""
     from agent.llm.prompt_assembly import build_prompt_profile, normalize_usage
 
+    if response.protocol:
+        response.protocol["owner"] = _protocol_owner(cfg)
     profile = req.metadata.get("prompt_assembly")
     if not isinstance(profile, dict):
         profile = build_prompt_profile(req, cfg)
@@ -229,14 +231,25 @@ def _mock_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
     )
 
 
-def _to_openai_compatible_messages(messages: list[LLMMessage]) -> list[dict]:
+def _protocol_owner(cfg: dict) -> list[str]:
+    return [str(cfg.get(key) or "") for key in ("provider", "base_url", "model")]
+
+
+def _compatible_protocol(message: LLMMessage, cfg: dict | None) -> dict:
+    state = message.protocol
+    if cfg is not None and state.get("owner") and state["owner"] != _protocol_owner(cfg):
+        return {}
+    return state
+
+
+def _to_openai_compatible_messages(messages: list[LLMMessage], cfg: dict | None = None) -> list[dict]:
     """Keep the reusable system kernel first and dynamic system facts after it."""
     from agent.llm.prompt_assembly import split_stable_system
 
     formatted: list[dict] = []
     for message in messages:
         if message.role != "system" or not isinstance(message.content, str):
-            formatted.append(_format_message(message))
+            formatted.append(_format_message(message, cfg))
             continue
         stable, dynamic = split_stable_system(message.content)
         if stable:
@@ -294,7 +307,7 @@ def _api_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
         url = cfg.get("base_url", "https://api.minimaxi.com/v1").rstrip("/") + "/chat/completions"
         body_dict = {
             "model": cfg.get("model", req.model),
-            "messages": _to_openai_compatible_messages(req.messages),
+            "messages": _to_openai_compatible_messages(req.messages, cfg),
             "temperature": cfg.get("temperature", req.temperature),
             "max_tokens": cfg.get("max_tokens", req.max_tokens),
         }
@@ -358,6 +371,8 @@ def _api_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
             usage=d.get("usage"),
             finish_reason=choice.get("finish_reason", ""),
             raw=d,
+            protocol={"openai": {key: message[key] for key in
+                ("content", "reasoning_content", "reasoning_details") if key in message}},
             tool_calls=tool_calls,
             metadata={
                 "prompt_cache_requested": cache_fields_added,
@@ -500,6 +515,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     provider_model = ""
     usage = None
     tool_calls_accum: list[dict] = [{}]
+    reasoning_fields: dict = {}
 
     try:
         resp = _requests.post(
@@ -573,6 +589,17 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
 
             choice = choices[0]
             delta = choice.get("delta", {})
+            for key in ("reasoning_content", "reasoning_details"):
+                value = delta.get(key)
+                if isinstance(value, str):
+                    reasoning_fields[key] = reasoning_fields.get(key, "") + value
+                elif isinstance(value, list):
+                    # MiniMax documents cumulative reasoning_details snapshots,
+                    # not a list of independent blocks for every SSE chunk.
+                    if cfg.get("provider") == "minimax":
+                        reasoning_fields[key] = value
+                    else:
+                        reasoning_fields.setdefault(key, []).extend(value)
             finish_reason = choice.get("finish_reason", finish_reason)
 
             # Token content
@@ -674,6 +701,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
         usage=usage,
         finish_reason=finish_reason,
         tool_calls=tool_calls if not isinstance(tool_calls, list) else _fix_tool_calls_format(tool_calls),
+        protocol={"openai": {"content": content, **reasoning_fields}},
     )
 
 
@@ -764,8 +792,10 @@ def _redact_error_detail(msg: str) -> str:
     return msg
 
 
-def _format_message(m) -> dict:
+def _format_message(m, cfg: dict | None = None) -> dict:
     msg = {"role": m.role, "content": m.content}
+    if m.role == "assistant":
+        msg.update(_compatible_protocol(m, cfg).get("openai", {}))
     if m.tool_call_id:
         msg["tool_call_id"] = m.tool_call_id
     if m.tool_calls:
@@ -883,6 +913,10 @@ def _to_anthropic_messages_request(req: LLMRequest, cfg: dict) -> dict:
             continue
 
         blocks: list[dict] = []
+        protocol = _compatible_protocol(message, cfg)
+        if message.role == "assistant" and "anthropic" in protocol:
+            append_message("assistant", protocol["anthropic"])
+            continue
         if isinstance(message.content, list):
             blocks.extend(_to_anthropic_content_part(part) for part in message.content)
         elif str(message.content or ""):
@@ -1009,7 +1043,7 @@ def _parse_anthropic_messages_response(data: dict, cfg: dict) -> LLMResponse:
             content.append(str(block.get("text") or ""))
         elif block.get("type") == "tool_use":
             calls.append(LLMToolCall(id=str(block.get("id") or ""), name=str(block.get("name") or ""), arguments=dict(block.get("input") or {})))
-    return LLMResponse(content="".join(content), provider=cfg.get("provider", ""), model=data.get("model", cfg.get("model", "")), usage=data.get("usage"), finish_reason=data.get("stop_reason", ""), raw=data, tool_calls=calls)
+    return LLMResponse(content="".join(content), provider=cfg.get("provider", ""), model=data.get("model", cfg.get("model", "")), usage=data.get("usage"), finish_reason=data.get("stop_reason", ""), raw=data, tool_calls=calls, protocol={"anthropic": data.get("content") or []})
 
 
 def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
@@ -1056,7 +1090,12 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
                             usage=usage, finish_reason=stop_reason,
                         )
                     content_parts.append(token)
+                    block["text"] = block.get("text", "") + token
                     if req.metadata.get("stream_to_user") and token: _push_stream_token(token)
+                elif delta.get("type") == "thinking_delta":
+                    block["thinking"] = block.get("thinking", "") + str(delta.get("thinking") or "")
+                elif delta.get("type") == "signature_delta":
+                    block["signature"] = block.get("signature", "") + str(delta.get("signature") or "")
                 elif delta.get("type") == "input_json_delta":
                     block["_partial_json"] = block.get("_partial_json", "") + str(delta.get("partial_json") or "")
             elif kind == "message_delta":
@@ -1070,10 +1109,11 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
     calls = []
     for block in blocks.values():
         if block.get("type") == "tool_use":
-            try: args = json.loads(block.get("_partial_json") or "{}")
+            try: args = json.loads(block.pop("_partial_json")) if "_partial_json" in block else block.get("input", {})
             except json.JSONDecodeError: args = {}
+            block["input"] = args
             calls.append(LLMToolCall(id=str(block.get("id") or ""), name=str(block.get("name") or ""), arguments=args))
-    return LLMResponse(content="".join(content_parts), provider=cfg.get("provider", "minimax"), model=model, usage=usage, finish_reason=stop_reason, tool_calls=calls)
+    return LLMResponse(content="".join(content_parts), provider=cfg.get("provider", "minimax"), model=model, usage=usage, finish_reason=stop_reason, tool_calls=calls, protocol={"anthropic": [blocks[index] for index in sorted(blocks)]})
 
 
 def _parse_message_tool_calls(message: dict) -> list:

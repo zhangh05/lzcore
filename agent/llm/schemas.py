@@ -33,6 +33,8 @@ class LLMMessage:
     content: Union[str, List[dict]]  # str for text, List[dict] for multimodal (text + image_url)
     tool_call_id: Optional[str] = None  # for role=tool responses
     tool_calls: Optional[List[dict]] = None  # for role=assistant with function_call
+    # Provider protocol state, never public display metadata.
+    protocol: Dict[str, Any] = field(default_factory=dict, repr=False)
 
 
 @dataclass
@@ -78,6 +80,11 @@ class LLMResponse:
     error: Optional[str] = None
     tool_calls: List[LLMToolCall] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    protocol: Dict[str, Any] = field(default_factory=dict, repr=False)
+
+    def assistant_message(self, tool_calls=None) -> LLMMessage:
+        return LLMMessage(role="assistant", content=self.content,
+                          tool_calls=tool_calls, protocol=self.protocol)
 
     def has_tool_calls(self) -> bool:
         return len(self.tool_calls) > 0

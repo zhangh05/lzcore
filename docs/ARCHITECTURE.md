@@ -8,6 +8,14 @@ LZCore 的边界由执行链路而非页面或提示词决定：`backend/` 接�
 
 运行时不以 token 预算截断模型可见的会话、工具输出或证据。若 provider 返回未完成输出，QueryLoop 把已接收内容保留在同一会话中并继续生成，直到获得完整的模型答复或用户取消。
 
+## 模型协议状态与公开历史
+
+`LLMResponse.protocol` / `LLMMessage.protocol` 仅用于当前 QueryLoop 的 provider 协议回传，不属于公开消息 metadata。Anthropic Messages 的原始 content blocks（包括 thinking、signature 和 redacted_thinking）按顺序保留；流式响应重组文本、思考、签名和工具参数。OpenAI Chat Completions 兼容路径保留原始 content、reasoning_content 与 reasoning_details；MiniMax 的 reasoning_details 流按其累计快照协议处理。工具调用、参数纠错和继续生成时保留相应 assistant 正文及协议状态。公开文本仍经过隐藏推理过滤和脱敏。
+
+跨用户轮次的公开历史包含已保存的 stage_outputs 和全部已保存的工具摘要，不再二次限制为 8 条或 300 字符。阶段输出不是原生推理块，工具摘要也不是完整工具协议记录。
+
+当前原生协议状态仅在进程内的连续模型调用中使用；尚未接入跨轮次持久化、审批 checkpoint 恢复或 OpenAI Responses API。它不会写入会话消息、浏览器存储或运行日志。provider、endpoint 或 model 切换时不转发不兼容的私有状态，仍保留公开正文与工具调用。不能将此实现描述为跨会话完整推理恢复；此类恢复需要独立的私有存储生命周期。
+
 ## 工具
 
 工具通过 `ToolRuntimeClient` 统一进入 manifest、调用方检查、Skill 范围、executor 和审计。通用工具由 canonical registry 管理；扩展工具仍须使用同一执行边界。网络设备命令没有平台危险命令策略或配置写入开关，设备账号决定实际命令权限。

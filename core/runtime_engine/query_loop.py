@@ -1795,7 +1795,7 @@ class QueryLoop:
                 # and ask the same model to continue before any final result
                 # is emitted to the user.
                 if response.content:
-                    messages.append(LLMMessage(role="assistant", content=response.content))
+                    messages.append(response.assistant_message())
                 messages = self._append_turn_nudge(
                     messages,
                     "The preceding model response ended before completion. Continue from its exact final "
@@ -1939,7 +1939,7 @@ class QueryLoop:
                         for tc in tool_calls
                     ]
                     all_results.extend(fake_results)
-                    messages = self._append_tool_round(messages, tool_calls, fake_results)
+                    messages = self._append_tool_round(messages, tool_calls, fake_results, response=response)
                     # Don't count these as successful tool calls
                     continue
                 tool_calls = gate["tool_calls"]
@@ -2171,7 +2171,7 @@ class QueryLoop:
                 ]
 
                 # Append assistant message (with tool_calls) + tool results
-                messages = self._append_tool_round(messages, model_tool_calls, results)
+                messages = self._append_tool_round(messages, model_tool_calls, results, response=response)
                 checkpoint_nudge = self._task_state_checkpoint_nudge(ctx)
                 if checkpoint_nudge:
                     messages = self._append_turn_nudge(messages, checkpoint_nudge)
@@ -2272,7 +2272,7 @@ class QueryLoop:
             if recovery_gate.should_continue:
                 messages = [
                     *messages,
-                    LLMMessage(role="assistant", content=str(response.content or "").strip()),
+                    response.assistant_message(),
                     LLMMessage(role="user", content=recovery_gate.nudge),
                 ]
                 ctx.extras.setdefault("recovery_goal_events", []).append({
@@ -2288,7 +2288,7 @@ class QueryLoop:
             if network_retry_nudge:
                 messages = [
                     *messages,
-                    LLMMessage(role="assistant", content=str(response.content or "").strip()),
+                    response.assistant_message(),
                     LLMMessage(role="user", content=network_retry_nudge),
                 ]
                 ctx.extras.setdefault("network_execution_evidence_events", []).append({
@@ -2771,6 +2771,8 @@ class QueryLoop:
         can be continued by the QueryLoop rather than emitted as a final reply.
         """
         if isinstance(raw, LLMResponse):
+            if "<think>" in str(raw.content or "") and not raw.protocol:
+                raw.protocol = {"openai": {"content": raw.content}}
             raw.content = self._strip_think_tags(str(raw.content or ""))
             return raw
         if raw is None:
@@ -3565,6 +3567,7 @@ class QueryLoop:
         messages: list[LLMMessage],
         tool_calls: list[LLMToolCall],
         results: list[StreamingToolResult],
+        response: LLMResponse | None = None,
     ) -> list[LLMMessage]:
         """Append assistant tool_calls + tool results to messages.
         
@@ -3585,7 +3588,7 @@ class QueryLoop:
             }
             for tc in tool_calls
         ]
-        new_msgs.append(LLMMessage(
+        new_msgs.append(response.assistant_message(assistant_tool_calls) if response else LLMMessage(
             role="assistant",
             content="",
             tool_calls=assistant_tool_calls,
