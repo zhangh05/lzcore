@@ -48,6 +48,21 @@ def test_catalog_and_runtime_agree_on_read_only_action_semantics():
     assert mismatches == []
 
 
+def test_single_action_extension_without_action_argument_uses_its_declared_semantics():
+    from core.runtime_engine.contracts import is_read_only_call
+    from extensions.runtime import get_extension_tool_specs
+
+    specs = {spec.tool_id: spec for spec, _handler in get_extension_tool_specs()}
+    wait = specs["network.operations.wait"]
+
+    assert "action" not in (wait.input_schema.get("properties") or {})
+    assert is_read_only_call(
+        wait.tool_id,
+        {"seconds": 10},
+        {"metadata": wait.metadata},
+    ) is True
+
+
 def test_every_base_action_has_an_explicit_execution_contract():
     missing = []
     for tool_id, actions in _action_enums(include_extensions=False).items():

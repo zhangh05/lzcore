@@ -172,6 +172,64 @@ def test_linked_durable_resource_reconciles_unknown_operation(monkeypatch, tmp_p
     assert record["resource_id"] == "sub-12345678"
 
 
+def test_startup_reconciliation_closes_orphaned_previous_process_records(monkeypatch, tmp_path):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
+    from core.runtime_engine.operation_ledger import (
+        finish_operation,
+        list_operations,
+        plan_operation,
+        reconcile_operations,
+        start_operation,
+    )
+
+    unknown = plan_operation(_ctx(), "network.operations.device.manage", "call-orphan", {"action": "configure"})
+    start_operation("default", unknown["operation_id"])
+    finish_operation("default", unknown["operation_id"], SimpleNamespace(
+        ok=False,
+        error="configuration_outcome_unknown",
+        error_code="TOOL_TIMEOUT_UNCERTAIN",
+        execution_may_continue=True,
+        output={"executed": True},
+    ))
+    running = plan_operation(_ctx(), "network.operations.wait", "call-stale-wait", {"seconds": 10})
+    start_operation("default", running["operation_id"])
+
+    result = reconcile_operations("default", started_before="2999-01-01T00:00:00+00:00")
+
+    assert result == {"checked": 2, "resolved": 2, "pending": 0, "indeterminate": 2}
+    records = {item["operation_id"]: item for item in list_operations("default")}
+    assert records[unknown["operation_id"]]["status"] == "indeterminate"
+    assert records[running["operation_id"]]["status"] == "indeterminate"
+    assert records[unknown["operation_id"]]["resolved_by"] == "startup_reconciliation"
+    assert records[unknown["operation_id"]]["error_code"] == "OPERATION_RESULT_INDETERMINATE_AFTER_RESTART"
+
+
+def test_startup_reconciliation_preserves_current_process_unknown(monkeypatch, tmp_path):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
+    from core.runtime_engine.operation_ledger import (
+        finish_operation,
+        list_operations,
+        plan_operation,
+        reconcile_operations,
+        start_operation,
+    )
+
+    operation = plan_operation(_ctx(), "network.operations.device.manage", "call-current", {"action": "configure"})
+    start_operation("default", operation["operation_id"])
+    finish_operation("default", operation["operation_id"], SimpleNamespace(
+        ok=False,
+        error="configuration_outcome_unknown",
+        error_code="TOOL_TIMEOUT_UNCERTAIN",
+        execution_may_continue=True,
+        output={"executed": True},
+    ))
+
+    result = reconcile_operations("default", started_before="2000-01-01T00:00:00+00:00")
+
+    assert result == {"checked": 1, "resolved": 0, "pending": 1, "indeterminate": 0}
+    assert list_operations("default")[0]["status"] == "unknown"
+
+
 def test_manual_resolution_requires_reason_and_preserves_audit(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     from core.runtime_engine.operation_ledger import (
@@ -269,15 +327,19 @@ def test_detached_handler_eventually_settles_timeout_truth(monkeypatch, tmp_path
 def test_operation_resolution_admin_route_requires_confirmation(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     monkeypatch.setenv("LZCORE_LOGIN_ENABLED", "false")
+    from backend.main import create_app
     from core.runtime_engine.operation_ledger import finish_operation, plan_operation, start_operation
+
+    # Runtime operations are created after the backend startup boundary.  A
+    # record created before create_app() correctly represents a previous
+    # process and is now closed by startup reconciliation.
+    client = create_app().test_client()
     operation = plan_operation(_ctx(), "workspace.file", "call-api", {"action": "write"})
     start_operation("default", operation["operation_id"])
     finish_operation("default", operation["operation_id"], SimpleNamespace(
         ok=False, error="uncertain", error_code="TOOL_TIMEOUT_UNCERTAIN",
         execution_may_continue=True, output={"executed": True},
     ))
-    from backend.main import create_app
-    client = create_app().test_client()
     url = f'/api/admin/operation-ledger/{operation["operation_id"]}/resolve'
     assert client.post(url, json={"workspace_id": "default", "status": "succeeded", "reason": "checked"}).status_code == 400
     response = client.post(url, json={

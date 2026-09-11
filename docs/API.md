@@ -157,6 +157,12 @@ Reference. Only a complete candidate can be explicitly confirmed.
 | `GET` | `/api/admin/production`, `/api/admin/backups`, `/api/admin/operation-ledger` | Administrator projections. |
 | `POST` | `/api/admin/backups`, `/api/admin/backups/prune`, `/api/admin/backups/<backup_id>/restore`, `/api/admin/operation-ledger/<operation_id>/resolve` | Verified administration actions. |
 
+The operation ledger uses `planned`, `running`, and `unknown` only for records
+that still have a live reconciliation path. On backend restart, an unresolved
+record from the previous process without a durable linked resource becomes the
+terminal `indeterminate` state. This preserves uncertainty for audit without
+reporting the record as actively pending forever.
+
 ## Error shape
 
 应用定义的 API 错误返回 JSON，通常含 `ok: false` 和稳定错误标识；个别路由还会

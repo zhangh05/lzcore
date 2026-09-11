@@ -296,6 +296,16 @@ def is_read_only_call(
             )
         ):
             return True
+    # A dedicated single-action tool may not expose an ``action`` argument at
+    # all.  Extension manifests still publish one action execution contract;
+    # use that sole declaration instead of treating the tool as a write merely
+    # because there is no action value to match.
+    metadata = (tool_metadata or {}).get("metadata") or {}
+    declared_contracts = metadata.get("action_execution_contracts") or {}
+    if not action and isinstance(declared_contracts, dict) and len(declared_contracts) == 1:
+        declared = next(iter(declared_contracts.values()))
+        if isinstance(declared, dict):
+            return declared.get("read_only") is True
     return action in READ_ONLY_ACTIONS.get(normalized, frozenset())
 
 

@@ -52,7 +52,7 @@
 
 ## 对外结果
 
-`tool_execution_outcome` 保存工具尝试事实；`execution_outcome` 保存用户目标。存在失败工具卡不必然是任务失败：若替代证据满足目标，任务可以 `complete`。写入未知保持为事实记录，模型可在后续任何一步决定是否用 read-back/reconcile 收集新事实。
+`tool_execution_outcome` 保存工具尝试事实；`execution_outcome` 保存用户目标。存在失败工具卡不必然是任务失败：若替代证据满足目标，任务可以 `complete`。写入未知在所属运行进程存活期间保持为事实记录，模型可在后续任何一步决定是否用 read-back/reconcile 收集新事实。后端重启时，仍有耐久任务关联的记录继续跟踪；没有任何关联恢复源的前进程记录收敛为 `indeterminate`，保留审计事实但退出实时未决队列。
 
 ## 回归要求
 

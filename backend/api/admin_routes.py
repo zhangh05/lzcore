@@ -58,7 +58,10 @@ def register_admin_routes(app) -> None:
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "invalid_workspace_id"}), 400
         status = str(request.args.get("status") or "").strip()
-        allowed_statuses = {"planned", "running", "succeeded", "failed", "unknown", "blocked", "reconciled"}
+        allowed_statuses = {
+            "planned", "running", "succeeded", "failed", "unknown",
+            "blocked", "reconciled", "indeterminate",
+        }
         if status and status not in allowed_statuses:
             return jsonify({"ok": False, "error": "invalid_status"}), 400
         try:

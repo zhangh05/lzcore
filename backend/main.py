@@ -370,7 +370,9 @@ def create_app():
             )
         try:
             from core.runtime_engine.operation_ledger import reconcile_all_operations
-            reconciled_operations = reconcile_all_operations()
+            reconciled_operations = reconcile_all_operations(
+                started_before=_backend_started_at,
+            )
             if any(int(value.get("resolved") or 0) for value in reconciled_operations.values()):
                 import logging as _operation_log
                 _operation_log.getLogger(__name__).info(

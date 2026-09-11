@@ -150,7 +150,7 @@ def settle_operation(
     require_unresolved: bool = False,
 ) -> dict[str, Any]:
     """Resolve planned/running/unknown state from durable or human evidence."""
-    if status not in {"succeeded", "failed", "blocked", "reconciled"}:
+    if status not in {"succeeded", "failed", "blocked", "reconciled", "indeterminate"}:
         raise ValueError("invalid_operation_resolution_status")
     path = _path(workspace_id, op_id)
     if not path.is_file():
@@ -158,7 +158,7 @@ def settle_operation(
     with FileLock(path.with_suffix(".lock")):
         record = json.loads(path.read_text())
         current = str(record.get("status") or "")
-        if current in {"succeeded", "failed", "blocked"}:
+        if current in {"succeeded", "failed", "blocked", "reconciled", "indeterminate"}:
             if require_unresolved:
                 raise RuntimeError("operation_already_resolved")
             return record
@@ -203,47 +203,110 @@ def resolve_operation_manually(
     )
 
 
-def reconcile_operations(workspace_id: str) -> dict[str, int]:
-    """Resolve uncertain operations from their exact durable resource links."""
+def _started_before(record: dict[str, Any], boundary: str) -> bool:
+    """Return whether an unresolved record belongs to an earlier process."""
+    if not boundary:
+        return False
+    candidate = str(
+        record.get("started_at")
+        or record.get("planned_at")
+        or record.get("updated_at")
+        or ""
+    )
+    if not candidate:
+        return False
+    try:
+        return datetime.fromisoformat(candidate.replace("Z", "+00:00")) < datetime.fromisoformat(
+            str(boundary).replace("Z", "+00:00")
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+def reconcile_operations(workspace_id: str, *, started_before: str = "") -> dict[str, int]:
+    """Resolve durable operations and close records orphaned by a prior process.
+
+    ``unknown`` remains actionable while its owning runtime can still produce a
+    read-back or detached result.  After a backend restart, an unlinked record
+    has no remaining resolver.  It becomes the honest terminal state
+    ``indeterminate`` instead of occupying the live unresolved queue forever.
+    """
     records = list_operations(workspace_id, limit=5000)
-    outcome = {"checked": 0, "resolved": 0, "pending": 0}
+    outcome = {"checked": 0, "resolved": 0, "pending": 0, "indeterminate": 0}
     for record in records:
-        if record.get("status") not in {"running", "unknown"}:
+        if record.get("status") not in {"planned", "running", "unknown"}:
             continue
         outcome["checked"] += 1
         kind = str(record.get("resource_kind") or "")
         identifier = str(record.get("resource_id") or "")
-        if not kind or not identifier:
-            outcome["pending"] += 1
-            continue
         resource_status = ""
         summary = ""
+        resource_found = False
         if kind == "subagent":
             from agent.runtime.durable.subagent import get_subagent_task
             resource = get_subagent_task(workspace_id, identifier)
             if resource:
+                resource_found = True
                 resource_status = str(resource.get("status") or "")
                 summary = str(resource.get("summary") or "")
         elif kind == "job":
             from jobs.store import get_job
             resource = get_job(workspace_id, identifier)
             if resource:
+                resource_found = True
                 resource_status = str(resource.status or "")
                 summary = str((resource.result_summary or {}).get("status") or resource.error or "")
-        if resource_status not in {"succeeded", "failed", "cancelled", "canceled"}:
+
+        if resource_status in {"succeeded", "failed", "cancelled", "canceled"}:
+            settle_operation(
+                workspace_id,
+                str(record["operation_id"]),
+                status="succeeded" if resource_status == "succeeded" else "failed",
+                resolved_by="durable_resource",
+                resource_kind=kind,
+                resource_id=identifier,
+                result_summary=summary,
+                error_code="" if resource_status == "succeeded" else f"{kind.upper()}_{resource_status.upper()}",
+            )
+            outcome["resolved"] += 1
+            continue
+
+        # An existing durable job/subagent remains a valid resolver across a
+        # backend restart.  Only orphaned records are closed at the boundary.
+        if resource_found:
             outcome["pending"] += 1
             continue
+
+        if not _started_before(record, started_before):
+            outcome["pending"] += 1
+            continue
+
+        status = "blocked" if record.get("status") == "planned" else "indeterminate"
         settle_operation(
             workspace_id,
             str(record["operation_id"]),
-            status="succeeded" if resource_status == "succeeded" else "failed",
-            resolved_by="durable_resource",
-            resource_kind=kind,
-            resource_id=identifier,
-            result_summary=summary,
-            error_code="" if resource_status == "succeeded" else f"{kind.upper()}_{resource_status.upper()}",
+            status=status,
+            resolved_by="startup_reconciliation",
+            result_summary=(
+                "前一运行进程未开始执行该操作"
+                if status == "blocked"
+                else "前一运行进程结束且没有可继续核验的关联资源；保留结果不确定事实"
+            ),
+            error_code=(
+                "OPERATION_NOT_STARTED_BEFORE_RESTART"
+                if status == "blocked"
+                else "OPERATION_RESULT_INDETERMINATE_AFTER_RESTART"
+            ),
+            error=(
+                "operation was not started before backend restart"
+                if status == "blocked"
+                else "operation result cannot be determined after backend restart"
+            ),
+            resolution_reason="previous_process_has_no_live_reconciliation_source",
         )
         outcome["resolved"] += 1
+        if status == "indeterminate":
+            outcome["indeterminate"] += 1
     return outcome
 
 
@@ -270,7 +333,7 @@ def operation_counts(workspace_id: str) -> dict[str, int]:
     return counts
 
 
-def reconcile_all_operations() -> dict[str, dict[str, int]]:
+def reconcile_all_operations(*, started_before: str = "") -> dict[str, dict[str, int]]:
     """Reconcile every principal/workspace after restart without crossing scope."""
     from backend.core.identity import get_user
     from storage.principal import known_storage_principals, storage_principal
@@ -283,7 +346,10 @@ def reconcile_all_operations() -> dict[str, dict[str, int]]:
         workspace_ids = list(identity.get("workspace_ids") or []) if isinstance(identity, dict) else fallback_workspaces
         with storage_principal(principal):
             for workspace_id in sorted(set(workspace_ids)):
-                results[f"{principal}:{workspace_id}"] = reconcile_operations(workspace_id)
+                results[f"{principal}:{workspace_id}"] = reconcile_operations(
+                    workspace_id,
+                    started_before=started_before,
+                )
     return results
 
 

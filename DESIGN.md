@@ -22,7 +22,7 @@ Frontend / HTTP / WebSocket
 
 ## 任务与工具的不同结果
 
-`execution_outcome` 表示用户目标：例如 `complete`、`partial`、`blocked` 或 `unknown`。`tool_execution_outcome` 描述本次工具尝试。某一调用失败后，如后续取得替代的真实只读证据，任务仍可以完成；反之，外部写入结果未知始终保持 `unknown`，直到 read-back/reconcile 给出事实。
+`execution_outcome` 表示用户目标：例如 `complete`、`partial`、`blocked` 或 `unknown`。`tool_execution_outcome` 描述本次工具尝试。某一调用失败后，如后续取得替代的真实只读证据，任务仍可以完成；反之，外部写入结果未知在当前运行进程中保持 `unknown`，等待 read-back/reconcile 给出事实。若后端重启后既没有耐久关联资源也没有可继续运行的核验器，账本将其收敛为 `indeterminate` 终态：保留“结果无法确定”的事实，但不再伪装成仍在处理的未决操作。
 
 ## 工具边界
 
