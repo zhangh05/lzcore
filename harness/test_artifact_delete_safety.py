@@ -3,6 +3,53 @@
 from core.tools.schemas import ToolInvocation
 
 
+def test_hard_delete_detaches_run_refs_and_preserves_execution_history(tmp_path, monkeypatch):
+    import json
+
+    import artifacts.store as artifact_store
+    import storage.run_artifact_store as run_artifacts
+    from artifacts.schemas import ArtifactRecord
+    from storage.atomic_io import atomic_write_json
+    from storage import reference_index
+
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    record_path = runs / "run_test.json"
+    index_path = runs / "run_test.artifacts.json"
+    trace_path = runs / "run_test.trace.json"
+    atomic_write_json(record_path, {
+        "artifact_refs": [{"artifact_id": "art_deleted"}, "art_deleted", {"artifact_id": "art_kept"}],
+        "final_response_summary": "Historical output",
+        "status": "succeeded",
+    })
+    atomic_write_json(index_path, {"output_artifacts": [{"artifact_id": "art_deleted"}, {"artifact_id": "art_kept"}]})
+    atomic_write_json(trace_path, {"artifact_refs": [{"artifact_id": "art_deleted"}]})
+    original_trace = trace_path.read_bytes()
+    monkeypatch.setattr(run_artifacts, "workspace_root", lambda _ws: tmp_path)
+    artifact = ArtifactRecord(artifact_id="art_deleted", workspace_id="test_ws")
+    monkeypatch.setattr(artifact_store, "get_artifact", lambda *_args: artifact)
+    monkeypatch.setattr(artifact_store, "_records_in_index_order", lambda *_args: [artifact])
+    monkeypatch.setattr(artifact_store, "_remove_from_knowledge_index", lambda *_args: None)
+    monkeypatch.setattr(reference_index, "list_references_for_owner", lambda *_args: [])
+    monkeypatch.setattr("storage.events.publish", lambda *_args: None)
+
+    def remove_metadata(*_args):
+        # References must be detached before metadata disappears, so failed
+        # reference cleanup leaves the artifact addressable for a retry.
+        assert json.loads(record_path.read_text())["artifact_refs"] == [{"artifact_id": "art_kept"}]
+
+    monkeypatch.setattr(artifact_store, "_remove_artifact_record_permanently", remove_metadata)
+    assert artifact_store.delete_artifact("test_ws", "art_deleted", hard=True)
+    assert json.loads(record_path.read_text()) == {
+        "artifact_refs": [{"artifact_id": "art_kept"}],
+        "final_response_summary": "Historical output",
+        "status": "succeeded",
+    }
+    assert json.loads(index_path.read_text())["output_artifacts"] == [{"artifact_id": "art_kept"}]
+    assert trace_path.read_bytes() == original_trace
+    assert run_artifacts.remove_artifact_from_all_runs("test_ws", "art_deleted") == 0
+
+
 def test_workspace_artifact_delete_is_recoverable(monkeypatch):
     import artifacts.store as artifact_store
     from core.tools.general_tools.artifact_tools import handle_artifact_delete_soft

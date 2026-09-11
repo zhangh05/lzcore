@@ -97,6 +97,13 @@ and `POST /retention/apply` routes.
 | `PUT` | `/api/review-items/<item_id>` | Update a review item. |
 | `GET/POST` | `/api/workspaces/<ws_id>/review-items` | Workspace review-item lifecycle. |
 
+Artifact hard deletion removes the artifact's live references from both run records
+(`artifact_refs`) and run artifact indexes before removing its metadata. Execution
+summaries and traces remain as history. Missing references left by older versions
+can be detached with `storage.run_artifact_store.remove_artifact_from_all_runs`
+after verifying the artifact is absent and backing up the affected run records;
+selfcheck continues to report other missing references.
+
 ## Jobs
 
 | Method | Path | Purpose |

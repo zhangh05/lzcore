@@ -49,31 +49,50 @@ def mutate_run_artifacts(workspace_id: str, run_id: str, mutator: Callable[[dict
 
 
 def remove_artifact_from_all_runs(workspace_id: str, artifact_id: str) -> int:
+    """Detach deleted artifacts from both indexes and run result projections.
+
+    Trace and result summaries remain historical evidence of the execution.
+    Only live artifact references are removed.
+    """
+    from storage.run_record_store import is_run_record_file
+
     ws_id = validate_workspace_id(workspace_id)
     runs_dir = workspace_root(ws_id) / "runs"
     if not runs_dir.is_dir():
         return 0
     changed_count = 0
-    for path in runs_dir.glob("*.artifacts.json"):
-        run_id = path.name[:-len(".artifacts.json")]
+    for path in runs_dir.glob("*.json"):
+        is_index = path.name.endswith(".artifacts.json")
+        if not is_index and not is_run_record_file(path):
+            continue
+        run_id = path.name[:-len(".artifacts.json")] if is_index else path.stem
         try:
             validate_run_id(run_id)
         except ValueError:
             continue
 
-        def _remove(data):
-            nonlocal changed_count
+        fields = (
+            ("input_artifacts", "output_artifacts", "report_artifacts", "temp_artifacts")
+            if is_index else ("artifact_refs",)
+        )
+        with FileLock(_lock_path(path)):
+            # A concurrent run deletion must not recreate an empty record.
+            if not path.is_file():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
             changed = False
-            for field in ("input_artifacts", "output_artifacts", "report_artifacts", "temp_artifacts"):
+            for field in fields:
                 values = list(data.get(field) or [])
-                kept = [item for item in values if item.get("artifact_id") != artifact_id]
+                kept = [
+                    item for item in values
+                    if (item.get("artifact_id") if isinstance(item, dict) else item) != artifact_id
+                ]
                 if len(kept) != len(values):
                     data[field] = kept
                     changed = True
             if changed:
+                atomic_write_json(path, data)
                 changed_count += 1
-
-        mutate_run_artifacts(ws_id, run_id, _remove)
     return changed_count
 
 
