@@ -1502,7 +1502,9 @@ def _build_retrieved_context_block(
             core_rules = MemoryStore().list_retrievable(
                 workspace_id,
                 memory_type="core_rule",
-                limit=8,
+                session_id=session_id,
+                task_id=task_id,
+                limit=0,
             )
             for rule in core_rules:
                 content = redact_text(str(rule.get("content") or rule.get("summary") or "")).strip()
@@ -1522,7 +1524,7 @@ def _build_retrieved_context_block(
         return "\n".join(lines)
     except Exception:
         _LOG.debug("governed context retrieval failed", exc_info=True)
-        return ""
+        return "[context_load_failed] Memory/knowledge context could not be loaded. Do not assume there are no saved rules or facts; retry the relevant read tool and disclose any unresolved gap."
 
 
 def _build_history_block(

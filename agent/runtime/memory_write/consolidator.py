@@ -49,12 +49,14 @@ def _consolidate_locked(
         return {"ok": True, "status": "empty", "processed": 0}
 
     store = MemoryStore()
-    query = " ".join(str(row.get("user_input") or "") for row in events)[-2000:]
+    query = " ".join(str(row.get("user_input") or "") for row in events)
     existing = [row for row in store.search(workspace_id, query, limit=12) if row.get("status") == "active"]
     proposals = _reflect(events, existing)
     if proposals is None:
         return {"ok": False, "status": "retry_pending", "processed": 0}
-    results = [_apply(proposal, workspace_id, session_id, task_id, events, store) for proposal in proposals[:6]]
+    results = [_apply(proposal, workspace_id, session_id, task_id, events, store) for proposal in proposals]
+    if any(not result.get("ok") for result in results):
+        return {"ok": False, "status": "retry_pending", "processed": 0, "results": results}
     mark_experiences_processed(workspace_id, session_id, [str(row.get("event_id") or "") for row in events])
     return {"ok": True, "status": "processed", "processed": len(events), "results": results}
 
@@ -84,10 +86,9 @@ def _reflect(events: list[dict[str, Any]], existing: list[dict[str, Any]]) -> li
                 LLMMessage(role="system", content=system),
                 LLMMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
             ],
-            # Reasoning-capable providers account internal reasoning against
-            # max_tokens.  A small cap can finish with a closed <think> block
-            # but no JSON answer, leaving the durable journal forever pending.
-            config_override={"temperature": 0.0, "max_tokens": 6000},
+            # Use the configured provider output capacity, not a hidden
+            # memory-specific ceiling lower than the main agent's capacity.
+            config_override={"temperature": 0.0},
             extra={
                 "stream_to_user": False,
                 "stream_scope": "internal",
@@ -99,6 +100,9 @@ def _reflect(events: list[dict[str, Any]], existing: list[dict[str, Any]]) -> li
         )
         if response.error:
             _log.warning("memory consolidation failed: %s", response.error)
+            return None
+        if response.finish_reason in {"length", "max_tokens"}:
+            _log.warning("memory consolidation response incomplete; experience remains pending")
             return None
         return _parse_operations(response.content or "")
     except Exception:
@@ -188,7 +192,7 @@ def _parse_operations(raw: str) -> list[dict[str, Any]] | None:
             continue
         action = str(item.get("action") or "ignore").lower()
         memory_type = str(item.get("memory_type") or "")
-        content = str(item.get("content") or "").strip()[:1200]
+        content = str(item.get("content") or "").strip()
         if action not in {"create", "supersede", "expire", "ignore"}:
             continue
         if action not in {"expire", "ignore"} and (memory_type not in VALID_TYPES or not content):
@@ -200,18 +204,18 @@ def _parse_operations(raw: str) -> list[dict[str, Any]] | None:
             continue
         result.append({
             "action": action,
-            "target_memory_id": str(item.get("target_memory_id") or "")[:64],
+            "target_memory_id": str(item.get("target_memory_id") or ""),
             "memory_type": memory_type,
             "scope": "workspace" if str(item.get("scope") or "workspace") != "global" else "global",
-            "memory_key": str(item.get("memory_key") or "")[:160],
+            "memory_key": str(item.get("memory_key") or ""),
             "content": content,
-            "summary": str(item.get("summary") or content)[:200],
+            "summary": str(item.get("summary") or content),
             "confidence": confidence,
             "score": score,
-            "reason": str(item.get("reason") or "")[:200],
-            "evidence_event_ids": [str(v)[:64] for v in list(item.get("evidence_event_ids") or [])[:12]],
+            "reason": str(item.get("reason") or ""),
+            "evidence_event_ids": [str(v) for v in list(item.get("evidence_event_ids") or [])],
         })
-    return result[:6]
+    return result
 
 
 def _safe_event(row: dict[str, Any]) -> dict[str, Any]:
@@ -219,9 +223,9 @@ def _safe_event(row: dict[str, Any]) -> dict[str, Any]:
         "event_id": row.get("event_id"),
         "task_id": row.get("task_id"),
         "task_ok": row.get("task_ok"),
-        "user_input": _safe_snippet(row.get("user_input"), 1200),
-        "assistant_response": _safe_snippet(row.get("assistant_response"), 1800),
-        "tool_calls": row.get("tool_calls", [])[:12],
+        "user_input": _safe_text(row.get("user_input")),
+        "assistant_response": _safe_text(row.get("assistant_response")),
+        "tool_calls": row.get("tool_calls", []),
     }
 
 
@@ -230,12 +234,12 @@ def _safe_existing(row: dict[str, Any]) -> dict[str, Any]:
         "memory_id": row.get("memory_id"),
         "memory_type": row.get("memory_type"),
         "scope": row.get("scope"),
-        "content": _safe_snippet(row.get("content"), 500),
-        "summary": _safe_snippet(row.get("summary"), 200),
+        "content": _safe_text(row.get("content")),
+        "summary": _safe_text(row.get("summary")),
         "memory_key": (row.get("metadata") or {}).get("memory_key"),
         "authority": (row.get("metadata") or {}).get("authority"),
     }
 
 
-def _safe_snippet(value: Any, limit: int) -> str:
-    return redact_text(str(value or "").replace("\x00", ""))[: max(1, int(limit))]
+def _safe_text(value: Any) -> str:
+    return redact_text(str(value or "").replace("\x00", ""))

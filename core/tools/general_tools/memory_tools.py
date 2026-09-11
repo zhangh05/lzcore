@@ -36,7 +36,7 @@ def _via_gate(title: str, content: str, ws_id: str, source: str = "llm_tool",
         scope=scope, memory_type=memory_type,
         status="pending",  # Gate decides final status
         source="subagent" if source == "subagent" else "agent_suggestion",
-        content=content[:2000], summary=title[:200],
+        content=content, summary=title,
         confidence=0.5,  # Neutral default; gate adjusts via _auto_confirm
         citations=citations or [], created_by=source,
         redacted=True,
@@ -49,31 +49,49 @@ def handle_memory_search(inv: ToolInvocation) -> dict:
     """Search stored memories by keyword. Auto-injection happens at session start."""
     query = (inv.arguments.get("query") or "").strip()
     limit = max(1, min(int(inv.arguments.get("limit") or 10), 100))
+    offset = max(0, int(inv.arguments.get("offset") or 0))
     try:
         ws = _caller_workspace(inv)
         store = _get_store(ws)
         # Try store-level search first, fall back to list+filter
         try:
-            results = store.search(ws, query, limit=limit)
+            results = store.search(ws, query, limit=limit, offset=offset)
         except (AttributeError, NotImplementedError):
-            results = store.list_retrievable(ws, limit=max(limit, 30))
+            results = store.list_retrievable(ws, limit=0)
             if query:
                 q = query.lower()
                 results = [r for r in results if q in (r.get("content", "") + r.get("summary", "")).lower()]
+            results = results[offset:offset + limit]
         safe = [{
             "memory_id": r.get("memory_id", ""),
             "title": r.get("title", ""),
-            "summary": r.get("summary", "")[:200],
-            "content": r.get("content", "")[:300],
+            "summary": r.get("summary", ""),
+            "content": r.get("content", ""),
             "status": r.get("status", ""),
             "memory_type": r.get("memory_type", ""),
         } for r in results[:limit]]
         return _ok(inv, "", {
             "results": safe, "count": len(safe),
+            "offset": offset,
+            "next_offset": offset + len(safe) if len(safe) == limit else None,
             "_hint": f"找到 {len(safe)} 条相关记忆。记忆在会话启动时自动注入，search 用于精确查询。",
         })
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
+
+
+def handle_memory_get(inv: ToolInvocation) -> dict:
+    """Read one user-owned record in full, including its lifecycle state."""
+    try:
+        ws = _caller_workspace(inv)
+        record = _get_store(ws).get(ws, str(inv.arguments.get("memory_id") or ""))
+        if record is None:
+            return _error_inv(inv, "memory_not_found")
+        return _ok(inv, "", {key: getattr(record, key) for key in
+                            ("memory_id", "content", "summary", "status", "scope",
+                             "workspace_id", "session_id", "task_id", "memory_type")})
+    except Exception as exc:
+        return _error_inv(inv, str(exc)[:200])
 
 
 def handle_memory_create(inv: ToolInvocation) -> dict:
@@ -119,6 +137,7 @@ def handle_memory_create(inv: ToolInvocation) -> dict:
 def handle_memory_review(inv: ToolInvocation) -> dict:
     """Review pending memories — those waiting for user confirmation."""
     limit = int((inv.arguments.get("limit") or 10))
+    offset = max(0, int(inv.arguments.get("offset") or 0))
     try:
         ws = _caller_workspace(inv)
         store = _get_store(ws)
@@ -131,15 +150,16 @@ def handle_memory_review(inv: ToolInvocation) -> dict:
         items = [{
             "memory_id": getattr(r, "memory_id", ""),
             "title": getattr(r, "title", "") or getattr(r, "summary", ""),
-            "content": (getattr(r, "content", "") or "")[:200],
+            "content": (getattr(r, "content", "") or ""),
             "confidence": getattr(r, "confidence", 0.5),
             "source": getattr(r, "source", ""),
             "memory_type": getattr(r, "memory_type", ""),
             "created_at": getattr(r, "created_at", ""),
-        } for r in pending[:limit]]
+        } for r in pending[offset:offset + limit]]
         return _ok(inv, "", {
             "ok": True, "items": items, "total_pending": len(pending),
             "returned": len(items),
+            "next_offset": offset + len(items) if offset + len(items) < len(pending) else None,
             "_hint": (
                 f"有 {len(pending)} 条待确认记忆。"
                 + (f" 已返回 {len(items)} 条。" if len(pending) > limit else "")
@@ -164,7 +184,7 @@ def handle_memory_list(inv: ToolInvocation) -> dict:
             summaries.append({
                 "memory_id": r.get("memory_id", ""),
                 "title": r.get("title", ""),
-                "summary": r.get("summary", "")[:200],
+                "summary": r.get("summary", ""),
                 "status": r.get("status", ""),
                 "memory_type": r.get("memory_type", ""),
                 "scope": r.get("scope", ""),
@@ -253,7 +273,7 @@ def handle_memory_set_profile(inv: ToolInvocation) -> dict:
         rec = MemoryRecord(
             workspace_id=ws, scope="workspace",
             memory_type="profile", status="active",
-            source="user", content=str(profile)[:2000],
+            source="user", content=str(profile),
             summary=f"Profile updated: {field}",
             confidence=1.0, created_by="user", redacted=True,
             metadata={"profile": profile},
@@ -302,8 +322,8 @@ def handle_memory_update(inv: ToolInvocation) -> dict:
             status="pending",
             source="agent_suggestion",
             source_ref=rec.memory_id,
-            content=content[:2000],
-            summary=rec.summary or content[:200],
+            content=content,
+            summary=rec.summary or content,
             confidence=rec.confidence,
             citations=list(rec.citations or []),
             created_by="llm_tool",

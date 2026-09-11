@@ -384,7 +384,7 @@ class TestConsolidation:
 
         assert _reflect([{"event_id": "mex-1", "user_input": "hello"}], []) == []
         assert captured["task"] == "memory_consolidation"
-        assert captured["config_override"] == {"temperature": 0.0, "max_tokens": 6000}
+        assert captured["config_override"] == {"temperature": 0.0}
         assert captured["extra"]["stream_to_user"] is False
         assert captured["extra"]["request_metadata"] == {
             "memory_stage": "task_reflection",

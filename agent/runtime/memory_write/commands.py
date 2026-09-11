@@ -17,14 +17,14 @@ _REMEMBER = re.compile(
 
 def parse_memory_command(user_input: str) -> dict[str, Any] | None:
     """Return explicit remember/forget intent from user text only."""
-    text = re.sub(r"\s+", " ", str(user_input or "")).strip()
+    text = str(user_input or "").strip()
     if not text:
         return None
     forget = _FORGET.search(text)
     if forget:
         return {
             "action": "forget",
-            "query": (forget.group(1) or "").strip(" ，。.!！?")[:300],
+            "query": (forget.group(1) or "").strip(" ，。.!！?"),
             "reason": "explicit_user_forget_command",
         }
     if not _REMEMBER.search(text):
@@ -34,8 +34,8 @@ def parse_memory_command(user_input: str) -> dict[str, Any] | None:
         return None
     return {
         "action": "remember",
-        "content": text[:1000],
-        "summary": text[:160],
+        "content": text,
+        "summary": text,
         "memory_type": "core_rule",
         "memory_key": _rule_key(text),
         "reason": "explicit_user_memory_command",
@@ -77,7 +77,7 @@ def apply_memory_command(
         status="active",
         source="user",
         content=content,
-        summary=str(command.get("summary") or content)[:200],
+        summary=str(command.get("summary") or content),
         confidence=1.0,
         citations=[{"task_id": task_id, "source": "user_input"}],
         created_by="user",

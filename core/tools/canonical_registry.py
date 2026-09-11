@@ -394,6 +394,7 @@ def _handle_memory(inv: ToolInvocation) -> dict:
         handle_memory_create,
         handle_memory_delete_soft,
         handle_memory_get_profile,
+        handle_memory_get,
         handle_memory_review,
         handle_memory_search,
         handle_memory_set_profile,
@@ -403,6 +404,7 @@ def _handle_memory(inv: ToolInvocation) -> dict:
     action = _action(inv) or "search"
     return {
         "search": handle_memory_search,
+        "get": handle_memory_get,
         "create": handle_memory_create,
         "update": handle_memory_update,
         "confirm": handle_memory_confirm,
@@ -410,7 +412,7 @@ def _handle_memory(inv: ToolInvocation) -> dict:
         "review": handle_memory_review,
         "profile_get": handle_memory_get_profile,
         "profile_set": handle_memory_set_profile,
-    }.get(action, lambda x: _unsupported(x, "search|create|update|confirm|delete|review|profile_get|profile_set"))(inv)
+    }.get(action, lambda x: _unsupported(x, "search|get|create|update|confirm|delete|review|profile_get|profile_set"))(inv)
 
 
 def _handle_skill(inv: ToolInvocation) -> dict:
@@ -748,6 +750,7 @@ _DATA_ARGS = {
 }
 
 _MEMORY_ARGS = {
+    "offset": {"type": "integer", "minimum": 0},
     "query": {"type": "string"},
     "limit": {"type": "integer", "minimum": 1, "maximum": 100},
     "title": {"type": "string"},
@@ -836,7 +839,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
     _entry("data.manage", _handle_data, {**_COMMON, **_DATA_ARGS, "action": {"type": "string", "enum": ["parse", "stats", "distinct", "aggregate", "filter", "sort", "render", "pivot", "join"]}}, required=["action"], description="Structured data processing. Supply text or rows; action-specific columns/options are declared in the schema."),
     _entry("report.manage", _handle_report, {**_COMMON, "action": {"type": "string", "enum": ["save", "diff", "document"]}, "title": {"type": "string"}, "content": {"type": "string"}, "summary": {"type": "string"}, "text_a": {"type": "string"}, "text_b": {"type": "string"}}, required=["action"], description="Report operations. save requires content; diff requires text_a/text_b; document requires summary."),
     _entry("knowledge.manage", _handle_knowledge, {**_COMMON, "action": {"type": "string", "enum": ["search", "read", "list", "chunk", "import", "reindex"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "artifact_id": {"type": "string"}, "level": {"type": "string", "enum": ["chunk", "source"]}, "chunk_id": {"type": "string"}, "source_id": {"type": "string"}, "chunk_type": {"type": "string"}, "scope": {"type": "string"}, "include_disabled": {"type": "boolean"}, "include_deleted": {"type": "boolean"}}, required=["action"], risk="medium", description="Knowledge operations. search requires query; read requires chunk_id or source_id; list lists sources; chunk lists chunks; import requires artifact_id; reindex requires source_id."),
-    _entry("memory.manage", _handle_memory, {**_COMMON, **_MEMORY_ARGS, "action": {"type": "string", "enum": ["search", "review", "confirm", "create", "update", "delete", "profile_get", "profile_set"]}}, required=["action"], risk="medium", description="Memory operations. create requires content; update requires memory_id and replacement content; confirm/delete require memory_id; profile_set requires field and value."),
+    _entry("memory.manage", _handle_memory, {**_COMMON, **_MEMORY_ARGS, "action": {"type": "string", "enum": ["search", "get", "review", "confirm", "create", "update", "delete", "profile_get", "profile_set"]}}, required=["action"], risk="medium", description="Memory operations. get returns full text by memory_id; search/review support offset pagination. create requires content; update requires memory_id and replacement content; confirm/delete require memory_id; profile_set requires field and value."),
     _entry("skill.manage", _handle_skill, {**_COMMON, "action": {"type": "string", "enum": ["list", "find", "load", "inspect", "mcp_list_tools", "mcp_call"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "skill_name": {"type": "string"}, "provider_id": {"type": "string"}, "tool_name": {"type": "string"}, "arguments": {"type": "object"}, "confirm": {"type": "boolean"}}, required=["action"], risk="medium", permission="exec", description="Skill operations. find requires query; load/inspect require skill_name; MCP actions require provider_id and mcp_call also requires tool_name."),
     _entry("agent.manage", _handle_agent, {
         **_COMMON,
@@ -851,7 +854,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
     }, required=["action"], description="Subagent task management. spawn delegates an outcome, not an invented implementation plan, and accepts only the profile_id values published in the schema; choose research_agent for external research, file_agent for workspace files, and data_agent for structured analysis. Preserve explicit user constraints, but let the child select and compose its allowed tools. get/cancel/merge use the subtask_id returned by spawn. Delegation does not extend an upstream tool or data provider's limits."),
     _entry("system.manage", _handle_system, {**_COMMON, **_SYSTEM_ARGS, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "action": {"type": "string", "enum": ["diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_checkpoint", "session_rewind", "session_export", "session_snapshot"]}}, required=["action"], risk="medium", description="Runtime health, current local date/time and host facts, durable tasks, audit logs, run details, and session operations. local_info returns timezone-aware current time plus host/IP/OS facts; run_get requires run_id; session actions require session_id; rewind additionally requires snapshot_id."),
     _entry("text.analyze", _handle_text, {**_COMMON, "action": {"type": "string", "enum": ["redact", "extract_entities", "match"]}, "text": {"type": "string"}, "pattern": {"type": "string"}}, required=["action"], description="Text redact, extract and match."),
-    _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "write", "write_artifact", "edit", "patch", "glob", "delete"]}}, required=["action"], risk="medium", description="Workspace files. extract_document reads a managed text, DOCX, PDF, XLSX, or PPTX attachment by file_id and reports embedded_image_count for DOCX. extract_document_image extracts one DOCX image by file_id and 1-based image_index. extract_document_images extracts an ordered DOCX image batch (up to 8) for visual analysis; its image evidence is automatically delivered to the next model turn. Never pass a returned file_id to read/read_image because those actions require a workspace filepath. write/write_artifact require filename and content.", execution_contract={
+    _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "write", "write_artifact", "edit", "patch", "glob", "delete"]}}, required=["action"], risk="medium", description="Workspace files. list supports offset/limit pagination with next_offset; read returns full text unless an explicit line offset/limit is supplied. extract_document reads a managed text, DOCX, PDF, XLSX, or PPTX attachment by file_id and reports embedded_image_count for DOCX. extract_document_image extracts one DOCX image by file_id and 1-based image_index. extract_document_images extracts an ordered DOCX image batch (up to 8) for visual analysis; its image evidence is automatically delivered to the next model turn. Never pass a returned file_id to read/read_image because those actions require a workspace filepath. write/write_artifact require filename and content.", execution_contract={
         "batching": [{
             "source_action": "extract_document_image",
             "target_action": "extract_document_images",

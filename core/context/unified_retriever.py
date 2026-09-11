@@ -400,7 +400,8 @@ class UnifiedRetriever:
         """Search the user's governed memory SSOT, shared across workspaces."""
         from storage.memory_governance import MemoryStore
 
-        records = MemoryStore().search(self.workspace_id, query, limit=max(top_k * 3, top_k))
+        records = MemoryStore().search(self.workspace_id, query, limit=max(top_k * 3, top_k),
+                                       retrievable_only=True, session_id=session_id, task_id=task_id)
         if records:
             candidates = [
                 dict(record, item_id=f"mh_{record.get('memory_id', '')}", memory_status=record.get("status", ""))
@@ -460,16 +461,8 @@ class UnifiedRetriever:
         session_id: str,
         task_id: str,
     ) -> bool:
-        scope = str(hit.get("scope") or "").lower()
-        if scope == "global":
-            return True
-        if scope == "workspace":
-            return str(hit.get("workspace_id") or "") == self.workspace_id
-        if scope == "session":
-            return bool(session_id) and str(hit.get("session_id") or "") == session_id
-        if scope == "task":
-            return bool(task_id) and str(hit.get("task_id") or "") == task_id
-        return False
+        from storage.memory_governance import memory_scope_visible
+        return memory_scope_visible(hit, session_id=session_id, task_id=task_id)
 
     @staticmethod
     def _apply_boosts(results: list[dict]) -> list[dict]:

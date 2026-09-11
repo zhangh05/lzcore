@@ -18,6 +18,10 @@ LZCore 的边界由执行链路而非页面或提示词决定：`backend/` 接�
 
 ## 工具
 
+受信任提示词正文、Skill 约束和子 Agent 的角色/输出契约不按字符预算裁切；结构化认知提示保留全部动作和原因码列表。来源校验、data_only 包装、脱敏和工具权限保持不变。模型容量限制不能通过悄悄裁掉这些约束解决。
+
+`workspace.file` 的 read 动作默认返回完整文本，不再因超过 1 MB 拒绝；需要分段时显式指定 offset（零起始行号）和 limit（行数），返回 next_offset、has_more、total_lines。list 动作按名称排序并使用 offset/limit 分页，每页最多 200 项；目录变动时调用方应重新遍历。路径越界检查、二进制拒绝和写入目录边界不变。附件解析仍受格式与解析器资源限制，明确报错而非假装返回完整内容。
+
 工具通过 `ToolRuntimeClient` 统一进入 manifest、调用方检查、Skill 范围、executor 和审计。通用工具由 canonical registry 管理；扩展工具仍须使用同一执行边界。网络设备命令没有平台危险命令策略或配置写入开关，设备账号决定实际命令权限。
 
 `extensions/approval/` 是可选的外部决定扩展。Skill 的 `approval_enabled=false` 时不会改变工具路径；为 `true` 时，核心 `execution_interceptor` 边界在实际执行前生成扩展拥有的 prepared-operation 记录和完整 QueryLoop checkpoint。记录覆盖精确参数和服务端范围版本，界面批准后仍会重新核验，再通过 `ToolRuntimeClient` 调用；同一决策集终态后，服务端用原 call id 的完整结果自动恢复 checkpoint。这个扩展不包含命令危险度分类、自动回滚、TTL 或第二个模型循环。

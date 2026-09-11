@@ -115,6 +115,18 @@ class MemoryRecord:
     def from_dict(cls, d: dict): return cls(**{k:v for k,v in d.items() if k in cls.__dataclass_fields__})
 
 
+def memory_scope_visible(record: dict, *, session_id: str = "", task_id: str = "") -> bool:
+    """User-owned workspace/global memory is shared; transient scopes are exact."""
+    scope = record.get("scope")
+    if scope in {"workspace", "global"}:
+        return True
+    if scope == "session":
+        return bool(session_id) and record.get("session_id") == session_id
+    if scope == "task":
+        return bool(task_id) and record.get("task_id") == task_id
+    return False
+
+
 class MemoryStore:
     """Persist one governed long-term memory collection per user."""
 
@@ -164,8 +176,8 @@ class MemoryStore:
             "workspace_id": record.workspace_id,
             "source": "memory_governance",
             "title": record.summary[:200] if record.summary else record.content[:200],
-            "summary": record.summary[:500] if record.summary else record.content[:500],
-            "content": record.content[:2000],
+            "summary": record.summary if record.summary else record.content,
+            "content": record.content,
             "memory_id": record.memory_id,
             "memory_type": record.memory_type,
             "confidence": record.confidence,
@@ -243,7 +255,8 @@ class MemoryStore:
             return None
         if not p.exists(): return None
         try: return MemoryRecord.from_dict(json.loads(p.read_text(encoding="utf-8")))
-        except Exception: return None
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
+            raise RuntimeError("memory_record_load_failed") from exc
 
     def list_all(self, ws_id: str) -> list[MemoryRecord]:
         d = self._dir(ws_id)
@@ -251,7 +264,8 @@ class MemoryStore:
         recs = []
         for f in sorted(d.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
             try: recs.append(MemoryRecord.from_dict(json.loads(f.read_text(encoding="utf-8"))))
-            except Exception: continue
+            except (OSError, ValueError, TypeError, AttributeError) as exc:
+                raise RuntimeError("memory_record_load_failed") from exc
         return recs
 
     def list_by_status(self, ws_id: str, status: MemoryStatus) -> list[MemoryRecord]:
@@ -259,34 +273,32 @@ class MemoryStore:
 
     def list_retrievable(self, ws_id: str, scope: Scope = "workspace",
                          session_id: str = "", memory_type: str = "",
-                         limit: int = 100) -> list[dict]:
+                         limit: int = 100, task_id: str = "") -> list[dict]:
         all_recs = self.list_all(ws_id)
         results = []
         for r in all_recs:
             if not r.is_retrievable(): continue
-            if r.scope == "global": pass
-            # A user's long-term memory is shared across their workspaces.
-            # ``workspace_id`` remains provenance, not a storage/visibility wall.
-            elif r.scope == "workspace": pass
-            elif r.scope == "session" and r.session_id != session_id: continue
-            elif r.scope == "task":
-                if not session_id or r.session_id != session_id: continue
+            if not memory_scope_visible(r.to_dict(), session_id=session_id, task_id=task_id):
+                continue
             if memory_type and r.memory_type != memory_type: continue
             results.append(r)
-            if len(results) >= limit:
+            if limit > 0 and len(results) >= limit:
                 break
         return [r.to_dict() for r in results]
 
-    def search(self, ws_id: str, query: str, limit: int = 10) -> list[dict]:
+    def search(self, ws_id: str, query: str, limit: int = 10, offset: int = 0,
+               retrievable_only: bool = False, session_id: str = "", task_id: str = "") -> list[dict]:
         """Search all lifecycle records for the memory-management surface."""
         ws_id = self._validated_ws_id(ws_id)
         limit = max(1, min(int(limit), 100))
-        records = [record.to_dict() for record in self.list_all(ws_id)]
+        offset = max(0, int(offset))
+        records = (self.list_retrievable(ws_id, session_id=session_id, task_id=task_id, limit=0)
+                   if retrievable_only else [record.to_dict() for record in self.list_all(ws_id)])
         if not str(query or "").strip():
-            return records[:limit]
+            return records[offset:offset + limit]
         if _rank_hook is not None:
-            return _rank_hook(str(query), records, limit)
-        return _rank_records(str(query), records, limit)
+            return _rank_hook(str(query), records, offset + limit)[offset:offset + limit]
+        return _rank_records(str(query), records, offset + limit)[offset:offset + limit]
 
     def find_conflicts(self, record: MemoryRecord) -> list[MemoryRecord]:
         """Find records with the same structured semantic key."""
@@ -599,7 +611,7 @@ def _validate_consolidation_decision(record: MemoryRecord) -> tuple[Optional[boo
             if cached_keep and int(cached_score) >= 3:
                 cached_summary = record.metadata.get("llm_summary", "")
                 if cached_summary:
-                    record.summary = str(cached_summary)[:200]
+                    record.summary = str(cached_summary)
                 return True, []
             return False, [{"reason": f"llm_score_too_low ({cached_score})"}]
     return None, [{"reason": "consolidation_decision_missing"}]

@@ -203,7 +203,7 @@ _CANONICAL_ACTIONS: Final[dict[str, frozenset[str]]] = {
         "redact", "extract_entities", "match",
     }),
     "memory.manage": frozenset({
-        "search", "create", "update", "confirm", "delete",
+        "search", "get", "create", "update", "confirm", "delete",
         "review", "profile_get", "profile_set",
     }),
     "skill.manage": frozenset({

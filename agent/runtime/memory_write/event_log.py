@@ -31,16 +31,16 @@ def append_experience(
     ws_id = validate_workspace_id(workspace_id)
     sid = validate_session_id(session_id)
     tools = []
-    for call in list(tool_calls or [])[:20]:
+    for call in list(tool_calls or []):
         if not isinstance(call, dict):
             continue
         tools.append({
-            "tool_id": str(call.get("tool_id") or "")[:120],
+            "tool_id": str(call.get("tool_id") or ""),
             "ok": bool(call.get("ok", False)),
-            "summary": redact_text(str(call.get("summary") or ""))[:800],
+            "summary": redact_text(str(call.get("summary") or "")),
             "artifact_ids": [
-                str(item.get("artifact_id") or "")[:120]
-                for item in list(call.get("artifacts") or [])[:20]
+                str(item.get("artifact_id") or "")
+                for item in list(call.get("artifacts") or [])
                 if isinstance(item, dict) and item.get("artifact_id")
             ],
         })
@@ -48,11 +48,11 @@ def append_experience(
         "event_id": f"mex-{uuid.uuid4().hex[:16]}",
         "workspace_id": ws_id,
         "session_id": sid,
-        "task_id": str(task_id or "")[:128],
+        "task_id": str(task_id or ""),
         "created_at": now_iso(),
         "task_ok": bool(task_ok),
-        "user_input": redact_text(str(user_input or ""))[:4000],
-        "assistant_response": redact_text(str(assistant_response or ""))[:6000],
+        "user_input": redact_text(str(user_input or "")),
+        "assistant_response": redact_text(str(assistant_response or "")),
         "tool_calls": tools,
     })
     append_event(ws_id, sid, event)
@@ -65,7 +65,7 @@ def pending_experiences(workspace_id: str, session_id: str, limit: int = 12) -> 
     cursor = read_cursor(ws_id, sid)
     processed = set(str(item) for item in list(cursor.get("processed_event_ids") or []))
     rows = read_events(ws_id, sid)
-    return [row for row in rows if str(row.get("event_id") or "") not in processed][-max(1, limit):]
+    return [row for row in rows if str(row.get("event_id") or "") not in processed][:max(1, limit)]
 
 
 def mark_experiences_processed(workspace_id: str, session_id: str, event_ids: list[str]) -> None:
@@ -75,7 +75,7 @@ def mark_experiences_processed(workspace_id: str, session_id: str, event_ids: li
     processed = list(dict.fromkeys([
         *list(cursor.get("processed_event_ids") or []),
         *(str(item) for item in event_ids if item),
-    ]))[-500:]
+    ]))
     save_cursor(ws_id, sid, {
         "session_id": sid,
         "processed_event_ids": processed,

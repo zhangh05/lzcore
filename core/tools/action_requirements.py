@@ -40,6 +40,7 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("knowledge.manage", "search"): ("query",),
     ("knowledge.manage", "import"): ("artifact_id",),
     ("knowledge.manage", "reindex"): ("source_id",),
+    ("memory.manage", "get"): ("memory_id",),
     ("memory.manage", "create"): ("content",),
     ("memory.manage", "update"): ("memory_id", "content"),
     ("memory.manage", "confirm"): ("memory_id",),
@@ -183,7 +184,7 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("list", "get", "st
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("spawn", "cancel", "merge"), _EXECUTE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("knowledge.manage", ("search", "read", "list", "chunk"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("knowledge.manage", ("import", "reindex"), _WRITE))
-ACTION_EXECUTION_CONTRACTS.update(_contracts("memory.manage", ("search", "review", "profile_get"), _READ))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("memory.manage", ("search", "get", "review", "profile_get"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("memory.manage", ("create", "update", "confirm", "profile_set"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("memory.manage", ("delete",), _DELETE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts(

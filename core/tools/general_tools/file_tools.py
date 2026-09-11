@@ -25,13 +25,13 @@ def handle_file_read(inv: ToolInvocation) -> dict:
     """
     ws = _caller_workspace(inv)
     filepath = inv.arguments.get("filepath", "")
-    offset = int(inv.arguments.get("offset", 0) or 0)
     try:
+        offset = max(0, int(inv.arguments.get("offset", 0) or 0))
+        limit = inv.arguments.get("limit")
+        limit = max(1, int(limit)) if limit is not None else None
         target = _workspace_path(ws, filepath)
         if not target.is_file():
             return _error_inv(inv, "file not found")
-        if target.stat().st_size > 1024 * 1024:
-            return _error_inv(inv, "file too large (>1MB)")
         with open(target, "rb") as f:
             head = f.read(1024)
         if b"\x00" in head:
@@ -41,15 +41,17 @@ def handle_file_read(inv: ToolInvocation) -> dict:
                 "file_size": target.stat().st_size,
             })
         content = target.read_text(encoding="utf-8", errors="replace")
-        if offset > 0:
-            lines = content.split('\n')
-            content = '\n'.join(lines[offset:])
+        lines = content.splitlines(keepends=True)
+        end = min(len(lines), offset + limit) if limit is not None else len(lines)
+        content = ''.join(lines[offset:end])
         return _ok(inv, "", {
             "preview": content,
             "size": len(content),
-            "total_lines": len(content.split('\n')),
+            "total_lines": len(lines),
             "offset": offset,
-            "truncated": False,
+            "next_offset": end if end < len(lines) else None,
+            "has_more": end < len(lines),
+            "truncated": end < len(lines),
         })
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
@@ -168,12 +170,13 @@ def handle_ws_list_files(inv: ToolInvocation) -> dict:
     ws = _caller_workspace(inv)
     subdir = inv.arguments.get("subdir", "")
     limit = max(1, min(int(inv.arguments.get("limit") or 50), 200))
+    offset = max(0, int(inv.arguments.get("offset") or 0))
     try:
         target = _workspace_path(ws, subdir)
         if not target.exists():
             return _ok(inv, "", {"files": [], "count": 0})
         files = []
-        for p in target.iterdir():
+        for p in sorted(target.iterdir(), key=lambda entry: entry.name):
             relative_path = (Path(subdir) / p.name).as_posix()
             if p.is_file():
                 files.append({
@@ -182,7 +185,10 @@ def handle_ws_list_files(inv: ToolInvocation) -> dict:
                 })
             elif p.is_dir():
                 files.append({"name": p.name, "filepath": relative_path, "type": "directory"})
-        return _ok(inv, "", {"files": files[:limit], "count": len(files)})
+        end = min(len(files), offset + limit)
+        return _ok(inv, "", {"files": files[offset:end], "count": len(files),
+                              "offset": offset, "has_more": end < len(files),
+                              "next_offset": end if end < len(files) else None})
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
 

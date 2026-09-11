@@ -45,13 +45,10 @@ def trusted_prompt_item(source_kind: str, content: Any, *, label: str = "") -> T
     value = str(content or "").replace("\x00", "").strip()
     if not value:
         raise ValueError("trusted prompt content is required")
-    # A selected Skill can legitimately carry a bounded multi-resource
-    # authorization snapshot. Never silently cut connection ids or the Skill's
-    # operating contract; ordinary guidance remains intentionally compact.
-    content_limit = 40_000 if kind == "workbench_skill" else 4_000
+    # Server-owned contracts must remain complete, regardless of source kind.
     return TrustedPromptItem(
         source_kind=kind,
-        content=value[:content_limit],
+        content=value,
         label=_clean(label, 80),
     )
 
@@ -137,17 +134,17 @@ def cognitive_state_prompt_item(state: Any) -> TrustedPromptItem | None:
         "known_fact_count": _nonnegative_int(summary.get("known_fact_count")),
         "unknown_count": _nonnegative_int(summary.get("unknown_count")),
         "blocking_unknown_count": _nonnegative_int(summary.get("blocking_unknown_count")),
-        "planned_actions": planned_actions[:8],
+        "planned_actions": planned_actions,
         "decision": _code(decision.get("decision"), 80),
         "decision_reason_codes": [
             code for value in (decision.get("reason_codes") or [])
             if (code := _code(value, 80))
-        ][:8],
-        "unknown_reason_codes": unknown_reasons[:8],
+        ],
+        "unknown_reason_codes": unknown_reasons,
         "safety_reason_codes": [
             code for value in (safety.get("stop_reason_codes") or [])
             if (code := _code(value, 80))
-        ][:8],
+        ],
     }
     return trusted_prompt_item(
         "cognitive_state",
@@ -381,8 +378,8 @@ def build_runtime_system_prompt(extras: Mapping[str, Any] | None = None) -> str:
         return RUNTIME_SYSTEM_PROMPT
 
     name = _clean(profile.get("name"), 80)
-    role = _clean(profile.get("role"), 240)
-    output = _clean(profile.get("output_contract"), 500)
+    role = str(profile.get("role") or "").replace("\x00", "").strip()
+    output = str(profile.get("output_contract") or "").replace("\x00", "").strip()
     max_steps = _clean(profile.get("max_steps"), 20)
     max_tool_nodes = _clean(profile.get("max_tool_nodes"), 20)
     max_seconds = _clean(profile.get("max_runtime_seconds"), 20)

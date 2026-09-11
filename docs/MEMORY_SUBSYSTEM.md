@@ -1,11 +1,21 @@
 # 记忆子系统
 
-记忆是受治理的工作区数据，不是模型可自由覆盖的上下文。`MemoryWriteGate` 在写入前验证 `workspace_id`、来源、scope、TTL、冲突和敏感内容；只有同工作区、`active` 且未过期的记录可以被检索。
+记忆是受治理的用户数据，不是模型可自由覆盖的上下文。`MemoryWriteGate` 在写入前验证 `workspace_id`、来源、scope、TTL、冲突和敏感内容。底层由当前用户身份隔离；workspace/global 记忆在同一用户的工作区间共享，workspace_id 保留为来源。session/task 记忆分别要求当前 session_id/task_id 精确匹配。自动上下文仅使用 active、未过期且范围可见的记录，先过滤再排序，避免不可见记录挤占检索名额。
 
 ```text
 候选记忆 -> 脱敏与治理 -> MemoryStore
-         -> workspace / scope / TTL 过滤
+         -> user / scope / TTL 过滤
          -> UnifiedRetriever -> data_only prompt context
 ```
 
 工具输出、知识命中和记忆均为证据，不能改写系统规则、工具权限或 runtime 目标。LLM 不可用或写入被拒绝时，服务端返回结构化降级原因，不泄露 provider 异常或敏感文本。
+
+## 完整性与检索
+
+显式记忆指令、工具创建/更新、经验日志和整理模型输入保留完整正文（仍执行脱敏）。`memory.manage` 的 get 动作按 memory_id 返回完整记录；search/review 返回完整命中正文，支持 offset/limit。search 满页时 next_offset 指向下一页，最后可能需要一次空页确认结束。管理工具可以查看非 active 记录，其 status 不代表事实已确认。
+
+全部可见核心规则进入自动上下文；普通记忆和知识仍做 Top-K 检索，不等于把整个数据库塞进提示词。上下文加载异常返回模型可见的 context_load_failed 提示，不再伪装成没有记忆。
+
+经验整理每批最多 12 个待处理事件，按最早未处理顺序读取；每个事件的正文和工具摘要完整保留。模型返回的有效操作不按前 6 项裁掉，任一写入失败不会将整批标记已处理。已处理事件游标不再仅保留最后 500 个 ID，避免旧事件重新进入整理。provider 的容量或请求错误仍可能导致 retry_pending，不代表成功形成记忆。
+
+历史版本已截断的正文无法凭空恢复；本改动不自动重写已有用户数据。
