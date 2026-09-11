@@ -12,6 +12,8 @@ import hljs from "highlight.js/lib/core";
 import { useSessionStore } from "../../../stores/session";
 import { IconAlert, IconDocument, IconSparkle } from "../../../components/Icon";
 import { ApprovalActions } from "./ApprovalActions";
+import { StageOutputs } from "./StageOutputs";
+import { normalizeStageOutputs, precedingStageOutputs } from "../../../utils/stageOutputs";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -117,6 +119,9 @@ export const MessageRow = memo(function MessageRow({ m, idx: _idx, total: _total
     <div className={`message-row assistant${m.status === "error" ? " error" : ""}${m.status === "streaming" ? " streaming" : ""}`} data-testid="chat-assistant">
       <div className="message-avatar agent"><IconSparkle size={14} weight="fill" /></div>
       <div className="message-stack">
+        <StageOutputs stages={m.status === "streaming"
+          ? normalizeStageOutputs(m.stageOutputs)
+          : precedingStageOutputs(m.stageOutputs ?? m.result?.metadata.stage_outputs, m.text)} />
         {/* Live tool call chips during streaming */}
         {m.status === "streaming" && m.toolCalls && m.toolCalls.length > 0 && (
           <div className="tool-calls-inline">
@@ -133,12 +138,22 @@ export const MessageRow = memo(function MessageRow({ m, idx: _idx, total: _total
         {m.status !== "streaming" && m.toolCalls && m.toolCalls.length > 0 && (
           <div className="tool-calls-inline">
             {m.toolCalls.map((tc: InlineToolCall, tci: number) => (
-              <InlineToolCallCard key={tc.call_id || `${tc.tool_id}-${tci}`} toolCall={tc} seq={tci + 1} />
+              <InlineToolCallCard
+                key={tc.call_id || `${tc.tool_id}-${tci}`}
+                toolCall={tc}
+                seq={tci + 1}
+                // 本回合的 result。`ChatMsg` 同时持有 `result` 与 `toolCalls`，
+                // 所以这里能直接把两者对上，无需改动类型或数据流。
+                // 传整个 result 而非 `metadata.unknown_outcome`：未知态是否成立
+                // 由回合级 `execution_outcome` 决定，触发事实只回答「哪一次调用」。
+                turnResult={m.result}
+              />
             ))}
           </div>
         )}
         {m.status === "streaming" ? (
-          <div className={`chat-bubble assistant sending-line${m.text ? " has-content" : ""}`}>
+          <details className={`chat-bubble assistant sending-line stage-output active${m.text ? " has-content" : ""}`} open>
+            <summary>当前输出<span className="muted">生成中 · 可收起</span></summary>
             {m.progressText && (
               <div className="ssot-runtime-progress-row" data-testid="ssot-runtime-progress">
                 <span className="typing-indicator">
@@ -170,7 +185,7 @@ export const MessageRow = memo(function MessageRow({ m, idx: _idx, total: _total
                 <span className="text-sm muted wb-thinking-label">思考中…</span>
               </div>
             ) : null}
-          </div>
+          </details>
         ) : (
           <>
             {(() => {

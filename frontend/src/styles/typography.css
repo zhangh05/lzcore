@@ -1,0 +1,376 @@
+/* LZCore typography layer — the single source of truth for vertical rhythm,
+   type scale, line-height and content typography.
+
+   Why this layer exists
+   ---------------------
+   1. `.markdown-body` typography used to be defined in three places at once:
+        global.css:3168  (hardcoded px)
+        AgentWorkbench.css:305  (hardcoded px, negative letter-spacing)
+        AgentWorkbench.css:1225 (token based)
+      The three disagreed — h2 was written both as `1.16em` and `18px`, heading
+      margins were both `20px/8px` and `26px/10px`. The resolved value depended
+      on import order, not on intent. This file now owns those properties.
+
+   2. The `--space-*` scale was defined but barely used: 112 references across
+      11,452 lines of CSS against well over a thousand hardcoded px values,
+      including off-grid steps (3/5/6/7/9/18/22px). There was no vertical rhythm.
+
+   3. `--lh-tight/base/loose` were referenced 3 times in total while 15 distinct
+      hardcoded line-heights were in use. Paragraphs rendered at 1.78, list items
+      at 1.65 and the document body at 1.55 — three rhythms inside one column.
+
+   Scope
+   -----
+   Typography only: font size, weight, letter-spacing, line-height, vertical
+   spacing, list markers, text alignment. Colour, radius, shadow and motion stay
+   where they are. Every value below sits on the 4px grid.
+
+   Load order
+   ----------
+   Must be imported AFTER global.css / product-shell.css / console-system.css /
+   AgentWorkbench.css. See src/main.tsx. */
+
+:root {
+  /* ── Vertical rhythm ───────────────────────────────────────────────────
+     One 4px-based scale replaces the off-grid spacing scattered across the
+     codebase. Name by role, not by size: the role is what should be stable. */
+  --flow-hair: 4px; /* between list items, inline marker to text */
+  --flow-tight: 8px; /* elements inside one group */
+  --flow-base: 12px; /* between paragraphs */
+  --flow-loose: 20px; /* above a minor heading */
+  --flow-block: 28px; /* above a major heading, between blocks */
+  --flow-section: 40px; /* between page-level sections */
+
+  /* ── Line height ───────────────────────────────────────────────────────
+     Chinese text needs more leading than Latin: 1.72 on a 14px base gives a
+     ~24px line box, which keeps dense CJK glyphs from touching. */
+  --lh-display: 1.24; /* page title */
+  --lh-heading: 1.34; /* content heading */
+  --lh-body: 1.72; /* body copy — shared by paragraphs AND list items so the
+                      two never drift apart again */
+  --lh-compact: 1.45; /* table cells, chips, short labels */
+
+  /* ── Weight ────────────────────────────────────────────────────────────
+     The heading block, the page title and table headers used to render at
+     720 / 740 / 760 respectively. Three values, no intent behind any of them. */
+  --weight-display: 700; /* page and document titles */
+  --weight-subhead: 650; /* h3-h6, table headers */
+  --weight-minor: 620; /* kickers, meta labels */
+
+  /* ── Letter spacing ────────────────────────────────────────────────────
+     Negative tracking is a Latin display convention. Applied to CJK it pushes
+     glyphs into each other, so content tracking is explicitly zero. */
+  --tracking-cjk: 0;
+  --tracking-caps: 0.04em; /* uppercase Latin labels only */
+
+  /* ── Page gutter ───────────────────────────────────────────────────────
+     The page header used 26px and the page body 24px, so every page title sat
+     2px off the content column it was labelling. One gutter, both surfaces. */
+  --page-gutter: 24px;
+}
+
+/* ── Element level: headings ──────────────────────────────────────────────
+   global.css defines h1-h4 but stops there, so h5/h6 fell back to body size
+   and rendered at 14px — identical to h5 and identical to body copy. The scale
+   below is complete and strictly monotonic: 20 / 18 / 16 / 14 / 13 / 12. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--text);
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-cjk);
+}
+
+h1 {
+  font-size: var(--fs-20);
+  font-weight: var(--weight-display);
+  line-height: var(--lh-display);
+}
+
+h2 {
+  font-size: var(--fs-18);
+  font-weight: var(--weight-display);
+  line-height: var(--lh-display);
+}
+
+h3 {
+  font-size: var(--fs-16);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+}
+
+h4 {
+  font-size: var(--fs-14);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+}
+
+/* h5/h6 bottom out at or below body size. They stay distinguishable by weight
+   and colour rather than by size — the standard move once a scale bottoms out. */
+h5 {
+  font-size: var(--fs-13);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+  color: var(--text-2);
+}
+
+h6 {
+  font-size: var(--fs-12);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+  color: var(--text-3);
+}
+
+/* ── Content surface: assistant output and any markdown render ──────────── */
+
+.markdown-body,
+.streaming-plain-text {
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
+  color: var(--text-2);
+  text-wrap: pretty;
+}
+
+/* Paragraphs */
+.markdown-body p {
+  margin: 0 0 var(--flow-base);
+  color: var(--text-2);
+  line-height: var(--lh-body);
+}
+
+.markdown-body > :first-child,
+.markdown-body > :first-child > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Headings inside content — one margin scale for all six levels.
+   Previously h1-h3 used 24px/12px and h4-h6 used 20px/8px, so the gap above a
+   heading depended on its depth rather than on the reading rhythm. */
+.markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  margin-block: var(--flow-loose) var(--flow-tight);
+  color: var(--text);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+  letter-spacing: var(--tracking-cjk);
+  text-wrap: balance;
+}
+
+.markdown-body :is(h1, h2) {
+  margin-block-start: var(--flow-block);
+  font-weight: var(--weight-display);
+  line-height: var(--lh-display);
+}
+
+.markdown-body h1 {
+  font-size: var(--fs-20);
+}
+
+.markdown-body h2 {
+  padding-bottom: var(--flow-hair);
+  font-size: var(--fs-18);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.markdown-body h3 {
+  font-size: var(--fs-16);
+}
+
+.markdown-body h4 {
+  font-size: var(--fs-14);
+}
+
+.markdown-body h5 {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+
+.markdown-body h6 {
+  font-size: var(--fs-12);
+  color: var(--text-3);
+}
+
+/* ── Lists ────────────────────────────────────────────────────────────────
+   REGRESSION FIX. global.css sets `ul, ol { list-style: none }` for the app
+   chrome and nothing ever restored it on the content surface, so assistant
+   output rendered bullet lists with no bullets and numbered lists with no
+   numbers. `.markdown-body li::marker` was styled all along — dead code, since
+   a marker cannot paint when `list-style-type` is `none`. */
+.markdown-body ul {
+  list-style: disc;
+  margin: var(--flow-base) 0;
+  padding-inline-start: var(--flow-loose);
+}
+
+.markdown-body ul ul {
+  list-style: circle;
+  margin-block: var(--flow-hair);
+}
+
+.markdown-body ul ul ul {
+  list-style: square;
+}
+
+.markdown-body ol {
+  list-style: decimal;
+  margin: var(--flow-base) 0;
+  padding-inline-start: var(--flow-loose);
+}
+
+.markdown-body ol ol {
+  list-style: lower-alpha;
+  margin-block: var(--flow-hair);
+}
+
+.markdown-body ol ol ol {
+  list-style: lower-roman;
+}
+
+.markdown-body li {
+  margin-block: var(--flow-hair);
+  padding-inline-start: var(--flow-hair);
+  line-height: var(--lh-body); /* matches paragraphs — no more 1.65 vs 1.78 */
+}
+
+.markdown-body li::marker {
+  color: var(--text-3);
+  font-weight: var(--weight-subhead);
+}
+
+.markdown-body li > p {
+  margin-block: var(--flow-hair);
+}
+
+/* Task lists render their own checkbox column, so they opt out of markers. */
+.markdown-body .task-list,
+.markdown-body .task-list ul,
+.markdown-body .task-list ol {
+  list-style: none;
+}
+
+.markdown-body .task-list-item {
+  padding-inline-start: 0;
+  line-height: var(--lh-body);
+}
+
+/* ── Blockquote, rule, code ─────────────────────────────────────────────── */
+
+.markdown-body blockquote {
+  margin: var(--flow-base) 0;
+  padding: var(--flow-tight) var(--flow-base);
+  color: var(--text-2);
+  line-height: var(--lh-body);
+  background: var(--surface-2);
+  border-inline-start: 2px solid var(--line-3);
+  border-radius: 0 var(--r-6) var(--r-6) 0;
+}
+
+.markdown-body blockquote > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body hr {
+  margin: var(--flow-block) 0;
+  border: 0;
+  border-top: 1px solid var(--line-2);
+}
+
+.markdown-body :not(pre) > code {
+  padding: 1px 5px;
+  font-size: 0.9em;
+  line-height: inherit;
+  border-radius: var(--r-4);
+}
+
+.markdown-body pre,
+.markdown-body .code-block {
+  margin: var(--flow-base) 0;
+  padding: var(--flow-base) var(--flow-loose);
+  font-size: var(--fs-12);
+  line-height: var(--lh-compact);
+  border-radius: var(--r-8);
+}
+
+.markdown-body .code-block-wrap {
+  margin: var(--flow-base) 0;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────
+   Header cells were 11px/14px and body cells 13px/14px — asymmetric vertically
+   and off the 4px grid. Both sides now share one rhythm, and digits align. */
+.markdown-body :is(th, td) {
+  padding: var(--flow-tight) var(--flow-base);
+  font-size: var(--fs-13);
+  line-height: var(--lh-compact);
+  font-variant-numeric: tabular-nums;
+  border-color: var(--line-2);
+}
+
+.markdown-body th {
+  color: var(--text-2);
+  font-weight: var(--weight-subhead);
+  background: var(--surface-3);
+}
+
+.markdown-body .markdown-table-scroll {
+  margin: var(--flow-base) 0;
+}
+
+/* ── Page level: header and body share one gutter and one rhythm ────────── */
+
+.page-header {
+  gap: var(--flow-loose);
+  padding: var(--flow-loose) var(--page-gutter) var(--flow-base);
+}
+
+.page-header h1 {
+  margin-bottom: var(--flow-hair);
+  font-size: var(--fs-20);
+  font-weight: var(--weight-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--tracking-cjk);
+}
+
+.page-header .subtitle {
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  line-height: var(--lh-compact);
+}
+
+.page-body {
+  padding: var(--flow-loose) var(--page-gutter) var(--flow-block);
+}
+
+/* ── Tables (app chrome) ────────────────────────────────────────────────── */
+
+.tbl thead th {
+  padding: var(--flow-tight) var(--flow-base);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-subhead);
+  letter-spacing: var(--tracking-cjk);
+  line-height: var(--lh-compact);
+}
+
+.tbl td {
+  padding: var(--flow-base) var(--flow-base);
+  line-height: var(--lh-compact);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Uppercase Latin labels ───────────────────────────────────────────────
+   Tracking belongs on Latin caps, not on CJK. Anything that uppercases Latin
+   gets it; the CJK rules above keep zero. */
+[class*="kicker"],
+.mobile-nav-section-label {
+  letter-spacing: var(--tracking-caps);
+}

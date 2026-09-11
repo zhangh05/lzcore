@@ -26,6 +26,7 @@
 .rt-card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .rt-card-dot.ok  { background: var(--ok); }
 .rt-card-dot.err { background: var(--danger); }
+.rt-card-dot.unknown { background: var(--unknown); }
 .rt-card-id {
   font-family: "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 600;
   color: var(--text); flex-shrink: 0;
@@ -103,6 +104,22 @@
 .rt-step-err {
   margin-top: 4px; padding: 4px 10px 4px 10px;
   font-size: 11px; color: var(--danger); font-family: "SF Mono", Menlo, monospace;
+}
+
+/* ── 写入结果未知（与内联工具卡共用同一套语义色） ──
+   放在 .rt-step-head:hover 之后：两者特异性相同，靠顺序保证
+   悬停时未知态不会被 --line-3 覆盖掉。 */
+.rt-step-head.unknown,
+.rt-step-head.unknown:hover {
+  border-color: var(--unknown); background: var(--unknown-soft);
+}
+.rt-step-ok.unknown { color: var(--unknown); }
+/* 失败态此前继承 .rt-step-ok 的 --ok 绿色，于是「失败」旁边是个绿叉。 */
+.rt-step-ok.fail { color: var(--danger); }
+.rt-tag.unknown { color: var(--unknown); background: var(--unknown-soft); }
+.rt-step-note {
+  margin-top: 4px; padding: 0 10px 0 10px;
+  font-size: 11px; color: var(--unknown); line-height: 1.5;
 }
 
 /* ── chips ── */

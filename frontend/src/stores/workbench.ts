@@ -15,7 +15,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { PersistStorage, StorageValue } from "zustand/middleware";
-import type { AgentResult, SessionMessage, MessageStatus, InlineToolCall, RuntimeEvent } from "../types";
+import type { AgentResult, SessionMessage, MessageStatus, InlineToolCall, RuntimeEvent, StageOutput } from "../types";
+import { normalizeStageOutputs } from "../utils/stageOutputs";
 import { sanitizeAssistantText } from "../utils/displayText";
 import { runtimeAuditApi } from "../api";
 import { scopedLocalStorageKey } from "../utils/userScope";
@@ -87,6 +88,7 @@ export interface ChatMsg {
   stageElapsedMs?: number;
   /** Compact live runtime events used by the task progress panel. */
   runtimeEvents?: RuntimeEvent[];
+  stageOutputs?: StageOutput[];
   /** Durable session-job id for explicit cancellation and refresh recovery. */
   activeJobId?: string;
   /** Immutable Skill snapshot used for this user turn. */
@@ -229,7 +231,7 @@ interface WorkbenchState {
   /** Update an existing message (streaming→ready/error, append tool calls) */
   updateAssistant: (
     msgId: string,
-    patch: Partial<Pick<ChatMsg, "status" | "text" | "error" | "toolCalls" | "trace_id" | "result" | "run_id" | "progressText" | "progressElapsedMs" | "stageElapsedMs" | "runtimeEvents" | "activeJobId">>,
+    patch: Partial<Pick<ChatMsg, "status" | "text" | "error" | "toolCalls" | "trace_id" | "result" | "run_id" | "progressText" | "progressElapsedMs" | "stageElapsedMs" | "runtimeEvents" | "activeJobId" | "stageOutputs">>,
     session_id?: string,
   ) => void;
   setSending: (v: boolean) => void;
@@ -401,7 +403,11 @@ export const useWorkbenchStore = create<WorkbenchState>()(
             }
           }
           if (idx < 0) return s;
-          const updated: ChatMsg = { ...msgs[idx], result: r };
+          const updated: ChatMsg = {
+            ...msgs[idx], result: r,
+            stageOutputs: r.metadata.stage_outputs
+              ? normalizeStageOutputs(r.metadata.stage_outputs) : msgs[idx].stageOutputs,
+          };
           const nextMsgs = [
             ...msgs.slice(0, idx),
             updated,
@@ -630,6 +636,8 @@ export const useWorkbenchStore = create<WorkbenchState>()(
           role: m.role,
           text: m.role === "assistant" ? sanitizeAssistantText(m.content) : m.content,
           status: "ready",
+          stageOutputs: Array.isArray(m.metadata?.stage_outputs)
+            ? normalizeStageOutputs(m.metadata.stage_outputs) : undefined,
           created_at: m.created_at,
           run_id: m.run_id,
           attachments: Array.isArray(m.metadata?.attachments)
@@ -672,6 +680,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(
                       : localMatch.text,
                   attachments: serverMsg.attachments ?? localMatch.attachments,
                   skill: serverMsg.skill ?? localMatch.skill,
+                  stageOutputs: serverMsg.stageOutputs ?? localMatch.stageOutputs,
                 }
               : serverMsg;
             combined.push(nextMsg);

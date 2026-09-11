@@ -80,6 +80,12 @@ and `POST /retention/apply` routes.
 
 ## Artifacts, files, knowledge, memory, reports and reviews
 
+Agent result metadata and persisted assistant-message metadata may include
+`stage_outputs`: an ordered list of `{id, label, text}` containing public model
+outputs from the turn. Clients preserve earlier stages as collapsible history;
+`final_response` remains the authoritative final answer. Hidden reasoning is not
+included. The field is optional for records produced by older versions.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET/POST` | `/api/workspaces/<ws_id>/artifacts` | Artifact list/create. |

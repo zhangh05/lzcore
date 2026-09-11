@@ -143,6 +143,7 @@ def persist_run_record(session, turn, result, context) -> bool:
                     # Conversation recovery receives only bounded, redacted
                     # evidence breadcrumbs for a later follow-up turn.
                     "tool_context": history_tools,
+                    "stage_outputs": list(result_metadata.get("stage_outputs") or []),
                     "history_state": build_history_state_record(
                         "assistant",
                         final_response,

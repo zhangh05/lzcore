@@ -132,6 +132,12 @@ export interface CognitiveEvent {
   state_revision?: number;
   payload?: Record<string, unknown>;
 }
+export interface StageOutput {
+  id: string;
+  label: string;
+  text: string;
+}
+
 export interface AgentResult {
   ok: boolean;
   final_response: string;
@@ -286,9 +292,18 @@ export interface AgentResult {
     execution_outcome?: "complete" | "partial" | "failed" | "unknown";
     /** Aggregate tool-attempt telemetry; failed attempts may coexist with a completed task. */
     tool_execution_outcome?: "complete" | "partial" | "failed" | "unknown";
+    stage_outputs?: StageOutput[];
     /** Read-only trigger fact for a fail-closed unknown write outcome. */
     unknown_outcome?: {
-      status?: "unknown";
+      /**
+       * `unknown` 表示写入结果仍未确定；`reconciled` 表示后续 read-back
+       * 已经把它确认下来了（QueryLoop 会把 status 改成 reconciled，
+       * 并把 `execution_outcome` 同步改成 complete）。
+       *
+       * 这两个取值必须都能表达，否则界面无法区分
+       * 「还没确定」和「已经确认」，会把确认过的写入重新渲染成不确定。
+       */
+      status?: "unknown" | "reconciled";
       tool_id?: string;
       call_id?: string;
       error_code?: string;

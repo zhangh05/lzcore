@@ -544,6 +544,7 @@ def run_ssot_turn(
             "synthesis_recovery": dict(
                 (runtime_result.metadata or {}).get("synthesis_recovery") or {}
             ),
+            "stage_outputs": list((runtime_result.metadata or {}).get("stage_outputs") or []),
             # Read-only terminal facts for API/UI consumers. QueryLoop remains
             # the only owner of execution, recovery and write fencing.
             "unknown_outcome": (

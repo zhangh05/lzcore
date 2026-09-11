@@ -302,22 +302,12 @@
 }
 
 
-.markdown-body {
-  font-size: 14px;
-  line-height: 1.78;
-}
-
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3 {
-  margin-top: 26px;
-  margin-bottom: 10px;
-  color: var(--text);
-  letter-spacing: -0.015em;
-}
-
-.markdown-body h2 { font-size: 18px; }
-.markdown-body h3 { font-size: 16px; }
+/* `.markdown-body` typography (font-size, line-height, heading scale, heading
+   margins, letter-spacing) lives in src/styles/typography.css. It used to be
+   defined here as well, which is why h2 resolved to either `1.16em` or `18px`
+   depending on import order, and why every heading carried a negative
+   letter-spacing that squeezed the CJK glyphs. Do not reintroduce type values
+   here — add them to the typography layer. */
 
 .markdown-body table {
   border-color: var(--line);
@@ -1141,12 +1131,16 @@
   margin-top: var(--space-2);
 }
 
+/* 这条规则覆盖 global.css 里的同名规则（本文件后加载），所以颜色必须在这里改。
+   覆盖前用的是 --warn 琥珀色，而 --warn 同时是「执行中」的颜色 ——
+   于是「结果未确定」和「正在执行」在视觉上撞在一起，标题却又是 global 规则里的
+   --danger 红色，三种颜色混在一张告警里。统一到 --unknown。 */
 .unknown-outcome-alert {
   padding: 14px 16px;
   border-radius: 10px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--warn);
-  background: var(--surface);
+  border-left: 3px solid var(--unknown);
+  background: var(--unknown-soft);
   margin-bottom: 10px;
 }
 
@@ -1154,7 +1148,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--warn);
+  color: var(--unknown);
   margin-bottom: 6px;
 }
 
@@ -1222,16 +1216,22 @@
 
 /* Full-width operational reading and integrated context controls. */
 .wb-chat-list { scrollbar-gutter: stable; }
-.markdown-body > :first-child { margin-top: 0; }
-.markdown-body h1 { font-size: var(--fs-20); }
-.markdown-body :is(h1, h2, h3) { font-weight: var(--weight-heading); line-height: var(--lh-tight); margin-block: var(--space-6) var(--space-3); }
-.markdown-body :is(p, ul, ol, blockquote) { margin-block: var(--space-3); }
-.markdown-body :is(ul, ol) { padding-inline-start: var(--space-6); }
-.markdown-body li + li { margin-top: var(--space-1); }
-.markdown-body blockquote { padding: var(--space-2) var(--space-4); border-left: 2px solid var(--line-3); background: var(--surface-2); color: var(--text-2); }
+.stage-outputs { display: grid; gap: var(--space-2); min-width: 0; }
+.stage-output { min-width: 0; }
+.stage-output > summary {
+  display: list-item;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+.stage-output > summary span { margin-inline-start: var(--space-3); }
+.stage-output-body { padding: var(--space-3); overflow-wrap: anywhere; }
+.stage-output.active { display: block; }
+/* Second, later duplicate of the same `.markdown-body` typography. Removed for
+   the same reason as the first: type values belong to src/styles/typography.css.
+   The overflow guard below is layout, not type, so it stays. */
 .markdown-body :is(pre, table) { max-width: 100%; overflow-x: auto; }
-.markdown-body :is(th, td) { padding: var(--space-2) var(--space-3); border-color: var(--line-2); font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
-.markdown-body th { background: var(--surface-3); font-weight: var(--weight-label); }
 .code-block-wrap { border-radius: var(--r-8); box-shadow: none; }
 .wb-empty-badge { padding: 0; background: transparent; border-radius: 0; }
 .wb-empty-kicker { margin: 0; color: var(--text-3); font-size: var(--fs-12); }

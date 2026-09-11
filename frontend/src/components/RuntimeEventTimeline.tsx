@@ -16,7 +16,11 @@ import type { ChatMsg } from "../stores/workbench";
 import { useWorkbenchStore } from "../stores/workbench";
 import { useSessionStore } from "../stores/session";
 import { shortId } from "../utils/displayText";
-import { IconCheck, IconClose } from "./Icon";
+import { IconAlert, IconCheck, IconClose } from "./Icon";
+import {
+  UNKNOWN_OUTCOME_COPY,
+  deriveSettledCardState,
+} from "./toolCallState";
 
 /* ── helpers ── */
 
@@ -61,20 +65,49 @@ function stepColorClass(evt: RuntimeEvent): string {
 
 /* ── tiny tool chip ── */
 
-const ToolChip: React.FC<{ tc: ToolCallResult }> = React.memo(({ tc }) => {
+/**
+ * 落库的工具调用条目。
+ *
+ * 这里此前用 `tc.ok ? "完成" : "失败"` 判定，于是「写入结果未知」被显示成
+ * 红色「失败」—— 与内联卡改造前是同一个错误，同样会诱发重复下发配置。
+ * 现在与内联卡共用 `deriveSettledCardState`，两处不可能再分叉。
+ */
+const ToolChip: React.FC<{
+  tc: ToolCallResult;
+  /** 本回合的 result —— 未知态是否成立由回合级 `execution_outcome` 决定。 */
+  turnResult?: Pick<AgentResult, "metadata"> | null;
+}> = React.memo(({ tc, turnResult }) => {
   const [open, setOpen] = useState(false);
   const hasBody = !!(tc.summary || tc.errors?.length || tc.artifacts?.length);
+  const state = deriveSettledCardState(tc, turnResult);
   return (
     <div className="rt-step rt-step-tool">
-      <span className="rt-dot rt-dot-warn" />
+      <span className={`rt-dot rt-dot-${state === "unknown" ? "unknown" : "warn"}`} />
       <div className="rt-step-body">
-        <div className={`rt-step-head ${hasBody ? "rt-step-head--interactive" : ""}`} onClick={() => hasBody && setOpen(!open)}>
-          <span className="rt-step-ok">{tc.ok ? <IconCheck size={12} aria-hidden="true" /> : <IconClose size={12} aria-hidden="true" />}</span>
+        <div className={`rt-step-head ${hasBody ? "rt-step-head--interactive" : ""} ${state}`}
+          role={hasBody ? "button" : undefined}
+          tabIndex={hasBody ? 0 : undefined}
+          aria-expanded={hasBody ? open : undefined}
+          onKeyDown={(event) => {
+            if (hasBody && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault();
+              setOpen(!open);
+            }
+          }}
+          onClick={() => hasBody && setOpen(!open)}>
+          <span className={`rt-step-ok ${state}`}>
+            {state === "ok" ? <IconCheck size={12} aria-hidden="true" /> : state === "unknown" ? <IconAlert size={12} aria-hidden="true" /> : <IconClose size={12} aria-hidden="true" />}
+          </span>
           <code className="rt-step-name">{toolLabel(tc.tool_id)}</code>
-          <span className="rt-tag">{tc.ok ? "完成" : "失败"}</span>
+          <span className={`rt-tag ${state}`}>{state === "ok" ? "完成" : state === "unknown" ? UNKNOWN_OUTCOME_COPY.pill : "失败"}</span>
           {tc.duration_ms != null && <span className="rt-dur">{formatMs(tc.duration_ms)}</span>}
           {hasBody && <span className="rt-chev">{open ? "▲" : "▼"}</span>}
         </div>
+        {state === "unknown" && (
+          <div className="rt-step-note" role="note">
+            {UNKNOWN_OUTCOME_COPY.headline}
+          </div>
+        )}
         {open && tc.summary && <div className="rt-step-detail">{tc.summary}</div>}
         {open && tc.errors?.map((e, i) => <div key={`${tc.call_id}-err-${i}-${e.slice(0, 32)}`} className="rt-step-err">{e}</div>)}
         {open && tc.artifacts?.length ? (
@@ -152,14 +185,14 @@ const ResultBody: React.FC<{ result: AgentResult }> = React.memo(({ result }) =>
             if (match) {
               if (renderedToolCalls.has(callId)) return null;
               renderedToolCalls.add(callId);
-              return <ToolChip key={`tc-${callId}`} tc={match} />;
+              return <ToolChip key={`tc-${callId}`} tc={match} turnResult={result} />;
             }
           }
           return <StepRow key={`ev-${evt.event_id || eventCallId(evt) || evt.type || evt.name}`} evt={evt} />;
         })}
         {/* tools without matching events */}
         {tools.filter((tc) => !renderedToolCalls.has(tc.call_id)).map((tc) => (
-          <ToolChip key={`tc-orphan-${tc.call_id}`} tc={tc} />
+          <ToolChip key={`tc-orphan-${tc.call_id}`} tc={tc} turnResult={result} />
         ))}
       </div>
 
@@ -335,6 +368,7 @@ const RunCard: React.FC<{ group: RunGroup; runIdx: number }> = React.memo(({ gro
   const result = group.result;
   const assistantText = group.assistantMsg?.text ?? "";
   const userText = group.userMsg?.text ?? "";
+  const unknown = result?.metadata.execution_outcome === "unknown";
   const ok = result ? result.ok : group.assistantMsg?.status !== "error";
   const cardId = (result?.turn_id ?? group.runId).slice(0, 8);
   const snippet = assistantText.slice(0, 50) || userText.slice(0, 50) || "";
@@ -381,7 +415,7 @@ const RunCard: React.FC<{ group: RunGroup; runIdx: number }> = React.memo(({ gro
         aria-expanded={open}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } }}
       >
-        <span className={`rt-card-dot ${ok ? "ok" : "err"}`} />
+        <span className={`rt-card-dot ${unknown ? "unknown" : ok ? "ok" : "err"}`} />
         <span className="rt-card-id">{cardId || `#${runIdx + 1}`}</span>
         <span className="rt-card-snippet">{snippet}{snippet.length > 50 ? "…" : ""}</span>
         <span className="rt-card-chev">{open ? "▲ 收起" : "▼ 展开"}</span>

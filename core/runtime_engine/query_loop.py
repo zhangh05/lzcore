@@ -1557,6 +1557,7 @@ class QueryLoop:
                 "evidence": evidence_summary(ctx.extras),
                 "response_outcome": str(ctx.extras.get("response_outcome") or "complete"),
                 "synthesis_recovery": dict(ctx.extras.get("synthesis_recovery") or {}),
+                "stage_outputs": list(ctx.extras.get("stage_outputs") or []),
                 "prompt_policy_events": list(ctx.extras.get("prompt_policy_events") or []),
                 "llm_usage": self._aggregate_llm_usage(ctx.extras),
                 "active_capability_playbooks": list(
@@ -2522,6 +2523,14 @@ class QueryLoop:
                     timeout=(provider_timeout_seconds + provider_guard_seconds),
                 )
                 response = self._coerce_llm_response(raw)
+                if stream_to_user and response.content:
+                    from core.tools.redaction import redact_string
+                    outputs = ctx.extras.setdefault("stage_outputs", [])
+                    outputs.append({
+                        "id": f"model-{len(outputs) + 1}",
+                        "label": f"模型输出 {len(outputs) + 1}",
+                        "text": redact_string(response.content),
+                    })
                 if isinstance(response.usage, dict):
                     ctx.extras.setdefault("llm_usage_events", []).append(dict(response.usage))
                 provider_metadata = response.metadata or {}

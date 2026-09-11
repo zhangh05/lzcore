@@ -44,6 +44,7 @@ def test_ssot_runtime_inflight_and_terminal_user_persistence_share_request_ident
     session_id = "session-message-idempotency"
     request_id = "request-message-idempotency"
     user_input = "不要调用工具，输出一条变更检查项。"
+    stage_outputs = [{"id": "model-1", "label": "模型输出 1", "text": "先核对备份。"}]
 
     class FakeEngine:
         async def run(self, **_kwargs):
@@ -53,7 +54,7 @@ def test_ssot_runtime_inflight_and_terminal_user_persistence_share_request_ident
                 tool_calls=[],
                 events=[],
                 errors=[],
-                metadata={},
+                metadata={"stage_outputs": stage_outputs},
                 node_results={},
             )
 
@@ -84,6 +85,8 @@ def test_ssot_runtime_inflight_and_terminal_user_persistence_share_request_ident
     api_users = [message for message in api_messages if message["role"] == "user"]
     assert len(api_users) == 1
     assert api_users[0]["metadata"]["client_request_id"] == request_id
+    assistant = next(message for message in api_messages if message["role"] == "assistant")
+    assert assistant["metadata"]["stage_outputs"] == stage_outputs
 
 
 def test_ssot_runtime_excludes_current_provisional_request_from_model_history(monkeypatch, tmp_path):

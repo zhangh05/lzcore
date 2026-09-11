@@ -9,6 +9,10 @@ import "./styles/console-system.css";
 // rules after the shared system so legacy compatibility selectors cannot alter
 // the grid lifecycle when the route chunk is loaded or reloaded.
 import "./pages/AgentWorkbench/AgentWorkbench.css";
+// Typography is the last layer on purpose. It owns the vertical rhythm, the type
+// scale and all `.markdown-body` typography, replacing values that were being
+// redefined in three files at once. Anything that sets type must load before it.
+import "./styles/typography.css";
 
 // Theme initialization — read from Zustand persist store (lzcore_ui) or
 // fall back to prefers-color-scheme. We do this BEFORE React mounts so

@@ -386,7 +386,7 @@ def test_failed_fetch_does_not_repeat_completed_weather_answer():
 
 def test_query_loop_allows_model_to_recover_web_read_without_forcing_another_final():
     responses = [
-        LLMResponse(tool_calls=[LLMToolCall(
+        LLMResponse(content="先检索资料。", tool_calls=[LLMToolCall(
             id="bad-search", name="web.manage",
             arguments={"action": "search", "query": "bad syntax"},
         )]),
@@ -429,6 +429,9 @@ def test_query_loop_allows_model_to_recover_web_read_without_forcing_another_fin
     assert received == ["bad syntax", "correct syntax"]
     assert outcome.success is True
     assert outcome.metadata["goal_loop"]["status"] == "passed"
+    assert [item["text"] for item in outcome.metadata["stage_outputs"]] == [
+        "先检索资料。", "已经通过修正后的检索获得所需证据。",
+    ]
     assert not any(
         item.get("type") == "premature_final_rejected"
         for item in outcome.metadata["recovery_goal_events"]

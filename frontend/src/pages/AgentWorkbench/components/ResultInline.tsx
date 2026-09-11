@@ -5,6 +5,7 @@ import { knowledgeApi, memoryApi } from "../../../api";
 import { apiRequest } from "../../../api/client";
 import { IconBolt, IconBrain, IconBook, IconRefresh, IconAlert, IconShield, IconChevronDown, IconChevronRight } from "../../../components/Icon";
 import { TaskTrackingCard } from "../../../components/TaskTrackingCard";
+import { UNKNOWN_OUTCOME_COPY, unknownOutcomeParagraph } from "../../../components/toolCallState";
 import { toolLabel } from "../../../utils/displayText";
 import { isApiError } from "../../../types";
 import type { AgentResult, SourceSummary, ToolCallResult, CognitiveSummary } from "../../../types";
@@ -199,11 +200,9 @@ export const ResultInline = memo(function ResultInline({
         <section className="unknown-outcome-alert" role="alert" data-testid="unknown-outcome-alert">
           <div className="unknown-outcome-header">
             <IconAlert size={18} className="unknown-outcome-icon" />
-            <strong>执行结果尚未确定，完整结果已返回模型</strong>
+            <strong>{UNKNOWN_OUTCOME_COPY.headline}</strong>
           </div>
-          <p>
-            外部操作可能仍在执行。模型会基于完整工具结果自行决定 read-back、继续配置、重试或向你说明当前状态。
-          </p>
+          <p>{unknownOutcomeParagraph()}</p>
           <div className="unknown-outcome-facts">
             {unknownOutcome?.tool_id && <span>工具：{unknownOutcome.tool_id}</span>}
             {unknownOutcome?.call_id && <span>调用：{unknownOutcome.call_id}</span>}
@@ -229,7 +228,7 @@ export const ResultInline = memo(function ResultInline({
               <div className="result-overview-main">
                 <span className={`result-overview-status ${isUnknownOutcome ? "unknown" : trackingPending ? "pending" : isFailed ? "failed" : "complete"}`}>
                   <span className="status-dot-mini" />
-                  {isUnknownOutcome ? "结果未知" : trackingPending ? "等待设备结果" : isFailed ? "需要关注" : "本轮完成"}
+                  {isUnknownOutcome ? UNKNOWN_OUTCOME_COPY.pill : trackingPending ? "等待设备结果" : isFailed ? "需要关注" : "本轮完成"}
                 </span>
                 <span className="result-overview-title">
                   {actionCount > 0 ? `已处理 ${actionCount} 个工具调用` : "已生成本轮答复"}
@@ -237,7 +236,7 @@ export const ResultInline = memo(function ResultInline({
               </div>
               <span className="result-overview-meta">
                 {isUnknownOutcome
-                  ? "完整结果已返回模型，等待其决策"
+                  ? UNKNOWN_OUTCOME_COPY.summary
                   : trackingPending
                   ? "任务已提交，尚无可确认的设备执行结果"
                   : failedToolCount > 0 && isFailed

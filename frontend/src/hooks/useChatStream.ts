@@ -20,8 +20,9 @@ import { useSessionStore } from "../stores/session";
 import { isApiError } from "../types";
 import type { AgentResult, ToolCallResult, InlineToolCall, CognitiveSummary, CognitiveEvent } from "../types";
 import { sanitizeAssistantText, toolLabel, filterStreamingThink, type ThinkFilterState } from "../utils/displayText";
-import { beginModelStep, canFallbackToHttp, discardToolCallDraft, finalizeStreamText, runningIdempotentRedirectJobId, shouldFlushUncommittedStreamDraft } from "../utils/agentStream";
+import { beginModelStep, canFallbackToHttp, finalizeStreamText, runningIdempotentRedirectJobId, shouldFlushUncommittedStreamDraft } from "../utils/agentStream";
 import { nextStreamRevealLength } from "../utils/streamReveal";
+import { normalizeStageOutputs } from "../utils/stageOutputs";
 import { agentResultFromWsDone } from "../utils/wsResult";
 import { notifyRunCompleted } from "../utils/appEvents";
 import { createStreamActivityWatchdog, STREAM_IDLE_TIMEOUT_MS } from "../utils/streamActivity";
@@ -315,6 +316,25 @@ export function useChatStream(
           flushTokenBuffer(true);
           streamRender.flush();
         };
+        const archiveModelOutput = () => {
+          flushAllTokenBuffer();
+          const store = useWorkbenchStore.getState();
+          const current = store.bySession[scratch]?.find((item) => item.id === streamingMsgId);
+          if (streamState.draft.trim()) {
+            const stages = current?.stageOutputs || [];
+            store.updateAssistant(streamingMsgId, {
+              stageOutputs: [...stages, {
+                id: `model-${stages.length + 1}`,
+                label: `模型输出 ${stages.length + 1}`,
+                text: streamState.draft,
+              }],
+            }, scratch);
+          }
+          streamState = beginModelStep();
+          streamedText = "";
+          thinkFilter.mode = "idle";
+          store.updateAssistant(streamingMsgId, { text: "" }, scratch);
+        };
         let finished = false;
         const finish = () => {
           if (finished) return;
@@ -408,9 +428,7 @@ export function useChatStream(
                   }, scratch);
                 }
                 if (stageName === "model_started") {
-                  streamState = beginModelStep(streamedText);
-                  streamedText = "";
-                  useWorkbenchStore.getState().updateAssistant(streamingMsgId, { text: "" }, scratch);
+                  archiveModelOutput();
                 }
                 const progressPatch = progressPatchForStreamStage(stageName, msg.data);
                 if (progressPatch) {
@@ -453,10 +471,7 @@ export function useChatStream(
                   }
                 }
                 if (stageName === "tool_call") {
-                  flushAllTokenBuffer();
-                  discardToolCallDraft(streamState);
-                  streamedText = "";
-                  useWorkbenchStore.getState().updateAssistant(streamingMsgId, { text: "" }, scratch);
+                  archiveModelOutput();
                 }
                 break;
               }
@@ -582,6 +597,8 @@ export function useChatStream(
         trace_id: wsResult.trace_id,
         run_id: wsResult.turn_id,
         runtimeEvents: cleanResult.events || [],
+        ...(cleanResult.metadata.stage_outputs
+          ? { stageOutputs: normalizeStageOutputs(cleanResult.metadata.stage_outputs) } : {}),
       }, resolvedSid);
 
       // Defer heavy post-processing.
