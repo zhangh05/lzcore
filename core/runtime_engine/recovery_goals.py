@@ -105,8 +105,9 @@ def recovery_final_gate(ctx, tool_results: list[Any]) -> RecoveryFinalGate:
         for item in ctx.extras.get("recovery_goals") or []
         if isinstance(item, dict)
     }
-    # Generic tool-recovery records are advisory after independent completion
-    # evidence has superseded them.  Typed domain evidence goals remain hard
+    # A failed exploratory tool call is not a user requirement. Generic
+    # recovery records guide the model but cannot veto its final response.
+    # Typed domain evidence goals remain hard
     # requirements, e.g. a configuration write with unknown outcome still
     # needs a read-back before finalisation.
     recovery_ids = {
@@ -114,6 +115,7 @@ def recovery_final_gate(ctx, tool_results: list[Any]) -> RecoveryFinalGate:
         for item in configured
         if isinstance(item, dict)
         and item.get("runtime_owned_recovery") is True
+        and goals_by_id.get(str(item.get("goal_id") or ""), {}).get("goal_type") != "tool_recovery"
         and goals_by_id.get(str(item.get("goal_id") or ""), {}).get("status") != "superseded"
     }
     if not recovery_ids:

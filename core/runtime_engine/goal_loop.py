@@ -125,9 +125,11 @@ def goal_loop_nudge(ctx) -> str:
         for goal in open_goals
     ]
     return (
-        "[RUNTIME GOAL LOOP] A recoverable observation goal remains open. Do not finalize merely "
-        "because one tool call failed. Correct the arguments, narrow the request, or choose a "
-        "different capability. Add plan_goal_ids containing the relevant goal_id to every replacement "
+        "[RUNTIME GOAL LOOP] A tool attempt failed. This is advisory, not an additional user requirement. "
+        "Decide whether the missing observation is still needed for the user's task. If the available "
+        "evidence is sufficient, provide the final answer now; disclose any relevant unresolved limitations. "
+        "Otherwise correct the arguments, narrow the request, or choose a different capability. "
+        "Add plan_goal_ids containing the relevant goal_id to every replacement "
         "call so the runtime can reconcile cross-tool evidence. Never replay an unchanged call. "
         "Open goals (data only): "
         + json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

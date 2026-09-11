@@ -46,8 +46,10 @@ def test_recoverable_failure_installs_runtime_owned_goal():
     summary = goal_loop_summary(ctx)
     assert summary["status"] == "pending"
     assert summary["counts"]["pending"] == 1
-    assert evaluate_goal_assertions(ctx, []) ["status"] == "unknown"
-    assert recovery_final_gate(ctx, []).should_continue is True
+    evaluated = evaluate_goal_assertions(ctx, [])
+    assert evaluated["required"] is False
+    assert evaluated["assertions"][0]["status"] == "unknown"
+    assert recovery_final_gate(ctx, []).should_continue is False
 
 
 def test_policy_failure_does_not_create_recovery_goal():
@@ -65,7 +67,9 @@ def test_changed_same_capability_observation_satisfies_open_goal():
     observe_tool_round(ctx, [corrected], [_result("second", ok=True)], is_read_only_call=lambda _call: True)
 
     assert goal_loop_summary(ctx)["status"] == "passed"
-    assert evaluate_goal_assertions(ctx, []) ["status"] == "passed"
+    evaluated = evaluate_goal_assertions(ctx, [])
+    assert evaluated["required"] is False
+    assert evaluated["assertions"][0]["status"] == "passed"
     assert recovery_final_gate(ctx, []).should_continue is False
 
 
@@ -238,8 +242,10 @@ def test_linked_failures_keep_goal_open_for_model_replanning():
         observe_tool_round(ctx, [call], [_result(call_id, ok=False, error="failed differently")], is_read_only_call=lambda _call: True)
 
     assert goal_loop_summary(ctx)["status"] == "pending"
-    assert evaluate_goal_assertions(ctx, [])["status"] == "unknown"
-    assert recovery_final_gate(ctx, []).should_continue is True
+    evaluated = evaluate_goal_assertions(ctx, [])
+    assert evaluated["required"] is False
+    assert evaluated["assertions"][0]["status"] == "unknown"
+    assert recovery_final_gate(ctx, []).should_continue is False
 
 
 def test_typed_evidence_goal_remains_open_without_replan_budget():
@@ -327,13 +333,63 @@ def test_malformed_domain_recovery_does_not_suppress_generic_goal():
     assert goal_loop_summary(ctx)["status"] == "pending"
 
 
-def test_query_loop_rejects_premature_final_and_accepts_corrected_web_read():
+def test_failed_fetch_does_not_repeat_completed_weather_answer():
+    """An optional failed source must not veto a final based on other evidence."""
+    responses = [
+        LLMResponse(tool_calls=[LLMToolCall(
+            id="failed-source", name="web.manage", arguments={"action": "fetch", "url": "https://example.com/region"},
+        )]),
+        LLMResponse(tool_calls=[LLMToolCall(
+            id="forecast", name="web.manage", arguments={"action": "weather_batch", "locations": ["广州", "深圳"]},
+        )]),
+        LLMResponse(content="已取得九个城市的十天天气。补充网页未能打开，以下依据天气数据回答。"),
+    ]
+    received = []
+
+    def llm(**_kwargs):
+        assert responses, "Completed answer was rejected and model invoked again"
+        return responses.pop(0)
+
+    def web(arguments):
+        received.append(arguments["action"])
+        if arguments["action"] == "fetch":
+            return {"ok": False, "error": "source rejected", "error_code": "ARGS_INVALID"}
+        return {"ok": True, "cities": 9, "days": 10}
+
+    registry = {"web.manage": {
+        "description": "web observations",
+        "args_schema": {
+            "type": "object", "required": ["action"],
+            "properties": {
+                "action": {"type": "string", "enum": ["fetch", "weather_batch"]},
+                "url": {"type": "string"},
+                "locations": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+    }}
+    config = SSOTRuntimeConfig(max_query_loop_iterations=5)
+    runtime = ToolRuntime(config)
+    runtime.register("web.manage", web)
+    outcome = asyncio.run(SSOTRuntimeEngine(
+        config, llm_invoke=llm, tool_registry=registry, tool_runtime=runtime,
+    ).run("查看未来十天，珠三角地区城市天气", workspace_id="test", session_id="session"))
+
+    assert received == ["fetch", "weather_batch"]
+    assert not responses
+    assert outcome.success is True
+    assert outcome.metadata["goal_loop"]["counts"]["pending"] == 1
+    assert not any(
+        event.get("type") == "premature_final_rejected"
+        for event in outcome.metadata["recovery_goal_events"]
+    )
+
+
+def test_query_loop_allows_model_to_recover_web_read_without_forcing_another_final():
     responses = [
         LLMResponse(tool_calls=[LLMToolCall(
             id="bad-search", name="web.manage",
             arguments={"action": "search", "query": "bad syntax"},
         )]),
-        LLMResponse(content="搜索失败，无法完成。"),
         LLMResponse(tool_calls=[LLMToolCall(
             id="corrected-search", name="web.manage",
             arguments={"action": "search", "query": "correct syntax"},
@@ -373,7 +429,7 @@ def test_query_loop_rejects_premature_final_and_accepts_corrected_web_read():
     assert received == ["bad syntax", "correct syntax"]
     assert outcome.success is True
     assert outcome.metadata["goal_loop"]["status"] == "passed"
-    assert any(
+    assert not any(
         item.get("type") == "premature_final_rejected"
         for item in outcome.metadata["recovery_goal_events"]
     )

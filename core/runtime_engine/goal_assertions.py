@@ -13,6 +13,11 @@ def evaluate_goal_assertions(ctx, tool_results: list[Any]) -> dict[str, Any]:
         return {"required": False, "status": "not_required", "assertions": []}
     results = {str(getattr(item, "call_id", "")): item for item in tool_results}
     evaluated: list[dict[str, Any]] = []
+    advisory_goal_ids = {
+        str(goal.get("goal_id") or "")
+        for goal in extras.get("recovery_goals") or []
+        if isinstance(goal, dict) and goal.get("goal_type") == "tool_recovery"
+    }
     for assertion in assertions:
         keys = [str(key) for key in assertion.get("required_call_keys") or []]
         missing_keys = [key for key in keys if key not in results]
@@ -37,6 +42,10 @@ def evaluate_goal_assertions(ctx, tool_results: list[Any]) -> dict[str, Any]:
             "assertion_id": str(assertion.get("assertion_id") or "goal_assertion"),
             "kind": kind,
             "status": status,
+            "required": not (
+                assertion.get("runtime_owned_recovery") is True
+                and str(assertion.get("goal_id") or "") in advisory_goal_ids
+            ),
             "required_call_keys": keys,
             "missing_call_keys": missing_keys,
             **({
@@ -49,7 +58,9 @@ def evaluate_goal_assertions(ctx, tool_results: list[Any]) -> dict[str, Any]:
                 "fact": str(assertion.get("fact") or ""),
             } if kind == "evidence_claim_satisfied" else {}),
         })
-    statuses = {item["status"] for item in evaluated}
+    statuses = {item["status"] for item in evaluated if item["required"]}
+    if not statuses:
+        return {"required": False, "status": "not_required", "assertions": evaluated}
     status = "passed" if statuses == {"passed"} else "unknown" if "unknown" in statuses else "failed"
     return {"required": True, "status": status, "assertions": evaluated}
 
