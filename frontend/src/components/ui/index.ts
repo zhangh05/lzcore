@@ -8,3 +8,4 @@ export { Select } from "./Select";
 export { Textarea } from "./Textarea";
 export { ModalShell } from "./ModalShell";
 export { FormField } from "./FormField";
+export { TabButton } from "./TabButton";

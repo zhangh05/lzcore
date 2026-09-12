@@ -129,7 +129,9 @@
   max-width: var(--w-reading);
   flex-direction: column;
   align-items: flex-start;
-  justify-content: flex-start;
+  /* 空状态是工作台的默认首屏。之前顶在顶部，下半屏全空，看起来像"没加载完"。
+     垂直居中后构图才成立。 */
+  justify-content: center;
   padding: var(--space-8) var(--space-6);
   color: var(--text-3);
   text-align: left;
@@ -137,8 +139,10 @@
 
 .wb-empty::before { display: none; }
 
+/* .wb-empty-kicker 是 .wb-empty-badge 的子元素，之前还带 14px margin-bottom，
+   等于在 4px padding 的胶囊内部再撑 14px，把胶囊顶成一个歪的长条。归零。 */
 .wb-empty-kicker {
-  margin-bottom: 14px;
+  margin-bottom: 0;
   color: var(--accent);
   font-size: 12px;
   font-weight: var(--weight-heading);
@@ -148,29 +152,32 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  margin-bottom: 12px;
+  padding: 5px 12px;
+  margin-bottom: var(--flow-loose);
   color: var(--accent);
   background: var(--accent-soft);
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--fs-11);
   font-weight: 700;
+  line-height: 1;
 }
 
 .wb-empty h2 {
-  margin: 0 0 12px;
+  margin: 0 0 var(--flow-base);
   color: var(--text);
   font-size: var(--fs-24);
   font-weight: 750;
-  letter-spacing: -0.035em;
+  /* 中文负字距会把"开始处理任务"几个字挤到一起，跟 typography.css 的
+     CJK 字距归零原则冲突。 */
+  letter-spacing: var(--tracking-cjk);
 }
 
 .wb-empty p {
   max-width: 600px;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--flow-block);
   color: var(--text-3);
-  font-size: 14px;
-  line-height: 1.75;
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
 }
 
 .wb-empty-chips {
@@ -406,9 +413,9 @@
   width: 100%;
   /* The composer shares the full middle column with conversation results. */
   max-width: none;
-  min-height: 70px;
+  min-height: 60px;
   margin: 0 auto;
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   box-sizing: border-box;
   overflow: hidden;
   background: var(--surface);
@@ -685,6 +692,36 @@
 .task-phase-title-row > span {
   color: var(--text-4);
   font-size: 10px;
+}
+
+/* .task-phase-status-tag 之前只挂类名但没规则，落到 .task-phase-title-row > span
+   的兜底里变成 10px 灰文字。统一成工作台摘要条的胶囊语言。 */
+.task-phase-status-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: var(--fs-11);
+  font-weight: var(--weight-minor);
+  line-height: 1;
+  white-space: nowrap;
+}
+.task-phase-status-tag.done {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok-soft) 62%, var(--surface));
+}
+.task-phase-status-tag.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface));
+}
+.task-phase-status-tag.failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 62%, var(--surface));
+}
+.task-phase-status-tag.pending {
+  color: var(--text-3);
+  background: var(--surface-2);
 }
 
 .task-phase.active .task-phase-title-row > span { color: var(--accent); }
@@ -1233,8 +1270,9 @@
    The overflow guard below is layout, not type, so it stays. */
 .markdown-body :is(pre, table) { max-width: 100%; overflow-x: auto; }
 .code-block-wrap { border-radius: var(--r-8); box-shadow: none; }
-.wb-empty-badge { padding: 0; background: transparent; border-radius: 0; }
-.wb-empty-kicker { margin: 0; color: var(--text-3); font-size: var(--fs-12); }
+/* .wb-empty-badge / .wb-empty-kicker / .wb-empty h2 原本在这里还有一份中和规则
+   （badge 去背景、kicker 改灰、h2 降字重），和上面 144 行起的正式定义打架，
+   实测把胶囊压成了 padding:0 的裸文字。正式定义已上移，这两行重复定义删除。 */
 .wb-empty h2 { font-weight: var(--weight-heading); }
 .wb-composer-actions { grid-column: 2; align-self: end; }
 .wb-skill-picker label { min-width: 0; max-width: 100%; font-weight: var(--weight-label); }
@@ -1275,3 +1313,144 @@
 
 .message-row, .chat-result-inline, .thinking-block, .tool-call-card { animation: none; }
 .live-tool-chip.running, .live-tool-dot.running { animation: none; }
+
+/* ── 执行摘要条（.result-overview-toggle）三段排版 ──────────────────────
+   global.css:8205 只给了容器 min-height / padding / background / border，
+   内部的 .result-overview-main / -status / -title / -meta 一条规则都没有，
+   实测三个文本节点全是 14px / 400 / var(--text)，层级完全丢失。
+   更麻烦的是 .status-dot-mini 是 `background: currentColor`，而 currentColor
+   一路继承到 --text，于是 complete / pending / failed / unknown 四态
+   渲染出来一模一样，状态点起不到任何提示作用。
+   本文件在 global.css 之后加载，这里把四个子类补齐并给状态点上色。 */
+
+.result-overview-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: var(--r-10);
+  transition: border-color var(--dur-2) var(--ease);
+}
+
+.result-overview-toggle:hover { border-color: var(--text-4); }
+
+/* 单行排版：状态胶囊 + 标题 + meta 挤在一行，靠竖线和色阶区分主次。
+   之前 meta 独占第二行，栏高被撑到 52px，在会话流里太占地方。 */
+.result-overview-toggle .result-overview {
+  display: flex;
+  grid-row: 1;
+  grid-column: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.result-overview-main {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.result-overview-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: var(--fs-12);
+  font-weight: var(--weight-minor);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.result-overview-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-14);
+  font-weight: var(--weight-subhead);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-overview-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding-left: 8px;
+  overflow: hidden;
+  border-left: 1px solid var(--line-2);
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  font-weight: 400;
+  line-height: var(--lh-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* result 为空时的兜底文案，之前同样是裸 span */
+.result-overview-fallback {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: var(--weight-subhead);
+}
+
+/* 状态点 6 → 7px，并改由状态色驱动（.status-dot-mini 本身仍是 currentColor，
+   这里是靠父级 .result-overview-status 的 color 传下去的） */
+.result-overview-status .status-dot-mini {
+  width: 7px;
+  height: 7px;
+}
+
+/* 四态配色。soft 底色用 color-mix 混进 --surface，夜间主题下 --surface 变暗时
+   胶囊底色会自己跟着变，不需要再写一条 [data-theme="dark"] 规则。 */
+.result-overview-status.complete {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok-soft) 62%, var(--surface));
+}
+.result-overview-status.pending {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn-soft) 62%, var(--surface));
+}
+.result-overview-status.failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 62%, var(--surface));
+}
+.result-overview-status.unknown {
+  color: var(--unknown);
+  background: color-mix(in srgb, var(--unknown-soft) 62%, var(--surface));
+}
+
+/* "展开 / 收起" 文案保留（测试按 summary 的 aria-label 断言，不受影响），
+   新增 ::before 画 chevron，让这条 bar 看得出是可展开的。 */
+.result-overview-toggle::after {
+  grid-row: 1;
+  grid-column: 2;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-minor);
+}
+
+.result-overview-toggle::before {
+  grid-row: 1;
+  grid-column: 3;
+  width: 6px;
+  height: 6px;
+  margin-top: -2px;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  content: "";
+  transform: rotate(45deg);
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.result-inline-disclosure[open] .result-overview-toggle::before {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}

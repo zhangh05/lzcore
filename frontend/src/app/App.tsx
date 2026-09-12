@@ -92,7 +92,7 @@ const NavGroupItem = memo(function NavGroupItem({ group, currentPath }: { group:
         aria-expanded={hasMenu ? (active ? "true" : "false") : undefined}
         viewTransition
       >
-        <Icon size={14} />
+        <Icon size={16} weight="duotone" />
         <span>{group.label}</span>
       </NavLink>
       {hasMenu ? (
@@ -114,7 +114,7 @@ const NavGroupItem = memo(function NavGroupItem({ group, currentPath }: { group:
                 viewTransition
                 role="menuitem"
               >
-                <ChildIcon size={14} />
+                <ChildIcon size={14} weight="duotone" />
                 <span>{item.label}</span>
               </NavLink>
             );
@@ -134,7 +134,7 @@ const SettingsNav = memo(function SettingsNav({ items, currentPath }: { items: N
   return (
     <details className={"app-settings-menu" + (active ? " active" : "")}>
       <summary className="settings-nav-trigger" aria-label="打开设置菜单" data-testid="btn-settings-menu">
-        <IconSettings size={15} />
+        <IconSettings size={16} weight="duotone" />
         <span className="sr-only">设置</span>
       </summary>
       <div className="app-nav-menu" role="menu" aria-label="设置菜单">
@@ -156,7 +156,7 @@ const SettingsNav = memo(function SettingsNav({ items, currentPath }: { items: N
               viewTransition
               role="menuitem"
             >
-              <Icon size={14} />
+              <Icon size={14} weight="duotone" />
               <span>{item.label}</span>
             </NavLink>
           );

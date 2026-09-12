@@ -13,8 +13,18 @@ import { useSessionStore } from "../../stores/session";
 import { APP_EVENTS } from "../../utils/appEvents";
 import { useToastStore } from "../../stores/toast";
 import { Badge, StatusDot, EmptyState, LoadingState, CodeBlock } from "../../components/common";
-import { PageHeader, DetailPanel, Button, FilterBar, Input, Select } from "../../components/ui";
-import { IconRefresh, IconDocument, IconHistory, IconBolt, IconAlert, IconTrash } from "../../components/Icon";
+import { PageHeader, DetailPanel, Button, FilterBar, Input, Select, TabButton } from "../../components/ui";
+import {
+  IconRefresh,
+  IconDocument,
+  IconHistory,
+  IconBolt,
+  IconAlert,
+  IconTrash,
+  IconGauge,
+  IconGrid,
+  IconChecklist,
+} from "../../components/Icon";
 import { TraceDetailPanel } from "../../components/TraceDetailPanel";
 import { deriveRunTraceStats } from "../../utils/runTraceStats";
 import { formatEventTime, formatEventDetail, formatEventLabel } from "../../utils/runEvent";
@@ -750,12 +760,29 @@ function JobDetail({
         </div>
       )}
 
-      <div className="tabs operations-tabs">
-        <button className={"tab" + (jobTab === "overview" ? " active" : "")} onClick={() => setJobTab("overview")}>
-          执行记录 {stats.runCount > 0 && <span className="opacity-60 ml-1">{stats.runCount}</span>}
-        </button>
-        <button className={"tab" + (jobTab === "stats" ? " active" : "")} onClick={() => setJobTab("stats")}>统计</button>
-        <button className={"tab" + (jobTab === "summary" ? " active" : "")} onClick={() => setJobTab("summary")}>概要</button>
+      <div className="tabs operations-tabs" role="tablist">
+        <TabButton
+          className="tab"
+          icon={IconHistory}
+          label="执行记录"
+          count={stats.runCount}
+          active={jobTab === "overview"}
+          onClick={() => setJobTab("overview")}
+        />
+        <TabButton
+          className="tab"
+          icon={IconGauge}
+          label="统计"
+          active={jobTab === "stats"}
+          onClick={() => setJobTab("stats")}
+        />
+        <TabButton
+          className="tab"
+          icon={IconDocument}
+          label="概要"
+          active={jobTab === "summary"}
+          onClick={() => setJobTab("summary")}
+        />
       </div>
 
       {jobTab === "overview" && (
@@ -969,9 +996,21 @@ function RunTraceView({ run, trace, tab, setTab, onBack }: {
         <Badge kind={sBadge(effectiveStatus(run))}>{sLabel(effectiveStatus(run))}</Badge>
       </div>
 
-      <div className="tabs operations-tabs">
-        <button className={"tab" + (tab === "overview" ? " active" : "")} onClick={() => setTab("overview")}>概览</button>
-        <button className={"tab" + (tab === "events" ? " active" : "")} onClick={() => setTab("events")}>处理过程</button>
+      <div className="tabs operations-tabs" role="tablist">
+        <TabButton
+          className="tab"
+          icon={IconGrid}
+          label="概览"
+          active={tab === "overview"}
+          onClick={() => setTab("overview")}
+        />
+        <TabButton
+          className="tab"
+          icon={IconChecklist}
+          label="处理过程"
+          active={tab === "events"}
+          onClick={() => setTab("events")}
+        />
       </div>
 
       {tab === "overview" && (

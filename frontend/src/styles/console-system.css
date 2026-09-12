@@ -204,6 +204,43 @@ select.input:focus-visible {
 .job-card-meta,
 .ra-event-meta,
 .ra-event-summary { color: var(--console-muted-ink); font-size: 11px; }
+
+/* 任务卡片底部的操作行（重试/恢复/删除）。之前没规则，按钮直接贴 meta 行，
+   跟 meta 之间没有视觉分隔，删除按钮的红边跟"智能体对话"行混在一起看不出层级。
+   加一条顶部细线 + 内边距，让操作区像 footer 一样独立。 */
+.job-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: var(--space-3) var(--space-3) 0;
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--line-2);
+}
+
+/* "选择可删除项 + 删除已选" 的批量操作行。补内边距和 checkbox / button 对齐。 */
+.job-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  background: var(--surface-2);
+}
+.job-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+.job-bulk-actions .btn {
+  margin-left: auto;
+}
 .ra-event-card,
 .ra-event-card-static { padding: 10px 12px; background: var(--console-surface); }
 .ra-event-card:hover,

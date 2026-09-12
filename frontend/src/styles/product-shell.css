@@ -1,6 +1,7 @@
 /* Application shell. All visual values come from global Design System 3.0. */
 
 .app-header {
+  min-height: 48px;
   gap: 18px;
   padding: 0 var(--space-6);
   background: var(--surface);
@@ -13,14 +14,40 @@
   max-width: var(--w-sidebar);
 }
 
+/* 在品牌区和导航区之间画一条竖线。顶栏 brand + nav + actions 横向跨度大，
+   中间 700+px 全靠 margin-left:auto 吃掉，单靠位置感容易看成"散"。
+   用两条竖线把栏切成 3 段，视觉上空白变成"对称留白"而不是"断层"。 */
+.brand { position: relative; }
+.brand::after {
+  position: absolute;
+  right: -9px;
+  top: 50%;
+  width: 1px;
+  height: 16px;
+  background: var(--line-2);
+  content: "";
+  transform: translateY(-50%);
+}
+
 .brand-text > span {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: var(--weight-heading);
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .brand-text small {
-  display: none;
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-4);
+  font-size: 10px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  vertical-align: 1px;
 }
 
 .app-nav {
@@ -43,10 +70,11 @@
   align-items: center;
   gap: 7px;
   min-height: 100%;
-  padding: 0 10px;
+  padding: 0 12px;
   color: var(--text-3);
   font-size: 13px;
   font-weight: 620;
+  line-height: 1.5;
 }
 
 .app-nav-item:hover,
@@ -59,10 +87,10 @@
 .app-nav-item.active::after,
 .app-nav-group.active > .app-nav-item::after {
   position: absolute;
-  right: 10px;
-  bottom: 0;
-  left: 10px;
-  height: 2px;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 3px;
   content: "";
   background: var(--accent-2);
   border-radius: 3px 3px 0 0;
@@ -78,8 +106,20 @@
 }
 
 .app-actions {
+  position: relative;
   gap: 6px;
+  padding-left: 14px;
   margin-left: auto;
+}
+.app-actions::before {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 16px;
+  background: var(--line-2);
+  content: "";
+  transform: translateY(-50%);
 }
 
 .collapse-btn,
@@ -354,20 +394,32 @@
   z-index: 0;
 }
 
-/* Dense graphite console treatment: icons carry hierarchy without decorative color. */
+/* 顶栏图标：duotone 自带描边 + 半透明背景填充，视觉饱满。如果再叠 0.72
+   opacity 会把背景填充压淡，效果反而发灰。改为默认不抑制、保持饱满；
+   激活态用色相切换（var(--accent) → var(--text)）做层级。 */
 .app-nav-item > svg,
-.collapse-btn > svg,
-.theme-toggle > svg,
-.nav-toggle > svg {
-  opacity: 0.72;
-  stroke-width: 1.65;
+.app-settings-menu > summary > svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+  transition: opacity var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
 }
-.app-nav-item.active > svg,
 .app-nav-item:hover > svg,
-.collapse-btn:hover > svg,
-.theme-toggle:hover > svg,
-.nav-toggle:hover > svg {
+.app-nav-item.active > svg,
+.app-settings-menu:hover > summary > svg,
+.app-settings-menu[open] > summary > svg {
   opacity: 1;
+}
+
+/* 16px 图标 + 13px 文字：原 gap 7px 偏紧，icon 自身有 padding，视觉上贴字。
+   8px 让图标和文字各自独立呼吸，又不显得脱节。 */
+.app-nav-item {
+  gap: 8px;
+}
+
+/* 分组触发器激活时图标着色：duotone 的 background layer 用 currentColor
+   渲染（fillOpacity 由组件控制），所以换 color 就能整层换色。 */
+.app-nav-group.active > .app-nav-item {
+  color: var(--accent);
 }
 .logout-btn:hover,
 .logout-btn:focus-visible {

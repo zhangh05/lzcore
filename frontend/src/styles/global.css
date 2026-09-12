@@ -25,7 +25,7 @@ body,
      portal, icon, control and legacy pixel value shares the same scale.
      Inverse compensations (--h-touch, --focus-width, .app-shell height) are
      expressed as `x / var(--ui-scale)`, so they stay correct at any value. */
-  --ui-scale: 0.8;
+  --ui-scale: 0.95;
 
   /* Design System 3.0 — calm, evidence-led operations workspace. */
   --bg: #f6f8f7;
@@ -1885,14 +1885,12 @@ pre code {
   color: var(--text);
   background: var(--surface-2);
   border-color: var(--line-3);
-  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.05);
-  transform: translate3d(0, -1px, 0);
+  /* 全 app 是 flat 设计，按钮 hover 不应跳出阴影和位移，否则跟整套语言不搭。
+     之前 translate3d(-1px) + box-shadow 让按钮在紧贴列表项时抖一下。 */
 }
 
 .btn:active:not(:disabled) {
   background: var(--surface-3);
-  box-shadow: none;
-  transform: translate3d(0, 0, 0) scale(0.985);
 }
 
 .btn.primary {
@@ -1905,7 +1903,6 @@ pre code {
   color: var(--accent-text);
   background: var(--accent-2);
   border-color: var(--accent-2);
-  box-shadow: 0 7px 16px rgba(29, 92, 131, 0.18);
 }
 
 .btn.ghost {
@@ -1918,9 +1915,16 @@ pre code {
   border-color: transparent;
 }
 
+/* .btn.danger-ghost 之前只设了 color，没有 transparent 背景，所以渲染出来跟
+   .btn.danger 完全一样——是个"带边框的实心按钮"，跟 ghost 的语义不符。
+   8+ 处使用（删除/批量删除/取消等）都被这个 bug 拖累成"红边按钮"。 */
 .btn.danger,
 .btn.danger-ghost {
   color: var(--danger);
+}
+.btn.danger-ghost {
+  background: transparent;
+  border-color: transparent;
 }
 
 .btn.danger:hover:not(:disabled),
@@ -2430,42 +2434,124 @@ select.input {
   font-size: var(--fs-13);
 }
 
-.tabs {
+/* ── 统一 tab 条 ───────────────────────────────────────────────────────────
+   数据管理用 .data-center-tabs / .dc-tab，运行监控用 .tabs / .tab，
+   此前是两套各写一遍的实现：高度 34 / 36、激活色 --accent-2 / --text、
+   字重 640 / 620、计数徽章一个是裸 span（opacity-60）一个是胶囊 ——
+   看起来像两套产品。现在结构收敛到 components/ui/TabButton，
+   视觉由下面这一组规则统一给出，页面只保留容器类名差异。
+
+   ★ 特异性：console-system.css 有 `.data-center .data-center-tabs button`
+   和 `.operations-page .operations-tabs button`（都是 (0,2,1)），
+   裸 `.tab` / `.dc-tab` (0,1,0) 会被静默盖掉，所以这里必须带页面前缀 (0,3,0)。 */
+.tabs,
+.data-center > .ui-filter-bar.data-center-tabs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 2px;
+  overflow-x: auto;
   border-bottom: 1px solid var(--line);
 }
 
-.tab {
+.data-center > .ui-filter-bar.data-center-tabs {
+  padding: 0 8px;
+}
+
+.operations-page .operations-tabs .tab,
+.data-center .data-center-tabs .dc-tab {
   position: relative;
-  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
   padding: 0 12px;
   color: var(--text-3);
-  border: 0;
   font-size: var(--fs-13);
-  font-weight: 640;
+  font-weight: var(--weight-minor);
+  white-space: nowrap;
+  border-radius: var(--r-4) var(--r-4) 0 0;
   transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
 
-.tab:hover {
+/* duotone 的背景层用 currentColor 渲染：激活态切 duotone 会连背景一起变实 */
+.operations-page .operations-tabs .tab > svg,
+.data-center .data-center-tabs .dc-tab > svg {
+  flex-shrink: 0;
+  opacity: 0.82;
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.operations-page .operations-tabs .tab:hover,
+.data-center .data-center-tabs .dc-tab:hover {
   color: var(--text);
   background: var(--surface-2);
 }
 
-.tab.active {
-  color: var(--accent-2);
+.operations-page .operations-tabs .tab:hover > svg,
+.data-center .data-center-tabs .dc-tab:hover > svg,
+.operations-page .operations-tabs .tab.active > svg,
+.data-center .data-center-tabs .dc-tab.active > svg {
+  opacity: 1;
 }
 
-.tab.active::after {
+.operations-page .operations-tabs .tab:focus-visible,
+.data-center .data-center-tabs .dc-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.operations-page .operations-tabs .tab.active,
+.data-center .data-center-tabs .dc-tab.active {
+  color: var(--text);
+  font-weight: var(--weight-subhead);
+}
+
+/* 下划线贴在 tab 底边内侧 —— 容器开了 overflow-x:auto，如果用 bottom:-1px
+   去压容器的 border-bottom，会被 overflow 裁掉。 */
+.operations-page .operations-tabs .tab::after,
+.data-center .data-center-tabs .dc-tab::after {
   position: absolute;
   right: 10px;
-  bottom: -1px;
+  bottom: 0;
   left: 10px;
   height: 2px;
+  background: transparent;
+  border-radius: 2px 2px 0 0;
+  transition: background var(--dur-2) var(--ease);
   content: "";
+}
+
+.operations-page .operations-tabs .tab.active::after,
+.data-center .data-center-tabs .dc-tab.active::after {
   background: var(--accent);
   transform-origin: center;
   animation: tab-line-in var(--dur-3) var(--ease-out) both;
+}
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  color: var(--text-3);
+  font-size: var(--fs-10);
+  font-weight: var(--weight-subhead);
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-3);
+  border-radius: var(--r-pill);
+}
+
+.operations-page .operations-tabs .tab:hover .tab-count,
+.data-center .data-center-tabs .dc-tab:hover .tab-count {
+  color: var(--text-2);
+}
+
+.operations-page .operations-tabs .tab.active .tab-count,
+.data-center .data-center-tabs .dc-tab.active .tab-count {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface));
 }
 
 @keyframes tab-line-in {
@@ -6895,13 +6981,214 @@ summary:focus-visible,
 
 /* ── Knowledge Library (.kl-*) ── */
 .kl-help-details {
-  margin-bottom: 16px;
+  margin-bottom: var(--flow-base);
   font-size: var(--fs-12);
   color: var(--text-3);
 }
 .kl-help-summary {
   cursor: pointer;
   font-weight: 680;
+}
+
+/* 折叠卡：复用 .card 的容器样式，summary 当卡片标题用。 */
+.kl-collapsible-card {
+  padding: 0;
+}
+.kl-collapsible-card > .kl-collapsible-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--flow-tight);
+  padding: var(--flow-loose);
+  color: var(--text);
+  font-size: var(--fs-14);
+  font-weight: var(--weight-subhead);
+  background: var(--surface-2);
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  /* 左侧 4px 色条：上传=绿、导入=蓝。让折叠行从背景里"浮起来"，并跟
+     标题栏的按钮配色对应。box-shadow inset 不占布局，summary 内容左对齐
+     不会跳。 */
+  box-shadow: inset 4px 0 0 var(--accent);
+  transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.kl-collapsible-card > .kl-collapsible-summary:hover {
+  background: var(--surface-3);
+}
+.kl-collapsible-card[data-testid="knowledge-import-card"] > .kl-collapsible-summary {
+  box-shadow: inset 4px 0 0 var(--info);
+}
+.kl-collapsible-card > .kl-collapsible-summary::-webkit-details-marker { display: none; }
+.kl-collapsible-card > .kl-collapsible-summary::before {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-right: 2px;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  transform: rotate(-45deg);
+  transition: transform var(--dur-2) var(--ease);
+}
+.kl-collapsible-card[open] > .kl-collapsible-summary::before {
+  transform: rotate(45deg);
+}
+.kl-collapsible-card[open] > .kl-collapsible-summary {
+  border-bottom: 1px solid var(--line-2);
+}
+.kl-collapsible-body {
+  padding: var(--flow-base) var(--flow-loose) var(--flow-loose);
+}
+
+/* 列表卡：知识库的核心主区。空状态与展开卡之间留出明确呼吸。 */
+.kl-list-card {
+  /* 比默认 .card 多一点底部留白，与下方折叠卡分隔 */
+  margin-bottom: var(--flow-loose);
+}
+
+/* 常驻检索工具条：搜索框做成"带内嵌放大镜的输入容器"，比裸 input 更容易被
+   识别为搜索入口（这是知识库最高频的操作）。 */
+.kl-toolbar {
+  display: flex;
+  gap: var(--flow-tight);
+  margin-bottom: var(--flow-base);
+}
+.kl-search-box {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--flow-tight);
+  min-width: 0;
+  padding: 0 var(--flow-base);
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  transition: border-color var(--dur-2) var(--ease);
+}
+.kl-search-box:focus-within {
+  border-color: var(--accent);
+}
+.kl-search-box > svg {
+  flex-shrink: 0;
+}
+/* 剥掉 .input 自带的边框和底色，让整个容器看起来就是一个搜索框 */
+.kl-search-box .kl-search-input {
+  min-width: 0;
+  padding-right: 0;
+  padding-left: 0;
+  background: transparent;
+  border: 0;
+}
+.kl-search-box .kl-search-input:focus {
+  box-shadow: none;
+  outline: none;
+}
+
+.kl-search-results-card {
+  margin-bottom: var(--flow-loose);
+}
+
+/* 状态条：数字给足体量和色彩，非 0 的状态自动上底色。五个等权灰数字是
+   "看不出重点"的典型 —— 这里让异常状态自己跳出来。 */
+.kl-stats .stat-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 68px;
+  padding: var(--flow-base) var(--flow-loose);
+}
+.kl-stats .stat-value {
+  font-size: var(--fs-24);
+  font-weight: var(--weight-display);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.kl-stats .stat-label {
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  font-weight: var(--weight-minor);
+}
+.kl-stat--ok { background: color-mix(in srgb, var(--ok-soft) 45%, var(--surface)); }
+.kl-stat--ok .stat-value { color: var(--ok); }
+.kl-stat--warn { background: color-mix(in srgb, var(--warn-soft) 45%, var(--surface)); }
+.kl-stat--warn .stat-value { color: var(--warn); }
+.kl-stat--accent { background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.kl-stat--accent .stat-value { color: var(--accent); }
+.kl-stat--danger { background: color-mix(in srgb, var(--danger-soft) 45%, var(--surface)); }
+.kl-stat--danger .stat-value { color: var(--danger); }
+
+/* 来源：artifact 用主题色，本地上传保持中性 */
+.kl-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-12);
+  white-space: nowrap;
+}
+.kl-source.local { color: var(--text-3); }
+.kl-source.artifact { color: var(--accent); }
+
+/* 状态点比 Badge 更省地方，且颜色本身就是语义 —— 不用读文字就知道好坏 */
+.kl-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-12);
+  font-weight: var(--weight-minor);
+  white-space: nowrap;
+}
+.kl-status-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.kl-status.ok { color: var(--ok); }
+.kl-status.warn { color: var(--warn); }
+.kl-status.off { color: var(--text-4); }
+
+/* 列表标题栏的操作组：主操作（上传）用 primary 实底，次操作用 ghost，
+   靠右对齐。这样首屏始终看得见"怎么添加文档"。 */
+.kl-list-actions {
+  gap: var(--flow-tight);
+  margin-left: auto;
+}
+
+/* 导入专用蓝实底：和"上传文档"的绿形成色相对比，两个都是实底高对比，
+   但用色区分主次，不会有"一个描边一个实底"的视觉冲突。 */
+.btn-info,
+.btn-info.btn {
+  color: #fff;
+  background: var(--info);
+  border-color: var(--info);
+}
+.btn-info:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--info) 86%, #000);
+  border-color: color-mix(in srgb, var(--info) 86%, #000);
+}
+.btn-info:active:not(:disabled) {
+  background: color-mix(in srgb, var(--info) 76%, #000);
+  border-color: color-mix(in srgb, var(--info) 76%, #000);
+}
+
+/* 文档名下方的常驻 meta（片段数 · 体积）。用 tabular-nums 让数字纵向对齐，
+   列表扫读时不会因为字宽跳动而错位。 */
+.kl-doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--flow-tight);
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+}
+.kl-doc-meta > span + span::before {
+  margin-right: var(--flow-tight);
+  color: var(--text-4);
+  content: "·";
 }
 .kl-help-content {
   margin-top: 6px;
@@ -7828,6 +8115,9 @@ summary:focus-visible,
   width: min(360px, 42vw);
 }
 
+/* .data-center-tabs 的 tab 项样式不在这里 —— 见 global.css 顶部的「统一 tab 条」
+   区块（.tabs / .data-center-tabs 与 .tab / .dc-tab 共用一套规则）。 */
+
 .data-file-filters {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) auto auto;
@@ -7986,6 +8276,22 @@ summary:focus-visible,
 .data-lifecycle-card { margin: 0; }
 .data-archive-list { grid-column: 1 / -1; }
 
+/* 三个生命周期卡片用左侧色条区分语义：清理是 destructive 红、归档是
+   info 蓝、归档区是中性灰。box-shadow inset 不占布局空间，跟折叠区
+   色条同一套语言。注意 console-system.css 也有 .data-center .data-lifecycle-card
+   规则（特异性 0,2,0），这里要加 .data-center 前缀提升到 (0,3,1) 才能胜出。 */
+.data-center .data-lifecycle-card:nth-of-type(1) {
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+.data-center .data-lifecycle-card:nth-of-type(2) {
+  box-shadow: inset 4px 0 0 var(--info);
+}
+.data-center .data-lifecycle-card:nth-of-type(3) {
+  box-shadow: inset 4px 0 0 var(--text-4);
+}
+.data-center .data-lifecycle-card:nth-of-type(1):hover { box-shadow: inset 4px 0 0 color-mix(in srgb, var(--danger) 80%, black); }
+.data-center .data-lifecycle-card:nth-of-type(2):hover { box-shadow: inset 4px 0 0 color-mix(in srgb, var(--info) 80%, black); }
+
 .data-lifecycle-head {
   display: flex;
   align-items: flex-start;
@@ -8009,13 +8315,25 @@ summary:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 9px;
+  padding: 6px 9px 6px 14px;
   color: var(--text-2);
   font-size: var(--fs-11);
   background: var(--surface-2);
   border-radius: var(--r-4);
+  position: relative;
 }
-
+.data-candidate-counts > span::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+.dc-cleanup .data-candidate-counts > span::before { background: var(--danger); }
+.dc-archive-action .data-candidate-counts > span::before { background: var(--info); }
 .data-candidate-counts > span b { color: var(--text); font-size: var(--fs-14); }
 
 .diag-policy-management {
@@ -8082,7 +8400,8 @@ summary:focus-visible,
   .data-stat:nth-child(odd) { border-right: 1px solid var(--line-2); }
   .data-stat:last-child { grid-column: 1 / -1; border-bottom: 0; border-right: 0; }
   .data-overview-layout { grid-template-columns: 1fr; }
-  .data-center-tabs { padding-inline: 12px; overflow-x: auto; }
+  /* 与上面 .data-center > .ui-filter-bar.data-center-tabs 同特异性，才能盖住它 */
+  .data-center > .ui-filter-bar.data-center-tabs { padding-inline: 12px; overflow-x: auto; }
   .data-lifecycle-grid { grid-template-columns: 1fr; }
   .data-archive-list { grid-column: auto; }
   .data-split { grid-template-columns: 1fr; overflow: auto; }

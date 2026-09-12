@@ -6,11 +6,11 @@ import {
   CodeBlock,
   InlineCode,
 } from "../../components/common";
-import { PageHeader, FilterBar, DataTable } from "../../components/ui";
+import { PageHeader, DataTable } from "../../components/ui";
 import { PortalModal } from "../../components/PortalModal";
 import { knowledgeApi, artifactsApi, storageApi } from "../../api";
 import { useSessionStore } from "../../stores/session";
-import { formatDate } from "../../utils/format";
+import { formatDate, formatFileSize } from "../../utils/format";
 import { useToastStore } from "../../stores/toast";
 import { isApiError } from "../../types";
 import type { KnowledgeSource } from "../../types";
@@ -286,12 +286,18 @@ export function KnowledgeLibrary() {
             <div className="text-sm cursor-pointer" onClick={() => startRename(s.source_id, s.title || "")} title="点击编辑名称">
               {s.title || "未命名文档"}
             </div>
+            {/* chunk_count 是后端排除 parent chunk 后算出的真实子片段数，
+                total_size_bytes 是原始体积 —— 两者都比藏在折叠里更有价值，
+                常驻到名称下方一眼可见。 */}
+            <div className="kl-doc-meta">
+              {typeof s.chunk_count === "number" ? <span>{s.chunk_count} 片段</span> : null}
+              {s.total_size_bytes ? <span>{formatFileSize(s.total_size_bytes)}</span> : null}
+            </div>
             <details className="collapse mt-1">
               <summary className="text-xs muted">技术详情</summary>
               <div className="text-xs muted mt-1">
                 source: <InlineCode>{s.source_id}</InlineCode>
                 {s.artifact_id && <> · artifact: <InlineCode>{s.artifact_id}</InlineCode></>}
-                {typeof s.chunk_count === "number" && <> · chunks: {s.chunk_count}</>}
               </div>
             </details>
           </>
@@ -308,17 +314,31 @@ export function KnowledgeLibrary() {
     },
     {
       key: "type",
-      header: "内容类型",
-      render: (s: KnowledgeSource) => <Badge kind="muted">{sourceTypeLabel(s.source_type)}</Badge>,
+      header: "来源",
+      render: (s: KnowledgeSource) => (
+        // artifact 来源上主题色 + 书图标，本地上传保持中性 —— 扫读时能直接
+        // 区分"这份是我传的"还是"任务跑出来的"。
+        <span className={"kl-source" + (s.artifact_id ? " artifact" : " local")}>
+          {s.artifact_id ? <IconBook size={12} /> : <IconDocument size={12} />}
+          {sourceTypeLabel(s.source_type)}
+        </span>
+      ),
     },
     {
       key: "searchable",
-      header: "是否可检索",
-      render: (s: KnowledgeSource) => (
-        <Badge kind={isSearchableSource(s) ? "ok" : "warn"}>
-          {isSearchableSource(s) ? "可检索" : "待整理"}
-        </Badge>
-      ),
+      header: "状态",
+      render: (s: KnowledgeSource) => {
+        // 原来「已停用」和「待整理」都落进 Badge(warn)，看不出区别。
+        // 停用是用户主动关掉的，语义完全不同，单独一档。
+        const disabled = s.enabled === false;
+        const ok = !disabled && isSearchableSource(s);
+        return (
+          <span className={"kl-status" + (disabled ? " off" : ok ? " ok" : " warn")}>
+            <span className="kl-status-dot" />
+            {disabled ? "已停用" : ok ? "已索引" : "待整理"}
+          </span>
+        );
+      },
     },
     {
       key: "updated",
@@ -369,6 +389,12 @@ export function KnowledgeLibrary() {
     },
   ];
 
+  // 后端 /knowledge/sources 返回 counts = { total, indexed, pending, indexing,
+  // failed }，是**状态**统计而非范围统计（见 knowledge_routes.py:154）。之前
+  // 这个字段完全没在 UI 上用过，这里拿它做顶部状态条。
+  const counts: Partial<Record<"total" | "indexed" | "pending" | "indexing" | "failed", number>> =
+    sources.state.kind === "success" ? (sources.state.data.counts ?? {}) : {};
+
   return (
     <div className="page knowledge-library" data-testid="page-knowledge">
       <PageHeader
@@ -400,111 +426,93 @@ export function KnowledgeLibrary() {
             <strong>知识源</strong> — 列表中展示已导入的文档，可预览内容或重新索引。
           </div>
         </details>
-        <div className="card" data-testid="knowledge-upload-card">
-          <div className="card-title">
-            <IconPlus size={12} />
-            上传文档
+
+        <div className="stat-grid kl-stats" data-testid="knowledge-stats">
+          <div className="stat-card">
+            <div className="stat-value">{counts.total ?? "—"}</div>
+            <div className="stat-label">总文档</div>
           </div>
-          <div className="text-xs muted mb-3">
-            支持 Markdown、文本、HTML、DOCX、PDF。上传后会自动整理为可检索知识源。
+          {/* 非 0 的状态自动上底色：一眼看出"有没有需要处理的"，
+              而不是五个同样灰扑扑的数字。 */}
+          <div className={"stat-card" + (counts.indexed ? " kl-stat--ok" : "")}>
+            <div className="stat-value">{counts.indexed ?? 0}</div>
+            <div className="stat-label">已索引</div>
           </div>
-          <div className="knowledge-upload-row mb-2">
+          <div className={"stat-card" + (counts.pending ? " kl-stat--warn" : "")}>
+            <div className="stat-value">{counts.pending ?? 0}</div>
+            <div className="stat-label">待整理</div>
+          </div>
+          <div className={"stat-card" + (counts.indexing ? " kl-stat--accent" : "")}>
+            <div className="stat-value">{counts.indexing ?? 0}</div>
+            <div className="stat-label">整理中</div>
+          </div>
+          <div className={"stat-card" + (counts.failed ? " kl-stat--danger" : "")}>
+            <div className="stat-value">{counts.failed ?? 0}</div>
+            <div className="stat-label">失败</div>
+          </div>
+        </div>
+
+        {/* 检索常驻工具条：原先是页面最底部一个独立 card，要滚到底才能用。
+            搜索框提到这里，结果在下方 inline 展开。 */}
+        <div className="kl-toolbar">
+          <div className="kl-search-box">
+            <IconSearch size={14} />
             <input
-              key={uploadInputKey}
-              className="sr-only"
-              type="file"
-              id="knowledge-upload-file"
-              accept=".md,.markdown,.txt,.html,.htm,.docx,.pdf"
-              data-testid="knowledge-upload-file"
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0] ?? null;
-                setUploadFile(file);
-                if (file && !uploadTitle.trim()) setUploadTitle(file.name.replace(/\.[^.]+$/, ""));
+              className="input kl-search-input"
+              placeholder="搜索全部文档…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") search.reload();
               }}
-            />
-            <label className={"file-picker" + (uploadFile ? " selected" : "")} htmlFor="knowledge-upload-file">
-              <span className="file-picker-icon">
-                <IconDocument size={14} />
-              </span>
-              <span className="file-picker-main">
-                <span className="file-picker-title">
-                  {uploadFile ? uploadFile.name : "选择本地文档"}
-                </span>
-                <span className="file-picker-hint">
-                  {uploadFile ? "已准备整理为知识源" : "Markdown / 文本 / HTML / DOCX / PDF"}
-                </span>
-              </span>
-            </label>
-            <button
-              className="btn primary"
-              type="button"
-              data-testid="btn-knowledge-upload"
-              disabled={!uploadFile || uploading}
-              onClick={() => void onUpload()}
-            >
-              <IconPlus size={12} /> {uploading ? "上传中…" : "上传"}
-            </button>
-          </div>
-          <div className="knowledge-meta-grid">
-            <input
-              className="input"
-              placeholder="文档名（可选）"
-              value={uploadTitle}
-              onChange={(e) => setUploadTitle(e.target.value)}
-            />
-            <input
-              className="input"
-              placeholder="标签，用逗号分隔（可选）"
-              value={uploadTags}
-              onChange={(e) => setUploadTags(e.target.value)}
+              data-testid="knowledge-search-input"
+              aria-label="搜索知识库"
             />
           </div>
+          <button
+            className="btn"
+            onClick={search.reload}
+            disabled={!query.trim()}
+            data-testid="btn-knowledge-search"
+            type="button"
+          >
+            <IconSearch size={12} /> 检索
+          </button>
         </div>
 
-        <div className="card" data-testid="knowledge-import-card">
-          <div className="card-title">
-            <IconBook size={12} />
-            从 artifact 导入
-            <span className="count">{artifacts.state.kind === "success" ? (artifacts.state.data.artifacts ?? []).length : "—"}</span>
-          </div>
-          <div className="text-xs muted mb-3">
-            选择一项任务产出建立可检索文档。系统只提取安全内容，机密信息不会进入搜索结果。
-          </div>
-          <div className="row-flex kl-import-row">
-            <select
-              className="input kl-import-select"
-              value={importArtifactId}
-              onChange={(e) => setImportArtifactId(e.target.value)}
-              data-testid="knowledge-import-select"
-              disabled={artifacts.state.kind === "loading"}
-            >
-              <option value="">选择 artifact…</option>
-              {(artifacts.state.kind === "success" ? artifacts.state.data.artifacts : []).map(
-                (a) => (
-                  <option key={a.artifact_id} value={a.artifact_id}>
-                    {a.title || a.artifact_id} · {shortId(a.artifact_id)}
-                  </option>
-                ),
-              )}
-            </select>
-            <button
-              className="btn primary"
-              onClick={onImport}
-              disabled={importing || !importArtifactId.trim()}
-              data-testid="btn-knowledge-import"
-              type="button"
-            >
-              <IconRefresh size={12} /> {importing ? "导入中…" : "导入"}
-            </button>
-          </div>
-          {artifacts.state.kind === "empty" && (
-            <div className="text-xs muted mt-2">
-              当前工作区没有可导入的任务产出。请先到「数据管理」导入文件或运行任务。
+        {/* 只在有检索词时占用版面，避免空状态常驻 */}
+        {debouncedQuery.trim() ? (
+          <div className="card kl-search-results-card">
+            <div className="card-title">
+              <IconSearch size={12} />
+              检索结果
+              {search.state.kind === "success" && search.state.data ? (
+                <span className="count">{search.state.data.count ?? 0}</span>
+              ) : null}
             </div>
-          )}
-        </div>
+            {search.state.kind === "loading" && (
+              <div className="text-sm muted row-flex kl-detail-loading">
+                <span className="spinner" /> 搜索中…
+              </div>
+            )}
+            {search.state.kind === "error" && (
+              <div className="text-sm kl-search-error" data-testid="knowledge-search-error">
+                {search.state.error.message}
+                {search.state.error.request_id && (
+                  <span className="text-xs muted kl-req-id">
+                    req_id: {search.state.error.request_id}
+                  </span>
+                )}
+              </div>
+            )}
+            {search.state.kind === "success" && search.state.data && (
+              <SearchResults data={search.state.data} />
+            )}
+          </div>
+        ) : null}
 
-        <div className="card">
+        {/* 知识源列表提到第一位：用户来知识库是看文档，列表才是核心。 */}
+        <div className="card kl-list-card">
           <div className="card-title">
             <IconBook size={12} />
             知识源列表
@@ -515,20 +523,22 @@ export function KnowledgeLibrary() {
                   ? "—"
                   : "0"}
             </span>
-            <button
-              className="card-actions btn ghost sm"
-              onClick={sources.reload}
-              type="button"
-              aria-label="刷新"
-            >
-              <IconRefresh size={11} />
-            </button>
+            <div className="card-actions kl-list-actions">
+              <button
+                className="btn ghost sm"
+                onClick={sources.reload}
+                type="button"
+                aria-label="刷新"
+              >
+                <IconRefresh size={11} />
+              </button>
+            </div>
           </div>
           <AsyncView
             state={sources.state}
             onRetry={sources.reload}
             emptyText="暂无知识源"
-            emptyHint="点击「导入」从 artifact 创建"
+            emptyHint="点击下方「上传文档」或「从 artifact 导入」添加"
           >
             {(d) => (
               <DataTable
@@ -536,58 +546,122 @@ export function KnowledgeLibrary() {
                 columns={knowledgeColumns}
                 rows={d.sources ?? []}
                 keyExtractor={(s) => s.source_id}
-                empty={{ text: "暂无知识源", hint: "点击「导入」从 artifact 创建" }}
+                empty={{ text: "暂无知识源", hint: "点击下方「上传文档」或「从 artifact 导入」添加" }}
               />
             )}
           </AsyncView>
         </div>
 
-        <div className="card">
-          <div className="card-title">
-            <IconSearch size={12} />
-            检索
-          </div>
-          <FilterBar className="mb-3">
-            <input
-              className="input"
-              placeholder="输入关键词（CJK / 英文）"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") search.reload();
-              }}
-              data-testid="knowledge-search-input"
-            />
-            <button
-              className="btn primary"
-              onClick={search.reload}
-              disabled={!query.trim()}
-              data-testid="btn-knowledge-search"
-              type="button"
-            >
-              <IconSearch size={12} /> 检索
-            </button>
-          </FilterBar>
-
-          {search.state.kind === "loading" && (
-            <div className="text-sm muted row-flex kl-detail-loading">
-              <span className="spinner" /> 搜索中…
+        {/* 上传/导入改为 details 默认收起：作为辅助入口，列表可见时才方便核对。
+            testid 保留以兼容现有 e2e 选择器。 */}
+        <details name="kl-panel" className="card kl-collapsible-card" data-testid="knowledge-upload-card">
+          <summary className="kl-collapsible-summary">
+            <IconPlus size={12} />
+            上传文档
+          </summary>
+          <div className="kl-collapsible-body">
+            <div className="text-xs muted mb-3">
+              支持 Markdown、文本、HTML、DOCX、PDF。上传后会自动整理为可检索知识源。
             </div>
-          )}
-          {search.state.kind === "error" && (
-            <div className="text-sm kl-search-error" data-testid="knowledge-search-error">
-              {search.state.error.message}
-              {search.state.error.request_id && (
-                <span className="text-xs muted kl-req-id">
-                  req_id: {search.state.error.request_id}
+            <div className="knowledge-upload-row mb-2">
+              <input
+                key={uploadInputKey}
+                className="sr-only"
+                type="file"
+                id="knowledge-upload-file"
+                accept=".md,.markdown,.txt,.html,.htm,.docx,.pdf"
+                data-testid="knowledge-upload-file"
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0] ?? null;
+                  setUploadFile(file);
+                  if (file && !uploadTitle.trim()) setUploadTitle(file.name.replace(/\.[^.]+$/, ""));
+                }}
+              />
+              <label className={"file-picker" + (uploadFile ? " selected" : "")} htmlFor="knowledge-upload-file">
+                <span className="file-picker-icon">
+                  <IconDocument size={14} />
                 </span>
-              )}
+                <span className="file-picker-main">
+                  <span className="file-picker-title">
+                    {uploadFile ? uploadFile.name : "选择本地文档"}
+                  </span>
+                  <span className="file-picker-hint">
+                    {uploadFile ? "已准备整理为知识源" : "Markdown / 文本 / HTML / DOCX / PDF"}
+                  </span>
+                </span>
+              </label>
+              <button
+                className="btn primary"
+                type="button"
+                data-testid="btn-knowledge-upload"
+                disabled={!uploadFile || uploading}
+                onClick={() => void onUpload()}
+              >
+                <IconPlus size={12} /> {uploading ? "上传中…" : "上传"}
+              </button>
             </div>
-          )}
-          {search.state.kind === "success" && search.state.data && (
-            <SearchResults data={search.state.data} />
-          )}
-        </div>
+            <div className="knowledge-meta-grid">
+              <input
+                className="input"
+                placeholder="文档名（可选）"
+                value={uploadTitle}
+                onChange={(e) => setUploadTitle(e.target.value)}
+              />
+              <input
+                className="input"
+                placeholder="标签，用逗号分隔（可选）"
+                value={uploadTags}
+                onChange={(e) => setUploadTags(e.target.value)}
+              />
+            </div>
+          </div>
+        </details>
+
+        <details name="kl-panel" className="card kl-collapsible-card" data-testid="knowledge-import-card">
+          <summary className="kl-collapsible-summary">
+            <IconBook size={12} />
+            从 artifact 导入
+            <span className="count">{artifacts.state.kind === "success" ? (artifacts.state.data.artifacts ?? []).length : "—"}</span>
+          </summary>
+          <div className="kl-collapsible-body">
+            <div className="text-xs muted mb-3">
+              选择一项任务产出建立可检索文档。系统只提取安全内容，机密信息不会进入搜索结果。
+            </div>
+            <div className="row-flex kl-import-row">
+              <select
+                className="input kl-import-select"
+                value={importArtifactId}
+                onChange={(e) => setImportArtifactId(e.target.value)}
+                data-testid="knowledge-import-select"
+                disabled={artifacts.state.kind === "loading"}
+              >
+                <option value="">选择 artifact…</option>
+                {(artifacts.state.kind === "success" ? artifacts.state.data.artifacts : []).map(
+                  (a) => (
+                    <option key={a.artifact_id} value={a.artifact_id}>
+                      {a.title || a.artifact_id} · {shortId(a.artifact_id)}
+                    </option>
+                  ),
+                )}
+              </select>
+              <button
+                className="btn primary"
+                onClick={onImport}
+                disabled={importing || !importArtifactId.trim()}
+                data-testid="btn-knowledge-import"
+                type="button"
+              >
+                <IconRefresh size={12} /> {importing ? "导入中…" : "导入"}
+              </button>
+            </div>
+            {artifacts.state.kind === "empty" && (
+              <div className="text-xs muted mt-2">
+                当前工作区没有可导入的任务产出。请先到「数据管理」导入文件或运行任务。
+              </div>
+            )}
+          </div>
+        </details>
+
       </div>
 
       <PortalModal

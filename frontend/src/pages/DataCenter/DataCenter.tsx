@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
+import type { IconProps } from "@phosphor-icons/react";
 import { useSearchParams } from "../../router";
 import { apiRequest } from "../../api/client";
 import {
@@ -11,24 +12,26 @@ import {
 } from "../../api";
 import { Badge, CodeBlock, EmptyState, LoadingState } from "../../components/common";
 import { confirm } from "../../components/ConfirmDialog";
-import { Button, DetailPanel, FilterBar, Input, PageHeader } from "../../components/ui";
+import { Button, DetailPanel, FilterBar, Input, PageHeader, TabButton } from "../../components/ui";
 import { useSessionStore } from "../../stores/session";
 import { useToastStore } from "../../stores/toast";
 import type { ArchivedDataItem, Artifact, DataOverview, ManagedFile } from "../../types";
 import { isApiError } from "../../types";
 import { formatFileSize, formatDate } from "../../utils/format";
 import { shortId } from "../../utils/displayText";
-import { IconPlus } from "../../components/Icon";
+import { IconArchive, IconDocument, IconGauge, IconLayers, IconLink, IconPlus } from "../../components/Icon";
 
 type DataTab = "overview" | "files" | "artifacts" | "relations" | "lifecycle";
 type ArtifactView = "" | "current" | "history" | "deliverables";
 
-const TAB_LABELS: Array<[DataTab, string]> = [
-  ["overview", "概览"],
-  ["files", "文件"],
-  ["artifacts", "任务产出"],
-  ["relations", "数据关联"],
-  ["lifecycle", "归档与清理"],
+// 每个 tab 配一个图标：跟顶栏分组同一套 duotone 语言，激活时图标也一起加深，
+// 让"当前在哪一页"在扫视时就能分辨，而不是只能读文字。
+const TAB_LABELS: Array<[DataTab, string, ComponentType<IconProps>]> = [
+  ["overview", "概览", IconGauge],
+  ["files", "文件", IconDocument],
+  ["artifacts", "任务产出", IconLayers],
+  ["relations", "数据关联", IconLink],
+  ["lifecycle", "归档与清理", IconArchive],
 ];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -75,6 +78,21 @@ export function DataCenter() {
   const [error, setError] = useState("");
   const uploadRef = useRef<HTMLInputElement>(null);
   const contentAbort = useRef<AbortController | null>(null);
+
+  // 把"待处理"集中到一个数：到期待清理 + 待归档 + 已软删。这三个都表示
+  // "工作区有需要处理的堆积"，跨 tab 共享 stat 条上自动染色。
+  const retentionCount = sumCounts(retention?.candidate_counts);
+  const archiveCount = sumCounts(archive?.candidate_counts);
+  const pendingTotal = retentionCount + archiveCount + (overview?.files.soft_deleted ?? 0);
+
+  // tab 上的计数徽章：让用户切之前就知道每个 tab 有多少东西。
+  // "概览"不计数（它本身就是汇总），"数据关联"用已被引用的文件数。
+  const tabCounts: Partial<Record<DataTab, number>> = {
+    files: files.length,
+    artifacts: artifacts.length,
+    relations: overview?.files.referenced ?? 0,
+    lifecycle: pendingTotal,
+  };
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
     if (!workspaceId) {
@@ -349,15 +367,49 @@ export function DataCenter() {
         <Button size="sm" onClick={() => { void loadData(); void loadArtifacts(); }}>刷新</Button>
       </PageHeader>
 
-      <FilterBar className="data-center-tabs">
-        {TAB_LABELS.map(([key, label]) => (
-          <Button key={key} size="sm" variant={tab === key ? "primary" : "default"} onClick={() => {
-            setTab(key); setSelectedFile(null); setSelectedArtifact(null);
-          }}>{label}</Button>
+      <FilterBar className="data-center-tabs" role="tablist">
+        {TAB_LABELS.map(([key, label, TabIcon]) => (
+          <TabButton
+            key={key}
+            className="dc-tab"
+            testId={`data-tab-${key}`}
+            icon={TabIcon}
+            label={label}
+            count={tabCounts[key]}
+            active={tab === key}
+            onClick={() => { setTab(key); setSelectedFile(null); setSelectedArtifact(null); }}
+          />
         ))}
         <div className="spacer" />
         {overview && <Badge kind={overview.health.ok ? "ok" : "err"}>{overview.health.ok ? "数据关系正常" : "发现数据问题"}</Badge>}
       </FilterBar>
+
+      {/* 跨 tab 概览：把 overview 的关键数字 + 待处理数集中成 5 格 stat strip。
+          "待处理"非 0 时自动上底色（warn），跟知识库的 counts 一致的语言。 */}
+      <div className="stat-grid kl-stats" data-testid="data-stats">
+        <div className="stat-card">
+          <div className="stat-value">{overview?.files.active ?? "—"}</div>
+          <div className="stat-label">活跃文件</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{overview?.artifacts.active ?? "—"}</div>
+          <div className="stat-label">任务产出</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value stat-value-ok">{overview?.files.referenced ?? "—"}</div>
+          <div className="stat-label">已有引用</div>
+        </div>
+        <div className={"stat-card" + (pendingTotal ? " kl-stat--warn" : "")}>
+          <div className="stat-value">{pendingTotal}</div>
+          <div className="stat-label">待处理</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">
+            {overview ? formatFileSize(overview.files.size_bytes) : "—"}
+          </div>
+          <div className="stat-label">总存储</div>
+        </div>
+      </div>
 
       {error && <div className="callout error">{error}</div>}
       {loading && !overview ? <LoadingState text="正在读取数据…" skeleton="table" /> : null}
@@ -642,19 +694,19 @@ function LifecycleView({ retention, archive, archivedItems, busy, onApply, onRes
   const retentionCount = sumCounts(retention?.candidate_counts);
   const archiveCount = sumCounts(archive?.candidate_counts);
   return <div className="data-lifecycle-grid">
-    <section className="card data-lifecycle-card">
+    <section className="card data-lifecycle-card dc-cleanup">
       <div className="data-lifecycle-head"><div><h3>到期清理</h3><p>永久清理超过保留期限且没有活跃引用的数据。</p></div><Badge kind={retentionCount ? "warn" : "ok"}>{retentionCount} 项候选</Badge></div>
       <CandidateCounts counts={retention?.candidate_counts} />
       {retention?.blocked_items?.length ? <p className="text-sm dim">已自动保护 {retention.blocked_items.length} 项仍在使用的数据。</p> : null}
       <Button variant="danger" size="sm" disabled={!retentionCount || busy} onClick={() => onApply("retention")}>清理到期数据</Button>
     </section>
-    <section className="card data-lifecycle-card">
+    <section className="card data-lifecycle-card dc-archive-action">
       <div className="data-lifecycle-head"><div><h3>历史归档</h3><p>把历史执行记录、处理过程和任务移入可恢复归档区。</p></div><Badge kind={archiveCount ? "info" : "ok"}>{archiveCount} 项候选</Badge></div>
       <CandidateCounts counts={archive?.candidate_counts} />
       {archive?.blocked_items?.length ? <p className="text-sm dim">已自动保护 {archive.blocked_items.length} 项仍在使用的数据。</p> : null}
       <Button variant="primary" size="sm" disabled={!archiveCount || busy} onClick={() => onApply("archive")}>归档历史数据</Button>
     </section>
-    <section className="card data-lifecycle-card data-archive-list">
+    <section className="card data-lifecycle-card dc-archive-area data-archive-list">
       <div className="data-lifecycle-head"><div><h3>归档区</h3><p>归档内容可恢复到原来的运行位置。</p></div><Badge kind="muted">{archivedItems.length} 项</Badge></div>
       {archivedItems.map((item) => <div className="data-archive-row" key={`${item.month}-${item.kind}-${item.name}`}>
         <span><b>{item.name}</b><small>{archiveKindLabel(item.kind)} · {item.month} · {formatFileSize(item.size_bytes)}</small></span>

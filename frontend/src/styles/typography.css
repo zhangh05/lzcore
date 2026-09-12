@@ -233,7 +233,8 @@ h6 {
 }
 
 .markdown-body li {
-  margin-block: var(--flow-hair);
+  /* 4px 的项间距在单条「关键提示」里会糊成一片，放到 8px 让每个要点独立成行。 */
+  margin-block: var(--flow-tight);
   padding-inline-start: var(--flow-hair);
   line-height: var(--lh-body); /* matches paragraphs — no more 1.65 vs 1.78 */
 }
@@ -309,11 +310,28 @@ h6 {
    Header cells were 11px/14px and body cells 13px/14px — asymmetric vertically
    and off the 4px grid. Both sides now share one rhythm, and digits align. */
 .markdown-body :is(th, td) {
-  padding: var(--flow-tight) var(--flow-base);
-  font-size: var(--fs-13);
+  /* 数据密集的会话回复里（气温/风速/降水这类多列数字表），原来的 8px/12px
+     内边距让行高只有 ~24px，数字挤在一起难扫读。放到 12px/20px，并让数字
+     用等宽字形对齐，列与列之间能一眼看清。 */
+  padding: var(--flow-base) var(--flow-loose);
+  font-size: var(--fs-14);
   line-height: var(--lh-compact);
   font-variant-numeric: tabular-nums;
   border-color: var(--line-2);
+}
+
+/* global.css 里 `.markdown-body :is(th, td):first-child { padding-left: 8px }`
+   特异性更高，把首列钉在 8px 做贴边。但数据密集的表里首列通常是日期/编号
+   这类关键列，8px 会让它贴着边框。这里（后加载、特异性相同）统一到 12px，
+   让四边内边距一致。 */
+.markdown-body th:first-child,
+.markdown-body td:first-child {
+  padding-left: var(--flow-base);
+}
+
+.markdown-body th:last-child,
+.markdown-body td:last-child {
+  padding-right: var(--flow-base);
 }
 
 .markdown-body th {
@@ -334,7 +352,8 @@ h6 {
 }
 
 .page-header h1 {
-  margin-bottom: var(--flow-hair);
+  /* 4px 太贴，标题和副标题几乎黏在一起。8px 才看得出是两个层级。 */
+  margin-bottom: var(--flow-tight);
   font-size: var(--fs-20);
   font-weight: var(--weight-display);
   line-height: var(--lh-display);
@@ -343,7 +362,8 @@ h6 {
 
 .page-header .subtitle {
   color: var(--text-3);
-  font-size: var(--fs-12);
+  /* 12px 叠 0.95 缩放只有 11.4px，副标题偏小。提到 13px。 */
+  font-size: var(--fs-13);
   line-height: var(--lh-compact);
 }
 
@@ -353,8 +373,11 @@ h6 {
 
 /* ── Tables (app chrome) ────────────────────────────────────────────────── */
 
+/* global.css:2147 给的是 11px 14px / 字重 740，两个值都不在体系里；而且表头
+   左右 14px 跟下面 td 的 16px 对不齐，横向滚动时表头和数据列会差 2px。
+   这里统一成 12px 16px（上下跟 td 一致，左右跟 td 一致）。 */
 .tbl thead th {
-  padding: var(--flow-tight) var(--flow-base);
+  padding: var(--flow-base) var(--space-4);
   font-size: var(--fs-12);
   font-weight: var(--weight-subhead);
   letter-spacing: var(--tracking-cjk);
@@ -362,7 +385,12 @@ h6 {
 }
 
 .tbl td {
-  padding: var(--flow-base) var(--flow-base);
+  /* 左右 16px：表格比卡片更需要横向呼吸，12px 会让列挤在一起 */
+  padding: var(--flow-base) var(--space-4);
+  /* console-system.css 给的是固定 height: 42px —— 既不在 8pt 网格上，
+     内容换行时还会裁掉。改成 min-height，让行高在 44px 基准上自适应。 */
+  height: auto;
+  min-height: 44px;
   line-height: var(--lh-compact);
   font-variant-numeric: tabular-nums;
 }
@@ -373,4 +401,116 @@ h6 {
 [class*="kicker"],
 .mobile-nav-section-label {
   letter-spacing: var(--tracking-caps);
+}
+
+/* ── Enterprise layout rhythm: containers ─────────────────────────────────
+   上面管的是文字，这一块管容器。global.css / console-system.css 里卡片的
+   内边距和外边距全是硬编码的 9 / 10 / 14 / 18 / 34px，没有一个落在 8pt
+   网格上，于是"文件与数据"和"知识库"两张卡片的内边距对不齐、"系统状态"
+   的分区标题跟"能力中心"的也差 2px。统一到 --flow-* 之后，任意两个页面的
+   同层级容器在垂直方向上会落在同一条基线。
+
+   本文件最后加载，同特异性下这里的规则胜出；页面级覆盖（如
+   .knowledge-library .page-body > .card）特异性更高，不受影响。 */
+
+.card {
+  padding: var(--flow-loose);
+  margin-bottom: var(--flow-loose);
+  border-color: var(--line-2);
+}
+
+.card-title {
+  gap: var(--flow-tight);
+  margin-bottom: var(--flow-base);
+  font-weight: var(--weight-subhead);
+}
+
+.section-head {
+  gap: var(--flow-tight);
+  margin-bottom: var(--flow-base);
+  /* 760 不在 weight-* 令牌体系里（display 700 / subhead 650 / minor 620）。
+     11px 的小分区标签用 minor 档就够。 */
+  font-weight: var(--weight-minor);
+}
+
+/* 分区标题原本只有右侧一条填充细线，在长页面里扫读时抓不住层级。
+   左侧补一条 accent 竖线当定位锚点。 */
+.section-head::before {
+  flex: 0 0 auto;
+  width: 2px;
+  /* 14px（卡片标题）> 11px（分区标题）：同一套 accent 竖线语言，靠高度差做层级。
+     圆角跟 global.css:1837 的 .card-title::before 保持同一个令牌。 */
+  height: 11px;
+  border-radius: var(--r-pill);
+  content: "";
+  background: var(--accent);
+}
+
+.ui-filter-bar {
+  gap: var(--flow-tight);
+  padding: var(--flow-tight) var(--flow-base);
+  margin-bottom: var(--flow-base);
+}
+
+/* 空状态原本 34px 上下内边距，不在网格上，也跟卡片内边距（20px）对不齐 */
+.empty {
+  gap: var(--flow-base);
+  padding: var(--flow-section) var(--flow-loose);
+}
+
+/* ── Stat strips ────────────────────────────────────────────────────────────
+   .stat-grid 有两套定义：global.css:5820 是 gap:14 / padding:14px 18px 的
+   "卡片网格"，console-system.css:252 把它重做成 gap:0 / padding:0、靠
+   .stat-card 之间的 border-left 分隔的"仪器面板"。后者后加载胜出，是有意的
+   设计，所以这里绝不能覆盖 padding/gap，否则分隔线布局会散架。
+   真正偏离网格的只有 margin-bottom:14px 和 border-radius:12px（.card 是 8px）。 */
+.stat-grid {
+  margin-bottom: var(--flow-loose);
+  border-radius: var(--r-8);
+}
+
+.stat-label {
+  margin-top: var(--flow-hair);
+}
+
+.stat-sub {
+  margin-top: 2px;
+}
+
+/* stat-card-box 的 10px 14px 两个方向都不在网格上 */
+.stat-card-box {
+  padding: var(--flow-tight) var(--flow-base);
+}
+
+/* 680 / 720 都不在 weight-* 令牌体系里 */
+.stat-card-box-label {
+  margin-bottom: var(--flow-hair);
+  font-weight: var(--weight-minor);
+  letter-spacing: var(--tracking-caps);
+}
+
+.stat-card-box-value {
+  font-weight: var(--weight-subhead);
+}
+
+/* 42px 不在 8pt 网格上（40 或 44 才是） */
+.empty-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.empty-text {
+  font-weight: var(--weight-subhead);
+}
+
+/* ── Page-specific card overrides that drifted off the grid ───────────────
+   --console-border-soft 就是 --line-2、--console-surface 就是 --surface
+   （global.css:72/75），所以那些覆盖在颜色上是等价重复，不必动。
+   真正不一致的是圆角和内边距：能力中心用 6px 圆角 + 9px 下内边距，
+   跟全局 8px 卡片对不上。 */
+.capability-center .card {
+  border-radius: var(--r-8);
+}
+.capability-center .card-title {
+  padding-bottom: var(--flow-tight);
 }
