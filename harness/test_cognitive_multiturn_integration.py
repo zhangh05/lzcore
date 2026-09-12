@@ -50,10 +50,14 @@ def test_second_llm_round_sees_tool_observation_in_cognitive_projection():
 
     assert result.success is True
     assert len(captured_messages) == 2
-    second_cognitive = next(
+    cognitive_messages = [
         str(message.content)
         for message in captured_messages[1]
         if 'source_kind="cognitive_state"' in str(message.content)
-    )
+    ]
+    # The initial projection remains immutable; the observation is a later,
+    # causally ordered append-only projection.
+    assert len(cognitive_messages) == 2
+    second_cognitive = cognitive_messages[-1]
     assert '"known_fact_count":1' in second_cognitive
     assert '"unknown_count":0' in second_cognitive

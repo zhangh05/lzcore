@@ -131,7 +131,17 @@ class MemoryStore:
     """Persist one governed long-term memory collection per user."""
 
     def __init__(self):
-        pass
+        self._load_errors: list[dict[str, str]] = []
+
+    def load_errors(self) -> list[dict[str, str]]:
+        """Return record-level load diagnostics from the latest read."""
+        return list(self._load_errors)
+
+    def _record_load_error(self, path: Path, exc: Exception) -> None:
+        self._load_errors.append({"path": str(path.name), "error": type(exc).__name__})
+        logging.getLogger("memory_governance.read").warning(
+            "memory record unavailable: %s (%s)", path.name, type(exc).__name__,
+        )
 
     def _validated_ws_id(self, ws_id: str) -> str:
         from storage.ids import validate_workspace_id
@@ -249,6 +259,7 @@ class MemoryStore:
         return False
 
     def get(self, ws_id: str, memory_id: str) -> Optional[MemoryRecord]:
+        self._load_errors = []
         try:
             p = self._path(ws_id, memory_id)
         except ValueError:
@@ -256,16 +267,26 @@ class MemoryStore:
         if not p.exists(): return None
         try: return MemoryRecord.from_dict(json.loads(p.read_text(encoding="utf-8")))
         except (OSError, ValueError, TypeError, AttributeError) as exc:
-            raise RuntimeError("memory_record_load_failed") from exc
+            self._record_load_error(p, exc)
+            return None
 
     def list_all(self, ws_id: str) -> list[MemoryRecord]:
+        self._load_errors = []
         d = self._dir(ws_id)
         if not d.exists(): return []
         recs = []
-        for f in sorted(d.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
-            try: recs.append(MemoryRecord.from_dict(json.loads(f.read_text(encoding="utf-8"))))
-            except (OSError, ValueError, TypeError, AttributeError) as exc:
-                raise RuntimeError("memory_record_load_failed") from exc
+        candidates: list[tuple[float, Path]] = []
+        for f in d.glob("*.json"):
+            try:
+                candidates.append((f.stat().st_mtime, f))
+            except OSError as exc:
+                self._record_load_error(f, exc)
+        for _, f in sorted(candidates, key=lambda item: item[0], reverse=True):
+            try:
+                recs.append(MemoryRecord.from_dict(json.loads(f.read_text(encoding="utf-8"))))
+            except Exception as exc:  # bad user data must not hide healthy records
+                self._record_load_error(f, exc)
+                continue
         return recs
 
     def list_by_status(self, ws_id: str, status: MemoryStatus) -> list[MemoryRecord]:

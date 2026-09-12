@@ -256,7 +256,9 @@ def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         # Linux/macOS: setsid creates a new session/process group
-        popen_kwargs["preexec_fn"] = _os.setsid
+        # Do not use preexec_fn in the threaded runtime: it can deadlock in
+        # the child before exec.  This is the supported equivalent of setsid.
+        popen_kwargs["start_new_session"] = True
 
     proc = None
     try:

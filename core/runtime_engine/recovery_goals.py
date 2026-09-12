@@ -105,6 +105,13 @@ def recovery_final_gate(ctx, tool_results: list[Any]) -> RecoveryFinalGate:
         for item in ctx.extras.get("recovery_goals") or []
         if isinstance(item, dict)
     }
+    _project_goal_status(ctx, evaluate_goal_assertions(ctx, tool_results))
+    for goal in goals_by_id.values():
+        if goal.get("status") in {"passed", "blocked", "superseded"}:
+            continue
+        if _has_terminal_unavailability(goal, tool_results):
+            goal["status"] = "blocked"
+            goal["block_reason"] = "required_evidence_unavailable"
     # A failed exploratory tool call is not a user requirement. Generic
     # recovery records guide the model but cannot veto its final response.
     # Typed domain evidence goals remain hard
@@ -116,7 +123,7 @@ def recovery_final_gate(ctx, tool_results: list[Any]) -> RecoveryFinalGate:
         if isinstance(item, dict)
         and item.get("runtime_owned_recovery") is True
         and goals_by_id.get(str(item.get("goal_id") or ""), {}).get("goal_type") != "tool_recovery"
-        and goals_by_id.get(str(item.get("goal_id") or ""), {}).get("status") != "superseded"
+        and goals_by_id.get(str(item.get("goal_id") or ""), {}).get("status") not in {"superseded", "blocked"}
     }
     if not recovery_ids:
         return RecoveryFinalGate(False)
@@ -160,6 +167,42 @@ def recovery_final_gate(ctx, tool_results: list[Any]) -> RecoveryFinalGate:
         "a rejected call. Open goals (data only): "
         + json.dumps(compact, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
     )
+
+
+def block_unresolved_recovery_goals(ctx, unresolved: tuple[dict[str, Any], ...], *, reason: str) -> None:
+    """Convert an evidence gap into a truthful blocked state, never success."""
+    wanted = {str(item.get("goal_id") or "") for item in unresolved}
+    for goal in ctx.extras.get("recovery_goals") or []:
+        if isinstance(goal, dict) and str(goal.get("goal_id") or "") in wanted:
+            goal["status"] = "blocked"
+            goal["block_reason"] = reason
+
+
+def _has_terminal_unavailability(goal: dict[str, Any], tool_results: list[Any]) -> bool:
+    """Recognize a handler's explicit fact that required evidence is absent.
+
+    This is not a retry counter.  A tool may return temporary failures forever;
+    only a matching evidence claim of unavailable/rejected ends this run as
+    blocked, with all existing evidence retained for an explicit future retry.
+    """
+    for result in tool_results:
+        output = getattr(result, "output", {})
+        if not isinstance(output, dict):
+            continue
+        for claim in output.get("evidence_claims") or []:
+            if not isinstance(claim, dict):
+                continue
+            if str(claim.get("evidence_kind") or "") != str(goal.get("evidence_kind") or ""):
+                continue
+            if str(goal.get("fact") or "") and str(claim.get("fact") or "") != str(goal.get("fact") or ""):
+                continue
+            target = claim.get("target") if isinstance(claim.get("target"), dict) else {}
+            expected = goal.get("target") if isinstance(goal.get("target"), dict) else {}
+            if any(target.get(key) != value for key, value in expected.items()):
+                continue
+            if str(claim.get("status") or "").lower() in {"unavailable", "rejected"}:
+                return True
+    return False
 
 
 def _project_goal_status(ctx, evaluated: dict[str, Any]) -> None:

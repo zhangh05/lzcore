@@ -854,9 +854,10 @@ def test_engine_executes_dependent_tool_group_then_synthesizes():
     assert received[1]["rows"] == [{"value": "7"}]
     assert handler_outputs[1]["stats"]["value"]["mean"] == 7.0
     assert result.metadata["orchestration_batches"][0]["layers"] == [["extract"], ["analyse"]]
-    assert [message.role for message in model_messages[1]][-3:] == ["assistant", "tool", "tool"]
-    assert model_messages[1][-2].tool_call_id == "provider-a"
-    assert model_messages[1][-1].tool_call_id == "provider-b"
+    assert [message.role for message in model_messages[1]][-4:] == ["assistant", "tool", "tool", "user"]
+    assert model_messages[1][-3].tool_call_id == "provider-a"
+    assert model_messages[1][-2].tool_call_id == "provider-b"
+    assert 'source_kind="cognitive_state"' in str(model_messages[1][-1].content)
 
 
 def test_model_can_repeat_a_mutation_when_it_selects_that_step():

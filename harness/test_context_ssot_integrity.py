@@ -3,9 +3,8 @@
 import pytest
 
 from agent.runtime.ssot_runtime import (
-    _format_recent_history,
+    _build_history_block,
     _history_overlap,
-    _summarize_older_messages,
 )
 from core.runtime_engine.context_compaction import history_importance_score
 from core.context.context_store import ContextStore
@@ -28,16 +27,13 @@ def test_restored_history_overlap_is_not_injected_twice():
     assert persisted + memory[2:] == [*persisted, {"role": "user", "content": "next"}]
 
 
-def test_recent_history_preserves_all_messages():
+def test_recent_history_preserves_all_messages(monkeypatch):
     messages = [
         {"role": "user", "content": f"old-{index}-" + "x" * 500}
         for index in range(20)
     ]
-    text = _format_recent_history(
-        messages,
-        max_tokens=450,
-        per_message_tokens=180,
-    )
+    monkeypatch.setattr("agent.runtime.ssot_runtime._load_context_messages", lambda *_a, **_k: messages)
+    text = _build_history_block(object(), user_input="continue")
     assert "old-19-" in text
     assert "old-0-" in text
     from core.runtime_engine.context_budget import estimate_text_tokens
@@ -48,19 +44,6 @@ def test_history_retention_prioritizes_constraints_corrections_and_entities():
     assert history_importance_score("必须保留 VLAN 20，VLAN 10 不允许认证") > history_importance_score("看看数据")
     assert history_importance_score("更正：以 router01.log 为准") >= 7
     assert history_importance_score("今天天气不错") == 0
-
-
-def test_older_history_summary_is_structured_and_redacted():
-    messages = [
-        {"role": "user", "content": "随便聊聊"},
-        {"role": "user", "content": "必须使用 router01.log，password=hunter2"},
-        {"role": "assistant", "content": "已完成 task-123"},
-    ]
-    summary = _summarize_older_messages(messages, max_tokens=500)
-    assert "signals=constraint,artifact,entity" in summary
-    assert "task-123" in summary
-    assert "hunter2" not in summary
-    assert "[REDACTED_SECRET]" in summary
 
 
 def test_context_store_uses_workspace_storage_root(monkeypatch, tmp_path):

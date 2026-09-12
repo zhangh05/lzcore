@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import threading
 from typing import Any
@@ -40,6 +41,7 @@ def _consolidate_locked(
     task_id: str,
 ) -> dict[str, Any]:
     from agent.runtime.memory_write.event_log import mark_experiences_processed, pending_experiences
+    from storage.memory_event_store import read_cursor
     from storage.memory_governance import MemoryStore, is_auto_memory_enabled
 
     if not is_auto_memory_enabled(workspace_id):
@@ -48,17 +50,92 @@ def _consolidate_locked(
     if not events:
         return {"ok": True, "status": "empty", "processed": 0}
 
+    event_ids = [str(row.get("event_id") or "") for row in events]
+    batch_id = _batch_id(event_ids)
+    cursor = read_cursor(workspace_id, session_id)
+    batches = dict(cursor.get("consolidation_batches") or {})
+    batch = batches.get(batch_id)
     store = MemoryStore()
-    query = " ".join(str(row.get("user_input") or "") for row in events)
-    existing = [row for row in store.search(workspace_id, query, limit=12) if row.get("status") == "active"]
-    proposals = _reflect(events, existing)
-    if proposals is None:
-        return {"ok": False, "status": "retry_pending", "processed": 0}
-    results = [_apply(proposal, workspace_id, session_id, task_id, events, store) for proposal in proposals]
+
+    # Reflection is run once for this exact event set.  Persisting the parsed
+    # proposals makes retry a continuation of the same operation, not a new
+    # LLM generation with freshly invented memory ids or wording.
+    if not isinstance(batch, dict):
+        query = " ".join(str(row.get("user_input") or "") for row in events)
+        existing = [row for row in store.search(workspace_id, query, limit=12) if row.get("status") == "active"]
+        proposals = _reflect(events, existing)
+        if proposals is None:
+            return {"ok": False, "status": "retry_pending", "processed": 0}
+        proposals = [_with_proposal_id(item, batch_id) for item in proposals]
+        batch = {
+            "event_ids": event_ids,
+            "task_id": task_id,
+            "proposals": proposals,
+            "results": {},
+        }
+        batches[batch_id] = batch
+        _save_batches(cursor, batches, workspace_id, session_id)
+    else:
+        proposals = list(batch.get("proposals") or [])
+        # Older interrupted cursors are upgraded deterministically.
+        proposals = [_with_proposal_id(item, batch_id) for item in proposals if isinstance(item, dict)]
+        batch["proposals"] = proposals
+        batch.setdefault("results", {})
+
+    results_by_id = dict(batch.get("results") or {})
+    results: list[dict[str, Any]] = []
+    for proposal in proposals:
+        proposal_id = str(proposal["proposal_id"])
+        previous = results_by_id.get(proposal_id)
+        if isinstance(previous, dict) and previous.get("ok"):
+            results.append(previous)
+            continue
+        result = _apply(proposal, workspace_id, session_id, task_id, events, store)
+        result = {**dict(result or {}), "proposal_id": proposal_id}
+        results_by_id[proposal_id] = result
+        batch["results"] = results_by_id
+        # Commit each outcome before moving to the next proposal.  A crash can
+        # now resume from the exact failing item rather than replay successes.
+        batches[batch_id] = batch
+        _save_batches(cursor, batches, workspace_id, session_id)
+        results.append(result)
+
     if any(not result.get("ok") for result in results):
         return {"ok": False, "status": "retry_pending", "processed": 0, "results": results}
-    mark_experiences_processed(workspace_id, session_id, [str(row.get("event_id") or "") for row in events])
+
+    batches.pop(batch_id, None)
+    _save_batches(cursor, batches, workspace_id, session_id)
+    mark_experiences_processed(workspace_id, session_id, event_ids)
     return {"ok": True, "status": "processed", "processed": len(events), "results": results}
+
+
+def _batch_id(event_ids: list[str]) -> str:
+    payload = json.dumps(event_ids, ensure_ascii=False, separators=(",", ":"))
+    return "batch-" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
+def _with_proposal_id(proposal: dict[str, Any], batch_id: str) -> dict[str, Any]:
+    item = dict(proposal)
+    identity = {key: value for key, value in item.items() if key != "proposal_id"}
+    digest = hashlib.sha256(
+        (batch_id + "\n" + json.dumps(identity, ensure_ascii=False, sort_keys=True, default=str)).encode("utf-8")
+    ).hexdigest()
+    item["proposal_id"] = f"proposal-{digest[:24]}"
+    return item
+
+
+def _save_batches(cursor: dict[str, Any], batches: dict[str, Any], workspace_id: str, session_id: str) -> None:
+    updated = dict(cursor)
+    updated["consolidation_batches"] = batches
+    updated["session_id"] = session_id
+    from storage.time_utils import now_iso
+
+    updated["updated_at"] = now_iso()
+    cursor.clear()
+    cursor.update(updated)
+    from storage.memory_event_store import save_cursor
+
+    save_cursor(workspace_id, session_id, updated)
 
 
 def should_consolidate(events: list[dict[str, Any]]) -> bool:
@@ -127,7 +204,14 @@ def _apply(proposal, workspace_id, session_id, task_id, events, store):
     authority = "verified_tool" if has_verified_tool else "agent_inference"
     authority_rank = 70 if has_verified_tool else 30
     status = "active" if has_verified_tool and proposal["score"] >= 4 else "pending"
+    proposal_id = str(proposal.get("proposal_id") or "")
+    record_kwargs = {}
+    if proposal_id:
+        # Stable record identity makes an interrupted create idempotent even
+        # in the narrow window between writing the record and saving cursor.
+        record_kwargs["memory_id"] = "mem-" + proposal_id.removeprefix("proposal-")[:12]
     record = MemoryRecord(
+        **record_kwargs,
         workspace_id=workspace_id,
         session_id=session_id,
         task_id=task_id,
@@ -153,6 +237,7 @@ def _apply(proposal, workspace_id, session_id, task_id, events, store):
             "evidence_event_ids": list(evidence_ids),
             "consolidation_origin": "task_reflection",
             "generation_origin": "task_reflection",
+            "consolidation_proposal_id": proposal_id,
             "supersedes_memory_id": target if action == "supersede" else "",
         },
     )

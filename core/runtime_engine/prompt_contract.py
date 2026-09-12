@@ -7,6 +7,7 @@ defines how the model reasons over those tools, governed context and results.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from datetime import datetime, timezone
 import json
 import os
@@ -267,8 +268,9 @@ RUNTIME_SYSTEM_PROMPT = """You are 联智中枢, a tool-using general-purpose ag
 - Decide tool use from the evidence the task needs, not from whether the user names a tool.
   Proactively inspect, search, calculate or execute for current/private facts and requested
   actions. Stable, fully evidenced questions may be answered directly; never route a class of user requests around this loop.
-- Capabilities arrive as function definitions. Inspect complete tool schemas and call exact
-  double-underscore names. Merged tools use canonical tool plus `action`; obey each
+- Capabilities arrive as function definitions. Inspect complete tool schemas. The provider-facing spelling uses exact
+  double-underscore names; runtime records may show the equivalent canonical dotted ID.
+  Never invent or mix spellings in a tool call. Merged tools use canonical tool plus `action`; obey each
   action-level boundary and supply only schema-supported arguments.
 - Identify the claim or action, required evidence and direct tool. Never claim
   checked/current/completed/fixed without matching successful evidence. A successful call
@@ -455,12 +457,22 @@ def _clean(value: Any, limit: int) -> str:
 
 
 def _escape_data(value: Any) -> str:
-    """Prevent untrusted evidence from closing its explicit data boundary."""
-    return (
-        str(value or "")
-        .replace("\x00", "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .strip()
+    """Preserve operational syntax while preventing closure of data boundaries.
+
+    Network and shell input routinely contains ``<``, ``>``, ``&`` and pipes.
+    XML-escaping every comparison/redirection character corrupts ordinary
+    shell and network commands.  Only tags that can impersonate this runtime's
+    own delimiters are encoded; all other text remains byte-for-byte intact.
+    """
+    text = str(value or "").replace("\x00", "")
+    boundary = (
+        "runtime_identity|conversation_history|governed_context|current_user_request|"
+        "runtime_guidance|tool_failure_evidence|auto_tracking_results|"
+        "safe_read_recovery|network_execution_evidence"
+    )
+    return re.sub(
+        rf"<(?P<slash>/?)(?P<name>{boundary})(?P<tail>[^>]*)>",
+        lambda match: f"&lt;{match.group('slash')}{match.group('name')}{match.group('tail')}&gt;",
+        text,
+        flags=re.IGNORECASE,
     )

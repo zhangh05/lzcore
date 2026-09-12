@@ -76,11 +76,15 @@ def mark_experiences_processed(workspace_id: str, session_id: str, event_ids: li
         *list(cursor.get("processed_event_ids") or []),
         *(str(item) for item in event_ids if item),
     ]))
-    save_cursor(ws_id, sid, {
+    # Preserve reflection checkpoints: processing a completed batch must not
+    # erase the per-proposal journal for another pending batch.
+    cursor = dict(cursor)
+    cursor.update({
         "session_id": sid,
         "processed_event_ids": processed,
         "updated_at": now_iso(),
     })
+    save_cursor(ws_id, sid, cursor)
 
 
 def delete_experience_journal(workspace_id: str, session_id: str) -> None:

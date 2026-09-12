@@ -1450,19 +1450,6 @@ def _current_model_name() -> str:
 
 # ── Conversation history block builder ──────────────────────────────
 
-_HISTORY_RECENT_MESSAGES = 30
-_HISTORY_BASELINE_EXCHANGES = 6
-_HISTORY_REFERENCE_PATTERNS = (
-    "前面", "之前", "上次", "刚才", "还记得", "记得",
-    "上一轮", "前一轮", "前面的", "之前的", "刚才的",
-)
-_HISTORY_IMMEDIATE_PATTERNS = (
-    "继续", "接着", "详细点", "再详细", "展开", "再说说", "这个", "那个", "然后呢",
-)
-_HISTORY_STOP_TERMS = frozenset({
-    "一下", "一个", "这个", "那个", "什么", "怎么", "如何", "帮我", "看看",
-    "查看", "进行", "需要", "可以", "现在", "目前", "问题", "结果", "分析",
-})
 def _build_retrieved_context_block(
     *, workspace_id: str, session_id: str, task_id: str, user_input: str,
     max_tokens: int = 3000,
@@ -1499,7 +1486,8 @@ def _build_retrieved_context_block(
 
         lines: list[str] = []
         if include_workspace_memory:
-            core_rules = MemoryStore().list_retrievable(
+            core_store = MemoryStore()
+            core_rules = core_store.list_retrievable(
                 workspace_id,
                 memory_type="core_rule",
                 session_id=session_id,
@@ -1510,6 +1498,11 @@ def _build_retrieved_context_block(
                 content = redact_text(str(rule.get("content") or rule.get("summary") or "")).strip()
                 if content:
                     lines.append(f"[core-rule scope=workspace authority=explicit-user] {content}")
+            if core_store.load_errors():
+                lines.append(
+                    "[memory_load_warning] Some saved memory records could not be read; "
+                    "healthy records remain available. Do not assume unavailable records are absent."
+                )
         for hit in retrieved.get("memory_hits", [])[:3]:
             if str(hit.get("memory_type") or "") == "core_rule":
                 continue
@@ -1561,135 +1554,6 @@ def _build_history_block(
     except Exception:
         _LOG.debug("conversation history block build failed", exc_info=True)
         return ""
-
-
-def _select_history_messages(
-    messages: list[dict[str, str]],
-    user_input: str,
-) -> tuple[list[dict[str, str]], list[dict[str, str]], bool]:
-    """Select only history that can help the current turn.
-
-    Every same-session turn receives a bounded window of recent complete
-    exchanges. This is the minimum conversational contract: short or implicit
-    replies must never see an empty or one-turn-only history merely because a
-    keyword classifier missed them. Lexical matching may add older relevant
-    exchanges without displacing the recent window.
-    """
-    if not messages:
-        return [], [], False
-    text = str(user_input or "").strip()
-    baseline = _latest_complete_history_window(messages)
-    if _is_immediate_followup(text):
-        return baseline, [], False
-    if any(pattern in text for pattern in _HISTORY_REFERENCE_PATTERNS):
-        recent_count = min(
-            _HISTORY_BASELINE_EXCHANGES * 2,
-            _HISTORY_RECENT_MESSAGES,
-        )
-        return (
-            messages[-recent_count:],
-            messages[:-recent_count],
-            True,
-        )
-
-    query_terms = _history_terms(text)
-    if not query_terms:
-        return baseline, [], False
-    recent_pool = messages[-_HISTORY_RECENT_MESSAGES:]
-    matched_indexes = {
-        index
-        for index, message in enumerate(recent_pool)
-        if _message_matches_history_terms(message.get("content", ""), query_terms)
-    }
-    if not matched_indexes:
-        return baseline, [], False
-
-    # Keep the adjacent half of a matched user/assistant exchange so evidence
-    # and its response are not separated.
-    selected_indexes = set(matched_indexes)
-    for index in tuple(matched_indexes):
-        role = str(recent_pool[index].get("role") or "")
-        if role == "assistant" and index > 0:
-            selected_indexes.add(index - 1)
-        elif role == "user" and index + 1 < len(recent_pool):
-            selected_indexes.add(index + 1)
-    baseline_ids = {id(item) for item in baseline}
-    for index, message in enumerate(recent_pool):
-        if id(message) in baseline_ids:
-            selected_indexes.add(index)
-    selected = [recent_pool[index] for index in sorted(selected_indexes)][
-        -(_HISTORY_BASELINE_EXCHANGES * 2):
-    ]
-    return selected, [], False
-
-
-def _latest_complete_history_window(
-    messages: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    """Return the newest bounded set of complete adjacent exchanges."""
-    exchanges: list[list[dict[str, str]]] = []
-    index = len(messages) - 1
-    while index > 0 and len(exchanges) < _HISTORY_BASELINE_EXCHANGES:
-        user = messages[index - 1]
-        assistant = messages[index]
-        if user.get("role") == "user" and assistant.get("role") == "assistant":
-            exchanges.append([user, assistant])
-            index -= 2
-            continue
-        index -= 1
-    return [message for exchange in reversed(exchanges) for message in exchange]
-
-
-def _is_immediate_followup(text: str) -> bool:
-    import re
-
-    value = str(text or "").strip()
-    if not value or len(value) > 80:
-        return False
-    from agent.runtime.task_relation_policy import classify_task_relation
-
-    if classify_task_relation(value) is not None:
-        return True
-    if re.fullmatch(
-        r"(?:全部|所有|全都|都要|这些|以上|它们|每个|每一个)[。.!！?？\s]*",
-        value,
-    ):
-        return True
-    # Quantity-only continuations such as “再来30条” have no lexical topic
-    # signal, but their only coherent referent is the immediately preceding
-    # exchange. Treat them as continuation instructions before lexical history
-    # selection, so the original target, quantity and output constraints remain
-    # visible to the canonical QueryLoop prompt.
-    if re.fullmatch(
-        r"(?:再来|再给|再生成|再写|再列|再补)\s*(?:\d+|几|一些|一批)?\s*(?:条|个|项|份|段|组)?[。.!！?？\s]*",
-        value,
-    ):
-        return True
-    return any(value.startswith(pattern) for pattern in _HISTORY_IMMEDIATE_PATTERNS)
-
-
-def _history_terms(text: str) -> set[str]:
-    import re
-
-    value = str(text or "").lower()
-    terms = {
-        token for token in re.findall(r"[a-z0-9][a-z0-9_.:/-]{2,}", value)
-        if token not in _HISTORY_STOP_TERMS
-    }
-    for sequence in re.findall(r"[\u4e00-\u9fff]{2,}", value):
-        if sequence not in _HISTORY_STOP_TERMS:
-            terms.add(sequence)
-        for size in (2, 3, 4):
-            for index in range(max(0, len(sequence) - size + 1)):
-                token = sequence[index:index + size]
-                if token not in _HISTORY_STOP_TERMS:
-                    terms.add(token)
-    return terms
-
-
-def _message_matches_history_terms(text: str, terms: set[str]) -> bool:
-    value = str(text or "").lower()
-    return any(term in value for term in terms)
 
 
 def _attachment_reference_terms(text: str) -> set[str]:
@@ -1854,16 +1718,6 @@ def _history_overlap(
     return 0
 
 
-def _format_recent_history(
-    messages: list[dict[str, str]],
-    *,
-    max_tokens: int,
-    per_message_tokens: int,
-) -> str:
-    """Return all history; budgeting is telemetry and never a filter."""
-    return "\n".join(f"  [{message['role']}] {message['content']}" for message in messages)
-
-
 def _append_context_message(messages: list[dict[str, Any]], seen: set[str], raw: Any) -> None:
     if not isinstance(raw, dict):
         return
@@ -1913,100 +1767,6 @@ def _append_context_message(messages: list[dict[str, Any]], seen: set[str], raw:
         message["history_state"] = redact_value(history_state)
     messages.append(message)
 
-
-def _summarize_older_messages(
-    messages: list[dict[str, str]],
-    *,
-    max_tokens: int,
-) -> str:
-    from core.runtime_engine.context_budget import estimate_text_tokens
-    from core.runtime_engine.context_compaction import history_state_signals
-    from storage.redaction import redact_text
-
-    # Select on explicit state signals rather than one flat keyword gate.
-    # Stable ordering is restored after scoring so cause/effect remains legible.
-    ranked = sorted(
-        enumerate(messages),
-        key=lambda item: (-_history_record_score(item[1]), -item[0]),
-    )
-    selected = sorted([item for item in ranked if _history_record_score(item[1]) > 0], key=lambda item: item[0])
-    if not selected and messages:
-        indexes = sorted(set(range(min(2, len(messages)))) | set(range(max(0, len(messages) - 3), len(messages))))
-        selected = [(index, messages[index]) for index in indexes]
-
-    lines: list[str] = []
-    for _, message in selected:
-        content = redact_text(message["content"])
-        compacted = content
-        state = message.get("history_state") if isinstance(message.get("history_state"), dict) else {}
-        signals = ",".join(str(value) for value in state.get("signals", []) if value) or ",".join(history_state_signals(content)) or "context"
-        state_projection = {
-            key: state[key]
-            for key in ("entities", "constraints", "tool_facts", "unresolved", "references")
-            if state.get(key)
-        }
-        state_text = (
-            " state=" + json.dumps(state_projection, ensure_ascii=False, separators=(",", ":"), default=str)
-            if state_projection else ""
-        )
-        lines.append(f"  [history_state role={message['role']} signals={signals}]{state_text} excerpt={compacted}")
-    if not lines:
-        return ""
-    return "\n".join(lines)
-
-
-def _retrieve_history_references(messages: list[dict[str, str]], user_input: str) -> list[dict[str, str]]:
-    """Return bounded, query-relevant history outside the recent window.
-
-    Explicit references must recover matching middle turns in a long session.
-    Query matches take precedence over generic importance so unrelated later
-    constraints cannot crowd out the named historical fact.
-    """
-    text = (user_input or "").strip()
-    if not text or not any(p in text for p in _HISTORY_REFERENCE_PATTERNS):
-        return []
-    recent_count = min(8, _HISTORY_RECENT_MESSAGES)
-    candidates = messages[:-recent_count] if len(messages) > recent_count else []
-    terms = _history_terms(text)
-    matched_indexes = [
-        index for index, message in enumerate(candidates)
-        if terms and _message_matches_history_terms(message.get("content", ""), terms)
-    ]
-    if matched_indexes:
-        selected_indexes = set(matched_indexes[-8:])
-        for index in range(len(candidates) - 1, -1, -1):
-            if len(selected_indexes) >= 8:
-                break
-            if index not in selected_indexes and _history_record_score(candidates[index]) > 0:
-                selected_indexes.add(index)
-        return [candidates[index] for index in sorted(selected_indexes)]
-    important_indexes = [
-        index for index, message in enumerate(candidates)
-        if _history_record_score(message) > 0
-    ]
-    return [candidates[index] for index in important_indexes[-8:]]
-
-def _history_record_score(message: dict[str, Any]) -> int:
-    from core.runtime_engine.context_compaction import history_importance_score
-
-    state = message.get("history_state") if isinstance(message.get("history_state"), dict) else {}
-    state_weights = {
-        "constraint": 5, "correction": 5, "decision": 4,
-        "status": 3, "entity": 2, "artifact": 1,
-    }
-    persisted_score = sum(
-        state_weights.get(str(signal), 0)
-        for signal in state.get("signals", [])
-    )
-    unresolved_score = 6 if any(
-        isinstance(item, dict) and not bool(item.get("ok", False))
-        for item in list(state.get("unresolved") or [])
-    ) else 0
-    return max(
-        persisted_score,
-        unresolved_score,
-        history_importance_score(str(message.get("content") or "")),
-    )
 
 
 # ── Session history sync ──────────────────────────────────────

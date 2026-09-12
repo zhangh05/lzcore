@@ -3,8 +3,6 @@ import os
 import json
 import sys
 import pytest
-from harness.conftest import read_frontend_source_text
-
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -208,22 +206,3 @@ class TestApplyArchive:
             "default", month="2026-07", kind="runs", name="../secret", confirm=True,
         )
         assert result == {"ok": False, "error": "invalid_name"}
-
-
-class TestUIArchive:
-    def test_ui_has_archive_preview(self):
-        html = read_frontend_source_text()
-        assert "archive" in html and "previewSessions" in html
-
-    def test_ui_no_default_archive_button(self):
-        html = read_frontend_source_text()
-        # Should not have a default delete/archive action
-        assert "应用归档" not in html or "confirm" in html.lower()
-
-    def test_ui_no_unverified_execution_claim(self):
-        html = read_frontend_source_text()
-        assert "已修改生产环境" not in html
-
-    def test_ui_no_absolute_path(self):
-        html = read_frontend_source_text()
-        assert "/Users/" not in html

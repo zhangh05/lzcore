@@ -248,7 +248,7 @@ def test_linked_failures_keep_goal_open_for_model_replanning():
     assert recovery_final_gate(ctx, []).should_continue is False
 
 
-def test_typed_evidence_goal_remains_open_without_replan_budget():
+def test_typed_evidence_goal_becomes_blocked_when_handler_reports_unavailable():
     ctx = _ctx()
     install_recovery_goal(ctx, {
         "goal": {
@@ -263,13 +263,13 @@ def test_typed_evidence_goal_remains_open_without_replan_budget():
             "fact": "status", "status": "unavailable",
         }]}, ok=False, error="unavailable",
     )
-    assert recovery_final_gate(ctx, [unavailable]).should_continue is True
-    assert recovery_final_gate(ctx, [unavailable]).should_continue is True
-    assert ctx.extras["recovery_goals"][0]["status"] == "pending"
-    assert goal_loop_summary(ctx)["status"] == "pending"
+    assert recovery_final_gate(ctx, [unavailable]).should_continue is False
+    assert ctx.extras["recovery_goals"][0]["status"] == "blocked"
+    assert ctx.extras["recovery_goals"][0]["block_reason"] == "required_evidence_unavailable"
+    assert goal_loop_summary(ctx)["status"] == "blocked"
 
 
-def test_legacy_blocked_typed_goal_is_reopened_for_continued_recovery():
+def test_blocked_typed_goal_does_not_veto_truthful_final_response():
     ctx = _ctx()
     install_recovery_goal(ctx, {
         "goal": {"evidence_kind": "live_fact", "target": {"resource_id": "r1"}, "fact": "status"},
@@ -277,9 +277,9 @@ def test_legacy_blocked_typed_goal_is_reopened_for_continued_recovery():
     goal = ctx.extras["recovery_goals"][0]
     goal["status"] = "blocked"
 
-    assert recovery_final_gate(ctx, []).should_continue is True
+    assert recovery_final_gate(ctx, []).should_continue is False
     assert goal["status"] == "blocked"
-    assert recovery_final_gate(ctx, []).should_continue is True
+    assert recovery_final_gate(ctx, []).should_continue is False
     assert goal["status"] == "blocked"
 
 

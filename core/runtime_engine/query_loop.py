@@ -94,7 +94,7 @@ def _normalize_llm_error(error: Any) -> str:
     value = str(error or "").strip().lower()
     if value in {
         "llm_call_timeout", "llm_rate_limited", "llm_auth_failed",
-        "llm_configuration_error", "llm_provider_error", "no_response",
+        "llm_configuration_error", "llm_request_rejected", "llm_provider_error", "no_response",
     }:
         return value
     if "timeout" in value or "timed out" in value:
@@ -108,6 +108,16 @@ def _normalize_llm_error(error: Any) -> str:
         "model not found", "invalid model", "configuration", "config",
     )):
         return "llm_configuration_error"
+    # These errors describe the request we are about to resend, rather than a
+    # transient condition at the provider.  Retrying the byte-for-byte same
+    # payload would create an unbounded loop when production has no turn cap.
+    if any(marker in value for marker in (
+        "400", "422", "bad request", "invalid request", "invalid parameter",
+        "schema validation", "malformed", "context length", "context window",
+        "maximum context", "too many tokens", "prompt is too long",
+        "content filter", "content policy",
+    )):
+        return "llm_request_rejected"
     return "llm_provider_error"
 
 
@@ -117,6 +127,7 @@ def _llm_failure_message(error_code: str) -> str:
         "llm_rate_limited": "模型服务当前繁忙，请稍后重试。",
         "llm_auth_failed": "模型服务认证失败，请联系管理员检查模型配置。",
         "llm_configuration_error": "模型服务配置不可用，请联系管理员检查配置。",
+        "llm_request_rejected": "模型服务拒绝了当前请求；保留的上下文和证据未丢失，但需要修正请求或模型约束后才能继续。",
     }
     return messages.get(error_code, "模型服务暂时不可用，请稍后重试。")
 
@@ -1821,7 +1832,7 @@ class QueryLoop:
                 # and invalid model configuration cannot: retrying the exact
                 # same request only creates a busy loop.  Return the complete
                 # already-collected evidence and a typed operator-facing state.
-                if provider_error in {"llm_auth_failed", "llm_configuration_error"}:
+                if provider_error in {"llm_auth_failed", "llm_configuration_error", "llm_request_rejected"}:
                     final_response = (
                         self._build_tool_result_fallback(ctx, all_results)
                         if all_results else _llm_failure_message(provider_error)
@@ -1896,8 +1907,35 @@ class QueryLoop:
 
                 tool_calls, duplicate_note = self._suppress_repeated_tool_calls(ctx, tool_calls)
                 if duplicate_note:
+                    # Keep the model's proposal in transcript as a proposal,
+                    # then make the no-progress diagnosis explicit.  It was
+                    # never executed, so no synthetic tool result is created.
+                    messages = [*messages, response.assistant_message()]
                     messages = self._append_turn_nudge(messages, duplicate_note)
                 if not tool_calls:
+                    signature = str(ctx.extras.get("last_suppressed_tool_signature") or "")
+                    current_signature = str(ctx.extras.get("suppressed_tool_signature") or "")
+                    if current_signature and current_signature == signature:
+                        ctx.extras["response_outcome"] = "blocked_no_progress"
+                        ctx.extras.setdefault("no_progress_events", []).append({
+                            "kind": "repeated_terminal_tool_proposal",
+                            "signature": current_signature,
+                            "iteration": iterations,
+                        })
+                        return finish(
+                            final_response=(
+                                "任务受阻：模型连续提出同一组已有终态证据或确定性失败的工具调用；"
+                                "这些调用没有再次执行，已保留全部既有证据。请基于不同的可执行路径继续，"
+                                "或明确说明当前目标缺少的外部条件。"
+                            ),
+                            tool_results=all_results,
+                            iterations=iterations,
+                            total_tool_calls=len(all_results),
+                            llm_calls=budget.llm_calls,
+                            error="no_progress_repeated_tool_calls",
+                        )
+                    if current_signature:
+                        ctx.extras["last_suppressed_tool_signature"] = current_signature
                     continue
 
                 gate = self._prepare_tool_calls(ctx, tool_calls)
@@ -2172,6 +2210,10 @@ class QueryLoop:
 
                 # Append assistant message (with tool_calls) + tool results
                 messages = self._append_tool_round(messages, model_tool_calls, results, response=response)
+                # New observed evidence reopens normal recovery planning.  A
+                # final-text-only response after a nudge is handled below as a
+                # truthful blocked state, not an unbounded dialogue loop.
+                ctx.extras.pop("recovery_final_nudge_pending", None)
                 checkpoint_nudge = self._task_state_checkpoint_nudge(ctx)
                 if checkpoint_nudge:
                     messages = self._append_turn_nudge(messages, checkpoint_nudge)
@@ -2270,19 +2312,38 @@ class QueryLoop:
 
             recovery_gate = recovery_final_gate(ctx, all_results)
             if recovery_gate.should_continue:
-                messages = [
-                    *messages,
-                    response.assistant_message(),
-                    LLMMessage(role="user", content=recovery_gate.nudge),
-                ]
-                ctx.extras.setdefault("recovery_goal_events", []).append({
-                    "type": "premature_final_rejected",
-                    "iteration": iterations,
-                    "unresolved_goal_ids": [
-                        str(item.get("goal_id") or "") for item in recovery_gate.unresolved
-                    ],
-                })
-                continue
+                if ctx.extras.get("recovery_final_nudge_pending"):
+                    from .recovery_goals import block_unresolved_recovery_goals
+
+                    block_unresolved_recovery_goals(
+                        ctx,
+                        recovery_gate.unresolved,
+                        reason="no_executable_recovery_after_runtime_nudge",
+                    )
+                    ctx.extras["response_outcome"] = "blocked_no_recovery_action"
+                    ctx.extras.setdefault("recovery_goal_events", []).append({
+                        "type": "blocked_no_executable_recovery_action",
+                        "iteration": iterations,
+                        "unresolved_goal_ids": [
+                            str(item.get("goal_id") or "") for item in recovery_gate.unresolved
+                        ],
+                    })
+                    recovery_gate = recovery_final_gate(ctx, all_results)
+                if recovery_gate.should_continue:
+                    ctx.extras["recovery_final_nudge_pending"] = True
+                    messages = [
+                        *messages,
+                        response.assistant_message(),
+                        LLMMessage(role="user", content=recovery_gate.nudge),
+                    ]
+                    ctx.extras.setdefault("recovery_goal_events", []).append({
+                        "type": "premature_final_rejected",
+                        "iteration": iterations,
+                        "unresolved_goal_ids": [
+                            str(item.get("goal_id") or "") for item in recovery_gate.unresolved
+                        ],
+                    })
+                    continue
 
             network_retry_nudge = self._network_retry_final_gate(ctx, str(response.content or ""), all_results)
             if network_retry_nudge:
@@ -2415,26 +2476,25 @@ class QueryLoop:
         messages: list[LLMMessage],
         ctx: StatelessContext,
     ) -> None:
-        """Keep one server-owned CognitiveState projection per LLM round."""
+        """Append changed server-owned CognitiveState projections in causal order.
+
+        The conversation is append-only: rewriting a prior user turn with
+        current tool evidence both reverses causality and invalidates the
+        mutable portion of provider prompt caches.
+        """
         from .prompt_contract import (
             cognitive_state_prompt_item,
             render_trusted_prompt_item,
         )
 
         item = cognitive_state_prompt_item(ctx.extras.get("cognitive_state"))
-        marker = '<runtime_guidance trusted="true" source_kind="cognitive_state">'
-        messages[:] = [
-            message for message in messages
-            if not (message.role == "user" and str(message.content or "").startswith(marker))
-        ]
-        if item is not None:
-            insert_at = next(
-                (index for index, message in enumerate(messages) if message.role == "assistant"),
-                len(messages),
-            )
-            messages.insert(insert_at, LLMMessage(
-                role="user", content=render_trusted_prompt_item(item)
-            ))
+        if item is None:
+            return
+        rendered = render_trusted_prompt_item(item)
+        if str(ctx.extras.get("_cognitive_prompt_projection") or "") == rendered:
+            return
+        messages.append(LLMMessage(role="user", content=rendered))
+        ctx.extras["_cognitive_prompt_projection"] = rendered
 
     @staticmethod
     def _unique_call_ids(
@@ -2574,7 +2634,7 @@ class QueryLoop:
                 type(e).__name__,
                 _redact_tool_error(e),
             )
-            return LLMResponse(error=_normalize_llm_error(type(e).__name__))
+            return LLMResponse(error=_normalize_llm_error(str(e)))
 
     async def _recover_final_synthesis(
         self,
@@ -2957,7 +3017,7 @@ class QueryLoop:
             for item in (ctx.extras.get("task_state_execution_manifest") or [])
             if isinstance(item, dict)
         }
-        executable, suppressed = [], []
+        executable, suppressed, suppressed_keys = [], [], []
         for call in tool_calls:
             prior = previous.get(self._durable_call_key(call))
             if not prior:
@@ -2966,11 +3026,18 @@ class QueryLoop:
             read_only = self._executor._is_read_only_call(call)
             deterministic_failure = not read_only and not bool(prior.get("ok")) and not bool(prior.get("execution_may_continue"))
             if (read_only and bool(prior.get("ok"))) or deterministic_failure:
-                suppressed.append(str(call.name).replace("__", "."))
+                # This text returns to the model, so retain the same alias
+                # spelling exposed in provider tool definitions.
+                suppressed.append(str(call.name).replace(".", "__"))
+                suppressed_keys.append(self._durable_call_key(call))
             else:
                 executable.append(call)
         if not suppressed:
+            ctx.extras.pop("suppressed_tool_signature", None)
             return executable, ""
+        ctx.extras["suppressed_tool_signature"] = hashlib.sha256(
+            json.dumps(sorted(suppressed_keys), ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
         ctx.extras.setdefault("duplicate_tool_call_events", []).append({"count": len(suppressed), "tools": suppressed})
         return executable, (
             "[RUNTIME DEDUPLICATION] Exact calls with existing terminal evidence or a deterministic failure were not re-executed: "

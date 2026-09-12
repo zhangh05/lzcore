@@ -147,11 +147,12 @@ def test_failed_memory_write_does_not_consume_experience(monkeypatch):
 
 
 def test_corrupt_memory_is_not_silently_missing(monkeypatch, tmp_path):
-    import pytest
     store = MemoryStore()
     monkeypatch.setattr(store, "_dir", lambda ws: tmp_path)
     (tmp_path / "mem-123456abcdef.json").write_text("{broken")
-    with pytest.raises(RuntimeError, match="memory_record_load_failed"):
-        store.list_all("test_ws")
-    with pytest.raises(RuntimeError, match="memory_record_load_failed"):
-        store.get("test_ws", "mem-123456abcdef")
+    healthy = MemoryRecord(workspace_id="test_ws", content="healthy", status="active")
+    (tmp_path / f"{healthy.memory_id}.json").write_text(__import__("json").dumps(healthy.to_dict()))
+    assert [record.content for record in store.list_all("test_ws")] == ["healthy"]
+    assert store.load_errors() == [{"path": "mem-123456abcdef.json", "error": "JSONDecodeError"}]
+    assert store.get("test_ws", "mem-123456abcdef") is None
+    assert store.load_errors()

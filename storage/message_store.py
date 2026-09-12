@@ -206,10 +206,17 @@ class SessionMessageStore:
                 if record.get("artifact_ref"):
                     art = record["artifact_ref"]
                     m["artifact_ref"] = art
-                    m["content"] = (
-                        f"[内容过大 ({art.get('size_bytes', 0) // 1024} KB)，"
-                        f"请通过制品 API 获取: artifact_id={art.get('artifact_id', '')}]"
-                    )
+                    content = self._read_large_message_content(art)
+                    if content is None:
+                        m["content"] = (
+                            f"[内容制品暂不可读 ({art.get('size_bytes', 0) // 1024} KB)，"
+                            f"artifact_id={art.get('artifact_id', '')}]"
+                        )
+                        m["artifact_unavailable"] = True
+                    else:
+                        # Large message artifacts were created from redacted
+                        # content.  Restore them verbatim for later turns.
+                        m["content"] = _message_content(role, content)
 
                 # Carry metadata for frontend rendering
                 meta = record.get("metadata", {})
@@ -233,6 +240,23 @@ class SessionMessageStore:
 
         msgs.sort(key=_message_sort_key)
         return msgs
+
+    def _read_large_message_content(self, artifact_ref: Any) -> Optional[str]:
+        """Hydrate a redacted artifact owned by this session, without clipping."""
+        if not isinstance(artifact_ref, dict) or not artifact_ref.get("redacted"):
+            return None
+        file_id = str(artifact_ref.get("file_id") or "")
+        if not file_id:
+            return None
+        try:
+            from storage.file_store import read_file_content
+
+            content = read_file_content(self.ws_id, file_id)
+            return str(content) if content is not None else None
+        except Exception:
+            # One deleted artifact is visible as unavailable but cannot hide
+            # the rest of the persisted conversation.
+            return None
 
     # ── Artifact storage for large content ──
 
