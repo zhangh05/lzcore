@@ -10,7 +10,11 @@
       "react": ["./node_modules/@types/react"],
       "react/*": ["./node_modules/@types/react/*"],
       "react-dom": ["./node_modules/@types/react-dom"],
-      "react-dom/*": ["./node_modules/@types/react-dom/*"]
+      "react-dom/*": ["./node_modules/@types/react-dom/*"],
+      "@xyflow/react": ["./node_modules/@xyflow/react"],
+      "@xyflow/react/*": ["./node_modules/@xyflow/react/*"],
+      "@phosphor-icons/react": ["./node_modules/@phosphor-icons/react"],
+      "@phosphor-icons/react/*": ["./node_modules/@phosphor-icons/react/*"]
     },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,

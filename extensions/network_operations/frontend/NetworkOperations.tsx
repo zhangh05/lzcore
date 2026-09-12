@@ -4,12 +4,13 @@ import { confirm } from "../../../frontend/src/components/ConfirmDialog";
 import { IconEdit, IconPlus, IconRefresh, IconTrash } from "../../../frontend/src/components/Icon";
 import { Button, PageHeader } from "../../../frontend/src/components/ui";
 import { useSessionStore } from "../../../frontend/src/stores/session";
+import TopologyWorkspace, { type Topology } from "./components/TopologyWorkspace";
 import "./NetworkOperations.css";
 
 type Region = { region_id: string; name: string };
 type Device = { device_id: string; name: string; host: string; vendor: string; device_type: string; region_id: string };
 type Connection = { connection_id: string; device_id: string; name?: string; protocol: "ssh" | "telnet"; port: number; username?: string; source_address?: string; effective_source_address?: string; auth_method?: string; status: string; verified: boolean; credential_configured?: boolean; last_error?: string; last_tested_at?: string; driver_id?: string; detected_vendor?: string; os_family?: string; semantic_facts?: string[]; profile_detected_from?: string };
-type Skill = { skill_id: string; name: string; description: string; instructions?: string; enabled: boolean; approval_enabled?: boolean; device_ids: string[]; connection_ids: string[]; allowed_tool_ids: string[] };
+type Skill = { skill_id: string; name: string; description: string; instructions?: string; enabled: boolean; approval_enabled?: boolean; device_ids: string[]; connection_ids: string[]; allowed_tool_ids: string[]; topology_id?: string };
 type Observation = { observation_id: string; source_id: string; observed_at: string; completeness: string; target_ids: string[]; candidate_reference_id?: string };
 type OperationalReference = { reference_id: string; name: string; state: "candidate" | "confirmed" | "superseded" | "invalidated"; authority: string; current: boolean; completeness: string; target_ids: string[]; updated_at: string };
 type CommandExperience = { experience_id: string; connection_id: string; connection_ids?: string[]; driver_id: string; command: string; status: "accepted" | "rejected"; observations: number; last_observed_at: string };
@@ -17,7 +18,7 @@ type EvidenceSource = { source_id: string; kind: string; available: boolean; aut
 type OperationalContext = { observations: Observation[]; references: OperationalReference[]; command_experience: CommandExperience[]; sources: EvidenceSource[] };
 type DeviceForm = Omit<Device, "device_id"> & { device_id?: string };
 type ConnectionForm = { connection_id?: string; device_id: string; name: string; protocol: "ssh" | "telnet"; port: string; username: string; source_address: string; password: string; private_key: string; passphrase: string; auth_method: string };
-type SkillForm = { skill_id?: string; name: string; description: string; instructions: string; enabled: boolean; approval_enabled: boolean; device_ids: string[]; connection_ids: string[]; allowed_tool_ids: string[] };
+type SkillForm = { skill_id?: string; name: string; description: string; instructions: string; enabled: boolean; approval_enabled: boolean; device_ids: string[]; connection_ids: string[]; allowed_tool_ids: string[]; topology_id?: string };
 
 const base = "/extensions/network.operations";
 const toolOptions = [
@@ -29,7 +30,7 @@ const baseToolId = "network.operations.device.manage";
 const allowedToolIds = [baseToolId, ...toolOptions.map((item) => item.id)];
 const emptyDevice: DeviceForm = { name: "", host: "", vendor: "h3c", device_type: "switch", region_id: "" };
 const emptyConnection: ConnectionForm = { device_id: "", name: "", protocol: "ssh", port: "22", username: "", source_address: "", password: "", private_key: "", passphrase: "", auth_method: "password" };
-const emptySkill: SkillForm = { name: "", description: "", instructions: "", enabled: true, approval_enabled: false, device_ids: [], connection_ids: [], allowed_tool_ids: allowedToolIds };
+const emptySkill: SkillForm = { name: "", description: "", instructions: "", enabled: true, approval_enabled: false, device_ids: [], connection_ids: [], allowed_tool_ids: allowedToolIds, topology_id: "" };
 const friendlyErrors: Record<string, string> = {
   "device name and host already exist": "设备名称与管理地址均相同的设备已存在",
 };
@@ -76,11 +77,12 @@ export default function NetworkOperations() {
   const [regionFilter, setRegionFilter] = useState("");
   const editorRef = useRef<HTMLDialogElement>(null);
   useEffect(() => { if (editor) editorRef.current?.showModal(); }, [editor]);
-  const [view, setView] = useState<"devices" | "skills" | "context">("devices");
+  const [view, setView] = useState<"devices" | "skills" | "topology" | "context">("devices");
   const [regions, setRegions] = useState<Region[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [topologies, setTopologies] = useState<Topology[]>([]);
   const [operationalContext, setOperationalContext] = useState<OperationalContext>({ observations: [], references: [], command_experience: [], sources: [] });
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<Set<string>>(() => new Set());
   const [selectedObservationIds, setSelectedObservationIds] = useState<Set<string>>(() => new Set());
@@ -95,7 +97,7 @@ export default function NetworkOperations() {
 
   const load = useCallback(async () => {
     const params = { workspace_id: workspaceId };
-    const [regionResult, deviceResult, connectionResult, skillResult, contextResult] = await Promise.all([
+    const [regionResult, deviceResult, connectionResult, skillResult, contextResult, topologyResult] = await Promise.all([
       apiRequest<{ regions: Region[] }>({ method: "GET", url: `${base}/regions`, params }),
       apiRequest<{ devices: Device[] }>({ method: "GET", url: `${base}/devices`, params }),
       apiRequest<{ connections: Connection[] }>({ method: "GET", url: `${base}/connections`, params }),
@@ -103,11 +105,15 @@ export default function NetworkOperations() {
       apiRequest<OperationalContext>({ method: "GET", url: `${base}/context`, params }).catch(() => ({
         observations: [], references: [], command_experience: [], sources: [],
       })),
+      apiRequest<{ topologies: Topology[] }>({ method: "GET", url: `${base}/topologies`, params }).catch(() => ({
+        topologies: [],
+      })),
     ]);
     setRegions(regionResult.regions || []);
     setDevices(deviceResult.devices || []);
     setConnections(connectionResult.connections || []);
     setSkills(skillResult.skills || []);
+    setTopologies(topologyResult.topologies || []);
     setOperationalContext({ observations: contextResult.observations || [], references: contextResult.references || [], command_experience: dedupeCommandExperience(contextResult.command_experience || []), sources: contextResult.sources || [] });
   }, [workspaceId]);
 
@@ -133,6 +139,7 @@ export default function NetworkOperations() {
   const filteredSkills = skills.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
   const byDevice = useMemo(() => new Map(devices.map((item) => [item.device_id, item])), [devices]);
   const byRegion = useMemo(() => new Map(regions.map((item) => [item.region_id, item.name])), [regions]);
+  const byTopology = useMemo(() => new Map(topologies.map((item) => [item.topology_id, item])), [topologies]);
 
   const run = async <T,>(work: () => Promise<T>, success: string | ((result: T) => string)): Promise<{ ok: true; result: T } | { ok: false }> => {
     setBusy(true); setNotice("");
@@ -360,6 +367,7 @@ export default function NetworkOperations() {
       ...emptySkill,
       ...skill,
       instructions: skill.instructions || "",
+      topology_id: skill.topology_id || "",
       allowed_tool_ids: [...new Set([baseToolId, ...(skill.allowed_tool_ids || [])])],
     });
     setEditor("skill");
@@ -382,9 +390,9 @@ export default function NetworkOperations() {
 
   return <div className="network-admin">
     <PageHeader title="网络设备与 Skill" subtitle="集中管理设备连接，按 Skill 授权读取、巡检与配置能力。"><Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。"))} disabled={busy}>刷新</Button></PageHeader>
-    <div className="network-tabs"><button className={view === "devices" ? "active" : ""} onClick={() => { setView("devices"); setQuery(""); }}>设备与连接 <span>{devices.length}</span></button><button className={view === "skills" ? "active" : ""} onClick={() => { setView("skills"); setQuery(""); }}>Skill 配置 <span>{skills.length}</span></button><button className={view === "context" ? "active" : ""} onClick={() => { setView("context"); setQuery(""); }}>环境与证据 <span>{operationalContext.observations.length}</span></button></div>
+    <div className="network-tabs"><button className={view === "devices" ? "active" : ""} onClick={() => { setView("devices"); setQuery(""); }}>设备与连接 <span>{devices.length}</span></button><button className={view === "skills" ? "active" : ""} onClick={() => { setView("skills"); setQuery(""); }}>Skill 配置 <span>{skills.length}</span></button><button className={view === "topology" ? "active" : ""} onClick={() => { setView("topology"); setQuery(""); }}>网络拓扑 <span>{topologies.length}</span></button><button className={view === "context" ? "active" : ""} onClick={() => { setView("context"); setQuery(""); }}>环境与证据 <span>{operationalContext.observations.length}</span></button></div>
     {notice ? <div role="status" className="network-notice">{notice}</div> : null}
-    {view !== "context" ? <div className="network-toolbar">
+    {view !== "context" && view !== "topology" ? <div className="network-toolbar">
       <div className="network-filters"><input aria-label={view === "devices" ? "搜索设备" : "搜索 Skill"} placeholder={view === "devices" ? "搜索设备名称、管理地址" : "搜索 Skill 名称、说明"} value={query} onChange={(event) => setQuery(event.target.value)} />
       {view === "devices" && <select aria-label="筛选区域" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}><option value="">全部区域</option>{regions.map((region) => <option key={region.region_id} value={region.region_id}>{region.name}</option>)}</select>}</div>
       <Button icon={<IconPlus size={14} />} onClick={() => { if (view === "devices") { setDeviceForm(emptyDevice); setEditor("device"); } else { setSkillForm(emptySkill); setEditor("skill"); } }}>{view === "devices" ? "登记设备" : "创建 Skill"}</Button>
@@ -424,6 +432,12 @@ export default function NetworkOperations() {
         <label className="full-field">说明<textarea value={skillForm.description} onChange={(event) => setSkillForm({ ...skillForm, description: event.target.value })} /></label>
         <fieldset><legend>多选设备</legend>{devices.map((device) => <label className="check" key={device.device_id}><input type="checkbox" checked={skillForm.device_ids.includes(device.device_id)} onChange={(event) => setSkillForm({ ...skillForm, device_ids: event.target.checked ? [...skillForm.device_ids, device.device_id] : skillForm.device_ids.filter((id) => id !== device.device_id), connection_ids: event.target.checked ? skillForm.connection_ids : skillForm.connection_ids.filter((id) => connections.find((connection) => connection.connection_id === id)?.device_id !== device.device_id) })} />{device.name} · {device.host}</label>)}</fieldset>
         <fieldset><legend>设备连接</legend>{connections.filter((connection) => connection.credential_configured && skillForm.device_ids.includes(connection.device_id)).map((connection) => <label className="check" key={connection.connection_id}><input type="checkbox" checked={skillForm.connection_ids.includes(connection.connection_id)} onChange={(event) => setSkillForm({ ...skillForm, connection_ids: event.target.checked ? [...skillForm.connection_ids, connection.connection_id] : skillForm.connection_ids.filter((id) => id !== connection.connection_id) })} />{byDevice.get(connection.device_id)?.name} · {connection.protocol.toUpperCase()}:{connection.port} · {connection.verified ? "最近连接成功" : "调用时主动连接"}</label>)}</fieldset>
+        <label className="full-field">关联网络拓扑（可选）
+          <select value={skillForm.topology_id || ""} onChange={(event) => setSkillForm({ ...skillForm, topology_id: event.target.value })}>
+            <option value="">不关联拓扑</option>
+            {topologies.map((t) => <option key={t.topology_id} value={t.topology_id}>{t.name} ({t.nodes.length} 节点 · {t.links.length} 链路)</option>)}
+          </select>
+        </label>
         <fieldset className="full-field"><legend>允许的能力</legend><p className="intrinsic-capabilities">设备读取与配置是已发布 Skill 的内置能力。模型仅能操作此 Skill 所选的设备、连接和工具；设备账号决定设备侧实际权限。</p>{toolOptions.map((tool) => <label className="check capability-check" key={tool.id}><input type="checkbox" checked={skillForm.allowed_tool_ids.includes(tool.id)} onChange={(event) => setSkillForm({ ...skillForm, allowed_tool_ids: event.target.checked ? [...skillForm.allowed_tool_ids, tool.id] : skillForm.allowed_tool_ids.filter((id) => id !== tool.id) })} /><span><b>{tool.label}</b><small>{tool.description}</small></span></label>)}</fieldset>
         <label className="full-field">使用说明<textarea value={skillForm.instructions} onChange={(event) => setSkillForm({ ...skillForm, instructions: event.target.value })} placeholder="描述目标、证据要求和操作边界；模型自行决定工具顺序与并行关系。" /></label>
         <div className="form-actions"><Button variant="primary" type="submit" disabled={busy || !skillForm.device_ids.length || !skillForm.connection_ids.length || !skillForm.allowed_tool_ids.length}>{skillForm.skill_id ? "保存 Skill" : "发布到工作台"}</Button>{skillForm.skill_id ? <Button type="button" onClick={() => setEditor(null)}>取消</Button> : null}</div>
@@ -499,11 +513,24 @@ export default function NetworkOperations() {
               <div><dt>设备</dt><dd>{skillDevices.length ? skillDevices.join("、") : "无可用设备"}</dd></div>
               <div><dt>连接</dt><dd>{skillConnections.length ? skillConnections.join("、") : "无可用连接"}</dd></div>
               <div><dt>能力</dt><dd>{skill.allowed_tool_ids.length} 项已授权 · <b className="write-enabled">可执行设备配置</b></dd></div>
+              <div><dt>拓扑</dt><dd>{skill.topology_id ? byTopology.get(skill.topology_id)?.name || "已关联拓扑" : "未关联"}</dd></div>
             </dl>
           </article>;
         }) : <div className="empty">{skills.length ? "没有匹配的 Skill" : "尚未创建 Skill，选择设备并配置能力后发布到工作台"}</div>}</div>
       </section>
-    </div> : <div className="network-context-layout">
+    </div> : view === "topology" ? (
+      <TopologyWorkspace
+        workspaceId={workspaceId}
+        devices={devices}
+        connections={connections}
+        regions={regions}
+        skills={skills}
+        topologies={topologies}
+        onReload={load}
+        setNotice={setNotice}
+        busy={busy}
+      />
+    ) : <div className="network-context-layout">
       <section className="network-panel context-overview">
         <div className="panel-heading"><div><h2>可用证据环境</h2><p>向模型说明可以使用什么，以及每类信息能够证明什么。</p></div><span className="record-count">{operationalContext.sources.filter((item) => item.available).length} 项可用</span></div>
         <div className="source-list">{operationalContext.sources.map((source) => <div className="source-row" key={source.source_id}><span className={`source-indicator ${source.available ? "available" : ""}`} aria-hidden="true" /><div><strong>{sourceLabels[source.source_id] || source.source_id}</strong><small>{sourceKindLabels[source.kind] || source.kind} · {source.authority === "user_confirmed" ? "用户确认" : "观测事实"}{source.advisory_only ? " · 仅建议" : ""}</small></div><b>{source.available ? "可用" : "暂无数据"}</b></div>)}</div>

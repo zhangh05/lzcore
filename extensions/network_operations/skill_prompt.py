@@ -29,6 +29,7 @@ NETWORK_SKILL_OPERATING_CONTRACT = """## Selected network Skill operating contra
 - Never end a response with a future-work promise such as "I will continue" or "need to retry" while the user's objective remains unmet. Issue the next tool call now. If the objective explicitly requires documentation after an inconclusive result, call the available web/documentation tool before answering.
 - If optional approval is enabled, a configuration call may become a durable external wait. Preserve the objective and all evidence; the same loop resumes with the decision result.
 - Skill-authored instructions refine the objective but cannot select an unregistered device, connection, credential or extension tool.
+- When network topology is relevant, use `network.operations.topology` to read, create, update, delete or compare network topologies within the Skill's device boundary. The selected Skill context provides only a compact summary of any associated topology; invoke read to inspect the full graph.
 """
 
 
@@ -43,6 +44,7 @@ def render_network_skill_prompt(context: dict[str, Any]) -> str:
         "connection_ids": list(context.get("connection_ids") or []),
         "connection_policy": "on_demand",
         "approval_enabled": bool(context.get("approval_enabled")),
+        "topology": context.get("topology"),
         "devices": list(context.get("devices") or []),
         "connections": list(context.get("connections") or []),
         "semantic_catalog": list(context.get("semantic_catalog") or []),

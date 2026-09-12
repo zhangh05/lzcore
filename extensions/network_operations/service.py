@@ -36,6 +36,7 @@ SKILL_TOOL_IDS = frozenset({
     "network.operations.device.manage",
     "network.operations.wait",
     "network.operations.inspection",
+    "network.operations.topology",
 })
 INTERNAL_SCAN_LIMIT = 5000
 
@@ -313,6 +314,17 @@ def delete_device(workspace_id: str, device_id: str) -> bool:
                 item for item in skill.get("connection_ids") or [] if item not in deleted_connection_ids
             ]
             _save_or_delete_depleted_skill(workspace_id, skill)
+    for topo in list_topologies(workspace_id):
+        nodes = topo.get("nodes") or []
+        if any(n.get("device_id") == device_id for n in nodes):
+            topo["nodes"] = [n for n in nodes if n.get("device_id") != device_id]
+            topo["links"] = [
+                l for l in (topo.get("links") or [])
+                if l.get("source_device_id") != device_id and l.get("target_device_id") != device_id
+            ]
+            topo["version"] = int(topo.get("version") or 1) + 1
+            topo["updated_at"] = now_iso()
+            _store(workspace_id).save("topologies", topo["topology_id"], topo)
     return _store(workspace_id).delete("devices", device_id)
 
 
@@ -737,6 +749,7 @@ def _with_skill_base_capability(record: dict[str, Any]) -> dict[str, Any]:
     """Normalize legacy Skill records to the default device-execution contract."""
     return {
         **{key: value for key, value in record.items() if key != "capabilities"},
+        "topology_id": str(record.get("topology_id") or ""),
         "allowed_tool_ids": list(dict.fromkeys([
         *(record.get("allowed_tool_ids") or []), SKILL_BASE_TOOL_ID,
         "network.operations.context_read",
@@ -798,6 +811,9 @@ def save_skill(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     default_script_id = str(payload.get("default_script_id") or "").strip()
     if default_script_id:
         _resolve_script(workspace_id, default_script_id)
+    topology_id = str(payload.get("topology_id") if "topology_id" in payload else existing.get("topology_id") or "").strip()
+    if topology_id and not get_topology(workspace_id, topology_id):
+        raise ValueError("skill contains unknown topology")
     record = {
         "skill_id": skill_id,
         "name": name,
@@ -811,6 +827,7 @@ def save_skill(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         # explicitly enables it.
         "approval_enabled": bool(payload.get("approval_enabled", existing.get("approval_enabled", False))),
         "default_script_id": default_script_id,
+        "topology_id": topology_id,
         "instructions": str(payload.get("instructions") or "").strip()[:2000],
         "created_at": str(existing.get("created_at") or now_iso()),
         "updated_at": now_iso(),
@@ -862,6 +879,20 @@ def resolve_workbench_selection(workspace_id: str, selection: dict[str, Any]) ->
         ]
         if not connections:
             raise ValueError("workbench_skill_has_no_configured_connection")
+        topology_summary = None
+        topology_id = str(skill.get("topology_id") or "").strip()
+        if topology_id:
+            topo = get_topology(workspace_id, topology_id)
+            if topo:
+                topology_summary = {
+                    "topology_id": topo["topology_id"],
+                    "name": topo["name"],
+                    "description": topo.get("description", ""),
+                    "version": topo.get("version", 1),
+                    "node_count": len(topo.get("nodes") or []),
+                    "link_count": len(topo.get("links") or []),
+                    "group_count": len(topo.get("groups") or []),
+                }
     return {
         "skill_id": skill_id,
         "skill_name": str(skill.get("name") or ""),
@@ -871,6 +902,7 @@ def resolve_workbench_selection(workspace_id: str, selection: dict[str, Any]) ->
         "device_ids": selected,
         "connection_ids": [str(item.get("connection_id") or "") for item in connections],
         "connection_policy": "on_demand",
+        "topology": topology_summary,
         "devices": [{"device_id": item.get("device_id"), "name": item.get("name"), "host": item.get("host"), "vendor": item.get("vendor")} for item in devices if item],
         "connections": [{
             "connection_id": item.get("connection_id"),
@@ -2069,4 +2101,328 @@ def inspection_evidence_summary(workspace_id: str, task_id: str) -> dict[str, An
         "artifact_id": task.get("artifact_id", ""),
         "artifact_sensitivity": "internal",
         "devices": devices,
+    }
+
+
+def _public_topology(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "topology_id": str(record.get("topology_id") or ""),
+        "name": str(record.get("name") or ""),
+        "description": str(record.get("description") or ""),
+        "version": int(record.get("version") or 1),
+        "nodes": list(record.get("nodes") or []),
+        "links": list(record.get("links") or []),
+        "groups": list(record.get("groups") or []),
+        "created_at": str(record.get("created_at") or ""),
+        "updated_at": str(record.get("updated_at") or ""),
+    }
+
+
+def list_topologies(workspace_id: str) -> list[dict[str, Any]]:
+    records = _store(workspace_id).list("topologies", limit=500)
+    return [_public_topology(item) for item in records]
+
+
+def get_topology(workspace_id: str, topology_id: str) -> dict[str, Any] | None:
+    try:
+        record = _store(workspace_id).get("topologies", topology_id)
+    except ValueError:
+        return None
+    return _public_topology(record) if record else None
+
+
+@_connection_transaction
+def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    name = str(payload.get("name") or "").strip()
+    if not name or len(name) > 80:
+        raise ValueError("topology name is required and must be at most 80 characters")
+    topology_id = str(payload.get("topology_id") or _id("topo")).strip()
+    existing = get_topology(workspace_id, topology_id)
+
+    # Optimistic concurrency check
+    if existing is not None:
+        expected_version = payload.get("version")
+        if expected_version is not None and int(expected_version) != int(existing.get("version") or 1):
+            raise ValueError("topology_version_conflict")
+        new_version = int(existing.get("version") or 1) + 1
+    else:
+        new_version = 1
+
+    # Devices must exist in workspace
+    workspace_devices = {str(d.get("device_id") or ""): d for d in list_devices(workspace_id)}
+
+    raw_nodes = payload.get("nodes") if "nodes" in payload else (existing.get("nodes") if existing else [])
+    if not isinstance(raw_nodes, list):
+        raise ValueError("nodes must be a list")
+
+    normalized_nodes: list[dict[str, Any]] = []
+    seen_devices: set[str] = set()
+    for raw in raw_nodes:
+        if not isinstance(raw, dict):
+            continue
+        device_id = str(raw.get("device_id") or "").strip()
+        if not device_id or device_id not in workspace_devices:
+            raise ValueError(f"topology node references unknown device: {device_id or '<empty>'}")
+        if device_id in seen_devices:
+            raise ValueError(f"duplicate device entity in topology: {device_id}")
+        seen_devices.add(device_id)
+        dev = workspace_devices[device_id]
+        node_id = str(raw.get("node_id") or f"node_{device_id}").strip()
+        try:
+            x = float(raw.get("x", 0.0))
+            y = float(raw.get("y", 0.0))
+        except (TypeError, ValueError):
+            x, y = 0.0, 0.0
+        normalized_nodes.append({
+            "node_id": node_id,
+            "device_id": device_id,
+            "display_name": str(raw.get("display_name") or dev.get("name") or "").strip()[:80],
+            "labels": sorted({str(item).strip() for item in (raw.get("labels") or []) if str(item).strip()}),
+            "group_id": str(raw.get("group_id") or "").strip() or None,
+            "x": x,
+            "y": y,
+        })
+
+    raw_groups = payload.get("groups") if "groups" in payload else (existing.get("groups") if existing else [])
+    if not isinstance(raw_groups, list):
+        raise ValueError("groups must be a list")
+
+    normalized_groups: list[dict[str, Any]] = []
+    seen_groups: set[str] = set()
+    for raw in raw_groups:
+        if not isinstance(raw, dict):
+            continue
+        group_id = str(raw.get("group_id") or _id("grp")).strip()
+        if group_id in seen_groups:
+            continue
+        seen_groups.add(group_id)
+        try:
+            gx = float(raw.get("x", 0.0))
+            gy = float(raw.get("y", 0.0))
+            gw = float(raw.get("width", 320.0))
+            gh = float(raw.get("height", 240.0))
+        except (TypeError, ValueError):
+            gx, gy, gw, gh = 0.0, 0.0, 320.0, 240.0
+        kind = str(raw.get("kind") or "datacenter").strip().lower()
+        if kind not in {"as", "region", "datacenter", "tenant", "custom"}:
+            kind = "custom"
+        normalized_groups.append({
+            "group_id": group_id,
+            "name": str(raw.get("name") or "未命名分组").strip()[:80],
+            "description": str(raw.get("description") or "").strip()[:200],
+            "kind": kind,
+            "x": gx,
+            "y": gy,
+            "width": max(100.0, gw),
+            "height": max(80.0, gh),
+            "style": dict(raw.get("style") or {}) if isinstance(raw.get("style"), dict) else {},
+        })
+
+    raw_links = payload.get("links") if "links" in payload else (existing.get("links") if existing else [])
+    if not isinstance(raw_links, list):
+        raise ValueError("links must be a list")
+
+    normalized_links: list[dict[str, Any]] = []
+    seen_links: set[str] = set()
+    for raw in raw_links:
+        if not isinstance(raw, dict):
+            continue
+        src = str(raw.get("source_device_id") or "").strip()
+        tgt = str(raw.get("target_device_id") or "").strip()
+        if src not in seen_devices or tgt not in seen_devices:
+            raise ValueError(f"topology link endpoints must reference existing nodes in topology (got {src} -> {tgt})")
+        link_id = str(raw.get("link_id") or _id("link")).strip()
+        if link_id in seen_links:
+            link_id = _id("link")
+        seen_links.add(link_id)
+        src_iface = str(raw.get("source_interface") or "").strip()[:64]
+        tgt_iface = str(raw.get("target_interface") or "").strip()[:64]
+        kind = str(raw.get("kind") or "physical").strip().lower()
+        if kind not in {"physical", "logical"}:
+            kind = "physical"
+        status = str(raw.get("status") or "unknown").strip().lower()
+        if status not in {"unknown", "up", "down"}:
+            status = "unknown"
+        source = str(raw.get("source") or "manual").strip().lower()
+        if source not in {"manual", "discovered"}:
+            source = "manual"
+        label = str(raw.get("label") or "").strip()
+        if not label and src_iface and tgt_iface:
+            label = f"{src_iface} ↔ {tgt_iface}"
+        metadata = dict(raw.get("metadata") or {}) if isinstance(raw.get("metadata"), dict) else {}
+        evidence_refs = [str(item).strip() for item in (raw.get("evidence_refs") or []) if str(item).strip()]
+        normalized_links.append({
+            "link_id": link_id,
+            "source_device_id": src,
+            "source_interface": src_iface,
+            "target_device_id": tgt,
+            "target_interface": tgt_iface,
+            "kind": kind,
+            "label": label[:100],
+            "metadata": metadata,
+            "source": source,
+            "evidence_refs": evidence_refs,
+            "status": status,
+        })
+
+    record = {
+        "topology_id": topology_id,
+        "name": name,
+        "description": str(payload.get("description") or "").strip()[:500],
+        "version": new_version,
+        "nodes": normalized_nodes,
+        "links": normalized_links,
+        "groups": normalized_groups,
+        "created_at": str(existing.get("created_at") or now_iso()) if existing else now_iso(),
+        "updated_at": now_iso(),
+    }
+    _store(workspace_id).save("topologies", topology_id, record)
+    return _public_topology(record)
+
+
+@_connection_transaction
+def remove_topology_node(workspace_id: str, topology_id: str, device_id: str, *, expected_version: int | None = None) -> dict[str, Any]:
+    existing = get_topology(workspace_id, topology_id)
+    if not existing:
+        raise ValueError("topology_not_found")
+    if expected_version is not None and int(expected_version) != int(existing.get("version") or 1):
+        raise ValueError("topology_version_conflict")
+    filtered_nodes = [n for n in existing.get("nodes") or [] if n.get("device_id") != device_id]
+    filtered_links = [
+        l for l in existing.get("links") or []
+        if l.get("source_device_id") != device_id and l.get("target_device_id") != device_id
+    ]
+    payload = {
+        **existing,
+        "nodes": filtered_nodes,
+        "links": filtered_links,
+        "version": existing.get("version"),
+    }
+    return save_topology(workspace_id, payload)
+
+
+@_connection_transaction
+def delete_topology(workspace_id: str, topology_id: str) -> bool:
+    record = get_topology(workspace_id, topology_id)
+    if not record:
+        return False
+    # Clear any Skill references to this topology so no dangling references remain
+    for skill in list_skills(workspace_id):
+        if str(skill.get("topology_id") or "") == topology_id:
+            skill["topology_id"] = ""
+            save_skill(workspace_id, skill)
+    return _store(workspace_id).delete("topologies", topology_id)
+
+
+def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: set[str] | None = None) -> dict[str, Any]:
+    topo = get_topology(workspace_id, topology_id)
+    if not topo:
+        raise ValueError("topology_not_found")
+
+    all_workspace_devices = list_devices(workspace_id)
+    if scope_device_ids is not None:
+        available_devices = [d for d in all_workspace_devices if d.get("device_id") in scope_device_ids]
+    else:
+        available_devices = all_workspace_devices
+    available_ids = {str(d.get("device_id") or "") for d in available_devices}
+
+    topo_nodes = [n for n in topo.get("nodes") or [] if scope_device_ids is None or n.get("device_id") in scope_device_ids]
+    topo_device_ids = {str(n.get("device_id") or "") for n in topo_nodes}
+
+    devices_in_scope_not_in_topology = sorted(available_ids - topo_device_ids)
+    topology_devices_not_in_scope = sorted(topo_device_ids - available_ids)
+
+    # Collect operational evidence
+    context = operational_context(workspace_id)
+    observations = context.get("observations") or []
+    references = context.get("references") or []
+    inspections = list_inspections(workspace_id)
+
+    # Gather textual clues and observations
+    evidence_tokens: dict[str, list[str]] = {}
+    for obs in observations:
+        t_ids = obs.get("target_ids") or []
+        for t in t_ids:
+            evidence_tokens.setdefault(str(t), []).append(f"observation_{obs.get('observation_id')}")
+
+    for insp in inspections:
+        results = insp.get("results") or {}
+        for conn_id, res in results.items():
+            facts = (res.get("facts") or {}) if isinstance(res, dict) else {}
+            config = facts.get("current_config") if isinstance(facts, dict) else {}
+            if isinstance(config, dict):
+                addrs = config.get("interface_addresses") or []
+                for addr in addrs:
+                    evidence_tokens.setdefault(str(conn_id), []).append(str(addr))
+
+    topo_links = [
+        l for l in topo.get("links") or []
+        if scope_device_ids is None or (l.get("source_device_id") in scope_device_ids and l.get("target_device_id") in scope_device_ids)
+    ]
+
+    link_comparisons = []
+    matched_count = 0
+    mismatched_count = 0
+    unknown_count = 0
+
+    for link in topo_links:
+        link_id = link.get("link_id")
+        src_dev = link.get("source_device_id")
+        tgt_dev = link.get("target_device_id")
+        src_iface = link.get("source_interface") or ""
+        tgt_iface = link.get("target_interface") or ""
+        recorded_status = link.get("status") or "unknown"
+
+        # Check evidence references explicitly attached or matching
+        refs = link.get("evidence_refs") or []
+        matched_evidence = list(refs)
+        for dev_id in (src_dev, tgt_dev):
+            if dev_id in evidence_tokens:
+                matched_evidence.extend(evidence_tokens[dev_id])
+
+        if not matched_evidence:
+            comparison_status = "unknown"
+            note = "无可用运行证据，保持未知状态"
+            unknown_count += 1
+        else:
+            # We have evidence: evaluate status
+            if recorded_status in {"up", "down"}:
+                comparison_status = "matched"
+                note = f"关联证据有效，拓扑状态为 {recorded_status}"
+                matched_count += 1
+            else:
+                comparison_status = "unknown"
+                note = "已有运行证据，但链路状态未显式标记"
+                unknown_count += 1
+
+        link_comparisons.append({
+            "link_id": link_id,
+            "source_device_id": src_dev,
+            "source_interface": src_iface,
+            "target_device_id": tgt_dev,
+            "target_interface": tgt_iface,
+            "kind": link.get("kind"),
+            "recorded_status": recorded_status,
+            "comparison_status": comparison_status,
+            "evidence_count": len(matched_evidence),
+            "evidence_refs": matched_evidence[:10],
+            "note": note,
+        })
+
+    return {
+        "ok": True,
+        "topology_id": topology_id,
+        "topology_name": topo.get("name"),
+        "version": topo.get("version"),
+        "devices_in_scope_not_in_topology": devices_in_scope_not_in_topology,
+        "topology_devices_not_in_scope": topology_devices_not_in_scope,
+        "link_comparisons": link_comparisons,
+        "summary": {
+            "total_nodes": len(topo_nodes),
+            "total_links": len(topo_links),
+            "matched_links": matched_count,
+            "mismatched_links": mismatched_count,
+            "unknown_evidence_links": unknown_count,
+            "available_devices_missing_from_topology": len(devices_in_scope_not_in_topology),
+        },
     }

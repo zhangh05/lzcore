@@ -5,14 +5,15 @@
   "api_version": "1",
   "min_platform_version": "1.1.0",
   "description": "以授权设备连接为基础，提供自主 CLI、巡检与 Skill 编排；已发布并选择的 Skill 可直接执行设备配置。",
-  "capabilities": ["network_devices", "network_connections", "network_skills", "network_cli_runtime", "semantic_collection", "network_inspection", "operational_context", "confirmed_references"],
+  "capabilities": ["network_devices", "network_connections", "network_skills", "network_cli_runtime", "semantic_collection", "network_inspection", "operational_context", "confirmed_references", "network_topologies"],
   "tools": [
     "network.operations.devices_read",
     "network.operations.skills_read",
     "network.operations.context_read",
     "network.operations.device.manage",
     "network.operations.wait",
-    "network.operations.inspection"
+    "network.operations.inspection",
+    "network.operations.topology"
   ],
   "permissions": ["workspace:read", "workspace:write", "network:network"],
   "routes": [
@@ -25,6 +26,10 @@
     "/api/extensions/network.operations/connections/<connection_id>/test",
     "/api/extensions/network.operations/skills",
     "/api/extensions/network.operations/skills/<skill_id>",
+    "/api/extensions/network.operations/topologies",
+    "/api/extensions/network.operations/topologies/<topology_id>",
+    "/api/extensions/network.operations/topologies/<topology_id>/nodes/<device_id>",
+    "/api/extensions/network.operations/topologies/<topology_id>/compare",
     "/api/extensions/network.operations/inspections",
     "/api/extensions/network.operations/inspections/<task_id>",
     "/api/extensions/network.operations/inspections/<task_id>/cancel",

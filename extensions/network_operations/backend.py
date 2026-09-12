@@ -289,6 +289,57 @@ def register_routes(app):
         try: return jsonify({"ok": True, "script": service.save_inspection_script(ws, {**_payload(), "script_id": script_id})})
         except ValueError as exc: return jsonify({"ok": False, "error": str(exc)}), 400
 
+    @app.route("/api/extensions/network.operations/topologies", methods=["GET", "POST"])
+    def network_topologies():
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            if request.method == "GET":
+                return jsonify({"ok": True, "topologies": service.list_topologies(ws)})
+            return jsonify({"ok": True, "topology": service.save_topology(ws, _payload())}), 201
+        except ValueError as exc:
+            status = 409 if str(exc) == "topology_version_conflict" else 400
+            return jsonify({"ok": False, "error": str(exc)}), status
+
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>", methods=["GET", "PUT", "DELETE"])
+    def network_topology(topology_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        if request.method == "GET":
+            topo = service.get_topology(ws, topology_id)
+            return jsonify({"ok": True, "topology": topo}) if topo else (jsonify({"ok": False, "error": "topology_not_found"}), 404)
+        try:
+            if request.method == "DELETE":
+                return jsonify({"ok": service.delete_topology(ws, topology_id)})
+            return jsonify({"ok": True, "topology": service.save_topology(ws, {**_payload(), "topology_id": topology_id})})
+        except ValueError as exc:
+            status = 409 if str(exc) == "topology_version_conflict" else (404 if str(exc) == "topology_not_found" else 400)
+            return jsonify({"ok": False, "error": str(exc)}), status
+
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/nodes/<device_id>", methods=["DELETE"])
+    def network_topology_node_delete(topology_id, device_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            version = _payload().get("version")
+            return jsonify({"ok": True, "topology": service.remove_topology_node(ws, topology_id, device_id, expected_version=version)})
+        except ValueError as exc:
+            status = 409 if str(exc) == "topology_version_conflict" else (404 if str(exc) in {"topology_not_found", "node_not_found"} else 400)
+            return jsonify({"ok": False, "error": str(exc)}), status
+
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/compare", methods=["GET"])
+    def network_topology_compare(topology_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            return jsonify(service.compare_topology(ws, topology_id))
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+
 def devices_read(invocation):
     if not _skill_allows(invocation, "network.operations.devices_read"):
         return {"ok": False, "error": "tool_not_allowed_by_skill"}
@@ -551,6 +602,132 @@ def inspection(invocation):
     if scope is not None:
         tasks = [task for task in tasks if _inspection_in_scope(task, scope)]
     return {"ok": True, "inspections": tasks}
+
+
+def topology_tool(invocation):
+    if not _skill_allows(invocation, "network.operations.topology"):
+        return {"ok": False, "error": "tool_not_allowed_by_skill"}
+    args = invocation.arguments or {}
+    action = str(args.get("action") or "read").strip().lower()
+    if action not in {"read", "create", "update", "delete", "compare"}:
+        return {
+            "ok": False,
+            "error": f"unsupported action for network.operations.topology; expected read|create|update|delete|compare, got {action}",
+        }
+    scope = _selected_skill_scope(invocation)
+    allowed_devices = scope["device_ids"] if scope is not None else None
+
+    if action == "read":
+        topology_id = str(args.get("topology_id") or (scope["skill"].get("topology_id") if scope and scope.get("skill") else "") or "").strip()
+        if not topology_id:
+            topologies = service.list_topologies(invocation.workspace_id)
+            if scope is not None:
+                scoped_topos = []
+                for t in topologies:
+                    t_devices = {n.get("device_id") for n in t.get("nodes") or []}
+                    if not t_devices or t_devices.intersection(allowed_devices):
+                        scoped_topos.append(t)
+                return {"ok": True, "topologies": scoped_topos}
+            return {"ok": True, "topologies": topologies}
+        topo = service.get_topology(invocation.workspace_id, topology_id)
+        if not topo:
+            return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
+        if scope is not None:
+            scoped_nodes = [n for n in (topo.get("nodes") or []) if n.get("device_id") in allowed_devices]
+            scoped_links = [l for l in (topo.get("links") or []) if l.get("source_device_id") in allowed_devices and l.get("target_device_id") in allowed_devices]
+            all_topo_devices = {n.get("device_id") for n in (topo.get("nodes") or [])}
+            if all_topo_devices and not scoped_nodes:
+                return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
+            scoped_topo = {
+                **topo,
+                "nodes": scoped_nodes,
+                "links": scoped_links,
+            }
+            return {
+                "ok": True,
+                "topology": scoped_topo,
+                "version": topo.get("version"),
+                "nodes": scoped_nodes,
+                "links": scoped_links,
+                "groups": topo.get("groups") or [],
+            }
+        return {
+            "ok": True,
+            "topology": topo,
+            "version": topo.get("version"),
+            "nodes": topo.get("nodes") or [],
+            "links": topo.get("links") or [],
+            "groups": topo.get("groups") or [],
+        }
+
+    if action == "create":
+        nodes = args.get("nodes") or []
+        if scope is not None:
+            for node in nodes:
+                dev_id = str(node.get("device_id") or "").strip()
+                if dev_id not in allowed_devices:
+                    return {"ok": False, "error": "device_not_allowed_by_skill", "device_id": dev_id}
+            for link in args.get("links") or []:
+                s_id = str(link.get("source_device_id") or "").strip()
+                t_id = str(link.get("target_device_id") or "").strip()
+                if s_id not in allowed_devices or t_id not in allowed_devices:
+                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+        try:
+            topo = service.save_topology(invocation.workspace_id, args)
+            return {"ok": True, "topology": topo}
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    if action == "update":
+        topology_id = str(args.get("topology_id") or "").strip()
+        if not topology_id:
+            return {"ok": False, "error": "topology_id is required for update"}
+        existing = service.get_topology(invocation.workspace_id, topology_id)
+        if not existing:
+            return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
+        if scope is not None:
+            for node in args.get("nodes") or []:
+                dev_id = str(node.get("device_id") or "").strip()
+                if dev_id not in allowed_devices:
+                    return {"ok": False, "error": "device_not_allowed_by_skill", "device_id": dev_id}
+            for link in args.get("links") or []:
+                s_id = str(link.get("source_device_id") or "").strip()
+                t_id = str(link.get("target_device_id") or "").strip()
+                if s_id not in allowed_devices or t_id not in allowed_devices:
+                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+        try:
+            topo = service.save_topology(invocation.workspace_id, {**args, "topology_id": topology_id})
+            return {"ok": True, "topology": topo}
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    if action == "delete":
+        topology_id = str(args.get("topology_id") or "").strip()
+        if not topology_id:
+            return {"ok": False, "error": "topology_id is required for delete"}
+        existing = service.get_topology(invocation.workspace_id, topology_id)
+        if not existing:
+            return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
+        if scope is not None:
+            for node in existing.get("nodes") or []:
+                if node.get("device_id") not in allowed_devices:
+                    return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
+        deleted = service.delete_topology(invocation.workspace_id, topology_id)
+        return {"ok": deleted}
+
+    if action == "compare":
+        topology_id = str(args.get("topology_id") or (scope["skill"].get("topology_id") if scope and scope.get("skill") else "") or "").strip()
+        if not topology_id:
+            return {"ok": False, "error": "topology_id is required for compare"}
+        try:
+            result = service.compare_topology(
+                invocation.workspace_id,
+                topology_id,
+                scope_device_ids=allowed_devices,
+            )
+            return result
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
 
 
 def _inspection_result(task: dict[str, Any]) -> dict[str, Any]:
@@ -870,6 +1047,49 @@ def register():
                         "facts": {"type": "array", "items": {"type": "string", "enum": list(service.SEMANTIC_FACTS)}, "minItems": 1},
                         "script_id": {"type": "string"},
                         "task_id": {"type": "string"},
+                    },
+                    "required": ["action"],
+                },
+            },
+            {
+                "tool_id": "network.operations.topology",
+                "name": "网络拓扑管理与比对",
+                "description": "读取、创建、更新、删除网络拓扑节点、链路和分组，并比对拓扑与当前运行事实。受当前 Skill 授权设备限制；只读拓扑返回节点、链路、分组、来源、证据引用和版本；比对输出存量拓扑与可用设备或采集证据的差异。",
+                "category": "ops",
+                "risk_level": "medium",
+                "permission_action": "network",
+                "action_execution_contracts": {
+                    "read": {"action_class": "network", "risk_level": "low", "side_effects": "none", "idempotency": "safe_to_retry", "read_only": True},
+                    "compare": {"action_class": "network", "risk_level": "low", "side_effects": "none", "idempotency": "safe_to_retry", "read_only": True},
+                    "create": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
+                    "update": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
+                    "delete": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
+                },
+                "bindable_inputs": {"read": ["topology_id"], "compare": ["topology_id"], "update": ["topology_id"], "delete": ["topology_id"]},
+                "referenceable_outputs": {
+                    "read": ["topology", "nodes", "links", "groups", "version"],
+                    "create": ["topology"],
+                    "update": ["topology"],
+                    "delete": ["ok"],
+                    "compare": ["devices_in_scope_not_in_topology", "topology_devices_not_in_scope", "link_comparisons", "summary"],
+                },
+                "action_requirements": {
+                    "all": {"update": ["topology_id"], "delete": ["topology_id"]},
+                },
+                "handler": topology_tool,
+                "timeout_seconds": 60,
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        **common,
+                        "action": {"type": "string", "enum": ["read", "create", "update", "delete", "compare"]},
+                        "topology_id": {"type": "string"},
+                        "name": {"type": "string"},
+                        "description": {"type": "string"},
+                        "version": {"type": "integer"},
+                        "nodes": {"type": "array", "items": {"type": "object"}},
+                        "links": {"type": "array", "items": {"type": "object"}},
+                        "groups": {"type": "array", "items": {"type": "object"}},
                     },
                     "required": ["action"],
                 },
