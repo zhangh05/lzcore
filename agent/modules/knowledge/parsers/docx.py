@@ -46,11 +46,11 @@ def parse(
             title = str(cp.title)
         if (not author) and cp and cp.author:
             author = str(cp.author)
-    for para in d.paragraphs:
+    def append_paragraph(para):
         style_name = (para.style.name or "").lower() if para.style else ""
         text = para.text
         if not text.strip() and not out_lines:
-            continue
+            return
         if "heading 1" in style_name or "标题 1" in style_name:
             out_lines.append("# " + text)
         elif "heading 2" in style_name or "标题 2" in style_name:
@@ -66,12 +66,23 @@ def parse(
         else:
             out_lines.append(text)
         out_lines.append("")
-    for table in d.tables:
+    def append_table(table):
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells]
             if any(cells):
                 out_lines.append("| " + " | ".join(cells) + " |")
         out_lines.append("")
+
+    # ``Document.paragraphs`` and ``Document.tables`` are separate views and
+    # cannot preserve the order in which Word placed blocks.  Walk the body
+    # XML in document order and wrap each paragraph/table through python-docx.
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+    for child in d.element.body.iterchildren():
+        if child.tag.endswith("}p"):
+            append_paragraph(Paragraph(child, d))
+        elif child.tag.endswith("}tbl"):
+            append_table(Table(child, d))
     md = "\n".join(out_lines).strip()
     metadata = dict(metadata or {})
     metadata.setdefault("format_hint", "docx")

@@ -79,7 +79,7 @@ def import_document(
     content = str(content or "")
     if not content.strip():
         return {"ok": False, "errors": ["empty_document"]}
-    preview = content[:1000]  # Full text lives in managed workspace storage.
+    preview = content[:1000]  # Source-list preview; FileStore retains the full text.
 
     source_id = _generate_source_id()
     meta = dict(metadata or {})
@@ -108,6 +108,7 @@ def import_document(
             "summary": str(exc)[:200],
         }
 
+    source_scope = meta.pop("scope", "workspace")
     item = {
         "item_id": source_id,
         "item_type": "knowledge_source",
@@ -116,7 +117,7 @@ def import_document(
         "title": title.strip()[:200],
         "summary": preview,
         "content": preview,  # Store preview only; full content in chunks
-        "scope": meta.pop("scope", "workspace"),
+        "scope": source_scope,
         "sensitivity": "internal",
         "tags": meta.pop("tags", []),
         "metadata": meta,
@@ -125,9 +126,10 @@ def import_document(
     store = get_context_store(workspace_id)
     try:
         store.put(item)
-        # Direct text imports receive basic search chunks. File-ingestion
-        # callers may replace these with richer structural chunks afterwards.
-        _create_basic_chunks(workspace_id, source_id, title.strip()[:200], content, meta)
+        _create_basic_chunks(
+            workspace_id, source_id, title.strip()[:200], content, meta,
+            scope=source_scope,
+        )
     except Exception as exc:
         try:
             delete_source(workspace_id, source_id)
@@ -150,42 +152,42 @@ def import_document(
     }
 
 
-def _create_basic_chunks(workspace_id: str, source_id: str, title: str, content: str, meta: dict = None):
-    """Create simple chunks from content for BM25 searchability."""
+def _create_basic_chunks(
+    workspace_id: str,
+    source_id: str,
+    title: str,
+    content: str,
+    meta: dict = None,
+    *,
+    scope: str = "workspace",
+):
+    """Create lossless parent/child projections for a direct text import."""
     if not content or not content.strip():
         return
     meta = meta or {}
-    store = get_context_store(workspace_id)
-    chunk_size = 800
-    overlap = 100
-    text = content.strip()
-    chunks = []
-    i = 0
-    idx = 0
-    while i < len(text):
-        end = min(i + chunk_size, len(text))
-        chunk_text = text[i:end]
-        chunk_id = f"kch_{source_id[5:]}_{idx:04d}" if source_id.startswith("ksrc_") else f"kch_{uuid.uuid4().hex[:8]}_{idx:04d}"
-        chunks.append({
-            "item_id": f"kc_{chunk_id}",
-            "item_type": "knowledge_chunk",
-            "source": "knowledge_import",
-            "source_id": source_id,
-            "title": title,
-            "content": chunk_text,
-            "chunk_id": chunk_id,
-            "chunk_type": "child",
-            "chunk_index": idx,
-            "scope": "workspace",
-            "metadata": {
-                "source_type": meta.get("source_type", "document"),
-                "artifact_id": meta.get("artifact_id", ""),
-            },
-        })
-        idx += 1
-        i = end - overlap if end < len(text) else end
-    if chunks:
-        store.put_many(chunks)
+    from agent.modules.knowledge.chunking import chunk_document
+    from agent.modules.knowledge.index import replace_chunks
+    from agent.modules.knowledge.schemas import NormalizedDocument
+
+    doc = NormalizedDocument(
+        source_id=source_id,
+        title=title,
+        source_type=str(meta.get("source_type") or "document"),
+        scope=scope,
+        language=str(meta.get("language") or "zh"),
+        normalized_markdown=content,
+        metadata=dict(meta),
+    )
+    parents, children = chunk_document(doc)
+    shared_meta = {
+        **meta,
+        "scope": scope,
+        "source_title": title,
+        "source_type": doc.source_type,
+    }
+    for chunk in [*parents, *children]:
+        chunk.metadata.update(shared_meta)
+    replace_chunks(workspace_id, source_id, [*parents, *children])
 
 
 def list_sources(
@@ -240,6 +242,13 @@ def read_source(workspace_id: str, source_id: str) -> Optional[dict]:
             out["normalized_markdown"] = full_content
         except (FileNotFoundError, OSError, ValueError):
             out.setdefault("warnings", []).append("normalized_content_unavailable")
+    chunks = store.list_items(
+        item_type="knowledge_chunk", source_id=source_id,
+        include_deleted=False, limit=999_999,
+    )
+    out["chunk_count"] = sum(
+        1 for chunk in chunks if str(chunk.get("chunk_type") or "child") == "child"
+    )
     return out
 
 
@@ -337,12 +346,13 @@ def query(
 
     retriever = get_retriever(workspace_id)
     source_type = (filters or {}).get("source_type")
+    scope = str((filters or {}).get("scope") or "")
 
     # Use unified retriever for both knowledge and memory
     if source_type == "memory":
         hits = retriever.search_memory(query, top_k=top_k)
     else:
-        hits = retriever.search_knowledge(query, top_k=top_k)
+        hits = retriever.search_knowledge(query, top_k=top_k, scope=scope)
 
     # Format hits
     formatted = []
@@ -354,7 +364,7 @@ def query(
             "chapter": h.get("chapter", ""),
             "section": h.get("section", ""),
             "content": h.get("content", ""),
-            "snippet": str(h.get("content", ""))[:300],
+            "snippet": str(h.get("content", "")),
             "score": h.get("_score", 0),
             "scope": h.get("scope", ""),
             "metadata": h.get("metadata", {}),

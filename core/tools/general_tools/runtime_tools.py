@@ -44,7 +44,13 @@ def handle_knowledge_search(inv: ToolInvocation) -> dict:
     try:
         validate_workspace_id(ws)
         from agent.modules.knowledge.service import search_chunks
-        result = search_chunks(workspace_id=ws, query=query, top_k=limit)
+        result = search_chunks(
+            workspace_id=ws,
+            query=query,
+            top_k=limit,
+            source_id=str(args.get("source_id") or ""),
+            scope=str(args.get("scope") or ""),
+        )
         if not result.get("ok"):
             errors = result.get("errors") or [result.get("error") or "knowledge_search_failed"]
             return _error_inv(inv, str(errors[0])[:200])
@@ -54,9 +60,12 @@ def handle_knowledge_search(inv: ToolInvocation) -> dict:
             d = r.as_dict() if hasattr(r, 'as_dict') else r
             safe_results.append({
                 "chunk_id": d.get("chunk_id", ""),
+                "source_id": d.get("source_id", ""),
+                "parent_chunk_id": d.get("parent_chunk_id", ""),
                 "title": d.get("title", ""),
                 "summary": d.get("chapter", "") or d.get("section", ""),
                 "safe_excerpt": d.get("snippet", ""),
+                "scope": d.get("scope", "workspace"),
                 "score": d.get("score", 0),
                 "llm_safe": True,
             })
@@ -112,12 +121,18 @@ def handle_knowledge_get_source(inv: ToolInvocation) -> dict:
         if not result.get("ok"):
             return _error_inv(inv, "source not found")
         source = result.get("source", {})
+        content = str(source.get("content") or source.get("normalized_markdown") or "")
         return _ok(inv, "", {
             "source_id": source.get("source_id", ""),
             "chunk_id": "",
             "title": source.get("title", ""),
-            "safe_excerpt": "",
+            # A read is a full-document operation.  Search is the operation
+            # that returns an excerpt; never substitute an arbitrary prefix.
+            "safe_excerpt": content,
+            "content": content,
+            "summary": source.get("summary", ""),
             "source": source.get("source", ""),
+            "scope": source.get("scope", "workspace"),
             "enabled": source.get("enabled", True),
             "chunk_count": source.get("chunk_count", 0),
         })
@@ -140,7 +155,10 @@ def handle_knowledge_get_chunk_summary(inv: ToolInvocation) -> dict:
             "source_id": chunk.get("source_id", ""),
             "title": chunk.get("title", ""),
             "summary": chunk.get("chapter", "") or chunk.get("section", ""),
-            "safe_excerpt": str(chunk.get("content", ""))[:900],
+            "parent_chunk_id": chunk.get("parent_chunk_id", ""),
+            "scope": chunk.get("scope", "workspace"),
+            "safe_excerpt": str(chunk.get("content", "")),
+            "content": str(chunk.get("content", "")),
             "llm_safe": True,
         })
     except Exception as e:

@@ -47,8 +47,15 @@ def parse(
         t = soup.find("title")
         if t and t.get_text(strip=True):
             title = t.get_text(strip=True)
-    for el in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6",
-                              "p", "pre", "ul", "ol", "table", "blockquote"]):
+    block_names = ["h1", "h2", "h3", "h4", "h5", "h6",
+                   "p", "pre", "ul", "ol", "table", "blockquote"]
+    blocks = soup.find_all(block_names)
+    block_ids = {id(block) for block in blocks}
+    for el in blocks:
+        # A blockquote/table/list is rendered as one atomic Markdown block.
+        # Descendant selected elements would otherwise duplicate its text.
+        if any(id(parent) in block_ids for parent in el.parents):
+            continue
         name = el.name
         if name and name.startswith("h"):
             level = int(name[1])
@@ -73,7 +80,7 @@ def parse(
             out_lines.append("")
         elif name == "table":
             for tr in el.find_all("tr"):
-                cells = [td.get_text(" ", strip=True) for td in tr.find_all(["td", "th"])]
+                cells = [td.get_text(" ", strip=True) for td in tr.find_all(["td", "th"], recursive=False)]
                 if cells:
                     out_lines.append("| " + " | ".join(cells) + " |")
             out_lines.append("")

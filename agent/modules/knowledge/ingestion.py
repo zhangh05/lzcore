@@ -502,7 +502,10 @@ def reindex_source(workspace_id: str, source_id: str) -> dict:
         author=meta.get("author", ""),
         edition=meta.get("edition", ""),
         source_type=meta.get("source_type", "project_doc"),
-        scope=meta.get("scope", "workspace"),
+        # The source record owns scope.  Older direct imports did not mirror
+        # it into metadata, so metadata-only reconstruction silently changed
+        # global/session documents into workspace documents on reindex.
+        scope=src.get("scope", meta.get("scope", "workspace")),
         language=meta.get("language", "zh"),
         format=meta.get("format", "md"),
         normalized_markdown=full_markdown,

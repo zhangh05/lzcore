@@ -278,7 +278,7 @@ def register_knowledge_routes(app):
                 "ok": False,
                 "error": "invalid_query_params",
                 "invalid_params": unknown_params,
-                "message": "知识库搜索只支持 q、workspace_id、limit、source_id。",
+                "message": "知识库搜索只支持 q、workspace_id、limit、source_id、scope。",
             }), 400
         ws_id = request.args.get("workspace_id", "")
         ws_id, err = _validated_ws_id(ws_id)
@@ -306,7 +306,7 @@ def register_knowledge_routes(app):
             "results": results,
             "count": len(results),
             "query": query,
-            "note": "搜索结果为安全摘录，不是完整文件内容。不包含配置详情、密钥或绝对路径。",
+            "note": "搜索结果包含完整命中切片及来源标识；需要整篇文档时使用 source_id 读取。敏感内容仍按服务端脱敏规则处理。",
         })
 
     # ── Chunk Detail ──
@@ -458,22 +458,29 @@ def _module_search_results(
         return []
     hits = result.get("hits", []) if isinstance(result, dict) else []
     if not hits and query:
-        hits = _module_title_search(workspace_id, query, source_id=source_id, limit=limit)
+        hits = _module_title_search(
+            workspace_id, query, source_id=source_id, scope=scope, limit=limit,
+        )
     if not hits and query:
-        return _module_source_store_results(workspace_id, query, source_id=source_id, limit=limit)
+        return _module_source_store_results(
+            workspace_id, query, source_id=source_id, scope=scope, limit=limit,
+        )
     out = []
     for h in hits:
         if (h.get("metadata") or {}).get("hidden"):
             continue
-        snippet = h.get("snippet", "")
+        content = h.get("content", "") or h.get("snippet", "")
         out.append({
             "chunk_id": h.get("chunk_id", ""),
             "source_id": h.get("source_id", ""),
+            "parent_chunk_id": h.get("parent_chunk_id", ""),
             "artifact_id": (h.get("metadata") or {}).get("artifact_id", ""),
             "title": h.get("title", ""),
             "artifact_name": h.get("title", ""),
             "summary": h.get("chapter", "") or h.get("section", ""),
-            "safe_excerpt": snippet,
+            "safe_excerpt": content,
+            "content": content,
+            "scope": h.get("scope", "workspace"),
             "artifact_type": "",
             "sensitivity": "internal",
             "tags": list((h.get("metadata") or {}).get("tags") or []),
@@ -484,10 +491,15 @@ def _module_search_results(
     return out
 
 
-def _module_source_store_results(workspace_id: str, query: str, source_id: str = "", limit: int = 20) -> list:
+def _module_source_store_results(
+    workspace_id: str, query: str, source_id: str = "", scope: str = "", limit: int = 20,
+) -> list:
     try:
         from agent.modules.knowledge.service import query_knowledge
-        result = query_knowledge(query=query, workspace_id=workspace_id, top_k=limit)
+        result = query_knowledge(
+            query=query, workspace_id=workspace_id, top_k=limit,
+            filters={"scope": scope} if scope else None,
+        )
     except Exception:
         return []
     hits = result.get("hits", []) if isinstance(result, dict) else []
@@ -497,6 +509,10 @@ def _module_source_store_results(workspace_id: str, query: str, source_id: str =
         sid = meta.get("source_id", "") or h.get("source", "")
         if source_id and sid != source_id:
             continue
+        hit_scope = str(h.get("scope") or meta.get("scope") or "workspace")
+        if scope and hit_scope != scope:
+            continue
+        content = h.get("content", "") or h.get("snippet", "")
         out.append({
             "chunk_id": meta.get("chunk_id", "") or f"source:{sid}",
             "source_id": sid,
@@ -504,7 +520,9 @@ def _module_source_store_results(workspace_id: str, query: str, source_id: str =
             "title": h.get("title", ""),
             "artifact_name": h.get("title", ""),
             "summary": h.get("source", ""),
-            "safe_excerpt": (h.get("content", "") or "")[:900],
+            "safe_excerpt": content,
+            "content": content,
+            "scope": hit_scope,
             "artifact_type": meta.get("artifact_type", ""),
             "sensitivity": "internal",
             "tags": [],
@@ -517,7 +535,9 @@ def _module_source_store_results(workspace_id: str, query: str, source_id: str =
     return out
 
 
-def _module_title_search(workspace_id: str, query: str, source_id: str = "", limit: int = 20) -> list:
+def _module_title_search(
+    workspace_id: str, query: str, source_id: str = "", scope: str = "", limit: int = 20,
+) -> list:
     """Supplement document-title/chapter searches.
 
     The module retriever intentionally filters title-only hits when the body
@@ -526,38 +546,49 @@ def _module_title_search(workspace_id: str, query: str, source_id: str = "", lim
     chunks without exposing full file paths or raw metadata.
     """
     try:
-        from agent.modules.knowledge.index import load_all_chunks
-        chunks = load_all_chunks(workspace_id)
+        from core.context.context_store import get_context_store
+        store = get_context_store(workspace_id)
+        sources = store.list_items(item_type="knowledge_source", limit=999_999)
     except Exception:
         return []
-    q = str(query or "").lower().strip()
+    q = "".join(str(query or "").lower().split())
     if not q:
         return []
     out = []
-    for c in chunks:
-        if source_id and c.source_id != source_id:
+    for source in sources:
+        sid = str(source.get("source_id") or source.get("item_id") or "")
+        source_scope = str(source.get("scope") or (source.get("metadata") or {}).get("scope") or "workspace")
+        if source_id and sid != source_id:
             continue
-        if c.chunk_type == "parent":
+        if scope and source_scope != scope:
             continue
-        meta = c.metadata or {}
-        haystack = " ".join([
-            str(meta.get("source_title", "")),
-            str(c.chapter or ""),
-            str(c.section or ""),
-            str(c.subsection or ""),
-            str(c.index_text or ""),
-        ]).lower()
+        meta = source.get("metadata") or {}
+        haystack = "".join(" ".join([
+            str(source.get("title") or ""),
+            str(meta.get("source_title") or ""),
+            str(meta.get("chapter") or ""),
+            str(meta.get("section") or ""),
+        ]).lower().split())
         if q not in haystack:
             continue
+        from agent.modules.knowledge.index import list_chunks
+        children = list_chunks(
+            workspace_id, source_id=sid, chunk_type="child", limit=1,
+        ).get("chunks", [])
+        child = children[0] if children else None
+        if child is None:
+            continue
         out.append({
-            "chunk_id": c.chunk_id,
-            "source_id": c.source_id,
-            "parent_chunk_id": c.parent_chunk_id,
-            "title": meta.get("source_title", "") or c.chapter,
-            "chapter": c.chapter,
-            "section": c.section,
-            "snippet": (c.content or c.chapter or meta.get("source_title", ""))[:200],
+            "chunk_id": child.get("chunk_id", ""),
+            "source_id": sid,
+            "parent_chunk_id": child.get("parent_chunk_id", ""),
+            "title": source.get("title", ""),
+            "chapter": child.get("chapter", ""),
+            "section": child.get("section", ""),
+            "content": child.get("content", ""),
+            "snippet": child.get("content", ""),
             "score": 0.5,
+            "scope": source_scope,
             "metadata": {
                 "source_type": meta.get("source_type", ""),
                 "tags": list(meta.get("tags") or []),
@@ -585,7 +616,10 @@ def _module_chunk_to_safe_dict(chunk: dict) -> dict:
         "artifact_id": "",
         "title": meta.get("source_title", ""),
         "summary": chunk.get("chapter", "") or chunk.get("section", ""),
-        "safe_excerpt": chunk.get("content", "")[:900],
+        "safe_excerpt": chunk.get("content", ""),
+        "content": chunk.get("content", ""),
+        "parent_chunk_id": chunk.get("parent_chunk_id", ""),
+        "scope": chunk.get("scope", "workspace"),
         "sensitivity": "internal",
         "artifact_type": "",
         "tags": list(meta.get("tags") or []),

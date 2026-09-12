@@ -141,7 +141,13 @@ def search_chunks(
     if source_type == "memory":
         hits = retriever.search_memory(query, top_k=top_k * 2, min_score=min_score)
     else:
-        hits = retriever.search_knowledge(query, top_k=top_k * 2, min_score=min_score)
+        hits = retriever.search_knowledge(
+            query,
+            top_k=top_k * 2,
+            min_score=min_score,
+            scope=scope or None,
+            source_id=source_id or None,
+        )
 
     # Post-filter
     filtered = []
@@ -172,7 +178,7 @@ def search_chunks(
             "chapter": h.get("chapter", ""),
             "section": h.get("section", ""),
             "content": content,
-            "snippet": content[:400],
+            "snippet": content,
             "summary": h.get("summary", ""),
             "score": h.get("_score", 0),
             "scope": h.get("scope", ""),
@@ -199,16 +205,17 @@ def _chunk_to_item(d: dict) -> dict:
     """Convert a KnowledgeChunk dict to a ContextStore item dict."""
     chunk_id = d.get("chunk_id", "")
     item_id = f"kc_{chunk_id}" if chunk_id and not chunk_id.startswith("kc_") else chunk_id
+    metadata = d.get("metadata", {}) or {}
 
     return {
         "item_id": item_id or f"kc_{uuid.uuid4().hex[:12]}",
         "item_type": "knowledge_chunk",
         "source": "knowledge_ingestion",
         "source_id": d.get("source_id", ""),
-        "title": d.get("title", "") or d.get("chapter", ""),
+        "title": d.get("title", "") or metadata.get("source_title", "") or d.get("chapter", ""),
         "summary": "",
         "content": d.get("content", ""),
-        "scope": d.get("scope", "workspace"),
+        "scope": d.get("scope") or metadata.get("scope", "workspace"),
         "sensitivity": "internal",
         "chunk_id": chunk_id,
         "parent_chunk_id": d.get("parent_chunk_id", ""),
@@ -221,11 +228,11 @@ def _chunk_to_item(d: dict) -> dict:
         "chunk_index": d.get("chunk_index", 0),
         "index_text": d.get("index_text", ""),
         "token_count": d.get("token_count", 0),
-        "source_type": d.get("source_type", ""),
-        "tags": d.get("tags", []),
+        "source_type": d.get("source_type") or metadata.get("source_type", ""),
+        "tags": d.get("tags") or metadata.get("tags", []),
         "author": d.get("author", ""),
         "language": d.get("language", ""),
-        "metadata": d.get("metadata", {}),
+        "metadata": metadata,
     }
 
 

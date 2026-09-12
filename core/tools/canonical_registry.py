@@ -974,7 +974,7 @@ _REFERENCEABLE_OUTPUTS: dict[str, dict[str, list[str]]] = {
     },
     "knowledge.manage": {
         "search": ["results", "count"],
-        "read": ["source_id", "chunk_id", "title", "safe_excerpt"],
+        "read": ["source_id", "chunk_id", "parent_chunk_id", "title", "scope", "content", "safe_excerpt"],
         "list": ["sources"], "chunk": ["chunks"], "import": ["source_id"],
         "reindex": ["source_id"],
     },

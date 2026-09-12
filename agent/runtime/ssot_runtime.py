@@ -1513,7 +1513,18 @@ def _build_retrieved_context_block(
         for hit in retrieved.get("knowledge_hits", [])[:2]:
             content = redact_text(str(hit.get("content") or hit.get("summary") or "")).strip()
             if content:
-                lines.append(f"[knowledge scope=workspace] {content}")
+                scope = str(hit.get("scope") or "workspace")
+                source_id = str(hit.get("source_id") or "")
+                chunk_id = str(hit.get("chunk_id") or hit.get("item_id") or "")
+                parent_chunk_id = str(hit.get("parent_chunk_id") or "")
+                title = str(hit.get("title") or "")
+                section = str(hit.get("chapter") or hit.get("section") or "")
+                lines.append(
+                    "[knowledge "
+                    f"scope={scope} source_id={source_id} chunk_id={chunk_id} "
+                    f"parent_chunk_id={parent_chunk_id} title={title!r} section={section!r}] "
+                    f"{content}"
+                )
         return "\n".join(lines)
     except Exception:
         _LOG.debug("governed context retrieval failed", exc_info=True)

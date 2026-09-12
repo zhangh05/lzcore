@@ -361,8 +361,24 @@ class UnifiedRetriever:
             # Type filter
             if types_filter and doc.get("item_type") not in types_filter:
                 continue
+            # Knowledge chunks written by older releases can carry a stale
+            # top-level ``workspace`` scope while their metadata/source record
+            # carries the real scope.  Resolve the authoritative value before
+            # filtering so a repaired reader also works for existing data.
+            doc_scope = str(doc.get("scope") or "workspace")
+            if doc.get("item_type") == "knowledge_chunk":
+                metadata_scope = str((doc.get("metadata") or {}).get("scope") or "")
+                if metadata_scope:
+                    doc_scope = metadata_scope
+                elif doc.get("source_id"):
+                    source = self._store.get(str(doc.get("source_id"))) or {}
+                    doc_scope = str(
+                        source.get("scope")
+                        or (source.get("metadata") or {}).get("scope")
+                        or doc_scope
+                    )
             # Scope filter
-            if scope and doc.get("scope") != scope:
+            if scope and doc_scope != scope:
                 continue
             # Source filter
             if source_id and doc.get("source_id") != source_id:
@@ -374,6 +390,7 @@ class UnifiedRetriever:
                     continue
 
             hit = dict(doc)
+            hit["scope"] = doc_scope
             hit["_score"] = round(score, 4)
             results.append(hit)
 

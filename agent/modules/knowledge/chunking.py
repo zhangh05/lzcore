@@ -42,10 +42,12 @@ from agent.modules.knowledge.schemas import (
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 # Page markers emitted by the PDF parser: <!-- page N -->
 _PAGE_RE = re.compile(r"^<!--\s*page\s+(\d+)\s*-->\s*$", re.MULTILINE)
-# Code fence
-_FENCE_RE = re.compile(r"^```", re.MULTILINE)
+# Code fences.  The opener's character must be remembered by the scanner so
+# a tilde fence is not accidentally closed by a backtick fence (or vice versa).
+_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 # Table separator line: ---|---|---
 _TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
+_LIST_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)")
 
 
 def _is_protected_block_start(lines: List[str], i: int) -> Optional[str]:
@@ -60,7 +62,7 @@ def _is_protected_block_start(lines: List[str], i: int) -> Optional[str]:
         return "fence"
     if _TABLE_ROW_RE.match(line):
         return "table"
-    if line.lstrip().startswith(("- ", "* ", "1. ", "2. ", "3. ")):
+    if _LIST_RE.match(line):
         return "list"
     return None
 
@@ -69,9 +71,14 @@ def _scan_block(lines: List[str], start: int, kind: str) -> int:
     """Return the line index *after* the protected block (exclusive)."""
     i = start
     if kind == "fence":
-        # Find next fence (could be ``` or ~~~)
+        # A fence can only be closed by the same character with at least the
+        # opener's length.  This keeps mixed Markdown fences intact.
+        opener = _FENCE_RE.match(lines[start])
+        marker = opener.group(1) if opener else "```"
+        marker_char = re.escape(marker[0])
+        closer = re.compile(rf"^\s*{marker_char}{{{len(marker)},}}\s*$")
         i += 1
-        while i < len(lines) and not _FENCE_RE.match(lines[i]):
+        while i < len(lines) and not closer.match(lines[i]):
             i += 1
         if i < len(lines):
             i += 1
@@ -84,7 +91,7 @@ def _scan_block(lines: List[str], start: int, kind: str) -> int:
         return i
     if kind == "list":
         i += 1
-        while i < len(lines) and lines[i].lstrip().startswith(("- ", "* ", "1. ", "2. ", "3. ")):
+        while i < len(lines) and (_LIST_RE.match(lines[i]) or not lines[i].strip()):
             i += 1
         return i
     return start + 1
@@ -337,25 +344,29 @@ def _make_children(parents: List[KnowledgeChunk], source_id: str,
             )
             children.append(cc)
             continue
-        # Walk through body in CHILD_TARGET windows with overlap.
+        # Split only between semantic units.  The old character-window path
+        # reintroduced cuts through code/table/list blocks after parents had
+        # already protected them.  An atomic unit may exceed CHILD_MAX; keeping
+        # it intact is the only lossless outcome.
+        units = _split_body_by_paragraphs(body)
+        if not units:
+            units = [body]
         start = 0
         child_idx = 0
-        n = len(body)
+        n = len(units)
         while start < n:
-            end = min(start + CHILD_TARGET, n)
-            # Try to extend to a paragraph boundary if close.
-            if end < n:
-                window = body[start:end]
-                # Search for last \n\n in last 100 chars
-                last_pp = window.rfind("\n\n")
-                if last_pp > CHILD_TARGET * 0.6:
-                    end = start + last_pp
-            slice_text = body[start:end]
-            # If still too small (and we have more), extend to CHILD_MAX
-            if end - start < CHILD_MIN and end < n:
-                end2 = min(start + CHILD_MAX, n)
-                slice_text = body[start:end2]
-                end = end2
+            end = start
+            size = 0
+            while end < n:
+                unit = units[end]
+                candidate_size = size + (2 if end > start else 0) + len(unit)
+                if end > start and (size >= CHILD_TARGET or candidate_size > CHILD_MAX):
+                    break
+                size = candidate_size
+                end += 1
+            if end == start:  # Defensive; a unit is always emitted whole.
+                end += 1
+            slice_text = "\n\n".join(units[start:end])
             cc = KnowledgeChunk(
                 chunk_id=f"kch_{source_id[5:21]}_c{parent.chunk_index:05d}_{child_idx}",
                 source_id=source_id,
@@ -383,7 +394,17 @@ def _make_children(parents: List[KnowledgeChunk], source_id: str,
             child_idx += 1
             if end >= n:
                 break
-            start = max(end - CHILD_OVERLAP, start + 1)
+            # Overlap only whole semantic units.  A large unit simply yields
+            # no overlap rather than a damaged partial copy.
+            next_start = end
+            overlap_size = 0
+            while next_start > start:
+                unit_size = len(units[next_start - 1]) + (2 if overlap_size else 0)
+                if overlap_size + unit_size > CHILD_OVERLAP:
+                    break
+                overlap_size += unit_size
+                next_start -= 1
+            start = next_start if next_start < end else end
     return children
 
 

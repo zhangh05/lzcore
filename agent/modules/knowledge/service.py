@@ -298,27 +298,19 @@ def query_knowledge(
             "metadata": {},
         }
 
-    from agent.modules.knowledge.index import load_all_chunks
     from agent.modules.knowledge.store import list_sources as _list_sources
-    _src_result = _list_sources(workspace_id=workspace_id)
+    scope = str((filters or {}).get("scope") or "")
+    _src_result = _list_sources(workspace_id=workspace_id, scope=scope)
     _sources_list = _src_result.get("sources", []) if isinstance(_src_result, dict) else []
-    enabled_source_ids = {s["source_id"] for s in _sources_list
-                          if s.get("enabled", True)
-                          and not s.get("deleted", False)}
-    # Load chunks with a sane safety limit; large knowledge bases should use
-    # source-level scoping instead of loading every chunk into memory.
-    all_chunks = load_all_chunks(workspace_id)
-    if len(all_chunks) > 50_000:
-        logger.warning("query_knowledge: too many chunks (%d), truncating to 50000", len(all_chunks))
-        all_chunks = all_chunks[:50_000]
-    children = [c for c in all_chunks
-                if c.chunk_type == "child"
-                and c.source_id in enabled_source_ids]
-    if children:
-        return _query_via_chunks(
-            workspace_id=workspace_id, query=query.strip(),
-            top_k=top_k, filters=filters,
-        )
+    # The unified index already knows all live chunks.  Searching it directly
+    # avoids materialising and arbitrarily truncating a large workspace before
+    # a query can be evaluated.
+    chunk_result = _query_via_chunks(
+        workspace_id=workspace_id, query=query.strip(), top_k=top_k,
+        filters=filters,
+    )
+    if chunk_result.get("hits"):
+        return chunk_result
 
     from agent.modules.knowledge.store import query as _store_query
     stats_enabled = sum(1 for s in _sources_list
@@ -376,7 +368,7 @@ def _query_via_chunks(
                 "page_end": h.get("page_end"),
                 "score": h.get("score"),
                 "snippet": h.get("snippet"),
-                "parent_snippet": (p.get("content") or "")[:200],
+                "parent_snippet": p.get("content") or "",
                 "metadata": h.get("metadata") or {},
             })
         else:

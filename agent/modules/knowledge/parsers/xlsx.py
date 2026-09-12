@@ -35,8 +35,6 @@ def parse(
             values = ["" if value is None else str(value).replace("|", "\\|").replace("\n", " ") for value in row]
             if any(values):
                 rows.append(values)
-            if len(rows) >= 500:
-                break
         if not rows:
             lines.append("（空工作表）")
             continue
@@ -46,8 +44,6 @@ def parse(
         lines.append("| " + " | ".join(header) + " |")
         lines.append("| " + " | ".join("---" for _ in header) + " |")
         lines.extend("| " + " | ".join(row) + " |" for row in rows[1:])
-        if sheet.max_row > len(rows):
-            lines.append("（该工作表仅提取前 500 个非空行）")
         lines.append("")
     workbook.close()
     return NormalizedDocument(
