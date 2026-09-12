@@ -116,100 +116,105 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
           spellCheck={false}
         />
 
-        {/* Skill 选择栏 */}
-        {currentSessionId && workbenchSkills.length > 0 ? (
-          <div className="wb-skill-picker" data-testid="workbench-skill-picker">
-            <label>
-              <span>Skill</span>
-              <select
-                value={selectedSkillKey}
-                onChange={(event) => onSelectSkillKey(event.target.value)}
+        {/* 底部工具栏：Skill 选择 + 附件 + 发送 —— 跟 ChatGPT/Claude 同一套形态。
+           之前它们是 grid 的第二行（独立 row），把整张 composer 卡撑高到 140+ px；
+           现在收成 textarea 内的底栏，空状态从 ~149px 压到 ~70-80px。 */}
+        <div className="wb-composer-toolbar">
+          {/* Skill 选择栏 */}
+          {currentSessionId && workbenchSkills.length > 0 ? (
+            <div className="wb-skill-picker" data-testid="workbench-skill-picker">
+              <label>
+                <span>Skill</span>
+                <select
+                  value={selectedSkillKey}
+                  onChange={(event) => onSelectSkillKey(event.target.value)}
+                >
+                  <option value="">通用对话</option>
+                  {workbenchSkills.map((skill) => (
+                    <option key={`${skill.extension_id}:${skill.skill_id}`} value={`${skill.extension_id}:${skill.skill_id}`}>
+                      {skill.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {selectedSkill ? (
+                <div className="wb-skill-devices" aria-label="选择 Skill 资源">
+                  {selectedSkill.resources.map((resource) => {
+                    const active = selectedResourceIds.includes(resource.resource_id);
+                    return (
+                      <button
+                        key={resource.resource_id}
+                        type="button"
+                        className={active ? "active" : ""}
+                        aria-pressed={active}
+                        title={resource.description}
+                        onClick={() =>
+                          onSelectResourceIds((items) =>
+                            active
+                              ? items.filter((item) => item !== resource.resource_id)
+                              : selectedSkill.selection_mode === "single"
+                              ? [resource.resource_id]
+                              : [...items, resource.resource_id]
+                          )
+                        }
+                      >
+                        {resource.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="wb-composer-actions">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              disabled={!currentSessionId || turnRunning}
+              accept=".txt,.md,.json,.csv,.tsv,.log,.conf,.cfg,.yaml,.yml,.xml,.html,.htm,.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.gif,.webp"
+              onChange={onFileInputChange}
+              className="wb-file-input"
+            />
+
+            <button
+              className="wb-attach-btn"
+              onClick={onPickFile}
+              disabled={!currentSessionId || turnRunning}
+              title={currentSessionId ? "添加文件" : "请先新建会话"}
+              aria-label={currentSessionId ? "添加文件" : "请先新建会话"}
+              type="button"
+            >
+              <IconAttachment size={16} aria-hidden="true" />
+            </button>
+
+            {turnRunning ? (
+              <button
+                className="wb-stop"
+                onClick={onStop}
+                title="停止当前任务"
+                aria-label="停止当前任务"
+                type="button"
+                data-testid="btn-stop"
               >
-                <option value="">通用对话</option>
-                {workbenchSkills.map((skill) => (
-                  <option key={`${skill.extension_id}:${skill.skill_id}`} value={`${skill.extension_id}:${skill.skill_id}`}>
-                    {skill.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedSkill ? (
-              <div className="wb-skill-devices" aria-label="选择 Skill 资源">
-                {selectedSkill.resources.map((resource) => {
-                  const active = selectedResourceIds.includes(resource.resource_id);
-                  return (
-                    <button
-                      key={resource.resource_id}
-                      type="button"
-                      className={active ? "active" : ""}
-                      aria-pressed={active}
-                      title={resource.description}
-                      onClick={() =>
-                        onSelectResourceIds((items) =>
-                          active
-                            ? items.filter((item) => item !== resource.resource_id)
-                            : selectedSkill.selection_mode === "single"
-                            ? [resource.resource_id]
-                            : [...items, resource.resource_id]
-                        )
-                      }
-                    >
-                      {resource.name}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
+                <IconStop size={15} weight="fill" aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                className="wb-send"
+                onClick={onSend}
+                disabled={!canSend}
+                data-testid="btn-send"
+                type="button"
+                aria-label="发送"
+                title="Enter 发送"
+              >
+                <IconSend size={17} />
+              </button>
+            )}
           </div>
-        ) : null}
-
-        <div className="wb-composer-actions">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            disabled={!currentSessionId || turnRunning}
-            accept=".txt,.md,.json,.csv,.tsv,.log,.conf,.cfg,.yaml,.yml,.xml,.html,.htm,.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.gif,.webp"
-            onChange={onFileInputChange}
-            className="wb-file-input"
-          />
-
-          <button
-            className="wb-attach-btn"
-            onClick={onPickFile}
-            disabled={!currentSessionId || turnRunning}
-            title={currentSessionId ? "添加文件" : "请先新建会话"}
-            aria-label={currentSessionId ? "添加文件" : "请先新建会话"}
-            type="button"
-          >
-            <IconAttachment size={16} aria-hidden="true" />
-          </button>
-
-          {turnRunning ? (
-            <button
-              className="wb-stop"
-              onClick={onStop}
-              title="停止当前任务"
-              aria-label="停止当前任务"
-              type="button"
-              data-testid="btn-stop"
-            >
-              <IconStop size={15} weight="fill" aria-hidden="true" />
-            </button>
-          ) : (
-            <button
-              className="wb-send"
-              onClick={onSend}
-              disabled={!canSend}
-              data-testid="btn-send"
-              type="button"
-              aria-label="发送"
-              title="Enter 发送"
-            >
-              <IconSend size={17} />
-            </button>
-          )}
         </div>
       </div>
 

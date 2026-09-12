@@ -406,14 +406,15 @@
 }
 
 .wb-input-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(var(--space-12), auto) auto;
+  /* textarea + 底栏纵向排列：把 Skill/附件/发送从原来的 grid 第二行
+     收进 textarea 内的底部工具栏，空状态 composer 高度从 ~149px 压到 ~70-80px。
+     textarea 增长时整张卡跟着长，工具栏始终紧贴 textarea 底边。 */
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
   width: 100%;
   /* The composer shares the full middle column with conversation results. */
   max-width: none;
-  min-height: 60px;
   margin: 0 auto;
   padding: var(--space-2) var(--space-3);
   box-sizing: border-box;
@@ -428,6 +429,23 @@
     box-shadow 160ms ease;
 }
 
+.wb-composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-height: 0;
+}
+
+/* 在工具栏里 picker 跟 actions 同一行：去掉原 grid 全宽行为，
+   让 Skill 选择器按内容收缩，多 resource 时换行也不要 100% 占满。 */
+.wb-composer-toolbar > .wb-skill-picker {
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .wb-input-row:focus-within {
   border-color: var(--lz-primary);
   outline: var(--focus-width) solid var(--focus-ring);
@@ -437,7 +455,6 @@
 }
 
 .wb-input {
-  grid-column: 1 / -1;
   width: 100%;
   min-height: 32px;
   max-height: 140px;
@@ -542,7 +559,7 @@
   justify-content: space-between;
   gap: 16px;
   max-width: none;
-  margin: 4px auto 0;
+  margin: 2px auto 0;
   color: var(--text-4);
   font-size: var(--fs-11);
 }

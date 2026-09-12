@@ -645,7 +645,7 @@ export function KnowledgeLibrary() {
                 )}
               </select>
               <button
-                className="btn primary"
+                className="btn btn-info"
                 onClick={onImport}
                 disabled={importing || !importArtifactId.trim()}
                 data-testid="btn-knowledge-import"
