@@ -814,6 +814,12 @@ def save_skill(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     topology_id = str(payload.get("topology_id") if "topology_id" in payload else existing.get("topology_id") or "").strip()
     if topology_id and not get_topology(workspace_id, topology_id):
         raise ValueError("skill contains unknown topology")
+    # A topology selected for a Skill is only useful when the model can read
+    # it.  Do not make the UI remember a hidden capability toggle: bind the
+    # canonical topology tool to the association itself, including API and
+    # migration callers that do not go through the React form.
+    if topology_id and "network.operations.topology" not in allowed_tool_ids:
+        allowed_tool_ids.append("network.operations.topology")
     record = {
         "skill_id": skill_id,
         "name": name,
@@ -2332,28 +2338,10 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
     devices_in_scope_not_in_topology = sorted(available_ids - topo_device_ids)
     topology_devices_not_in_scope = sorted(topo_device_ids - available_ids)
 
-    # Collect operational evidence
-    context = operational_context(workspace_id)
-    observations = context.get("observations") or []
-    references = context.get("references") or []
-    inspections = list_inspections(workspace_id)
-
-    # Gather textual clues and observations
-    evidence_tokens: dict[str, list[str]] = {}
-    for obs in observations:
-        t_ids = obs.get("target_ids") or []
-        for t in t_ids:
-            evidence_tokens.setdefault(str(t), []).append(f"observation_{obs.get('observation_id')}")
-
-    for insp in inspections:
-        results = insp.get("results") or {}
-        for conn_id, res in results.items():
-            facts = (res.get("facts") or {}) if isinstance(res, dict) else {}
-            config = facts.get("current_config") if isinstance(facts, dict) else {}
-            if isinstance(config, dict):
-                addrs = config.get("interface_addresses") or []
-                for addr in addrs:
-                    evidence_tokens.setdefault(str(conn_id), []).append(str(addr))
+    # Current observations retain target-level snapshots, not interface-to-
+    # interface adjacency.  An observation on either device cannot prove that
+    # this particular link is present or operational.  Keep comparisons
+    # conservative until collection emits explicit adjacency evidence.
 
     topo_links = [
         l for l in topo.get("links") or []
@@ -2373,27 +2361,14 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
         tgt_iface = link.get("target_interface") or ""
         recorded_status = link.get("status") or "unknown"
 
-        # Check evidence references explicitly attached or matching
-        refs = link.get("evidence_refs") or []
-        matched_evidence = list(refs)
-        for dev_id in (src_dev, tgt_dev):
-            if dev_id in evidence_tokens:
-                matched_evidence.extend(evidence_tokens[dev_id])
-
-        if not matched_evidence:
-            comparison_status = "unknown"
-            note = "无可用运行证据，保持未知状态"
-            unknown_count += 1
-        else:
-            # We have evidence: evaluate status
-            if recorded_status in {"up", "down"}:
-                comparison_status = "matched"
-                note = f"关联证据有效，拓扑状态为 {recorded_status}"
-                matched_count += 1
-            else:
-                comparison_status = "unknown"
-                note = "已有运行证据，但链路状态未显式标记"
-                unknown_count += 1
+        evidence_refs = [str(item) for item in (link.get("evidence_refs") or []) if str(item)]
+        comparison_status = "unknown"
+        unknown_count += 1
+        note = (
+            "已关联证据引用，但当前证据不含两端接口邻接关系，不能确认此链路"
+            if evidence_refs
+            else "无两端接口邻接证据，保持未知状态"
+        )
 
         link_comparisons.append({
             "link_id": link_id,
@@ -2404,8 +2379,8 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
             "kind": link.get("kind"),
             "recorded_status": recorded_status,
             "comparison_status": comparison_status,
-            "evidence_count": len(matched_evidence),
-            "evidence_refs": matched_evidence[:10],
+            "evidence_count": len(evidence_refs),
+            "evidence_refs": evidence_refs[:10],
             "note": note,
         })
 

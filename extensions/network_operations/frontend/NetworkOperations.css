@@ -1,52 +1,103 @@
+/* ── 网络运维（扩展页）─────────────────────────────────────────────────────
+   ★ tab 条（.network-tabs / .net-tab）的视觉不在本文件：它和数据管理、
+     运行监控共用 global.css 的「统一 tab 条」区块。要改 tab 长相请改那一处，
+     不要在这里再写一份 —— 之前就是每页各写一份，才会长出三套长相。 */
+
 .network-admin {
-  height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  background: var(--bg); color: var(--text);
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg);
+  color: var(--text);
 }
-.network-tabs { display: flex; gap: 6px; padding: 12px 24px 0; border-bottom: 1px solid var(--line); }
-.network-tabs button { min-height: 42px; padding: 0 16px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-3); font-size: var(--fs-13); font-weight: var(--weight-label); cursor: pointer; }
-.network-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
-.network-tabs button span { margin-left: 8px; font-size: var(--fs-12); opacity: .7; }
-.network-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 24px 0; }
-.network-filters { display: flex; gap: 10px; min-width: 0; }
+
+/* 提示条按结果分色。此前恒用 warn 配色，导致"设备已登记""Skill 已发布"
+   这类成功提示也显示成黄色警告，看起来像出错了。 */
+.network-notice {
+  margin: var(--space-3) var(--space-6) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--warn) 26%, transparent);
+  border-radius: var(--r-8);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--fs-13);
+  line-height: 1.6;
+}
+
+.network-notice.kind-ok {
+  border-color: color-mix(in srgb, var(--ok) 26%, transparent);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+/* 抽屉里的提示条已经处在 .network-panel 的 24px 内边距里，不要再叠一次横向外边距。 */
+.network-editor .network-notice { margin: var(--space-3) 0 0; }
+
+.network-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6) 0;
+}
+
+.network-filters { display: flex; gap: var(--space-2); min-width: 0; }
 .network-filters input { width: 280px; }
-.network-notice { margin: 14px 24px 0; padding: 12px 16px; border-radius: var(--r-8); background: var(--warn-soft); color: var(--warn); }
+
 .network-grid { width: 100%; margin: 0; padding: var(--space-4) var(--space-6) var(--space-6); min-width: 0; }
 .network-context-layout { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(520px, 1.3fr); gap: var(--space-4); width: 100%; padding: var(--space-4) var(--space-6) var(--space-6); }
 .network-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-12); padding: 0; min-width: 0; overflow: hidden; }
-.network-panel h2 { margin: 0 0 6px; font-size: var(--fs-18); }
+.network-panel h2 { margin: 0 0 var(--space-1); font-size: var(--fs-18); }
 .network-panel p { margin: 0; color: var(--text-3); font-size: var(--fs-13); line-height: 1.6; }
-.network-admin .panel-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 0; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+.network-admin .panel-heading { display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; margin: 0; padding: var(--space-4); border-bottom: 1px solid var(--line); }
 .network-admin .record-count { font-size: var(--fs-12); color: var(--text-3); white-space: nowrap; }
 .network-admin .device-list, .network-admin .skill-list { display: grid; gap: 0; }
 .network-admin .device-card, .network-admin .skill-card { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; overflow: hidden; }
 .network-admin .device-card:last-child, .network-admin .skill-card:last-child { border-bottom: 0; }
-.network-admin .device-card-header, .network-admin .skill-card-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px; background: var(--surface); }
+.network-admin .device-card-header, .network-admin .skill-card-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4); background: var(--surface); }
 .network-admin .device-card:hover .device-card-header, .network-admin .skill-card:hover .skill-card-header { background: var(--surface-hover); }
-.network-admin .device-identity { display: grid; gap: 5px; min-width: 0; }
+.network-admin .device-identity { display: grid; gap: var(--space-1); min-width: 0; }
 .network-admin .device-identity strong, .network-admin .skill-title strong { font-size: var(--fs-15); overflow-wrap: anywhere; }
 .network-admin .device-identity span { color: var(--text-3); font-size: var(--fs-12); overflow-wrap: anywhere; }
-.network-admin .device-actions, .network-admin .connection-actions, .network-admin .skill-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.network-admin .connection-section { border-top: 1px solid var(--line); padding: 10px 16px; }
-.network-admin .connection-section summary { cursor: pointer; display: flex; justify-content: space-between; gap: 12px; font-size: var(--fs-12); color: var(--text-3); }
+.network-admin .device-actions, .network-admin .connection-actions, .network-admin .skill-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.network-admin .device-actions, .network-admin .connection-actions { flex-shrink: 0; }
+.network-admin .connection-section { border-top: 1px solid var(--line); padding: 10px 16px; background: var(--surface-2); }
+.network-admin .connection-section summary { cursor: pointer; display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; min-height: var(--h-control-compact); font-size: var(--fs-12); color: var(--text-3); }
 .network-admin .connection-section summary span:last-child { color: var(--accent); }
-.network-admin .connection-section[open] summary { padding-bottom: 12px; }
-.network-admin .connection-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: var(--fs-12); }
-.network-admin .connection-heading span { margin-left: 8px; color: var(--text-3); }
-.network-admin .connection-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
-.network-admin .connection-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; font-size: var(--fs-13); }
+.network-admin .connection-section[open] summary { padding-bottom: var(--space-3); }
+.network-admin .connection-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-1); font-size: var(--fs-12); }
+.network-admin .connection-heading span { margin-left: var(--space-2); color: var(--text-3); }
+.network-admin .connection-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; }
+.network-admin .connection-summary { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--fs-13); }
 .network-admin .connection-summary small { color: var(--text-3); overflow-wrap: anywhere; }
-.network-admin .connection-empty { color: var(--text-3); font-size: var(--fs-13); padding: 8px 0; }
+.network-admin .connection-empty { color: var(--text-3); font-size: var(--fs-13); padding: var(--space-2) 0; }
 .network-admin .status, .network-admin .skill-state { border-radius: var(--r-8); padding: 3px 7px; font-size: var(--fs-12); white-space: nowrap; background: var(--surface-2); color: var(--text-3); }
 .network-admin .status.connected, .network-admin .skill-state.enabled { background: var(--ok-soft); color: var(--ok); }
 .network-admin .status.failed { background: var(--danger-soft); color: var(--danger); }
-.network-admin .skill-title { display: flex; align-items: center; gap: 10px; }
-.network-admin .skill-description { padding: 12px 16px 0; margin: 0; }
-.network-admin .skill-scope { display: grid; gap: 8px; padding: 12px 16px; margin: 0; font-size: var(--fs-13); }
-.network-admin .skill-scope > div { display: grid; grid-template-columns: 44px minmax(0,1fr); gap: 8px; }
+/* 待确认主机指纹需要用户动作才能连上，用 warn 提示；"未测试"保持中性灰。 */
+.network-admin .status.trust_required { background: var(--warn-soft); color: var(--warn); }
+.network-admin .skill-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.network-admin .skill-description { padding: var(--space-3) var(--space-4) 0; margin: 0; }
+.network-admin .skill-scope { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); margin: 0; font-size: var(--fs-13); }
+.network-admin .skill-scope > div { display: grid; grid-template-columns: 44px minmax(0,1fr); gap: var(--space-2); }
 .network-admin .skill-scope dt { color: var(--text-3); }
 .network-admin .skill-scope dd { margin: 0; overflow-wrap: anywhere; }
 .network-admin .write-enabled { color: var(--warn); }
-.network-admin .empty { padding: 56px 16px; text-align: center; color: var(--text-3); }
+
+/* 空状态：图标 + 一行说明，跟拓扑画布的空状态卡片是同一套语言。 */
+.network-admin .empty { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-12) var(--space-4); text-align: center; color: var(--text-3); font-size: var(--fs-13); }
+.network-admin .empty > svg { color: var(--text-4); }
+.network-admin .empty p { margin: 0; }
+
+/* 设备类型图标：与拓扑画布节点 / 侧栏设备项同一套映射（DeviceTypeIcon）。 */
+.network-admin .device-title-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.network-admin .device-type-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex-shrink: 0;
+  border: 1px solid var(--line); border-radius: var(--r-6);
+  background: var(--surface-2); color: var(--accent);
+}
 .network-admin .source-list, .network-admin .reference-list, .network-admin .observation-list, .network-admin .command-list { display: grid; }
 .network-admin .source-row, .network-admin .observation-row, .network-admin .command-row, .network-admin .reference-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
 .network-admin .source-row:last-child, .network-admin .observation-row:last-child, .network-admin .command-row:last-child, .network-admin .reference-row:last-child { border-bottom: 0; }
@@ -70,6 +121,7 @@
 .network-admin .command-row code { min-width: 0; color: var(--text); font-size: var(--fs-12); overflow-wrap: anywhere; }
 .network-admin .command-row > div { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
 .network-admin .context-overview, .network-admin .observation-panel { align-self: start; }
+
 .network-editor {
   position: fixed; inset: 0 0 0 auto; margin: 0; width: min(640px, calc(100vw / var(--ui-scale))); max-width: calc(100vw / var(--ui-scale));
   height: calc(100dvh / var(--ui-scale)); max-height: calc(100dvh / var(--ui-scale)); padding: 0; overflow-y: auto; box-sizing: border-box;
@@ -78,84 +130,77 @@
 }
 .network-editor::backdrop { background: var(--overlay); }
 .network-editor-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-13); color: var(--text-3); }
-.network-editor .network-panel { border: 0; border-radius: 0; padding: 24px; }
+.network-editor .network-panel { border: 0; border-radius: 0; padding: var(--space-6); }
 .network-editor .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 14px; }
-.network-editor .form-grid label { display: grid; gap: 7px; font-size: var(--fs-13); font-weight: 600; }
+.network-editor .form-grid label { display: grid; gap: 7px; font-size: var(--fs-13); font-weight: var(--weight-label); }
+.network-editor .field-help { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--weight-regular); line-height: 1.55; }
 .network-editor .full-field, .network-editor .form-actions { grid-column: 1/-1; }
 .network-editor input:not([type="checkbox"]), .network-editor select, .network-editor textarea, .network-filters input, .network-filters select {
-  box-sizing: border-box; min-width: 0; max-width: 100%; border: 1px solid var(--line-3); border-radius: var(--r-8); padding: 10px 11px;
-  background: var(--surface); color: var(--text); font: inherit; outline: none;
+  box-sizing: border-box; min-width: 0; max-width: 100%; min-height: var(--h-control);
+  border: 1px solid var(--line-3); border-radius: var(--r-8); padding: 6px 11px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-13); outline: none;
 }
 .network-editor input:focus-visible, .network-editor select:focus-visible, .network-editor textarea:focus-visible, .network-filters input:focus-visible, .network-filters select:focus-visible {
   border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring-shadow);
 }
 .network-editor textarea { min-height: 80px; resize: vertical; }
 .network-editor fieldset { grid-column: 1/-1; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--r-8); min-width: 0; }
-.network-editor legend { padding: 0 6px; font-size: var(--fs-13); font-weight: 700; }
-.network-editor .form-grid .check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; font-size: var(--fs-13); font-weight: 400; }
+.network-editor legend { padding: 0 6px; font-size: var(--fs-13); font-weight: var(--weight-heading); }
+.network-editor .form-grid .check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; font-size: var(--fs-13); font-weight: var(--weight-regular); }
 .network-editor .check input { flex-shrink: 0; margin-top: 3px; accent-color: var(--accent); }
-.network-editor .capability-check span { display: grid; gap: 5px; }
-.network-editor .capability-check small { font-size: var(--fs-12); font-weight: 400; color: var(--text-3); line-height: 1.6; }
-.network-editor .write-capability { border-color: var(--warn); }
-.network-editor .write-capability p { margin: 4px 0 0; font-size: var(--fs-12); }
+.network-editor .capability-check span { display: grid; gap: var(--space-1); }
+.network-editor .capability-check small { font-size: var(--fs-12); font-weight: var(--weight-regular); color: var(--text-3); line-height: 1.6; }
 .network-editor .intrinsic-capabilities { margin: 0 0 var(--space-2); color: var(--text-3); font-size: var(--fs-12); }
-.network-editor .inline-form { display: flex; gap: 8px; margin: 18px 0 10px; }
+.network-editor .inline-form { display: flex; gap: var(--space-2); margin: 18px 0 10px; }
 .network-editor .inline-form input { flex: 1; }
-.network-editor .region-list { display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
-.network-editor .region-list > span { display: flex; align-items: center; gap: 8px; padding: 5px 8px; background: var(--surface-2); border-radius: var(--r-8); font-size: var(--fs-12); }
+.network-editor .region-list { display: flex; gap: var(--space-2); flex-wrap: wrap; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.network-editor .region-list > span { display: flex; align-items: center; gap: var(--space-2); padding: 5px 8px; background: var(--surface-2); border-radius: var(--r-8); font-size: var(--fs-12); }
 .network-editor .region-list button { background: transparent; border: 0; color: var(--accent); cursor: pointer; }
-.network-editor .form-actions { display: flex; gap: 10px; border-top: 1px solid var(--line); padding-top: 18px; }
+/* 底部操作栏吸底：表单很长时不用滚到底才能提交。 */
+.network-editor .form-actions { display: flex; gap: 10px; position: sticky; bottom: 0; padding-top: 18px; padding-block: var(--space-3); border-top: 1px solid var(--line); background: var(--surface); }
+
+/* 断点收敛到三档：1100（页面双列塌成单列） / 1024（拓扑工作区堆叠） / 760（窄屏与触摸）。
+   此前 1100 / 760 / 700 三个断点散落在文件末尾，且 700 和 760 的规则互相打架。 */
 @media (max-width: 1100px) {
   .network-admin .connection-row { flex-direction: column; align-items: flex-start; }
   .network-admin .skill-card-header { align-items: flex-start; flex-wrap: wrap; }
   .network-context-layout { grid-template-columns: 1fr; }
 }
-@media (max-width: 700px) {
-  .network-tabs { padding: 12px 12px 0; }
-  .network-toolbar { padding: 14px 12px 0; flex-wrap: wrap; }
-  .network-filters { flex: 1; flex-wrap: wrap; }
-  .network-filters input { width: 100%; }
-  .network-grid { padding: 12px; }
-  .network-context-layout { padding: 12px; }
-  .network-admin .device-card-header { flex-direction: column; align-items: flex-start; }
-  .network-editor .form-grid { grid-template-columns: 1fr; }
-  .network-editor .network-panel { padding: 18px; }
-  .network-admin .reference-row, .network-admin .command-row { align-items: flex-start; flex-direction: column; }
-}
-
-/* Registry identity and editor controls share the platform density. */
-.network-admin .device-card-header { padding: var(--space-3) var(--space-4); }
-.network-admin .connection-section { background: var(--surface-2); }
-.network-admin .device-actions, .network-admin .connection-actions { flex-shrink: 0; }
-.network-admin .skill-title { min-width: 0; flex-wrap: wrap; }
-.network-admin .connection-section summary { min-height: var(--h-control-compact); align-items: center; }
-.network-filters input, .network-filters select { min-height: var(--h-control); font-size: var(--fs-13); }
-.network-editor .form-actions { position: sticky; bottom: 0; padding-block: var(--space-3); background: var(--surface); }
 @media (max-width: 760px) {
-  .network-tabs { overflow-x: auto; }
-  .network-tabs button { white-space: nowrap; min-height: var(--h-touch); }
-  .network-filters input, .network-filters select, .network-editor input:not([type="checkbox"]), .network-editor select { min-height: var(--h-touch); }
-  .network-toolbar { flex-wrap: wrap; padding-inline: var(--space-3); }
+  .network-admin .network-notice { margin-inline: var(--space-3); }
+  .network-toolbar { flex-wrap: wrap; padding: var(--space-3) var(--space-3) 0; }
   .network-filters { flex-wrap: wrap; width: 100%; }
   .network-filters input { width: 100%; }
-  .network-admin .device-card-header { flex-wrap: wrap; }
+  .network-grid { padding: var(--space-3); }
+  .network-context-layout { padding: var(--space-3); }
+  .network-admin .device-card-header, .network-admin .skill-card-header { flex-wrap: wrap; }
+  .network-admin .reference-row, .network-admin .command-row { align-items: flex-start; flex-direction: column; }
+  .network-editor .form-grid { grid-template-columns: 1fr; }
+  .network-editor .network-panel { padding: var(--space-4); }
+  .network-editor input:not([type="checkbox"]), .network-editor select, .network-filters input, .network-filters select { min-height: var(--h-touch); }
 }
+
 
 /* Network Topology Workspace */
 .network-topology-workspace {
-  display: flex;
+  /* 画布上方被 PageHeader 和 tab 条占掉的高度。之前这里直接写死
+     calc(100vh - 130px)，PageHeader 一改就会错位；抽成本地变量后只调这一处。
+     用 dvh 而不是 vh：移动端地址栏收起时 vh 会跳变。 */
+  --net-chrome: 140px;
+
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
   flex: 1;
-  min-height: 580px;
-  height: calc(100vh - 130px);
-  border-top: 1px solid var(--line);
+  min-height: 560px;
+  height: clamp(560px, calc(100dvh - var(--net-chrome)), 920px);
   position: relative;
   overflow: hidden;
   background: var(--bg);
 }
 
 .topology-sidebar {
-  width: 280px;
-  flex-shrink: 0;
+  width: auto;
+  min-width: 0;
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -258,7 +303,7 @@
   border-radius: var(--r-6);
   background: var(--surface-2);
   border: 1px solid transparent;
-  transition: background 0.15s ease;
+  transition: background var(--dur-1) var(--ease);
 }
 
 .palette-device-item:hover {
@@ -351,6 +396,15 @@
   color: var(--accent);
 }
 
+/* 分组名可能很长；不截断会把右侧的 kind 标签挤出 280px 的侧栏。 */
+.palette-group-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .group-kind-tag {
   font-size: var(--fs-10);
   padding: 1px 5px;
@@ -363,7 +417,7 @@
 
 /* Canvas Center */
 .topology-canvas-area {
-  flex: 1;
+  min-width: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -379,6 +433,7 @@
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   min-height: var(--h-control);
+  gap: var(--space-2);
   z-index: 2;
 }
 
@@ -386,18 +441,27 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
+  flex: 1 1 180px;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .topology-canvas-title {
   font-size: var(--fs-14);
   font-weight: var(--weight-heading);
   color: var(--text);
+  min-width: 0;
+  max-width: min(30vw, 300px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topology-version-badge {
@@ -443,6 +507,62 @@
   width: 100%;
   height: 100%;
   background: var(--bg);
+  position: relative;
+}
+
+.topology-canvas-onboarding {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  pointer-events: none;
+}
+
+.topology-canvas-onboarding-card {
+  max-width: 390px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-12);
+  box-shadow: var(--shadow-card);
+  color: var(--accent);
+  pointer-events: auto;
+}
+
+.topology-canvas-onboarding-card strong {
+  display: block;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.topology-canvas-onboarding-card p {
+  margin: 3px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  line-height: 1.55;
+}
+
+.topology-canvas-onboarding-card .ui-button {
+  grid-column: 2;
+  justify-self: start;
+}
+
+/* MiniMap 默认 200×150 且是方角，压到画布右下角并跟全站圆角/描边对齐。
+   （className 之前传了但没写规则，等于没生效。） */
+.topology-minimap-custom {
+  width: 180px;
+  height: 120px;
+  margin: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-6);
+  background: var(--surface);
+  overflow: hidden;
 }
 
 /* Custom Nodes */
@@ -454,7 +574,7 @@
   min-width: 180px;
   max-width: 230px;
   box-shadow: var(--shadow-card);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
   cursor: grab;
 }
 
@@ -526,12 +646,26 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-1);
+  min-width: 0;
   font-size: var(--fs-10);
   color: var(--text-3);
 }
 
+/* 节点宽度上限 230px，主机名长就把类型标签挤掉位置，所以让主机名单向截断。 */
+.device-node-host {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-node-type {
+  flex-shrink: 0;
+}
+
 .vendor-badge {
-  font-size: 9px;
+  font-size: var(--fs-9);
   font-weight: 700;
   letter-spacing: 0.5px;
   padding: 1px 4px;
@@ -606,7 +740,7 @@
 
 /* Edge badges */
 .edge-if-badge {
-  font-size: 10px;
+  font-size: var(--fs-10);
   font-family: var(--font-mono, monospace);
   font-weight: 600;
   padding: 1px 5px;
@@ -619,7 +753,7 @@
 }
 
 .edge-center-badge {
-  font-size: 10px;
+  font-size: var(--fs-10);
   padding: 2px 6px;
   border-radius: var(--r-4);
   background: var(--surface);
@@ -631,13 +765,25 @@
 
 /* Inspector */
 .topology-inspector {
-  width: 320px;
-  flex-shrink: 0;
+  position: absolute;
+  z-index: 8;
+  inset: 0 0 0 auto;
+  width: min(340px, calc(100% - 72px));
   border-left: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   background: var(--surface);
+  box-shadow: var(--shadow-menu);
+  transform: translateX(102%);
+  visibility: hidden;
+  transition: transform var(--dur-2) var(--ease), visibility 0s linear var(--dur-2);
+}
+
+.topology-inspector.is-open {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform var(--dur-2) var(--ease);
 }
 
 .inspector-panel {
@@ -1007,6 +1153,17 @@
   margin-left: auto;
 }
 
+/* 比对条目按结论着色，扫一眼就知道哪一类需要处理。 */
+.compare-item.missing-device, .compare-item.missing-link {
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+.compare-item.unexpected-link {
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+.compare-item.matched-link {
+  box-shadow: inset 2px 0 0 var(--ok);
+}
+
 .compare-status-tag {
   font-size: var(--fs-10);
   padding: 1px 6px;
@@ -1086,18 +1243,43 @@
 
 @media (max-width: 1024px) {
   .network-topology-workspace {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+  .topology-canvas-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .toolbar-right {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .network-topology-workspace {
+    display: flex;
     flex-direction: column;
     height: auto;
     min-height: 0;
   }
-  .topology-sidebar, .topology-inspector {
+  .topology-sidebar {
     width: 100%;
+    max-height: 300px;
     border-right: 0;
-    border-left: 0;
     border-bottom: 1px solid var(--line);
   }
+  .topology-canvas-area {
+    min-height: 540px;
+  }
   .topology-canvas-viewport {
-    min-height: 450px;
-    height: 450px;
+    min-height: 460px;
+  }
+  .topology-canvas-title {
+    max-width: 54vw;
+  }
+  .topology-canvas-onboarding-card {
+    grid-template-columns: 1fr;
+  }
+  .topology-canvas-onboarding-card .ui-button {
+    grid-column: 1;
   }
 }

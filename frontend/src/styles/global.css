@@ -2283,6 +2283,7 @@ select.input {
 
 /* ── 统一 tab 条 ───────────────────────────────────────────────────────────
    数据管理用 .data-center-tabs / .dc-tab，运行监控用 .tabs / .tab，
+   网络运维用 .network-tabs / .net-tab，
    此前是两套各写一遍的实现：高度 34 / 36、激活色 --accent-2 / --text、
    字重 640 / 620、计数徽章一个是裸 span（opacity-60）一个是胶囊 ——
    看起来像两套产品。现在结构收敛到 components/ui/TabButton，
@@ -2292,6 +2293,7 @@ select.input {
    和 `.operations-page .operations-tabs button`（都是 (0,2,1)），
    裸 `.tab` / `.dc-tab` (0,1,0) 会被静默盖掉，所以这里必须带页面前缀 (0,3,0)。 */
 .tabs,
+.network-admin .network-tabs,
 .data-center > .ui-filter-bar.data-center-tabs {
   display: flex;
   flex-wrap: nowrap;
@@ -2304,7 +2306,19 @@ select.input {
   padding: 0 8px;
 }
 
+/* 网络运维的 tab 条左右内边距跟 .network-toolbar 的 24px 对齐 */
+.network-admin .network-tabs {
+  padding: 0 24px;
+}
+
+@media (max-width: 760px) {
+  .network-admin .network-tabs {
+    padding: 0 var(--space-3);
+  }
+}
+
 .operations-page .operations-tabs .tab,
+.network-admin .network-tabs .net-tab,
 .data-center .data-center-tabs .dc-tab {
   position: relative;
   display: inline-flex;
@@ -2322,6 +2336,7 @@ select.input {
 
 /* duotone 的背景层用 currentColor 渲染：激活态切 duotone 会连背景一起变实 */
 .operations-page .operations-tabs .tab > svg,
+.network-admin .network-tabs .net-tab > svg,
 .data-center .data-center-tabs .dc-tab > svg {
   flex-shrink: 0;
   opacity: 0.82;
@@ -2329,6 +2344,7 @@ select.input {
 }
 
 .operations-page .operations-tabs .tab:hover,
+.network-admin .network-tabs .net-tab:hover,
 .data-center .data-center-tabs .dc-tab:hover {
   color: var(--text);
   background: var(--surface-2);
@@ -2337,17 +2353,20 @@ select.input {
 .operations-page .operations-tabs .tab:hover > svg,
 .data-center .data-center-tabs .dc-tab:hover > svg,
 .operations-page .operations-tabs .tab.active > svg,
+.network-admin .network-tabs .net-tab.active > svg,
 .data-center .data-center-tabs .dc-tab.active > svg {
   opacity: 1;
 }
 
 .operations-page .operations-tabs .tab:focus-visible,
+.network-admin .network-tabs .net-tab:focus-visible,
 .data-center .data-center-tabs .dc-tab:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
 .operations-page .operations-tabs .tab.active,
+.network-admin .network-tabs .net-tab.active,
 .data-center .data-center-tabs .dc-tab.active {
   color: var(--text);
   font-weight: var(--weight-subhead);
@@ -2356,6 +2375,7 @@ select.input {
 /* 下划线贴在 tab 底边内侧 —— 容器开了 overflow-x:auto，如果用 bottom:-1px
    去压容器的 border-bottom，会被 overflow 裁掉。 */
 .operations-page .operations-tabs .tab::after,
+.network-admin .network-tabs .net-tab::after,
 .data-center .data-center-tabs .dc-tab::after {
   position: absolute;
   right: 10px;
@@ -2369,6 +2389,7 @@ select.input {
 }
 
 .operations-page .operations-tabs .tab.active::after,
+.network-admin .network-tabs .net-tab.active::after,
 .data-center .data-center-tabs .dc-tab.active::after {
   background: var(--accent);
   transform-origin: center;
@@ -2391,11 +2412,13 @@ select.input {
 }
 
 .operations-page .operations-tabs .tab:hover .tab-count,
+.network-admin .network-tabs .net-tab:hover .tab-count,
 .data-center .data-center-tabs .dc-tab:hover .tab-count {
   color: var(--text-2);
 }
 
 .operations-page .operations-tabs .tab.active .tab-count,
+.network-admin .network-tabs .net-tab.active .tab-count,
 .data-center .data-center-tabs .dc-tab.active .tab-count {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface));

@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useMemo, useState, useRef, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, type ComponentType, type ReactNode, type FormEvent } from "react";
+import type { IconProps } from "@phosphor-icons/react";
 import { apiRequest } from "../../../frontend/src/api/client";
 import { confirm } from "../../../frontend/src/components/ConfirmDialog";
-import { IconEdit, IconPlus, IconRefresh, IconTrash } from "../../../frontend/src/components/Icon";
-import { Button, PageHeader } from "../../../frontend/src/components/ui";
+import { IconBolt, IconChecklist, IconEdit, IconEye, IconPlugs, IconPlus, IconRefresh, IconServer, IconShield, IconTrash, IconTree } from "../../../frontend/src/components/Icon";
+import { Button, PageHeader, TabButton } from "../../../frontend/src/components/ui";
 import { useSessionStore } from "../../../frontend/src/stores/session";
-import TopologyWorkspace, { type Topology } from "./components/TopologyWorkspace";
+import TopologyWorkspace, { DeviceTypeIcon, type Topology } from "./components/TopologyWorkspace";
 import "./NetworkOperations.css";
+
+/** 空状态：此前是纯文字一行，跟拓扑画布那个带图标的空状态卡片不是一套语言。 */
+const EmptyState = ({ icon: EmptyIcon, children }: { icon: ComponentType<IconProps>; children: ReactNode }) => (
+  <div className="empty">
+    <EmptyIcon size={22} weight="duotone" />
+    <p>{children}</p>
+  </div>
+);
 
 type Region = { region_id: string; name: string };
 type Device = { device_id: string; name: string; host: string; vendor: string; device_type: string; region_id: string };
@@ -48,6 +57,31 @@ const sourceKindLabels: Record<string, string> = {
 };
 const displayTime = (value: string) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "时间未知";
 
+/**
+ * 提示条带结果语义。此前 notice 只有一个字符串，样式恒为警告黄，
+ * 于是"设备已登记""Skill 已发布"这类成功提示也显示得像出错。
+ * ok = true 走成功绿，false 走警告黄。
+ */
+type Notice = { text: string; ok: boolean };
+const emptyNotice: Notice = { text: "", ok: true };
+type TopologyLoadState = { error: string };
+const topologyLoadReady: TopologyLoadState = { error: "" };
+
+type NetworkView = "devices" | "skills" | "topology" | "context";
+
+/**
+ * 四个视图与它们的图标。之前这里是四个裸 <button> 拼在 1000+ 字符的一行里，
+ * 计数用裸 <span>（opacity .7），与平台另外两套 tab（数据管理 / 运行监控）
+ * 不是一套语言。现在收敛到 components/ui/TabButton，视觉由 global.css
+ * 的「统一 tab 条」区块统一给出，这里只声明"哪个视图 + 什么图标"。
+ */
+const VIEWS: Array<[NetworkView, string, ComponentType<IconProps>]> = [
+  ["devices", "设备与连接", IconPlugs],
+  ["skills", "Skill 配置", IconBolt],
+  ["topology", "网络拓扑", IconTree],
+  ["context", "环境与证据", IconShield],
+];
+
 // The service returns a canonical list, but retain this UI-side guard for a
 // rolling upgrade or a stale proxy response: one driver command is one row.
 const dedupeCommandExperience = (items: CommandExperience[]): CommandExperience[] => {
@@ -77,12 +111,13 @@ export default function NetworkOperations() {
   const [regionFilter, setRegionFilter] = useState("");
   const editorRef = useRef<HTMLDialogElement>(null);
   useEffect(() => { if (editor) editorRef.current?.showModal(); }, [editor]);
-  const [view, setView] = useState<"devices" | "skills" | "topology" | "context">("devices");
+  const [view, setView] = useState<NetworkView>("devices");
   const [regions, setRegions] = useState<Region[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [topologies, setTopologies] = useState<Topology[]>([]);
+  const [topologyLoadState, setTopologyLoadState] = useState<TopologyLoadState>(topologyLoadReady);
   const [operationalContext, setOperationalContext] = useState<OperationalContext>({ observations: [], references: [], command_experience: [], sources: [] });
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<Set<string>>(() => new Set());
   const [selectedObservationIds, setSelectedObservationIds] = useState<Set<string>>(() => new Set());
@@ -93,7 +128,9 @@ export default function NetworkOperations() {
   const [editingRegionId, setEditingRegionId] = useState("");
   const [regionName, setRegionName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNoticeState] = useState<Notice>(emptyNotice);
+  // 传 ok=false 表示失败。TopologyWorkspace 也走这个签名（见它的 props）。
+  const setNotice = useCallback((text: string, ok = true) => setNoticeState({ text, ok }), []);
 
   const load = useCallback(async () => {
     const params = { workspace_id: workspaceId };
@@ -105,19 +142,23 @@ export default function NetworkOperations() {
       apiRequest<OperationalContext>({ method: "GET", url: `${base}/context`, params }).catch(() => ({
         observations: [], references: [], command_experience: [], sources: [],
       })),
-      apiRequest<{ topologies: Topology[] }>({ method: "GET", url: `${base}/topologies`, params }).catch(() => ({
-        topologies: [],
-      })),
+      apiRequest<{ topologies: Topology[] }>({ method: "GET", url: `${base}/topologies`, params })
+        .then((result) => ({ result, error: "" }))
+        .catch((error: unknown) => ({
+          result: { topologies: [] },
+          error: String((error as { message?: string })?.message || "拓扑数据加载失败"),
+        })),
     ]);
     setRegions(regionResult.regions || []);
     setDevices(deviceResult.devices || []);
     setConnections(connectionResult.connections || []);
     setSkills(skillResult.skills || []);
-    setTopologies(topologyResult.topologies || []);
+    setTopologies(topologyResult.result.topologies || []);
+    setTopologyLoadState(topologyResult.error ? { error: topologyResult.error } : topologyLoadReady);
     setOperationalContext({ observations: contextResult.observations || [], references: contextResult.references || [], command_experience: dedupeCommandExperience(contextResult.command_experience || []), sources: contextResult.sources || [] });
   }, [workspaceId]);
 
-  useEffect(() => { void load().catch(() => setNotice("数据加载失败，请检查服务。")); }, [load]);
+  useEffect(() => { void load().catch(() => setNotice("数据加载失败，请检查服务。", false)); }, [load]);
   useEffect(() => {
     const available = new Set(operationalContext.references.map((reference) => reference.reference_id));
     setSelectedReferenceIds((previous) => new Set([...previous].filter((referenceId) => available.has(referenceId))));
@@ -131,7 +172,7 @@ export default function NetworkOperations() {
     setSelectedExperienceIds((previous) => new Set([...previous].filter((experienceId) => available.has(experienceId))));
   }, [operationalContext.command_experience]);
   useEffect(() => {
-    if (!notice) return;
+    if (!notice.text) return;
     const timer = window.setTimeout(() => setNotice(""), 4500);
     return () => window.clearTimeout(timer);
   }, [notice]);
@@ -140,6 +181,13 @@ export default function NetworkOperations() {
   const byDevice = useMemo(() => new Map(devices.map((item) => [item.device_id, item])), [devices]);
   const byRegion = useMemo(() => new Map(regions.map((item) => [item.region_id, item.name])), [regions]);
   const byTopology = useMemo(() => new Map(topologies.map((item) => [item.topology_id, item])), [topologies]);
+  // 计数为 0 时 TabButton 不渲染徽章，避免一排 "0" 抢视线。
+  const viewCounts: Record<NetworkView, number> = {
+    devices: devices.length,
+    skills: skills.length,
+    topology: topologies.length,
+    context: operationalContext.observations.length,
+  };
 
   const run = async <T,>(work: () => Promise<T>, success: string | ((result: T) => string)): Promise<{ ok: true; result: T } | { ok: false }> => {
     setBusy(true); setNotice("");
@@ -147,11 +195,11 @@ export default function NetworkOperations() {
       const result = await work();
       const message = typeof success === "function" ? success(result) : success;
       try { await load(); setNotice(message); }
-      catch { setNotice(`${message}；列表刷新失败，请点击刷新，勿重复提交。`); }
+      catch { setNotice(`${message}；列表刷新失败，请点击刷新，勿重复提交。`, false); }
       return { ok: true, result };
     } catch (error) {
       const message = String((error as { message?: string }).message || "操作失败");
-      setNotice(friendlyErrors[message] || message);
+      setNotice(friendlyErrors[message] || message, false);
       return { ok: false };
     } finally { setBusy(false); }
   };
@@ -389,9 +437,9 @@ export default function NetworkOperations() {
   };
 
   return <div className="network-admin">
-    <PageHeader title="网络设备与 Skill" subtitle="集中管理设备连接，按 Skill 授权读取、巡检与配置能力。"><Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。"))} disabled={busy}>刷新</Button></PageHeader>
-    <div className="network-tabs"><button className={view === "devices" ? "active" : ""} onClick={() => { setView("devices"); setQuery(""); }}>设备与连接 <span>{devices.length}</span></button><button className={view === "skills" ? "active" : ""} onClick={() => { setView("skills"); setQuery(""); }}>Skill 配置 <span>{skills.length}</span></button><button className={view === "topology" ? "active" : ""} onClick={() => { setView("topology"); setQuery(""); }}>网络拓扑 <span>{topologies.length}</span></button><button className={view === "context" ? "active" : ""} onClick={() => { setView("context"); setQuery(""); }}>环境与证据 <span>{operationalContext.observations.length}</span></button></div>
-    {notice ? <div role="status" className="network-notice">{notice}</div> : null}
+    <PageHeader title="网络设备与 Skill" subtitle="集中管理设备连接，按 Skill 授权读取、巡检与配置能力。"><Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。", false))} disabled={busy}>刷新</Button></PageHeader>
+    <div className="network-tabs" role="tablist">{VIEWS.map(([key, label, ViewIcon]) => <TabButton key={key} className="net-tab" testId={`network-tab-${key}`} icon={ViewIcon} label={label} count={viewCounts[key]} active={view === key} onClick={() => { setView(key); setQuery(""); }} />)}</div>
+    {notice.text ? <div role="status" className={`network-notice${notice.ok ? " kind-ok" : ""}`}>{notice.text}</div> : null}
     {view !== "context" && view !== "topology" ? <div className="network-toolbar">
       <div className="network-filters"><input aria-label={view === "devices" ? "搜索设备" : "搜索 Skill"} placeholder={view === "devices" ? "搜索设备名称、管理地址" : "搜索 Skill 名称、说明"} value={query} onChange={(event) => setQuery(event.target.value)} />
       {view === "devices" && <select aria-label="筛选区域" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}><option value="">全部区域</option>{regions.map((region) => <option key={region.region_id} value={region.region_id}>{region.name}</option>)}</select>}</div>
@@ -399,7 +447,7 @@ export default function NetworkOperations() {
     </div> : null}
     {editor && <dialog ref={editorRef} className="network-editor" aria-label={editor === "skill" ? "Skill 编辑面板" : editor === "device" ? "设备编辑面板" : "连接编辑面板"} onCancel={(event) => { if (busy) event.preventDefault(); else setEditor(null); }}>
       <div className="network-editor-top"><span>{editor === "skill" ? "配置工作台能力" : editor === "device" ? "维护设备与区域" : "配置设备访问方式"}</span><Button disabled={busy} onClick={() => setEditor(null)}>关闭</Button></div>
-      {notice && <div role="alert" className="network-notice">{notice}</div>}
+      {notice.text ? <div role="alert" className={`network-notice${notice.ok ? " kind-ok" : ""}`}>{notice.text}</div> : null}
       {editor === "device" ? (<section className="network-panel">
         <h2>{deviceForm.device_id ? "编辑设备" : "登记设备"}</h2><p>设备只保存身份与区域，凭据由独立连接安全管理。</p>
         <form onSubmit={saveRegion} className="inline-form"><input value={regionName} onChange={(event) => setRegionName(event.target.value)} placeholder={editingRegionId ? "修改区域名称" : "新建设备区域"} /><Button variant="primary" type="submit">{editingRegionId ? "保存" : "添加区域"}</Button>{editingRegionId ? <Button type="button" onClick={() => { setEditingRegionId(""); setRegionName(""); }}>取消</Button> : null}</form>
@@ -437,6 +485,7 @@ export default function NetworkOperations() {
             <option value="">不关联拓扑</option>
             {topologies.map((t) => <option key={t.topology_id} value={t.topology_id}>{t.name} ({t.nodes.length} 节点 · {t.links.length} 链路)</option>)}
           </select>
+          <small className="field-help">关联后，模型会自动获得该拓扑的读取与运行比对能力；读取结果始终受当前 Skill 的设备范围限制。</small>
         </label>
         <fieldset className="full-field"><legend>允许的能力</legend><p className="intrinsic-capabilities">设备读取与配置是已发布 Skill 的内置能力。模型仅能操作此 Skill 所选的设备、连接和工具；设备账号决定设备侧实际权限。</p>{toolOptions.map((tool) => <label className="check capability-check" key={tool.id}><input type="checkbox" checked={skillForm.allowed_tool_ids.includes(tool.id)} onChange={(event) => setSkillForm({ ...skillForm, allowed_tool_ids: event.target.checked ? [...skillForm.allowed_tool_ids, tool.id] : skillForm.allowed_tool_ids.filter((id) => id !== tool.id) })} /><span><b>{tool.label}</b><small>{tool.description}</small></span></label>)}</fieldset>
         <label className="full-field">使用说明<textarea value={skillForm.instructions} onChange={(event) => setSkillForm({ ...skillForm, instructions: event.target.value })} placeholder="描述目标、证据要求和操作边界；模型自行决定工具顺序与并行关系。" /></label>
@@ -454,7 +503,10 @@ export default function NetworkOperations() {
           return <article key={device.device_id} className="device-card" data-testid={`device-card-${device.device_id}`}>
             <header className="device-card-header">
               <div className="device-identity">
-                <strong>{device.name}</strong>
+                <div className="device-title-row">
+                  <span className="device-type-icon"><DeviceTypeIcon deviceType={device.device_type} size={15} /></span>
+                  <strong>{device.name}</strong>
+                </div>
                 <span>{device.host} · {device.vendor.toUpperCase()} · {byRegion.get(device.region_id) || "未分区"}</span>
               </div>
               <div className="device-actions" aria-label={`${device.name} 设备管理`}>
@@ -482,7 +534,7 @@ export default function NetworkOperations() {
               </div>) : <div className="connection-empty">尚未配置连接。添加连接后即可加入 Skill，执行时按需连接。</div>}</div>
             </details>
           </article>;
-        }) : <div className="empty">{devices.length ? "没有匹配的设备" : "尚未登记设备，点击右上角登记设备开始"}</div>}</div>
+        }) : <EmptyState icon={IconServer}>{devices.length ? "没有匹配的设备" : "尚未登记设备，点击右上角登记设备开始"}</EmptyState>}</div>
       </section>
     </div> : view === "skills" ? <div className="network-grid">
       <section className="network-panel published-skills">
@@ -516,7 +568,7 @@ export default function NetworkOperations() {
               <div><dt>拓扑</dt><dd>{skill.topology_id ? byTopology.get(skill.topology_id)?.name || "已关联拓扑" : "未关联"}</dd></div>
             </dl>
           </article>;
-        }) : <div className="empty">{skills.length ? "没有匹配的 Skill" : "尚未创建 Skill，选择设备并配置能力后发布到工作台"}</div>}</div>
+        }) : <EmptyState icon={IconBolt}>{skills.length ? "没有匹配的 Skill" : "尚未创建 Skill，选择设备并配置能力后发布到工作台"}</EmptyState>}</div>
       </section>
     </div> : view === "topology" ? (
       <TopologyWorkspace
@@ -526,6 +578,7 @@ export default function NetworkOperations() {
         regions={regions}
         skills={skills}
         topologies={topologies}
+        loadError={topologyLoadState.error}
         onReload={load}
         setNotice={setNotice}
         busy={busy}
@@ -541,15 +594,15 @@ export default function NetworkOperations() {
           <input className="reference-select" type="checkbox" checked={selectedReferenceIds.has(reference.reference_id)} disabled={busy} onChange={() => toggleReferenceSelection(reference.reference_id)} aria-label={`选择运行参考 ${reference.name}`} />
           <div className="reference-main"><div><strong>{reference.name}</strong><span className={`reference-state ${reference.state}`}>{reference.state === "candidate" ? "候选" : reference.state === "confirmed" ? "已确认" : reference.state === "superseded" ? "已替代" : "已失效"}</span></div><small>{reference.target_ids.length} 个目标 · {reference.completeness === "complete" ? "证据完整" : "证据不完整"} · {displayTime(reference.updated_at)}</small></div>
           <div className="reference-actions">{reference.state === "candidate" && reference.completeness === "complete" ? <Button size="sm" variant="primary" onClick={() => void transitionReference(reference, "confirm")}>确认参考</Button> : null}{reference.state === "candidate" || reference.state === "confirmed" ? <Button size="sm" variant="danger-ghost" onClick={() => void transitionReference(reference, "invalidate")}>标记失效</Button> : null}<Button size="sm" variant="danger-ghost" aria-label={`永久删除运行参考 ${reference.name}`} icon={<IconTrash size={13} />} onClick={() => void removeReference(reference)}>永久删除</Button></div>
-        </article>) : <div className="empty">完成一次巡检后会出现候选参考，系统不会自动把第一次观察当作正常状态。</div>}</div>
+        </article>) : <EmptyState icon={IconShield}>完成一次巡检后会出现候选参考，系统不会自动把第一次观察当作正常状态。</EmptyState>}</div>
       </section>
       <section className="network-panel observation-panel">
         <div className="panel-heading"><div><h2>最近观察</h2><p>按时间保存的事实快照，可追溯到巡检任务和证据制品。</p></div><div className="reference-heading-actions"><span className="record-count">{operationalContext.observations.length} 条</span><label className="reference-select-all"><input type="checkbox" checked={allObservationsSelected} disabled={!operationalContext.observations.length || busy} onChange={() => setSelectedObservationIds(allObservationsSelected ? new Set() : new Set(operationalContext.observations.map((observation) => observation.observation_id)))} aria-label="选择全部最近观察" />选择全部</label><Button size="sm" variant="danger-ghost" disabled={!selectedObservationIds.size || busy} onClick={() => void removeSelectedObservations()}><IconTrash size={13} />删除已选 ({selectedObservationIds.size})</Button></div></div>
-        <div className="observation-list">{operationalContext.observations.length ? operationalContext.observations.map((observation) => <div className="observation-row" key={observation.observation_id}><input className="reference-select" type="checkbox" checked={selectedObservationIds.has(observation.observation_id)} disabled={busy} onChange={() => toggleObservationSelection(observation.observation_id)} aria-label={`选择最近观察 ${observation.source_id}`} /><div><strong>{observation.source_id}</strong><small>{observation.target_ids.length} 个目标 · {displayTime(observation.observed_at)}</small></div><span className={`reference-state ${observation.completeness}`}>{observation.completeness === "complete" ? "完整" : observation.completeness === "partial" ? "部分" : "失败"}</span><Button size="sm" variant="danger-ghost" aria-label={`永久删除观察 ${observation.source_id}`} icon={<IconTrash size={13} />} onClick={() => void removeObservation(observation)}>永久删除</Button></div>) : <div className="empty">尚无巡检观察。</div>}</div>
+        <div className="observation-list">{operationalContext.observations.length ? operationalContext.observations.map((observation) => <div className="observation-row" key={observation.observation_id}><input className="reference-select" type="checkbox" checked={selectedObservationIds.has(observation.observation_id)} disabled={busy} onChange={() => toggleObservationSelection(observation.observation_id)} aria-label={`选择最近观察 ${observation.source_id}`} /><div><strong>{observation.source_id}</strong><small>{observation.target_ids.length} 个目标 · {displayTime(observation.observed_at)}</small></div><span className={`reference-state ${observation.completeness}`}>{observation.completeness === "complete" ? "完整" : observation.completeness === "partial" ? "部分" : "失败"}</span><Button size="sm" variant="danger-ghost" aria-label={`永久删除观察 ${observation.source_id}`} icon={<IconTrash size={13} />} onClick={() => void removeObservation(observation)}>永久删除</Button></div>) : <EmptyState icon={IconEye}>尚无巡检观察。</EmptyState>}</div>
       </section>
       <section className="network-panel command-panel">
         <div className="panel-heading"><div><h2>命令反馈</h2><p>真实设备返回的语法经验，只提供给模型参考，不会自动执行或替代命令。</p></div><div className="reference-heading-actions"><span className="record-count">{operationalContext.command_experience.length} 条</span><label className="reference-select-all"><input type="checkbox" checked={allExperiencesSelected} disabled={!operationalContext.command_experience.length || busy} onChange={() => setSelectedExperienceIds(allExperiencesSelected ? new Set() : new Set(operationalContext.command_experience.map((experience) => experience.experience_id)))} aria-label="选择全部命令反馈" />选择全部</label><Button size="sm" variant="danger-ghost" disabled={!selectedExperienceIds.size || busy} onClick={() => void removeSelectedExperiences()}><IconTrash size={13} />删除已选 ({selectedExperienceIds.size})</Button></div></div>
-        <div className="command-list">{operationalContext.command_experience.length ? operationalContext.command_experience.map((item) => <div className="command-row" key={item.experience_id}><input className="reference-select" type="checkbox" checked={selectedExperienceIds.has(item.experience_id)} disabled={busy} onChange={() => toggleExperienceSelection(item.experience_id)} aria-label={`选择命令反馈 ${item.command}`} /><code>{item.command}</code><div><span className={`command-state ${item.status}`}>{item.status === "accepted" ? "已接受" : "已拒绝"}</span><small>{item.driver_id} · {item.observations} 次观察</small></div><Button size="sm" variant="danger-ghost" aria-label={`永久删除命令反馈 ${item.command}`} icon={<IconTrash size={13} />} onClick={() => void removeCommandExperience(item)}>永久删除</Button></div>) : <div className="empty">模型执行只读命令后，这里会积累与设备驱动关联的语法反馈。</div>}</div>
+        <div className="command-list">{operationalContext.command_experience.length ? operationalContext.command_experience.map((item) => <div className="command-row" key={item.experience_id}><input className="reference-select" type="checkbox" checked={selectedExperienceIds.has(item.experience_id)} disabled={busy} onChange={() => toggleExperienceSelection(item.experience_id)} aria-label={`选择命令反馈 ${item.command}`} /><code>{item.command}</code><div><span className={`command-state ${item.status}`}>{item.status === "accepted" ? "已接受" : "已拒绝"}</span><small>{item.driver_id} · {item.observations} 次观察</small></div><Button size="sm" variant="danger-ghost" aria-label={`永久删除命令反馈 ${item.command}`} icon={<IconTrash size={13} />} onClick={() => void removeCommandExperience(item)}>永久删除</Button></div>) : <EmptyState icon={IconChecklist}>模型执行只读命令后，这里会积累与设备驱动关联的语法反馈。</EmptyState>}</div>
       </section>
     </div>}
   </div>;

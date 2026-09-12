@@ -29,28 +29,31 @@ import {
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+// 图标全部走平台统一出口 components/Icon.tsx —— 这是全站唯一的 Phosphor
+// 门面，直接 import "@phosphor-icons/react" 会让扩展页与平台图标语义脱钩。
 import {
-  ArrowsSplit,
-  ArrowsLeftRight,
-  Stack,
-  ShieldCheck,
-  HardDrives,
-  WifiHigh,
-  Cloud,
-  Cube,
-  Plus,
-  Trash,
-  PencilSimple,
-  Check,
-  GitBranch,
-  FloppyDisk,
-  ArrowCounterClockwise,
-  ArrowClockwise,
-  Eye,
-  MagnifyingGlass,
-  X,
-  SquaresFour,
-} from "@phosphor-icons/react";
+  IconArrowsX,
+  IconBox,
+  IconBranch,
+  IconCheck,
+  IconClose,
+  IconCloud,
+  IconEdit,
+  IconEye,
+  IconGrid,
+  IconLayers,
+  IconPlus,
+  IconRedo,
+  IconRefresh,
+  IconSave,
+  IconSearch,
+  IconServer,
+  IconShield,
+  IconSplit,
+  IconTrash,
+  IconUndo,
+  IconWifi,
+} from "../../../../frontend/src/components/Icon";
 import { apiRequest } from "../../../../frontend/src/api/client";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
@@ -172,16 +175,20 @@ export type TopologyCompareResult = {
 
 const base = "/extensions/network.operations";
 
-function DeviceTypeIcon({ deviceType, size = 16 }: { deviceType: string; size?: number }) {
+/**
+ * 设备类型图标。导出给网络运维主页用 —— 设备列表和拓扑画布节点用同一套
+ * 类型 → 图标映射，用户从列表切到画布时不会认错设备。
+ */
+export function DeviceTypeIcon({ deviceType, size = 16 }: { deviceType: string; size?: number }) {
   const type = deviceType?.toLowerCase() || "";
-  if (type.includes("router")) return <ArrowsSplit size={size} />;
-  if (type === "l3_switch" || type.includes("layer3")) return <Stack size={size} />;
-  if (type.includes("switch")) return <ArrowsLeftRight size={size} />;
-  if (type.includes("firewall") || type.includes("fw") || type.includes("sec")) return <ShieldCheck size={size} />;
-  if (type.includes("server") || type.includes("host")) return <HardDrives size={size} />;
-  if (type.includes("wireless") || type.includes("ap") || type.includes("wifi")) return <WifiHigh size={size} />;
-  if (type.includes("cloud")) return <Cloud size={size} />;
-  return <Cube size={size} />;
+  if (type.includes("router")) return <IconSplit size={size} />;
+  if (type === "l3_switch" || type.includes("layer3")) return <IconLayers size={size} />;
+  if (type.includes("switch")) return <IconArrowsX size={size} />;
+  if (type.includes("firewall") || type.includes("fw") || type.includes("sec")) return <IconShield size={size} />;
+  if (type.includes("server") || type.includes("host")) return <IconServer size={size} />;
+  if (type.includes("wireless") || type.includes("ap") || type.includes("wifi")) return <IconWifi size={size} />;
+  if (type.includes("cloud")) return <IconCloud size={size} />;
+  return <IconBox size={size} />;
 }
 
 type DeviceNodeData = {
@@ -380,8 +387,10 @@ interface TopologyWorkspaceProps {
   regions: Region[];
   skills: Skill[];
   topologies: Topology[];
+  loadError: string;
   onReload: () => Promise<void>;
-  setNotice: (notice: string) => void;
+  /** ok 省略或为 true 表示成功提示（绿色）；显式传 false 表示失败（警告黄）。 */
+  setNotice: (notice: string, ok?: boolean) => void;
   busy: boolean;
 }
 
@@ -398,6 +407,7 @@ export default function TopologyWorkspace({
   regions,
   skills,
   topologies,
+  loadError,
   onReload,
   setNotice,
   busy,
@@ -431,6 +441,7 @@ export default function TopologyWorkspace({
 
   // Inspector & selection
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
 
   // Palette filters
   const [deviceSearch, setDeviceSearch] = useState("");
@@ -461,12 +472,30 @@ export default function TopologyWorkspace({
     subnet: "",
   });
 
+  const resetLinkForm = useCallback(() => {
+    setLinkForm({
+      source_interface: "GE0/1",
+      target_interface: "GE0/0",
+      kind: "physical",
+      label: "",
+      status: "unknown",
+      speed: "",
+      vlan: "",
+      medium: "",
+      subnet: "",
+    });
+  }, []);
+
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareResult, setCompareResult] = useState<TopologyCompareResult | null>(null);
   const [comparing, setComparing] = useState(false);
 
   const byDevice = useMemo(() => new Map(devices.map((d) => [d.device_id, d])), [devices]);
   const byRegion = useMemo(() => new Map(regions.map((r) => [r.region_id, r.name])), [regions]);
+
+  useEffect(() => {
+    if (selectedElement) setIsInspectorOpen(true);
+  }, [selectedElement]);
 
   // Execute Save
   const executeSave = useCallback(
@@ -492,7 +521,7 @@ export default function TopologyWorkspace({
       } catch (err: unknown) {
         setSaveStatus("unsaved");
         const errMsg = (err as { message?: string })?.message || "自动保存拓扑失败";
-        setNotice(errMsg.includes("version conflict") ? "拓扑版本冲突：已被其他操作修改，请刷新" : errMsg);
+        setNotice(errMsg.includes("version conflict") ? "拓扑版本冲突：已被其他操作修改，请刷新" : errMsg, false);
       }
     },
     [workspaceId, onReload, setNotice]
@@ -671,31 +700,36 @@ export default function TopologyWorkspace({
     [activeTopology, pushState]
   );
 
+  const openLinkComposer = useCallback(
+    (sourceId?: string, targetId?: string) => {
+      const availableIds = activeTopology?.nodes.map((node) => node.device_id) || [];
+      if (availableIds.length < 2) {
+        setNotice("请先将至少两台设备加入画布，再建立链路", false);
+        return;
+      }
+      const source = sourceId && availableIds.includes(sourceId) ? sourceId : availableIds[0];
+      const target =
+        targetId && targetId !== source && availableIds.includes(targetId)
+          ? targetId
+          : availableIds.find((id) => id !== source) || "";
+      if (!target) return;
+      setPendingConnection({ source, target });
+      resetLinkForm();
+    },
+    [activeTopology, resetLinkForm, setNotice]
+  );
+
   // Connect two nodes
   const onConnect = useCallback(
     (params: FlowConnection) => {
       if (!params.source || !params.target) return;
       if (params.source === params.target) {
-        setNotice("不能在同一设备节点建立自环链路");
+        setNotice("不能在同一设备节点建立自环链路", false);
         return;
       }
-      setPendingConnection({
-        source: params.source,
-        target: params.target,
-      });
-      setLinkForm({
-        source_interface: "GE0/1",
-        target_interface: "GE0/0",
-        kind: "physical",
-        label: "",
-        status: "unknown",
-        speed: "",
-        vlan: "",
-        medium: "",
-        subnet: "",
-      });
+      openLinkComposer(params.source, params.target);
     },
-    [setNotice]
+    [openLinkComposer, setNotice]
   );
 
   // Save new link from pending connection
@@ -863,7 +897,7 @@ export default function TopologyWorkspace({
   const handleAddDeviceToCanvas = (dev: Device) => {
     if (!activeTopology) return;
     if (activeTopology.nodes.some((n) => n.device_id === dev.device_id)) {
-      setNotice(`设备“${dev.name}”已在当前拓扑画布中，禁止重复添加`);
+      setNotice(`设备“${dev.name}”已在当前拓扑画布中，禁止重复添加`, false);
       return;
     }
 
@@ -885,6 +919,48 @@ export default function TopologyWorkspace({
     });
     setNotice(`设备“${dev.name}”已加入画布`);
   };
+
+  const layoutTopologyNodes = useCallback(
+    (topology: Topology, nodesToLayout = topology.nodes) => {
+      const ordered = [...nodesToLayout].sort((left, right) =>
+        (byDevice.get(left.device_id)?.name || left.device_id).localeCompare(
+          byDevice.get(right.device_id)?.name || right.device_id,
+          "zh-Hans-CN"
+        )
+      );
+      const columns = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(ordered.length || 1))));
+      return ordered.map((node, index) => ({
+        ...node,
+        x: 120 + (index % columns) * 250,
+        y: 110 + Math.floor(index / columns) * 180,
+      }));
+    },
+    [byDevice]
+  );
+
+  const handleAddAllDevices = useCallback(() => {
+    if (!activeTopology) return;
+    const existingIds = new Set(activeTopology.nodes.map((node) => node.device_id));
+    const additions = devices
+      .filter((device) => !existingIds.has(device.device_id))
+      .map((device) => ({ device_id: device.device_id, x: 0, y: 0 }));
+    if (!additions.length) {
+      setNotice("工作区设备已经全部在当前画布中", false);
+      return;
+    }
+    const nodes = layoutTopologyNodes(activeTopology, [...activeTopology.nodes, ...additions]);
+    pushState({ ...activeTopology, nodes });
+    setNotice(`已加入 ${additions.length} 台设备，并完成网格排布`);
+  }, [activeTopology, devices, layoutTopologyNodes, pushState, setNotice]);
+
+  const handleAutoLayout = useCallback(() => {
+    if (!activeTopology || activeTopology.nodes.length < 2) {
+      setNotice("至少需要两台画布设备才可自动排布", false);
+      return;
+    }
+    pushState({ ...activeTopology, nodes: layoutTopologyNodes(activeTopology) });
+    setNotice("已按设备名称完成网格排布；可继续手动拖动微调");
+  }, [activeTopology, layoutTopologyNodes, pushState, setNotice]);
 
   // Add group
   const handleCreateGroup = (e: FormEvent) => {
@@ -936,7 +1012,7 @@ export default function TopologyWorkspace({
         setSelectedTopologyId(res.topology.topology_id);
         setNotice(`拓扑“${res.topology.name}”创建成功`);
       } catch (err: unknown) {
-        setNotice((err as { message?: string })?.message || "创建拓扑失败");
+        setNotice((err as { message?: string })?.message || "创建拓扑失败", false);
       }
     } else if (topologyModalMode === "edit" && activeTopology) {
       try {
@@ -958,7 +1034,7 @@ export default function TopologyWorkspace({
         await onReload();
         setNotice("拓扑信息已更新");
       } catch (err: unknown) {
-        setNotice((err as { message?: string })?.message || "更新拓扑失败");
+        setNotice((err as { message?: string })?.message || "更新拓扑失败", false);
       }
     }
   };
@@ -984,7 +1060,7 @@ export default function TopologyWorkspace({
       await onReload();
       setNotice(`拓扑“${activeTopology.name}”已删除`);
     } catch (err: unknown) {
-      setNotice((err as { message?: string })?.message || "删除拓扑失败");
+      setNotice((err as { message?: string })?.message || "删除拓扑失败", false);
     }
   };
 
@@ -1001,7 +1077,7 @@ export default function TopologyWorkspace({
       setCompareResult(res.compare);
       setShowCompareModal(true);
     } catch (err: unknown) {
-      setNotice((err as { message?: string })?.message || "拓扑比对失败");
+      setNotice((err as { message?: string })?.message || "拓扑比对失败", false);
     } finally {
       setComparing(false);
     }
@@ -1051,18 +1127,35 @@ export default function TopologyWorkspace({
     return skills.filter((s) => s.topology_id === activeTopology.topology_id);
   }, [skills, activeTopology]);
 
+  if (loadError) {
+    return (
+      <div className="topology-empty-state" role="alert">
+        <div className="topology-empty-card topology-load-error">
+          <div className="topology-empty-icon">
+            <IconShield size={36} />
+          </div>
+          <h3>拓扑数据加载失败</h3>
+          <p>无法读取拓扑列表，当前不显示“空拓扑”以免掩盖服务或接口问题。请刷新；若仍失败，请检查网络扩展后端是否已更新。</p>
+          <Button variant="primary" icon={<IconRefresh size={14} />} onClick={() => void onReload()}>
+            重新加载
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (!topologies.length) {
     return (
       <div className="topology-empty-state">
         <div className="topology-empty-card">
           <div className="topology-empty-icon">
-            <GitBranch size={36} />
+            <IconBranch size={36} />
           </div>
           <h3>尚未创建网络拓扑</h3>
           <p>网络拓扑图用于独立维护设备间的二三层互联关系与逻辑分组。设备管理连接保持不变，拓扑链路支持与真实巡检证据比对。</p>
           <Button
             variant="primary"
-            icon={<Plus size={14} />}
+            icon={<IconPlus size={14} />}
             onClick={() => {
               setTopologyModalMode("create");
               setTopologyNameInput("");
@@ -1079,7 +1172,7 @@ export default function TopologyWorkspace({
               <div className="modal-header">
                 <h3>新建网络拓扑</h3>
                 <Button size="sm" onClick={() => setTopologyModalMode(null)}>
-                  <X size={14} />
+                  <IconClose size={14} />
                 </Button>
               </div>
               <div className="form-grid">
@@ -1125,7 +1218,7 @@ export default function TopologyWorkspace({
             <span className="section-title">网络拓扑 ({topologies.length})</span>
             <Button
               size="sm"
-              icon={<Plus size={12} />}
+              icon={<IconPlus size={12} />}
               onClick={() => {
                 setTopologyModalMode("create");
                 setTopologyNameInput("");
@@ -1158,11 +1251,17 @@ export default function TopologyWorkspace({
         <div className="topology-sidebar-section palette-device-section">
           <div className="section-title-row">
             <span className="section-title">工作区设备 ({devices.length})</span>
-            <small className="section-subtitle">仅可从既有设备选取</small>
+            {devices.length > placedDeviceIds.size ? (
+              <Button size="sm" icon={<IconPlus size={11} />} onClick={handleAddAllDevices}>
+                加入全部
+              </Button>
+            ) : (
+              <small className="section-subtitle">已全部加入</small>
+            )}
           </div>
           <div className="palette-search-row">
             <div className="palette-search-input-wrap">
-              <MagnifyingGlass size={13} className="search-icon" />
+              <IconSearch size={13} className="search-icon" />
               <input
                 placeholder="搜索名称 / IP"
                 value={deviceSearch}
@@ -1214,7 +1313,7 @@ export default function TopologyWorkspace({
                     ) : (
                       <Button
                         size="sm"
-                        icon={<Plus size={11} />}
+                        icon={<IconPlus size={11} />}
                         onClick={() => handleAddDeviceToCanvas(dev)}
                       >
                         加入
@@ -1235,7 +1334,7 @@ export default function TopologyWorkspace({
             <span className="section-title">拓扑分组 ({activeTopology?.groups?.length || 0})</span>
             <Button
               size="sm"
-              icon={<Plus size={12} />}
+              icon={<IconPlus size={12} />}
               onClick={() => {
                 setShowGroupModal(true);
                 setGroupNameInput("");
@@ -1252,7 +1351,7 @@ export default function TopologyWorkspace({
                   className={`palette-group-item ${selectedElement?.type === "group" && selectedElement.groupId === g.group_id ? "active" : ""}`}
                   onClick={() => setSelectedElement({ type: "group", groupId: g.group_id })}
                 >
-                  <SquaresFour size={14} />
+                  <IconGrid size={14} />
                   <span className="palette-group-name">{g.name}</span>
                   <span className="group-kind-tag">{g.kind}</span>
                 </div>
@@ -1274,17 +1373,17 @@ export default function TopologyWorkspace({
             <div className={`topology-save-indicator status-${saveStatus}`}>
               {saveStatus === "saved" ? (
                 <>
-                  <Check size={12} />
+                  <IconCheck size={12} />
                   <span>已保存</span>
                 </>
               ) : saveStatus === "saving" ? (
                 <>
-                  <FloppyDisk size={12} className="spin-icon" />
+                  <IconSave size={12} className="spin-icon" />
                   <span>正在保存...</span>
                 </>
               ) : (
                 <>
-                  <FloppyDisk size={12} />
+                  <IconSave size={12} />
                   <span>未保存修改</span>
                 </>
               )}
@@ -1294,7 +1393,7 @@ export default function TopologyWorkspace({
           <div className="toolbar-right">
             <Button
               size="sm"
-              icon={<ArrowCounterClockwise size={13} />}
+              icon={<IconUndo size={13} />}
               disabled={!history.length}
               onClick={handleUndo}
               title="撤销 (Ctrl+Z / Cmd+Z)"
@@ -1303,7 +1402,7 @@ export default function TopologyWorkspace({
             </Button>
             <Button
               size="sm"
-              icon={<ArrowClockwise size={13} />}
+              icon={<IconRedo size={13} />}
               disabled={!future.length}
               onClick={handleRedo}
               title="重做 (Ctrl+Y / Cmd+Shift+Z)"
@@ -1312,7 +1411,23 @@ export default function TopologyWorkspace({
             </Button>
             <Button
               size="sm"
-              icon={<Eye size={13} />}
+              icon={<IconBranch size={13} />}
+              onClick={() => openLinkComposer()}
+              disabled={(activeTopology?.nodes?.length || 0) < 2}
+            >
+              新建链路
+            </Button>
+            <Button
+              size="sm"
+              icon={<IconGrid size={13} />}
+              onClick={handleAutoLayout}
+              disabled={(activeTopology?.nodes?.length || 0) < 2}
+            >
+              自动排布
+            </Button>
+            <Button
+              size="sm"
+              icon={<IconEye size={13} />}
               onClick={handleCompareTopology}
               disabled={comparing}
             >
@@ -1320,7 +1435,7 @@ export default function TopologyWorkspace({
             </Button>
             <Button
               size="sm"
-              icon={<PencilSimple size={13} />}
+              icon={<IconEdit size={13} />}
               onClick={() => {
                 if (activeTopology) {
                   setTopologyModalMode("edit");
@@ -1334,16 +1449,38 @@ export default function TopologyWorkspace({
             <Button
               size="sm"
               variant="danger"
-              icon={<Trash size={13} />}
+              icon={<IconTrash size={13} />}
               onClick={handleDeleteTopology}
             >
               删除拓扑
+            </Button>
+            <Button
+              size="sm"
+              icon={<IconEye size={13} />}
+              onClick={() => setIsInspectorOpen((open) => !open)}
+              aria-pressed={isInspectorOpen}
+            >
+              {isInspectorOpen ? "收起详情" : "查看详情"}
             </Button>
           </div>
         </div>
 
         {/* ReactFlow Workspace */}
         <div className="topology-canvas-viewport">
+          {!activeTopology?.nodes?.length && (
+            <div className="topology-canvas-onboarding">
+              <div className="topology-canvas-onboarding-card">
+                <IconBranch size={24} />
+                <div>
+                  <strong>从设备开始建图</strong>
+                  <p>先放入现有设备，再通过节点连接点或“新建链路”填写两端接口。</p>
+                </div>
+                <Button size="sm" variant="primary" icon={<IconPlus size={12} />} onClick={handleAddAllDevices}>
+                  加入全部 {devices.length} 台设备
+                </Button>
+              </div>
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -1387,13 +1524,13 @@ export default function TopologyWorkspace({
       </main>
 
       {/* 3. Right: Inspector */}
-      <aside className="topology-inspector">
+      <aside className={`topology-inspector ${isInspectorOpen ? "is-open" : ""}`} aria-label="拓扑详情">
         {selectedElement?.type === "node" && selectedNode ? (
           <div className="inspector-panel">
             <div className="inspector-header">
               <h4>节点属性</h4>
-              <Button size="sm" onClick={() => setSelectedElement(null)}>
-                <X size={13} />
+              <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起节点详情">
+                <IconClose size={13} />
               </Button>
             </div>
 
@@ -1513,7 +1650,7 @@ export default function TopologyWorkspace({
             <div className="inspector-actions">
               <Button
                 variant="danger"
-                icon={<Trash size={13} />}
+                icon={<IconTrash size={13} />}
                 onClick={() => handleRemoveNode(selectedNode.device_id)}
               >
                 从拓扑中移除节点
@@ -1524,8 +1661,8 @@ export default function TopologyWorkspace({
           <div className="inspector-panel">
             <div className="inspector-header">
               <h4>链路属性</h4>
-              <Button size="sm" onClick={() => setSelectedElement(null)}>
-                <X size={13} />
+              <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起链路详情">
+                <IconClose size={13} />
               </Button>
             </div>
 
@@ -1602,8 +1739,8 @@ export default function TopologyWorkspace({
                   }}
                 >
                   <option value="unknown">未知 (缺少证据)</option>
-                  <option value="up">UP (正常通畅)</option>
-                  <option value="down">DOWN (链路中断)</option>
+                  <option value="up">图纸标注：UP（非运行结论）</option>
+                  <option value="down">图纸标注：DOWN（非运行结论）</option>
                 </select>
               </label>
 
@@ -1663,7 +1800,7 @@ export default function TopologyWorkspace({
             <div className="inspector-actions">
               <Button
                 variant="danger"
-                icon={<Trash size={13} />}
+                icon={<IconTrash size={13} />}
                 onClick={() => handleRemoveLink(selectedLink.link_id)}
               >
                 删除此链路
@@ -1674,8 +1811,8 @@ export default function TopologyWorkspace({
           <div className="inspector-panel">
             <div className="inspector-header">
               <h4>分组属性</h4>
-              <Button size="sm" onClick={() => setSelectedElement(null)}>
-                <X size={13} />
+              <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起分组详情">
+                <IconClose size={13} />
               </Button>
             </div>
 
@@ -1732,7 +1869,7 @@ export default function TopologyWorkspace({
             <div className="inspector-actions">
               <Button
                 variant="danger"
-                icon={<Trash size={13} />}
+                icon={<IconTrash size={13} />}
                 onClick={() => handleRemoveGroup(selectedGroup.group_id)}
               >
                 删除此分组
@@ -1743,6 +1880,9 @@ export default function TopologyWorkspace({
           <div className="inspector-panel">
             <div className="inspector-header">
               <h4>拓扑概览</h4>
+              <Button size="sm" onClick={() => setIsInspectorOpen(false)} aria-label="收起拓扑详情">
+                <IconClose size={13} />
+              </Button>
             </div>
 
             <div className="inspector-section">
@@ -1787,12 +1927,12 @@ export default function TopologyWorkspace({
             <div className="inspector-section">
               <span className="inspector-label">快捷操作</span>
               <div className="quick-actions-col">
-                <Button size="sm" icon={<Eye size={13} />} onClick={handleCompareTopology}>
+                <Button size="sm" icon={<IconEye size={13} />} onClick={handleCompareTopology}>
                   比对拓扑与运行现状
                 </Button>
                 <Button
                   size="sm"
-                  icon={<PencilSimple size={13} />}
+                  icon={<IconEdit size={13} />}
                   onClick={() => {
                     if (activeTopology) {
                       setTopologyModalMode("edit");
@@ -1816,7 +1956,7 @@ export default function TopologyWorkspace({
             <div className="modal-header">
               <h3>{topologyModalMode === "create" ? "新建网络拓扑" : "编辑拓扑信息"}</h3>
               <Button size="sm" onClick={() => setTopologyModalMode(null)}>
-                <X size={14} />
+                <IconClose size={14} />
               </Button>
             </div>
             <div className="form-grid">
@@ -1857,16 +1997,30 @@ export default function TopologyWorkspace({
             <div className="modal-header">
               <h3>新建拓扑链路</h3>
               <Button size="sm" onClick={() => setPendingConnection(null)}>
-                <X size={14} />
+                <IconClose size={14} />
               </Button>
             </div>
             <div className="form-grid">
               <label>
                 源端设备
-                <input
-                  disabled
-                  value={byDevice.get(pendingConnection.source)?.name || pendingConnection.source}
-                />
+                <select
+                  aria-label="源端设备"
+                  value={pendingConnection.source}
+                  onChange={(event) => {
+                    const source = event.target.value;
+                    const target =
+                      pendingConnection.target === source
+                        ? (activeTopology?.nodes || []).find((node) => node.device_id !== source)?.device_id || ""
+                        : pendingConnection.target;
+                    if (target) setPendingConnection({ source, target });
+                  }}
+                >
+                  {(activeTopology?.nodes || []).map((node) => (
+                    <option key={node.device_id} value={node.device_id}>
+                      {byDevice.get(node.device_id)?.name || node.device_id}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 源端接口
@@ -1879,10 +2033,21 @@ export default function TopologyWorkspace({
               </label>
               <label>
                 对端设备
-                <input
-                  disabled
-                  value={byDevice.get(pendingConnection.target)?.name || pendingConnection.target}
-                />
+                <select
+                  aria-label="对端设备"
+                  value={pendingConnection.target}
+                  onChange={(event) =>
+                    setPendingConnection({ ...pendingConnection, target: event.target.value })
+                  }
+                >
+                  {(activeTopology?.nodes || [])
+                    .filter((node) => node.device_id !== pendingConnection.source)
+                    .map((node) => (
+                      <option key={node.device_id} value={node.device_id}>
+                        {byDevice.get(node.device_id)?.name || node.device_id}
+                      </option>
+                    ))}
+                </select>
               </label>
               <label>
                 对端接口
@@ -1913,9 +2078,9 @@ export default function TopologyWorkspace({
                     setLinkForm({ ...linkForm, status: e.target.value as "unknown" | "up" | "down" })
                   }
                 >
-                  <option value="unknown">未知 (待观测证据)</option>
-                  <option value="up">UP (连通)</option>
-                  <option value="down">DOWN (异常)</option>
+                  <option value="unknown">未知（尚无运行证据）</option>
+                  <option value="up">图纸标注：UP（非运行结论）</option>
+                  <option value="down">图纸标注：DOWN（非运行结论）</option>
                 </select>
               </label>
               <label className="full-field">
@@ -1962,7 +2127,7 @@ export default function TopologyWorkspace({
             <div className="modal-header">
               <h3>新建拓扑分组</h3>
               <Button size="sm" onClick={() => setShowGroupModal(false)}>
-                <X size={14} />
+                <IconClose size={14} />
               </Button>
             </div>
             <div className="form-grid">
@@ -2012,7 +2177,7 @@ export default function TopologyWorkspace({
                 <p>核对拓扑定义与工作区既有设备及巡检观察证据的一致性。</p>
               </div>
               <Button size="sm" onClick={() => setShowCompareModal(false)}>
-                <X size={14} />
+                <IconClose size={14} />
               </Button>
             </div>
 

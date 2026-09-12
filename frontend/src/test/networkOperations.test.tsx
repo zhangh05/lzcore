@@ -64,7 +64,7 @@ test("device inventory is first; editors are on demand and search works", async 
 test("published Skill has device configuration capability by default", async () => {
   render(<NetworkOperations />);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /Skill 配置/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /Skill 配置/ }));
   expect(screen.getByText("可执行设备配置")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "编辑 Skill" }));
   const dialog = screen.getByRole("dialog", { name: "Skill 编辑面板" });
@@ -80,7 +80,7 @@ test("published Skill has device configuration capability by default", async () 
 test("operational context separates observations from explicitly confirmed references", async () => {
   render(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /环境与证据/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   expect(screen.getByText("巡检候选参考")).toBeInTheDocument();
   expect(screen.getByText(/巡检只产生候选参考/)).toBeInTheDocument();
   expect(screen.getByText("display version")).toBeInTheDocument();
@@ -105,7 +105,7 @@ test("selects and permanently deletes multiple operational references in one req
   });
   render(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /环境与证据/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   fireEvent.click(screen.getByLabelText("选择运行参考 巡检候选参考 A"));
   fireEvent.click(screen.getByLabelText("选择运行参考 巡检候选参考 B"));
   fireEvent.click(screen.getByRole("button", { name: "删除已选 (2)" }));
@@ -134,7 +134,7 @@ test("selects observations and command feedback for their own batch-delete endpo
   });
   render(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /环境与证据/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   fireEvent.click(screen.getByLabelText("选择全部最近观察"));
   fireEvent.click(screen.getByRole("button", { name: "删除已选 (2)" }));
   fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "永久删除" }));
@@ -166,7 +166,7 @@ test("command feedback renders one row for duplicate driver commands during a ro
   });
   render(<NetworkOperations />);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /环境与证据/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   expect(screen.getAllByText(/DISPLAY\s+CPU-USAGE/i)).toHaveLength(1);
   expect(screen.getByText("1 条")).toBeInTheDocument();
   expect(screen.getByText(/2 次观察/)).toBeInTheDocument();
@@ -175,7 +175,7 @@ test("command feedback renders one row for duplicate driver commands during a ro
 test("operational context exposes confirmed hard deletes", async () => {
   render(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /环境与证据/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   fireEvent.click(screen.getByRole("button", { name: "永久删除观察 inspection-1" }));
   fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "永久删除" }));
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -199,25 +199,39 @@ test("context loading failure does not hide device and Skill management", async 
   expect(screen.queryByText("数据加载失败，请检查服务。")).not.toBeInTheDocument();
 });
 
-test("topology tab displays canvas, device palette, and inspector overview", async () => {
+test("topology tab keeps the canvas primary and exposes the device palette", async () => {
   render(<NetworkOperations />);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /网络拓扑/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /网络拓扑/ }));
   const matches = await screen.findAllByText(/数据中心拓扑/);
   expect(matches.length).toBeGreaterThan(0);
   expect(screen.getAllByText("v1").length).toBeGreaterThan(0);
-  expect(screen.getByText(/仅可从既有设备选取/)).toBeInTheDocument();
+  expect(screen.getByText("已全部加入")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "查看详情" })).toBeInTheDocument();
   expect(screen.getByTestId("palette-dev-d1")).toBeInTheDocument();
   expect(within(screen.getByTestId("palette-dev-d1")).getByText("已在画布")).toBeInTheDocument();
+});
+
+test("topology endpoint failure is shown as a loading error instead of an empty canvas", async () => {
+  const original = vi.mocked(apiRequest).getMockImplementation();
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.url?.endsWith("/topologies")) throw new Error("topology endpoint unavailable");
+    return original?.(request) as never;
+  });
+  render(<NetworkOperations />);
+  await screen.findByTestId("device-card-d1");
+  fireEvent.click(screen.getByRole("tab", { name: /网络拓扑/ }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("拓扑数据加载失败");
+  expect(screen.queryByText("尚未创建网络拓扑")).not.toBeInTheDocument();
 });
 
 test("associates topology with Skill and displays it in Skill card", async () => {
   render(<NetworkOperations />);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /Skill 配置/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /Skill 配置/ }));
   fireEvent.click(screen.getByRole("button", { name: "编辑 Skill" }));
   const dialog = screen.getByRole("dialog", { name: "Skill 编辑面板" });
-  fireEvent.change(within(dialog).getByLabelText("关联网络拓扑（可选）"), { target: { value: "t1" } });
+  fireEvent.change(within(dialog).getByRole("combobox", { name: /关联网络拓扑/ }), { target: { value: "t1" } });
   fireEvent.click(within(dialog).getByRole("button", { name: "保存 Skill" }));
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({
     method: "PUT",
@@ -228,7 +242,7 @@ test("associates topology with Skill and displays it in Skill card", async () =>
 test("topology compare modal opens and emphasizes evidence-based unknown status", async () => {
   render(<NetworkOperations />);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /网络拓扑/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /网络拓扑/ }));
   const matches = await screen.findAllByText(/数据中心拓扑/);
   expect(matches.length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole("button", { name: "拓扑比对" }));
@@ -242,7 +256,7 @@ test("topology compare modal opens and emphasizes evidence-based unknown status"
 test("removing a node from topology preserves the workspace device entity", async () => {
   render(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("button", { name: /网络拓扑/ }));
+  fireEvent.click(screen.getByRole("tab", { name: /网络拓扑/ }));
   const matches = await screen.findAllByText(/数据中心拓扑/);
   expect(matches.length).toBeGreaterThan(0);
 

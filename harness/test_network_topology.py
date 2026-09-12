@@ -210,6 +210,24 @@ def test_topology_deletion_cleans_skill_references(workspace):
     assert reloaded_skill.get("topology_id") == ""
 
 
+def test_topology_association_grants_canonical_topology_tool(workspace):
+    dev = service.save_device(workspace, {"name": "TopoReader", "host": "10.2.3.1", "vendor": "h3c"})
+    conn = service.save_connection(workspace, {"device_id": dev["device_id"], "protocol": "ssh", "port": 22, "username": "u", "password": "p"}, auto_test=False)
+    topo = service.save_topology(workspace, {"name": "ReadableTopo", "nodes": [{"device_id": dev["device_id"]}]})
+
+    # Simulate the UI's older explicit capability list: it did not contain
+    # the new topology tool.  Association must still make the new feature
+    # usable to the Skill without a hidden, easy-to-forget extra toggle.
+    skill = service.save_skill(workspace, {
+        "name": "TopologyReader",
+        "device_ids": [dev["device_id"]],
+        "connection_ids": [conn["connection_id"]],
+        "allowed_tool_ids": ["network.operations.device.manage", "network.operations.devices_read"],
+        "topology_id": topo["topology_id"],
+    })
+    assert "network.operations.topology" in skill["allowed_tool_ids"]
+
+
 def test_topology_compare_with_unknown_evidence(workspace):
     dev1 = service.save_device(workspace, {"name": "Router1", "host": "10.3.3.1", "vendor": "h3c"})
     dev2 = service.save_device(workspace, {"name": "Router2", "host": "10.3.3.2", "vendor": "h3c"})
@@ -240,6 +258,26 @@ def test_topology_compare_with_unknown_evidence(workspace):
     assert result["summary"]["unknown_evidence_links"] == 1
     assert result["summary"]["mismatched_links"] == 0
     assert result["link_comparisons"][0]["comparison_status"] == "unknown"
+
+
+def test_topology_compare_does_not_turn_unrelated_device_observation_into_link_match(workspace):
+    dev1 = service.save_device(workspace, {"name": "Router1", "host": "10.3.4.1", "vendor": "h3c"})
+    dev2 = service.save_device(workspace, {"name": "Router2", "host": "10.3.4.2", "vendor": "h3c"})
+    topo = service.save_topology(workspace, {
+        "name": "EvidencePrecision",
+        "nodes": [{"device_id": dev1["device_id"]}, {"device_id": dev2["device_id"]}],
+        "links": [{
+            "source_device_id": dev1["device_id"], "source_interface": "GE0/1",
+            "target_device_id": dev2["device_id"], "target_interface": "GE0/0",
+            "status": "up", "evidence_refs": ["observation_unrelated"],
+        }],
+    })
+
+    result = service.compare_topology(workspace, topo["topology_id"])
+    comparison = result["link_comparisons"][0]
+    assert comparison["comparison_status"] == "unknown"
+    assert comparison["evidence_refs"] == ["observation_unrelated"]
+    assert result["summary"]["matched_links"] == 0
 
 
 def test_topology_rest_api(app, workspace):
