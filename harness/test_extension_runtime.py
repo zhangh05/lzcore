@@ -14,6 +14,7 @@ from extensions.runtime import (
     render_workbench_prompt,
     reset_extension_cache_for_tests,
 )
+from extensions.network_operations.skill_prompt import NETWORK_SKILL_PROMPT_VERSION
 from evaluation.runner import GoldenCase, evaluate_case
 
 
@@ -42,7 +43,7 @@ def test_selected_network_skill_owns_a_domain_prompt_contract():
         "source": "server_validated_extension_context",
     })
 
-    assert "network.operations.skill.v2" in rendered
+    assert NETWORK_SKILL_PROMPT_VERSION in rendered
     assert "network.operations.device.manage" in rendered
     assert "exact command text and order" in rendered
     assert "resource boundary" in rendered

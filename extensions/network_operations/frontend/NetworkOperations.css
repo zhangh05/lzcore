@@ -131,31 +131,51 @@
 .network-editor::backdrop { background: var(--overlay); }
 .network-editor-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-13); color: var(--text-3); }
 .network-editor .network-panel { border: 0; border-radius: 0; padding: var(--space-6); }
-.network-editor .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 14px; }
-.network-editor .form-grid label { display: grid; gap: 7px; font-size: var(--fs-13); font-weight: var(--weight-label); }
-.network-editor .field-help { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--weight-regular); line-height: 1.55; }
-.network-editor .full-field, .network-editor .form-actions { grid-column: 1/-1; }
-.network-editor input:not([type="checkbox"]), .network-editor select, .network-editor textarea, .network-filters input, .network-filters select {
+.network-editor .form-grid,
+.network-dialog-modal .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 14px; }
+.network-editor .form-grid label,
+.network-dialog-modal .form-grid label { display: grid; gap: 7px; font-size: var(--fs-13); font-weight: var(--weight-label); }
+.network-editor .field-help,
+.network-dialog-modal .field-help { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--weight-regular); line-height: 1.55; }
+.network-editor .full-field, .network-dialog-modal .full-field { grid-column: 1/-1; }
+.network-editor input:not([type="checkbox"]), .network-editor select, .network-editor textarea,
+.network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select, .network-dialog-modal textarea,
+.network-filters input, .network-filters select {
   box-sizing: border-box; min-width: 0; max-width: 100%; min-height: var(--h-control);
   border: 1px solid var(--line-3); border-radius: var(--r-8); padding: 6px 11px;
   background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-13); outline: none;
 }
-.network-editor input:focus-visible, .network-editor select:focus-visible, .network-editor textarea:focus-visible, .network-filters input:focus-visible, .network-filters select:focus-visible {
+.network-editor input:focus-visible, .network-editor select:focus-visible, .network-editor textarea:focus-visible,
+.network-dialog-modal input:focus-visible, .network-dialog-modal select:focus-visible, .network-dialog-modal textarea:focus-visible,
+.network-filters input:focus-visible, .network-filters select:focus-visible {
   border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring-shadow);
 }
-.network-editor textarea { min-height: 80px; resize: vertical; }
-.network-editor fieldset { grid-column: 1/-1; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--r-8); min-width: 0; }
-.network-editor legend { padding: 0 6px; font-size: var(--fs-13); font-weight: var(--weight-heading); }
-.network-editor .form-grid .check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; font-size: var(--fs-13); font-weight: var(--weight-regular); }
-.network-editor .check input { flex-shrink: 0; margin-top: 3px; accent-color: var(--accent); }
-.network-editor .capability-check span { display: grid; gap: var(--space-1); }
-.network-editor .capability-check small { font-size: var(--fs-12); font-weight: var(--weight-regular); color: var(--text-3); line-height: 1.6; }
-.network-editor .intrinsic-capabilities { margin: 0 0 var(--space-2); color: var(--text-3); font-size: var(--fs-12); }
-.network-editor .inline-form { display: flex; gap: var(--space-2); margin: 18px 0 10px; }
-.network-editor .inline-form input { flex: 1; }
-.network-editor .region-list { display: flex; gap: var(--space-2); flex-wrap: wrap; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
-.network-editor .region-list > span { display: flex; align-items: center; gap: var(--space-2); padding: 5px 8px; background: var(--surface-2); border-radius: var(--r-8); font-size: var(--fs-12); }
-.network-editor .region-list button { background: transparent; border: 0; color: var(--accent); cursor: pointer; }
+.network-editor textarea,
+.network-dialog-modal textarea { min-height: 80px; resize: vertical; }
+.network-editor fieldset,
+.network-dialog-modal fieldset { grid-column: 1/-1; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--r-8); min-width: 0; }
+.network-editor legend,
+.network-dialog-modal legend { padding: 0 6px; font-size: var(--fs-13); font-weight: var(--weight-heading); }
+.network-editor .form-grid .check,
+.network-dialog-modal .form-grid .check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; font-size: var(--fs-13); font-weight: var(--weight-regular); }
+.network-editor .check input,
+.network-dialog-modal .check input { flex-shrink: 0; margin-top: 3px; accent-color: var(--accent); }
+.network-editor .capability-check span,
+.network-dialog-modal .capability-check span { display: grid; gap: var(--space-1); }
+.network-editor .capability-check small,
+.network-dialog-modal .capability-check small { font-size: var(--fs-12); font-weight: var(--weight-regular); color: var(--text-3); line-height: 1.6; }
+.network-editor .intrinsic-capabilities,
+.network-dialog-modal .intrinsic-capabilities { margin: 0 0 var(--space-2); color: var(--text-3); font-size: var(--fs-12); }
+.network-editor .inline-form,
+.network-dialog-modal .inline-form { display: flex; gap: var(--space-2); margin: 18px 0 10px; }
+.network-editor .inline-form input,
+.network-dialog-modal .inline-form input { flex: 1; }
+.network-editor .region-list,
+.network-dialog-modal .region-list { display: flex; gap: var(--space-2); flex-wrap: wrap; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.network-editor .region-list > span,
+.network-dialog-modal .region-list > span { display: flex; align-items: center; gap: var(--space-2); padding: 5px 8px; background: var(--surface-2); border-radius: var(--r-8); font-size: var(--fs-12); }
+.network-editor .region-list button,
+.network-dialog-modal .region-list button { background: transparent; border: 0; color: var(--accent); cursor: pointer; }
 /* 底部操作栏吸底：表单很长时不用滚到底才能提交。 */
 .network-editor .form-actions { display: flex; gap: 10px; position: sticky; bottom: 0; padding-top: 18px; padding-block: var(--space-3); border-top: 1px solid var(--line); background: var(--surface); }
 
@@ -175,9 +195,12 @@
   .network-context-layout { padding: var(--space-3); }
   .network-admin .device-card-header, .network-admin .skill-card-header { flex-wrap: wrap; }
   .network-admin .reference-row, .network-admin .command-row { align-items: flex-start; flex-direction: column; }
-  .network-editor .form-grid { grid-template-columns: 1fr; }
+  .network-editor .form-grid,
+  .network-dialog-modal .form-grid { grid-template-columns: 1fr; }
   .network-editor .network-panel { padding: var(--space-4); }
-  .network-editor input:not([type="checkbox"]), .network-editor select, .network-filters input, .network-filters select { min-height: var(--h-touch); }
+  .network-editor input:not([type="checkbox"]), .network-editor select,
+  .network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select,
+  .network-filters input, .network-filters select { min-height: var(--h-touch); }
 }
 
 

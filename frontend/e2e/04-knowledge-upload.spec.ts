@@ -33,10 +33,14 @@ test("4. knowledge import from artifact (UI happy-path)", async ({ page, api, wo
   // Wait for the import-from-artifact card.
   const importCard = page.getByTestId("knowledge-import-card");
   await expect(importCard).toBeVisible({ timeout: 8_000 });
+  // Import is intentionally collapsed to keep the knowledge workspace focused.
+  // Open the card through its real user control before operating the select.
+  await importCard.locator("summary").click();
 
   // The select is rendered. The artifacts list may take a moment to
   // populate; we wait up to 15s for the option to appear.
   const select = page.getByTestId("knowledge-import-select");
+  await expect(select).toBeVisible({ timeout: 8_000 });
   const optionLocator = select.locator(`option[value="${artifact_id}"]`);
   let attempts = 0;
   while (attempts < 30) {
