@@ -228,6 +228,26 @@ def test_topology_association_grants_canonical_topology_tool(workspace):
     assert "network.operations.topology" in skill["allowed_tool_ids"]
 
 
+def test_topology_state_scopes_access_and_never_upgrades_recorded_status(workspace, app):
+    devices = [service.save_device(workspace, {"name": name, "host": "192.0.2.1", "vendor": "h3c"}) for name in ("A", "B")]
+    connections = [service.save_connection(workspace, {"device_id": d["device_id"], "protocol": "ssh", "username": "u", "password": "secret"}, auto_test=False) for d in devices]
+    topo = service.save_topology(workspace, {"name": "State", "nodes": [{"device_id": d["device_id"]} for d in devices], "links": [{"source_device_id": devices[0]["device_id"], "target_device_id": devices[1]["device_id"], "source_interface": "GE0/0", "target_interface": "GE0/0", "status": "up"}]})
+    state = service.topology_state(workspace, topo["topology_id"])
+    assert state["source"] == "recorded_facts"
+    assert state["refreshed_at"]
+    assert state["links"][0]["observed_status"] == "unknown"
+    assert state["links"][0]["recorded_status"] == "up"
+    assert all(node["observation"] is None for node in state["nodes"])
+    assert "password" not in str(state) and "secret" not in str(state)
+    scoped = service.topology_state(workspace, topo["topology_id"], scope_device_ids={devices[0]["device_id"]}, scope_connection_ids=set())
+    assert [node["device_id"] for node in scoped["nodes"]] == [devices[0]["device_id"]]
+    assert scoped["nodes"][0]["connections"] == []
+    assert scoped["links"] == []
+    response = app.test_client().get(f"/api/extensions/network.operations/topologies/{topo['topology_id']}/state?workspace_id={workspace}")
+    assert response.status_code == 200
+    assert {c["connection_id"] for node in response.json["state"]["nodes"] for c in node["connections"]} == {c["connection_id"] for c in connections}
+
+
 def test_topology_compare_with_unknown_evidence(workspace):
     dev1 = service.save_device(workspace, {"name": "Router1", "host": "10.3.3.1", "vendor": "h3c"})
     dev2 = service.save_device(workspace, {"name": "Router2", "host": "10.3.3.2", "vendor": "h3c"})

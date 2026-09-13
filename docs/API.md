@@ -144,7 +144,7 @@ return conflict; cancel and wait for a terminal state first.
 | `GET/POST` | `/api/extensions/network.operations/regions`, `/devices`, `/connections`, `/skills`, `/scripts`, `/inspections`, `/topologies` |
 | `GET/PUT/DELETE` | `/api/extensions/network.operations/regions/<region_id>`, `/devices/<device_id>`, `/connections/<connection_id>`, `/skills/<skill_id>`, `/scripts/<script_id>`, `/topologies/<topology_id>` |
 | `DELETE` | `/api/extensions/network.operations/topologies/<topology_id>/nodes/<device_id>` |
-| `GET` | `/api/extensions/network.operations/topologies/<topology_id>/compare` |
+| `GET` | `/api/extensions/network.operations/topologies/<topology_id>/compare`, `/api/extensions/network.operations/topologies/<topology_id>/state` |
 | `POST` | `/connections/<connection_id>/test`, `/inspections/<task_id>/cancel`, `/inspections/<task_id>/retry` |
 | `GET` | `/inspections/<task_id>`, `/inspections/<task_id>/evidence` |
 | `GET` | `/context` |
@@ -223,6 +223,7 @@ GET|POST    /api/extensions/network.operations/topologies
 DELETE|GET|PUT /api/extensions/network.operations/topologies/<topology_id>
 DELETE      /api/extensions/network.operations/topologies/<topology_id>/nodes/<device_id>
 GET         /api/extensions/network.operations/topologies/<topology_id>/compare
+GET         /api/extensions/network.operations/topologies/<topology_id>/state
 POST        /api/extensions/repository/<extension_id>/<version>/install
 GET         /api/jobs/<job_id>/artifacts
 GET         /api/jobs/<job_id>/logs

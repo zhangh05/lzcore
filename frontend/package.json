@@ -23,6 +23,7 @@
     "@tanstack/react-virtual": "^3.14.5",
     "@xyflow/react": "^12.11.6",
     "axios": "^1.7.7",
+    "elkjs": "^0.11.0",
     "highlight.js": "^11.11.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

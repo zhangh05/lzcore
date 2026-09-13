@@ -42,6 +42,7 @@ export default defineConfig(({ mode }) => {
         react: resolve(process.cwd(), "node_modules/react"),
         "react-dom": resolve(process.cwd(), "node_modules/react-dom"),
         zustand: resolve(process.cwd(), "node_modules/zustand"),
+        elkjs: resolve(process.cwd(), "node_modules/elkjs"),
         "@xyflow/react/dist/style.css": resolve(process.cwd(), "node_modules/@xyflow/react/dist/style.css"),
         "@xyflow/react": resolve(process.cwd(), "node_modules/@xyflow/react/dist/esm/index.js"),
         "@phosphor-icons/react": resolve(process.cwd(), "node_modules/@phosphor-icons/react/dist/index.es.js"),

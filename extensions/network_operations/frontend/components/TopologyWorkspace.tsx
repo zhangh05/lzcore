@@ -26,6 +26,7 @@ import {
   type EdgeProps,
   type NodeChange,
   type EdgeChange,
+  type ReactFlowInstance,
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -53,10 +54,15 @@ import {
   IconTrash,
   IconUndo,
   IconWifi,
+  IconSparkle,
+  IconExpand,
 } from "../../../../frontend/src/components/Icon";
 import { apiRequest } from "../../../../frontend/src/api/client";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
+import { layoutTopology, linkHandles } from "./topologyLayout";
+import { TopologyAgentPanel, type CanvasSelection } from "./TopologyAgentPanel";
+import "./TopologyStudio.css";
 
 export type Device = {
   device_id: string;
@@ -79,7 +85,15 @@ export type Connection = {
   driver_id?: string;
   detected_vendor?: string;
   os_family?: string;
+  last_tested_at?: string;
 };
+
+type TopologyState = {
+  topology_id: string; version: number; refreshed_at: string;
+  nodes: Array<{ device_id: string; connections: Connection[]; observation: { observed_at: string; completeness: string; source_id: string; artifact_id: string } | null }>;
+};
+
+const formatObservedTime = (value?: string) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "尚未采集";
 
 export type Region = { region_id: string; name: string };
 export type Skill = {
@@ -143,34 +157,15 @@ export type Topology = {
 };
 
 export type TopologyCompareResult = {
-  topology_id: string;
-  topology_name: string;
-  missing_devices: Array<{ device_id: string; reason: string }>;
-  missing_links: Array<{
-    link_id: string;
-    source_device_id: string;
-    target_device_id: string;
-    reason: string;
+  topology_id: string; topology_name: string;
+  topology_devices_not_in_scope: string[];
+  devices_in_scope_not_in_topology: string[];
+  link_comparisons: Array<{
+    link_id: string; source_device_id: string; source_interface: string;
+    target_device_id: string; target_interface: string;
+    comparison_status: string; recorded_status: string; note: string;
   }>;
-  unexpected_links: Array<{
-    source_device_id: string;
-    target_device_id: string;
-    evidence_source?: string;
-    reason: string;
-  }>;
-  matched_links: Array<{
-    link_id: string;
-    source_device_id: string;
-    target_device_id: string;
-    evidence_source?: string;
-    status: string;
-  }>;
-  summary: {
-    missing_devices_count: number;
-    missing_links_count: number;
-    unexpected_links_count: number;
-    matched_links_count: number;
-  };
+  summary: { total_nodes: number; total_links: number; matched_links: number; mismatched_links: number; unknown_evidence_links: number; available_devices_missing_from_topology: number };
 };
 
 const base = "/extensions/network.operations";
@@ -202,13 +197,18 @@ type DeviceNodeData = {
   groupName?: string;
   hasConnection?: boolean;
   connectionStatus?: string;
+  lastTestedAt?: string;
+  selectedContext?: boolean;
+  dimmed?: boolean;
 };
 
 function DeviceNodeComponent({ data, selected }: NodeProps<Node<DeviceNodeData>>) {
   const { name, host, vendor, deviceType, displayName, labels, groupName } = data;
+  const testAge = data.lastTestedAt ? Date.now() - Date.parse(data.lastTestedAt) : Infinity;
+  const recentAccess = testAge >= 0 && testAge < 5 * 60 * 1000;
 
   return (
-    <div className={`topology-device-node ${selected ? "is-selected" : ""}`} data-testid={`topo-node-${data.deviceId}`}>
+    <div className={`topology-device-node ${selected || data.selectedContext ? "is-selected" : ""} ${data.dimmed ? "is-dimmed" : ""}`} data-testid={`topo-node-${data.deviceId}`}>
       <Handle type="source" position={Position.Top} id="top" isConnectable />
       <Handle type="source" position={Position.Right} id="right" isConnectable />
       <Handle type="source" position={Position.Bottom} id="bottom" isConnectable />
@@ -216,7 +216,7 @@ function DeviceNodeComponent({ data, selected }: NodeProps<Node<DeviceNodeData>>
 
       <div className="device-node-body">
         <div className={`device-node-icon type-${deviceType.toLowerCase()}`}>
-          <DeviceTypeIcon deviceType={deviceType} size={16} />
+          <DeviceTypeIcon deviceType={deviceType} size={38} />
         </div>
         <div className="device-node-main">
           <div className="device-node-title-row">
@@ -229,10 +229,12 @@ function DeviceNodeComponent({ data, selected }: NodeProps<Node<DeviceNodeData>>
           </div>
           <div className="device-node-meta">
             <span className="device-node-host">{host}</span>
-            <span className="device-node-type">{deviceType}</span>
+            <span className="device-node-type">{deviceType === "switch" ? "交换机" : deviceType === "router" ? "路由器" : deviceType}</span>
           </div>
         </div>
       </div>
+
+      <span className={`node-access-dot ${recentAccess ? data.connectionStatus : "unknown"}`} title={data.lastTestedAt ? `上次管理连接：${data.connectionStatus} · ${formatObservedTime(data.lastTestedAt)}${recentAccess ? "" : "（历史记录）"}` : "管理连接尚无测试时间"} />
 
       {(labels?.length || groupName) ? (
         <div className="device-node-footer">
@@ -302,25 +304,25 @@ function TopologyEdgeComponent({
   });
 
   const kind = (data?.kind as string) || "physical";
-  const status = (data?.status as string) || "unknown";
   const srcIf = data?.source_interface as string;
   const tgtIf = data?.target_interface as string;
   const label = data?.label as string;
 
-  const strokeColor =
-    status === "up" ? "var(--ok)" : status === "down" ? "var(--danger)" : "var(--line-3)";
+  // Diagram annotations are not telemetry. Highlight selection, never infer UP.
+  const strokeColor = selected || data?.selectedContext ? "var(--accent)" : "var(--topology-link, #8294a6)";
 
   const edgeStyle = {
     ...style,
     stroke: strokeColor,
-    strokeWidth: selected ? 2.5 : 1.5,
+    strokeWidth: selected || data?.selectedContext ? 2.5 : 1.6,
+    opacity: data?.dimmed ? 0.2 : 1,
     strokeDasharray: kind === "logical" ? "6 4" : undefined,
   };
 
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-  const offset = 28;
+  const offset = 44;
   const srcBadgeX = sourceX + (dx / dist) * offset;
   const srcBadgeY = sourceY + (dy / dist) * offset;
   const tgtBadgeX = targetX - (dx / dist) * offset;
@@ -429,8 +431,14 @@ export default function TopologyWorkspace({
   }, [topologies, selectedTopologyId]);
 
   const [activeTopology, setActiveTopology] = useState<Topology | null>(currentTopology);
+  const saveStatusRef = useRef<"saved" | "saving" | "unsaved">("saved");
+  const revisionRef = useRef(0);
+  const serverVersionsRef = useRef(new Map<string, number>());
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
+    if (saveStatusRef.current !== "saved") return;
     setActiveTopology(currentTopology);
+    if (currentTopology) serverVersionsRef.current.set(currentTopology.topology_id, currentTopology.version);
   }, [currentTopology]);
 
   // Undo / Redo history
@@ -438,10 +446,46 @@ export default function TopologyWorkspace({
   const [future, setFuture] = useState<Topology[]>([]);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const saveTimerRef = useRef<number | null>(null);
+  useEffect(() => { setHistory([]); setFuture([]); setSelectedElement(null); }, [selectedTopologyId]);
 
   // Inspector & selection
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [showAgent, setShowAgent] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [layer, setLayer] = useState<"all" | "physical" | "logical">("all");
+  const [showInterfaces, setShowInterfaces] = useState(true);
+  const [topologyState, setTopologyState] = useState<TopologyState | null>(null);
+  const [stateError, setStateError] = useState("");
+  const [layoutBusy, setLayoutBusy] = useState(false);
+  const flowRef = useRef<ReactFlowInstance | null>(null);
+  const activeTopologyRef = useRef(activeTopology);
+  activeTopologyRef.current = activeTopology;
+  const refreshFacts = useCallback(async () => {
+    const id = activeTopologyRef.current?.topology_id;
+    if (!id) return;
+    try {
+      const result = await apiRequest<{ state: TopologyState }>({ method: "GET", url: `${base}/topologies/${id}/state`, params: { workspace_id: workspaceId } });
+      if (activeTopologyRef.current?.topology_id !== id) return;
+      setTopologyState(result.state); setStateError("");
+    } catch { if (activeTopologyRef.current?.topology_id === id) setStateError("状态同步失败，显示上次记录"); }
+  }, [workspaceId]);
+  useEffect(() => {
+    setTopologyState(null);
+    void refreshFacts();
+    const timer = window.setInterval(() => { if (!document.hidden) void refreshFacts(); }, 10000);
+    return () => window.clearInterval(timer);
+  }, [selectedTopologyId, refreshFacts]);
+  const canvasSelection: CanvasSelection = useMemo(() => {
+    if (!activeTopology || !selectedElement) return { device_ids: [], link_ids: [], label: "整张拓扑" };
+    if (selectedElement.type === "node") return { device_ids: [selectedElement.deviceId], link_ids: [], label: devices.find((dev) => dev.device_id === selectedElement.deviceId)?.name || selectedElement.deviceId };
+    if (selectedElement.type === "link") {
+      const link = activeTopology.links.find((item) => item.link_id === selectedElement.linkId);
+      return link ? { device_ids: [link.source_device_id, link.target_device_id], link_ids: [link.link_id], label: `${devices.find((dev) => dev.device_id === link.source_device_id)?.name || link.source_device_id} ↔ ${devices.find((dev) => dev.device_id === link.target_device_id)?.name || link.target_device_id}` } : { device_ids: [], link_ids: [], label: "整张拓扑" };
+    }
+    return { device_ids: activeTopology.nodes.filter((node) => node.group_id === selectedElement.groupId).map((node) => node.device_id), link_ids: [], label: activeTopology.groups.find((group) => group.group_id === selectedElement.groupId)?.name || "分组" };
+  }, [activeTopology, selectedElement, devices]);
 
   // Palette filters
   const [deviceSearch, setDeviceSearch] = useState("");
@@ -494,13 +538,15 @@ export default function TopologyWorkspace({
   const byRegion = useMemo(() => new Map(regions.map((r) => [r.region_id, r.name])), [regions]);
 
   useEffect(() => {
-    if (selectedElement) setIsInspectorOpen(true);
-  }, [selectedElement]);
+    if (selectedElement && !showAgent) setIsInspectorOpen(true);
+  }, [selectedElement, showAgent]);
 
   // Execute Save
   const executeSave = useCallback(
-    async (topo: Topology) => {
-      setSaveStatus("saving");
+    (topo: Topology) => {
+      const revision = revisionRef.current;
+      const work = async () => {
+      saveStatusRef.current = "saving"; setSaveStatus("saving");
       try {
         const res = await apiRequest<{ topology: Topology }>({
           method: "PUT",
@@ -509,20 +555,29 @@ export default function TopologyWorkspace({
             workspace_id: workspaceId,
             name: topo.name,
             description: topo.description,
-            version: topo.version,
+            version: serverVersionsRef.current.get(topo.topology_id) ?? topo.version,
             nodes: topo.nodes,
             links: topo.links,
             groups: topo.groups,
           },
         });
-        setActiveTopology(res.topology);
-        setSaveStatus("saved");
-        void onReload();
+        serverVersionsRef.current.set(topo.topology_id, res.topology.version);
+        if (revision === revisionRef.current) {
+          setActiveTopology(res.topology);
+          saveStatusRef.current = "saved"; setSaveStatus("saved");
+          void onReload();
+        } else {
+          setActiveTopology((current) => current?.topology_id === topo.topology_id ? { ...current, version: res.topology.version } : current);
+          saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
+        }
       } catch (err: unknown) {
-        setSaveStatus("unsaved");
+        saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
         const errMsg = (err as { message?: string })?.message || "自动保存拓扑失败";
-        setNotice(errMsg.includes("version conflict") ? "拓扑版本冲突：已被其他操作修改，请刷新" : errMsg, false);
+        setNotice(errMsg.includes("version_conflict") || errMsg.includes("version conflict") ? "拓扑版本冲突：已被其他操作修改，当前未保存编辑仍保留" : errMsg, false);
       }
+      };
+      saveChainRef.current = saveChainRef.current.then(work, work);
+      return saveChainRef.current;
     },
     [workspaceId, onReload, setNotice]
   );
@@ -533,6 +588,8 @@ export default function TopologyWorkspace({
       if (!activeTopology) return;
       setHistory((prev) => [...prev.slice(-20), activeTopology]);
       setFuture([]);
+      revisionRef.current += 1;
+      saveStatusRef.current = "unsaved";
       setActiveTopology(next);
       setSaveStatus("unsaved");
 
@@ -552,6 +609,8 @@ export default function TopologyWorkspace({
     setHistory((prev) => prev.slice(0, -1));
     setFuture((prev) => [activeTopology, ...prev]);
     setActiveTopology(previous);
+    revisionRef.current += 1;
+    saveStatusRef.current = "unsaved";
     setSaveStatus("unsaved");
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => void executeSave(previous), 800);
@@ -563,14 +622,24 @@ export default function TopologyWorkspace({
     setFuture((prev) => prev.slice(1));
     setHistory((prev) => [...prev, activeTopology]);
     setActiveTopology(next);
+    revisionRef.current += 1;
+    saveStatusRef.current = "unsaved";
     setSaveStatus("unsaved");
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => void executeSave(next), 800);
   }, [future, activeTopology, executeSave]);
 
+  const saveOnUnmountRef = useRef(executeSave);
+  saveOnUnmountRef.current = executeSave;
+  useEffect(() => () => {
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    if (saveStatusRef.current === "unsaved" && activeTopologyRef.current) void saveOnUnmountRef.current(activeTopologyRef.current);
+  }, []);
+
   // Keyboard shortcut listener for Undo / Redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable=true]")) return;
       if ((e.metaKey || e.ctrlKey) && e.key === "z") {
         e.preventDefault();
         if (e.shiftKey) {
@@ -581,6 +650,8 @@ export default function TopologyWorkspace({
       } else if ((e.metaKey || e.ctrlKey) && e.key === "y") {
         e.preventDefault();
         handleRedo();
+      } else if (e.key === "Escape") {
+        setFocusMode(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -606,6 +677,7 @@ export default function TopologyWorkspace({
       },
       selectable: true,
       draggable: true,
+      style: { width: g.width, height: g.height },
       zIndex: -1,
     }));
 
@@ -627,38 +699,48 @@ export default function TopologyWorkspace({
           groupName: n.group_id ? groupMap.get(n.group_id) : undefined,
           hasConnection: !!conn,
           connectionStatus: conn?.status,
+          lastTestedAt: topologyState?.nodes.find((node) => node.device_id === n.device_id)?.connections[0]?.last_tested_at || conn?.last_tested_at,
+          selectedContext: canvasSelection.device_ids.includes(n.device_id),
+          dimmed: !!deviceSearch && !`${dev?.name} ${dev?.host}`.toLowerCase().includes(deviceSearch.toLowerCase()),
         },
         selectable: true,
         draggable: true,
+        // React Flow's fitView uses its measured node box. Declare the same
+        // geometry as the persisted layout contract rather than relying on a
+        // CSS-only custom node to be observed after a re-render.
+        style: { width: 160, height: 130 },
         zIndex: 1,
       };
     });
 
     return [...gNodes, ...dNodes];
-  }, [activeTopology, byDevice, connections]);
+  }, [activeTopology, byDevice, connections, topologyState, canvasSelection, deviceSearch]);
 
   // React Flow Edges
   const flowEdges: Edge[] = useMemo(() => {
     if (!activeTopology) return [];
-    return (activeTopology.links || []).map((l) => ({
+    const nodeMap = new Map(activeTopology.nodes.map((node) => [node.device_id, node]));
+    return (activeTopology.links || []).filter((link) => layer === "all" || link.kind === layer).map((l) => ({
       id: l.link_id,
       source: l.source_device_id,
       target: l.target_device_id,
+      ...linkHandles(nodeMap.get(l.source_device_id) || { x: 0, y: 0 }, nodeMap.get(l.target_device_id) || { x: 0, y: 0 }),
       type: "topologyEdge",
       data: {
         link_id: l.link_id,
-        source_interface: l.source_interface,
-        target_interface: l.target_interface,
+        source_interface: showInterfaces ? l.source_interface : "",
+        target_interface: showInterfaces ? l.target_interface : "",
         kind: l.kind,
         label: l.label,
         status: l.status,
         metadata: l.metadata,
         source: l.source,
         evidence_refs: l.evidence_refs,
+        selectedContext: canvasSelection.link_ids.includes(l.link_id),
       },
       selectable: true,
     }));
-  }, [activeTopology]);
+  }, [activeTopology, layer, showInterfaces, canvasSelection]);
 
   const [nodes, setNodes] = useState<Node[]>(flowNodes);
   const [edges, setEdges] = useState<Edge[]>(flowEdges);
@@ -953,14 +1035,21 @@ export default function TopologyWorkspace({
     setNotice(`已加入 ${additions.length} 台设备，并完成网格排布`);
   }, [activeTopology, devices, layoutTopologyNodes, pushState, setNotice]);
 
-  const handleAutoLayout = useCallback(() => {
+  const handleAutoLayout = useCallback(async () => {
     if (!activeTopology || activeTopology.nodes.length < 2) {
       setNotice("至少需要两台画布设备才可自动排布", false);
       return;
     }
-    pushState({ ...activeTopology, nodes: layoutTopologyNodes(activeTopology) });
-    setNotice("已按设备名称完成网格排布；可继续手动拖动微调");
-  }, [activeTopology, layoutTopologyNodes, pushState, setNotice]);
+    setLayoutBusy(true);
+    try {
+      const result = await layoutTopology(activeTopology);
+      if (activeTopologyRef.current !== activeTopology) { setNotice("图纸已变化，请重新排布", false); return; }
+      pushState(result);
+      window.setTimeout(() => { void flowRef.current?.fitView({ padding: 0.22, duration: 300, maxZoom: 1.1 }); }, 80);
+      setNotice("已按连接关系排布；已有分组随成员调整");
+    } catch { setNotice("自动排布失败，原图保持不变", false); }
+    finally { setLayoutBusy(false); }
+  }, [activeTopology, pushState, setNotice]);
 
   // Add group
   const handleCreateGroup = (e: FormEvent) => {
@@ -1069,12 +1158,12 @@ export default function TopologyWorkspace({
     if (!activeTopology) return;
     setComparing(true);
     try {
-      const res = await apiRequest<{ compare: TopologyCompareResult }>({
+      const res = await apiRequest<TopologyCompareResult>({
         method: "GET",
         url: `${base}/topologies/${activeTopology.topology_id}/compare`,
         params: { workspace_id: workspaceId },
       });
-      setCompareResult(res.compare);
+      setCompareResult(res);
       setShowCompareModal(true);
     } catch (err: unknown) {
       setNotice((err as { message?: string })?.message || "拓扑比对失败", false);
@@ -1210,7 +1299,7 @@ export default function TopologyWorkspace({
   }
 
   return (
-    <div className="network-topology-workspace">
+    <div className={`network-topology-workspace topology-studio ${showLibrary ? "library-open" : ""} ${showAgent ? "agent-open" : ""} ${focusMode ? "focus-mode" : ""}`}>
       {/* 1. Left Panel: Topology selector + Device Palette + Group Palette */}
       <aside className="topology-sidebar">
         <div className="topology-sidebar-section topology-select-section">
@@ -1232,6 +1321,7 @@ export default function TopologyWorkspace({
             <select
               aria-label="选择网络拓扑"
               value={selectedTopologyId}
+              disabled={saveStatus !== "saved"}
               onChange={(e) => {
                 setSelectedTopologyId(e.target.value);
                 setSelectedElement(null);
@@ -1293,6 +1383,11 @@ export default function TopologyWorkspace({
                     key={dev.device_id}
                     className={`palette-device-item ${isPlaced ? "is-placed" : ""}`}
                     data-testid={`palette-dev-${dev.device_id}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`定位设备 ${dev.name}`}
+                    onClick={() => { if (isPlaced) { setSelectedElement({ type: "node", deviceId: dev.device_id }); void flowRef.current?.fitView({ nodes: [{ id: dev.device_id }], duration: 300, maxZoom: 1.2 }); } }}
+                    onKeyDown={(event) => { if (event.key === "Enter" && isPlaced) { setSelectedElement({ type: "node", deviceId: dev.device_id }); void flowRef.current?.fitView({ nodes: [{ id: dev.device_id }], duration: 300, maxZoom: 1.2 }); } }}
                   >
                     <div className="palette-dev-icon">
                       <DeviceTypeIcon deviceType={dev.device_type} size={15} />
@@ -1368,6 +1463,7 @@ export default function TopologyWorkspace({
         {/* Canvas Toolbar */}
         <div className="topology-canvas-toolbar">
           <div className="toolbar-left">
+            <button className="studio-icon-button" title="设备库与拓扑列表" aria-label="设备库与拓扑列表" aria-pressed={showLibrary} onClick={() => setShowLibrary((value) => !value)}><IconLayers size={18} /></button>
             <strong className="topology-canvas-title">{activeTopology?.name}</strong>
             <span className="topology-version-badge">v{activeTopology?.version}</span>
             <div className={`topology-save-indicator status-${saveStatus}`}>
@@ -1390,6 +1486,13 @@ export default function TopologyWorkspace({
             </div>
           </div>
 
+          <div className="toolbar-right">
+            <button className="studio-icon-button" aria-label={focusMode ? "退出专注画布" : "专注画布"} title="专注画布" onClick={() => setFocusMode((value) => !value)}><IconExpand size={18} /></button>
+            <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>Agent 协作</Button>
+          </div>
+        </div>
+        <div className="topology-editbar">
+          <div className="studio-layer-tabs" role="group" aria-label="拓扑图层">{([ ["all", "全部"], ["physical", "物理连接"], ["logical", "逻辑连接"] ] as const).map(([value, label]) => <button key={value} aria-pressed={layer === value} onClick={() => setLayer(value)}>{label}</button>)}</div>
           <div className="toolbar-right">
             <Button
               size="sm"
@@ -1420,10 +1523,10 @@ export default function TopologyWorkspace({
             <Button
               size="sm"
               icon={<IconGrid size={13} />}
-              onClick={handleAutoLayout}
-              disabled={(activeTopology?.nodes?.length || 0) < 2}
+              onClick={() => void handleAutoLayout()}
+              disabled={layoutBusy || (activeTopology?.nodes?.length || 0) < 2}
             >
-              自动排布
+              {layoutBusy ? "排布中" : "自动排布"}
             </Button>
             <Button
               size="sm"
@@ -1433,6 +1536,7 @@ export default function TopologyWorkspace({
             >
               {comparing ? "比对中..." : "拓扑比对"}
             </Button>
+            <details className="studio-more"><summary>更多</summary><div>
             <Button
               size="sm"
               icon={<IconEdit size={13} />}
@@ -1457,16 +1561,18 @@ export default function TopologyWorkspace({
             <Button
               size="sm"
               icon={<IconEye size={13} />}
-              onClick={() => setIsInspectorOpen((open) => !open)}
+              onClick={() => { setIsInspectorOpen((open) => !open); setShowAgent(false); }}
               aria-pressed={isInspectorOpen}
             >
               {isInspectorOpen ? "收起详情" : "查看详情"}
             </Button>
+            </div></details>
           </div>
         </div>
 
         {/* ReactFlow Workspace */}
         <div className="topology-canvas-viewport">
+          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 台设备</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -1482,6 +1588,7 @@ export default function TopologyWorkspace({
             </div>
           )}
           <ReactFlow
+            onInit={(instance) => { flowRef.current = instance; }}
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
@@ -1505,11 +1612,14 @@ export default function TopologyWorkspace({
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
             fitView
+            fitViewOptions={{ padding: 0.22, maxZoom: 1.1 }}
+            snapToGrid
+            snapGrid={[10, 10]}
             minZoom={0.2}
             maxZoom={2.5}
             defaultEdgeOptions={{ type: "topologyEdge" }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="var(--line-2)" />
+            <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--line-2)" />
             <Controls showInteractive={false} position="bottom-left" />
             <MiniMap
               nodeStrokeColor="var(--line-3)"
@@ -1521,18 +1631,23 @@ export default function TopologyWorkspace({
             />
           </ReactFlow>
         </div>
+        <footer className="studio-statusbar"><span>{stateError || (topologyState ? `记录同步 ${new Date(topologyState.refreshed_at).toLocaleTimeString("zh-CN", { hour12: false })}` : "正在读取设备记录…")}</span><span>链路颜色：图纸连接 · 管理访问状态见设备详情</span><button onClick={() => void refreshFacts()}><IconRefresh size={12} />刷新状态</button></footer>
       </main>
+
+      {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} skills={skills} selection={canvasSelection} onCompleted={() => { void refreshFacts(); if (saveStatus === "saved") void onReload(); }} /></aside>}
 
       {/* 3. Right: Inspector */}
       <aside className={`topology-inspector ${isInspectorOpen ? "is-open" : ""}`} aria-label="拓扑详情">
         {selectedElement?.type === "node" && selectedNode ? (
           <div className="inspector-panel">
             <div className="inspector-header">
-              <h4>节点属性</h4>
+              <h4>{selectedNodeDevice?.name || "设备详情"}</h4>
               <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起节点详情">
                 <IconClose size={13} />
               </Button>
             </div>
+
+            <div className="inspector-section studio-device-status"><span className="inspector-label">管理访问与观察记录</span>{(topologyState?.nodes.find((node) => node.device_id === selectedNode.device_id)?.connections || []).map((connection) => <div key={connection.connection_id}><strong>{connection.protocol.toUpperCase()} : {connection.port}</strong><span>{connection.last_tested_at ? `${connection.verified ? "上次验证成功" : "上次验证未通过"} · ${formatObservedTime(connection.last_tested_at)}` : "尚无连接测试记录"}</span></div>)}<p>最近采集：{formatObservedTime(topologyState?.nodes.find((node) => node.device_id === selectedNode.device_id)?.observation?.observed_at)}</p><Button variant="primary" icon={<IconSparkle size={14} />} onClick={() => { setShowAgent(true); setIsInspectorOpen(false); }}>围绕此设备对话</Button></div>
 
             <div className="inspector-section">
               <span className="inspector-label">关联设备实体</span>
@@ -2167,120 +2282,22 @@ export default function TopologyWorkspace({
         </dialog>
       )}
 
-      {/* MODAL 4: Topology Compare Modal */}
       {showCompareModal && compareResult && (
-        <dialog open className="network-dialog-modal compare-modal">
+        <dialog open className="network-dialog-modal compare-modal" aria-label="拓扑比对报告">
           <div className="network-panel modal-panel compare-panel">
-            <div className="modal-header">
-              <div>
-                <h3>拓扑比对报告 · {compareResult.topology_name}</h3>
-                <p>核对拓扑定义与工作区既有设备及巡检观察证据的一致性。</p>
-              </div>
-              <Button size="sm" onClick={() => setShowCompareModal(false)}>
-                <IconClose size={14} />
-              </Button>
-            </div>
-
-            <div className="compare-notice-banner">
-              <strong>系统以事实为准：</strong>
-              <span>无巡检运行证据支持时，链路状态保持为未知（unknown），不会误报为物理故障或配置错误。</span>
-            </div>
-
+            <div className="modal-header"><div><h3>拓扑比对 · {compareResult.topology_name}</h3><p>图纸定义与已有观察证据</p></div><Button aria-label="关闭比对报告" onClick={() => setShowCompareModal(false)}><IconClose size={14} /></Button></div>
+            <div className="compare-notice-banner">无两端接口邻接证据的链路显示未知；手工标注不会变成运行结论。</div>
             <div className="compare-metrics-row">
-              <div className="metric-box">
-                <span className="metric-val">{compareResult.summary.matched_links_count}</span>
-                <span className="metric-lbl">已匹配链路</span>
-              </div>
-              <div className="metric-box">
-                <span className="metric-val">{compareResult.summary.missing_links_count}</span>
-                <span className="metric-lbl">暂无证据链路</span>
-              </div>
-              <div className="metric-box">
-                <span className="metric-val">{compareResult.summary.unexpected_links_count}</span>
-                <span className="metric-lbl">未登记链路</span>
-              </div>
-              <div className="metric-box">
-                <span className="metric-val">{compareResult.summary.missing_devices_count}</span>
-                <span className="metric-lbl">异常设备</span>
-              </div>
+              <div className="metric-box"><span className="metric-val">{compareResult.summary.total_links}</span><span className="metric-lbl">图纸链路</span></div>
+              <div className="metric-box"><span className="metric-val">{compareResult.summary.matched_links}</span><span className="metric-lbl">证据已匹配</span></div>
+              <div className="metric-box"><span className="metric-val">{compareResult.summary.unknown_evidence_links}</span><span className="metric-lbl">暂无证据链路</span></div>
             </div>
-
             <div className="compare-details-area">
-              {compareResult.missing_links.length > 0 && (
-                <div className="compare-section">
-                  <h5>暂无巡检证据支持的拓扑链路 ({compareResult.missing_links.length})</h5>
-                  <div className="compare-item-list">
-                    {compareResult.missing_links.map((ml) => (
-                      <div key={ml.link_id} className="compare-item missing-link">
-                        <span className="compare-status-tag unknown">待核实</span>
-                        <span>
-                          {byDevice.get(ml.source_device_id)?.name || ml.source_device_id} ↔{" "}
-                          {byDevice.get(ml.target_device_id)?.name || ml.target_device_id}
-                        </span>
-                        <small>{ml.reason === "no_observed_evidence" ? "无时点巡检证据" : ml.reason}</small>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {compareResult.matched_links.length > 0 && (
-                <div className="compare-section">
-                  <h5>已匹配巡检证据的链路 ({compareResult.matched_links.length})</h5>
-                  <div className="compare-item-list">
-                    {compareResult.matched_links.map((ml) => (
-                      <div key={ml.link_id} className="compare-item matched-link">
-                        <span className="compare-status-tag ok">已证实</span>
-                        <span>
-                          {byDevice.get(ml.source_device_id)?.name || ml.source_device_id} ↔{" "}
-                          {byDevice.get(ml.target_device_id)?.name || ml.target_device_id}
-                        </span>
-                        <small>{ml.evidence_source || "巡检证据"}</small>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {compareResult.unexpected_links.length > 0 && (
-                <div className="compare-section">
-                  <h5>证据中发现但未在拓扑中登记的链路 ({compareResult.unexpected_links.length})</h5>
-                  <div className="compare-item-list">
-                    {compareResult.unexpected_links.map((ul, idx) => (
-                      <div key={idx} className="compare-item unexpected-link">
-                        <span className="compare-status-tag warn">未登记</span>
-                        <span>
-                          {byDevice.get(ul.source_device_id)?.name || ul.source_device_id} ↔{" "}
-                          {byDevice.get(ul.target_device_id)?.name || ul.target_device_id}
-                        </span>
-                        <small>{ul.evidence_source || "巡检证据"}</small>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {compareResult.missing_devices.length > 0 && (
-                <div className="compare-section">
-                  <h5>拓扑中引用但工作区已不存在的设备 ({compareResult.missing_devices.length})</h5>
-                  <div className="compare-item-list">
-                    {compareResult.missing_devices.map((md) => (
-                      <div key={md.device_id} className="compare-item missing-device">
-                        <span className="compare-status-tag danger">缺失设备</span>
-                        <span>{md.device_id}</span>
-                        <small>{md.reason}</small>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {compareResult.link_comparisons.map((link) => <div className="compare-item" key={link.link_id}><span className="compare-status-tag unknown">{link.comparison_status === "unknown" ? "未知" : link.comparison_status}</span><span>{byDevice.get(link.source_device_id)?.name || link.source_device_id} {link.source_interface} ↔ {byDevice.get(link.target_device_id)?.name || link.target_device_id} {link.target_interface}</span><small>{link.note}</small></div>)}
+              {!compareResult.link_comparisons.length && <p>当前图纸尚无链路。</p>}
+              {compareResult.topology_devices_not_in_scope.map((id) => <p key={id}>设备记录缺失：{id}</p>)}
             </div>
-
-            <div className="modal-actions">
-              <Button variant="primary" onClick={() => setShowCompareModal(false)}>
-                关闭报告
-              </Button>
-            </div>
+            <div className="modal-actions"><Button onClick={() => setShowCompareModal(false)}>关闭报告</Button></div>
           </div>
         </dialog>
       )}

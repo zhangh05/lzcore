@@ -330,6 +330,16 @@ def register_routes(app):
             status = 409 if str(exc) == "topology_version_conflict" else (404 if str(exc) in {"topology_not_found", "node_not_found"} else 400)
             return jsonify({"ok": False, "error": str(exc)}), status
 
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/state", methods=["GET"])
+    def network_topology_state(topology_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            return jsonify({"ok": True, "state": service.topology_state(ws, topology_id)})
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+
     @app.route("/api/extensions/network.operations/topologies/<topology_id>/compare", methods=["GET"])
     def network_topology_compare(topology_id):
         ws = _workspace()
@@ -646,6 +656,7 @@ def topology_tool(invocation):
             return {
                 "ok": True,
                 "topology": scoped_topo,
+                "state": service.topology_state(invocation.workspace_id, topology_id, scope_device_ids=allowed_devices, scope_connection_ids=scope["connection_ids"]),
                 "version": topo.get("version"),
                 "nodes": scoped_nodes,
                 "links": scoped_links,
@@ -654,6 +665,7 @@ def topology_tool(invocation):
         return {
             "ok": True,
             "topology": topo,
+            "state": service.topology_state(invocation.workspace_id, topology_id),
             "version": topo.get("version"),
             "nodes": topo.get("nodes") or [],
             "links": topo.get("links") or [],

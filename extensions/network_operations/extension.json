@@ -30,6 +30,7 @@
     "/api/extensions/network.operations/topologies/<topology_id>",
     "/api/extensions/network.operations/topologies/<topology_id>/nodes/<device_id>",
     "/api/extensions/network.operations/topologies/<topology_id>/compare",
+    "/api/extensions/network.operations/topologies/<topology_id>/state",
     "/api/extensions/network.operations/inspections",
     "/api/extensions/network.operations/inspections/<task_id>",
     "/api/extensions/network.operations/inspections/<task_id>/cancel",

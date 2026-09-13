@@ -27,15 +27,12 @@ beforeEach(() => {
     if (request.url?.endsWith("/connections")) return { connections: [{ connection_id: "c1", device_id: "d1", protocol: "telnet", port: 30001, credential_configured: true, status: "untested", verified: false }] } as never;
     if (request.url?.endsWith("/topologies")) return { topologies: [sampleTopology] } as never;
     if (request.url?.includes("/compare")) return {
-      compare: {
         topology_id: "t1",
         topology_name: "数据中心拓扑",
-        missing_devices: [],
-        missing_links: [{ link_id: "l1", source_device_id: "d1", target_device_id: "d2", reason: "no_observed_evidence" }],
-        unexpected_links: [],
-        matched_links: [],
-        summary: { missing_devices_count: 0, missing_links_count: 1, unexpected_links_count: 0, matched_links_count: 0 },
-      },
+        topology_devices_not_in_scope: [],
+        devices_in_scope_not_in_topology: [],
+        link_comparisons: [{ link_id: "l1", source_device_id: "d1", target_device_id: "d2", source_interface: "GE0/0", target_interface: "GE0/1", comparison_status: "unknown", note: "无两端接口邻接证据，保持未知状态" }],
+        summary: { total_nodes: 2, total_links: 1, matched_links: 0, mismatched_links: 0, unknown_evidence_links: 1, available_devices_missing_from_topology: 0 },
     } as never;
     if (request.url?.endsWith("/context")) return {
       observations: [{ observation_id: "o1", source_id: "inspection-1", observed_at: "2026-09-06T00:00:00Z", completeness: "complete", target_ids: ["c1"] }],
@@ -246,8 +243,8 @@ test("topology compare modal opens and emphasizes evidence-based unknown status"
   const matches = await screen.findAllByText(/数据中心拓扑/);
   expect(matches.length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole("button", { name: "拓扑比对" }));
-  expect(await screen.findByText(/拓扑比对报告/)).toBeInTheDocument();
-  expect(screen.getByText(/无巡检运行证据支持时，链路状态保持为未知（unknown），不会误报为物理故障或配置错误。/)).toBeInTheDocument();
+  expect(await screen.findByRole("dialog", { name: "拓扑比对报告" })).toBeInTheDocument();
+  expect(screen.getByText(/无两端接口邻接证据，保持未知状态/)).toBeInTheDocument();
   expect(screen.getByText("暂无证据链路")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "关闭报告" }));
   await waitFor(() => expect(screen.queryByText(/拓扑比对报告/)).not.toBeInTheDocument());

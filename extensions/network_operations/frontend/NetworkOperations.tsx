@@ -436,7 +436,7 @@ export default function NetworkOperations() {
     setEditor("connection");
   };
 
-  return <div className="network-admin">
+  return <div className={`network-admin${view === "topology" ? " is-topology" : ""}`}>
     <PageHeader title="网络设备与 Skill" subtitle="集中管理设备连接，按 Skill 授权读取、巡检与配置能力。"><Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。", false))} disabled={busy}>刷新</Button></PageHeader>
     <div className="network-tabs" role="tablist">{VIEWS.map(([key, label, ViewIcon]) => <TabButton key={key} className="net-tab" testId={`network-tab-${key}`} icon={ViewIcon} label={label} count={viewCounts[key]} active={view === key} onClick={() => { setView(key); setQuery(""); }} />)}</div>
     {notice.text ? <div role="status" className={`network-notice${notice.ok ? " kind-ok" : ""}`}>{notice.text}</div> : null}

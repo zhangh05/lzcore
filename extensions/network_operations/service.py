@@ -2320,6 +2320,52 @@ def delete_topology(workspace_id: str, topology_id: str) -> bool:
     return _store(workspace_id).delete("topologies", topology_id)
 
 
+def topology_state(workspace_id: str, topology_id: str, *, scope_device_ids: set[str] | None = None, scope_connection_ids: set[str] | None = None) -> dict[str, Any]:
+    """Project recorded facts for both canvas and model; never probe on a UI refresh.
+
+    Connection tests describe management access at a point in time. Inspection
+    completion and a manually drawn link do not establish device/link health.
+    """
+    topo = get_topology(workspace_id, topology_id)
+    if not topo:
+        raise ValueError("topology_not_found")
+    device_ids = {n["device_id"] for n in topo.get("nodes", [])}
+    if scope_device_ids is not None:
+        device_ids &= scope_device_ids
+    devices = {d["device_id"]: d for d in list_devices(workspace_id) if d["device_id"] in device_ids}
+    connections = [c for c in list_connections(workspace_id) if c.get("device_id") in device_ids
+                   and (scope_connection_ids is None or c.get("connection_id") in scope_connection_ids)]
+    observations = list_observations(workspace_id, limit=500)
+    nodes = []
+    for device_id in sorted(device_ids):
+        device_connections = [c for c in connections if c.get("device_id") == device_id]
+        ids = {c["connection_id"] for c in device_connections}
+        observation = next((
+            o for o in observations
+            if ids.intersection(o.get("target_ids") or []) or device_id in (o.get("target_ids") or [])
+        ), None)
+        device = devices.get(device_id, {})
+        nodes.append({
+            "device_id": device_id,
+            "name": device.get("name", device_id),
+            "device_type": device.get("device_type", ""),
+            "vendor": device.get("vendor", ""),
+            "host": device.get("host", ""),
+            "connections": [{key: c.get(key, "") for key in (
+                "connection_id", "protocol", "port", "status", "verified", "last_tested_at",
+            )} for c in device_connections],
+            "observation": {key: observation.get(key, "") for key in (
+                "observation_id", "source_id", "artifact_id", "observed_at", "completeness",
+            )} if observation else None,
+        })
+    return {"topology_id": topology_id, "version": topo["version"], "refreshed_at": now_iso(),
+            "source": "recorded_facts", "nodes": nodes,
+            "links": [{"link_id": link["link_id"], "observed_status": "unknown",
+                       "recorded_status": link.get("status", "unknown"), "source": link.get("source", "manual")}
+                      for link in topo.get("links", [])
+                      if link["source_device_id"] in device_ids and link["target_device_id"] in device_ids]}
+
+
 def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: set[str] | None = None) -> dict[str, Any]:
     topo = get_topology(workspace_id, topology_id)
     if not topo:

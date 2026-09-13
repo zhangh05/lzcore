@@ -28,6 +28,7 @@ export {
   Copy as IconCopy,
   Cube as IconBox,
   Eye as IconEye,
+  ArrowsOut as IconExpand,
   FileText as IconDocument,
   FloppyDisk as IconSave,
   FolderOpen as IconFolder,
