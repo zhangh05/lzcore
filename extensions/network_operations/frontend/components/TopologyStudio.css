@@ -48,6 +48,11 @@
 .studio-more > div { position: absolute; right: 0; top: 34px; display: grid; gap: 4px; padding: 8px; width: 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #0002; z-index: 20; }
 .topology-studio .topology-canvas-viewport { height: auto; min-height: 0; flex: 1 1 0; background: #f7fafb; }
 .topology-studio .topology-canvas-viewport.mode-connect { cursor: crosshair; }
+.topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: #f1f5f9; background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px); background-size: 24px 24px; background-position: 0 0; }
+.topology-studio .netops-canvas-wrap.grid-on { background-image: linear-gradient(#cbd5e1 1px, transparent 1px), linear-gradient(90deg, #cbd5e1 1px, transparent 1px); background-size: 48px 48px; }
+.topology-studio .netops-cytoscape { position: absolute; inset: 0; width: 100%; height: 100%; outline: 0; }
+.topology-studio .netops-canvas-accessibility { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.topology-studio .netops-reactflow-compat { display: none; }
 .studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: #6b8190; pointer-events: none; }
 .studio-canvas-caption strong { color: #2c4555; font-weight: 650; }
 .canvas-mode-hint { margin-left: 8px; color: #6f8795; }

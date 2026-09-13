@@ -4,32 +4,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
   type FormEvent,
 } from "react";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  Handle,
-  Position,
-  BaseEdge,
-  EdgeLabelRenderer,
-  getSmoothStepPath,
-  ConnectionMode,
-  applyNodeChanges,
-  applyEdgeChanges,
-  type Node,
-  type Edge,
-  type Connection as FlowConnection,
-  type NodeProps,
-  type EdgeProps,
-  type NodeChange,
-  type EdgeChange,
-  type ReactFlowInstance,
-  BackgroundVariant,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 // 图标全部走平台统一出口 components/Icon.tsx —— 这是全站唯一的 Phosphor
 // 门面，直接 import "@phosphor-icons/react" 会让扩展页与平台图标语义脱钩。
 import {
@@ -62,8 +39,10 @@ import {
 import { apiRequest } from "../../../../frontend/src/api/client";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
-import { layoutTopology, linkHandles } from "./topologyLayout";
+import { layoutTopology } from "./topologyLayout";
 import { TopologyAgentPanel, type CanvasSelection } from "./TopologyAgentPanel";
+import NetOpsCanvas from "./NetOpsCanvas";
+import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import "./TopologyStudio.css";
 
 export type Device = {
@@ -177,6 +156,8 @@ const base = "/extensions/network.operations";
  * 类型 → 图标映射，用户从列表切到画布时不会认错设备。
  */
 export function DeviceTypeIcon({ deviceType, size = 16 }: { deviceType: string; size?: number }) {
+  const netOpsIcon = netOpsIconForDeviceType(deviceType);
+  if (netOpsIcon) return <img src={netOpsIcon} alt="" width={size} height={size} style={{ objectFit: "contain" }} />;
   const type = deviceType?.toLowerCase() || "";
   if (type.includes("router")) return <IconSplit size={size} />;
   if (type === "l3_switch" || type.includes("layer3")) return <IconLayers size={size} />;
@@ -187,203 +168,6 @@ export function DeviceTypeIcon({ deviceType, size = 16 }: { deviceType: string; 
   if (type.includes("cloud")) return <IconCloud size={size} />;
   return <IconBox size={size} />;
 }
-
-type DeviceNodeData = {
-  deviceId: string;
-  name: string;
-  host: string;
-  vendor: string;
-  deviceType: string;
-  displayName?: string;
-  labels?: string[];
-  groupName?: string;
-  hasConnection?: boolean;
-  connectionStatus?: string;
-  lastTestedAt?: string;
-  selectedContext?: boolean;
-  dimmed?: boolean;
-};
-
-function DeviceNodeComponent({ data, selected }: NodeProps<Node<DeviceNodeData>>) {
-  const { name, host, vendor, deviceType, displayName, labels, groupName } = data;
-  const testAge = data.lastTestedAt ? Date.now() - Date.parse(data.lastTestedAt) : Infinity;
-  const recentAccess = testAge >= 0 && testAge < 5 * 60 * 1000;
-
-  return (
-    <div className={`topology-device-node ${selected || data.selectedContext ? "is-selected" : ""} ${data.dimmed ? "is-dimmed" : ""}`} data-testid={`topo-node-${data.deviceId}`}>
-      <Handle type="source" position={Position.Top} id="top" isConnectable />
-      <Handle type="source" position={Position.Right} id="right" isConnectable />
-      <Handle type="source" position={Position.Bottom} id="bottom" isConnectable />
-      <Handle type="source" position={Position.Left} id="left" isConnectable />
-
-      <div className="device-node-body">
-        <div className={`device-node-icon type-${deviceType.toLowerCase()}`}>
-          <DeviceTypeIcon deviceType={deviceType} size={38} />
-        </div>
-        <div className="device-node-main">
-          <div className="device-node-title-row">
-            <strong className="device-node-name" title={name}>
-              {displayName || name}
-            </strong>
-            <span className={`vendor-badge vendor-${vendor.toLowerCase()}`}>
-              {vendor.toUpperCase()}
-            </span>
-          </div>
-          <div className="device-node-meta">
-            <span className="device-node-host">{host}</span>
-            <span className="device-node-type">{deviceType === "switch" ? "交换机" : deviceType === "router" ? "路由器" : deviceType}</span>
-          </div>
-        </div>
-      </div>
-
-      <span className={`node-access-dot ${recentAccess ? data.connectionStatus : "unknown"}`} title={data.lastTestedAt ? `上次管理连接：${data.connectionStatus} · ${formatObservedTime(data.lastTestedAt)}${recentAccess ? "" : "（历史记录）"}` : "管理连接尚无测试时间"} />
-
-      {(labels?.length || groupName) ? (
-        <div className="device-node-footer">
-          {groupName && <span className="device-node-group-chip">{groupName}</span>}
-          {labels?.map((label: string) => (
-            <span key={label} className="device-node-label-chip">
-              {label}
-            </span>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-type GroupNodeData = {
-  groupId: string;
-  name: string;
-  kind: "as" | "region" | "datacenter" | "tenant" | "custom";
-  width: number;
-  height: number;
-};
-
-function GroupNodeComponent({ data, selected }: NodeProps<Node<GroupNodeData>>) {
-  const kindLabels: Record<string, string> = {
-    as: "自治系统 (AS)",
-    region: "区域",
-    datacenter: "数据中心",
-    tenant: "租户",
-    custom: "自定义分组",
-  };
-
-  return (
-    <div
-      className={`topology-group-node ${selected ? "is-selected" : ""}`}
-      style={{ width: data.width || 360, height: data.height || 260 }}
-      data-testid={`topo-group-${data.groupId}`}
-    >
-      <div className="group-node-header">
-        <span className="group-kind-badge">{kindLabels[data.kind] || data.kind}</span>
-        <strong>{data.name}</strong>
-      </div>
-    </div>
-  );
-}
-
-function TopologyEdgeComponent({
-  id: _id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  style = {},
-  markerEnd,
-  data,
-  selected,
-}: EdgeProps) {
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 8,
-  });
-
-  const kind = (data?.kind as string) || "physical";
-  const srcIf = data?.source_interface as string;
-  const tgtIf = data?.target_interface as string;
-  const label = data?.label as string;
-
-  // Diagram annotations are not telemetry. Highlight selection, never infer UP.
-  const strokeColor = selected || data?.selectedContext ? "var(--accent)" : "var(--topology-link, #8294a6)";
-
-  const edgeStyle = {
-    ...style,
-    stroke: strokeColor,
-    strokeWidth: selected || data?.selectedContext ? 2.5 : 1.6,
-    opacity: data?.dimmed ? 0.2 : 1,
-    strokeDasharray: kind === "logical" ? "6 4" : undefined,
-  };
-
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
-  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-  const offset = 44;
-  const srcBadgeX = sourceX + (dx / dist) * offset;
-  const srcBadgeY = sourceY + (dy / dist) * offset;
-  const tgtBadgeX = targetX - (dx / dist) * offset;
-  const tgtBadgeY = targetY - (dy / dist) * offset;
-
-  return (
-    <>
-      <BaseEdge path={edgePath} markerEnd={markerEnd} style={edgeStyle} />
-      <EdgeLabelRenderer>
-        {srcIf && (
-          <div
-            style={{
-              position: "absolute",
-              transform: `translate(-50%, -50%) translate(${srcBadgeX}px,${srcBadgeY}px)`,
-              pointerEvents: "none",
-            }}
-            className="edge-if-badge"
-          >
-            {srcIf}
-          </div>
-        )}
-        {tgtIf && (
-          <div
-            style={{
-              position: "absolute",
-              transform: `translate(-50%, -50%) translate(${tgtBadgeX}px,${tgtBadgeY}px)`,
-              pointerEvents: "none",
-            }}
-            className="edge-if-badge"
-          >
-            {tgtIf}
-          </div>
-        )}
-        {label && (
-          <div
-            style={{
-              position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: "none",
-            }}
-            className="edge-center-badge"
-          >
-            {label}
-          </div>
-        )}
-      </EdgeLabelRenderer>
-    </>
-  );
-}
-
-const nodeTypes = {
-  deviceNode: DeviceNodeComponent,
-  groupNode: GroupNodeComponent,
-};
-
-const edgeTypes = {
-  topologyEdge: TopologyEdgeComponent,
-};
 
 interface TopologyWorkspaceProps {
   workspaceId: string;
@@ -408,7 +192,6 @@ type SelectedElement =
 export default function TopologyWorkspace({
   workspaceId,
   devices,
-  connections,
   regions,
   skills,
   topologies,
@@ -462,12 +245,12 @@ export default function TopologyWorkspace({
   const [focusMode, setFocusMode] = useState(false);
   const [canvasMode, setCanvasMode] = useState<"select" | "connect">("select");
   const [gridEnabled, setGridEnabled] = useState(true);
+  const [canvasSelectedDeviceIds, setCanvasSelectedDeviceIds] = useState<string[]>([]);
   const [layer, setLayer] = useState<"all" | "physical" | "logical">("all");
   const [showInterfaces, setShowInterfaces] = useState(true);
   const [topologyState, setTopologyState] = useState<TopologyState | null>(null);
   const [stateError, setStateError] = useState("");
   const [layoutBusy, setLayoutBusy] = useState(false);
-  const flowRef = useRef<ReactFlowInstance | null>(null);
   const activeTopologyRef = useRef(activeTopology);
   activeTopologyRef.current = activeTopology;
   const refreshFacts = useCallback(async () => {
@@ -666,130 +449,6 @@ export default function TopologyWorkspace({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleUndo, handleRedo]);
 
-  // React Flow Nodes
-  const flowNodes: Node[] = useMemo(() => {
-    if (!activeTopology) return [];
-
-    const groupMap = new Map((activeTopology.groups || []).map((g) => [g.group_id, g.name]));
-
-    const gNodes: Node[] = (activeTopology.groups || []).map((g) => ({
-      id: `group-${g.group_id}`,
-      type: "groupNode",
-      position: { x: g.x, y: g.y },
-      data: {
-        groupId: g.group_id,
-        name: g.name,
-        kind: g.kind,
-        width: g.width,
-        height: g.height,
-      },
-      selectable: true,
-      draggable: true,
-      style: { width: g.width, height: g.height },
-      zIndex: -1,
-    }));
-
-    const dNodes: Node[] = (activeTopology.nodes || []).map((n) => {
-      const dev = byDevice.get(n.device_id);
-      const conn = connections.find((c) => c.device_id === n.device_id);
-      return {
-        id: n.device_id,
-        type: "deviceNode",
-        position: { x: n.x, y: n.y },
-        data: {
-          deviceId: n.device_id,
-          name: dev?.name || n.device_id,
-          host: dev?.host || "未配置 IP",
-          vendor: dev?.vendor || "generic",
-          deviceType: dev?.device_type || "switch",
-          displayName: n.display_name,
-          labels: n.labels,
-          groupName: n.group_id ? groupMap.get(n.group_id) : undefined,
-          hasConnection: !!conn,
-          connectionStatus: conn?.status,
-          lastTestedAt: topologyState?.nodes.find((node) => node.device_id === n.device_id)?.connections[0]?.last_tested_at || conn?.last_tested_at,
-          selectedContext: canvasSelection.device_ids.includes(n.device_id),
-          dimmed: !!deviceSearch && !`${dev?.name} ${dev?.host}`.toLowerCase().includes(deviceSearch.toLowerCase()),
-        },
-        selectable: true,
-        draggable: true,
-        // React Flow's fitView uses its measured node box. Declare the same
-        // geometry as the persisted layout contract rather than relying on a
-        // CSS-only custom node to be observed after a re-render.
-        style: { width: 160, height: 130 },
-        zIndex: 1,
-      };
-    });
-
-    return [...gNodes, ...dNodes];
-  }, [activeTopology, byDevice, connections, topologyState, canvasSelection, deviceSearch]);
-
-  // React Flow Edges
-  const flowEdges: Edge[] = useMemo(() => {
-    if (!activeTopology) return [];
-    const nodeMap = new Map(activeTopology.nodes.map((node) => [node.device_id, node]));
-    return (activeTopology.links || []).filter((link) => layer === "all" || link.kind === layer).map((l) => ({
-      id: l.link_id,
-      source: l.source_device_id,
-      target: l.target_device_id,
-      ...linkHandles(nodeMap.get(l.source_device_id) || { x: 0, y: 0 }, nodeMap.get(l.target_device_id) || { x: 0, y: 0 }),
-      type: "topologyEdge",
-      data: {
-        link_id: l.link_id,
-        source_interface: showInterfaces ? l.source_interface : "",
-        target_interface: showInterfaces ? l.target_interface : "",
-        kind: l.kind,
-        label: l.label,
-        status: l.status,
-        metadata: l.metadata,
-        source: l.source,
-        evidence_refs: l.evidence_refs,
-        selectedContext: canvasSelection.link_ids.includes(l.link_id),
-      },
-      selectable: true,
-    }));
-  }, [activeTopology, layer, showInterfaces, canvasSelection]);
-
-  const [nodes, setNodes] = useState<Node[]>(flowNodes);
-  const [edges, setEdges] = useState<Edge[]>(flowEdges);
-
-  useEffect(() => {
-    setNodes(flowNodes);
-  }, [flowNodes]);
-
-  useEffect(() => {
-    setEdges(flowEdges);
-  }, [flowEdges]);
-
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((nds) => applyNodeChanges(changes, nds));
-  }, []);
-
-  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
-    setEdges((eds) => applyEdgeChanges(changes, eds));
-  }, []);
-
-  // Node Drag Stop -> update model
-  const onNodeDragStop = useCallback(
-    (_: MouseEvent | TouchEvent, node: Node) => {
-      if (!activeTopology) return;
-
-      if (node.id.startsWith("group-")) {
-        const groupId = (node.data as GroupNodeData).groupId;
-        const updatedGroups = activeTopology.groups.map((g) =>
-          g.group_id === groupId ? { ...g, x: Math.round(node.position.x), y: Math.round(node.position.y) } : g
-        );
-        pushState({ ...activeTopology, groups: updatedGroups });
-      } else {
-        const updatedNodes = activeTopology.nodes.map((n) =>
-          n.device_id === node.id ? { ...n, x: Math.round(node.position.x), y: Math.round(node.position.y) } : n
-        );
-        pushState({ ...activeTopology, nodes: updatedNodes });
-      }
-    },
-    [activeTopology, pushState]
-  );
-
   const openLinkComposer = useCallback(
     (sourceId?: string, targetId?: string) => {
       const availableIds = activeTopology?.nodes.map((node) => node.device_id) || [];
@@ -807,20 +466,6 @@ export default function TopologyWorkspace({
       resetLinkForm();
     },
     [activeTopology, resetLinkForm, setNotice]
-  );
-
-  // Connect two nodes
-  const onConnect = useCallback(
-    (params: FlowConnection) => {
-      if (!params.source || !params.target) return;
-      if (params.source === params.target) {
-        setNotice("不能在同一设备节点建立自环链路", false);
-        return;
-      }
-      openLinkComposer(params.source, params.target);
-      setCanvasMode("select");
-    },
-    [openLinkComposer, setNotice]
   );
 
   // Save new link from pending connection
@@ -936,54 +581,6 @@ export default function TopologyWorkspace({
     [activeTopology, pushState, setNotice]
   );
 
-  // Keyboard delete handler in React Flow
-  const onNodesDelete = useCallback(
-    (deletedNodes: Node[]) => {
-      if (!activeTopology) return;
-      let nextNodes = [...activeTopology.nodes];
-      let nextLinks = [...activeTopology.links];
-      let nextGroups = [...activeTopology.groups];
-
-      for (const node of deletedNodes) {
-        if (node.id.startsWith("group-")) {
-          const gId = (node.data as GroupNodeData).groupId;
-          nextGroups = nextGroups.filter((g) => g.group_id !== gId);
-          nextNodes = nextNodes.map((n) => (n.group_id === gId ? { ...n, group_id: undefined } : n));
-        } else {
-          nextNodes = nextNodes.filter((n) => n.device_id !== node.id);
-          nextLinks = nextLinks.filter(
-            (l) => l.source_device_id !== node.id && l.target_device_id !== node.id
-          );
-        }
-      }
-
-      pushState({
-        ...activeTopology,
-        nodes: nextNodes,
-        links: nextLinks,
-        groups: nextGroups,
-      });
-      setSelectedElement(null);
-      setNotice("已从拓扑移除所选项，设备实体不受影响");
-    },
-    [activeTopology, pushState, setNotice]
-  );
-
-  const onEdgesDelete = useCallback(
-    (deletedEdges: Edge[]) => {
-      if (!activeTopology) return;
-      const edgeIds = new Set(deletedEdges.map((e) => e.id));
-      const nextLinks = activeTopology.links.filter((l) => !edgeIds.has(l.link_id));
-      pushState({
-        ...activeTopology,
-        links: nextLinks,
-      });
-      setSelectedElement(null);
-      setNotice("链路已删除");
-    },
-    [activeTopology, pushState, setNotice]
-  );
-
   // Add device to canvas from palette
   const handleAddDeviceToCanvas = (dev: Device, position?: { x: number; y: number }) => {
     if (!activeTopology) return;
@@ -1011,23 +608,30 @@ export default function TopologyWorkspace({
     setNotice(`设备“${dev.name}”已加入画布`);
   };
 
-  const handlePaletteDragStart = useCallback((event: React.DragEvent<HTMLDivElement>, deviceId: string) => {
+  const handlePaletteDragStart = useCallback((event: DragEvent<HTMLDivElement>, deviceId: string) => {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-lzcore-device-id", deviceId);
     event.dataTransfer.setData("text/plain", deviceId);
   }, []);
 
-  const handleCanvasDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const deviceId = event.dataTransfer.getData("application/x-lzcore-device-id") || event.dataTransfer.getData("text/plain");
+  const handleNetOpsDrop = useCallback((deviceId: string, position: { x: number; y: number }) => {
     const device = devices.find((item) => item.device_id === deviceId);
-    if (!device || !flowRef.current) return;
-    handleAddDeviceToCanvas(device, flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+    if (!device) return;
+    handleAddDeviceToCanvas(device, position);
   }, [devices, handleAddDeviceToCanvas]);
+
+  const handleNetOpsMove = useCallback((positions: Array<{ device_id: string; x: number; y: number }>) => {
+    if (!activeTopology || !positions.length) return;
+    const byId = new Map(positions.map((position) => [position.device_id, position]));
+    pushState({ ...activeTopology, nodes: activeTopology.nodes.map((node) => {
+      const position = byId.get(node.device_id);
+      return position ? { ...node, x: Math.round(position.x), y: Math.round(position.y) } : node;
+    }) });
+  }, [activeTopology, pushState]);
 
   const handleAlignSelectedNodes = useCallback((direction: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
     if (!activeTopology) return;
-    const selectedIds = new Set(nodes.filter((node) => node.selected && !node.id.startsWith("group-")).map((node) => node.id));
+    const selectedIds = new Set(canvasSelectedDeviceIds);
     const selected = activeTopology.nodes.filter((node) => selectedIds.has(node.device_id));
     if (selected.length < 2) {
       setNotice("请先框选至少两台设备，再执行对齐", false);
@@ -1044,7 +648,7 @@ export default function TopologyWorkspace({
         : node),
     });
     setNotice(`已对齐 ${selected.length} 台设备`);
-  }, [activeTopology, nodes, pushState, setNotice]);
+  }, [activeTopology, canvasSelectedDeviceIds, pushState, setNotice]);
 
   const layoutTopologyNodes = useCallback(
     (topology: Topology, nodesToLayout = topology.nodes) => {
@@ -1089,7 +693,6 @@ export default function TopologyWorkspace({
       const result = await layoutTopology(activeTopology);
       if (activeTopologyRef.current !== activeTopology) { setNotice("图纸已变化，请重新排布", false); return; }
       pushState(result);
-      window.setTimeout(() => { void flowRef.current?.fitView({ padding: 0.22, duration: 300, maxZoom: 1.1 }); }, 80);
       setNotice("已按连接关系排布；已有分组随成员调整");
     } catch { setNotice("自动排布失败，原图保持不变", false); }
     finally { setLayoutBusy(false); }
@@ -1432,8 +1035,8 @@ export default function TopologyWorkspace({
                     aria-label={`定位设备 ${dev.name}`}
                     draggable={!isPlaced}
                     onDragStart={(event) => handlePaletteDragStart(event, dev.device_id)}
-                    onClick={() => { if (isPlaced) { setSelectedElement({ type: "node", deviceId: dev.device_id }); void flowRef.current?.fitView({ nodes: [{ id: dev.device_id }], duration: 300, maxZoom: 1.2 }); } }}
-                    onKeyDown={(event) => { if (event.key === "Enter" && isPlaced) { setSelectedElement({ type: "node", deviceId: dev.device_id }); void flowRef.current?.fitView({ nodes: [{ id: dev.device_id }], duration: 300, maxZoom: 1.2 }); } }}
+                    onClick={() => { if (isPlaced) setSelectedElement({ type: "node", deviceId: dev.device_id }); }}
+                    onKeyDown={(event) => { if (event.key === "Enter" && isPlaced) setSelectedElement({ type: "node", deviceId: dev.device_id }); }}
                   >
                     <div className="palette-dev-icon">
                       <DeviceTypeIcon deviceType={dev.device_type} size={15} />
@@ -1625,8 +1228,8 @@ export default function TopologyWorkspace({
           </div>
         </div>
 
-        {/* ReactFlow Workspace */}
-        <div className={`topology-canvas-viewport mode-${canvasMode}`} onDragOver={(event) => event.preventDefault()} onDrop={handleCanvasDrop}>
+        {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
+        <div className={`topology-canvas-viewport mode-${canvasMode}`}>
           <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 台设备</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span><span className="canvas-mode-hint">{canvasMode === "connect" ? "从设备端口拖向另一台设备以连线" : "拖入左侧设备，或框选多个节点后对齐"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
@@ -1642,54 +1245,21 @@ export default function TopologyWorkspace({
               </div>
             </div>
           )}
-          <ReactFlow
-            onInit={(instance) => { flowRef.current = instance; }}
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onNodeDragStop={onNodeDragStop}
-            onConnect={onConnect}
-            onNodesDelete={onNodesDelete}
-            onEdgesDelete={onEdgesDelete}
-            onNodeClick={(_: React.MouseEvent, node: Node) => {
-              if (node.id.startsWith("group-")) {
-                setSelectedElement({ type: "group", groupId: (node.data as GroupNodeData).groupId });
-              } else {
-                setSelectedElement({ type: "node", deviceId: node.id });
-              }
-            }}
-            onEdgeClick={(_: React.MouseEvent, edge: Edge) => {
-              setSelectedElement({ type: "link", linkId: edge.id });
-            }}
-            onPaneClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            connectionMode={ConnectionMode.Loose}
-            nodesConnectable={canvasMode === "connect"}
-            nodesDraggable={canvasMode === "select"}
-            elementsSelectable={canvasMode === "select"}
-            selectionOnDrag={canvasMode === "select"}
-            panOnDrag={[1, 2]}
-            fitView
-            fitViewOptions={{ padding: 0.22, maxZoom: 1.1 }}
-            snapToGrid={gridEnabled}
-            snapGrid={[10, 10]}
-            minZoom={0.2}
-            maxZoom={2.5}
-            defaultEdgeOptions={{ type: "topologyEdge" }}
-          >
-            {gridEnabled && <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--line-2)" />}
-            <Controls showInteractive={false} position="bottom-left" />
-            <MiniMap
-              nodeStrokeColor="var(--line-3)"
-              nodeColor="var(--surface-2)"
-              nodeBorderRadius={4}
-              maskColor="var(--overlay)"
-              position="bottom-right"
-              className="topology-minimap-custom"
-            />
-          </ReactFlow>
+          <NetOpsCanvas
+            topology={activeTopology!}
+            devices={devices}
+            mode={canvasMode}
+            gridEnabled={gridEnabled}
+            layer={layer}
+            showInterfaces={showInterfaces}
+            onSelectNode={(deviceId) => setSelectedElement({ type: "node", deviceId })}
+            onSelectLink={(linkId) => setSelectedElement({ type: "link", linkId })}
+            onClearSelection={() => { setSelectedElement(null); setIsInspectorOpen(false); }}
+            onSelectionChange={setCanvasSelectedDeviceIds}
+            onMoveNodes={handleNetOpsMove}
+            onConnect={(source, target) => { openLinkComposer(source, target); setCanvasMode("select"); }}
+            onDropDevice={handleNetOpsDrop}
+          />
         </div>
         <footer className="studio-statusbar"><span>{stateError || (topologyState ? `记录同步 ${new Date(topologyState.refreshed_at).toLocaleTimeString("zh-CN", { hour12: false })}` : "正在读取设备记录…")}</span><span>链路颜色：图纸连接 · 管理访问状态见设备详情</span><button onClick={() => void refreshFacts()}><IconRefresh size={12} />刷新状态</button></footer>
       </main>
