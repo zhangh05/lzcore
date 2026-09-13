@@ -30,9 +30,9 @@ type Cy = {
   getElementById: (id: string) => { addClass: (className: string) => void; removeClass: (className: string) => void; length: number };
   nodes: (selector?: string) => { forEach: (callback: (node: CyNode) => void) => void; map: <T>(callback: (node: CyNode) => T) => T[]; length: number };
   on: (events: string, selectorOrCallback: string | ((event: CyEvent) => void), callback?: (event: CyEvent) => void) => void;
-  pan: () => { x: number; y: number };
+  pan: (position?: { x: number; y: number }) => { x: number; y: number };
   resize: () => void;
-  zoom: () => number;
+  zoom: (level?: number) => number;
   $: (selector: string) => { map: <T>(callback: (node: CyNode) => T) => T[]; length: number; forEach: (callback: (node: CyNode) => void) => void };
 };
 
@@ -71,6 +71,7 @@ export default function NetOpsCanvas(props: Props) {
   const connectingFromRef = useRef<string | null>(null);
   const initialTopologyIdRef = useRef<string | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   propsRef.current = props;
 
   useEffect(() => {
@@ -80,15 +81,15 @@ export default function NetOpsCanvas(props: Props) {
       const cy = window.cytoscape({
         container: hostRef.current,
         layout: { name: "preset" },
-        wheelSensitivity: 0.3,
+        wheelSensitivity: 0.22,
         userPanningEnabled: true,
         userWheelEnabled: true,
         minZoom: 0.15,
         maxZoom: 4,
         boxSelectionEnabled: true,
         style: [
-          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "4px", "font-size": 12, "font-weight": 500, color: "#374151", "text-wrap": "none", width: 80, height: 80, shape: "roundrectangle", "border-width": 3, "border-color": "data(color)", "background-color": "#ffffff", "background-image": "data(icon)", "background-fit": "cover", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
-          { selector: "edge", style: { width: 2, "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", label: "data(label)", "font-size": 10, color: "#374151", "text-background-color": "#f3f4f6", "text-background-opacity": 1, "text-background-padding": "2px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)" } },
+          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "7px", "font-size": 12, "font-weight": 600, color: "#26384a", "text-wrap": "ellipsis", "text-max-width": 128, "text-background-color": "#ffffff", "text-background-opacity": 0.88, "text-background-padding": "2px", width: 84, height: 84, shape: "roundrectangle", "border-width": 2, "border-color": "data(color)", "background-color": "#ffffff", "background-image": "data(icon)", "background-fit": "contain", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
+          { selector: "edge", style: { width: 2.5, "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", label: "data(label)", "font-size": 10, color: "#334155", "text-background-color": "#f8fafc", "text-background-opacity": 0.94, "text-background-padding": "3px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)" } },
           { selector: "node:selected", style: { "border-width": 3, "border-color": "#60a5fa" } },
           { selector: ".node-connecting", style: { "border-width": 3, "border-color": "#3b82f6" } },
           { selector: ".lz-group", style: { shape: "roundrectangle", label: "data(label)", "text-valign": "top", "text-halign": "left", "text-margin-x": 12, "text-margin-y": 10, color: "#475569", "font-size": 12, "font-weight": 600, width: "data(width)", height: "data(height)", "background-color": "#dbeafe", "background-opacity": 0.22, "border-color": "#93c5fd", "border-style": "dashed", "border-width": 1, "background-image": "none", "events": "no" } },
@@ -96,6 +97,8 @@ export default function NetOpsCanvas(props: Props) {
       });
       cyRef.current = cy;
       setRendererReady(true);
+      const syncViewport = () => setViewport({ ...cy.pan(), zoom: cy.zoom() });
+      cy.on("zoom pan", syncViewport);
       cy.on("tap", (event) => {
         const current = propsRef.current;
         if (event.target.isNode()) {
@@ -146,7 +149,9 @@ export default function NetOpsCanvas(props: Props) {
       ...props.topology.groups.map((group) => ({ group: "nodes", classes: "lz-group", data: { id: `group-${group.group_id}`, label: group.name, width: group.width, height: group.height }, position: { x: group.x + group.width / 2, y: group.y + group.height / 2 }, locked: true })),
       ...props.topology.nodes.map((node) => {
         const device = byDevice.get(node.device_id);
-        return { group: "nodes", data: { id: node.device_id, label: node.display_name || device?.name || node.device_id, color: "#10b981", icon: netOpsIconForDeviceType(device?.device_type || "switch") }, position: { x: node.x, y: node.y } };
+        const type = node.device_type || device?.device_type || "switch";
+        const color = node.manual ? "#64748b" : device?.vendor?.toLowerCase().includes("huawei") ? "#2563eb" : "#0f9d8c";
+        return { group: "nodes", classes: node.manual ? "manual-node" : "managed-node", data: { id: node.device_id, label: node.display_name || device?.name || node.device_id, color, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
       }),
       ...props.topology.links.filter((link) => props.layer === "all" || link.kind === props.layer).map((link) => ({ group: "edges", data: { id: link.link_id, source: link.source_device_id, target: link.target_device_id, label: link.label || "", srcPort: props.showInterfaces ? link.source_interface : "", tgtPort: props.showInterfaces ? link.target_interface : "", edgeColor: link.status === "down" ? "#ef4444" : link.status === "up" ? "#10b981" : "#64748b", edgeStyle: link.kind === "logical" ? "dashed" : "solid" } })),
     ];
@@ -156,7 +161,7 @@ export default function NetOpsCanvas(props: Props) {
     });
     if (initialTopologyIdRef.current !== props.topology.topology_id) {
       initialTopologyIdRef.current = props.topology.topology_id;
-      window.setTimeout(() => { cy.resize(); cy.fit(undefined, 80); }, 0);
+      window.setTimeout(() => { cy.resize(); cy.fit(undefined, 96); setViewport({ ...cy.pan(), zoom: cy.zoom() }); }, 0);
     }
   }, [rendererReady, props.topology, props.devices, props.layer, props.showInterfaces]);
 
@@ -176,11 +181,37 @@ export default function NetOpsCanvas(props: Props) {
     const rect = host.getBoundingClientRect();
     const pan = cy.pan();
     const zoom = cy.zoom();
-    props.onDropDevice(deviceId, { x: Math.round((event.clientX - rect.left - pan.x) / zoom), y: Math.round((event.clientY - rect.top - pan.y) / zoom) });
+    const x = (event.clientX - rect.left - pan.x) / zoom;
+    const y = (event.clientY - rect.top - pan.y) / zoom;
+    const snap = (value: number) => props.gridEnabled ? Math.round(value / 32) * 32 : Math.round(value);
+    props.onDropDevice(deviceId, { x: snap(x), y: snap(y) });
   };
 
-  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+  const updateZoom = (delta: number) => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const zoom = Math.min(4, Math.max(0.15, cy.zoom() + delta));
+    cy.zoom(zoom);
+    setViewport({ ...cy.pan(), zoom });
+  };
+  const fitCanvas = () => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.fit(undefined, 96);
+    setViewport({ ...cy.pan(), zoom: cy.zoom() });
+  };
+  const gridSize = Math.max(12, 32 * viewport.zoom);
+  const gridX = ((viewport.x % gridSize) + gridSize) % gridSize;
+  const gridY = ((viewport.y % gridSize) + gridSize) % gridSize;
+
+  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: `${gridX}px ${gridY}px` } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
+    <div className="netops-viewport-controls" aria-label="画布视图控制">
+      <button type="button" onClick={() => updateZoom(0.15)} aria-label="放大画布">+</button>
+      <button type="button" onClick={() => updateZoom(-0.15)} aria-label="缩小画布">−</button>
+      <button type="button" className="netops-zoom-readout" onClick={fitCanvas} title="适配全部节点">{Math.round(viewport.zoom * 100)}%</button>
+      <button type="button" onClick={fitCanvas} aria-label="适配画布">适配</button>
+    </div>
     <div className="netops-canvas-accessibility" aria-label="画布设备快捷选择">
       {props.topology.nodes.map((node) => <button key={node.device_id} type="button" data-testid={`topo-node-${node.device_id}`} onClick={() => props.onSelectNode(node.device_id)}>{node.display_name || node.device_id}</button>)}
     </div>

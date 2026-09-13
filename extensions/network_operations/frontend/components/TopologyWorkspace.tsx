@@ -88,6 +88,9 @@ export type TopologyNode = {
   device_id: string;
   x: number;
   y: number;
+  /** A diagram-only symbol; it never becomes a workspace execution target. */
+  manual?: boolean;
+  device_type?: string;
   display_name?: string;
   labels?: string[];
   group_id?: string;
@@ -238,10 +241,9 @@ export default function TopologyWorkspace({
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [showAgent, setShowAgent] = useState(false);
-  // The topology is an operational drawing surface.  Keep the device tray
-  // visible by default so the next action is always obvious: place one of the
-  // workspace devices or select one already on the canvas.
-  const [showLibrary, setShowLibrary] = useState(true);
+  // The board is primary. The tray opens intentionally instead of consuming
+  // canvas width for every user.
+  const [showLibrary, setShowLibrary] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [canvasMode, setCanvasMode] = useState<"select" | "connect">("select");
   const [gridEnabled, setGridEnabled] = useState(true);
@@ -270,10 +272,15 @@ export default function TopologyWorkspace({
   }, [selectedTopologyId, refreshFacts]);
   const canvasSelection: CanvasSelection = useMemo(() => {
     if (!activeTopology || !selectedElement) return { device_ids: [], link_ids: [], label: "整张拓扑" };
-    if (selectedElement.type === "node") return { device_ids: [selectedElement.deviceId], link_ids: [], label: devices.find((dev) => dev.device_id === selectedElement.deviceId)?.name || selectedElement.deviceId };
+    if (selectedElement.type === "node") {
+      const node = activeTopology.nodes.find((item) => item.device_id === selectedElement.deviceId);
+      if (node?.manual) return { device_ids: [], link_ids: [], label: `${node.display_name || "图形设备"}（仅图纸）` };
+      return { device_ids: [selectedElement.deviceId], link_ids: [], label: devices.find((dev) => dev.device_id === selectedElement.deviceId)?.name || selectedElement.deviceId };
+    }
     if (selectedElement.type === "link") {
       const link = activeTopology.links.find((item) => item.link_id === selectedElement.linkId);
-      return link ? { device_ids: [link.source_device_id, link.target_device_id], link_ids: [link.link_id], label: `${devices.find((dev) => dev.device_id === link.source_device_id)?.name || link.source_device_id} ↔ ${devices.find((dev) => dev.device_id === link.target_device_id)?.name || link.target_device_id}` } : { device_ids: [], link_ids: [], label: "整张拓扑" };
+      const operationalEndpointIds = link ? [link.source_device_id, link.target_device_id].filter((id) => !id.startsWith("manual_")) : [];
+      return link ? { device_ids: operationalEndpointIds, link_ids: [link.link_id], label: `${devices.find((dev) => dev.device_id === link.source_device_id)?.name || link.source_device_id} ↔ ${devices.find((dev) => dev.device_id === link.target_device_id)?.name || link.target_device_id}` } : { device_ids: [], link_ids: [], label: "整张拓扑" };
     }
     return { device_ids: activeTopology.nodes.filter((node) => node.group_id === selectedElement.groupId).map((node) => node.device_id), link_ids: [], label: activeTopology.groups.find((group) => group.group_id === selectedElement.groupId)?.name || "分组" };
   }, [activeTopology, selectedElement, devices]);
@@ -290,6 +297,9 @@ export default function TopologyWorkspace({
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
   const [groupKindInput, setGroupKindInput] = useState<"as" | "region" | "datacenter" | "tenant" | "custom">("datacenter");
+  const [showManualNodeModal, setShowManualNodeModal] = useState(false);
+  const [manualNodeName, setManualNodeName] = useState("");
+  const [manualNodeType, setManualNodeType] = useState("switch");
 
   const [pendingConnection, setPendingConnection] = useState<{
     source: string;
@@ -327,6 +337,7 @@ export default function TopologyWorkspace({
 
   const byDevice = useMemo(() => new Map(devices.map((d) => [d.device_id, d])), [devices]);
   const byRegion = useMemo(() => new Map(regions.map((r) => [r.region_id, r.name])), [regions]);
+  const nodeLabelById = useMemo(() => new Map((activeTopology?.nodes || []).map((node) => [node.device_id, node.display_name || byDevice.get(node.device_id)?.name || node.device_id])), [activeTopology?.nodes, byDevice]);
 
   useEffect(() => {
     if (selectedElement && !showAgent) setIsInspectorOpen(true);
@@ -503,12 +514,16 @@ export default function TopologyWorkspace({
   const handleRemoveNode = useCallback(
     async (deviceId: string) => {
       if (!activeTopology) return;
+      const node = activeTopology.nodes.find((item) => item.device_id === deviceId);
       const dev = byDevice.get(deviceId);
-      const devName = dev?.name || deviceId;
+      const isManual = Boolean(node?.manual);
+      const devName = isManual ? (node?.display_name || deviceId) : (dev?.name || deviceId);
 
       const confirmed = await confirm({
         title: "从拓扑中移除节点",
-        body: `将从拓扑“${activeTopology.name}”中移除节点“${devName}”及关联链路。\n工作区的“${devName}”设备实体及管理连接将被完整保留，不受任何影响。`,
+        body: isManual
+          ? `将从拓扑“${activeTopology.name}”中删除图形设备“${devName}”及关联链路。它不是工作区设备，不影响任何管理连接。`
+          : `将从拓扑“${activeTopology.name}”中移除节点“${devName}”及关联链路。\n工作区的“${devName}”设备实体及管理连接将被完整保留，不受任何影响。`,
         confirmLabel: "从拓扑移除",
         destructive: true,
       });
@@ -525,7 +540,7 @@ export default function TopologyWorkspace({
         links: nextLinks,
       });
       setSelectedElement(null);
-      setNotice(`已从拓扑移除节点“${devName}”，工作区设备实体完整保留`);
+      setNotice(isManual ? `已删除图形设备“${devName}”` : `已从拓扑移除节点“${devName}”，工作区设备实体完整保留`);
     },
     [activeTopology, byDevice, pushState, setNotice]
   );
@@ -607,6 +622,26 @@ export default function TopologyWorkspace({
     });
     setNotice(`设备“${dev.name}”已加入画布`);
   };
+
+  const handleAddManualNode = useCallback((event: FormEvent) => {
+    event.preventDefault();
+    if (!activeTopology) return;
+    const name = manualNodeName.trim();
+    if (!name) return;
+    const nodeCount = activeTopology.nodes.length;
+    const node: TopologyNode = {
+      device_id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      manual: true,
+      device_type: manualNodeType,
+      display_name: name,
+      x: 160 + (nodeCount % 4) * 200,
+      y: 140 + Math.floor(nodeCount / 4) * 160,
+    };
+    pushState({ ...activeTopology, nodes: [...activeTopology.nodes, node] });
+    setShowManualNodeModal(false);
+    setManualNodeName("");
+    setNotice(`已在画布创建图形设备“${name}”。它不会成为可操作的工作区设备。`);
+  }, [activeTopology, manualNodeName, manualNodeType, pushState, setNotice]);
 
   const handlePaletteDragStart = useCallback((event: DragEvent<HTMLDivElement>, deviceId: string) => {
     event.dataTransfer.effectAllowed = "move";
@@ -1180,6 +1215,13 @@ export default function TopologyWorkspace({
             </Button>
             <Button
               size="sm"
+              icon={<IconPlus size={13} />}
+              onClick={() => { setManualNodeName(""); setManualNodeType("switch"); setShowManualNodeModal(true); }}
+            >
+              图形设备
+            </Button>
+            <Button
+              size="sm"
               icon={<IconGrid size={13} />}
               onClick={() => void handleAutoLayout()}
               disabled={layoutBusy || (activeTopology?.nodes?.length || 0) < 2}
@@ -1230,7 +1272,7 @@ export default function TopologyWorkspace({
 
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
         <div className={`topology-canvas-viewport mode-${canvasMode}`}>
-          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 台设备</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span><span className="canvas-mode-hint">{canvasMode === "connect" ? "从设备端口拖向另一台设备以连线" : "拖入左侧设备，或框选多个节点后对齐"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
+          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span><span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : "拖动节点，滚轮缩放，空白处拖动平移"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -1271,13 +1313,16 @@ export default function TopologyWorkspace({
         {selectedElement?.type === "node" && selectedNode ? (
           <div className="inspector-panel">
             <div className="inspector-header">
-              <h4>{selectedNodeDevice?.name || "设备详情"}</h4>
+              <h4>{selectedNode.display_name || selectedNodeDevice?.name || (selectedNode.manual ? "图形设备" : "设备详情")}</h4>
               <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起节点详情">
                 <IconClose size={13} />
               </Button>
             </div>
 
-            <div className="inspector-section studio-device-status"><span className="inspector-label">管理访问与观察记录</span>{(topologyState?.nodes.find((node) => node.device_id === selectedNode.device_id)?.connections || []).map((connection) => <div key={connection.connection_id}><strong>{connection.protocol.toUpperCase()} : {connection.port}</strong><span>{connection.last_tested_at ? `${connection.verified ? "上次验证成功" : "上次验证未通过"} · ${formatObservedTime(connection.last_tested_at)}` : "尚无连接测试记录"}</span></div>)}<p>最近采集：{formatObservedTime(topologyState?.nodes.find((node) => node.device_id === selectedNode.device_id)?.observation?.observed_at)}</p><Button variant="primary" icon={<IconSparkle size={14} />} onClick={() => { setShowAgent(true); setIsInspectorOpen(false); }}>围绕此设备对话</Button></div>
+            {selectedNode.manual ? (
+              <div className="inspector-section"><span className="inspector-label">图形设备</span><div className="inspector-entity-card"><strong>{selectedNode.device_type || "switch"}</strong><div className="entity-card-note">此节点仅属于当前图纸，不会创建设备连接、产生巡检记录或成为 Agent 操作对象。</div></div></div>
+            ) : (
+              <><div className="inspector-section studio-device-status"><span className="inspector-label">管理访问与观察记录</span>{(topologyState?.nodes.find((node) => node.device_id === selectedNode.device_id)?.connections || []).map((connection) => <div key={connection.connection_id}><strong>{connection.protocol.toUpperCase()} : {connection.port}</strong><span>{connection.last_tested_at ? `${connection.verified ? "上次验证成功" : "上次验证未通过"} · ${formatObservedTime(connection.last_tested_at)}` : "尚无连接测试记录"}</span></div>)}<p>最近采集：{formatObservedTime(topologyState?.nodes.find((node) => node.device_id === selectedNode.device_id)?.observation?.observed_at)}</p><Button variant="primary" icon={<IconSparkle size={14} />} onClick={() => { setShowAgent(true); setIsInspectorOpen(false); }}>围绕此设备对话</Button></div>
 
             <div className="inspector-section">
               <span className="inspector-label">关联设备实体</span>
@@ -1297,7 +1342,8 @@ export default function TopologyWorkspace({
                   从拓扑中移除仅解除拓扑引用，不会删除此设备实体或连接。
                 </div>
               </div>
-            </div>
+            </div></>
+            )}
 
             <div className="inspector-section">
               <label className="inspector-field">
@@ -1373,7 +1419,7 @@ export default function TopologyWorkspace({
                       l.source_device_id === selectedNode.device_id
                         ? l.target_device_id
                         : l.source_device_id;
-                    const otherName = byDevice.get(otherId)?.name || otherId;
+                    const otherName = nodeLabelById.get(otherId) || otherId;
                     const isSrc = l.source_device_id === selectedNode.device_id;
                     return (
                       <div
@@ -1415,7 +1461,7 @@ export default function TopologyWorkspace({
               <div className="inspector-endpoints-card">
                 <div className="endpoint-col">
                   <small>源端</small>
-                  <strong>{byDevice.get(selectedLink.source_device_id)?.name || selectedLink.source_device_id}</strong>
+                  <strong>{nodeLabelById.get(selectedLink.source_device_id) || selectedLink.source_device_id}</strong>
                   <input
                     value={selectedLink.source_interface}
                     aria-label="源端接口"
@@ -1433,7 +1479,7 @@ export default function TopologyWorkspace({
                 <div className="endpoint-divider">↔</div>
                 <div className="endpoint-col">
                   <small>对端</small>
-                  <strong>{byDevice.get(selectedLink.target_device_id)?.name || selectedLink.target_device_id}</strong>
+                  <strong>{nodeLabelById.get(selectedLink.target_device_id) || selectedLink.target_device_id}</strong>
                   <input
                     value={selectedLink.target_interface}
                     aria-label="对端接口"
@@ -1763,7 +1809,7 @@ export default function TopologyWorkspace({
                 >
                   {(activeTopology?.nodes || []).map((node) => (
                     <option key={node.device_id} value={node.device_id}>
-                      {byDevice.get(node.device_id)?.name || node.device_id}
+                      {node.display_name || byDevice.get(node.device_id)?.name || node.device_id}
                     </option>
                   ))}
                 </select>
@@ -1790,7 +1836,7 @@ export default function TopologyWorkspace({
                     .filter((node) => node.device_id !== pendingConnection.source)
                     .map((node) => (
                       <option key={node.device_id} value={node.device_id}>
-                        {byDevice.get(node.device_id)?.name || node.device_id}
+                        {node.display_name || byDevice.get(node.device_id)?.name || node.device_id}
                       </option>
                     ))}
                 </select>
@@ -1862,6 +1908,20 @@ export default function TopologyWorkspace({
                 创建链路
               </Button>
             </div>
+          </form>
+        </dialog>
+      )}
+
+      {/* MODAL: Diagram-only node */}
+      {showManualNodeModal && (
+        <dialog open className="network-dialog-modal" aria-label="新建图形设备">
+          <form onSubmit={handleAddManualNode} className="network-panel modal-panel">
+            <div className="modal-header"><div><h3>新建图形设备</h3><p>只用于制图，不创建工作区设备，也不会被 Agent 操作。</p></div><Button size="sm" type="button" onClick={() => setShowManualNodeModal(false)}><IconClose size={14} /></Button></div>
+            <div className="form-grid">
+              <label className="full-field">显示名称<input required autoFocus placeholder="如：Internet、核心交换机、第三方系统" value={manualNodeName} onChange={(event) => setManualNodeName(event.target.value)} /></label>
+              <label className="full-field">图标类型<select value={manualNodeType} onChange={(event) => setManualNodeType(event.target.value)}><option value="router">路由器</option><option value="switch">交换机</option><option value="firewall">防火墙</option><option value="server">服务器</option><option value="cloud">云 / Internet</option><option value="wireless">无线 AP</option></select></label>
+            </div>
+            <div className="modal-actions"><Button type="button" onClick={() => setShowManualNodeModal(false)}>取消</Button><Button variant="primary" type="submit">放入画布</Button></div>
           </form>
         </dialog>
       )}

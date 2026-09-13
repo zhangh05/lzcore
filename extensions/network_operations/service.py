@@ -2162,17 +2162,24 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("nodes must be a list")
 
     normalized_nodes: list[dict[str, Any]] = []
+    # ``device_id`` remains the graph endpoint for backwards compatibility,
+    # but a canvas may also contain a user-created diagram object.  A manual
+    # object is deliberately *not* a workspace device: it has no management
+    # connection and must never become an execution target.
     seen_devices: set[str] = set()
     for raw in raw_nodes:
         if not isinstance(raw, dict):
             continue
         device_id = str(raw.get("device_id") or "").strip()
-        if not device_id or device_id not in workspace_devices:
+        manual = bool(raw.get("manual"))
+        if not device_id or (not manual and device_id not in workspace_devices):
             raise ValueError(f"topology node references unknown device: {device_id or '<empty>'}")
+        if manual and not device_id.startswith("manual_"):
+            raise ValueError("manual topology node id must start with manual_")
         if device_id in seen_devices:
             raise ValueError(f"duplicate device entity in topology: {device_id}")
         seen_devices.add(device_id)
-        dev = workspace_devices[device_id]
+        dev = workspace_devices.get(device_id, {})
         node_id = str(raw.get("node_id") or f"node_{device_id}").strip()
         try:
             x = float(raw.get("x", 0.0))
@@ -2182,6 +2189,8 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         normalized_nodes.append({
             "node_id": node_id,
             "device_id": device_id,
+            "manual": manual,
+            "device_type": str(raw.get("device_type") or dev.get("device_type") or "switch").strip()[:48],
             "display_name": str(raw.get("display_name") or dev.get("name") or "").strip()[:80],
             "labels": sorted({str(item).strip() for item in (raw.get("labels") or []) if str(item).strip()}),
             "group_id": str(raw.get("group_id") or "").strip() or None,
@@ -2252,6 +2261,11 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         source = str(raw.get("source") or "manual").strip().lower()
         if source not in {"manual", "discovered"}:
             source = "manual"
+        # Discovery is an operational claim about two managed devices.  A
+        # hand-drawn symbol can be linked manually, but it cannot acquire
+        # evidence-backed/discovered status by accident.
+        if source == "discovered" and (src.startswith("manual_") or tgt.startswith("manual_")):
+            raise ValueError("discovered topology links require managed devices")
         label = str(raw.get("label") or "").strip()
         if not label and src_iface and tgt_iface:
             label = f"{src_iface} ↔ {tgt_iface}"
@@ -2509,7 +2523,10 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
         available_devices = all_workspace_devices
     available_ids = {str(d.get("device_id") or "") for d in available_devices}
 
-    topo_nodes = [n for n in topo.get("nodes") or [] if scope_device_ids is None or n.get("device_id") in scope_device_ids]
+    # A diagram symbol is intentionally outside device inventory and evidence
+    # comparison.  Reporting it as a missing device would turn a drawing aid
+    # into a false operational alarm.
+    topo_nodes = [n for n in topo.get("nodes") or [] if not n.get("manual") and (scope_device_ids is None or n.get("device_id") in scope_device_ids)]
     topo_device_ids = {str(n.get("device_id") or "") for n in topo_nodes}
 
     devices_in_scope_not_in_topology = sorted(available_ids - topo_device_ids)
@@ -2522,7 +2539,9 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
 
     topo_links = [
         l for l in topo.get("links") or []
-        if scope_device_ids is None or (l.get("source_device_id") in scope_device_ids and l.get("target_device_id") in scope_device_ids)
+        if not str(l.get("source_device_id") or "").startswith("manual_")
+        and not str(l.get("target_device_id") or "").startswith("manual_")
+        and (scope_device_ids is None or (l.get("source_device_id") in scope_device_ids and l.get("target_device_id") in scope_device_ids))
     ]
 
     link_comparisons = []

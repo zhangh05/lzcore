@@ -105,6 +105,32 @@ def test_topology_lifecycle_and_validation(workspace):
         })
 
 
+def test_topology_manual_symbols_are_diagram_only_and_not_discoverable(workspace):
+    managed = service.save_device(workspace, {"name": "PE1", "host": "192.0.2.1", "vendor": "h3c"})
+    topo = service.save_topology(workspace, {
+        "name": "Mixed drawing",
+        "nodes": [
+            {"device_id": managed["device_id"], "x": 0, "y": 0},
+            {"device_id": "manual_internet", "manual": True, "device_type": "cloud", "display_name": "Internet", "x": 160, "y": 0},
+        ],
+        "links": [{
+            "source_device_id": managed["device_id"], "target_device_id": "manual_internet",
+            "source": "manual", "kind": "logical", "label": "WAN",
+        }],
+    })
+    manual = next(node for node in topo["nodes"] if node["manual"])
+    assert manual["device_type"] == "cloud"
+    assert manual["display_name"] == "Internet"
+    state = service.topology_state(workspace, topo["topology_id"])
+    assert {node["device_id"] for node in state["nodes"]} == {managed["device_id"], "manual_internet"}
+    with pytest.raises(ValueError, match="discovered topology links require managed devices"):
+        service.save_topology(workspace, {
+            "name": "Invalid discovery",
+            "nodes": [{"device_id": managed["device_id"]}, {"device_id": "manual_internet", "manual": True}],
+            "links": [{"source_device_id": managed["device_id"], "target_device_id": "manual_internet", "source": "discovered", "evidence_refs": ["observation_1"]}],
+        })
+
+
 def test_topology_patch_preserves_graph_requires_evidence_and_versions(workspace):
     dev1 = service.save_device(workspace, {"name": "PE1", "host": "192.0.2.1", "vendor": "h3c"})
     dev2 = service.save_device(workspace, {"name": "P1", "host": "192.0.2.2", "vendor": "h3c"})
