@@ -43,6 +43,8 @@ import {
   IconEye,
   IconGrid,
   IconLayers,
+  IconLink,
+  IconMenu,
   IconPlus,
   IconRedo,
   IconRefresh,
@@ -452,8 +454,13 @@ export default function TopologyWorkspace({
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [showAgent, setShowAgent] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
+  // The topology is an operational drawing surface.  Keep the device tray
+  // visible by default so the next action is always obvious: place one of the
+  // workspace devices or select one already on the canvas.
+  const [showLibrary, setShowLibrary] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
+  const [canvasMode, setCanvasMode] = useState<"select" | "connect">("select");
+  const [gridEnabled, setGridEnabled] = useState(true);
   const [layer, setLayer] = useState<"all" | "physical" | "logical">("all");
   const [showInterfaces, setShowInterfaces] = useState(true);
   const [topologyState, setTopologyState] = useState<TopologyState | null>(null);
@@ -810,6 +817,7 @@ export default function TopologyWorkspace({
         return;
       }
       openLinkComposer(params.source, params.target);
+      setCanvasMode("select");
     },
     [openLinkComposer, setNotice]
   );
@@ -976,7 +984,7 @@ export default function TopologyWorkspace({
   );
 
   // Add device to canvas from palette
-  const handleAddDeviceToCanvas = (dev: Device) => {
+  const handleAddDeviceToCanvas = (dev: Device, position?: { x: number; y: number }) => {
     if (!activeTopology) return;
     if (activeTopology.nodes.some((n) => n.device_id === dev.device_id)) {
       setNotice(`设备“${dev.name}”已在当前拓扑画布中，禁止重复添加`, false);
@@ -986,8 +994,8 @@ export default function TopologyWorkspace({
     const nodeCount = activeTopology.nodes.length;
     const col = nodeCount % 4;
     const row = Math.floor(nodeCount / 4);
-    const newX = 120 + col * 220;
-    const newY = 100 + row * 160;
+    const newX = Math.round(position?.x ?? 120 + col * 220);
+    const newY = Math.round(position?.y ?? 100 + row * 160);
 
     const newNode: TopologyNode = {
       device_id: dev.device_id,
@@ -1001,6 +1009,41 @@ export default function TopologyWorkspace({
     });
     setNotice(`设备“${dev.name}”已加入画布`);
   };
+
+  const handlePaletteDragStart = useCallback((event: React.DragEvent<HTMLDivElement>, deviceId: string) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-lzcore-device-id", deviceId);
+    event.dataTransfer.setData("text/plain", deviceId);
+  }, []);
+
+  const handleCanvasDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const deviceId = event.dataTransfer.getData("application/x-lzcore-device-id") || event.dataTransfer.getData("text/plain");
+    const device = devices.find((item) => item.device_id === deviceId);
+    if (!device || !flowRef.current) return;
+    handleAddDeviceToCanvas(device, flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+  }, [devices, handleAddDeviceToCanvas]);
+
+  const handleAlignSelectedNodes = useCallback((direction: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
+    if (!activeTopology) return;
+    const selectedIds = new Set(nodes.filter((node) => node.selected && !node.id.startsWith("group-")).map((node) => node.id));
+    const selected = activeTopology.nodes.filter((node) => selectedIds.has(node.device_id));
+    if (selected.length < 2) {
+      setNotice("请先框选至少两台设备，再执行对齐", false);
+      return;
+    }
+    const xValues = selected.map((node) => node.x);
+    const yValues = selected.map((node) => node.y);
+    const x = direction === "left" ? Math.min(...xValues) : direction === "right" ? Math.max(...xValues) : Math.round(xValues.reduce((sum, value) => sum + value, 0) / selected.length);
+    const y = direction === "top" ? Math.min(...yValues) : direction === "bottom" ? Math.max(...yValues) : Math.round(yValues.reduce((sum, value) => sum + value, 0) / selected.length);
+    pushState({
+      ...activeTopology,
+      nodes: activeTopology.nodes.map((node) => selectedIds.has(node.device_id)
+        ? { ...node, ...(direction === "left" || direction === "center" || direction === "right" ? { x } : { y }) }
+        : node),
+    });
+    setNotice(`已对齐 ${selected.length} 台设备`);
+  }, [activeTopology, nodes, pushState, setNotice]);
 
   const layoutTopologyNodes = useCallback(
     (topology: Topology, nodesToLayout = topology.nodes) => {
@@ -1299,7 +1342,7 @@ export default function TopologyWorkspace({
   }
 
   return (
-    <div className={`network-topology-workspace topology-studio ${showLibrary ? "library-open" : ""} ${showAgent ? "agent-open" : ""} ${focusMode ? "focus-mode" : ""}`}>
+    <div className={`network-topology-workspace topology-studio ${showLibrary ? "library-open" : ""} ${showAgent ? "agent-open" : ""} ${isInspectorOpen && !showAgent ? "inspector-open" : ""} ${focusMode ? "focus-mode" : ""}`}>
       {/* 1. Left Panel: Topology selector + Device Palette + Group Palette */}
       <aside className="topology-sidebar">
         <div className="topology-sidebar-section topology-select-section">
@@ -1386,6 +1429,8 @@ export default function TopologyWorkspace({
                     role="button"
                     tabIndex={0}
                     aria-label={`定位设备 ${dev.name}`}
+                    draggable={!isPlaced}
+                    onDragStart={(event) => handlePaletteDragStart(event, dev.device_id)}
                     onClick={() => { if (isPlaced) { setSelectedElement({ type: "node", deviceId: dev.device_id }); void flowRef.current?.fitView({ nodes: [{ id: dev.device_id }], duration: 300, maxZoom: 1.2 }); } }}
                     onKeyDown={(event) => { if (event.key === "Enter" && isPlaced) { setSelectedElement({ type: "node", deviceId: dev.device_id }); void flowRef.current?.fitView({ nodes: [{ id: dev.device_id }], duration: 300, maxZoom: 1.2 }); } }}
                   >
@@ -1492,7 +1537,16 @@ export default function TopologyWorkspace({
           </div>
         </div>
         <div className="topology-editbar">
-          <div className="studio-layer-tabs" role="group" aria-label="拓扑图层">{([ ["all", "全部"], ["physical", "物理连接"], ["logical", "逻辑连接"] ] as const).map(([value, label]) => <button key={value} aria-pressed={layer === value} onClick={() => setLayer(value)}>{label}</button>)}</div>
+          <div className="studio-edit-tools" role="group" aria-label="画布工具">
+            <button className="studio-mode-button" aria-pressed={canvasMode === "select"} onClick={() => setCanvasMode("select")}><IconMenu size={13} />选择</button>
+            <button className="studio-mode-button" aria-pressed={canvasMode === "connect"} onClick={() => setCanvasMode("connect")}><IconLink size={13} />连线</button>
+            <button className="studio-mode-button" aria-pressed={gridEnabled} onClick={() => setGridEnabled((value) => !value)}><IconGrid size={13} />网格</button>
+            <details className="studio-align-menu"><summary><IconArrowsX size={13} />对齐</summary><div>
+              <button onClick={() => handleAlignSelectedNodes("left")}>左对齐</button><button onClick={() => handleAlignSelectedNodes("center")}>水平居中</button><button onClick={() => handleAlignSelectedNodes("right")}>右对齐</button>
+              <button onClick={() => handleAlignSelectedNodes("top")}>顶对齐</button><button onClick={() => handleAlignSelectedNodes("middle")}>垂直居中</button><button onClick={() => handleAlignSelectedNodes("bottom")}>底对齐</button>
+            </div></details>
+            <div className="studio-layer-tabs" role="group" aria-label="拓扑图层">{([ ["all", "全部"], ["physical", "物理连接"], ["logical", "逻辑连接"] ] as const).map(([value, label]) => <button key={value} aria-pressed={layer === value} onClick={() => setLayer(value)}>{label}</button>)}</div>
+          </div>
           <div className="toolbar-right">
             <Button
               size="sm"
@@ -1571,8 +1625,8 @@ export default function TopologyWorkspace({
         </div>
 
         {/* ReactFlow Workspace */}
-        <div className="topology-canvas-viewport">
-          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 台设备</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
+        <div className={`topology-canvas-viewport mode-${canvasMode}`} onDragOver={(event) => event.preventDefault()} onDrop={handleCanvasDrop}>
+          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 台设备</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span><span className="canvas-mode-hint">{canvasMode === "connect" ? "从设备端口拖向另一台设备以连线" : "拖入左侧设备，或框选多个节点后对齐"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -1607,19 +1661,24 @@ export default function TopologyWorkspace({
             onEdgeClick={(_: React.MouseEvent, edge: Edge) => {
               setSelectedElement({ type: "link", linkId: edge.id });
             }}
-            onPaneClick={() => setSelectedElement(null)}
+            onPaneClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
+            nodesConnectable={canvasMode === "connect"}
+            nodesDraggable={canvasMode === "select"}
+            elementsSelectable={canvasMode === "select"}
+            selectionOnDrag={canvasMode === "select"}
+            panOnDrag={[1, 2]}
             fitView
             fitViewOptions={{ padding: 0.22, maxZoom: 1.1 }}
-            snapToGrid
+            snapToGrid={gridEnabled}
             snapGrid={[10, 10]}
             minZoom={0.2}
             maxZoom={2.5}
             defaultEdgeOptions={{ type: "topologyEdge" }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--line-2)" />
+            {gridEnabled && <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--line-2)" />}
             <Controls showInteractive={false} position="bottom-left" />
             <MiniMap
               nodeStrokeColor="var(--line-3)"

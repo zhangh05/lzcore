@@ -207,6 +207,10 @@ test("topology tab keeps the canvas primary and exposes the device palette", asy
   expect(screen.getByRole("button", { name: "查看详情" })).toBeInTheDocument();
   expect(screen.getByTestId("palette-dev-d1")).toBeInTheDocument();
   expect(within(screen.getByTestId("palette-dev-d1")).getByText("已在画布")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "连线" }));
+  expect(screen.getByRole("button", { name: "连线" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "网格" })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("topology endpoint failure is shown as a loading error instead of an empty canvas", async () => {
