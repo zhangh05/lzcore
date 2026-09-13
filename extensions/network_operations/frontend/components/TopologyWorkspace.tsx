@@ -138,7 +138,7 @@ export type TopologyLink = {
 export type TopologyGroup = {
   group_id: string;
   name: string;
-  kind: "as" | "region" | "datacenter" | "tenant";
+  kind: "as" | "region" | "datacenter" | "tenant" | "custom";
   x: number;
   y: number;
   width: number;
@@ -255,7 +255,7 @@ function DeviceNodeComponent({ data, selected }: NodeProps<Node<DeviceNodeData>>
 type GroupNodeData = {
   groupId: string;
   name: string;
-  kind: "as" | "region" | "datacenter" | "tenant";
+  kind: "as" | "region" | "datacenter" | "tenant" | "custom";
   width: number;
   height: number;
 };
@@ -266,6 +266,7 @@ function GroupNodeComponent({ data, selected }: NodeProps<Node<GroupNodeData>>) 
     region: "区域",
     datacenter: "数据中心",
     tenant: "租户",
+    custom: "自定义分组",
   };
 
   return (
@@ -505,7 +506,7 @@ export default function TopologyWorkspace({
 
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
-  const [groupKindInput, setGroupKindInput] = useState<"as" | "region" | "datacenter" | "tenant">("datacenter");
+  const [groupKindInput, setGroupKindInput] = useState<"as" | "region" | "datacenter" | "tenant" | "custom">("datacenter");
 
   const [pendingConnection, setPendingConnection] = useState<{
     source: string;
@@ -2012,7 +2013,7 @@ export default function TopologyWorkspace({
                   value={selectedGroup.kind}
                   onChange={(e) => {
                     if (!activeTopology) return;
-                    const val = e.target.value as "as" | "region" | "datacenter" | "tenant";
+                    const val = e.target.value as "as" | "region" | "datacenter" | "tenant" | "custom";
                     const updated = activeTopology.groups.map((g) =>
                       g.group_id === selectedGroup.group_id ? { ...g, kind: val } : g
                     );
@@ -2023,6 +2024,7 @@ export default function TopologyWorkspace({
                   <option value="region">地理区域 (Region)</option>
                   <option value="datacenter">数据中心 (Datacenter)</option>
                   <option value="tenant">业务租户 (Tenant)</option>
+                  <option value="custom">自定义分组</option>
                 </select>
               </label>
             </div>
@@ -2319,13 +2321,14 @@ export default function TopologyWorkspace({
                 <select
                   value={groupKindInput}
                   onChange={(e) =>
-                    setGroupKindInput(e.target.value as "as" | "region" | "datacenter" | "tenant")
+                    setGroupKindInput(e.target.value as "as" | "region" | "datacenter" | "tenant" | "custom")
                   }
                 >
                   <option value="as">自治系统 (AS)</option>
                   <option value="region">区域 (Region)</option>
                   <option value="datacenter">数据中心 (Datacenter)</option>
                   <option value="tenant">业务租户 (Tenant)</option>
+                  <option value="custom">自定义分组</option>
                 </select>
               </label>
             </div>
