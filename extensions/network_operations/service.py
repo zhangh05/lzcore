@@ -2287,6 +2287,137 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @_connection_transaction
+def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Apply a small, versioned topology change without replacing the graph.
+
+    This is the write path for an Agent.  A model normally knows only the
+    objects it has just observed, so asking it to re-submit a whole canvas is
+    both wasteful and unsafe: omitted objects must stay on the canvas.
+    """
+    existing = get_topology(workspace_id, topology_id)
+    if not existing:
+        raise ValueError("topology_not_found")
+    if "version" not in payload:
+        raise ValueError("topology_version_required")
+    try:
+        expected_version = int(payload.get("version"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("topology_version_required") from exc
+    if expected_version != int(existing.get("version") or 1):
+        raise ValueError("topology_version_conflict")
+
+    def records(value: Any, field: str) -> list[dict[str, Any]]:
+        if value is None:
+            return []
+        if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+            raise ValueError(f"{field} must be a list of objects")
+        return [dict(item) for item in value]
+
+    node_updates = records(payload.get("node_updates"), "node_updates")
+    link_updates = records(payload.get("link_updates"), "link_updates")
+    group_updates = records(payload.get("group_updates"), "group_updates")
+    remove_node_device_ids = {
+        str(item).strip() for item in (payload.get("remove_node_device_ids") or []) if str(item).strip()
+    }
+    remove_link_ids = {
+        str(item).strip() for item in (payload.get("remove_link_ids") or []) if str(item).strip()
+    }
+    remove_group_ids = {
+        str(item).strip() for item in (payload.get("remove_group_ids") or []) if str(item).strip()
+    }
+    if any(not isinstance(item, str) for item in (payload.get("remove_node_device_ids") or [])):
+        raise ValueError("remove_node_device_ids must be a list of strings")
+    if any(not isinstance(item, str) for item in (payload.get("remove_link_ids") or [])):
+        raise ValueError("remove_link_ids must be a list of strings")
+    if any(not isinstance(item, str) for item in (payload.get("remove_group_ids") or [])):
+        raise ValueError("remove_group_ids must be a list of strings")
+
+    nodes_by_device = {
+        str(item.get("device_id") or ""): dict(item)
+        for item in existing.get("nodes") or []
+    }
+    for update in node_updates:
+        device_id = str(update.get("device_id") or "").strip()
+        if not device_id:
+            raise ValueError("node_update_requires_device_id")
+        nodes_by_device[device_id] = {**nodes_by_device.get(device_id, {}), **update, "device_id": device_id}
+    for device_id in remove_node_device_ids:
+        if device_id not in nodes_by_device:
+            raise ValueError("topology_node_not_found")
+        del nodes_by_device[device_id]
+
+    groups_by_id = {
+        str(item.get("group_id") or ""): dict(item)
+        for item in existing.get("groups") or []
+    }
+    for update in group_updates:
+        group_id = str(update.get("group_id") or "").strip()
+        if not group_id:
+            raise ValueError("group_update_requires_group_id")
+        groups_by_id[group_id] = {**groups_by_id.get(group_id, {}), **update, "group_id": group_id}
+    for group_id in remove_group_ids:
+        if group_id not in groups_by_id:
+            raise ValueError("topology_group_not_found")
+        del groups_by_id[group_id]
+
+    links_by_id = {
+        str(item.get("link_id") or ""): dict(item)
+        for item in existing.get("links") or []
+    }
+    for update in link_updates:
+        link_id = str(update.get("link_id") or "").strip()
+        is_new = not link_id
+        if is_new and "source" not in update:
+            raise ValueError("new_link_requires_source")
+        if "source" in update and str(update.get("source") or "").strip().lower() not in {"manual", "discovered"}:
+            raise ValueError("topology_link_source_invalid")
+        if "status" in update and str(update.get("status") or "").strip().lower() not in {"unknown", "up", "down"}:
+            raise ValueError("topology_link_status_invalid")
+        if "evidence_refs" in update and (
+            not isinstance(update.get("evidence_refs"), list)
+            or any(not isinstance(item, str) or not item.strip() for item in update.get("evidence_refs") or [])
+        ):
+            raise ValueError("topology_evidence_refs_must_be_strings")
+        if link_id:
+            links_by_id[link_id] = {**links_by_id.get(link_id, {}), **update, "link_id": link_id}
+            continue
+        # New links deliberately receive their id in save_topology.  Existing
+        # links must be addressed by the id returned from a prior read.
+        generated_id = _id("link")
+        links_by_id[generated_id] = {**update, "link_id": generated_id}
+    for link_id in remove_link_ids:
+        if link_id not in links_by_id:
+            raise ValueError("topology_link_not_found")
+        del links_by_id[link_id]
+
+    # Removing a node also removes only its incident links.  It must never
+    # leave a graph whose links point at invisible/nonexistent nodes.
+    surviving_devices = set(nodes_by_device)
+    links = [
+        link for link in links_by_id.values()
+        if str(link.get("source_device_id") or "") in surviving_devices
+        and str(link.get("target_device_id") or "") in surviving_devices
+    ]
+    for link in links:
+        if str(link.get("source") or "manual").strip().lower() == "discovered" and not [
+            str(item).strip() for item in (link.get("evidence_refs") or []) if str(item).strip()
+        ]:
+            raise ValueError("discovered_link_requires_evidence")
+
+    # save_topology remains the single normalizer/validator for every graph
+    # write.  It also keeps the stored representation and API representation
+    # identical to manual canvas saves.
+    return save_topology(workspace_id, {
+        **existing,
+        "topology_id": topology_id,
+        "version": expected_version,
+        "nodes": list(nodes_by_device.values()),
+        "links": links,
+        "groups": list(groups_by_id.values()),
+    })
+
+
+@_connection_transaction
 def remove_topology_node(workspace_id: str, topology_id: str, device_id: str, *, expected_version: int | None = None) -> dict[str, Any]:
     existing = get_topology(workspace_id, topology_id)
     if not existing:

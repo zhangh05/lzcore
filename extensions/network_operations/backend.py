@@ -619,10 +619,10 @@ def topology_tool(invocation):
         return {"ok": False, "error": "tool_not_allowed_by_skill"}
     args = invocation.arguments or {}
     action = str(args.get("action") or "read").strip().lower()
-    if action not in {"read", "create", "update", "delete", "compare"}:
+    if action not in {"read", "create", "update", "patch", "record_discovered_link", "delete", "compare"}:
         return {
             "ok": False,
-            "error": f"unsupported action for network.operations.topology; expected read|create|update|delete|compare, got {action}",
+            "error": f"unsupported action for network.operations.topology; expected read|create|update|patch|record_discovered_link|delete|compare, got {action}",
         }
     scope = _selected_skill_scope(invocation)
     allowed_devices = scope["device_ids"] if scope is not None else None
@@ -690,6 +690,86 @@ def topology_tool(invocation):
         except ValueError as exc:
             return {"ok": False, "error": str(exc)}
 
+    if action == "record_discovered_link":
+        evidence_refs = args.get("evidence_refs")
+        if not isinstance(evidence_refs, list) or not evidence_refs or any(not isinstance(item, str) or not item.strip() for item in evidence_refs):
+            return {"ok": False, "error": "topology_evidence_refs_must_be_nonempty_strings"}
+        for field in ("topology_id", "source_device_id", "source_interface", "target_device_id", "target_interface"):
+            if not str(args.get(field) or "").strip():
+                return {"ok": False, "error": f"{field}_is_required"}
+        if str(args.get("kind") or "").strip().lower() not in {"physical", "logical"}:
+            return {"ok": False, "error": "topology_link_kind_invalid"}
+        if str(args.get("status") or "").strip().lower() not in {"unknown", "up", "down"}:
+            return {"ok": False, "error": "topology_link_status_invalid"}
+        args = {
+            **args,
+            "action": "patch",
+            "link_updates": [{
+                "source_device_id": args.get("source_device_id"),
+                "source_interface": args.get("source_interface"),
+                "target_device_id": args.get("target_device_id"),
+                "target_interface": args.get("target_interface"),
+                "kind": args.get("kind"),
+                "label": args.get("label"),
+                "metadata": args.get("metadata"),
+                "status": args.get("status"),
+                "source": "discovered",
+                "evidence_refs": evidence_refs,
+            }],
+        }
+        action = "patch"
+
+    if action == "patch":
+        topology_id = str(args.get("topology_id") or "").strip()
+        if not topology_id:
+            return {"ok": False, "error": "topology_id is required for patch"}
+        existing = service.get_topology(invocation.workspace_id, topology_id)
+        if not existing:
+            return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
+        if args.get("version") is None:
+            return {"ok": False, "error": "topology_version_required", "topology_id": topology_id}
+
+        # A scoped Skill may only patch the part of a shared canvas it can
+        # actually see.  Link ids are resolved against the saved graph before
+        # allowing a mutation, so they cannot become an indirect cross-Skill
+        # write capability.
+        if scope is not None:
+            existing_links = {str(link.get("link_id") or ""): link for link in existing.get("links") or []}
+            existing_groups = {str(group.get("group_id") or ""): group for group in existing.get("groups") or []}
+            for node in args.get("node_updates") or []:
+                if str((node or {}).get("device_id") or "").strip() not in allowed_devices:
+                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+            for device_id in args.get("remove_node_device_ids") or []:
+                if str(device_id).strip() not in allowed_devices:
+                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+            for link in args.get("link_updates") or []:
+                link = link or {}
+                link_id = str(link.get("link_id") or "").strip()
+                candidate = {**existing_links.get(link_id, {}), **link} if link_id else link
+                if (
+                    str(candidate.get("source_device_id") or "").strip() not in allowed_devices
+                    or str(candidate.get("target_device_id") or "").strip() not in allowed_devices
+                ):
+                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+            for link_id in args.get("remove_link_ids") or []:
+                link = existing_links.get(str(link_id).strip())
+                if not link or (
+                    str(link.get("source_device_id") or "") not in allowed_devices
+                    or str(link.get("target_device_id") or "") not in allowed_devices
+                ):
+                    return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
+            for group_id in [str((group or {}).get("group_id") or "").strip() for group in args.get("group_updates") or []] + [str(item).strip() for item in args.get("remove_group_ids") or []]:
+                if group_id and group_id in existing_groups and any(
+                    str(node.get("group_id") or "") == group_id and str(node.get("device_id") or "") not in allowed_devices
+                    for node in existing.get("nodes") or []
+                ):
+                    return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
+        try:
+            topo = service.patch_topology(invocation.workspace_id, topology_id, args)
+            return {"ok": True, "topology": topo, "version": topo.get("version")}
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc), "topology_id": topology_id}
+
     if action == "update":
         topology_id = str(args.get("topology_id") or "").strip()
         if not topology_id:
@@ -697,6 +777,8 @@ def topology_tool(invocation):
         existing = service.get_topology(invocation.workspace_id, topology_id)
         if not existing:
             return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
+        if args.get("version") is None or any(key not in args for key in ("nodes", "links", "groups")):
+            return {"ok": False, "error": "topology_full_snapshot_required_use_patch", "topology_id": topology_id}
         if scope is not None:
             for node in args.get("nodes") or []:
                 dev_id = str(node.get("device_id") or "").strip()
@@ -1066,7 +1148,7 @@ def register():
             {
                 "tool_id": "network.operations.topology",
                 "name": "网络拓扑管理与比对",
-                "description": "读取、创建、更新、删除网络拓扑节点、链路和分组，并比对拓扑与当前运行事实。受当前 Skill 授权设备限制；只读拓扑返回节点、链路、分组、来源、证据引用和版本；比对输出存量拓扑与可用设备或采集证据的差异。",
+                "description": "读取、创建、保留式补丁、记录已发现链路、完整替换或删除网络拓扑节点、链路和分组，并比对拓扑与当前运行事实。Agent 新增经两端证据确认的链路，必须先 read，再以该版本调用 record_discovered_link；它只接受两端设备/接口、physical 或 logical、unknown/up/down 和非空字符串证据 ID 数组。patch 仅用于已有对象变更，未声明图元绝不删除。update 仅接受完整图纸快照。受当前 Skill 授权设备限制；只读拓扑返回节点、链路、分组、来源、证据引用和版本；比对输出存量拓扑与可用设备或采集证据的差异。",
                 "category": "ops",
                 "risk_level": "medium",
                 "permission_action": "network",
@@ -1074,19 +1156,23 @@ def register():
                     "read": {"action_class": "network", "risk_level": "low", "side_effects": "none", "idempotency": "safe_to_retry", "read_only": True},
                     "compare": {"action_class": "network", "risk_level": "low", "side_effects": "none", "idempotency": "safe_to_retry", "read_only": True},
                     "create": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
+                    "patch": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
+                    "record_discovered_link": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
                     "update": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
                     "delete": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
                 },
-                "bindable_inputs": {"read": ["topology_id"], "compare": ["topology_id"], "update": ["topology_id"], "delete": ["topology_id"]},
+                "bindable_inputs": {"read": ["topology_id"], "compare": ["topology_id"], "patch": ["topology_id", "version"], "record_discovered_link": ["topology_id", "version", "source_device_id", "target_device_id"], "update": ["topology_id", "version"], "delete": ["topology_id"]},
                 "referenceable_outputs": {
                     "read": ["topology", "nodes", "links", "groups", "version"],
                     "create": ["topology"],
+                    "patch": ["topology", "version"],
+                    "record_discovered_link": ["topology", "version"],
                     "update": ["topology"],
                     "delete": ["ok"],
                     "compare": ["devices_in_scope_not_in_topology", "topology_devices_not_in_scope", "link_comparisons", "summary"],
                 },
                 "action_requirements": {
-                    "all": {"update": ["topology_id"], "delete": ["topology_id"]},
+                    "all": {"patch": ["topology_id", "version"], "record_discovered_link": ["topology_id", "version", "source_device_id", "source_interface", "target_device_id", "target_interface", "kind", "status", "evidence_refs"], "update": ["topology_id", "version", "nodes", "links", "groups"], "delete": ["topology_id"]},
                 },
                 "handler": topology_tool,
                 "timeout_seconds": 60,
@@ -1094,7 +1180,7 @@ def register():
                     "type": "object",
                     "properties": {
                         **common,
-                        "action": {"type": "string", "enum": ["read", "create", "update", "delete", "compare"]},
+                        "action": {"type": "string", "enum": ["read", "create", "patch", "record_discovered_link", "update", "delete", "compare"]},
                         "topology_id": {"type": "string"},
                         "name": {"type": "string"},
                         "description": {"type": "string"},
@@ -1102,6 +1188,21 @@ def register():
                         "nodes": {"type": "array", "items": {"type": "object"}},
                         "links": {"type": "array", "items": {"type": "object"}},
                         "groups": {"type": "array", "items": {"type": "object"}},
+                        "node_updates": {"type": "array", "items": {"type": "object"}},
+                        "link_updates": {"type": "array", "items": {"type": "object"}},
+                        "group_updates": {"type": "array", "items": {"type": "object"}},
+                        "remove_node_device_ids": {"type": "array", "items": {"type": "string"}},
+                        "remove_link_ids": {"type": "array", "items": {"type": "string"}},
+                        "remove_group_ids": {"type": "array", "items": {"type": "string"}},
+                        "source_device_id": {"type": "string"},
+                        "source_interface": {"type": "string"},
+                        "target_device_id": {"type": "string"},
+                        "target_interface": {"type": "string"},
+                        "kind": {"type": "string", "enum": ["physical", "logical"]},
+                        "label": {"type": "string"},
+                        "metadata": {"type": "object"},
+                        "status": {"type": "string", "enum": ["unknown", "up", "down"]},
+                        "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
                     },
                     "required": ["action"],
                 },

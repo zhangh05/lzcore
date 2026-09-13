@@ -104,6 +104,66 @@ def test_topology_lifecycle_and_validation(workspace):
             ],
         })
 
+
+def test_topology_patch_preserves_graph_requires_evidence_and_versions(workspace):
+    dev1 = service.save_device(workspace, {"name": "PE1", "host": "192.0.2.1", "vendor": "h3c"})
+    dev2 = service.save_device(workspace, {"name": "P1", "host": "192.0.2.2", "vendor": "h3c"})
+    topo = service.save_topology(workspace, {
+        "name": "Shared graph",
+        "nodes": [{"device_id": dev1["device_id"]}, {"device_id": dev2["device_id"]}],
+        "groups": [{"group_id": "grp_core", "name": "Core", "kind": "as"}],
+        "links": [{
+            "link_id": "link_manual", "source_device_id": dev1["device_id"], "target_device_id": dev2["device_id"],
+            "source_interface": "GE0/0", "target_interface": "GE0/0", "source": "manual",
+        }],
+    })
+
+    patched = service.patch_topology(workspace, topo["topology_id"], {
+        "version": topo["version"],
+        "node_updates": [{"device_id": dev1["device_id"], "labels": ["PE"]}],
+        "link_updates": [{
+            "source_device_id": dev1["device_id"], "target_device_id": dev2["device_id"],
+            "source_interface": "GE0/1", "target_interface": "GE0/1", "source": "discovered",
+            "evidence_refs": ["observation_direct_adjacency"], "status": "up",
+        }],
+    })
+    assert patched["version"] == 2
+    assert len(patched["nodes"]) == 2
+    assert len(patched["groups"]) == 1
+    assert {link["link_id"] for link in patched["links"]} >= {"link_manual"}
+    discovered = next(link for link in patched["links"] if link["source"] == "discovered")
+    assert discovered["evidence_refs"] == ["observation_direct_adjacency"]
+    assert next(node for node in patched["nodes"] if node["device_id"] == dev1["device_id"])["labels"] == ["PE"]
+
+    with pytest.raises(ValueError, match="topology_version_conflict"):
+        service.patch_topology(workspace, topo["topology_id"], {"version": 1, "node_updates": []})
+    with pytest.raises(ValueError, match="discovered_link_requires_evidence"):
+        service.patch_topology(workspace, topo["topology_id"], {
+            "version": patched["version"],
+            "link_updates": [{
+                "source_device_id": dev1["device_id"], "target_device_id": dev2["device_id"],
+                "source_interface": "GE0/2", "target_interface": "GE0/2", "source": "discovered",
+            }],
+        })
+    with pytest.raises(ValueError, match="topology_link_source_invalid"):
+        service.patch_topology(workspace, topo["topology_id"], {
+            "version": patched["version"],
+            "link_updates": [{
+                "source_device_id": dev1["device_id"], "target_device_id": dev2["device_id"],
+                "source_interface": "GE0/3", "target_interface": "GE0/3", "source": "observed",
+                "evidence_refs": ["observation_direct_adjacency"],
+            }],
+        })
+    with pytest.raises(ValueError, match="topology_evidence_refs_must_be_strings"):
+        service.patch_topology(workspace, topo["topology_id"], {
+            "version": patched["version"],
+            "link_updates": [{
+                "source_device_id": dev1["device_id"], "target_device_id": dev2["device_id"],
+                "source_interface": "GE0/4", "target_interface": "GE0/4", "source": "discovered",
+                "evidence_refs": [{"observation_id": "observation_direct_adjacency"}],
+            }],
+        })
+
     # Link with unknown node rejection
     with pytest.raises(ValueError, match="must reference existing nodes"):
         service.save_topology(workspace, {
@@ -428,7 +488,49 @@ def test_topology_canonical_tool_via_runtime_client(workspace):
     assert len(result.output["nodes"]) == 2
     assert len(result.output["links"]) == 1
 
-    # 3. Compare via tool
+    # 3. Record a directly evidenced link through the flat Agent action.  The
+    # original manual link remains because no whole canvas is reconstructed.
+    result = client.invoke(
+        "network.operations.topology",
+        arguments={
+            "workspace_id": workspace,
+            "action": "record_discovered_link",
+            "topology_id": topo_id,
+            "version": result.output["version"],
+            "source_device_id": dev1["device_id"],
+            "target_device_id": dev2["device_id"],
+            "source_interface": "GE0/2",
+            "target_interface": "GE0/2",
+            "kind": "physical",
+            "status": "up",
+            "evidence_refs": ["observation_two_ended_link"],
+        },
+        context=ctx,
+    )
+    assert result.status == "succeeded"
+    assert result.output["ok"] is True
+    assert len(result.output["topology"]["links"]) == 2
+
+    invalid_link = client.invoke(
+        "network.operations.topology",
+        arguments={
+            "workspace_id": workspace,
+            "action": "record_discovered_link",
+            "topology_id": topo_id,
+            "version": result.output["version"],
+            "source_device_id": dev1["device_id"],
+            "target_device_id": dev2["device_id"],
+            "source_interface": "GE0/3",
+            "target_interface": "GE0/3",
+            "kind": "physical",
+            "status": "up",
+            "evidence_refs": [{"observation_id": "not_a_string"}],
+        },
+        context=ctx,
+    )
+    assert invalid_link.status == "blocked"
+
+    # 4. Compare via tool
     result = client.invoke(
         "network.operations.topology",
         arguments={
@@ -441,7 +543,7 @@ def test_topology_canonical_tool_via_runtime_client(workspace):
     assert result.status == "succeeded"
     assert result.output["ok"] is True
 
-    # 4. Scope restriction: Create a skill only containing dev1
+    # 5. Scope restriction: Create a skill only containing dev1
     skill = service.save_skill(workspace, {
         "name": "ScopedSkill",
         "device_ids": [dev1["device_id"]],
@@ -468,9 +570,10 @@ def test_topology_canonical_tool_via_runtime_client(workspace):
     write_result = client.invoke(
         "network.operations.topology",
         arguments={
-            "action": "update",
+            "action": "patch",
             "topology_id": topo_id,
-            "nodes": [{"device_id": dev2["device_id"]}],
+            "version": result.output["version"],
+            "node_updates": [{"device_id": dev2["device_id"]}],
         },
         context=skill_ctx,
     )
@@ -482,7 +585,7 @@ def test_topology_canonical_tool_via_runtime_client(workspace):
     assert selection["topology"] is not None
     assert selection["topology"]["topology_id"] == topo_id
     assert selection["topology"]["node_count"] == 2
-    assert selection["topology"]["link_count"] == 1
+    assert selection["topology"]["link_count"] == 2
 
     prompt = render_network_skill_prompt(selection)
     assert topo_id in prompt

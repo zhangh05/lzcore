@@ -19,7 +19,7 @@ export function buildTopologyRequest(topology: Topology, selection: CanvasSelect
   return `${request}\n\n当前画布上下文（图纸描述不是设备运行结论）：\n${JSON.stringify({
     topology_id: topology.topology_id, version: topology.version,
     selected_device_ids: selection.device_ids, selected_link_ids: selection.link_ids,
-  })}\n请先读取此拓扑及所选对象的设备、连接标识；按用户目标使用当前 Skill 的工具。状态结论注明观察时间与证据。需要更新图纸时使用拓扑工具，并保留未涉及的节点、链路和分组。`;
+  })}\n请先读取此拓扑及所选对象的设备、连接标识；按用户目标使用当前 Skill 的工具。状态结论注明观察时间与证据。若直接证据建立了两端接口关系，先读取最新版本，再使用 record_discovered_link 写回；没有两端证据时不要把候选关系画成事实。`;
 }
 
 export function TopologyAgentPanel({ workspaceId, topology, skills, selection, onCompleted }: {
@@ -89,7 +89,7 @@ export function TopologyAgentPanel({ workspaceId, topology, skills, selection, o
       }
       setInput(""); pinnedRef.current = true;
       await send({ text: buildTopologyRequest(topology, selection, request.trim()), attachments: [], effectiveSessionId: id,
-        turnMetadata: { workbench_selection: { extension_id: selectedSkill.extension_id, skill_id: selectedSkill.skill_id, skill_name: selectedSkill.name, resource_ids: selectedSkill.default_resource_ids }, topology_context: { topology_id: topology.topology_id, ...selection } },
+        turnMetadata: { workbench_selection: { extension_id: selectedSkill.extension_id, skill_id: selectedSkill.skill_id, skill_name: selectedSkill.name, resource_ids: selectedSkill.default_resource_ids } },
       });
       await refresh();
     } catch { setError("发送失败，请检查服务连接后重试。"); }

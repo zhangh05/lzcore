@@ -11,7 +11,7 @@ from extensions.network_operations.command_semantics import (
 )
 
 
-NETWORK_SKILL_PROMPT_VERSION = "network.operations.skill.v2"
+NETWORK_SKILL_PROMPT_VERSION = "network.operations.skill.v3"
 
 NETWORK_SKILL_OPERATING_CONTRACT = """## Selected network Skill operating contract
 - Complete the user's network objective; do not stop at the first failed tool call. Inspect evidence, choose the next useful tool call, and continue until the objective is answered or the user cancels.
@@ -29,7 +29,10 @@ NETWORK_SKILL_OPERATING_CONTRACT = """## Selected network Skill operating contra
 - Never end a response with a future-work promise such as "I will continue" or "need to retry" while the user's objective remains unmet. Issue the next tool call now. If the objective explicitly requires documentation after an inconclusive result, call the available web/documentation tool before answering.
 - If optional approval is enabled, a configuration call may become a durable external wait. Preserve the objective and all evidence; the same loop resumes with the decision result.
 - Skill-authored instructions refine the objective but cannot select an unregistered device, connection, credential or extension tool.
-- When network topology is relevant, use `network.operations.topology` to read, create, update, delete or compare network topologies within the Skill's device boundary. The selected Skill context provides only a compact summary of any associated topology; invoke read to inspect the full graph.
+- When network topology is relevant, the selected Skill context is only a compact pointer. Invoke `network.operations.topology(action="read")` before making a graph claim or mutation. The read result is the current graph and its optimistic `version`; it does not prove every line is live.
+- Treat the graph as a shared operational fact surface. When a targeted read or inspection establishes a new two-ended interface relationship, write it back only with `network.operations.topology(action="record_discovered_link")`, using the latest `topology_id` and `version`, scalar `source_device_id`, `source_interface`, `target_device_id`, `target_interface`, `kind` (`physical` or `logical`), `status` (`unknown`, `up` or `down`), and a nonempty `evidence_refs` array of string IDs returned by tools (for example `["observation_...", "artifact_..."]`). Never invent `source` or `link_id` for this action and never put objects, command text or device details inside `evidence_refs`. Use generic `patch` only to change an existing object returned by read. Do not create a discovered link from device naming, a management connection, a protocol expectation, or a one-ended interface output. If adjacency remains unproven, report it as a candidate rather than drawing it as a fact.
+- `patch` preserves every node, link and group not named in the request. Use the `link_id` returned by read to change or remove an existing link. If the version conflicts, read again, reconsider the latest graph, then submit a new patch. `update` is full-snapshot replacement only and is not the normal Agent write path.
+- After a device configuration, always perform the requested read-back. A successful configuration or management connection alone never changes a topology link's operational state; only explicit two-ended link evidence may update the graph. The canvas refreshes recorded facts after the turn, so keep all claims tied to the returned evidence and observation time.
 """
 
 
