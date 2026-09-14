@@ -34,12 +34,12 @@
 .topology-studio .topology-editbar .btn:hover { background: #f0f7f6; border-color: #9ac9c0; }
 .studio-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #526779; cursor: pointer; }
 .studio-icon-button:hover, .studio-icon-button[aria-pressed=true] { background: #eaf6f3; border-color: #75b9ac; color: #087a70; }
-.studio-edit-tools, .studio-layer-tabs { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.studio-edit-tools { display: flex; align-items: center; gap: 3px; min-width: 0; }
 .studio-edit-tools { overflow: visible; padding-right: 8px; }
-.studio-mode-button, .studio-layer-tabs button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #64778a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-mode-button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #64778a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-align-menu > summary::-webkit-details-marker, .studio-insert-menu > summary::-webkit-details-marker { display: none; }
-.studio-mode-button:hover, .studio-layer-tabs button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: #f0f5f6; color: #233c4b; }
-.studio-mode-button[aria-pressed=true], .studio-layer-tabs button[aria-pressed=true] { background: #e4f5f1; border-color: #a2d6cd; color: #087a70; font-weight: 650; }
+.studio-mode-button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: #f0f5f6; color: #233c4b; }
+.studio-mode-button[aria-pressed=true] { background: #e4f5f1; border-color: #a2d6cd; color: #087a70; font-weight: 650; }
 .studio-align-menu { position: relative; }
 .studio-align-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(3, max-content); gap: 4px; min-width: 230px; padding: 8px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
 .studio-align-menu > div button { padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; color: #53697a; font-size: 11px; cursor: pointer; text-align: left; }
@@ -62,8 +62,6 @@
 .topology-studio .netops-canvas-wrap.grid-on { background-color: #f8fafc; background-image: linear-gradient(#dbe5ec 1px, transparent 1px), linear-gradient(90deg, #dbe5ec 1px, transparent 1px); }
 .topology-studio .netops-cytoscape { position: absolute; inset: 0; width: 100%; height: 100%; outline: 0; }
 .topology-studio .netops-selection-gesture-layer { position: absolute; inset: 0; z-index: 6; cursor: default; }
-.topology-studio .netops-move-gesture-layer { position: absolute; inset: 0; z-index: 6; cursor: grab; }
-.topology-studio .netops-move-gesture-layer:active { cursor: grabbing; }
 .topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid #16837b; background: rgb(22 131 123 / 14%); }
 .topology-studio .netops-viewport-controls { position: absolute; right: 14px; bottom: 14px; z-index: 8; display: flex; align-items: center; overflow: hidden; border: 1px solid #cfdbe3; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #273c4a1c; }
 .topology-studio .netops-viewport-controls button { min-width: 32px; height: 31px; padding: 0 8px; border: 0; border-right: 1px solid #e2e8ee; background: #fff; color: #385062; font-size: 13px; font-weight: 650; cursor: pointer; }
@@ -71,7 +69,6 @@
 .topology-studio .netops-viewport-controls button:hover { background: #edf7f5; color: #087a70; }
 .topology-studio .netops-viewport-controls .netops-zoom-readout { min-width: 48px; color: #617889; font-size: 10px; font-weight: 600; }
 .topology-studio .netops-canvas-accessibility { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
-.topology-studio .netops-reactflow-compat { display: none; }
 .studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: #6b8190; pointer-events: none; }
 .studio-canvas-caption strong { color: #2c4555; font-weight: 650; }
 .canvas-mode-hint { margin-left: 8px; color: #6f8795; }
@@ -97,12 +94,8 @@
 .topology-studio .device-node-type { display: none; }
 .topology-studio .device-node-footer { padding: 2px 0; justify-content: center; border: 0; background: transparent; }
 .topology-studio .device-node-label-chip, .topology-studio .device-node-group-chip { font-size: 9px; padding: 1px 4px; }
-.topology-studio .react-flow__handle { width: 7px; height: 7px; min-width: 7px; min-height: 7px; border: 1px solid #fff; background: #7d9cab; opacity: .35; }
-.topology-studio .react-flow__handle-left { left: 48px; top: 36px; }
-.topology-studio .react-flow__handle-right { right: 48px; top: 36px; }
-.topology-studio .react-flow__handle-top { top: 8px; }
-.topology-studio .react-flow__handle-bottom { bottom: auto; top: 64px; }
-.topology-canvas-viewport.mode-connect .react-flow__handle, .topology-studio .topology-device-node:hover .react-flow__handle, .topology-studio .is-selected .react-flow__handle { opacity: 1; background: #0c8a7a; }
+/* 引擎已从 React Flow 切到 Cytoscape（f14b052）—— 之前为 .react-flow__handle 写的
+   6 条规则没有对应 DOM，是纯死 CSS。连同占位 .netops-reactflow-compat 一起删。 */
 .topology-studio .node-access-dot { position: absolute; top: 7px; left: 99px; height: 8px; width: 8px; border-radius: 50%; background: #a4afba; border: 2px solid #fff; }
 .topology-studio .node-access-dot.connected, .topology-studio .node-access-dot.verified { background: var(--ok); }
 .topology-studio .node-access-dot.failed, .topology-studio .node-access-dot.error { background: var(--danger); }
