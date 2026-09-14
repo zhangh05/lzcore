@@ -50,7 +50,7 @@ def app():
 
 
 def test_topology_lifecycle_and_validation(workspace):
-    dev1 = service.save_device(workspace, {"name": "PE1", "host": "192.168.1.1", "vendor": "h3c", "device_type": "router"})
+    dev1 = service.save_device(workspace, {"name": "PE1", "host": "192.168.1.1", "vendor": "h3c", "device_type": "router", "device_model": "SR6608"})
     dev2 = service.save_device(workspace, {"name": "CE1", "host": "192.168.1.2", "vendor": "cisco", "device_type": "switch"})
 
     topo = service.save_topology(workspace, {
@@ -74,61 +74,79 @@ def test_topology_lifecycle_and_validation(workspace):
         "groups": [
             {"name": "AS65001", "kind": "as", "x": 50, "y": 50, "width": 400, "height": 300}
         ],
+        "canvas_items": [
+            {"item_id": "note-core", "kind": "text", "text": "核心区域", "x": 80, "y": 30, "width": 160, "height": 36},
+        ],
     })
 
     assert topo["name"] == "C1"
+    assert dev1["device_model"] == "SR6608"
     assert topo["version"] == 1
     assert len(topo["nodes"]) == 2
     assert len(topo["links"]) == 1
     assert topo["links"][0]["source_interface"] == "GE0/1"
     assert topo["links"][0]["target_interface"] == "GE0/0"
-    assert topo["links"][0]["label"] == "GE0/1 ↔ GE0/0"
+    assert topo["links"][0]["label"] == ""
     assert len(topo["groups"]) == 1
+    assert topo["canvas_items"] == [{"item_id": "note-core", "kind": "text", "text": "核心区域", "x": 80.0, "y": 30.0, "width": 160.0, "height": 36.0, "style": {}}]
 
-    # Duplicate device rejection
-    with pytest.raises(ValueError, match="duplicate device entity"):
-        service.save_topology(workspace, {
-            "name": "Duplicate Test",
-            "nodes": [
-                {"device_id": dev1["device_id"]},
-                {"device_id": dev1["device_id"]},
-            ],
-        })
+    # A diagram may intentionally show the same registered device more than
+    # once; node identity is owned by the canvas, not the asset inventory.
+    duplicate = service.save_topology(workspace, {
+        "name": "Duplicate Test",
+        "nodes": [
+            {"node_id": "pe1-main", "linked_device_id": dev1["device_id"]},
+            {"node_id": "pe1-detail", "linked_device_id": dev1["device_id"]},
+        ],
+    })
+    assert [node["node_id"] for node in duplicate["nodes"]] == ["pe1-main", "pe1-detail"]
 
     # Unknown device rejection
-    with pytest.raises(ValueError, match="unknown device"):
+    with pytest.raises(ValueError, match="unknown linked device"):
         service.save_topology(workspace, {
             "name": "Unknown Device Test",
             "nodes": [
-                {"device_id": "non-existent-device-id"},
+                {"node_id": "unknown", "linked_device_id": "non-existent-device-id"},
             ],
         })
 
 
-def test_topology_manual_symbols_are_diagram_only_and_not_discoverable(workspace):
+def test_topology_unlinked_symbols_are_diagram_only_and_not_discoverable(workspace):
     managed = service.save_device(workspace, {"name": "PE1", "host": "192.0.2.1", "vendor": "h3c"})
     topo = service.save_topology(workspace, {
         "name": "Mixed drawing",
         "nodes": [
-            {"device_id": managed["device_id"], "x": 0, "y": 0},
-            {"device_id": "manual_internet", "manual": True, "device_type": "cloud", "display_name": "Internet", "x": 160, "y": 0},
+            {"node_id": "pe1", "linked_device_id": managed["device_id"], "x": 0, "y": 0},
+            {"node_id": "internet", "device_type": "cloud", "display_name": "Internet", "x": 160, "y": 0},
         ],
         "links": [{
-            "source_device_id": managed["device_id"], "target_device_id": "manual_internet",
+            "source_node_id": "pe1", "target_node_id": "internet",
             "source": "manual", "kind": "logical", "label": "WAN",
         }],
     })
-    manual = next(node for node in topo["nodes"] if node["manual"])
-    assert manual["device_type"] == "cloud"
-    assert manual["display_name"] == "Internet"
+    unlinked = next(node for node in topo["nodes"] if not node["linked_device_id"])
+    assert unlinked["device_type"] == "cloud"
+    assert unlinked["display_name"] == "Internet"
     state = service.topology_state(workspace, topo["topology_id"])
-    assert {node["device_id"] for node in state["nodes"]} == {managed["device_id"], "manual_internet"}
+    assert {node["device_id"] for node in state["nodes"]} == {managed["device_id"]}
     with pytest.raises(ValueError, match="discovered topology links require managed devices"):
         service.save_topology(workspace, {
             "name": "Invalid discovery",
-            "nodes": [{"device_id": managed["device_id"]}, {"device_id": "manual_internet", "manual": True}],
-            "links": [{"source_device_id": managed["device_id"], "target_device_id": "manual_internet", "source": "discovered", "evidence_refs": ["observation_1"]}],
+            "nodes": [{"node_id": "pe1", "linked_device_id": managed["device_id"]}, {"node_id": "internet"}],
+            "links": [{"source_node_id": "pe1", "target_node_id": "internet", "source": "discovered", "evidence_refs": ["observation_1"]}],
         })
+
+
+def test_transition_read_maps_legacy_link_endpoints_to_modern_nodes():
+    topology = service._public_topology({
+        "topology_id": "transition", "version": 1,
+        "nodes": [
+            {"node_id": "node-pe1", "linked_device_id": "device-pe1"},
+            {"node_id": "node-ce1", "linked_device_id": "device-ce1"},
+        ],
+        "links": [{"link_id": "legacy-edge", "source_device_id": "device-pe1", "target_device_id": "device-ce1"}],
+    })
+    assert topology["links"] == [{"link_id": "legacy-edge", "source_node_id": "node-pe1", "target_node_id": "node-ce1"}]
 
 
 def test_topology_patch_preserves_graph_requires_evidence_and_versions(workspace):
@@ -144,9 +162,10 @@ def test_topology_patch_preserves_graph_requires_evidence_and_versions(workspace
         }],
     })
 
+    pe1_node_id = next(node["node_id"] for node in topo["nodes"] if node["linked_device_id"] == dev1["device_id"])
     patched = service.patch_topology(workspace, topo["topology_id"], {
         "version": topo["version"],
-        "node_updates": [{"device_id": dev1["device_id"], "labels": ["PE"]}],
+        "node_updates": [{"node_id": pe1_node_id, "labels": ["PE"]}],
         "link_updates": [{
             "source_device_id": dev1["device_id"], "target_device_id": dev2["device_id"],
             "source_interface": "GE0/1", "target_interface": "GE0/1", "source": "discovered",
@@ -159,7 +178,7 @@ def test_topology_patch_preserves_graph_requires_evidence_and_versions(workspace
     assert {link["link_id"] for link in patched["links"]} >= {"link_manual"}
     discovered = next(link for link in patched["links"] if link["source"] == "discovered")
     assert discovered["evidence_refs"] == ["observation_direct_adjacency"]
-    assert next(node for node in patched["nodes"] if node["device_id"] == dev1["device_id"])["labels"] == ["PE"]
+    assert next(node for node in patched["nodes"] if node["linked_device_id"] == dev1["device_id"])["labels"] == ["PE"]
 
     with pytest.raises(ValueError, match="topology_version_conflict"):
         service.patch_topology(workspace, topo["topology_id"], {"version": 1, "node_updates": []})
@@ -260,15 +279,34 @@ def test_node_deletion_does_not_delete_device_or_connections(workspace):
     assert len(topo["links"]) == 1
 
     # Delete node from topology
-    updated_topo = service.remove_topology_node(workspace, topo["topology_id"], dev1["device_id"])
+    dev1_node_id = next(node["node_id"] for node in topo["nodes"] if node["linked_device_id"] == dev1["device_id"])
+    updated_topo = service.remove_topology_node(workspace, topo["topology_id"], dev1_node_id)
     assert len(updated_topo["nodes"]) == 1
-    assert updated_topo["nodes"][0]["device_id"] == dev2["device_id"]
+    assert updated_topo["nodes"][0]["linked_device_id"] == dev2["device_id"]
     # The connected link was removed from topology
     assert len(updated_topo["links"]) == 0
 
     # Underlying device and connection still exist!
     assert service.get_device(workspace, dev1["device_id"]) is not None
     assert service.get_connection(workspace, conn1["connection_id"]) is not None
+
+
+def test_asset_deletion_only_unlinks_the_user_owned_diagram_node(workspace):
+    device = service.save_device(workspace, {"name": "Diagram-linked", "host": "10.1.2.1", "vendor": "h3c"})
+    topo = service.save_topology(workspace, {
+        "name": "Independent drawing",
+        "nodes": [
+            {"node_id": "managed-node", "linked_device_id": device["device_id"], "display_name": "主设备"},
+            {"node_id": "internet", "device_type": "cloud", "display_name": "Internet"},
+        ],
+        "links": [{"source_node_id": "managed-node", "target_node_id": "internet", "kind": "logical", "source": "manual"}],
+    })
+    assert service.delete_device(workspace, device["device_id"]) is True
+    reloaded = service.get_topology(workspace, topo["topology_id"])
+    assert reloaded is not None
+    assert [node["node_id"] for node in reloaded["nodes"]] == ["managed-node", "internet"]
+    assert next(node for node in reloaded["nodes"] if node["node_id"] == "managed-node")["linked_device_id"] is None
+    assert len(reloaded["links"]) == 1
 
 
 def test_topology_deletion_cleans_skill_references(workspace):
@@ -435,7 +473,8 @@ def test_topology_rest_api(app, workspace):
     assert res.get_json()["ok"] is True
 
     # DELETE node
-    res = client.delete(f"/api/extensions/network.operations/topologies/{topo_id}/nodes/{dev['device_id']}", json={
+    node_id = data["topology"]["nodes"][0]["node_id"]
+    res = client.delete(f"/api/extensions/network.operations/topologies/{topo_id}/nodes/{node_id}", json={
         "workspace_id": workspace,
     })
     assert res.status_code == 200
@@ -589,7 +628,7 @@ def test_topology_canonical_tool_via_runtime_client(workspace):
     assert scope_result.status == "succeeded"
     assert scope_result.output["ok"] is True
     assert len(scope_result.output["nodes"]) == 1
-    assert scope_result.output["nodes"][0]["device_id"] == dev1["device_id"]
+    assert scope_result.output["nodes"][0]["linked_device_id"] == dev1["device_id"]
     assert len(scope_result.output["links"]) == 0
 
     # Write out-of-scope under Skill scope: attempting to add dev2 node must fail
@@ -604,7 +643,7 @@ def test_topology_canonical_tool_via_runtime_client(workspace):
         context=skill_ctx,
     )
     assert write_result.output["ok"] is False
-    assert write_result.output["error"] == "device_not_allowed_by_skill"
+    assert write_result.output["error"] == "topology_node_outside_selected_skill"
 
     # 5. Skill context compact summary
     selection = service.resolve_workbench_selection(workspace, {"skill_id": skill["skill_id"]})

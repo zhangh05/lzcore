@@ -28,7 +28,7 @@
     "/api/extensions/network.operations/skills/<skill_id>",
     "/api/extensions/network.operations/topologies",
     "/api/extensions/network.operations/topologies/<topology_id>",
-    "/api/extensions/network.operations/topologies/<topology_id>/nodes/<device_id>",
+    "/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>",
     "/api/extensions/network.operations/topologies/<topology_id>/compare",
     "/api/extensions/network.operations/topologies/<topology_id>/state",
     "/api/extensions/network.operations/inspections",

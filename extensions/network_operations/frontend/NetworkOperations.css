@@ -858,7 +858,7 @@
   color: var(--text);
 }
 
-.inspector-field input, .inspector-field select {
+.inspector-field input, .inspector-field select, .inspector-field textarea {
   min-height: var(--h-control-compact);
   font-size: var(--fs-12);
   padding: 4px 8px;
@@ -867,6 +867,20 @@
   background: var(--surface-2);
   color: var(--text);
 }
+
+.inspector-field textarea { min-height: 66px; resize: vertical; font-family: inherit; line-height: 1.45; }
+.inspector-dimension-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+
+.inspector-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.inspector-check input { accent-color: var(--accent); }
 
 .inspector-entity-card {
   padding: var(--space-3);

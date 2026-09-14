@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef, type ComponentType, 
 import type { IconProps } from "@phosphor-icons/react";
 import { apiRequest } from "../../../frontend/src/api/client";
 import { confirm } from "../../../frontend/src/components/ConfirmDialog";
-import { IconBolt, IconChecklist, IconEdit, IconEye, IconPlugs, IconPlus, IconRefresh, IconServer, IconShield, IconTrash, IconTree } from "../../../frontend/src/components/Icon";
+import { IconBolt, IconChecklist, IconEdit, IconEye, IconPlugs, IconPlus, IconRefresh, IconServer, IconShield, IconTrash } from "../../../frontend/src/components/Icon";
 import { Button, PageHeader, TabButton } from "../../../frontend/src/components/ui";
 import { useSessionStore } from "../../../frontend/src/stores/session";
 import TopologyWorkspace, { DeviceTypeIcon, type Topology } from "./components/TopologyWorkspace";
@@ -17,7 +17,7 @@ const EmptyState = ({ icon: EmptyIcon, children }: { icon: ComponentType<IconPro
 );
 
 type Region = { region_id: string; name: string };
-type Device = { device_id: string; name: string; host: string; vendor: string; device_type: string; region_id: string };
+type Device = { device_id: string; name: string; host: string; vendor: string; device_type: string; device_model?: string; region_id: string };
 type Connection = { connection_id: string; device_id: string; name?: string; protocol: "ssh" | "telnet"; port: number; username?: string; source_address?: string; effective_source_address?: string; auth_method?: string; status: string; verified: boolean; credential_configured?: boolean; last_error?: string; last_tested_at?: string; driver_id?: string; detected_vendor?: string; os_family?: string; semantic_facts?: string[]; profile_detected_from?: string };
 type Skill = { skill_id: string; name: string; description: string; instructions?: string; enabled: boolean; approval_enabled?: boolean; device_ids: string[]; connection_ids: string[]; allowed_tool_ids: string[]; topology_id?: string };
 type Observation = { observation_id: string; source_id: string; observed_at: string; completeness: string; target_ids: string[]; candidate_reference_id?: string };
@@ -38,6 +38,16 @@ const toolOptions = [
 const baseToolId = "network.operations.device.manage";
 const allowedToolIds = [baseToolId, ...toolOptions.map((item) => item.id)];
 const emptyDevice: DeviceForm = { name: "", host: "", vendor: "h3c", device_type: "switch", region_id: "" };
+const deviceRoleOptions = [
+  ["router", "路由器"], ["switch", "二层交换机"], ["l3_switch", "三层交换机"],
+  ["firewall", "防火墙"], ["server", "服务器"], ["wireless", "无线设备"], ["cloud", "云 / Internet"],
+] as const;
+const deviceModelSuggestions: Record<string, string[]> = {
+  h3c: ["S5130S-28S-EI", "S5560X-30C-EI", "S6520X-54QC-EI", "S12500X-AF", "SR6608", "SecPath F1000"],
+  huawei: ["S5735-L24T4S-QA", "S6730-H48X6C", "NE40E-X8A", "USG6600E"],
+  cisco: ["Catalyst 9300", "Catalyst 9500", "Nexus 9300", "ASR 1000", "Firepower 2100"],
+  generic: ["通用路由器", "通用交换机", "通用防火墙", "虚拟设备"],
+};
 const emptyConnection: ConnectionForm = { device_id: "", name: "", protocol: "ssh", port: "22", username: "", source_address: "", password: "", private_key: "", passphrase: "", auth_method: "password" };
 const emptySkill: SkillForm = { name: "", description: "", instructions: "", enabled: true, approval_enabled: false, device_ids: [], connection_ids: [], allowed_tool_ids: allowedToolIds, topology_id: "" };
 const friendlyErrors: Record<string, string> = {
@@ -70,7 +80,8 @@ const topologyLoadReady: TopologyLoadState = { error: "" };
 type NetworkView = "devices" | "skills" | "topology" | "context";
 
 /**
- * 四个视图与它们的图标。之前这里是四个裸 <button> 拼在 1000+ 字符的一行里，
+ * 能力中心内的三个管理视图。拓扑是一级导航，不再作为此处的二级标签，
+ * 以避免画布被管理页标题和 tab 条挤压。
  * 计数用裸 <span>（opacity .7），与平台另外两套 tab（数据管理 / 运行监控）
  * 不是一套语言。现在收敛到 components/ui/TabButton，视觉由 global.css
  * 的「统一 tab 条」区块统一给出，这里只声明"哪个视图 + 什么图标"。
@@ -78,7 +89,6 @@ type NetworkView = "devices" | "skills" | "topology" | "context";
 const VIEWS: Array<[NetworkView, string, ComponentType<IconProps>]> = [
   ["devices", "设备与连接", IconPlugs],
   ["skills", "Skill 配置", IconBolt],
-  ["topology", "网络拓扑", IconTree],
   ["context", "环境与证据", IconShield],
 ];
 
@@ -104,14 +114,14 @@ const dedupeCommandExperience = (items: CommandExperience[]): CommandExperience[
   return [...grouped.values()].sort((left, right) => right.last_observed_at.localeCompare(left.last_observed_at));
 };
 
-export default function NetworkOperations() {
+export default function NetworkOperations({ topologyOnly = false }: { topologyOnly?: boolean }) {
   const workspaceId = useSessionStore((state) => state.currentWorkspaceId);
   const [editor, setEditor] = useState<"device" | "connection" | "skill" | null>(null);
   const [query, setQuery] = useState("");
   const [regionFilter, setRegionFilter] = useState("");
   const editorRef = useRef<HTMLDialogElement>(null);
   useEffect(() => { if (editor) editorRef.current?.showModal(); }, [editor]);
-  const [view, setView] = useState<NetworkView>("devices");
+  const [view, setView] = useState<NetworkView>(topologyOnly ? "topology" : "devices");
   const [regions, setRegions] = useState<Region[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -123,6 +133,7 @@ export default function NetworkOperations() {
   const [selectedObservationIds, setSelectedObservationIds] = useState<Set<string>>(() => new Set());
   const [selectedExperienceIds, setSelectedExperienceIds] = useState<Set<string>>(() => new Set());
   const [deviceForm, setDeviceForm] = useState<DeviceForm>(emptyDevice);
+  const modelSuggestions = deviceModelSuggestions[deviceForm.vendor] || deviceModelSuggestions.generic;
   const [connectionForm, setConnectionForm] = useState<ConnectionForm>(emptyConnection);
   const [skillForm, setSkillForm] = useState<SkillForm>(emptySkill);
   const [editingRegionId, setEditingRegionId] = useState("");
@@ -436,9 +447,11 @@ export default function NetworkOperations() {
     setEditor("connection");
   };
 
-  return <div className={`network-admin${view === "topology" ? " is-topology" : ""}`}>
-    <PageHeader title="网络设备与 Skill" subtitle="集中管理设备连接，按 Skill 授权读取、巡检与配置能力。"><Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。", false))} disabled={busy}>刷新</Button></PageHeader>
-    <div className="network-tabs" role="tablist">{VIEWS.map(([key, label, ViewIcon]) => <TabButton key={key} className="net-tab" testId={`network-tab-${key}`} icon={ViewIcon} label={label} count={viewCounts[key]} active={view === key} onClick={() => { setView(key); setQuery(""); }} />)}</div>
+  return <div className={`network-admin${view === "topology" ? " is-topology" : ""}${topologyOnly ? " topology-route" : ""}`}>
+    {!topologyOnly ? <>
+      <PageHeader title="网络设备与 Skill" subtitle="集中管理设备连接，按 Skill 授权读取、巡检与配置能力。"><Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。", false))} disabled={busy}>刷新</Button></PageHeader>
+      <div className="network-tabs" role="tablist">{VIEWS.map(([key, label, ViewIcon]) => <TabButton key={key} className="net-tab" testId={`network-tab-${key}`} icon={ViewIcon} label={label} count={viewCounts[key]} active={view === key} onClick={() => { setView(key); setQuery(""); }} />)}</div>
+    </> : null}
     {notice.text ? <div role="status" className={`network-notice${notice.ok ? " kind-ok" : ""}`}>{notice.text}</div> : null}
     {view !== "context" && view !== "topology" ? <div className="network-toolbar">
       <div className="network-filters"><input aria-label={view === "devices" ? "搜索设备" : "搜索 Skill"} placeholder={view === "devices" ? "搜索设备名称、管理地址" : "搜索 Skill 名称、说明"} value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -456,6 +469,8 @@ export default function NetworkOperations() {
           <label>设备名称<input required value={deviceForm.name} onChange={(event) => setDeviceForm({ ...deviceForm, name: event.target.value })} /></label>
           <label>管理地址<input required value={deviceForm.host} onChange={(event) => setDeviceForm({ ...deviceForm, host: event.target.value })} /></label>
           <label>厂商<select value={deviceForm.vendor} onChange={(event) => setDeviceForm({ ...deviceForm, vendor: event.target.value })}><option value="h3c">H3C</option><option value="huawei">华为</option><option value="cisco">Cisco</option><option value="generic">通用</option></select></label>
+          <label>设备角色<select aria-label="设备角色" value={deviceForm.device_type} onChange={(event) => setDeviceForm({ ...deviceForm, device_type: event.target.value })}>{deviceRoleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>设备型号（可选）<input aria-label="设备型号（可选）" list="network-device-model-suggestions" value={deviceForm.device_model || ""} onChange={(event) => setDeviceForm({ ...deviceForm, device_model: event.target.value })} placeholder="可从建议中选择，也可直接输入" /><datalist id="network-device-model-suggestions">{modelSuggestions.map((model) => <option key={model} value={model} />)}</datalist></label>
           <label>区域<select value={deviceForm.region_id} onChange={(event) => setDeviceForm({ ...deviceForm, region_id: event.target.value })}><option value="">未分区</option>{regions.map((region) => <option key={region.region_id} value={region.region_id}>{region.name}</option>)}</select></label>
           <div className="form-actions"><Button variant="primary" type="submit" disabled={busy}>{deviceForm.device_id ? "保存设备" : "登记设备"}</Button>{deviceForm.device_id ? <Button type="button" onClick={() => setEditor(null)}>取消</Button> : null}</div>
         </form>
@@ -507,7 +522,7 @@ export default function NetworkOperations() {
                   <span className="device-type-icon"><DeviceTypeIcon deviceType={device.device_type} size={15} /></span>
                   <strong>{device.name}</strong>
                 </div>
-                <span>{device.host} · {device.vendor.toUpperCase()} · {byRegion.get(device.region_id) || "未分区"}</span>
+                <span>{device.host} · {device.vendor.toUpperCase()} · {device.device_model || device.device_type} · {byRegion.get(device.region_id) || "未分区"}</span>
               </div>
               <div className="device-actions" aria-label={`${device.name} 设备管理`}>
                 <Button size="sm" icon={<IconEdit size={13} />} onClick={() => editDevice(device)}>编辑设备</Button>
@@ -580,6 +595,7 @@ export default function NetworkOperations() {
         topologies={topologies}
         loadError={topologyLoadState.error}
         onReload={load}
+        onCreateDevice={() => { setDeviceForm(emptyDevice); setEditor("device"); }}
         setNotice={setNotice}
         busy={busy}
       />

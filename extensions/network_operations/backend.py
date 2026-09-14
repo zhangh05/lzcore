@@ -318,16 +318,16 @@ def register_routes(app):
             status = 409 if str(exc) == "topology_version_conflict" else (404 if str(exc) == "topology_not_found" else 400)
             return jsonify({"ok": False, "error": str(exc)}), status
 
-    @app.route("/api/extensions/network.operations/topologies/<topology_id>/nodes/<device_id>", methods=["DELETE"])
-    def network_topology_node_delete(topology_id, device_id):
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>", methods=["DELETE"])
+    def network_topology_node_delete(topology_id, node_id):
         ws = _workspace()
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         try:
             version = _payload().get("version")
-            return jsonify({"ok": True, "topology": service.remove_topology_node(ws, topology_id, device_id, expected_version=version)})
+            return jsonify({"ok": True, "topology": service.remove_topology_node(ws, topology_id, node_id, expected_version=version)})
         except ValueError as exc:
-            status = 409 if str(exc) == "topology_version_conflict" else (404 if str(exc) in {"topology_not_found", "node_not_found"} else 400)
+            status = 409 if str(exc) == "topology_version_conflict" else (404 if str(exc) in {"topology_not_found", "topology_node_not_found"} else 400)
             return jsonify({"ok": False, "error": str(exc)}), status
 
     @app.route("/api/extensions/network.operations/topologies/<topology_id>/state", methods=["GET"])
@@ -627,6 +627,30 @@ def topology_tool(invocation):
     scope = _selected_skill_scope(invocation)
     allowed_devices = scope["device_ids"] if scope is not None else None
 
+    def linked_device(node):
+        return str((node or {}).get("linked_device_id") or "").strip()
+
+    def node_devices(nodes):
+        return {str(node.get("node_id") or ""): linked_device(node) for node in nodes or []}
+
+    def link_is_in_scope(link, nodes):
+        by_node_id = node_devices(nodes)
+        return (
+            by_node_id.get(str((link or {}).get("source_node_id") or "")) in allowed_devices
+            and by_node_id.get(str((link or {}).get("target_node_id") or "")) in allowed_devices
+        )
+
+    def scope_error_for_snapshot(nodes, links):
+        """Agents only see and mutate nodes tied to selected inventory assets."""
+        by_node_id = node_devices(nodes)
+        for node_id, device_id in by_node_id.items():
+            if not node_id or not device_id or device_id not in allowed_devices:
+                return {"ok": False, "error": "topology_node_outside_selected_skill", "node_id": node_id}
+        for link in links or []:
+            if not link_is_in_scope(link, nodes):
+                return {"ok": False, "error": "topology_link_outside_selected_skill"}
+        return None
+
     if action == "read":
         topology_id = str(args.get("topology_id") or (scope["skill"].get("topology_id") if scope and scope.get("skill") else "") or "").strip()
         if not topology_id:
@@ -634,7 +658,7 @@ def topology_tool(invocation):
             if scope is not None:
                 scoped_topos = []
                 for t in topologies:
-                    t_devices = {n.get("device_id") for n in t.get("nodes") or []}
+                    t_devices = {linked_device(n) for n in t.get("nodes") or [] if linked_device(n)}
                     if not t_devices or t_devices.intersection(allowed_devices):
                         scoped_topos.append(t)
                 return {"ok": True, "topologies": scoped_topos}
@@ -643,9 +667,9 @@ def topology_tool(invocation):
         if not topo:
             return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
         if scope is not None:
-            scoped_nodes = [n for n in (topo.get("nodes") or []) if n.get("device_id") in allowed_devices]
-            scoped_links = [l for l in (topo.get("links") or []) if l.get("source_device_id") in allowed_devices and l.get("target_device_id") in allowed_devices]
-            all_topo_devices = {n.get("device_id") for n in (topo.get("nodes") or [])}
+            scoped_nodes = [n for n in (topo.get("nodes") or []) if linked_device(n) in allowed_devices]
+            scoped_links = [l for l in (topo.get("links") or []) if link_is_in_scope(l, topo.get("nodes") or [])]
+            all_topo_devices = {linked_device(n) for n in (topo.get("nodes") or []) if linked_device(n)}
             if all_topo_devices and not scoped_nodes:
                 return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
             scoped_topo = {
@@ -675,15 +699,9 @@ def topology_tool(invocation):
     if action == "create":
         nodes = args.get("nodes") or []
         if scope is not None:
-            for node in nodes:
-                dev_id = str(node.get("device_id") or "").strip()
-                if dev_id not in allowed_devices:
-                    return {"ok": False, "error": "device_not_allowed_by_skill", "device_id": dev_id}
-            for link in args.get("links") or []:
-                s_id = str(link.get("source_device_id") or "").strip()
-                t_id = str(link.get("target_device_id") or "").strip()
-                if s_id not in allowed_devices or t_id not in allowed_devices:
-                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+            error = scope_error_for_snapshot(nodes, args.get("links") or [])
+            if error:
+                return error
         try:
             topo = service.save_topology(invocation.workspace_id, args)
             return {"ok": True, "topology": topo}
@@ -701,13 +719,30 @@ def topology_tool(invocation):
             return {"ok": False, "error": "topology_link_kind_invalid"}
         if str(args.get("status") or "").strip().lower() not in {"unknown", "up", "down"}:
             return {"ok": False, "error": "topology_link_status_invalid"}
+        topology_id = str(args.get("topology_id") or "").strip()
+        existing = service.get_topology(invocation.workspace_id, topology_id)
+        if not existing:
+            return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
+        def associated_node(device_id):
+            matches = [str(node.get("node_id") or "") for node in existing.get("nodes") or [] if linked_device(node) == device_id]
+            if len(matches) != 1:
+                return ""
+            return matches[0]
+        source_device_id = str(args.get("source_device_id") or "").strip()
+        target_device_id = str(args.get("target_device_id") or "").strip()
+        if scope is not None and (source_device_id not in allowed_devices or target_device_id not in allowed_devices):
+            return {"ok": False, "error": "device_not_allowed_by_skill"}
+        source_node_id = associated_node(source_device_id)
+        target_node_id = associated_node(target_device_id)
+        if not source_node_id or not target_node_id:
+            return {"ok": False, "error": "topology_device_association_not_unique"}
         args = {
             **args,
             "action": "patch",
             "link_updates": [{
-                "source_device_id": args.get("source_device_id"),
+                "source_node_id": source_node_id,
                 "source_interface": args.get("source_interface"),
-                "target_device_id": args.get("target_device_id"),
+                "target_node_id": target_node_id,
                 "target_interface": args.get("target_interface"),
                 "kind": args.get("kind"),
                 "label": args.get("label"),
@@ -736,31 +771,30 @@ def topology_tool(invocation):
         if scope is not None:
             existing_links = {str(link.get("link_id") or ""): link for link in existing.get("links") or []}
             existing_groups = {str(group.get("group_id") or ""): group for group in existing.get("groups") or []}
+            current_nodes = {str(node.get("node_id") or ""): dict(node) for node in existing.get("nodes") or []}
             for node in args.get("node_updates") or []:
-                if str((node or {}).get("device_id") or "").strip() not in allowed_devices:
-                    return {"ok": False, "error": "device_not_allowed_by_skill"}
-            for device_id in args.get("remove_node_device_ids") or []:
-                if str(device_id).strip() not in allowed_devices:
-                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+                node_id = str((node or {}).get("node_id") or "").strip()
+                candidate = {**current_nodes.get(node_id, {}), **(node or {})}
+                if linked_device(candidate) not in allowed_devices:
+                    return {"ok": False, "error": "topology_node_outside_selected_skill", "node_id": node_id}
+                current_nodes[node_id] = candidate
+            for node_id in args.get("remove_node_ids") or args.get("remove_node_device_ids") or []:
+                node = current_nodes.get(str(node_id).strip())
+                if not node or linked_device(node) not in allowed_devices:
+                    return {"ok": False, "error": "topology_node_outside_selected_skill", "node_id": str(node_id).strip()}
             for link in args.get("link_updates") or []:
                 link = link or {}
                 link_id = str(link.get("link_id") or "").strip()
                 candidate = {**existing_links.get(link_id, {}), **link} if link_id else link
-                if (
-                    str(candidate.get("source_device_id") or "").strip() not in allowed_devices
-                    or str(candidate.get("target_device_id") or "").strip() not in allowed_devices
-                ):
-                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+                if not link_is_in_scope(candidate, list(current_nodes.values())):
+                    return {"ok": False, "error": "topology_link_outside_selected_skill"}
             for link_id in args.get("remove_link_ids") or []:
                 link = existing_links.get(str(link_id).strip())
-                if not link or (
-                    str(link.get("source_device_id") or "") not in allowed_devices
-                    or str(link.get("target_device_id") or "") not in allowed_devices
-                ):
+                if not link or not link_is_in_scope(link, list(current_nodes.values())):
                     return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
             for group_id in [str((group or {}).get("group_id") or "").strip() for group in args.get("group_updates") or []] + [str(item).strip() for item in args.get("remove_group_ids") or []]:
                 if group_id and group_id in existing_groups and any(
-                    str(node.get("group_id") or "") == group_id and str(node.get("device_id") or "") not in allowed_devices
+                    str(node.get("group_id") or "") == group_id and linked_device(node) not in allowed_devices
                     for node in existing.get("nodes") or []
                 ):
                     return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
@@ -780,15 +814,9 @@ def topology_tool(invocation):
         if args.get("version") is None or any(key not in args for key in ("nodes", "links", "groups")):
             return {"ok": False, "error": "topology_full_snapshot_required_use_patch", "topology_id": topology_id}
         if scope is not None:
-            for node in args.get("nodes") or []:
-                dev_id = str(node.get("device_id") or "").strip()
-                if dev_id not in allowed_devices:
-                    return {"ok": False, "error": "device_not_allowed_by_skill", "device_id": dev_id}
-            for link in args.get("links") or []:
-                s_id = str(link.get("source_device_id") or "").strip()
-                t_id = str(link.get("target_device_id") or "").strip()
-                if s_id not in allowed_devices or t_id not in allowed_devices:
-                    return {"ok": False, "error": "device_not_allowed_by_skill"}
+            error = scope_error_for_snapshot(args.get("nodes") or [], args.get("links") or [])
+            if error:
+                return error
         try:
             topo = service.save_topology(invocation.workspace_id, {**args, "topology_id": topology_id})
             return {"ok": True, "topology": topo}
@@ -804,7 +832,7 @@ def topology_tool(invocation):
             return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
         if scope is not None:
             for node in existing.get("nodes") or []:
-                if node.get("device_id") not in allowed_devices:
+                if linked_device(node) not in allowed_devices:
                     return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
         deleted = service.delete_topology(invocation.workspace_id, topology_id)
         return {"ok": deleted}
@@ -1148,7 +1176,7 @@ def register():
             {
                 "tool_id": "network.operations.topology",
                 "name": "网络拓扑管理与比对",
-                "description": "读取、创建、保留式补丁、记录已发现链路、完整替换或删除网络拓扑节点、链路和分组，并比对拓扑与当前运行事实。Agent 新增经两端证据确认的链路，必须先 read，再以该版本调用 record_discovered_link；它只接受两端设备/接口、physical 或 logical、unknown/up/down 和非空字符串证据 ID 数组。patch 仅用于已有对象变更，未声明图元绝不删除。update 仅接受完整图纸快照。受当前 Skill 授权设备限制；只读拓扑返回节点、链路、分组、来源、证据引用和版本；比对输出存量拓扑与可用设备或采集证据的差异。",
+                "description": "网络拓扑是独立图纸：节点由 node_id 标识，可选 linked_device_id 关联登记设备；删除资产只解除关联，绝不删除图纸节点或连线。图纸还可包含用户注释图元 canvas_items（矩形、椭圆、文本），它们不是设备、链路或 Agent 操作目标。Agent 只读取、比对和修改关联到当前 Skill 设备范围的节点；先 read 取得最新 version，再 patch。record_discovered_link 仍以两端登记 device_id/接口作为输入，服务仅在各设备恰有一个关联节点时记录经证据确认的链路。",
                 "category": "ops",
                 "risk_level": "medium",
                 "permission_action": "network",
@@ -1163,7 +1191,7 @@ def register():
                 },
                 "bindable_inputs": {"read": ["topology_id"], "compare": ["topology_id"], "patch": ["topology_id", "version"], "record_discovered_link": ["topology_id", "version", "source_device_id", "target_device_id"], "update": ["topology_id", "version"], "delete": ["topology_id"]},
                 "referenceable_outputs": {
-                    "read": ["topology", "nodes", "links", "groups", "version"],
+                    "read": ["topology", "nodes", "links", "groups", "canvas_items", "version"],
                     "create": ["topology"],
                     "patch": ["topology", "version"],
                     "record_discovered_link": ["topology", "version"],
@@ -1188,10 +1216,11 @@ def register():
                         "nodes": {"type": "array", "items": {"type": "object"}},
                         "links": {"type": "array", "items": {"type": "object"}},
                         "groups": {"type": "array", "items": {"type": "object"}},
+                        "canvas_items": {"type": "array", "items": {"type": "object"}},
                         "node_updates": {"type": "array", "items": {"type": "object"}},
                         "link_updates": {"type": "array", "items": {"type": "object"}},
                         "group_updates": {"type": "array", "items": {"type": "object"}},
-                        "remove_node_device_ids": {"type": "array", "items": {"type": "string"}},
+                        "remove_node_ids": {"type": "array", "items": {"type": "string"}},
                         "remove_link_ids": {"type": "array", "items": {"type": "string"}},
                         "remove_group_ids": {"type": "array", "items": {"type": "string"}},
                         "source_device_id": {"type": "string"},

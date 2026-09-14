@@ -2,6 +2,7 @@
 .network-admin.is-topology { display: flex; flex-direction: column; overflow: hidden; }
 .network-admin.is-topology > .ui-page-header { flex: 0 0 auto; padding-top: 12px; padding-bottom: 10px; }
 .network-admin.is-topology > .network-tabs { flex: 0 0 42px; }
+.network-admin.topology-route { background: #f5f8fa; }
 .network-admin.is-topology > .network-notice { position: absolute; bottom: 46px; left: 20px; z-index: 40; max-width: min(520px, 80vw); box-shadow: var(--shadow-md); }
 .network-admin .network-topology-workspace.topology-studio {
   --topology-link: #778ba0;
@@ -28,31 +29,42 @@
 .topology-studio .toolbar-right { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; align-items: center; }
 .topology-studio .topology-canvas-title { max-width: none; font-size: 14px; letter-spacing: -.2px; color: #26384a; }
 .topology-studio .topology-save-indicator { white-space: nowrap; }
-.topology-studio .topology-editbar { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 16px; border-bottom: 1px solid #dce5ea; background: #fff; z-index: 6; }
+.topology-studio .topology-editbar { position: relative; z-index: 20; flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 16px; border-bottom: 1px solid #dce5ea; background: #fff; }
 .topology-studio .topology-editbar .btn { border-color: #d6e0e6; background: #fff; padding: 5px 8px; height: 30px; white-space: nowrap; box-shadow: none; }
 .topology-studio .topology-editbar .btn:hover { background: #f0f7f6; border-color: #9ac9c0; }
 .studio-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #526779; cursor: pointer; }
 .studio-icon-button:hover, .studio-icon-button[aria-pressed=true] { background: #eaf6f3; border-color: #75b9ac; color: #087a70; }
 .studio-edit-tools, .studio-layer-tabs { display: flex; align-items: center; gap: 3px; min-width: 0; }
-.studio-edit-tools { overflow: auto hidden; padding-right: 8px; }
-.studio-mode-button, .studio-layer-tabs button, .studio-align-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #64778a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
-.studio-align-menu > summary::-webkit-details-marker { display: none; }
-.studio-mode-button:hover, .studio-layer-tabs button:hover, .studio-align-menu > summary:hover { background: #f0f5f6; color: #233c4b; }
+.studio-edit-tools { overflow: visible; padding-right: 8px; }
+.studio-mode-button, .studio-layer-tabs button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #64778a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-align-menu > summary::-webkit-details-marker, .studio-insert-menu > summary::-webkit-details-marker { display: none; }
+.studio-mode-button:hover, .studio-layer-tabs button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: #f0f5f6; color: #233c4b; }
 .studio-mode-button[aria-pressed=true], .studio-layer-tabs button[aria-pressed=true] { background: #e4f5f1; border-color: #a2d6cd; color: #087a70; font-weight: 650; }
 .studio-align-menu { position: relative; }
 .studio-align-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(3, max-content); gap: 4px; min-width: 230px; padding: 8px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
 .studio-align-menu > div button { padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; color: #53697a; font-size: 11px; cursor: pointer; text-align: left; }
 .studio-align-menu > div button:hover { background: #edf7f5; color: #087a70; }
+.studio-insert-menu { position: relative; }
+.studio-insert-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; min-width: 128px; padding: 6px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
+.studio-insert-menu > div button { padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: #53697a; font-size: 12px; cursor: pointer; text-align: left; white-space: nowrap; }
+.studio-insert-menu > div button:hover { background: #edf7f5; color: #087a70; }
 .studio-more { position: relative; font-size: 12px; }
 .studio-more > summary { padding: 7px 8px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
 .studio-more > div { position: absolute; right: 0; top: 34px; display: grid; gap: 4px; padding: 8px; width: 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #0002; z-index: 20; }
 .topology-studio .topology-canvas-viewport { height: auto; min-height: 0; flex: 1 1 0; background: #f7fafb; }
 .topology-studio .topology-canvas-viewport.mode-connect { cursor: crosshair; }
+.topology-studio .topology-canvas-viewport.mode-select .netops-cytoscape { cursor: default; }
+.topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape { cursor: grab; }
+.topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape:active { cursor: grabbing; }
 .topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: #f8fafc; }
-/* Background position and scale are driven by the Cytoscape viewport. A fixed
-   CSS grid makes a panned drawing look like the nodes slide over wallpaper. */
+/* Grid paper is intentionally fixed; editing changes object coordinates, not
+   the viewport or its reference grid. */
 .topology-studio .netops-canvas-wrap.grid-on { background-color: #f8fafc; background-image: linear-gradient(#dbe5ec 1px, transparent 1px), linear-gradient(90deg, #dbe5ec 1px, transparent 1px); }
 .topology-studio .netops-cytoscape { position: absolute; inset: 0; width: 100%; height: 100%; outline: 0; }
+.topology-studio .netops-selection-gesture-layer { position: absolute; inset: 0; z-index: 6; cursor: default; }
+.topology-studio .netops-move-gesture-layer { position: absolute; inset: 0; z-index: 6; cursor: grab; }
+.topology-studio .netops-move-gesture-layer:active { cursor: grabbing; }
+.topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid #16837b; background: rgb(22 131 123 / 14%); }
 .topology-studio .netops-viewport-controls { position: absolute; right: 14px; bottom: 14px; z-index: 8; display: flex; align-items: center; overflow: hidden; border: 1px solid #cfdbe3; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #273c4a1c; }
 .topology-studio .netops-viewport-controls button { min-width: 32px; height: 31px; padding: 0 8px; border: 0; border-right: 1px solid #e2e8ee; background: #fff; color: #385062; font-size: 13px; font-weight: 650; cursor: pointer; }
 .topology-studio .netops-viewport-controls button:last-child { border-right: 0; font-size: 11px; }
@@ -63,6 +75,7 @@
 .studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: #6b8190; pointer-events: none; }
 .studio-canvas-caption strong { color: #2c4555; font-weight: 650; }
 .canvas-mode-hint { margin-left: 8px; color: #6f8795; }
+.topology-canvas-viewport.mode-select .canvas-mode-hint { color: #087a70; font-weight: 600; }
 .studio-canvas-caption label { pointer-events: auto; margin-left: auto; display: flex; align-items: center; gap: 4px; background: #fff; padding: 4px 7px; border: 1px solid #d6e1e7; border-radius: 4px; box-shadow: 0 2px 5px #1025360d; }
 .studio-canvas-caption input { margin: 0; width: 12px; height: 12px; }
 .studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid #dce5ea; background: #fff; color: #718694; font-size: 10px; }

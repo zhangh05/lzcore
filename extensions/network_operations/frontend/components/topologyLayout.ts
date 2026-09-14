@@ -3,7 +3,7 @@ import type { Topology } from "./TopologyWorkspace";
 type PositionedNode = { device_id: string; x: number; y: number };
 
 function connectedComponents(topology: Topology): string[][] {
-  const parent = new Map(topology.nodes.map((node) => [node.device_id, node.device_id]));
+  const parent = new Map(topology.nodes.map((node) => [node.node_id, node.node_id]));
   const find = (id: string): string => {
     const root = parent.get(id) || id;
     if (root === id) return id;
@@ -17,12 +17,12 @@ function connectedComponents(topology: Topology): string[][] {
     if (leftRoot !== rightRoot) parent.set(rightRoot, leftRoot);
   };
   topology.links.forEach((link) => {
-    if (parent.has(link.source_device_id) && parent.has(link.target_device_id)) join(link.source_device_id, link.target_device_id);
+    if (parent.has(link.source_node_id) && parent.has(link.target_node_id)) join(link.source_node_id, link.target_node_id);
   });
   const components = new Map<string, string[]>();
   topology.nodes.forEach((node) => {
-    const root = find(node.device_id);
-    components.set(root, [...(components.get(root) || []), node.device_id]);
+    const root = find(node.node_id);
+    components.set(root, [...(components.get(root) || []), node.node_id]);
   });
   return [...components.values()].sort((left, right) => right.length - left.length || left[0].localeCompare(right[0]));
 }
@@ -45,7 +45,7 @@ export async function layoutTopology(topology: Topology): Promise<Topology> {
 
   for (const component of connectedComponents(topology)) {
     const componentIds = new Set(component);
-    const componentLinks = topology.links.filter((link) => componentIds.has(link.source_device_id) && componentIds.has(link.target_device_id));
+    const componentLinks = topology.links.filter((link) => componentIds.has(link.source_node_id) && componentIds.has(link.target_node_id));
     const result = await elk.layout({
       id: `component-${component[0]}`,
       layoutOptions: {
@@ -56,7 +56,7 @@ export async function layoutTopology(topology: Topology): Promise<Topology> {
         "elk.padding": "[top=0,left=0,bottom=0,right=0]",
       },
       children: component.map((id) => ({ id, width: 160, height: 130 })),
-      edges: componentLinks.map((link) => ({ id: link.link_id, sources: [link.source_device_id], targets: [link.target_device_id] })),
+      edges: componentLinks.map((link) => ({ id: link.link_id, sources: [link.source_node_id], targets: [link.target_node_id] })),
     });
     const laidOut = result.children || [];
     const minX = Math.min(...laidOut.map((node) => node.x || 0));
@@ -77,7 +77,7 @@ export async function layoutTopology(topology: Topology): Promise<Topology> {
     rowHeight = Math.max(rowHeight, height);
   }
 
-  const nodes = topology.nodes.map((node) => ({ ...node, x: positioned.get(node.device_id)?.x ?? node.x, y: positioned.get(node.device_id)?.y ?? node.y }));
+  const nodes = topology.nodes.map((node) => ({ ...node, x: positioned.get(node.node_id)?.x ?? node.x, y: positioned.get(node.node_id)?.y ?? node.y }));
   const groups = topology.groups.map((group) => {
     const members = nodes.filter((node) => node.group_id === group.group_id);
     if (!members.length) return group;

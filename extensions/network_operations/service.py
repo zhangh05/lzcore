@@ -270,6 +270,9 @@ def save_device(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         "host": host,
         "vendor": str(payload.get("vendor") or "generic").strip().lower(),
         "device_type": str(payload.get("device_type") or "switch").strip().lower(),
+        # The role drives a diagram icon; the physical model is user-owned
+        # inventory data and intentionally remains independently editable.
+        "device_model": str(payload.get("device_model") or "").strip()[:80],
         "region_id": region_id,
         "tags": sorted({str(item).strip() for item in (payload.get("tags") or []) if str(item).strip()}),
         "created_at": str(existing.get("created_at") or now_iso()),
@@ -316,15 +319,15 @@ def delete_device(workspace_id: str, device_id: str) -> bool:
             _save_or_delete_depleted_skill(workspace_id, skill)
     for topo in list_topologies(workspace_id):
         nodes = topo.get("nodes") or []
-        if any(n.get("device_id") == device_id for n in nodes):
-            topo["nodes"] = [n for n in nodes if n.get("device_id") != device_id]
-            topo["links"] = [
-                l for l in (topo.get("links") or [])
-                if l.get("source_device_id") != device_id and l.get("target_device_id") != device_id
+        if any(n.get("linked_device_id") == device_id for n in nodes):
+            # A drawing belongs to its owner, not the asset register.  Keep
+            # the node and links visible; merely sever the optional reference.
+            topo["nodes"] = [
+                {**node, "linked_device_id": None}
+                if node.get("linked_device_id") == device_id else node
+                for node in nodes
             ]
-            topo["version"] = int(topo.get("version") or 1) + 1
-            topo["updated_at"] = now_iso()
-            _store(workspace_id).save("topologies", topo["topology_id"], topo)
+            save_topology(workspace_id, topo)
     return _store(workspace_id).delete("devices", device_id)
 
 
@@ -2110,15 +2113,71 @@ def inspection_evidence_summary(workspace_id: str, task_id: str) -> dict[str, An
     }
 
 
+def _topology_graph_for_read(record: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Read legacy device-keyed diagrams as independent graph nodes.
+
+    Older records used a registered ``device_id`` as the canvas identity.  The
+    canvas now owns node identities and keeps the asset link separately.  This
+    adapter is deliberately read-only so existing diagrams open safely before
+    their next normal save persists the new representation.
+    """
+    nodes: list[dict[str, Any]] = []
+    legacy_refs: dict[str, str] = {}
+    for raw in record.get("nodes") or []:
+        if not isinstance(raw, dict):
+            continue
+        legacy_id = str(raw.get("device_id") or "").strip()
+        node_id = str(raw.get("node_id") or (f"node_{legacy_id}" if legacy_id else _id("node"))).strip()
+        linked_device_id = str(raw.get("linked_device_id") or "").strip()
+        if not linked_device_id and legacy_id and not raw.get("manual"):
+            linked_device_id = legacy_id
+        node = {
+            "node_id": node_id,
+            "linked_device_id": linked_device_id or None,
+            "device_type": str(raw.get("device_type") or "switch"),
+            "display_name": str(raw.get("display_name") or ""),
+            "labels": list(raw.get("labels") or []),
+            "group_id": raw.get("group_id") or None,
+            "x": raw.get("x", 0.0),
+            "y": raw.get("y", 0.0),
+        }
+        nodes.append(node)
+        if legacy_id:
+            legacy_refs[legacy_id] = node_id
+        # Some diagrams were saved during the earlier transition: their
+        # nodes already carry ``linked_device_id`` while links still use the
+        # historic device endpoints.  Read both generations safely.
+        if linked_device_id and linked_device_id not in legacy_refs:
+            legacy_refs[linked_device_id] = node_id
+    links: list[dict[str, Any]] = []
+    for raw in record.get("links") or []:
+        if not isinstance(raw, dict):
+            continue
+        src = str(raw.get("source_node_id") or raw.get("source_device_id") or "").strip()
+        tgt = str(raw.get("target_node_id") or raw.get("target_device_id") or "").strip()
+        links.append({
+            **raw,
+            "source_node_id": legacy_refs.get(src, src),
+            "target_node_id": legacy_refs.get(tgt, tgt),
+        })
+        links[-1].pop("source_device_id", None)
+        links[-1].pop("target_device_id", None)
+    return nodes, links
+
+
 def _public_topology(record: dict[str, Any]) -> dict[str, Any]:
+    nodes, links = _topology_graph_for_read(record)
     return {
         "topology_id": str(record.get("topology_id") or ""),
         "name": str(record.get("name") or ""),
         "description": str(record.get("description") or ""),
         "version": int(record.get("version") or 1),
-        "nodes": list(record.get("nodes") or []),
-        "links": list(record.get("links") or []),
+        "nodes": nodes,
+        "links": links,
         "groups": list(record.get("groups") or []),
+        # Diagram annotations are user-owned visual context.  They are never
+        # graph endpoints or execution targets.
+        "canvas_items": list(record.get("canvas_items") or []),
         "created_at": str(record.get("created_at") or ""),
         "updated_at": str(record.get("updated_at") or ""),
     }
@@ -2154,7 +2213,8 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     else:
         new_version = 1
 
-    # Devices must exist in workspace
+    # Device inventory is optional context for a diagram node, never its
+    # identity.  A topology remains useful before assets are registered.
     workspace_devices = {str(d.get("device_id") or ""): d for d in list_devices(workspace_id)}
 
     raw_nodes = payload.get("nodes") if "nodes" in payload else (existing.get("nodes") if existing else [])
@@ -2162,25 +2222,32 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("nodes must be a list")
 
     normalized_nodes: list[dict[str, Any]] = []
-    # ``device_id`` remains the graph endpoint for backwards compatibility,
-    # but a canvas may also contain a user-created diagram object.  A manual
-    # object is deliberately *not* a workspace device: it has no management
-    # connection and must never become an execution target.
-    seen_devices: set[str] = set()
+    seen_node_ids: set[str] = set()
+    legacy_node_refs: dict[str, str] = {}
     for raw in raw_nodes:
         if not isinstance(raw, dict):
             continue
-        device_id = str(raw.get("device_id") or "").strip()
-        manual = bool(raw.get("manual"))
-        if not device_id or (not manual and device_id not in workspace_devices):
-            raise ValueError(f"topology node references unknown device: {device_id or '<empty>'}")
-        if manual and not device_id.startswith("manual_"):
-            raise ValueError("manual topology node id must start with manual_")
-        if device_id in seen_devices:
-            raise ValueError(f"duplicate device entity in topology: {device_id}")
-        seen_devices.add(device_id)
-        dev = workspace_devices.get(device_id, {})
-        node_id = str(raw.get("node_id") or f"node_{device_id}").strip()
+        legacy_device_id = str(raw.get("device_id") or "").strip()
+        node_id = str(raw.get("node_id") or (f"node_{legacy_device_id}" if legacy_device_id else _id("node"))).strip()
+        if not node_id or node_id in seen_node_ids:
+            raise ValueError("duplicate_topology_node_id")
+        seen_node_ids.add(node_id)
+        # Accept old payloads on read/write, but persist the explicit optional
+        # association.  Legacy ``manual`` nodes become unlinked nodes.
+        linked_device_id = str(raw.get("linked_device_id") or "").strip()
+        if not linked_device_id and legacy_device_id and not raw.get("manual"):
+            linked_device_id = legacy_device_id
+        if linked_device_id and linked_device_id not in workspace_devices:
+            raise ValueError(f"topology node references unknown linked device: {linked_device_id}")
+        dev = workspace_devices.get(linked_device_id, {})
+        if legacy_device_id:
+            legacy_node_refs[legacy_device_id] = node_id
+        # Compatibility for clients that still submit a legacy device-keyed
+        # link while the saved graph has already migrated to node ids.  The
+        # public representation remains node-keyed; this map is only an input
+        # adapter and is deliberately overwritten by explicit node ids.
+        if linked_device_id and linked_device_id not in legacy_node_refs:
+            legacy_node_refs[linked_device_id] = node_id
         try:
             x = float(raw.get("x", 0.0))
             y = float(raw.get("y", 0.0))
@@ -2188,8 +2255,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             x, y = 0.0, 0.0
         normalized_nodes.append({
             "node_id": node_id,
-            "device_id": device_id,
-            "manual": manual,
+            "linked_device_id": linked_device_id or None,
             "device_type": str(raw.get("device_type") or dev.get("device_type") or "switch").strip()[:48],
             "display_name": str(raw.get("display_name") or dev.get("name") or "").strip()[:80],
             "labels": sorted({str(item).strip() for item in (raw.get("labels") or []) if str(item).strip()}),
@@ -2233,6 +2299,40 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             "style": dict(raw.get("style") or {}) if isinstance(raw.get("style"), dict) else {},
         })
 
+    raw_canvas_items = payload.get("canvas_items") if "canvas_items" in payload else (existing.get("canvas_items") if existing else [])
+    if not isinstance(raw_canvas_items, list):
+        raise ValueError("canvas_items must be a list")
+    normalized_canvas_items: list[dict[str, Any]] = []
+    seen_canvas_item_ids: set[str] = set()
+    for raw in raw_canvas_items:
+        if not isinstance(raw, dict):
+            continue
+        item_id = str(raw.get("item_id") or _id("canvas")).strip()
+        if item_id in seen_canvas_item_ids:
+            item_id = _id("canvas")
+        seen_canvas_item_ids.add(item_id)
+        kind = str(raw.get("kind") or "rectangle").strip().lower()
+        if kind not in {"rectangle", "ellipse", "text"}:
+            kind = "rectangle"
+        try:
+            x = float(raw.get("x", 0.0))
+            y = float(raw.get("y", 0.0))
+            width = float(raw.get("width", 180.0))
+            height = float(raw.get("height", 96.0))
+        except (TypeError, ValueError):
+            x, y, width, height = 0.0, 0.0, 180.0, 96.0
+        style = dict(raw.get("style") or {}) if isinstance(raw.get("style"), dict) else {}
+        normalized_canvas_items.append({
+            "item_id": item_id,
+            "kind": kind,
+            "text": str(raw.get("text") or "").strip()[:240],
+            "x": x,
+            "y": y,
+            "width": min(1600.0, max(40.0, width)),
+            "height": min(1200.0, max(24.0, height)),
+            "style": {key: str(value)[:24] for key, value in style.items() if key in {"fill", "border", "color"}},
+        })
+
     raw_links = payload.get("links") if "links" in payload else (existing.get("links") if existing else [])
     if not isinstance(raw_links, list):
         raise ValueError("links must be a list")
@@ -2242,9 +2342,11 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     for raw in raw_links:
         if not isinstance(raw, dict):
             continue
-        src = str(raw.get("source_device_id") or "").strip()
-        tgt = str(raw.get("target_device_id") or "").strip()
-        if src not in seen_devices or tgt not in seen_devices:
+        src = str(raw.get("source_node_id") or raw.get("source_device_id") or "").strip()
+        tgt = str(raw.get("target_node_id") or raw.get("target_device_id") or "").strip()
+        src = legacy_node_refs.get(src, src)
+        tgt = legacy_node_refs.get(tgt, tgt)
+        if src not in seen_node_ids or tgt not in seen_node_ids:
             raise ValueError(f"topology link endpoints must reference existing nodes in topology (got {src} -> {tgt})")
         link_id = str(raw.get("link_id") or _id("link")).strip()
         if link_id in seen_links:
@@ -2261,21 +2363,21 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         source = str(raw.get("source") or "manual").strip().lower()
         if source not in {"manual", "discovered"}:
             source = "manual"
-        # Discovery is an operational claim about two managed devices.  A
-        # hand-drawn symbol can be linked manually, but it cannot acquire
-        # evidence-backed/discovered status by accident.
-        if source == "discovered" and (src.startswith("manual_") or tgt.startswith("manual_")):
+        linked_by_node_id = {node["node_id"]: node.get("linked_device_id") for node in normalized_nodes}
+        # Discovery is an operational claim about two registered devices.  A
+        # hand-drawn node can be linked manually, but cannot acquire evidence.
+        if source == "discovered" and (not linked_by_node_id.get(src) or not linked_by_node_id.get(tgt)):
             raise ValueError("discovered topology links require managed devices")
+        # A label is a human description, not a generated endpoint caption.
+        # Interfaces already have their own compact labels on the canvas.
         label = str(raw.get("label") or "").strip()
-        if not label and src_iface and tgt_iface:
-            label = f"{src_iface} ↔ {tgt_iface}"
         metadata = dict(raw.get("metadata") or {}) if isinstance(raw.get("metadata"), dict) else {}
         evidence_refs = [str(item).strip() for item in (raw.get("evidence_refs") or []) if str(item).strip()]
         normalized_links.append({
             "link_id": link_id,
-            "source_device_id": src,
+            "source_node_id": src,
             "source_interface": src_iface,
-            "target_device_id": tgt,
+            "target_node_id": tgt,
             "target_interface": tgt_iface,
             "kind": kind,
             "label": label[:100],
@@ -2293,6 +2395,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         "nodes": normalized_nodes,
         "links": normalized_links,
         "groups": normalized_groups,
+        "canvas_items": normalized_canvas_items,
         "created_at": str(existing.get("created_at") or now_iso()) if existing else now_iso(),
         "updated_at": now_iso(),
     }
@@ -2330,8 +2433,8 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
     node_updates = records(payload.get("node_updates"), "node_updates")
     link_updates = records(payload.get("link_updates"), "link_updates")
     group_updates = records(payload.get("group_updates"), "group_updates")
-    remove_node_device_ids = {
-        str(item).strip() for item in (payload.get("remove_node_device_ids") or []) if str(item).strip()
+    remove_node_ids = {
+        str(item).strip() for item in (payload.get("remove_node_ids") or payload.get("remove_node_device_ids") or []) if str(item).strip()
     }
     remove_link_ids = {
         str(item).strip() for item in (payload.get("remove_link_ids") or []) if str(item).strip()
@@ -2339,26 +2442,26 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
     remove_group_ids = {
         str(item).strip() for item in (payload.get("remove_group_ids") or []) if str(item).strip()
     }
-    if any(not isinstance(item, str) for item in (payload.get("remove_node_device_ids") or [])):
-        raise ValueError("remove_node_device_ids must be a list of strings")
+    if any(not isinstance(item, str) for item in (payload.get("remove_node_ids") or payload.get("remove_node_device_ids") or [])):
+        raise ValueError("remove_node_ids must be a list of strings")
     if any(not isinstance(item, str) for item in (payload.get("remove_link_ids") or [])):
         raise ValueError("remove_link_ids must be a list of strings")
     if any(not isinstance(item, str) for item in (payload.get("remove_group_ids") or [])):
         raise ValueError("remove_group_ids must be a list of strings")
 
-    nodes_by_device = {
-        str(item.get("device_id") or ""): dict(item)
+    nodes_by_id = {
+        str(item.get("node_id") or ""): dict(item)
         for item in existing.get("nodes") or []
     }
     for update in node_updates:
-        device_id = str(update.get("device_id") or "").strip()
-        if not device_id:
-            raise ValueError("node_update_requires_device_id")
-        nodes_by_device[device_id] = {**nodes_by_device.get(device_id, {}), **update, "device_id": device_id}
-    for device_id in remove_node_device_ids:
-        if device_id not in nodes_by_device:
+        node_id = str(update.get("node_id") or "").strip()
+        if not node_id:
+            raise ValueError("node_update_requires_node_id")
+        nodes_by_id[node_id] = {**nodes_by_id.get(node_id, {}), **update, "node_id": node_id}
+    for node_id in remove_node_ids:
+        if node_id not in nodes_by_id:
             raise ValueError("topology_node_not_found")
-        del nodes_by_device[device_id]
+        del nodes_by_id[node_id]
 
     groups_by_id = {
         str(item.get("group_id") or ""): dict(item)
@@ -2406,11 +2509,28 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
 
     # Removing a node also removes only its incident links.  It must never
     # leave a graph whose links point at invisible/nonexistent nodes.
-    surviving_devices = set(nodes_by_device)
+    surviving_nodes = set(nodes_by_id)
+    # Legacy patch callers may still address a link by registered device id.
+    # Resolve that input once against the current associations before testing
+    # graph integrity; persisted links remain strictly node-keyed.
+    node_ids_by_device: dict[str, list[str]] = {}
+    for node_id, node in nodes_by_id.items():
+        linked_device_id = str(node.get("linked_device_id") or "").strip()
+        if linked_device_id:
+            node_ids_by_device.setdefault(linked_device_id, []).append(node_id)
+    for link in links_by_id.values():
+        if not link.get("source_node_id"):
+            candidates = node_ids_by_device.get(str(link.get("source_device_id") or "").strip(), [])
+            if len(candidates) == 1:
+                link["source_node_id"] = candidates[0]
+        if not link.get("target_node_id"):
+            candidates = node_ids_by_device.get(str(link.get("target_device_id") or "").strip(), [])
+            if len(candidates) == 1:
+                link["target_node_id"] = candidates[0]
     links = [
         link for link in links_by_id.values()
-        if str(link.get("source_device_id") or "") in surviving_devices
-        and str(link.get("target_device_id") or "") in surviving_devices
+        if str(link.get("source_node_id") or link.get("source_device_id") or "") in surviving_nodes
+        and str(link.get("target_node_id") or link.get("target_device_id") or "") in surviving_nodes
     ]
     for link in links:
         if str(link.get("source") or "manual").strip().lower() == "discovered" and not [
@@ -2425,23 +2545,25 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         **existing,
         "topology_id": topology_id,
         "version": expected_version,
-        "nodes": list(nodes_by_device.values()),
+        "nodes": list(nodes_by_id.values()),
         "links": links,
         "groups": list(groups_by_id.values()),
     })
 
 
 @_connection_transaction
-def remove_topology_node(workspace_id: str, topology_id: str, device_id: str, *, expected_version: int | None = None) -> dict[str, Any]:
+def remove_topology_node(workspace_id: str, topology_id: str, node_id: str, *, expected_version: int | None = None) -> dict[str, Any]:
     existing = get_topology(workspace_id, topology_id)
     if not existing:
         raise ValueError("topology_not_found")
     if expected_version is not None and int(expected_version) != int(existing.get("version") or 1):
         raise ValueError("topology_version_conflict")
-    filtered_nodes = [n for n in existing.get("nodes") or [] if n.get("device_id") != device_id]
+    filtered_nodes = [n for n in existing.get("nodes") or [] if n.get("node_id") != node_id]
+    if len(filtered_nodes) == len(existing.get("nodes") or []):
+        raise ValueError("topology_node_not_found")
     filtered_links = [
         l for l in existing.get("links") or []
-        if l.get("source_device_id") != device_id and l.get("target_device_id") != device_id
+        if l.get("source_node_id") != node_id and l.get("target_node_id") != node_id
     ]
     payload = {
         **existing,
@@ -2474,7 +2596,11 @@ def topology_state(workspace_id: str, topology_id: str, *, scope_device_ids: set
     topo = get_topology(workspace_id, topology_id)
     if not topo:
         raise ValueError("topology_not_found")
-    device_ids = {n["device_id"] for n in topo.get("nodes", [])}
+    linked_by_node_id = {
+        str(node.get("node_id") or ""): str(node.get("linked_device_id") or "")
+        for node in topo.get("nodes", [])
+    }
+    device_ids = {device_id for device_id in linked_by_node_id.values() if device_id}
     if scope_device_ids is not None:
         device_ids &= scope_device_ids
     devices = {d["device_id"]: d for d in list_devices(workspace_id) if d["device_id"] in device_ids}
@@ -2482,7 +2608,9 @@ def topology_state(workspace_id: str, topology_id: str, *, scope_device_ids: set
                    and (scope_connection_ids is None or c.get("connection_id") in scope_connection_ids)]
     observations = list_observations(workspace_id, limit=500)
     nodes = []
-    for device_id in sorted(device_ids):
+    for node_id, device_id in sorted(linked_by_node_id.items()):
+        if not device_id or device_id not in device_ids:
+            continue
         device_connections = [c for c in connections if c.get("device_id") == device_id]
         ids = {c["connection_id"] for c in device_connections}
         observation = next((
@@ -2491,6 +2619,7 @@ def topology_state(workspace_id: str, topology_id: str, *, scope_device_ids: set
         ), None)
         device = devices.get(device_id, {})
         nodes.append({
+            "node_id": node_id,
             "device_id": device_id,
             "name": device.get("name", device_id),
             "device_type": device.get("device_type", ""),
@@ -2508,13 +2637,18 @@ def topology_state(workspace_id: str, topology_id: str, *, scope_device_ids: set
             "links": [{"link_id": link["link_id"], "observed_status": "unknown",
                        "recorded_status": link.get("status", "unknown"), "source": link.get("source", "manual")}
                       for link in topo.get("links", [])
-                      if link["source_device_id"] in device_ids and link["target_device_id"] in device_ids]}
+                      if linked_by_node_id.get(str(link.get("source_node_id") or "")) in device_ids
+                      and linked_by_node_id.get(str(link.get("target_node_id") or "")) in device_ids]}
 
 
 def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: set[str] | None = None) -> dict[str, Any]:
     topo = get_topology(workspace_id, topology_id)
     if not topo:
         raise ValueError("topology_not_found")
+    linked_by_node_id = {
+        str(node.get("node_id") or ""): str(node.get("linked_device_id") or "")
+        for node in topo.get("nodes", [])
+    }
 
     all_workspace_devices = list_devices(workspace_id)
     if scope_device_ids is not None:
@@ -2526,8 +2660,8 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
     # A diagram symbol is intentionally outside device inventory and evidence
     # comparison.  Reporting it as a missing device would turn a drawing aid
     # into a false operational alarm.
-    topo_nodes = [n for n in topo.get("nodes") or [] if not n.get("manual") and (scope_device_ids is None or n.get("device_id") in scope_device_ids)]
-    topo_device_ids = {str(n.get("device_id") or "") for n in topo_nodes}
+    topo_nodes = [n for n in topo.get("nodes") or [] if n.get("linked_device_id") and (scope_device_ids is None or n.get("linked_device_id") in scope_device_ids)]
+    topo_device_ids = {str(n.get("linked_device_id") or "") for n in topo_nodes}
 
     devices_in_scope_not_in_topology = sorted(available_ids - topo_device_ids)
     topology_devices_not_in_scope = sorted(topo_device_ids - available_ids)
@@ -2539,9 +2673,9 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
 
     topo_links = [
         l for l in topo.get("links") or []
-        if not str(l.get("source_device_id") or "").startswith("manual_")
-        and not str(l.get("target_device_id") or "").startswith("manual_")
-        and (scope_device_ids is None or (l.get("source_device_id") in scope_device_ids and l.get("target_device_id") in scope_device_ids))
+        if linked_by_node_id.get(str(l.get("source_node_id") or ""))
+        and linked_by_node_id.get(str(l.get("target_node_id") or ""))
+        and (scope_device_ids is None or (linked_by_node_id.get(str(l.get("source_node_id") or "")) in scope_device_ids and linked_by_node_id.get(str(l.get("target_node_id") or "")) in scope_device_ids))
     ]
 
     link_comparisons = []
@@ -2551,8 +2685,10 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
 
     for link in topo_links:
         link_id = link.get("link_id")
-        src_dev = link.get("source_device_id")
-        tgt_dev = link.get("target_device_id")
+        src_node = str(link.get("source_node_id") or "")
+        tgt_node = str(link.get("target_node_id") or "")
+        src_dev = linked_by_node_id.get(src_node, "")
+        tgt_dev = linked_by_node_id.get(tgt_node, "")
         src_iface = link.get("source_interface") or ""
         tgt_iface = link.get("target_interface") or ""
         recorded_status = link.get("status") or "unknown"
@@ -2568,8 +2704,10 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
 
         link_comparisons.append({
             "link_id": link_id,
+            "source_node_id": src_node,
             "source_device_id": src_dev,
             "source_interface": src_iface,
+            "target_node_id": tgt_node,
             "target_device_id": tgt_dev,
             "target_interface": tgt_iface,
             "kind": link.get("kind"),

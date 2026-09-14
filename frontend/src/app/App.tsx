@@ -32,6 +32,7 @@ import {
   KnowledgeLibrary,
   DataCenter,
   MemoryPage,
+  NetworkTopology,
   UserManagement,
   preloadRoute,
 } from "../routes";
@@ -176,6 +177,7 @@ const SKELETON_BY_PATH: Record<string, "list" | "table"> = {
   "/memory": "list",
   "/diagnostics": "list",
   "/capabilities": "list",
+  "/topology": "list",
 };
 
 function RouteFallback() {
@@ -200,6 +202,7 @@ function AppRoutes({ canManageUsers }: { canManageUsers: boolean }) {
     "/data": <ErrorBoundary><DataCenter /></ErrorBoundary>,
     "/memory": <ErrorBoundary><MemoryPage /></ErrorBoundary>,
     "/capabilities": <ErrorBoundary><CapabilityCenter /></ErrorBoundary>,
+    "/topology": <ErrorBoundary><NetworkTopology /></ErrorBoundary>,
     "/diagnostics": <ErrorBoundary><Diagnostics /></ErrorBoundary>,
     "/settings": <ErrorBoundary><Settings /></ErrorBoundary>,
     "/runs": <ErrorBoundary><OperationsPage /></ErrorBoundary>,

@@ -51,6 +51,9 @@ export const MemoryPage = lazyWithPreload(() =>
 export const UserManagement = lazyWithPreload(() =>
   import("./pages/UserManagement/UserManagement").then((m) => ({ default: m.UserManagement })),
 );
+export const NetworkTopology = lazyWithPreload(() =>
+  import("../../extensions/network_operations/frontend/TopologyPage"),
+);
 // Path → preload thunk. Keys match `NAV_ITEMS.to` plus the secondary routes.
 const PRELOAD: Record<string, () => PageModule> = {
   "/workbench": () => Promise.resolve({ default: TaskWorkbench }),
@@ -62,6 +65,7 @@ const PRELOAD: Record<string, () => PageModule> = {
   "/settings": Settings.preload,
   "/runs": OperationsPage.preload,
   "/users": UserManagement.preload,
+  "/topology": NetworkTopology.preload,
 };
 
 /** Warm a route's chunk ahead of navigation (call on hover/focus). */
