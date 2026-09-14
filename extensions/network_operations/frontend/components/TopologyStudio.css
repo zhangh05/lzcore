@@ -68,6 +68,8 @@
 .topology-studio .netops-canvas-wrap.marquee-armed .netops-cytoscape { cursor: crosshair; }
 .topology-studio .netops-canvas-wrap.marquee-armed::after { content: "按住 Shift 拖框多选"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 9px; border-radius: 4px; background: #0c8a7a; color: #fff; font-size: 10px; pointer-events: none; }
 .topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid #16837b; background: rgb(22 131 123 / 14%); }
+.topology-studio .netops-align-guides { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
+.topology-studio .netops-align-guides line { stroke: #ec4899; stroke-width: 1; stroke-dasharray: 4 3; }
 .topology-studio .netops-viewport-controls { position: absolute; right: 14px; bottom: 14px; z-index: 8; display: flex; align-items: center; overflow: hidden; border: 1px solid #cfdbe3; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #273c4a1c; }
 .topology-studio .netops-viewport-controls button { min-width: 32px; height: 31px; padding: 0 8px; border: 0; border-right: 1px solid #e2e8ee; background: #fff; color: #385062; font-size: 13px; font-weight: 650; cursor: pointer; }
 .topology-studio .netops-viewport-controls button:last-child { border-right: 0; font-size: 11px; }
@@ -84,6 +86,17 @@
 .studio-canvas-caption input { margin: 0; width: 12px; height: 12px; }
 .studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid #dce5ea; background: #fff; color: #718694; font-size: 10px; }
 .studio-statusbar button { margin-left: auto; padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: #52706f; cursor: pointer; white-space: nowrap; }
+/* Legend: colour only means something if the reader is told what. */
+.canvas-legend { position: absolute; left: 16px; bottom: 16px; z-index: 7; min-width: 132px; padding: 6px 8px; border: 1px solid #d6e1e7; border-radius: 7px; background: #ffffffee; backdrop-filter: blur(3px); box-shadow: 0 6px 18px #10253614; font-size: 10.5px; color: var(--text-2); }
+.canvas-legend.is-collapsed { padding: 3px 4px; }
+.canvas-legend .legend-title { padding: 0; border: 0; background: none; color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
+.canvas-legend .legend-body { display: grid; gap: 3px; margin-top: 5px; }
+.canvas-legend .legend-body > span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.canvas-legend .legend-ring { width: 10px; height: 10px; flex: 0 0 auto; border: 2px solid #94a3b8; border-radius: 3px; }
+.canvas-legend .legend-line { width: 16px; height: 0; flex: 0 0 auto; border-top: 2px solid #64748b; }
+.canvas-legend .legend-line.dashed { border-top-style: dashed; }
+.canvas-legend .legend-swatch { width: 10px; height: 10px; flex: 0 0 auto; border: 1px solid #dbe5ec; border-radius: 3px; background: linear-gradient(90deg, #f2f7ff 50%, #f4fbfa 50%); }
+.canvas-legend .legend-body small { margin-top: 3px; color: var(--text-3); font-size: 9.5px; line-height: 1.5; white-space: normal; }
 .canvas-selection-count { padding: 1px 7px; border-radius: 99px; background: #e4f5f1; color: #087a70; font-size: 10px; font-weight: 650; white-space: nowrap; }
 /* In-canvas search: on a large diagram, finding one device by eye is the
    slowest operation there is. */
@@ -127,6 +140,18 @@
 .topology-studio.inspector-open .topology-inspector { display: block; }
 .topology-studio:not(.library-open).inspector-open .topology-inspector { grid-column: 2; }
 .topology-studio .topology-inspector .inspector-panel { min-height: 100%; }
+.batch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 4px 0 10px; }
+.batch-grid .btn { justify-content: center; padding: 5px 4px; font-size: 11px; }
+.studio-layout-menu { position: relative; }
+.studio-layout-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #52697a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-layout-menu > summary::-webkit-details-marker { display: none; }
+.studio-layout-menu > summary:hover { background: #f0f7f6; border-color: #9ac9c0; }
+.studio-layout-menu > summary.is-disabled { opacity: .45; pointer-events: none; }
+.studio-layout-menu > div { position: absolute; right: 0; top: 31px; z-index: 30; display: grid; gap: 3px; width: 218px; padding: 6px; border: 1px solid #cad8df; border-radius: 7px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
+.studio-layout-menu > div button { display: grid; gap: 1px; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
+.studio-layout-menu > div button:hover { background: #edf7f5; }
+.studio-layout-menu > div strong { font-size: 12px; color: var(--text); }
+.studio-layout-menu > div small { font-size: 10px; color: var(--text-3); }
 .studio-device-status > div { padding: 10px 0; display: grid; gap: 4px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .studio-device-status > div > span, .studio-device-status p { color: var(--text-3); font-size: 11px; margin-bottom: 10px; }
 .studio-agent-dock { display: none; min-width: 0; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); z-index: 12; }

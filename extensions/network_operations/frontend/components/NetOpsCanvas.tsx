@@ -19,6 +19,19 @@ export type CanvasApi = {
 
 export type CanvasContextTarget = { x: number; y: number; kind: "node" | "link" | "canvas_item" | "canvas"; id: string };
 
+/**
+ * Operational state, as opposed to the hand-drawn `status` on a link.
+ * A topology an operator cannot read at a glance is just a picture, so this
+ * is what the node border encodes; vendor stays in the node background.
+ */
+export type NodeRuntimeStatus = "ok" | "warning" | "error" | "unknown";
+export const NODE_STATUS_COLORS: Record<NodeRuntimeStatus, string> = {
+  ok: "#10b981",
+  warning: "#f59e0b",
+  error: "#ef4444",
+  unknown: "#94a3b8",
+};
+
 type Props = {
   topology: Topology;
   devices: Device[];
@@ -36,6 +49,8 @@ type Props = {
   /** Handed to the workspace once the renderer exists, null when it is gone. */
   onReady?: (api: CanvasApi | null) => void;
   onContextMenu?: (target: CanvasContextTarget) => void;
+  /** node_id -> operational state, derived from the last collection pass. */
+  nodeStatus?: Record<string, NodeRuntimeStatus>;
 };
 
 type CyCollection<T> = {
@@ -143,6 +158,7 @@ const canvasItemDefaults: Record<TopologyCanvasItem["kind"], Required<TopologyCa
 };
 
 type CanvasElementSpec = { group?: string; classes?: string; data: Record<string, unknown>; position?: { x: number; y: number } };
+type AlignGuide = { x1: number; y1: number; x2: number; y2: number };
 
 const SKIPPED_DATA_KEYS = new Set(["id", "source", "target"]);
 
@@ -207,6 +223,8 @@ export default function NetOpsCanvas(props: Props) {
   const [marqueeDrag, setMarqueeDrag] = useState(false);
   const miniRef = useRef<HTMLCanvasElement | null>(null);
   const [miniOpen, setMiniOpen] = useState(false);
+  const [alignGuides, setAlignGuides] = useState<AlignGuide[]>([]);
+  const guideSignatureRef = useRef("");
   propsRef.current = props;
 
   useEffect(() => {
@@ -229,13 +247,13 @@ export default function NetOpsCanvas(props: Props) {
         maxZoom: 4,
         boxSelectionEnabled: false,
         style: [
-          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "8px", "font-size": 12, "font-weight": 600, color: "#26384a", "text-wrap": "ellipsis", "text-max-width": 132, "text-background-color": "#ffffff", "text-background-opacity": 0.88, "text-background-padding": "2px", width: 94, height: 76, shape: "roundrectangle", "border-width": 2, "border-color": "data(color)", "background-color": "#ffffff", "z-index": 10 } },
+          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "8px", "font-size": 12, "font-weight": 600, color: "#26384a", "text-wrap": "ellipsis", "text-max-width": 132, "text-background-color": "#ffffff", "text-background-opacity": 0.88, "text-background-padding": "2px", width: 94, height: 76, shape: "roundrectangle", "border-width": "data(statusWidth)", "border-color": "data(statusColor)", "background-color": "data(vendorTint)", "text-opacity": "data(labelOpacity)", "z-index": 10 } },
           // Canvas items and groups deliberately have no device icon. Apply
           // image mappings only to asset nodes so Cytoscape stays warning-free.
           { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "contain", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
           { selector: "edge", style: { width: 2.5, opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": "14px", "target-text-margin-y": "14px" } },
-          { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-valign": "center", "text-halign": "center", "z-index": 2 } },
+          { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
           { selector: ".canvas-item-text", style: { "background-opacity": 0, "border-width": 0, "text-valign": "center", "text-halign": "left", "font-size": 14, "font-weight": 500, "text-max-width": "data(textMaxWidth)" } },
           { selector: "node:selected", style: { "border-width": 3, "border-color": "#60a5fa" } },
           { selector: ".node-connecting", style: { "border-width": 3, "border-color": "#3b82f6" } },
@@ -321,6 +339,63 @@ export default function NetOpsCanvas(props: Props) {
         if (event.target?.isEdge?.()) kind = "link";
         else if (event.target?.isNode?.()) kind = id.startsWith("canvas-") ? "canvas_item" : "node";
         propsRef.current.onContextMenu?.({ x: native.clientX, y: native.clientY, kind, id });
+      });
+      // Smart guides. Aligning by eye is the slowest part of tidying a
+      // diagram, so a dragged node snaps to the edges and centres of its
+      // neighbours and shows why.
+      const NODE_HALF_W = 47;
+      const NODE_HALF_H = 38;
+      const SNAP = 5;
+      cy.on("drag", "node", (event) => {
+        const node = event.target as CyNode | undefined;
+        if (!node || propsRef.current.mode !== "move" || node.id().startsWith("group-")) return;
+        const selectedIds = new Set(cy.$("node:selected").map((item) => item.id()));
+        const others = propsRef.current.topology.nodes.filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id));
+        if (!others.length) return;
+        const position = node.position();
+        const snapAxis = (candidates: number[], targets: number[]) => {
+          let best: { diff: number; value: number } | null = null;
+          candidates.forEach((candidate) => {
+            targets.forEach((target) => {
+              const diff = Math.abs(target - candidate);
+              if (diff <= SNAP && (!best || diff < best.diff)) best = { diff, value: target };
+            });
+          });
+          return best;
+        };
+        const targetsX = others.flatMap((other) => [other.x - NODE_HALF_W, other.x, other.x + NODE_HALF_W]);
+        const targetsY = others.flatMap((other) => [other.y - NODE_HALF_H, other.y, other.y + NODE_HALF_H]);
+        let x = position.x;
+        let y = position.y;
+        const snappedX = snapAxis([x - NODE_HALF_W, x, x + NODE_HALF_W], targetsX);
+        if (snappedX) x = snappedX.value;
+        const snappedY = snapAxis([y - NODE_HALF_H, y, y + NODE_HALF_H], targetsY);
+        if (snappedY) y = snappedY.value;
+        if (x !== position.x || y !== position.y) node.position({ x, y });
+
+        const lines: AlignGuide[] = [];
+        if (snappedX) {
+          const near = others.filter((other) => Math.abs(other.x - x) <= NODE_HALF_W * 2 + 60);
+          const top = Math.min(y, ...near.map((other) => other.y)) - NODE_HALF_H - 12;
+          const bottom = Math.max(y, ...near.map((other) => other.y)) + NODE_HALF_H + 12;
+          lines.push({ x1: x, y1: top, x2: x, y2: bottom });
+        }
+        if (snappedY) {
+          const near = others.filter((other) => Math.abs(other.y - y) <= NODE_HALF_H * 2 + 60);
+          const leftEdge = Math.min(x, ...near.map((other) => other.x)) - NODE_HALF_W - 12;
+          const rightEdge = Math.max(x, ...near.map((other) => other.x)) + NODE_HALF_W + 12;
+          lines.push({ x1: leftEdge, y1: y, x2: rightEdge, y2: y });
+        }
+        const signature = lines.map((line) => `${Math.round(line.x1)}:${Math.round(line.y1)}:${Math.round(line.x2)}:${Math.round(line.y2)}`).join("|");
+        if (signature !== guideSignatureRef.current) {
+          guideSignatureRef.current = signature;
+          setAlignGuides(lines);
+        }
+      });
+      cy.on("free dragfree", "node", () => {
+        if (!guideSignatureRef.current) return;
+        guideSignatureRef.current = "";
+        setAlignGuides([]);
       });
       cy.on("dragfree", "node", () => {
         if (propsRef.current.mode !== "move") return;
@@ -413,13 +488,18 @@ export default function NetOpsCanvas(props: Props) {
       ...props.topology.nodes.map((node) => {
         const device = byDevice.get(node.linked_device_id || "");
         const type = node.device_type || device?.device_type || "switch";
-        const color = !node.linked_device_id ? "#64748b" : device?.vendor?.toLowerCase().includes("huawei") ? "#2563eb" : "#0f9d8c";
-        return { group: "nodes", classes: node.linked_device_id ? "managed-node" : "manual-node", data: { id: node.node_id, label: node.display_name || device?.name || "未命名设备", color, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
+        // The border carries operational state because that is what an
+        // operator scans for; vendor stays as a background tint so neither
+        // signal is lost.
+        const status: NodeRuntimeStatus = props.nodeStatus?.[node.node_id] || "unknown";
+        const statusColor = NODE_STATUS_COLORS[status];
+        const vendorTint = !node.linked_device_id ? "#fbfcfd" : device?.vendor?.toLowerCase().includes("huawei") ? "#f2f7ff" : "#f4fbfa";
+        return { group: "nodes", classes: node.linked_device_id ? "managed-node" : "manual-node", data: { id: node.node_id, label: node.display_name || device?.name || "未命名设备", status, statusColor, statusWidth: status === "error" ? 3 : 2, vendorTint, labelOpacity: 1, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
       }),
       ...(props.topology.canvas_items || []).map((item) => {
         const style = { ...canvasItemDefaults[item.kind], ...item.style };
         const isText = item.kind === "text";
-        return { group: "nodes", classes: `canvas-item canvas-item-${item.kind}`, data: { id: `canvas-${item.item_id}`, label: item.text, shape: item.kind === "ellipse" ? "ellipse" : "roundrectangle", width: item.width, height: item.height, fill: style.fill, border: style.border, textColor: style.color, fillOpacity: isText ? 0 : 0.24, borderWidth: isText ? 0 : 1.5, fontSize: isText ? 14 : 12, textMaxWidth: Math.max(24, item.width - 16) }, position: { x: item.x, y: item.y } };
+        return { group: "nodes", classes: `canvas-item canvas-item-${item.kind}`, data: { id: `canvas-${item.item_id}`, label: item.text, shape: item.kind === "ellipse" ? "ellipse" : "roundrectangle", width: item.width, height: item.height, fill: style.fill, border: style.border, textColor: style.color, fillOpacity: isText ? 0 : 0.24, borderWidth: isText ? 0 : 1.5, fontSize: isText ? 14 : 12, labelOpacity: 1, textMaxWidth: Math.max(24, item.width - 16) }, position: { x: item.x, y: item.y } };
       }),
       // Do not let stale/imported links with a missing endpoint reach the
       // renderer. Cytoscape rejects those elements and can otherwise leave a
@@ -441,17 +521,33 @@ export default function NetOpsCanvas(props: Props) {
     const cy = cyRef.current;
     if (!cy) return;
     const linksById = new Map(props.topology.links.map((link) => [link.link_id, link]));
+    // Zoomed far out, interface names are noise: they overlap and hide the
+    // shape of the network. Level of detail is driven by the viewport.
+    const showPorts = props.showInterfaces && viewport.zoom >= 0.55;
     cy.batch(() => {
       cy.$("edge").forEach((edge) => {
         const link = linksById.get(edge.id());
         if (!link) return;
         edge.data("label", canvasLinkDescription(link));
-        edge.data("srcPort", props.showInterfaces ? compactInterfaceLabel(link.source_interface) : "");
-        edge.data("tgtPort", props.showInterfaces ? compactInterfaceLabel(link.target_interface) : "");
+        edge.data("srcPort", showPorts ? compactInterfaceLabel(link.source_interface) : "");
+        edge.data("tgtPort", showPorts ? compactInterfaceLabel(link.target_interface) : "");
         edge.data("visible", 1);
       });
     });
-  }, [rendererReady, props.topology.links, props.showInterfaces]);
+  }, [rendererReady, props.topology.links, props.showInterfaces, viewport.zoom]);
+
+  // Level of detail: past a zoom-out threshold, labels stop being readable
+  // and start being the reason the diagram looks like a mess.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !rendererReady) return;
+    const opacity = viewport.zoom < 0.32 ? 0 : 1;
+    cy.batch(() => {
+      cy.$("node").forEach((node) => {
+        if (node.data("labelOpacity") !== opacity) node.data("labelOpacity", opacity);
+      });
+    });
+  }, [rendererReady, viewport.zoom]);
 
   useEffect(() => {
     if (props.mode === "connect") return;
@@ -668,6 +764,13 @@ export default function NetOpsCanvas(props: Props) {
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
     {marqueeArmed && <div className="netops-selection-gesture-layer" onMouseDown={handlePointerDown} />}
     {marquee && <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
+    {alignGuides.length > 0 && (
+      <svg className="netops-align-guides" aria-hidden="true">
+        {alignGuides.map((line, index) => (
+          <line key={index} x1={line.x1 * viewport.zoom + viewport.x} y1={line.y1 * viewport.zoom + viewport.y} x2={line.x2 * viewport.zoom + viewport.x} y2={line.y2 * viewport.zoom + viewport.y} />
+        ))}
+      </svg>
+    )}
     {miniOpen && <canvas ref={miniRef} className="topology-minimap-custom" aria-label="画布鹰眼视图" title="点击跳转视口" onMouseDown={jumpFromMinimap} />}
     <div className="netops-viewport-controls" aria-label="画布视图控制">
       <button type="button" onClick={() => updateZoom(0.15)} aria-label="放大画布">+</button>
