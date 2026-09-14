@@ -15,6 +15,8 @@ export type CanvasApi = {
   focusIds: (ids: string[], zoom?: number) => void;
   selectAll: () => string[];
   clearSelection: () => void;
+  getViewport: () => { x: number; y: number; zoom: number };
+  setViewport: (view: { x: number; y: number; zoom: number }) => void;
 };
 
 export type CanvasContextTarget = { x: number; y: number; kind: "node" | "link" | "canvas_item" | "canvas"; id: string };
@@ -80,6 +82,9 @@ type Cy = {
   resize: () => void;
   zoom: (level?: number | { level: number; renderedPosition?: { x: number; y: number } }) => number;
   $: (selector: string) => CyCollection<CyNode>;
+  style: () => {
+    selector: (selector: string) => { style: (style: Record<string, unknown>) => CyStyleChain };
+  };
   animate: (animation: Record<string, unknown>, options?: Record<string, unknown>) => void;
   /** Base64 data URI. Used by the export action. */
   png: (options?: Record<string, unknown>) => string;
@@ -102,6 +107,7 @@ type CyElement = {
   length: number;
 };
 type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean };
+type CyStyleChain = { selector: (selector: string) => { style: (style: Record<string, unknown>) => CyStyleChain }; update: () => void };
 type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void }; originalEvent?: MouseEvent };
 
 declare global {
@@ -225,6 +231,9 @@ export default function NetOpsCanvas(props: Props) {
   const [miniOpen, setMiniOpen] = useState(false);
   const [alignGuides, setAlignGuides] = useState<AlignGuide[]>([]);
   const guideSignatureRef = useRef("");
+  const [linkPreview, setLinkPreview] = useState<AlignGuide | null>(null);
+  const connectStartRef = useRef<string | null>(null);
+  const [theme, setTheme] = useState(() => (typeof document === "undefined" ? "light" : document.documentElement.getAttribute("data-theme") || "light"));
   propsRef.current = props;
 
   useEffect(() => {
@@ -459,9 +468,23 @@ export default function NetOpsCanvas(props: Props) {
         if (!ids.length) return;
         const collection = cy.$(ids.map((id) => `[id = "${id}"]`).join(","));
         if (!collection.length) return;
-        if (zoom) cy.animate({ center: { eles: collection }, zoom }, { duration: 220 });
-        else cy.animate({ fit: { eles: collection, padding: 90 } }, { duration: 220 });
-        window.setTimeout(() => setViewport({ ...cy.pan(), zoom: cy.zoom() }), 280);
+        // Selecting an object usually opens the inspector, which resizes the
+        // container. Centring against a stale size lands the node off screen,
+        // so measure again first and zoom about the rendered centre.
+        cy.resize();
+        const finish = () => setViewport({ ...cy.pan(), zoom: cy.zoom() });
+        if (!zoom) {
+          cy.animate({ fit: { eles: collection, padding: 90 } }, { duration: 220 });
+          window.setTimeout(finish, 280);
+          return;
+        }
+        cy.animate({ center: { eles: collection } }, { duration: 200 });
+        window.setTimeout(() => {
+          cy.resize();
+          const host = hostRef.current;
+          cy.zoom({ level: zoom, renderedPosition: { x: (host?.clientWidth || 0) / 2, y: (host?.clientHeight || 0) / 2 } });
+          finish();
+        }, 230);
       },
       selectAll: () => {
         const ids = cy.$("node").map((node) => node.id()).filter((id) => !id.startsWith("group-"));
@@ -475,9 +498,46 @@ export default function NetOpsCanvas(props: Props) {
         propsRef.current.onSelectionChange([]);
         propsRef.current.onClearSelection();
       },
+      getViewport: () => ({ ...cy.pan(), zoom: cy.zoom() }),
+      setViewport: (view) => {
+        cy.zoom(view.zoom);
+        cy.pan({ x: view.x, y: view.y });
+        setViewport({ ...cy.pan(), zoom: cy.zoom() });
+      },
     });
     return () => { propsRef.current.onReady?.(null); };
   }, [rendererReady]);
+
+  // The canvas is drawn, not styled, so its colours have to follow the theme
+  // explicitly. Without this a dark UI keeps a white diagram in the middle.
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(document.documentElement.getAttribute("data-theme") || "light"));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !rendererReady) return;
+    const dark = theme === "dark";
+    cy.style()
+      .selector("node")
+      .style({
+        "background-color": dark ? "#1c242c" : "data(vendorTint)",
+        color: dark ? "#dce7ef" : "#26384a",
+        "text-background-color": dark ? "#111820" : "#ffffff",
+      })
+      .selector("edge")
+      .style({ color: dark ? "#c8d5df" : "#334155", "text-background-color": dark ? "#111820" : "#ffffff" })
+      .selector(".canvas-item")
+      .style({ "text-background-color": dark ? "#111820" : "#ffffff" })
+      .selector(".lz-group")
+      .style({
+        "background-color": dark ? "#1e3350" : "#dbeafe",
+        "border-color": dark ? "#3f5f8a" : "#93c5fd",
+        color: dark ? "#a3b7c9" : "#475569",
+      })
+      .update();
+  }, [rendererReady, theme]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -662,6 +722,66 @@ export default function NetOpsCanvas(props: Props) {
     setViewport({ ...cy.pan(), zoom });
   };
 
+  /**
+   * Drag to connect. Picking two nodes in sequence works, but every diagram
+   * tool people know draws the link from one device to the other, and the
+   * React Flow canvas used to have connection handles before the migration.
+   */
+  useEffect(() => {
+    if (props.mode !== "connect") return;
+    const nodeAtClient = (clientX: number, clientY: number) => {
+      const cy = cyRef.current;
+      const host = hostRef.current;
+      if (!cy || !host) return null;
+      const rect = host.getBoundingClientRect();
+      const pan = cy.pan();
+      const zoom = cy.zoom();
+      const modelX = (clientX - rect.left - pan.x) / zoom;
+      const modelY = (clientY - rect.top - pan.y) / zoom;
+      return propsRef.current.topology.nodes.find((node) => Math.abs(node.x - modelX) <= 47 && Math.abs(node.y - modelY) <= 38) || null;
+    };
+    const pointInHost = (clientX: number, clientY: number) => {
+      const host = hostRef.current;
+      if (!host) return null;
+      const rect = host.getBoundingClientRect();
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    };
+    const onDown = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      const node = nodeAtClient(event.clientX, event.clientY);
+      if (!node) return;
+      const point = pointInHost(event.clientX, event.clientY);
+      if (!point) return;
+      connectStartRef.current = node.node_id;
+      setLinkPreview({ x1: point.x, y1: point.y, x2: point.x, y2: point.y });
+    };
+    const onMove = (event: MouseEvent) => {
+      if (!connectStartRef.current) return;
+      const point = pointInHost(event.clientX, event.clientY);
+      if (!point) return;
+      setLinkPreview((current) => (current ? { ...current, x2: point.x, y2: point.y } : current));
+    };
+    const onUp = (event: MouseEvent) => {
+      const source = connectStartRef.current;
+      connectStartRef.current = null;
+      setLinkPreview(null);
+      if (!source) return;
+      const target = nodeAtClient(event.clientX, event.clientY);
+      if (target && target.node_id !== source) propsRef.current.onConnect(source, target.node_id);
+    };
+    // Capture phase: Cytoscape owns the bubble-phase handlers on this element
+    // and stops propagation of the gestures it recognises.
+    const host = hostRef.current;
+    host?.addEventListener("mousedown", onDown, true);
+    window.addEventListener("mousemove", onMove, true);
+    window.addEventListener("mouseup", onUp, true);
+    return () => {
+      host?.removeEventListener("mousedown", onDown, true);
+      window.removeEventListener("mousemove", onMove, true);
+      window.removeEventListener("mouseup", onUp, true);
+    };
+  }, [props.mode]);
+
   const updateZoom = (delta: number) => {
     const cy = cyRef.current;
     if (!cy) return;
@@ -764,6 +884,12 @@ export default function NetOpsCanvas(props: Props) {
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
     {marqueeArmed && <div className="netops-selection-gesture-layer" onMouseDown={handlePointerDown} />}
     {marquee && <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
+    {linkPreview && (
+      <svg className="netops-link-preview" aria-hidden="true">
+        <line x1={linkPreview.x1} y1={linkPreview.y1} x2={linkPreview.x2} y2={linkPreview.y2} />
+        <circle cx={linkPreview.x2} cy={linkPreview.y2} r={4} />
+      </svg>
+    )}
     {alignGuides.length > 0 && (
       <svg className="netops-align-guides" aria-hidden="true">
         {alignGuides.map((line, index) => (

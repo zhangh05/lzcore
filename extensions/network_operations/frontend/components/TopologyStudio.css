@@ -24,7 +24,8 @@
 .topology-studio.library-open.inspector-open .topology-canvas-area { grid-column: 2; }
 .topology-studio.agent-open .topology-canvas-area { grid-column: 1; }
 .topology-studio.library-open.agent-open .topology-canvas-area { grid-column: 2; }
-.topology-studio .topology-canvas-toolbar { flex: 0 0 54px; min-height: 54px; box-sizing: border-box; padding: 0 16px; flex-direction: row; align-items: center; gap: 12px; background: #fff; border-bottom: 1px solid #dce5ea; }
+/* Above the edit bar (z-index 20) so its dropdowns are not covered by it. */
+.topology-studio .topology-canvas-toolbar { position: relative; z-index: 30; flex: 0 0 54px; min-height: 54px; box-sizing: border-box; padding: 0 16px; flex-direction: row; align-items: center; gap: 12px; background: #fff; border-bottom: 1px solid #dce5ea; }
 .topology-studio .toolbar-left { flex: 1 1 auto; min-width: 0; gap: 10px; }
 .topology-studio .toolbar-right { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; align-items: center; }
 .topology-studio .topology-canvas-title { max-width: none; font-size: 14px; letter-spacing: -.2px; color: #26384a; }
@@ -60,6 +61,10 @@
 /* Grid paper is intentionally fixed; editing changes object coordinates, not
    the viewport or its reference grid. */
 .topology-studio .netops-canvas-wrap.grid-on { background-color: #f8fafc; background-image: linear-gradient(#dbe5ec 1px, transparent 1px), linear-gradient(90deg, #dbe5ec 1px, transparent 1px); }
+[data-theme="dark"] .topology-studio .netops-canvas-wrap { background-color: #0f1519; }
+[data-theme="dark"] .topology-studio .netops-canvas-wrap.grid-on { background-color: #0f1519; background-image: linear-gradient(#22303b 1px, transparent 1px), linear-gradient(90deg, #22303b 1px, transparent 1px); }
+[data-theme="dark"] .topology-studio .topology-canvas-area { background: #0f1519; }
+[data-theme="dark"] .topology-studio .canvas-legend { background: #1a2129ee; border-color: #2c353e; color: #a9bac7; }
 .topology-studio .netops-cytoscape { position: absolute; inset: 0; width: 100%; height: 100%; outline: 0; }
 /* The marquee overlay exists only while Shift is held. Everything else is
    handled by Cytoscape's own hit testing, which is why this layer must not
@@ -68,6 +73,9 @@
 .topology-studio .netops-canvas-wrap.marquee-armed .netops-cytoscape { cursor: crosshair; }
 .topology-studio .netops-canvas-wrap.marquee-armed::after { content: "按住 Shift 拖框多选"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 9px; border-radius: 4px; background: #0c8a7a; color: #fff; font-size: 10px; pointer-events: none; }
 .topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid #16837b; background: rgb(22 131 123 / 14%); }
+.topology-studio .netops-link-preview { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
+.topology-studio .netops-link-preview line { stroke: #2563eb; stroke-width: 2; stroke-dasharray: 6 4; }
+.topology-studio .netops-link-preview circle { fill: #2563eb; }
 .topology-studio .netops-align-guides { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
 .topology-studio .netops-align-guides line { stroke: #ec4899; stroke-width: 1; stroke-dasharray: 4 3; }
 .topology-studio .netops-viewport-controls { position: absolute; right: 14px; bottom: 14px; z-index: 8; display: flex; align-items: center; overflow: hidden; border: 1px solid #cfdbe3; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #273c4a1c; }
@@ -142,6 +150,18 @@
 .topology-studio .topology-inspector .inspector-panel { min-height: 100%; }
 .batch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 4px 0 10px; }
 .batch-grid .btn { justify-content: center; padding: 5px 4px; font-size: 11px; }
+.studio-views-menu { position: relative; font-size: 12px; }
+.studio-views-menu > summary { padding: 6px 9px; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #52697a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-views-menu > summary::-webkit-details-marker { display: none; }
+.studio-views-menu > summary:hover { background: #f0f7f6; border-color: #9ac9c0; }
+.studio-views-menu > div { position: absolute; right: 0; top: 32px; z-index: 40; display: grid; gap: 3px; width: 190px; padding: 6px; border: 1px solid #cad8df; border-radius: 7px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
+.studio-views-menu > div > button { padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
+.studio-views-menu > div > button:hover { background: #edf7f5; color: #087a70; }
+.studio-views-menu > div > small { padding: 4px 8px; color: var(--text-3); font-size: 10.5px; }
+.studio-views-menu .view-row { display: flex; align-items: center; gap: 2px; }
+.studio-views-menu .view-row > button:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-views-menu .view-remove { flex: 0 0 auto; width: 20px; padding: 4px 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); cursor: pointer; }
+.studio-views-menu .view-remove:hover { background: #fdecec; color: var(--danger); }
 .studio-layout-menu { position: relative; }
 .studio-layout-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #52697a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-layout-menu > summary::-webkit-details-marker { display: none; }

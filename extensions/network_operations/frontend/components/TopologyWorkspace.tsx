@@ -809,6 +809,67 @@ export default function TopologyWorkspace({
     setNotice(`已导出 ${safeName}.${format}`);
   }, [activeTopology, setNotice]);
 
+  /**
+   * Deep link. A diagram that cannot be linked to cannot be shared, attached
+   * to a ticket, or restored after a refresh.
+   */
+  const deepLinkTopologyRef = useRef(false);
+  const deepLinkNodeRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkTopologyRef.current || !topologies.length) return;
+    const wanted = new URLSearchParams(window.location.search).get("topology");
+    if (wanted && topologies.some((item) => item.topology_id === wanted)) setSelectedTopologyId(wanted);
+    deepLinkTopologyRef.current = true;
+  }, [topologies]);
+  useEffect(() => {
+    const nodeId = new URLSearchParams(window.location.search).get("node");
+    if (!nodeId || !activeTopology || deepLinkNodeRef.current) return;
+    if (!activeTopology.nodes.some((node) => node.node_id === nodeId)) return;
+    deepLinkNodeRef.current = true;
+    setSelectedElement({ type: "node", nodeId });
+    window.setTimeout(() => canvasApiRef.current?.focusIds([nodeId], 1.1), 400);
+  }, [activeTopology]);
+  useEffect(() => {
+    if (!selectedTopologyId || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("topology", selectedTopologyId);
+    if (selectedElement?.type === "node") url.searchParams.set("node", selectedElement.nodeId);
+    else url.searchParams.delete("node");
+    window.history.replaceState({}, "", url.toString());
+  }, [selectedTopologyId, selectedElement]);
+
+  // Named views. On a large diagram, scrolling back to "the core layer" is
+  // work people redo every time; a saved viewport costs one click.
+  const bookmarkKey = useMemo(() => `lzcore.topology.views.${workspaceId}.${selectedTopologyId}`, [workspaceId, selectedTopologyId]);
+  const [bookmarks, setBookmarks] = useState<Array<{ name: string; x: number; y: number; zoom: number }>>([]);
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(bookmarkKey);
+      setBookmarks(stored ? JSON.parse(stored) : []);
+    } catch {
+      setBookmarks([]);
+    }
+  }, [bookmarkKey]);
+  const saveBookmark = () => {
+    const view = canvasApiRef.current?.getViewport();
+    if (!view) return;
+    const name = window.prompt("视图名称", `视图 ${bookmarks.length + 1}`);
+    if (!name) return;
+    const next = [...bookmarks.filter((item) => item.name !== name), { name, ...view }];
+    setBookmarks(next);
+    window.localStorage.setItem(bookmarkKey, JSON.stringify(next));
+    setNotice(`已保存视图「${name}」`);
+  };
+  const applyBookmark = (bookmark: { name: string; x: number; y: number; zoom: number }) => {
+    canvasApiRef.current?.setViewport(bookmark);
+    setNotice(`已切换到视图「${bookmark.name}」`);
+  };
+  const removeBookmark = (name: string) => {
+    const next = bookmarks.filter((item) => item.name !== name);
+    setBookmarks(next);
+    window.localStorage.setItem(bookmarkKey, JSON.stringify(next));
+  };
+
   // The menu is transient: any gesture outside it dismisses it.
   useEffect(() => {
     if (!contextMenu) return;
@@ -839,9 +900,14 @@ export default function TopologyWorkspace({
   }, [canvasQuery, activeTopology, byDevice]);
 
   const focusCanvasObject = useCallback((id: string, kind: "node" | "canvas_item") => {
-    canvasApiRef.current?.focusIds([id], 1.1);
     setSelectedElement(kind === "node" ? { type: "node", nodeId: id } : { type: "canvas_item", itemId: id.replace(/^canvas-/, "") });
     setCanvasQuery("");
+    // Release focus, otherwise the shortcut guard keeps swallowing keys and
+    // the user has to click the canvas before V/M/C work again.
+    searchInputRef.current?.blur();
+    // Let the inspector settle first; it resizes the canvas and would
+    // otherwise drag the focused node away from the centre.
+    window.setTimeout(() => canvasApiRef.current?.focusIds([id], 1.1), 260);
   }, []);
 
   const nudgeSelected = useCallback((dx: number, dy: number) => {
@@ -1536,6 +1602,19 @@ export default function TopologyWorkspace({
                 </div>
               )}
             </div>
+            <details className="studio-views-menu">
+              <summary>视图</summary>
+              <div>
+                <button type="button" onClick={saveBookmark}>保存当前视图…</button>
+                {bookmarks.length === 0 && <small>尚未保存视图</small>}
+                {bookmarks.map((bookmark) => (
+                  <span key={bookmark.name} className="view-row">
+                    <button type="button" onClick={() => applyBookmark(bookmark)}>{bookmark.name}</button>
+                    <button type="button" className="view-remove" aria-label={`删除视图 ${bookmark.name}`} onClick={() => removeBookmark(bookmark.name)}>×</button>
+                  </span>
+                ))}
+              </div>
+            </details>
             <button className="studio-icon-button" aria-label={focusMode ? "退出专注画布" : "专注画布"} title="专注画布" onClick={() => setFocusMode((value) => !value)}><IconExpand size={18} /></button>
             <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>Agent 协作</Button>
           </div>
