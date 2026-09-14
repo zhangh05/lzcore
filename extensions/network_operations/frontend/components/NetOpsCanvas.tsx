@@ -11,7 +11,6 @@ type Props = {
   devices: Device[];
   mode: CanvasMode;
   gridEnabled: boolean;
-  layer: "all" | "physical" | "logical";
   showInterfaces: boolean;
   onSelectNode: (nodeId: string) => void;
   onSelectCanvasItem: (itemId: string) => void;
@@ -23,28 +22,56 @@ type Props = {
   onDropDevice: (deviceId: string, position: { x: number; y: number }) => void;
 };
 
+type CyCollection<T> = {
+  map: <R>(callback: (element: T) => R) => R[];
+  forEach: (callback: (element: T) => void) => void;
+  remove: () => void;
+  unselect: () => void;
+  select: () => void;
+  length: number;
+};
+
 type Cy = {
   add: (elements: unknown[]) => void;
   batch: (work: () => void) => void;
   destroy: () => void;
-  elements: () => { remove: () => void; unselect: () => void };
+  elements: () => CyCollection<CyElement>;
   fit: (elements?: unknown, padding?: number) => void;
   getElementById: (id: string) => CyElement;
-  nodes: (selector?: string) => { forEach: (callback: (node: CyNode) => void) => void; map: <T>(callback: (node: CyNode) => T) => T[]; length: number };
+  nodes: (selector?: string) => CyCollection<CyNode>;
   on: (events: string, selectorOrCallback: string | ((event: CyEvent) => void), callback?: (event: CyEvent) => void) => void;
   pan: (position?: { x: number; y: number }) => { x: number; y: number };
+  panningEnabled: (enabled?: boolean) => boolean;
   boxSelectionEnabled: (enabled?: boolean) => boolean;
   selectionType: (type?: "single" | "additive") => string;
   userPanningEnabled: (enabled?: boolean) => boolean;
   autoungrabify: (enabled?: boolean) => boolean;
   resize: () => void;
-  zoom: (level?: number) => number;
-  $: (selector: string) => { map: <T>(callback: (node: CyNode) => T) => T[]; length: number; forEach: (callback: (node: CyNode) => void) => void };
+  zoom: (level?: number | { level: number; renderedPosition?: { x: number; y: number } }) => number;
+  $: (selector: string) => CyCollection<CyNode>;
+  animate: (animation: Record<string, unknown>, options?: Record<string, unknown>) => void;
+  /** Base64 data URI. Used by the export action. */
+  png: (options?: Record<string, unknown>) => string;
+  svg: (options?: Record<string, unknown>) => string;
+  extent: () => { x1: number; y1: number; x2: number; y2: number };
 };
 
-type CyElement = { id: () => string; data: (name: string, value?: unknown) => unknown; addClass: (className: string) => void; removeClass: (className: string) => void; select: () => void; grabify: () => void; ungrabify: () => void; length: number };
+type CyElement = {
+  id: () => string;
+  data: (name: string, value?: unknown) => unknown;
+  addClass: (className: string) => void;
+  removeClass: (className: string) => void;
+  classes: (value?: string) => string;
+  select: () => void;
+  grabify: () => void;
+  ungrabify: () => void;
+  remove: () => void;
+  isNode: () => boolean;
+  group: () => string;
+  length: number;
+};
 type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean };
-type CyEvent = { target: { id: () => string; isNode: () => boolean; isEdge: () => boolean; addClass: (className: string) => void; removeClass: (className: string) => void; select: () => void } };
+type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void } };
 
 declare global {
   interface Window {
@@ -99,19 +126,69 @@ const canvasItemDefaults: Record<TopologyCanvasItem["kind"], Required<TopologyCa
   text: { fill: "#ffffff", border: "#ffffff", color: "#334155" },
 };
 
+type CanvasElementSpec = { group?: string; classes?: string; data: Record<string, unknown>; position?: { x: number; y: number } };
+
+const SKIPPED_DATA_KEYS = new Set(["id", "source", "target"]);
+
+/**
+ * Reconcile the drawing instead of rebuilding it.
+ *
+ * Tearing the graph down on every edit (including the end of every drag)
+ * discarded Cytoscape's selection, animation and layout caches, and made a
+ * 200 node diagram stutter for a one pixel move. Element ids are stable and
+ * already persisted, so a straight diff is both cheap and correct.
+ */
+function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: string | null): void {
+  const desired = new Map(elements.map((element) => [String(element.data.id), element]));
+  const stale: CyElement[] = [];
+  const fresh: CanvasElementSpec[] = [];
+  cy.batch(() => {
+    cy.elements().forEach((existing) => {
+      const next = desired.get(existing.id());
+      if (!next) {
+        stale.push(existing);
+        return;
+      }
+      for (const key of Object.keys(next.data)) {
+        if (SKIPPED_DATA_KEYS.has(key) || key.startsWith("_")) continue;
+        if (existing.data(key) !== next.data[key]) existing.data(key, next.data[key]);
+      }
+      const classes = next.classes || "";
+      // Preserve the transient connecting marker across reconciliation.
+      const effective = existing.id() === connectingId ? `${classes} node-connecting`.trim() : classes;
+      if (existing.data("_cls") !== effective) {
+        existing.data("_cls", effective);
+        existing.classes(effective);
+      }
+      if (existing.isNode() && next.position) {
+        const current = (existing as CyNode).position();
+        if (Math.abs(current.x - next.position.x) > 0.5 || Math.abs(current.y - next.position.y) > 0.5) {
+          (existing as CyNode).position(next.position);
+        }
+      }
+    });
+    stale.forEach((element) => element.remove());
+    elements.forEach((element) => {
+      if (!cy.getElementById(String(element.data.id)).length) fresh.push(element);
+    });
+    if (fresh.length) cy.add(fresh);
+  });
+}
+
 export default function NetOpsCanvas(props: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Cy | null>(null);
   const propsRef = useRef(props);
   const connectingFromRef = useRef<string | null>(null);
   const ignoreBoxSelectionTapRef = useRef(false);
-  const marqueeStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
-  const clickCandidateRef = useRef<{ id: string; kind: "node" | "canvas_item" | "link"; pointerId: number } | null>(null);
-  const moveStartRef = useRef<{ x: number; y: number; pointerId: number; positions: Position[] } | null>(null);
+  const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
+  /** Shift enables marquee selection; see the gesture overlay below. */
+  const [shiftHeld, setShiftHeld] = useState(false);
   const initialTopologyIdRef = useRef<string | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [marqueeDrag, setMarqueeDrag] = useState(false);
   propsRef.current = props;
 
   useEffect(() => {
@@ -122,13 +199,22 @@ export default function NetOpsCanvas(props: Props) {
         container: hostRef.current,
         layout: { name: "preset" },
         // The sheet itself is fixed. Editing changes object coordinates only.
-        userPanningEnabled: false,
-        userWheelEnabled: true,
+        panningEnabled: true,
+        // Cytoscape 3.28 gates wheel zoom behind userPanningEnabled as well
+        // (see the wheel handler in cytoscape.min.js). Keeping panning on for
+        // every mode is what makes the wheel work outside layout mode.
+        userPanningEnabled: true,
+        // Default 1 means one mouse notch (deltaY 100) zooms 10^(100/250)
+        // = 2.5x. 0.25 puts a notch near 1.26x, which is the familiar feel.
+        wheelSensitivity: 0.25,
         minZoom: 0.15,
         maxZoom: 4,
         boxSelectionEnabled: false,
         style: [
-          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "8px", "font-size": 12, "font-weight": 600, color: "#26384a", "text-wrap": "ellipsis", "text-max-width": 132, "text-background-color": "#ffffff", "text-background-opacity": 0.88, "text-background-padding": "2px", width: 94, height: 76, shape: "roundrectangle", "border-width": 2, "border-color": "data(color)", "background-color": "#ffffff", "background-image": "data(icon)", "background-fit": "contain", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%", "z-index": 10 } },
+          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "8px", "font-size": 12, "font-weight": 600, color: "#26384a", "text-wrap": "ellipsis", "text-max-width": 132, "text-background-color": "#ffffff", "text-background-opacity": 0.88, "text-background-padding": "2px", width: 94, height: 76, shape: "roundrectangle", "border-width": 2, "border-color": "data(color)", "background-color": "#ffffff", "z-index": 10 } },
+          // Canvas items and groups deliberately have no device icon. Apply
+          // image mappings only to asset nodes so Cytoscape stays warning-free.
+          { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "contain", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
           { selector: "edge", style: { width: 2.5, opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": "14px", "target-text-margin-y": "14px" } },
           { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-valign": "center", "text-halign": "center", "z-index": 2 } },
@@ -144,11 +230,12 @@ export default function NetOpsCanvas(props: Props) {
       cy.on("zoom pan", syncViewport);
       cy.on("tap", (event) => {
         const current = propsRef.current;
-        if (event.target.isNode()) {
-          const id = event.target.id();
+        if (event.target.isNode?.()) {
+          const id = event.target.id?.() || "";
+          if (!id) return;
           if (id.startsWith("group-")) return;
           if (id.startsWith("canvas-")) {
-            if (current.mode !== "move") {
+            if (current.mode !== "connect") {
               window.setTimeout(() => {
                 cy.elements().unselect();
                 cy.getElementById(id).select();
@@ -162,7 +249,7 @@ export default function NetOpsCanvas(props: Props) {
             const source = connectingFromRef.current;
             if (!source) {
               connectingFromRef.current = id;
-              event.target.addClass("node-connecting");
+              event.target.addClass?.("node-connecting");
               return;
             }
             cy.getElementById(source).removeClass("node-connecting");
@@ -170,7 +257,18 @@ export default function NetOpsCanvas(props: Props) {
             if (source !== id) current.onConnect(source, id);
             return;
           }
-          if (current.mode === "move") return;
+          if (current.mode === "move") {
+            // Move mode still needs an explicit selection on a click.  Dragging
+            // is left entirely to Cytoscape so a node drag and a sheet pan can
+            // share the same native pointer stream without a React overlay.
+            window.setTimeout(() => {
+              cy.elements().unselect();
+              cy.getElementById(id).select();
+              current.onSelectionChange([id]);
+            }, 0);
+            current.onSelectNode(id);
+            return;
+          }
           // Cytoscape must use additive selection for a marquee to retain all
           // enclosed objects.  Restore familiar single-click semantics here.
           window.setTimeout(() => {
@@ -181,8 +279,9 @@ export default function NetOpsCanvas(props: Props) {
           current.onSelectNode(id);
           return;
         }
-        if (event.target.isEdge()) {
-          current.onSelectLink(event.target.id());
+        if (event.target.isEdge?.()) {
+          const id = event.target.id?.();
+          if (id) current.onSelectLink(id);
           return;
         }
         connectingFromRef.current = null;
@@ -211,9 +310,13 @@ export default function NetOpsCanvas(props: Props) {
     const cy = cyRef.current;
     if (!cy) return;
     const layoutEditing = props.mode === "move";
-    cy.userPanningEnabled(false);
+    // Panning stays on in every mode: Cytoscape couples wheel zoom to
+    // userPanningEnabled, and dragging empty canvas to pan is what every
+    // network map does. Marquee selection moved to Shift + drag.
+    cy.panningEnabled(true);
+    cy.userPanningEnabled(true);
     // Do not let Cytoscape draw its own selection rectangle on mouse-down.
-    // The React gesture below starts only after the user holds and drags.
+    // The React marquee below starts only while Shift is held.
     cy.boxSelectionEnabled(false);
     // Additive remains necessary for programmatic multi-selection; ordinary
     // taps are explicitly normalized to one selected object above.
@@ -232,7 +335,7 @@ export default function NetOpsCanvas(props: Props) {
     const cy = cyRef.current;
     if (!cy) return;
     const byDevice = new Map(props.devices.map((device) => [device.device_id, device]));
-    const elements: Array<Record<string, unknown>> = [
+    const elements: CanvasElementSpec[] = [
       ...props.topology.groups.map((group) => ({ group: "nodes", classes: "lz-group", data: { id: `group-${group.group_id}`, label: group.name, width: group.width, height: group.height }, position: { x: group.x + group.width / 2, y: group.y + group.height / 2 }, locked: true })),
       ...props.topology.nodes.map((node) => {
         const device = byDevice.get(node.linked_device_id || "");
@@ -245,20 +348,22 @@ export default function NetOpsCanvas(props: Props) {
         const isText = item.kind === "text";
         return { group: "nodes", classes: `canvas-item canvas-item-${item.kind}`, data: { id: `canvas-${item.item_id}`, label: item.text, shape: item.kind === "ellipse" ? "ellipse" : "roundrectangle", width: item.width, height: item.height, fill: style.fill, border: style.border, textColor: style.color, fillOpacity: isText ? 0 : 0.24, borderWidth: isText ? 0 : 1.5, fontSize: isText ? 14 : 12, textMaxWidth: Math.max(24, item.width - 16) }, position: { x: item.x, y: item.y } };
       }),
-      ...props.topology.links.map((link) => ({ group: "edges", data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, label: "", srcPort: "", tgtPort: "", visible: 1, edgeColor: link.status === "down" ? "#ef4444" : link.status === "up" ? "#10b981" : "#64748b", edgeStyle: link.kind === "logical" ? "dashed" : "solid" } })),
+      // Do not let stale/imported links with a missing endpoint reach the
+      // renderer. Cytoscape rejects those elements and can otherwise leave a
+      // blank canvas even though the surviving drawing is valid.
+      ...props.topology.links
+        .filter((link) => props.topology.nodes.some((node) => node.node_id === link.source_node_id) && props.topology.nodes.some((node) => node.node_id === link.target_node_id))
+        .map((link) => ({ group: "edges", data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, label: "", srcPort: "", tgtPort: "", visible: 1, edgeColor: link.status === "down" ? "#ef4444" : link.status === "up" ? "#10b981" : "#64748b", edgeStyle: link.kind === "logical" ? "dashed" : "solid" } })),
     ];
-    cy.batch(() => {
-      cy.elements().remove();
-      cy.add(elements);
-    });
+    applyElements(cy, elements, connectingFromRef.current);
     if (initialTopologyIdRef.current !== props.topology.topology_id) {
       initialTopologyIdRef.current = props.topology.topology_id;
       window.setTimeout(() => { cy.resize(); cy.fit(undefined, 48); setViewport({ ...cy.pan(), zoom: cy.zoom() }); }, 0);
     }
   }, [rendererReady, props.topology, props.devices]);
 
-  // Interface labels and the layer filter are display-only controls.  Updating
-  // edge data in place keeps positions, selection, and the fixed sheet intact.
+  // Interface labels are display-only controls. Updating edge data in place
+  // keeps positions, selection, and the fixed sheet intact.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
@@ -270,10 +375,10 @@ export default function NetOpsCanvas(props: Props) {
         edge.data("label", canvasLinkDescription(link));
         edge.data("srcPort", props.showInterfaces ? compactInterfaceLabel(link.source_interface) : "");
         edge.data("tgtPort", props.showInterfaces ? compactInterfaceLabel(link.target_interface) : "");
-        edge.data("visible", props.layer === "all" || link.kind === props.layer ? 1 : 0);
+        edge.data("visible", 1);
       });
     });
-  }, [rendererReady, props.topology.links, props.layer, props.showInterfaces]);
+  }, [rendererReady, props.topology.links, props.showInterfaces]);
 
   useEffect(() => {
     if (props.mode === "connect") return;
@@ -281,6 +386,21 @@ export default function NetOpsCanvas(props: Props) {
     if (source) cyRef.current?.getElementById(source).removeClass("node-connecting");
     connectingFromRef.current = null;
   }, [props.mode]);
+
+  // Shift arms the marquee. Tracked globally so the overlay is mounted before
+  // the drag starts, and released defensively when the window loses focus.
+  useEffect(() => {
+    const sync = (event: KeyboardEvent) => setShiftHeld(event.shiftKey);
+    const release = () => setShiftHeld(false);
+    window.addEventListener("keydown", sync);
+    window.addEventListener("keyup", sync);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", sync);
+      window.removeEventListener("keyup", sync);
+      window.removeEventListener("blur", release);
+    };
+  }, []);
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -314,8 +434,7 @@ export default function NetOpsCanvas(props: Props) {
   const gridSize = 32;
 
   type CanvasPointerEvent = MouseEvent<HTMLDivElement>;
-  const eventPointerId = () => 1;
-  const clientPoint = (event: CanvasPointerEvent) => {
+  const clientPoint = (event: { clientX: number; clientY: number }) => {
     const rect = hostRef.current?.getBoundingClientRect();
     return rect ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null;
   };
@@ -325,36 +444,6 @@ export default function NetOpsCanvas(props: Props) {
     const pan = cy.pan();
     const zoom = cy.zoom();
     return { x: (point.x - pan.x) / zoom, y: (point.y - pan.y) / zoom };
-  };
-  const canvasObjectAt = (point: { x: number; y: number }) => {
-    const model = modelPoint(point);
-    if (!model) return null;
-    const node = props.topology.nodes.find((item) => Math.abs(item.x - model.x) <= 48 && Math.abs(item.y - model.y) <= 40);
-    if (node) return { id: node.node_id, kind: "node" as const };
-    const canvasItem = (props.topology.canvas_items || []).find((item) => Math.abs(item.x - model.x) <= item.width / 2 && Math.abs(item.y - model.y) <= item.height / 2);
-    if (canvasItem) return { id: `canvas-${canvasItem.item_id}`, kind: "canvas_item" as const };
-    const nodeById = new Map(props.topology.nodes.map((item) => [item.node_id, item]));
-    const link = props.topology.links.find((item) => {
-      const source = nodeById.get(item.source_node_id);
-      const target = nodeById.get(item.target_node_id);
-      if (!source || !target) return false;
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const squared = dx * dx + dy * dy;
-      const ratio = squared ? Math.max(0, Math.min(1, ((model.x - source.x) * dx + (model.y - source.y) * dy) / squared)) : 0;
-      return Math.hypot(model.x - (source.x + ratio * dx), model.y - (source.y + ratio * dy)) <= 10;
-    });
-    return link ? { id: link.link_id, kind: "link" as const } : null;
-  };
-  const selectCanvasObject = (candidate: { id: string; kind: "node" | "canvas_item" | "link" }) => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.elements().unselect();
-    cy.getElementById(candidate.id).select();
-    props.onSelectionChange([candidate.id]);
-    if (candidate.kind === "node") props.onSelectNode(candidate.id);
-    else if (candidate.kind === "canvas_item") props.onSelectCanvasItem(candidate.id.slice("canvas-".length));
-    else props.onSelectLink(candidate.id);
   };
   const applyMarqueeSelection = (start: { x: number; y: number }, end: { x: number; y: number }) => {
     const first = modelPoint(start);
@@ -375,93 +464,60 @@ export default function NetOpsCanvas(props: Props) {
     props.onSelectionChange(ids);
     window.setTimeout(() => { ignoreBoxSelectionTapRef.current = false; }, 0);
   };
+  // Marquee selection is opt-in with Shift. A plain drag pans the sheet and
+  // the wheel zooms, and because the overlay only exists while Shift is held,
+  // every ordinary gesture goes back to Cytoscape's own hit testing instead
+  // of a hand-rolled duplicate of it.
   const handlePointerDown = (event: CanvasPointerEvent) => {
-    if (event.button !== 0 || props.mode === "connect") return;
-    const point = clientPoint(event);
-    if (!point) return;
-    const candidate = canvasObjectAt(point);
-    if (candidate) {
-      clickCandidateRef.current = { ...candidate, pointerId: eventPointerId() };
-      return;
-    }
-    marqueeStartRef.current = { ...point, pointerId: eventPointerId() };
-  };
-  const handlePointerMove = (event: CanvasPointerEvent) => {
-    const start = marqueeStartRef.current;
-    const point = clientPoint(event);
-    if (!start || !point || start.pointerId !== eventPointerId()) return;
-    const width = Math.abs(point.x - start.x);
-    const height = Math.abs(point.y - start.y);
-    if (width < 5 && height < 5) return;
-    setMarquee({ x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), width, height });
-  };
-  const finishMarquee = (event: CanvasPointerEvent) => {
-    const candidate = clickCandidateRef.current;
-    const start = marqueeStartRef.current;
-    const point = clientPoint(event);
-    clickCandidateRef.current = null;
-    marqueeStartRef.current = null;
-    if (!point) return;
-    if (candidate && candidate.pointerId === eventPointerId()) {
-      selectCanvasObject(candidate);
-      return;
-    }
-    if (!start || start.pointerId !== eventPointerId() || (Math.abs(point.x - start.x) < 5 && Math.abs(point.y - start.y) < 5)) {
-      cyRef.current?.elements().unselect();
-      props.onSelectionChange([]);
-      props.onClearSelection();
-      setMarquee(null);
-      return;
-    }
-    applyMarqueeSelection(start, point);
-    setMarquee(null);
-  };
-  const handleMovePointerDown = (event: CanvasPointerEvent) => {
     if (event.button !== 0) return;
     const point = clientPoint(event);
-    const candidate = point && canvasObjectAt(point);
-    const cy = cyRef.current;
-    if (!point || !candidate || candidate.kind === "link" || !cy) return;
-    let ids = cy.$("node:selected").map((node) => node.id()).filter((id) => !id.startsWith("group-"));
-    if (!ids.includes(candidate.id)) {
-      cy.elements().unselect();
-      cy.getElementById(candidate.id).select();
-      ids = [candidate.id];
-      props.onSelectionChange(ids);
-    }
-    const positions = ids.map((element_id) => ({ element_id, ...((cy.getElementById(element_id) as CyNode).position()) }));
-    moveStartRef.current = { ...point, pointerId: eventPointerId(), positions };
-  };
-  const handleMovePointerMove = (event: CanvasPointerEvent) => {
-    const start = moveStartRef.current;
-    const point = clientPoint(event);
-    const cy = cyRef.current;
-    if (!start || !point || !cy || start.pointerId !== eventPointerId()) return;
-    const zoom = cy.zoom();
-    const deltaX = (point.x - start.x) / zoom;
-    const deltaY = (point.y - start.y) / zoom;
-    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
-    cy.batch(() => start.positions.forEach((position) => {
-      (cy.getElementById(position.element_id) as CyNode).position({ x: position.x + deltaX, y: position.y + deltaY });
-    }));
-  };
-  const finishMove = (event: CanvasPointerEvent) => {
-    const start = moveStartRef.current;
-    const point = clientPoint(event);
-    const cy = cyRef.current;
-    moveStartRef.current = null;
-    if (!start || !point || !cy || start.pointerId !== eventPointerId()) return;
-    const zoom = cy.zoom();
-    const deltaX = (point.x - start.x) / zoom;
-    const deltaY = (point.y - start.y) / zoom;
-    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
-    props.onMoveElements(start.positions.map((position) => ({ element_id: position.element_id, x: position.x + deltaX, y: position.y + deltaY })));
+    if (!point) return;
+    marqueeStartRef.current = point;
+    setMarqueeDrag(true);
   };
 
-  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: "0 0" } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+  // The drag is tracked on window so that releasing the button over a floating
+  // control (zoom cluster, minimap) still finishes the selection instead of
+  // stranding the rectangle on screen.
+  useEffect(() => {
+    if (!marqueeDrag) return;
+    const onMove = (event: MouseEvent) => {
+      const start = marqueeStartRef.current;
+      const point = clientPoint(event);
+      if (!start || !point) return;
+      const width = Math.abs(point.x - start.x);
+      const height = Math.abs(point.y - start.y);
+      if (width < 5 && height < 5) return;
+      setMarquee({ x: Math.min(start.x, point.x), y: Math.min(start.y, point.y), width, height });
+    };
+    const onUp = (event: MouseEvent) => {
+      const start = marqueeStartRef.current;
+      const point = clientPoint(event);
+      marqueeStartRef.current = null;
+      setMarqueeDrag(false);
+      setMarquee(null);
+      if (!start || !point) return;
+      if (Math.abs(point.x - start.x) < 5 && Math.abs(point.y - start.y) < 5) {
+        cyRef.current?.elements().unselect();
+        props.onSelectionChange([]);
+        props.onClearSelection();
+        return;
+      }
+      applyMarqueeSelection(start, point);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [marqueeDrag]);
+
+  const marqueeArmed = props.mode === "select" && shiftHeld;
+
+  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: "0 0" } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
-    {props.mode === "select" && <div className="netops-selection-gesture-layer" onMouseDown={handlePointerDown} onMouseMove={handlePointerMove} onMouseUp={finishMarquee} onMouseLeave={() => { marqueeStartRef.current = null; clickCandidateRef.current = null; setMarquee(null); }} />}
-    {props.mode === "move" && <div className="netops-move-gesture-layer" onMouseDown={handleMovePointerDown} onMouseMove={handleMovePointerMove} onMouseUp={finishMove} onMouseLeave={() => { moveStartRef.current = null; }} />}
+    {marqueeArmed && <div className="netops-selection-gesture-layer" onMouseDown={handlePointerDown} />}
     {marquee && <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     <div className="netops-viewport-controls" aria-label="画布视图控制">
       <button type="button" onClick={() => updateZoom(0.15)} aria-label="放大画布">+</button>

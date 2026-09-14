@@ -281,7 +281,6 @@ export default function TopologyWorkspace({
   const [canvasMode, setCanvasMode] = useState<"select" | "move" | "connect">("select");
   const [gridEnabled, setGridEnabled] = useState(true);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
-  const [layer, setLayer] = useState<"all" | "physical" | "logical">("all");
   const [showInterfaces, setShowInterfaces] = useState(true);
   const [topologyState, setTopologyState] = useState<TopologyState | null>(null);
   const [stateError, setStateError] = useState("");
@@ -644,10 +643,6 @@ export default function TopologyWorkspace({
   // Add device to canvas from palette
   const handleAddDeviceToCanvas = (dev: Device, position?: { x: number; y: number }) => {
     if (!activeTopology) return;
-    if (activeTopology.nodes.some((n) => n.linked_device_id === dev.device_id)) {
-      setNotice(`设备“${dev.name}”已在当前拓扑画布中，禁止重复添加`, false);
-      return;
-    }
 
     const nodeCount = activeTopology.nodes.length;
     const col = nodeCount % 4;
@@ -658,6 +653,8 @@ export default function TopologyWorkspace({
     const newNode: TopologyNode = {
       node_id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       linked_device_id: dev.device_id,
+      device_type: dev.device_type,
+      display_name: dev.name,
       x: newX,
       y: newY,
     };
@@ -666,7 +663,7 @@ export default function TopologyWorkspace({
       ...activeTopology,
       nodes: [...activeTopology.nodes, newNode],
     });
-    setNotice(`设备“${dev.name}”已加入画布`);
+    setNotice(`设备“${dev.name}”已加入画布；图纸节点可按需要重复呈现同一登记设备。`);
   };
 
   const handleAddManualNode = useCallback((event: FormEvent) => {
@@ -788,7 +785,7 @@ export default function TopologyWorkspace({
     const existingIds = new Set(activeTopology.nodes.map((node) => node.linked_device_id));
     const additions = devices
       .filter((device) => !existingIds.has(device.device_id))
-      .map((device) => ({ node_id: `node_${Date.now()}_${device.device_id}`, linked_device_id: device.device_id, x: 0, y: 0 }));
+      .map((device) => ({ node_id: `node_${Date.now()}_${device.device_id}`, linked_device_id: device.device_id, device_type: device.device_type, display_name: device.name, x: 0, y: 0 }));
     if (!additions.length) {
       setNotice("工作区设备已经全部在当前画布中", false);
       return;
@@ -1168,7 +1165,10 @@ export default function TopologyWorkspace({
                     role="button"
                     tabIndex={0}
                     aria-label={`定位设备 ${dev.name}`}
-                    draggable={!isPlaced}
+                    // A diagram may intentionally show the same registered
+                    // asset in more than one visual context. Click locates an
+                    // existing node; drag always adds another diagram node.
+                    draggable
                     onDragStart={(event) => handlePaletteDragStart(event, dev.device_id)}
                     onClick={() => { const node = activeTopology?.nodes.find((item) => item.linked_device_id === dev.device_id); if (node) setSelectedElement({ type: "node", nodeId: node.node_id }); }}
                     onKeyDown={(event) => { if (event.key === "Enter") { const node = activeTopology?.nodes.find((item) => item.linked_device_id === dev.device_id); if (node) setSelectedElement({ type: "node", nodeId: node.node_id }); } }}
@@ -1188,7 +1188,7 @@ export default function TopologyWorkspace({
                       </small>
                     </div>
                     {isPlaced ? (
-                      <span className="palette-badge-placed">已在画布</span>
+                      <span className="palette-badge-placed">已在画布 · 可再添加</span>
                     ) : (
                       <Button
                         size="sm"
@@ -1289,7 +1289,6 @@ export default function TopologyWorkspace({
               <button onClick={() => handleAlignSelectedNodes("left")}>左对齐</button><button onClick={() => handleAlignSelectedNodes("center")}>水平居中</button><button onClick={() => handleAlignSelectedNodes("right")}>右对齐</button>
               <button onClick={() => handleAlignSelectedNodes("top")}>顶对齐</button><button onClick={() => handleAlignSelectedNodes("middle")}>垂直居中</button><button onClick={() => handleAlignSelectedNodes("bottom")}>底对齐</button>
             </div></details>
-            <div className="studio-layer-tabs" role="group" aria-label="拓扑图层">{([ ["all", "全部"], ["physical", "物理连接"], ["logical", "逻辑连接"] ] as const).map(([value, label]) => <button key={value} aria-pressed={layer === value} onClick={() => setLayer(value)}>{label}</button>)}</div>
           </div>
           <div className="toolbar-right">
             <Button
@@ -1385,7 +1384,7 @@ export default function TopologyWorkspace({
 
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
         <div className={`topology-canvas-viewport mode-${canvasMode}`}>
-          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span><span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : canvasMode === "move" ? `${canvasSelectedElementIds.length ? `已选 ${canvasSelectedElementIds.length} 个对象；` : ""}普通单击只选一个；直接在空白处按住鼠标拖框多选，拖动任一已选对象可整体移动` : "普通单击选择对象；直接在空白处按住鼠标拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
+          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : canvasMode === "move" ? "单击对象打开管理面板；空白处拖动平移画布，拖动对象移动布局" : "单击选择对象；拖动平移画布；Shift + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -1408,7 +1407,6 @@ export default function TopologyWorkspace({
             devices={devices}
             mode={canvasMode}
             gridEnabled={gridEnabled}
-            layer={layer}
             showInterfaces={showInterfaces}
             onSelectNode={(nodeId) => setSelectedElement({ type: "node", nodeId })}
             onSelectCanvasItem={(itemId) => setSelectedElement({ type: "canvas_item", itemId })}
@@ -1755,14 +1753,14 @@ export default function TopologyWorkspace({
         ) : selectedElement?.type === "canvas_item" && selectedCanvasItem ? (
           <div className="inspector-panel">
             <div className="inspector-header">
-              <h4>图纸图元</h4>
+              <h4>图纸图元 · {selectedCanvasItem.text || "未命名图元"}</h4>
               <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起图元详情">
                 <IconClose size={13} />
               </Button>
             </div>
 
             <div className="inspector-section">
-              <p className="inspector-desc">图元只属于当前图纸：可用于业务域、注释和边界说明，不会创建设备、连接或 Agent 操作目标。</p>
+              <p className="inspector-desc">图元只属于当前图纸：用于业务域、注释和边界说明。可编辑类型、文字、样式和尺寸；删除只移除这个图元，不会影响设备或链路。</p>
               <label className="inspector-field">
                 图元类型
                 <select
