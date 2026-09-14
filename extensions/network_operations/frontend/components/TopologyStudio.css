@@ -73,6 +73,8 @@
 .topology-studio .netops-viewport-controls button:last-child { border-right: 0; font-size: 11px; }
 .topology-studio .netops-viewport-controls button:hover { background: #edf7f5; color: #087a70; }
 .topology-studio .netops-viewport-controls .netops-zoom-readout { min-width: 48px; color: #617889; font-size: 10px; font-weight: 600; }
+.topology-studio .netops-viewport-controls button.is-active { background: #eaf6f3; color: #087a70; }
+.topology-studio .netops-viewport-controls button:last-child { font-size: 11px; }
 .topology-studio .netops-canvas-accessibility { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: #6b8190; pointer-events: none; }
 .studio-canvas-caption strong { color: #2c4555; font-weight: 650; }
@@ -82,13 +84,41 @@
 .studio-canvas-caption input { margin: 0; width: 12px; height: 12px; }
 .studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid #dce5ea; background: #fff; color: #718694; font-size: 10px; }
 .studio-statusbar button { margin-left: auto; padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: #52706f; cursor: pointer; white-space: nowrap; }
+.canvas-selection-count { padding: 1px 7px; border-radius: 99px; background: #e4f5f1; color: #087a70; font-size: 10px; font-weight: 650; white-space: nowrap; }
+/* In-canvas search: on a large diagram, finding one device by eye is the
+   slowest operation there is. */
+.canvas-search-wrap { position: relative; display: flex; align-items: center; gap: 5px; padding: 0 8px; height: 30px; border: 1px solid #d6e0e6; border-radius: 6px; background: #fff; }
+.canvas-search-wrap:focus-within { border-color: #75b9ac; box-shadow: 0 0 0 2px #0c8a7a14; }
+.canvas-search-wrap > svg { color: #8497a5; flex: 0 0 auto; }
+.canvas-search-wrap input { width: 128px; border: 0; outline: none; background: transparent; font-size: 12px; color: var(--text); }
+.canvas-search-results { position: absolute; top: 34px; right: 0; z-index: 40; display: grid; width: 230px; padding: 5px; border: 1px solid #cad8df; border-radius: 7px; background: #fff; box-shadow: 0 14px 30px #1e344428; }
+.canvas-search-results button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
+.canvas-search-results button:hover { background: #edf7f5; }
+.canvas-search-results button span { font-size: 12px; color: var(--text); font-weight: 600; }
+.canvas-search-results button small { font-size: 10px; color: var(--text-3); }
+/* Right-click menu: every diagram tool has one and people reach for it
+   before they read the toolbar. */
+.canvas-context-menu { position: fixed; z-index: 1200; display: grid; gap: 2px; min-width: 168px; padding: 5px; border: 1px solid #cad8df; border-radius: 8px; background: #fff; box-shadow: 0 16px 34px #1e344430; }
+.canvas-context-menu button { padding: 6px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
+.canvas-context-menu button:hover { background: #edf7f5; color: #087a70; }
+.canvas-context-menu button.danger:hover { background: #fdecec; color: var(--danger); }
+.canvas-context-menu hr { margin: 3px 4px; border: 0; border-top: 1px solid var(--line-2); }
+.shortcut-help-backdrop { position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; background: #10253630; }
+.shortcut-help { width: min(420px, 92vw); max-height: 82vh; overflow: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 24px 60px #10253640; }
+.shortcut-help > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line-2); }
+.shortcut-help > header button { border: 0; background: transparent; color: var(--text-3); cursor: pointer; }
+.shortcut-help dl { margin: 0; padding: 8px 16px 16px; display: grid; gap: 2px; }
+.shortcut-help dl > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line-2); font-size: 12px; }
+.shortcut-help dl > div:last-child { border-bottom: 0; }
+.shortcut-help dt { color: var(--text); font-weight: 650; font-family: var(--mono, monospace); font-size: 11px; }
+.shortcut-help dd { margin: 0; color: var(--text-2); }
 /* 引擎已从 React Flow 切到 Cytoscape（f14b052）—— 画布节点不再是 DOM，而是
    Cytoscape 画在 canvas 上的图形。上面这一整片 .topology-device-node /
    .device-node-* / .node-access-dot / .edge-if-badge / .edge-center-badge /
    .topology-group-node / .group-node-header 都是 DOM 时代的样式，实测 18 个
    选择器 0 命中，随 Cytoscape 迁移一并删除。节点视觉现在由 NetOpsCanvas 的
    Cytoscape style 数组定义。 */
-.topology-studio .topology-minimap-custom { width: 160px; height: 110px; border-radius: 6px; border: 1px solid #cfdbe3; background: #fff; box-shadow: 0 6px 18px #273c4a1c; display: block; }
+.topology-studio .topology-minimap-custom { position: absolute; right: 14px; bottom: 56px; z-index: 8; width: 160px; height: 110px; border-radius: 6px; border: 1px solid #cfdbe3; background: #fff; box-shadow: 0 6px 18px #273c4a1c; display: block; cursor: pointer; }
 .topology-studio .palette-device-item { cursor: pointer; }
 .topology-studio .palette-device-item[draggable=true] { cursor: grab; }
 .topology-studio .palette-device-item[draggable=true]:active { cursor: grabbing; }

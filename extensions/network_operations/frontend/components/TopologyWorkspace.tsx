@@ -41,7 +41,7 @@ import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
 import { layoutTopology } from "./topologyLayout";
 import { TopologyAgentPanel, type CanvasSelection } from "./TopologyAgentPanel";
-import NetOpsCanvas from "./NetOpsCanvas";
+import NetOpsCanvas, { type CanvasApi, type CanvasContextTarget } from "./NetOpsCanvas";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import "./TopologyStudio.css";
 
@@ -282,6 +282,13 @@ export default function TopologyWorkspace({
   const [gridEnabled, setGridEnabled] = useState(true);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);
+  // Imperative canvas handle (export / focus / viewport) and transient canvas
+  // UI: right-click menu, keyboard help, and in-canvas search.
+  const canvasApiRef = useRef<CanvasApi | null>(null);
+  const [contextMenu, setContextMenu] = useState<CanvasContextTarget | null>(null);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+  const [canvasQuery, setCanvasQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [topologyState, setTopologyState] = useState<TopologyState | null>(null);
   const [stateError, setStateError] = useState("");
   const [layoutBusy, setLayoutBusy] = useState(false);
@@ -481,27 +488,6 @@ export default function TopologyWorkspace({
     if (saveStatusRef.current === "unsaved" && activeTopologyRef.current) void saveOnUnmountRef.current(activeTopologyRef.current);
   }, []);
 
-  // Keyboard shortcut listener for Undo / Redo
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable=true]")) return;
-      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
-        e.preventDefault();
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "y") {
-        e.preventDefault();
-        handleRedo();
-      } else if (e.key === "Escape") {
-        setFocusMode(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleUndo, handleRedo]);
 
   const openLinkComposer = useCallback(
     (sourceId?: string, targetId?: string) => {
@@ -761,6 +747,161 @@ export default function TopologyWorkspace({
     setSelectedElement(null);
     setNotice("图纸图元已删除");
   }, [activeTopology, pushState, setNotice]);
+
+  // A diagram that cannot leave the tool ends up as a screenshot in a report.
+  // PNG and SVG come straight from the renderer.
+  const exportCanvas = useCallback((format: "png" | "svg") => {
+    const api = canvasApiRef.current;
+    if (!api) {
+      setNotice("画布尚未就绪，请稍后再试", false);
+      return;
+    }
+    const safeName = (activeTopology?.name || "topology").replace(/[\\/:*?"<>|\s]+/g, "_");
+    const anchor = document.createElement("a");
+    if (format === "svg") {
+      anchor.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(api.exportSVG())}`;
+      anchor.download = `${safeName}.svg`;
+    } else {
+      anchor.href = api.exportPNG({ full: true, scale: 2, background: "#ffffff" });
+      anchor.download = `${safeName}.png`;
+    }
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setNotice(`已导出 ${safeName}.${format}`);
+  }, [activeTopology, setNotice]);
+
+  // The menu is transient: any gesture outside it dismisses it.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener("mousedown", close);
+    window.addEventListener("wheel", close, { passive: true });
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("wheel", close);
+      window.removeEventListener("blur", close);
+    };
+  }, [contextMenu]);
+
+  const canvasMatches = useMemo(() => {
+    const query = canvasQuery.trim().toLowerCase();
+    if (!query || !activeTopology) return [];
+    const nodes = activeTopology.nodes
+      .filter((node) => {
+        const device = byDevice.get(node.linked_device_id || "");
+        return [node.display_name, node.device_type, device?.name, device?.host].some((value) => String(value || "").toLowerCase().includes(query));
+      })
+      .map((node) => ({ id: node.node_id, kind: "node" as const, label: node.display_name || byDevice.get(node.linked_device_id || "")?.name || node.node_id, detail: byDevice.get(node.linked_device_id || "")?.host || "图纸设备" }));
+    const items = (activeTopology.canvas_items || [])
+      .filter((item) => (item.text || "").toLowerCase().includes(query))
+      .map((item) => ({ id: `canvas-${item.item_id}`, kind: "canvas_item" as const, label: item.text || item.kind, detail: "图纸图元" }));
+    return [...nodes, ...items].slice(0, 8);
+  }, [canvasQuery, activeTopology, byDevice]);
+
+  const focusCanvasObject = useCallback((id: string, kind: "node" | "canvas_item") => {
+    canvasApiRef.current?.focusIds([id], 1.1);
+    setSelectedElement(kind === "node" ? { type: "node", nodeId: id } : { type: "canvas_item", itemId: id.replace(/^canvas-/, "") });
+    setCanvasQuery("");
+  }, []);
+
+  const nudgeSelected = useCallback((dx: number, dy: number) => {
+    if (!activeTopology || !canvasSelectedElementIds.length) return;
+    const ids = new Set(canvasSelectedElementIds);
+    pushState({ ...activeTopology, nodes: activeTopology.nodes.map((node) => (ids.has(node.node_id) ? { ...node, x: node.x + dx, y: node.y + dy } : node)) });
+  }, [activeTopology, canvasSelectedElementIds, pushState]);
+
+  const deleteSelection = useCallback(() => {
+    if (!selectedElement) return;
+    if (selectedElement.type === "node") void handleRemoveNode(selectedElement.nodeId);
+    else if (selectedElement.type === "link") void handleRemoveLink(selectedElement.linkId);
+    else if (selectedElement.type === "canvas_item") void handleRemoveCanvasItem(selectedElement.itemId);
+  }, [selectedElement, handleRemoveNode, handleRemoveLink, handleRemoveCanvasItem]);
+
+  /**
+   * Keyboard shortcuts. Every diagram tool people already know (draw.io,
+   * Figma, Visio) is keyboard driven, and the canvas is where an operator
+   * spends their time, so the common gestures get single keys.
+   */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable=true]")) return;
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo(); else handleUndo();
+        return;
+      }
+      if (meta && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+      if (meta && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        canvasApiRef.current?.selectAll();
+        return;
+      }
+      if (meta && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (activeTopologyRef.current) void executeSave(activeTopologyRef.current);
+        return;
+      }
+      if (meta) return;
+      switch (e.key) {
+        case "Escape":
+          setContextMenu(null);
+          setShowShortcutHelp(false);
+          setFocusMode(false);
+          return;
+        case "Delete":
+        case "Backspace":
+          if (selectedElement) {
+            e.preventDefault();
+            deleteSelection();
+          }
+          return;
+        case "ArrowLeft":
+        case "ArrowRight":
+        case "ArrowUp":
+        case "ArrowDown": {
+          if (!canvasSelectedElementIds.length) return;
+          e.preventDefault();
+          const step = e.shiftKey ? 32 : 8;
+          if (e.key === "ArrowLeft") nudgeSelected(-step, 0);
+          else if (e.key === "ArrowRight") nudgeSelected(step, 0);
+          else if (e.key === "ArrowUp") nudgeSelected(0, -step);
+          else nudgeSelected(0, step);
+          return;
+        }
+        case "/":
+          e.preventDefault();
+          searchInputRef.current?.focus();
+          return;
+        case "?":
+          e.preventDefault();
+          setShowShortcutHelp((value) => !value);
+          return;
+        default:
+          break;
+      }
+      switch (e.key.toLowerCase()) {
+        case "v": setCanvasMode("select"); break;
+        case "m": setCanvasMode("move"); break;
+        case "c": setCanvasMode("connect"); break;
+        case "g": if (e.shiftKey) setGridEnabled((value) => !value); break;
+        case "i": setShowInterfaces((value) => !value); break;
+        case "f":
+          if (e.shiftKey) canvasApiRef.current?.focusIds(canvasSelectedElementIds, 1.2);
+          else canvasApiRef.current?.fit();
+          break;
+        default: break;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleUndo, handleRedo, executeSave, deleteSelection, nudgeSelected, canvasSelectedElementIds]);
 
   const layoutTopologyNodes = useCallback(
     (topology: Topology, nodesToLayout = topology.nodes) => {
@@ -1270,6 +1411,27 @@ export default function TopologyWorkspace({
           </div>
 
           <div className="toolbar-right">
+            <div className="canvas-search-wrap">
+              <IconSearch size={13} />
+              <input
+                ref={searchInputRef}
+                value={canvasQuery}
+                placeholder="搜索设备 / IP  /"
+                aria-label="在画布中搜索设备"
+                onChange={(event) => setCanvasQuery(event.target.value)}
+                onBlur={() => window.setTimeout(() => setCanvasQuery(""), 180)}
+              />
+              {canvasMatches.length > 0 && (
+                <div className="canvas-search-results">
+                  {canvasMatches.map((match) => (
+                    <button key={match.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => focusCanvasObject(match.id, match.kind)}>
+                      <span>{match.label}</span>
+                      <small>{match.detail}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button className="studio-icon-button" aria-label={focusMode ? "退出专注画布" : "专注画布"} title="专注画布" onClick={() => setFocusMode((value) => !value)}><IconExpand size={18} /></button>
             <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>Agent 协作</Button>
           </div>
@@ -1279,7 +1441,6 @@ export default function TopologyWorkspace({
             <button className="studio-mode-button" aria-pressed={canvasMode === "select"} onClick={() => setCanvasMode("select")}><IconMenu size={13} />选择</button>
             <button className="studio-mode-button" aria-pressed={canvasMode === "move"} onClick={() => setCanvasMode("move")}><IconArrowsX size={13} />移动布局</button>
             <button className="studio-mode-button" aria-pressed={canvasMode === "connect"} onClick={() => setCanvasMode("connect")}><IconLink size={13} />连线</button>
-            <button className="studio-mode-button" aria-pressed={gridEnabled} onClick={() => setGridEnabled((value) => !value)}><IconGrid size={13} />网格</button>
             <details className="studio-insert-menu"><summary><IconBox size={13} />插入</summary><div>
               <button type="button" onClick={() => handleAddCanvasItem("rectangle")}>矩形区域</button>
               <button type="button" onClick={() => handleAddCanvasItem("ellipse")}>椭圆标注</button>
@@ -1351,6 +1512,22 @@ export default function TopologyWorkspace({
             <details className="studio-more"><summary>更多</summary><div>
             <Button
               size="sm"
+              icon={<IconSave size={13} />}
+              onClick={() => exportCanvas("png")}
+              title="导出整张拓扑为 PNG"
+            >
+              导出 PNG
+            </Button>
+            <Button
+              size="sm"
+              icon={<IconSave size={13} />}
+              onClick={() => exportCanvas("svg")}
+              title="导出整张拓扑为矢量 SVG"
+            >
+              导出 SVG
+            </Button>
+            <Button
+              size="sm"
               icon={<IconEdit size={13} />}
               onClick={() => {
                 if (activeTopology) {
@@ -1384,7 +1561,7 @@ export default function TopologyWorkspace({
 
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
         <div className={`topology-canvas-viewport mode-${canvasMode}`}>
-          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : canvasMode === "move" ? "单击对象打开管理面板；空白处拖动平移画布，拖动对象移动布局" : "单击选择对象；拖动平移画布；Shift + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label></div>
+          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : canvasMode === "move" ? "单击对象打开管理面板；空白处拖动平移画布，拖动对象移动布局" : "单击选择对象；拖动平移画布；Shift + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -1416,12 +1593,73 @@ export default function TopologyWorkspace({
             onMoveElements={handleNetOpsMove}
             onConnect={(source, target) => { openLinkComposer(source, target); setCanvasMode("select"); }}
             onDropDevice={handleNetOpsDrop}
+            onReady={(api) => { canvasApiRef.current = api; }}
+            onContextMenu={setContextMenu}
           />
         </div>
         <footer className="studio-statusbar"><span>{stateError || (topologyState ? `记录同步 ${new Date(topologyState.refreshed_at).toLocaleTimeString("zh-CN", { hour12: false })}` : "正在读取设备记录…")}</span><span>链路颜色：图纸连接 · 管理访问状态见设备详情</span><button onClick={() => void refreshFacts()}><IconRefresh size={12} />刷新状态</button></footer>
       </main>
 
       {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} skills={skills} selection={canvasSelection} onCompleted={() => { void refreshFacts(); if (saveStatus === "saved") void onReload(); }} /></aside>}
+
+      {contextMenu && (
+        <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(event) => event.stopPropagation()}>
+          {contextMenu.kind === "node" && (
+            <>
+              <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>打开设备详情</button>
+              <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setShowAgent(true); setIsInspectorOpen(false); setContextMenu(null); }}>围绕此设备对话</button>
+              <button type="button" className="danger" onClick={() => { void handleRemoveNode(contextMenu.id); setContextMenu(null); }}>从拓扑移除</button>
+            </>
+          )}
+          {contextMenu.kind === "link" && (
+            <>
+              <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑链路</button>
+              <button type="button" className="danger" onClick={() => { void handleRemoveLink(contextMenu.id); setContextMenu(null); }}>删除链路</button>
+            </>
+          )}
+          {contextMenu.kind === "canvas_item" && (
+            <>
+              <button type="button" onClick={() => { setSelectedElement({ type: "canvas_item", itemId: contextMenu.id.replace(/^canvas-/, "") }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑图元</button>
+              <button type="button" className="danger" onClick={() => { void handleRemoveCanvasItem(contextMenu.id.replace(/^canvas-/, "")); setContextMenu(null); }}>删除图元</button>
+            </>
+          )}
+          {contextMenu.kind === "canvas" && (
+            <>
+              <button type="button" onClick={() => { canvasApiRef.current?.selectAll(); setContextMenu(null); }}>全选对象</button>
+              <button type="button" onClick={() => { canvasApiRef.current?.fit(); setContextMenu(null); }}>适配视图</button>
+              <button type="button" onClick={() => { void handleAutoLayout(); setContextMenu(null); }}>自动排布</button>
+              <hr />
+              <button type="button" onClick={() => { handleAddCanvasItem("rectangle"); setContextMenu(null); }}>插入矩形区域</button>
+              <button type="button" onClick={() => { handleAddCanvasItem("text"); setContextMenu(null); }}>插入文本框</button>
+            </>
+          )}
+        </div>
+      )}
+
+      {showShortcutHelp && (
+        <div className="shortcut-help-backdrop" onClick={() => setShowShortcutHelp(false)}>
+          <div className="shortcut-help" onClick={(event) => event.stopPropagation()}>
+            <header><strong>画布快捷键</strong><button type="button" onClick={() => setShowShortcutHelp(false)} aria-label="关闭"><IconClose size={13} /></button></header>
+            <dl>
+              <div><dt>V / M / C</dt><dd>选择 / 移动布局 / 连线</dd></div>
+              <div><dt>Shift + 拖动</dt><dd>框选多个对象</dd></div>
+              <div><dt>Delete</dt><dd>删除选中对象</dd></div>
+              <div><dt>Ctrl/⌘ + A</dt><dd>全选</dd></div>
+              <div><dt>方向键</dt><dd>微移选中对象（Shift 加速）</dd></div>
+              <div><dt>F</dt><dd>适配全部对象</dd></div>
+              <div><dt>Shift + F</dt><dd>缩放至选中对象</dd></div>
+              <div><dt>/</dt><dd>搜索设备并定位</dd></div>
+              <div><dt>I</dt><dd>切换接口标签</dd></div>
+              <div><dt>Shift + G</dt><dd>切换网格</dd></div>
+              <div><dt>Ctrl/⌘ + Z / Y</dt><dd>撤销 / 重做</dd></div>
+              <div><dt>Ctrl/⌘ + S</dt><dd>立即保存</dd></div>
+              <div><dt>滚轮</dt><dd>缩放视图</dd></div>
+              <div><dt>Esc</dt><dd>关闭面板 / 退出专注模式</dd></div>
+              <div><dt>?</dt><dd>显示本帮助</dd></div>
+            </dl>
+          </div>
+        </div>
+      )}
 
       {/* 3. Right: Inspector */}
       <aside className={`topology-inspector ${isInspectorOpen ? "is-open" : ""}`} aria-label="拓扑详情">

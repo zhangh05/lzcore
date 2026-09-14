@@ -6,6 +6,19 @@ import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 type CanvasMode = "select" | "move" | "connect";
 type Position = { element_id: string; x: number; y: number };
 
+/** Imperative handles the surrounding workspace needs (export, focus, view). */
+export type CanvasApi = {
+  exportPNG: (options?: { full?: boolean; scale?: number; background?: string }) => string;
+  exportSVG: (options?: { full?: boolean }) => string;
+  fit: () => void;
+  zoomBy: (delta: number) => void;
+  focusIds: (ids: string[], zoom?: number) => void;
+  selectAll: () => string[];
+  clearSelection: () => void;
+};
+
+export type CanvasContextTarget = { x: number; y: number; kind: "node" | "link" | "canvas_item" | "canvas"; id: string };
+
 type Props = {
   topology: Topology;
   devices: Device[];
@@ -20,6 +33,9 @@ type Props = {
   onMoveElements: (positions: Position[]) => void;
   onConnect: (sourceId: string, targetId: string) => void;
   onDropDevice: (deviceId: string, position: { x: number; y: number }) => void;
+  /** Handed to the workspace once the renderer exists, null when it is gone. */
+  onReady?: (api: CanvasApi | null) => void;
+  onContextMenu?: (target: CanvasContextTarget) => void;
 };
 
 type CyCollection<T> = {
@@ -71,7 +87,7 @@ type CyElement = {
   length: number;
 };
 type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean };
-type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void } };
+type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void }; originalEvent?: MouseEvent };
 
 declare global {
   interface Window {
@@ -189,6 +205,8 @@ export default function NetOpsCanvas(props: Props) {
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [marqueeDrag, setMarqueeDrag] = useState(false);
+  const miniRef = useRef<HTMLCanvasElement | null>(null);
+  const [miniOpen, setMiniOpen] = useState(false);
   propsRef.current = props;
 
   useEffect(() => {
@@ -293,6 +311,17 @@ export default function NetOpsCanvas(props: Props) {
       cy.on("select unselect", "node", () => {
         propsRef.current.onSelectionChange(cy.$("node:selected").map((node) => node.id()).filter((id) => !id.startsWith("group-")));
       });
+      cy.on("cxttap", (event) => {
+        // Cytoscape swallows the native menu only partially; the host element
+        // prevents it, and this turns the gesture into workspace actions.
+        const native = event.originalEvent;
+        if (!native) return;
+        const id = event.target?.id?.() || "";
+        let kind: CanvasContextTarget["kind"] = "canvas";
+        if (event.target?.isEdge?.()) kind = "link";
+        else if (event.target?.isNode?.()) kind = id.startsWith("canvas-") ? "canvas_item" : "node";
+        propsRef.current.onContextMenu?.({ x: native.clientX, y: native.clientY, kind, id });
+      });
       cy.on("dragfree", "node", () => {
         if (propsRef.current.mode !== "move") return;
         const positions = cy.$("node:selected").map((node) => ({ element_id: node.id(), ...node.position() })).filter((node) => !node.element_id.startsWith("group-"));
@@ -330,6 +359,50 @@ export default function NetOpsCanvas(props: Props) {
       else node.ungrabify();
     });
   }, [rendererReady, props.mode]);
+
+  // Export, focus and viewport control are imperative, so the workspace asks
+  // for a handle once instead of pushing every canvas affordance through props.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!rendererReady || !cy) {
+      propsRef.current.onReady?.(null);
+      return;
+    }
+    propsRef.current.onReady?.({
+      exportPNG: (options) => cy.png({ full: true, scale: 2, bg: "#ffffff", ...options }),
+      exportSVG: (options) => cy.svg({ full: true, ...options }),
+      fit: () => {
+        cy.fit(undefined, 48);
+        setViewport({ ...cy.pan(), zoom: cy.zoom() });
+      },
+      zoomBy: (delta) => {
+        const zoom = Math.min(4, Math.max(0.15, cy.zoom() + delta));
+        cy.zoom(zoom);
+        setViewport({ ...cy.pan(), zoom });
+      },
+      focusIds: (ids, zoom) => {
+        if (!ids.length) return;
+        const collection = cy.$(ids.map((id) => `[id = "${id}"]`).join(","));
+        if (!collection.length) return;
+        if (zoom) cy.animate({ center: { eles: collection }, zoom }, { duration: 220 });
+        else cy.animate({ fit: { eles: collection, padding: 90 } }, { duration: 220 });
+        window.setTimeout(() => setViewport({ ...cy.pan(), zoom: cy.zoom() }), 280);
+      },
+      selectAll: () => {
+        const ids = cy.$("node").map((node) => node.id()).filter((id) => !id.startsWith("group-"));
+        cy.elements().unselect();
+        ids.forEach((id) => cy.getElementById(id).select());
+        propsRef.current.onSelectionChange(ids);
+        return ids;
+      },
+      clearSelection: () => {
+        cy.elements().unselect();
+        propsRef.current.onSelectionChange([]);
+        propsRef.current.onClearSelection();
+      },
+    });
+    return () => { propsRef.current.onReady?.(null); };
+  }, [rendererReady]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -415,6 +488,82 @@ export default function NetOpsCanvas(props: Props) {
     const y = (event.clientY - rect.top - pan.y) / zoom;
     const snap = (value: number) => props.gridEnabled ? Math.round(value / 32) * 32 : Math.round(value);
     props.onDropDevice(deviceId, { x: snap(x), y: snap(y) });
+  };
+
+  /**
+   * Overview map. It answers "where am I" on a diagram that no longer fits on
+   * screen, which is the moment a topology stops being readable.
+   */
+  const miniTransformRef = useRef<{ minX: number; minY: number; scale: number; offX: number; offY: number } | null>(null);
+  useEffect(() => {
+    const canvas = miniRef.current;
+    const cy = cyRef.current;
+    const host = hostRef.current;
+    if (!canvas || !cy || !host || !miniOpen) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const width = 160;
+    const height = 110;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    const points: Array<{ x: number; y: number }> = [];
+    props.topology.nodes.forEach((node) => points.push({ x: node.x - 47, y: node.y - 38 }, { x: node.x + 47, y: node.y + 38 }));
+    (props.topology.canvas_items || []).forEach((item) => points.push({ x: item.x - item.width / 2, y: item.y - item.height / 2 }, { x: item.x + item.width / 2, y: item.y + item.height / 2 }));
+    if (!points.length) return;
+    const minX = Math.min(...points.map((p) => p.x)) - 40;
+    const maxX = Math.max(...points.map((p) => p.x)) + 40;
+    const minY = Math.min(...points.map((p) => p.y)) - 40;
+    const maxY = Math.max(...points.map((p) => p.y)) + 40;
+    const scale = Math.min(width / (maxX - minX), height / (maxY - minY));
+    const offX = (width - (maxX - minX) * scale) / 2;
+    const offY = (height - (maxY - minY) * scale) / 2;
+    miniTransformRef.current = { minX, minY, scale, offX, offY };
+    const tx = (x: number) => offX + (x - minX) * scale;
+    const ty = (y: number) => offY + (y - minY) * scale;
+    ctx.strokeStyle = "#c3d2db";
+    ctx.lineWidth = 0.8;
+    const byId = new Map(props.topology.nodes.map((node) => [node.node_id, node]));
+    props.topology.links.forEach((link) => {
+      const source = byId.get(link.source_node_id);
+      const target = byId.get(link.target_node_id);
+      if (!source || !target) return;
+      ctx.beginPath();
+      ctx.moveTo(tx(source.x), ty(source.y));
+      ctx.lineTo(tx(target.x), ty(target.y));
+      ctx.stroke();
+    });
+    ctx.fillStyle = "#0f9d8c";
+    props.topology.nodes.forEach((node) => ctx.fillRect(tx(node.x) - 2.5, ty(node.y) - 2, 5, 4));
+    const pan = cy.pan();
+    const zoom = cy.zoom();
+    const viewX = tx(-pan.x / zoom);
+    const viewY = ty(-pan.y / zoom);
+    const viewW = (host.clientWidth / zoom) * scale;
+    const viewH = (host.clientHeight / zoom) * scale;
+    ctx.fillStyle = "rgba(12,138,122,0.09)";
+    ctx.fillRect(viewX, viewY, viewW, viewH);
+    ctx.strokeStyle = "#0c8a7a";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(viewX, viewY, viewW, viewH);
+  }, [rendererReady, props.topology, viewport, miniOpen]);
+
+  const jumpFromMinimap = (event: MouseEvent<HTMLCanvasElement>) => {
+    const canvas = miniRef.current;
+    const cy = cyRef.current;
+    const host = hostRef.current;
+    const transform = miniTransformRef.current;
+    if (!canvas || !cy || !host || !transform) return;
+    const rect = canvas.getBoundingClientRect();
+    const modelX = (event.clientX - rect.left - transform.offX) / transform.scale + transform.minX;
+    const modelY = (event.clientY - rect.top - transform.offY) / transform.scale + transform.minY;
+    const zoom = cy.zoom();
+    cy.pan({ x: host.clientWidth / 2 - modelX * zoom, y: host.clientHeight / 2 - modelY * zoom });
+    setViewport({ ...cy.pan(), zoom });
   };
 
   const updateZoom = (delta: number) => {
@@ -515,15 +664,17 @@ export default function NetOpsCanvas(props: Props) {
 
   const marqueeArmed = props.mode === "select" && shiftHeld;
 
-  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: "0 0" } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: "0 0" } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
     {marqueeArmed && <div className="netops-selection-gesture-layer" onMouseDown={handlePointerDown} />}
     {marquee && <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
+    {miniOpen && <canvas ref={miniRef} className="topology-minimap-custom" aria-label="画布鹰眼视图" title="点击跳转视口" onMouseDown={jumpFromMinimap} />}
     <div className="netops-viewport-controls" aria-label="画布视图控制">
       <button type="button" onClick={() => updateZoom(0.15)} aria-label="放大画布">+</button>
       <button type="button" onClick={() => updateZoom(-0.15)} aria-label="缩小画布">−</button>
       <button type="button" className="netops-zoom-readout" onClick={fitCanvas} title="适配全部节点">{Math.round(viewport.zoom * 100)}%</button>
       <button type="button" onClick={fitCanvas} aria-label="适配画布">适配</button>
+      <button type="button" className={miniOpen ? "is-active" : ""} aria-pressed={miniOpen} onClick={() => setMiniOpen((value) => !value)} title="鹰眼视图">鹰眼</button>
     </div>
     <div className="netops-canvas-accessibility" aria-label="画布设备快捷选择">
       {props.topology.nodes.map((node) => <button key={node.node_id} type="button" data-testid={`topo-node-${node.node_id}`} onClick={() => props.onSelectNode(node.node_id)}>{node.display_name || node.node_id}</button>)}
