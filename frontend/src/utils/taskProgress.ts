@@ -8,6 +8,12 @@ export type TaskPhase = {
   title: string;
   description: string;
   state: TaskPhaseState;
+  /**
+   * Wall-clock span covered by this phase's real stage events. Absent when the
+   * runtime did not timestamp them — the rail must not invent a duration to
+   * fill the column.
+   */
+  durationMs?: number;
 };
 
 export type TaskEvidence = {
@@ -26,6 +32,27 @@ export type TaskEvidence = {
 export type TaskProgressLifecycle = {
   turnRunning?: boolean;
 };
+
+/**
+ * The runtime stamps events as a Unix float (seconds) or an ISO string,
+ * depending on the producer. Both are real timestamps; neither is estimated.
+ */
+function eventTimeMs(event: RuntimeEvent): number | null {
+  const unix = typeof event.timestamp === "number" ? event.timestamp : null;
+  if (unix !== null && Number.isFinite(unix)) return unix > 1e12 ? unix : unix * 1000;
+  const iso = event.occurred_at || event.started_at;
+  if (iso) {
+    const parsed = Date.parse(iso);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return null;
+}
+
+function parsedTime(value?: string): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 
 const STAGE_INDEX: Record<string, number> = {
   turn_started: 0,
@@ -108,7 +135,16 @@ export function buildTaskProgress(
   message: ChatMsg | undefined,
   snapshot?: ActiveTurnSnapshot,
   lifecycle: TaskProgressLifecycle = {},
-): { phases: TaskPhase[]; evidence: TaskEvidence[]; activeIndex: number; status: string } {
+): {
+  phases: TaskPhase[];
+  evidence: TaskEvidence[];
+  activeIndex: number;
+  status: string;
+  /** Turn identity and cost for the rail header. Every value is observed. */
+  runId?: string;
+  elapsedMs?: number;
+  toolCount: number;
+} {
   const result = message?.result;
   const events = (snapshot?.events?.length ? snapshot.events : message?.runtimeEvents?.length
     ? message.runtimeEvents
@@ -123,14 +159,45 @@ export function buildTaskProgress(
   const completed = !isStreaming && (snapshot?.status === "succeeded" || Boolean(result && message?.status !== "streaming"));
   const activeIndex = completed ? 3 : Math.max(0, STAGE_INDEX[lastStage] ?? (isStreaming ? 0 : 0));
 
+  // Phase spans come from the timestamps of the stage events the runtime
+  // actually emitted, so the rail reports observed time rather than a
+  // plausible-looking number.
+  const spans = new Map<number, { start: number; end: number }>();
+  let firstEventAt: number | null = null;
+  let lastEventAt: number | null = null;
+  events.forEach((event) => {
+    const at = eventTimeMs(event);
+    if (at === null) return;
+    firstEventAt = firstEventAt === null ? at : Math.min(firstEventAt, at);
+    lastEventAt = lastEventAt === null ? at : Math.max(lastEventAt, at);
+    const index = STAGE_INDEX[eventType(event)];
+    if (index === undefined) return;
+    const span = spans.get(index);
+    if (!span) spans.set(index, { start: at, end: at });
+    else {
+      span.start = Math.min(span.start, at);
+      span.end = Math.max(span.end, at);
+    }
+  });
+
   const phases: TaskPhase[] = PHASE_COPY.map(([id, title, description], index) => {
     let state: TaskPhaseState = "idle";
     if (completed) state = "done";
     else if (index < activeIndex) state = "done";
     else if (index === activeIndex && isStreaming) state = "active";
     if (failed && index === activeIndex) state = "failed";
-    return { id, title, description, state };
+    const span = spans.get(index);
+    const durationMs = span && span.end > span.start ? span.end - span.start : undefined;
+    return { id, title, description, state, durationMs };
   });
+
+  // The run id comes from the turn snapshot or from the message — the same
+  // field the timeline groups by. A trace id is not a run id and is never
+  // substituted here.
+  const runId = String(snapshot?.run_id || message?.run_id || "") || undefined;
+  const turnStart = parsedTime(snapshot?.started_at) ?? firstEventAt;
+  const turnEnd = parsedTime(snapshot?.finished_at) ?? parsedTime(snapshot?.updated_at) ?? lastEventAt;
+  const elapsedMs = turnStart !== null && turnEnd !== null && turnEnd > turnStart ? turnEnd - turnStart : undefined;
 
   const liveTools = snapshot?.tool_calls || [];
   const messageTools = message?.toolCalls || result?.tool_calls || [];
@@ -155,5 +222,8 @@ export function buildTaskProgress(
     evidence,
     activeIndex,
     status: failed ? "failed" : completed ? "succeeded" : isStreaming ? "running" : "idle",
+    runId,
+    elapsedMs,
+    toolCount: evidence.length,
   };
 }

@@ -78,4 +78,40 @@ describe("task progress projection", () => {
     expect(model.status).toBe("running");
     expect(model.phases.map((phase) => phase.state)).toEqual(["done", "done", "done", "active"]);
   });
+
+  it("reports observed stage durations and turn cost, never estimates", () => {
+    const model = buildTaskProgress(undefined, {
+      status: "running",
+      started_at: "2026-09-15T10:00:00.000Z",
+      updated_at: "2026-09-15T10:00:12.000Z",
+      run_id: "run_abc123def456",
+      events: [
+        { event_id: "1", event_type: "turn_started", occurred_at: "2026-09-15T10:00:00.000Z" },
+        { event_id: "2", event_type: "planner_completed", occurred_at: "2026-09-15T10:00:03.000Z" },
+        { event_id: "3", event_type: "execution_started", occurred_at: "2026-09-15T10:00:04.000Z" },
+      ],
+      tool_calls: [{ tool_id: "device.inspect", status: "done", ok: true }],
+    }, { turnRunning: true });
+
+    expect(model.runId).toBe("run_abc123def456");
+    expect(model.elapsedMs).toBe(12000);
+    expect(model.toolCount).toBe(1);
+    // Understanding spans turn_started -> planner_completed: three real seconds.
+    expect(model.phases[0].durationMs).toBe(3000);
+    // The next stage has a single event, so it has a start but no span to report.
+    expect(model.phases[1].durationMs).toBeUndefined();
+  });
+
+  it("omits durations the runtime never timestamped instead of inventing them", () => {
+    const model = buildTaskProgress(undefined, {
+      status: "succeeded",
+      stage: "turn_completed",
+      tool_calls: [],
+    });
+
+    expect(model.phases.every((phase) => phase.durationMs === undefined)).toBe(true);
+    expect(model.elapsedMs).toBeUndefined();
+    expect(model.runId).toBeUndefined();
+    expect(model.toolCount).toBe(0);
+  });
 });

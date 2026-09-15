@@ -3,6 +3,7 @@ import type { ActiveTurnSnapshot } from "../../../types";
 import type { ChatMsg } from "../../../stores/workbench";
 import { IconBolt, IconCheck, IconChevronLeft, IconChevronRight, IconDocument, IconProbe, IconShield } from "../../../components/Icon";
 import { buildTaskProgress } from "../../../utils/taskProgress";
+import { formatStreamElapsedSeconds } from "../../../utils/streamElapsed";
 
 type Props = {
   latestAssistant?: ChatMsg;
@@ -44,6 +45,12 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
       aria-label="任务进度"
       data-testid="task-progress-panel"
     >
+      {/*
+        The rail answers "what is the agent doing right now" without becoming a
+        log. Its header states the turn the way an operator would refer to it —
+        which run, how long, how many tools, how many sources — and every one of
+        those values is observed rather than estimated.
+      */}
       <header className="task-progress-header">
         <div className="task-progress-header-title">
           <span className="task-progress-kicker">实时状态</span>
@@ -55,6 +62,26 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
             {statusText(model.status, model.evidence.filter((item) => item.status === "done").length)}
           </span>
         </span>
+        <div className="task-rail-facts">
+          {model.runId ? (
+            <span className="meta-fact" title={`运行 ${model.runId}`}>
+              <span className="meta-label">run</span>
+              <span className="meta">{model.runId.slice(0, 8)}</span>
+            </span>
+          ) : null}
+          {model.elapsedMs !== undefined ? (
+            <span className="meta-fact">
+              <span className="meta-label">elapsed</span>
+              <span className="meta">{formatStreamElapsedSeconds(model.elapsedMs)}</span>
+            </span>
+          ) : null}
+          {model.toolCount > 0 ? (
+            <span className="meta-fact">
+              <span className="meta-label">tools</span>
+              <span className="meta">{model.toolCount}</span>
+            </span>
+          ) : null}
+        </div>
         <button
           className="task-progress-collapse"
           type="button"
@@ -72,27 +99,33 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
       </header>
 
       <div className="task-phase-list">
+        {/* Overview first, details on demand: a stage states its title, state
+            and observed duration, and only the open one carries prose and
+            evidence. The active stage is open so the rail still narrates a
+            running turn without any interaction. */}
         {model.phases.map((phase, index) => (
-          <section className={`task-phase ${phase.state}`} key={phase.id}>
-            <div className="task-phase-rail" aria-hidden="true">
+          <details className={`task-phase ${phase.state}`} key={phase.id} open={phase.state === "active"}>
+            <summary className="task-phase-summary">
               <span className={`task-phase-index ${phase.state}`}>
                 {phase.state === "done" ? <IconCheck size={12} weight="bold" /> : index + 1}
               </span>
-              {index < model.phases.length - 1 ? <span className="task-phase-line" /> : null}
-            </div>
+              <h3>{phase.title}</h3>
+              {/* Sub-second spans round to "0s" and tell the reader nothing, so
+                  they are omitted rather than printed. */}
+              {phase.durationMs !== undefined && phase.durationMs >= 1000 ? (
+                <span className="meta-duration">{formatStreamElapsedSeconds(phase.durationMs)}</span>
+              ) : null}
+              <span className={`task-phase-status-tag ${phase.state}`}>
+                {phase.state === "done"
+                  ? "已完成"
+                  : phase.state === "active"
+                  ? "进行中"
+                  : phase.state === "failed"
+                  ? "需检查"
+                  : "等待中"}
+              </span>
+            </summary>
             <div className="task-phase-content">
-              <div className="task-phase-title-row">
-                <h3>{phase.title}</h3>
-                <span className={`task-phase-status-tag ${phase.state}`}>
-                  {phase.state === "done"
-                    ? "已完成"
-                    : phase.state === "active"
-                    ? "进行中"
-                    : phase.state === "failed"
-                    ? "需检查"
-                    : "等待中"}
-                </span>
-              </div>
               <p>{phase.description}</p>
               {phase.id === "evidence" && visibleEvidence.length > 0 ? (
                 <div className="task-evidence-list">
@@ -120,7 +153,7 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
                 </div>
               ) : null}
             </div>
-          </section>
+          </details>
         ))}
       </div>
 

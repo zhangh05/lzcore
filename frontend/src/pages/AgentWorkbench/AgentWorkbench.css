@@ -563,13 +563,22 @@
 }
 
 .task-progress-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  min-height: 72px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--flow-tight) var(--space-4);
   padding: var(--space-4);
   border-bottom: 1px solid var(--line-2);
+}
+
+/* The turn's identity and cost, in the same metadata language the rest of the
+   product uses for identifiers. Wraps rather than truncates: a run id that
+   cannot be read is not an identifier. */
+.task-rail-facts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--flow-tight) var(--space-3);
 }
 
 .task-progress-kicker {
@@ -611,16 +620,34 @@
   overflow-y: auto;
 }
 
+/* A stage is a continuous row, not a card: separators and spacing carry the
+   structure. Its summary states title, observed duration and state; prose and
+   evidence appear only when the row is opened. */
 .task-phase {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  min-height: 84px;
+  border-bottom: 1px solid var(--line-2);
 }
 
-.task-phase-rail {
-  display: flex;
+.task-phase:last-child {
+  border-bottom: 0;
+}
+
+.task-phase-summary {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto auto;
   align-items: center;
-  flex-direction: column;
+  gap: var(--flow-tight);
+  padding: 9px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.task-phase-summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-phase-summary:focus-visible {
+  outline: 2px solid var(--focus-ring-shadow);
+  outline-offset: 2px;
 }
 
 .task-phase-index {
@@ -635,13 +662,6 @@
   border-radius: 50%;
   font-size: 12px;
   font-weight: 720;
-}
-
-.task-phase-line {
-  width: 1px;
-  min-height: 58px;
-  flex: 1;
-  background: var(--line);
 }
 
 .task-phase.done .task-phase-index {
@@ -664,30 +684,20 @@
   border-color: var(--danger);
 }
 
-.task-phase.done .task-phase-line { background: color-mix(in srgb, var(--ok) 45%, var(--line)); }
-.task-phase.active .task-phase-line { background: color-mix(in srgb, var(--accent) 38%, var(--line)); }
-
 .task-phase-content {
   min-width: 0;
-  padding: 3px 0 20px 10px;
+  padding: 0 0 var(--flow-base) 34px;
 }
 
-.task-phase-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.task-phase-summary h3 {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: var(--weight-subhead);
 }
 
-.task-phase-title-row h3 {
+.task-phase.active .task-phase-summary h3,
+.task-phase.failed .task-phase-summary h3 {
   color: var(--text);
-  font-size: 14px;
-  font-weight: var(--weight-heading);
-}
-
-.task-phase-title-row > span {
-  color: var(--text-4);
-  font-size: 10px;
 }
 
 /* .task-phase-status-tag 之前只挂类名但没规则，落到 .task-phase-title-row > span
