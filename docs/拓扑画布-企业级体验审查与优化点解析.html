@@ -614,10 +614,45 @@ else if (n.panningEnabled() &amp;&amp; <b data-page-node-id="EHIX6lOy8GZvT0emNKn
       这个缺陷单元测试抓不到 —— 它只在「工作区图纸数量」这个维度上成立。</p>
   </div>
 
-  <h3 data-page-node-id="progress-quantified">8.3 可量化的变化</h3>
+  <div data-page-node-id="progress-round2">
+  <h3 data-page-node-id="progress-round2-title">8.5 第二轮补齐：PDF 导出与图层过滤（2026-09-15 下午）</h3>
+  <p data-page-node-id="progress-round2-lead">
+    回到能力矩阵逐条核对，发现两项报告里自己写过、但代码里没有的东西：PDF 导出和图层/过滤。
+    两项都已补齐，并各配一条像素级或解析器级的验证。
+  </p>
+  <table data-page-node-id="progress-round2-table">
+    <thead><tr><th>能力</th><th>实现方式</th><th>验证证据</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>PDF 导出</td>
+        <td>零依赖手写 PDF 容器：单页 + 图像 XObject + FlateDecode（用浏览器自带 <code>CompressionStream</code>，无则回退为不压缩）。超过 1600pt 长边才缩放，之下保持 1:1 不重采样。</td>
+        <td>用真实解析器（pdfplumber）打开：1 页、MediaBox 正确、图像落在预期 bbox；并用绿/红/蓝三色图案确认图像<b>没有被上下翻转</b>。再从运行中的界面真实点一次导出、回读解析。</td>
+      </tr>
+      <tr>
+        <td>图层 / 过滤</td>
+        <td>按厂商、运行状态、分组过滤，选项从图纸自身推导。不匹配对象<b>淡化而非隐藏</b>；链路跟随端点一起淡化，避免两端已暗、连线仍亮。</td>
+        <td>用画布像素度量：居中的设备在被厂商过滤后，高饱和像素从 11.86% 掉到 <b>0.00%</b>；换成保留它的厂商回到 12.97%；清除过滤复原。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="card" data-page-node-id="progress-card-5">
+    <p><strong>5. 度量方式本身会骗人。</strong>
+      第一次验证过滤时，我用「暗于背景的像素比例」当指标，结果过滤前后只差 1%，差点判定功能没生效。
+      真实原因是画布上的浅灰网格也算进了「墨」。改成颜色饱和度后，结论立刻从「几乎没变」变成「11.86% → 0.00%」。
+      验证手段选错，比不验证更危险 —— 它会给出一个看起来可信的错误结论。</p>
+  </div>
+  <div class="card" data-page-node-id="progress-card-6">
+    <p><strong>6. 并行改动合并后必须重验。</strong>
+      本轮期间另一条工作线把修订集合的键改成哈希（避免不同图纸名清洗后碰撞），并补上了两种旧布局的迁移。
+      这两点比我原来的实现更严谨：我原先只是把旧数据留在原地不再读取。合并后我重跑了后端测试、重启服务，
+      确认历史迁移真的把两种旧布局的 6 条修订都搬了过来。</p>
+  </div>
+</div>
+
+<h3 data-page-node-id="progress-quantified">8.3 可量化的变化</h3>
   <div class="kv" data-page-node-id="progress-kv">
     <div><span class="k">后端测试</span><span class="v">93 通过（拓扑 / 扩展包 / 邻居发现）</span></div>
-    <div><span class="k">新增测试</span><span class="v">邻居发现 9 例 · 版本历史 8 例</span></div>
+    <div><span class="k">新增测试</span><span class="v">邻居发现 9 例 · 版本历史 8 例 · PDF 生成器 7 例 · 画布过滤 1 例</span></div>
     <div><span class="k">前端测试</span><span class="v">199 通过 / 45 个文件</span></div>
     <div><span class="k">类型检查</span><span class="v"><code>tsc -b</code> 0 错误，<code>npm run build</code> 通过</span></div>
     <div><span class="k">实时闭环</span><span class="v">发现→采纳：链路带 <code>source: discovered</code> 与证据引用</span></div>
