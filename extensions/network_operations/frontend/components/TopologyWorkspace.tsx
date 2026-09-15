@@ -43,6 +43,7 @@ import { Button } from "../../../../frontend/src/components/ui";
 import { LAYOUT_PRESETS, layoutTopology, type LayoutAlgorithm } from "./topologyLayout";
 import { TopologyAgentPanel, type CanvasSelection } from "./TopologyAgentPanel";
 import NetOpsCanvas, { NODE_STATUS_COLORS, type CanvasApi, type CanvasContextTarget, type NodeRuntimeStatus } from "./NetOpsCanvas";
+import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import "./TopologyStudio.css";
 
@@ -182,6 +183,27 @@ type DiscoveryCandidate = {
   remote_name: string;
   evidence_artifact_id: string;
 };
+
+/**
+ * Decode the renderer's PNG data URL into the raw pixels the PDF writer needs.
+ * Going through a canvas means the browser does the PNG decoding for us.
+ */
+async function pngToRgbImage(dataUrl: string): Promise<RgbImage> {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error("png_decode_failed"));
+    element.src = dataUrl;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const context = canvas.getContext("2d");
+  if (!context || !canvas.width || !canvas.height) throw new Error("png_decode_failed");
+  context.drawImage(image, 0, 0);
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+  return rgbFromRgba(data, canvas.width, canvas.height);
+}
 
 /** A stored structural snapshot of the canvas. */
 type TopologyRevision = {
@@ -342,6 +364,9 @@ export default function TopologyWorkspace({
   const [gridEnabled, setGridEnabled] = useState(true);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);
+  // Filters dim rather than hide, so the diagram never turns into a different
+  // drawing than the one being discussed.
+  const [canvasFilter, setCanvasFilter] = useState<{ vendors: string[]; statuses: NodeRuntimeStatus[]; groups: string[] }>({ vendors: [], statuses: [], groups: [] });
   // Imperative canvas handle (export / focus / viewport) and transient canvas
   // UI: right-click menu, keyboard help, and in-canvas search.
   const canvasApiRef = useRef<CanvasApi | null>(null);
@@ -487,6 +512,47 @@ export default function TopologyWorkspace({
     });
     return map;
   }, [activeTopology, topologyState]);
+
+  /**
+   * Filtering. On a 200 device diagram the useful question is never "show me
+   * everything" but "show me the Huawei gear", "show me what is broken" or
+   * "show me this site" — so the options come from the drawing itself rather
+   * than from a fixed list.
+   */
+  const filterOptions = useMemo(() => {
+    const vendors = new Set<string>();
+    const groups: Array<{ id: string; name: string }> = [];
+    (activeTopology?.nodes || []).forEach((node) => {
+      const vendor = byDevice.get(node.linked_device_id || "")?.vendor;
+      if (vendor) vendors.add(String(vendor));
+    });
+    (activeTopology?.groups || []).forEach((group) => groups.push({ id: group.group_id, name: group.name }));
+    return { vendors: [...vendors].sort(), groups };
+  }, [activeTopology?.nodes, activeTopology?.groups, byDevice]);
+
+  const filterActive = Boolean(canvasFilter.vendors.length || canvasFilter.statuses.length || canvasFilter.groups.length);
+
+  const dimmedNodeIds = useMemo(() => {
+    if (!activeTopology || !filterActive) return [];
+    const matches = (node: Topology["nodes"][number]) => {
+      const vendor = String(byDevice.get(node.linked_device_id || "")?.vendor || "");
+      if (canvasFilter.vendors.length && !canvasFilter.vendors.includes(vendor)) return false;
+      if (canvasFilter.statuses.length && !canvasFilter.statuses.includes(nodeStatus[node.node_id] || "unknown")) return false;
+      if (canvasFilter.groups.length && !canvasFilter.groups.includes(String(node.group_id || ""))) return false;
+      return true;
+    };
+    return activeTopology.nodes.filter((node) => !matches(node)).map((node) => node.node_id);
+  }, [activeTopology, canvasFilter, filterActive, byDevice, nodeStatus]);
+
+  const toggleFilter = useCallback((kind: "vendors" | "statuses" | "groups", value: string) => {
+    setCanvasFilter((current) => {
+      const selected = current[kind] as string[];
+      return {
+        ...current,
+        [kind]: selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value],
+      } as typeof current;
+    });
+  }, []);
 
   useEffect(() => {
     if (selectedElement && !showAgent) setIsInspectorOpen(true);
@@ -849,14 +915,38 @@ export default function TopologyWorkspace({
   }, [activeTopology, pushState, setNotice]);
 
   // A diagram that cannot leave the tool ends up as a screenshot in a report.
-  // PNG and SVG come straight from the renderer.
-  const exportCanvas = useCallback((format: "png" | "svg") => {
+  // PNG and SVG come straight from the renderer; PDF is wrapped from the
+  // rendered pixels, because a PDF page is what a delivery document needs.
+  const downloadBlob = useCallback((blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const exportCanvas = useCallback(async (format: "png" | "svg" | "pdf") => {
     const api = canvasApiRef.current;
     if (!api) {
       setNotice("画布尚未就绪，请稍后再试", false);
       return;
     }
     const safeName = (activeTopology?.name || "topology").replace(/[\\/:*?"<>|\s]+/g, "_");
+    if (format === "pdf") {
+      setNotice("正在生成 PDF…");
+      try {
+        const pixels = await pngToRgbImage(api.exportPNG({ full: true, scale: 2, background: "#ffffff" }));
+        const pdf = await buildImagePdf(pixels);
+        downloadBlob(new Blob([pdf], { type: "application/pdf" }), `${safeName}.pdf`);
+        setNotice(`已导出 ${safeName}.pdf`);
+      } catch {
+        setNotice("PDF 导出失败，请改用 PNG 或 SVG", false);
+      }
+      return;
+    }
     const anchor = document.createElement("a");
     if (format === "svg") {
       anchor.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(api.exportSVG())}`;
@@ -869,7 +959,7 @@ export default function TopologyWorkspace({
     anchor.click();
     anchor.remove();
     setNotice(`已导出 ${safeName}.${format}`);
-  }, [activeTopology, setNotice]);
+  }, [activeTopology, setNotice, downloadBlob]);
 
   /**
    * Deep link. A diagram that cannot be linked to cannot be shared, attached
@@ -1897,6 +1987,35 @@ export default function TopologyWorkspace({
                 ))}
               </div>
             </details>
+            <details className="studio-filter-menu">
+              <summary><IconSearch size={13} />过滤{filterActive ? ` · ${dimmedNodeIds.length} 项已淡化` : ""}</summary>
+              <div>
+                <small>厂商</small>
+                {filterOptions.vendors.map((vendor) => (
+                  <label key={`vendor-${vendor}`}>
+                    <input type="checkbox" checked={canvasFilter.vendors.includes(vendor)} onChange={() => toggleFilter("vendors", vendor)} />
+                    <span>{vendor}</span>
+                  </label>
+                ))}
+                {!filterOptions.vendors.length && <small>画布上的设备还没有厂商信息</small>}
+                <small>运行状态</small>
+                {(Object.keys(NODE_STATUS_COLORS) as NodeRuntimeStatus[]).map((status) => (
+                  <label key={`status-${status}`}>
+                    <input type="checkbox" checked={canvasFilter.statuses.includes(status)} onChange={() => toggleFilter("statuses", status)} />
+                    <i style={{ background: NODE_STATUS_COLORS[status] }} />
+                    <span>{status === "ok" ? "正常" : status === "warning" ? "待确认" : status === "error" ? "不可达" : "未采集"}</span>
+                  </label>
+                ))}
+                {filterOptions.groups.length > 0 && <small>分组</small>}
+                {filterOptions.groups.map((group) => (
+                  <label key={`group-${group.id}`}>
+                    <input type="checkbox" checked={canvasFilter.groups.includes(group.id)} onChange={() => toggleFilter("groups", group.id)} />
+                    <span>{group.name}</span>
+                  </label>
+                ))}
+                <Button size="sm" disabled={!filterActive} onClick={() => setCanvasFilter({ vendors: [], statuses: [], groups: [] })}>清除过滤</Button>
+              </div>
+            </details>
             <Button
               size="sm"
               icon={<IconBranch size={13} />}
@@ -1942,6 +2061,14 @@ export default function TopologyWorkspace({
             </Button>
             <Button
               size="sm"
+              icon={<IconSave size={13} />}
+              onClick={() => void exportCanvas("pdf")}
+              title="导出为可交付的单页 PDF"
+            >
+              导出 PDF
+            </Button>
+            <Button
+              size="sm"
               icon={<IconEdit size={13} />}
               onClick={() => {
                 if (activeTopology) {
@@ -1975,7 +2102,8 @@ export default function TopologyWorkspace({
 
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
         <div className={`topology-canvas-viewport mode-${canvasMode}`}>
-          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : canvasMode === "move" ? "单击对象打开管理面板；空白处拖动平移画布，拖动对象移动布局" : "单击选择对象；拖动平移画布；Shift + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
+          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}
+            {filterActive && <span className="canvas-selection-count canvas-filter-count">过滤中 · {dimmedNodeIds.length} 个对象已淡化<button type="button" aria-label="清除画布过滤" onClick={() => setCanvasFilter({ vendors: [], statuses: [], groups: [] })}><IconClose size={11} /></button></span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : canvasMode === "move" ? "单击对象打开管理面板；空白处拖动平移画布，拖动对象移动布局" : "单击选择对象；拖动平移画布；Shift + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -1999,6 +2127,7 @@ export default function TopologyWorkspace({
             mode={canvasMode}
             gridEnabled={gridEnabled}
             showInterfaces={showInterfaces}
+            dimmedNodeIds={dimmedNodeIds}
             onSelectNode={(nodeId) => setSelectedElement({ type: "node", nodeId })}
             onSelectCanvasItem={(itemId) => setSelectedElement({ type: "canvas_item", itemId })}
             onSelectLink={(linkId) => setSelectedElement({ type: "link", linkId })}

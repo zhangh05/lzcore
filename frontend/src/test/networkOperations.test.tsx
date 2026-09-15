@@ -223,6 +223,23 @@ test("dedicated topology route keeps the canvas primary and exposes the device p
   expect(screen.getByRole("checkbox", { name: "接口标签" })).toBeInTheDocument();
 });
 
+test("canvas filter dims non-matching objects and can be cleared", async () => {
+  render(<NetworkOperations topologyOnly />);
+  await screen.findByTestId("topo-node-node-d1");
+
+  // Nothing is dimmed until a filter is chosen.
+  expect(screen.queryByText(/过滤中/)).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByText(/^过滤/));
+  // The only canvas device has no collected state, so demanding "正常"
+  // must exclude it — the count is what proves the filter reached the canvas.
+  fireEvent.click(screen.getByRole("checkbox", { name: "正常" }));
+  expect(await screen.findByText(/过滤中 · 1 个对象已淡化/)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "清除过滤" }));
+  expect(screen.queryByText(/过滤中/)).not.toBeInTheDocument();
+});
+
 test("text and ellipse diagram items share the editable, deletable inspector", async () => {
   render(<NetworkOperations topologyOnly />);
   await screen.findByTestId("topo-item-text-note");

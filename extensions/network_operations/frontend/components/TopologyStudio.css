@@ -172,6 +172,21 @@
 .studio-layout-menu > div button:hover { background: #edf7f5; }
 .studio-layout-menu > div strong { font-size: 12px; color: var(--text); }
 .studio-layout-menu > div small { font-size: 10px; color: var(--text-3); }
+/* 过滤菜单：与布局菜单同壳，行是复选项而不是命令。 */
+.studio-filter-menu { position: relative; }
+.studio-filter-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #52697a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-filter-menu > summary::-webkit-details-marker { display: none; }
+.studio-filter-menu > summary:hover { background: #f0f7f6; border-color: #9ac9c0; }
+.studio-filter-menu > div { position: absolute; right: 0; top: 31px; z-index: 30; display: grid; gap: 2px; width: 214px; max-height: 60vh; overflow: auto; padding: 6px; border: 1px solid #cad8df; border-radius: 7px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
+.studio-filter-menu > div > small { padding: 6px 8px 2px; color: var(--text-3); font-size: 10px; letter-spacing: .3px; }
+.studio-filter-menu > div > small:first-child { padding-top: 2px; }
+.studio-filter-menu > div > label { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 5px; color: var(--text-2); font-size: 12px; cursor: pointer; }
+.studio-filter-menu > div > label:hover { background: #edf7f5; }
+.studio-filter-menu > div > label > i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.studio-filter-menu > div > label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-filter-menu > div > button { margin-top: 4px; }
+.canvas-filter-count { display: inline-flex; align-items: center; gap: 5px; }
+.canvas-filter-count > button { display: inline-flex; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .studio-device-status > div { padding: 10px 0; display: grid; gap: 4px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .studio-device-status > div > span, .studio-device-status p { color: var(--text-3); font-size: 11px; margin-bottom: 10px; }
 .studio-agent-dock { display: none; min-width: 0; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); z-index: 12; }

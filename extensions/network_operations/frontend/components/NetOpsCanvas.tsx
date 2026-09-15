@@ -56,6 +56,12 @@ type Props = {
   onContextMenu?: (target: CanvasContextTarget) => void;
   /** node_id -> operational state, derived from the last collection pass. */
   nodeStatus?: Record<string, NodeRuntimeStatus>;
+  /**
+   * node_ids the active filter excludes. They stay on the canvas at low
+   * opacity rather than disappearing: a filtered diagram still has to answer
+   * "what am I not looking at".
+   */
+  dimmedNodeIds?: string[];
 };
 
 type CyCollection<T> = {
@@ -269,6 +275,11 @@ export default function NetOpsCanvas(props: Props) {
           { selector: ".canvas-item-text", style: { "background-opacity": 0, "border-width": 0, "text-valign": "center", "text-halign": "left", "font-size": 14, "font-weight": 500, "text-max-width": "data(textMaxWidth)" } },
           { selector: "node:selected", style: { "border-width": 3, "border-color": "#60a5fa" } },
           { selector: ".node-connecting", style: { "border-width": 3, "border-color": "#3b82f6" } },
+          // Filtered-out elements stay visible but recede, so the filtered view
+          // keeps its context instead of looking like a different diagram.
+          // One opacity value only — stacking a second one on the item fill
+          // would make a filtered rectangle indistinguishable from empty space.
+          { selector: ".filtered-out", style: { opacity: 0.16, "text-opacity": 0.16 } },
           { selector: ".lz-group", style: { shape: "roundrectangle", label: "data(label)", "text-valign": "top", "text-halign": "left", "text-margin-x": 12, "text-margin-y": 10, color: "#475569", "font-size": 12, "font-weight": 600, width: "data(width)", height: "data(height)", "background-color": "#dbeafe", "background-opacity": 0.22, "border-color": "#93c5fd", "border-style": "dashed", "border-width": 1, "background-image": "none", "events": "no" } },
         ],
       });
@@ -546,6 +557,8 @@ export default function NetOpsCanvas(props: Props) {
     const cy = cyRef.current;
     if (!cy) return;
     const byDevice = new Map(props.devices.map((device) => [device.device_id, device]));
+    const dimmed = new Set(props.dimmedNodeIds || []);
+    const dimClass = (id: string, base: string) => (dimmed.has(id) ? `${base} filtered-out`.trim() : base);
     const elements: CanvasElementSpec[] = [
       ...props.topology.groups.map((group) => ({ group: "nodes", classes: "lz-group", data: { id: `group-${group.group_id}`, label: group.name, width: group.width, height: group.height }, position: { x: group.x + group.width / 2, y: group.y + group.height / 2 }, locked: true })),
       ...props.topology.nodes.map((node) => {
@@ -557,26 +570,32 @@ export default function NetOpsCanvas(props: Props) {
         const status: NodeRuntimeStatus = props.nodeStatus?.[node.node_id] || "unknown";
         const statusColor = NODE_STATUS_COLORS[status];
         const vendorTint = !node.linked_device_id ? "#fbfcfd" : device?.vendor?.toLowerCase().includes("huawei") ? "#f2f7ff" : "#f4fbfa";
-        return { group: "nodes", classes: node.linked_device_id ? "managed-node" : "manual-node", data: { id: node.node_id, label: node.display_name || device?.name || "未命名设备", status, statusColor, statusWidth: status === "error" ? 3 : 2, vendorTint, labelOpacity: 1, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
+        return { group: "nodes", classes: dimClass(node.node_id, node.linked_device_id ? "managed-node" : "manual-node"), data: { id: node.node_id, label: node.display_name || device?.name || "未命名设备", status, statusColor, statusWidth: status === "error" ? 3 : 2, vendorTint, labelOpacity: 1, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
       }),
       ...(props.topology.canvas_items || []).map((item) => {
         const style = { ...canvasItemDefaults[item.kind], ...item.style };
         const isText = item.kind === "text";
-        return { group: "nodes", classes: `canvas-item canvas-item-${item.kind}`, data: { id: `canvas-${item.item_id}`, label: item.text, shape: item.kind === "ellipse" ? "ellipse" : "roundrectangle", width: item.width, height: item.height, fill: style.fill, border: style.border, textColor: style.color, fillOpacity: isText ? 0 : 0.24, borderWidth: isText ? 0 : 1.5, fontSize: isText ? 14 : 12, labelOpacity: 1, textMaxWidth: Math.max(24, item.width - 16) }, position: { x: item.x, y: item.y } };
+        return { group: "nodes", classes: dimClass(`canvas-${item.item_id}`, `canvas-item canvas-item-${item.kind}`), data: { id: `canvas-${item.item_id}`, label: item.text, shape: item.kind === "ellipse" ? "ellipse" : "roundrectangle", width: item.width, height: item.height, fill: style.fill, border: style.border, textColor: style.color, fillOpacity: isText ? 0 : 0.24, borderWidth: isText ? 0 : 1.5, fontSize: isText ? 14 : 12, labelOpacity: 1, textMaxWidth: Math.max(24, item.width - 16) }, position: { x: item.x, y: item.y } };
       }),
       // Do not let stale/imported links with a missing endpoint reach the
       // renderer. Cytoscape rejects those elements and can otherwise leave a
       // blank canvas even though the surviving drawing is valid.
       ...props.topology.links
         .filter((link) => props.topology.nodes.some((node) => node.node_id === link.source_node_id) && props.topology.nodes.some((node) => node.node_id === link.target_node_id))
-        .map((link) => ({ group: "edges", data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, label: "", srcPort: "", tgtPort: "", visible: 1, edgeColor: link.status === "down" ? "#ef4444" : link.status === "up" ? "#10b981" : "#64748b", edgeStyle: link.kind === "logical" ? "dashed" : "solid" } })),
+        .map((link) => ({
+          group: "edges",
+          // A link is only as visible as its endpoints; dimming one end and
+          // leaving the edge bright would draw attention to nothing.
+          classes: dimmed.has(link.source_node_id) || dimmed.has(link.target_node_id) ? "filtered-out" : "",
+          data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, label: "", srcPort: "", tgtPort: "", visible: 1, edgeColor: link.status === "down" ? "#ef4444" : link.status === "up" ? "#10b981" : "#64748b", edgeStyle: link.kind === "logical" ? "dashed" : "solid" },
+        })),
     ];
     applyElements(cy, elements, connectingFromRef.current);
     if (initialTopologyIdRef.current !== props.topology.topology_id) {
       initialTopologyIdRef.current = props.topology.topology_id;
       window.setTimeout(() => { cy.resize(); cy.fit(undefined, 48); setViewport({ ...cy.pan(), zoom: cy.zoom() }); }, 0);
     }
-  }, [rendererReady, props.topology, props.devices]);
+  }, [rendererReady, props.topology, props.devices, props.dimmedNodeIds]);
 
   // Interface labels are display-only controls. Updating edge data in place
   // keeps positions, selection, and the fixed sheet intact.
