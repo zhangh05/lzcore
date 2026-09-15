@@ -7,10 +7,11 @@ describe("navigation simplification", () => {
     const groups = buildNavGroups(primary);
     expect(primary.map((item) => item.to)).toEqual([
       "/workbench", "/runs", "/capabilities", "/knowledge", "/data",
-      "/memory", "/diagnostics",
+      "/memory", "/topology", "/diagnostics",
     ]);
     expect(groups.find((group) => group.id === "tasks")?.items.map((item) => item.to)).toEqual(["/runs"]);
     expect(groups.find((group) => group.id === "capabilities")?.items.map((item) => item.to)).toEqual(["/capabilities"]);
+    expect(groups.find((group) => group.id === "topology")?.items.map((item) => item.to)).toEqual(["/topology"]);
     expect(groups.find((group) => group.id === "system")?.items.map((item) => item.to)).toEqual(["/diagnostics"]);
   });
 

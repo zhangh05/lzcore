@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
+// React 的合成事件类型与 DOM 原生事件同名，这里显式区分：画布上的原生
+// window 监听必须拿到 DOM MouseEvent（带 clientX/clientY 且可用于
+// addEventListener），React 回调才用合成事件类型。
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import type { Device, Topology, TopologyCanvasItem, TopologyLink } from "./TopologyWorkspace";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 
@@ -362,7 +365,7 @@ export default function NetOpsCanvas(props: Props) {
         const others = propsRef.current.topology.nodes.filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id));
         if (!others.length) return;
         const position = node.position();
-        const snapAxis = (candidates: number[], targets: number[]) => {
+        const snapAxis = (candidates: number[], targets: number[]): { diff: number; value: number } | null => {
           let best: { diff: number; value: number } | null = null;
           candidates.forEach((candidate) => {
             targets.forEach((target) => {
@@ -708,7 +711,7 @@ export default function NetOpsCanvas(props: Props) {
     ctx.strokeRect(viewX, viewY, viewW, viewH);
   }, [rendererReady, props.topology, viewport, miniOpen]);
 
-  const jumpFromMinimap = (event: MouseEvent<HTMLCanvasElement>) => {
+  const jumpFromMinimap = (event: ReactMouseEvent<HTMLCanvasElement>) => {
     const canvas = miniRef.current;
     const cy = cyRef.current;
     const host = hostRef.current;
@@ -798,7 +801,7 @@ export default function NetOpsCanvas(props: Props) {
   // Grid paper is a stable visual reference, independent of fit/zoom actions.
   const gridSize = 32;
 
-  type CanvasPointerEvent = MouseEvent<HTMLDivElement>;
+  type CanvasPointerEvent = ReactMouseEvent<HTMLDivElement>;
   const clientPoint = (event: { clientX: number; clientY: number }) => {
     const rect = hostRef.current?.getBoundingClientRect();
     return rect ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null;

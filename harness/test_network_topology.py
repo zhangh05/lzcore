@@ -129,12 +129,15 @@ def test_topology_unlinked_symbols_are_diagram_only_and_not_discoverable(workspa
     assert unlinked["display_name"] == "Internet"
     state = service.topology_state(workspace, topo["topology_id"])
     assert {node["device_id"] for node in state["nodes"]} == {managed["device_id"]}
-    with pytest.raises(ValueError, match="discovered topology links require managed devices"):
-        service.save_topology(workspace, {
-            "name": "Invalid discovery",
-            "nodes": [{"node_id": "pe1", "linked_device_id": managed["device_id"]}, {"node_id": "internet"}],
-            "links": [{"source_node_id": "pe1", "target_node_id": "internet", "source": "discovered", "evidence_refs": ["observation_1"]}],
-        })
+    degraded = service.save_topology(workspace, {
+        "name": "Unlinked discovery history",
+        "nodes": [{"node_id": "pe1", "linked_device_id": managed["device_id"]}, {"node_id": "internet"}],
+        "links": [{"source_node_id": "pe1", "target_node_id": "internet", "source": "discovered", "status": "up", "evidence_refs": ["observation_1"]}],
+    })
+    assert degraded["links"][0]["source"] == "manual"
+    assert degraded["links"][0]["status"] == "unknown"
+    assert degraded["links"][0]["evidence_refs"] == ["observation_1"]
+    assert degraded["links"][0]["metadata"]["discovery_state"] == "association_removed"
 
 
 def test_transition_read_maps_legacy_link_endpoints_to_modern_nodes():
@@ -307,6 +310,59 @@ def test_asset_deletion_only_unlinks_the_user_owned_diagram_node(workspace):
     assert [node["node_id"] for node in reloaded["nodes"]] == ["managed-node", "internet"]
     assert next(node for node in reloaded["nodes"] if node["node_id"] == "managed-node")["linked_device_id"] is None
     assert len(reloaded["links"]) == 1
+
+
+def test_asset_deletion_degrades_discovered_link_without_destroying_the_drawing(workspace):
+    first = service.save_device(workspace, {"name": "PE1", "host": "10.1.3.1", "vendor": "h3c"})
+    second = service.save_device(workspace, {"name": "PE2", "host": "10.1.3.2", "vendor": "h3c"})
+    topo = service.save_topology(workspace, {
+        "name": "Recorded discovery",
+        "nodes": [
+            {"node_id": "pe1", "linked_device_id": first["device_id"]},
+            {"node_id": "pe2", "linked_device_id": second["device_id"]},
+        ],
+        "links": [{
+            "link_id": "recorded", "source_node_id": "pe1", "target_node_id": "pe2",
+            "source": "discovered", "status": "up", "evidence_refs": ["obs_1"],
+        }],
+    })
+    assert service.delete_device(workspace, first["device_id"]) is True
+    reloaded = service.get_topology(workspace, topo["topology_id"])
+    assert reloaded is not None
+    assert len(reloaded["nodes"]) == 2 and len(reloaded["links"]) == 1
+    assert reloaded["links"][0]["source"] == "manual"
+    assert reloaded["links"][0]["status"] == "unknown"
+    assert reloaded["links"][0]["evidence_refs"] == ["obs_1"]
+
+
+def test_legacy_patch_device_identifiers_are_explicitly_resolved(workspace):
+    first = service.save_device(workspace, {"name": "PE1", "host": "10.1.4.1", "vendor": "h3c"})
+    second = service.save_device(workspace, {"name": "PE2", "host": "10.1.4.2", "vendor": "h3c"})
+    topo = service.save_topology(workspace, {
+        "name": "Legacy patch adapter",
+        "nodes": [
+            {"node_id": "pe1", "linked_device_id": first["device_id"]},
+            {"node_id": "pe2", "linked_device_id": second["device_id"]},
+        ],
+        "links": [{"link_id": "manual", "source_node_id": "pe1", "target_node_id": "pe2"}],
+    })
+    patched = service.patch_topology(workspace, topo["topology_id"], {
+        "version": topo["version"], "remove_node_device_ids": [first["device_id"]],
+    })
+    assert [node["node_id"] for node in patched["nodes"]] == ["pe2"]
+    assert patched["links"] == []
+
+    duplicate = service.save_topology(workspace, {
+        "name": "Ambiguous legacy patch adapter",
+        "nodes": [
+            {"node_id": "pe1-main", "linked_device_id": first["device_id"]},
+            {"node_id": "pe1-detail", "linked_device_id": first["device_id"]},
+        ],
+    })
+    with pytest.raises(ValueError, match="topology_device_association_ambiguous"):
+        service.patch_topology(workspace, duplicate["topology_id"], {
+            "version": duplicate["version"], "remove_node_device_ids": [first["device_id"]],
+        })
 
 
 def test_topology_deletion_cleans_skill_references(workspace):
@@ -630,6 +686,118 @@ def test_topology_canonical_tool_via_runtime_client(workspace):
     assert len(scope_result.output["nodes"]) == 1
     assert scope_result.output["nodes"][0]["linked_device_id"] == dev1["device_id"]
     assert len(scope_result.output["links"]) == 0
+
+    # The public drawing may contain user-owned visual structure.  A selected
+    # Skill receives only the nodes it already controls and links internal to
+    # that node set, both from individual reads and list reads.
+    shared_diagram = service.save_topology(workspace, {
+        "name": "Shared diagram",
+        "nodes": [
+            {"node_id": "scoped", "linked_device_id": dev1["device_id"], "group_id": "human-group"},
+            {"node_id": "human-note", "display_name": "Internet", "group_id": "human-group"},
+        ],
+        "groups": [{"group_id": "human-group", "name": "业务域"}],
+        "canvas_items": [{"item_id": "human-canvas-item", "kind": "text", "text": "仅图纸说明"}],
+    })
+    scoped_diagram_read = client.invoke(
+        "network.operations.topology",
+        arguments={"action": "read", "topology_id": shared_diagram["topology_id"]},
+        context=skill_ctx,
+    )
+    assert scoped_diagram_read.status == "succeeded"
+    assert [node["node_id"] for node in scoped_diagram_read.output["nodes"]] == ["scoped"]
+    assert scoped_diagram_read.output["groups"] == []
+    assert scoped_diagram_read.output["canvas_items"] == []
+    assert scoped_diagram_read.output["topology"]["groups"] == []
+    assert scoped_diagram_read.output["topology"]["canvas_items"] == []
+    listing_skill = service.save_skill(workspace, {
+        "name": "ScopedListingSkill",
+        "device_ids": [dev1["device_id"]],
+        "connection_ids": [conn1["connection_id"]],
+        "allowed_tool_ids": ["network.operations.topology"],
+    })
+    scoped_list = client.invoke(
+        "network.operations.topology",
+        arguments={"action": "read"},
+        context=ToolRuntimeContext(workspace_id=workspace, skill=listing_skill["skill_id"], requested_by="turn_runner"),
+    )
+    listed_shared = next(item for item in scoped_list.output["topologies"] if item["topology_id"] == shared_diagram["topology_id"])
+    assert listed_shared["groups"] == []
+    assert listed_shared["canvas_items"] == []
+
+    # A Skill cannot claim an unlinked diagram node by assigning an allowed
+    # asset, mutate its visual grouping, or replace the shared full snapshot.
+    claimed_node = client.invoke(
+        "network.operations.topology",
+        arguments={
+            "action": "patch", "topology_id": shared_diagram["topology_id"], "version": shared_diagram["version"],
+            "node_updates": [{"node_id": "human-note", "linked_device_id": dev1["device_id"]}],
+        },
+        context=skill_ctx,
+    )
+    assert claimed_node.output["error"] == "topology_node_outside_selected_skill"
+    blocked_group_patch = client.invoke(
+        "network.operations.topology",
+        arguments={
+            "action": "patch", "topology_id": shared_diagram["topology_id"], "version": shared_diagram["version"],
+            "remove_group_ids": ["human-group"],
+        },
+        context=skill_ctx,
+    )
+    assert blocked_group_patch.output["error"] == "topology_diagram_content_outside_selected_skill"
+    blocked_snapshot = client.invoke(
+        "network.operations.topology",
+        arguments={
+            "action": "update", "topology_id": shared_diagram["topology_id"], "version": shared_diagram["version"],
+            "nodes": [{"node_id": "scoped", "linked_device_id": dev1["device_id"]}], "links": [], "groups": [],
+        },
+        context=skill_ctx,
+    )
+    assert blocked_snapshot.output["error"] == "topology_full_snapshot_not_allowed_in_selected_skill_use_patch"
+    blocked_visual_delete = client.invoke(
+        "network.operations.topology",
+        arguments={"action": "delete", "topology_id": shared_diagram["topology_id"]},
+        context=skill_ctx,
+    )
+    assert blocked_visual_delete.output["error"] == "topology_contains_unmanaged_diagram_content"
+
+    # Legacy device-keyed deletion remains available only when the association
+    # resolves to one pre-existing node already inside the Skill's scope.
+    legacy_unique = service.save_topology(workspace, {
+        "name": "Unique legacy association",
+        "nodes": [{"node_id": "legacy-scoped", "linked_device_id": dev1["device_id"]}],
+    })
+    legacy_remove = client.invoke(
+        "network.operations.topology",
+        arguments={
+            "action": "patch", "topology_id": legacy_unique["topology_id"], "version": legacy_unique["version"],
+            "remove_node_device_ids": [dev1["device_id"]],
+        },
+        context=skill_ctx,
+    )
+    assert legacy_remove.status == "succeeded"
+    assert legacy_remove.output["topology"]["nodes"] == []
+
+    # Unlinked graph content belongs only to its human owner; a Skill cannot
+    # receive it as context or delete the containing document indirectly.
+    diagram_only = service.save_topology(workspace, {
+        "name": "Human-only diagram",
+        "nodes": [{"node_id": "internet", "display_name": "Internet", "device_type": "cloud"}],
+    })
+    hidden_read = client.invoke(
+        "network.operations.topology",
+        arguments={"action": "read", "topology_id": diagram_only["topology_id"]},
+        context=skill_ctx,
+    )
+    assert hidden_read.status == "failed"
+    assert hidden_read.output["error"] == "topology_outside_selected_skill"
+    blocked_delete = client.invoke(
+        "network.operations.topology",
+        arguments={"action": "delete", "topology_id": diagram_only["topology_id"]},
+        context=skill_ctx,
+    )
+    assert blocked_delete.status == "failed"
+    assert blocked_delete.output["error"] == "topology_contains_unmanaged_diagram_content"
 
     # Write out-of-scope under Skill scope: attempting to add dev2 node must fail
     write_result = client.invoke(

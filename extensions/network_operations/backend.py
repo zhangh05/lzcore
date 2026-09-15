@@ -340,6 +340,44 @@ def register_routes(app):
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 404
 
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/discover", methods=["GET"])
+    def network_topology_discover(topology_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            return jsonify({"ok": True, **service.discover_topology_neighbors(ws, topology_id)})
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/revisions", methods=["GET"])
+    def network_topology_revisions(topology_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        return jsonify({"ok": True, "revisions": service.list_topology_revisions(ws, topology_id)})
+
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/diff", methods=["GET"])
+    def network_topology_revision_diff(topology_id, revision_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            return jsonify({"ok": True, "diff": service.compare_topology_revision(ws, revision_id)})
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 404
+
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/restore", methods=["POST"])
+    def network_topology_revision_restore(topology_id, revision_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            return jsonify({"ok": True, "topology": service.restore_topology_revision(ws, revision_id)})
+        except ValueError as exc:
+            status = 409 if str(exc) == "topology_version_conflict" else 404
+            return jsonify({"ok": False, "error": str(exc)}), status
+
     @app.route("/api/extensions/network.operations/topologies/<topology_id>/compare", methods=["GET"])
     def network_topology_compare(topology_id):
         ws = _workspace()
@@ -651,6 +689,21 @@ def topology_tool(invocation):
                 return {"ok": False, "error": "topology_link_outside_selected_skill"}
         return None
 
+    def scoped_topology(topology):
+        """Project a shared human drawing into the current Skill's asset view."""
+        scoped_nodes = [node for node in (topology.get("nodes") or []) if linked_device(node) in allowed_devices]
+        if not scoped_nodes:
+            return None
+        return {
+            **topology,
+            "nodes": scoped_nodes,
+            "links": [link for link in (topology.get("links") or []) if link_is_in_scope(link, topology.get("nodes") or [])],
+            # Groups and canvas items are human-owned diagram content.  They
+            # have no device association and must never enter a scoped prompt.
+            "groups": [],
+            "canvas_items": [],
+        }
+
     if action == "read":
         topology_id = str(args.get("topology_id") or (scope["skill"].get("topology_id") if scope and scope.get("skill") else "") or "").strip()
         if not topology_id:
@@ -658,33 +711,29 @@ def topology_tool(invocation):
             if scope is not None:
                 scoped_topos = []
                 for t in topologies:
-                    t_devices = {linked_device(n) for n in t.get("nodes") or [] if linked_device(n)}
-                    if not t_devices or t_devices.intersection(allowed_devices):
-                        scoped_topos.append(t)
+                    projected = scoped_topology(t)
+                    # A diagram-only canvas has no managed target for a
+                    # selected Skill, so it must not become agent context.
+                    if projected:
+                        scoped_topos.append(projected)
                 return {"ok": True, "topologies": scoped_topos}
             return {"ok": True, "topologies": topologies}
         topo = service.get_topology(invocation.workspace_id, topology_id)
         if not topo:
             return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
         if scope is not None:
-            scoped_nodes = [n for n in (topo.get("nodes") or []) if linked_device(n) in allowed_devices]
-            scoped_links = [l for l in (topo.get("links") or []) if link_is_in_scope(l, topo.get("nodes") or [])]
-            all_topo_devices = {linked_device(n) for n in (topo.get("nodes") or []) if linked_device(n)}
-            if all_topo_devices and not scoped_nodes:
+            scoped_topo = scoped_topology(topo)
+            if not scoped_topo:
                 return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
-            scoped_topo = {
-                **topo,
-                "nodes": scoped_nodes,
-                "links": scoped_links,
-            }
             return {
                 "ok": True,
                 "topology": scoped_topo,
                 "state": service.topology_state(invocation.workspace_id, topology_id, scope_device_ids=allowed_devices, scope_connection_ids=scope["connection_ids"]),
                 "version": topo.get("version"),
-                "nodes": scoped_nodes,
-                "links": scoped_links,
-                "groups": topo.get("groups") or [],
+                "nodes": scoped_topo["nodes"],
+                "links": scoped_topo["links"],
+                "groups": [],
+                "canvas_items": [],
             }
         return {
             "ok": True,
@@ -699,6 +748,8 @@ def topology_tool(invocation):
     if action == "create":
         nodes = args.get("nodes") or []
         if scope is not None:
+            if args.get("groups") or args.get("canvas_items"):
+                return {"ok": False, "error": "topology_diagram_content_outside_selected_skill"}
             error = scope_error_for_snapshot(nodes, args.get("links") or [])
             if error:
                 return error
@@ -770,18 +821,33 @@ def topology_tool(invocation):
         # write capability.
         if scope is not None:
             existing_links = {str(link.get("link_id") or ""): link for link in existing.get("links") or []}
-            existing_groups = {str(group.get("group_id") or ""): group for group in existing.get("groups") or []}
             current_nodes = {str(node.get("node_id") or ""): dict(node) for node in existing.get("nodes") or []}
             for node in args.get("node_updates") or []:
                 node_id = str((node or {}).get("node_id") or "").strip()
-                candidate = {**current_nodes.get(node_id, {}), **(node or {})}
+                existing_node = current_nodes.get(node_id)
+                # A patch may not create, claim, or re-associate a node the
+                # Skill could not already see.  Validating only the merged
+                # candidate would let an attacker claim an unlinked/foreign
+                # visual node by assigning an allowed device id.
+                if not existing_node or linked_device(existing_node) not in allowed_devices:
+                    return {"ok": False, "error": "topology_node_outside_selected_skill", "node_id": node_id}
+                candidate = {**existing_node, **(node or {})}
                 if linked_device(candidate) not in allowed_devices:
                     return {"ok": False, "error": "topology_node_outside_selected_skill", "node_id": node_id}
                 current_nodes[node_id] = candidate
-            for node_id in args.get("remove_node_ids") or args.get("remove_node_device_ids") or []:
+            for node_id in args.get("remove_node_ids") or []:
                 node = current_nodes.get(str(node_id).strip())
                 if not node or linked_device(node) not in allowed_devices:
                     return {"ok": False, "error": "topology_node_outside_selected_skill", "node_id": str(node_id).strip()}
+            for device_id in args.get("remove_node_device_ids") or []:
+                candidates = [node_id for node_id, node in current_nodes.items() if linked_device(node) == str(device_id).strip()]
+                if len(candidates) == 0:
+                    return {"ok": False, "error": "topology_device_association_not_found"}
+                if len(candidates) > 1:
+                    return {"ok": False, "error": "topology_device_association_ambiguous"}
+                node = current_nodes[candidates[0]]
+                if linked_device(node) not in allowed_devices:
+                    return {"ok": False, "error": "topology_node_outside_selected_skill", "node_id": candidates[0]}
             for link in args.get("link_updates") or []:
                 link = link or {}
                 link_id = str(link.get("link_id") or "").strip()
@@ -792,12 +858,8 @@ def topology_tool(invocation):
                 link = existing_links.get(str(link_id).strip())
                 if not link or not link_is_in_scope(link, list(current_nodes.values())):
                     return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
-            for group_id in [str((group or {}).get("group_id") or "").strip() for group in args.get("group_updates") or []] + [str(item).strip() for item in args.get("remove_group_ids") or []]:
-                if group_id and group_id in existing_groups and any(
-                    str(node.get("group_id") or "") == group_id and linked_device(node) not in allowed_devices
-                    for node in existing.get("nodes") or []
-                ):
-                    return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
+            if args.get("group_updates") or args.get("remove_group_ids"):
+                return {"ok": False, "error": "topology_diagram_content_outside_selected_skill", "topology_id": topology_id}
         try:
             topo = service.patch_topology(invocation.workspace_id, topology_id, args)
             return {"ok": True, "topology": topo, "version": topo.get("version")}
@@ -814,9 +876,10 @@ def topology_tool(invocation):
         if args.get("version") is None or any(key not in args for key in ("nodes", "links", "groups")):
             return {"ok": False, "error": "topology_full_snapshot_required_use_patch", "topology_id": topology_id}
         if scope is not None:
-            error = scope_error_for_snapshot(args.get("nodes") or [], args.get("links") or [])
-            if error:
-                return error
+            # A partial view must never be used as a replacement snapshot: it
+            # would remove nodes and human-owned drawing content the Skill is
+            # deliberately not allowed to read.  Scoped mutations use patch.
+            return {"ok": False, "error": "topology_full_snapshot_not_allowed_in_selected_skill_use_patch", "topology_id": topology_id}
         try:
             topo = service.save_topology(invocation.workspace_id, {**args, "topology_id": topology_id})
             return {"ok": True, "topology": topo}
@@ -831,9 +894,15 @@ def topology_tool(invocation):
         if not existing:
             return {"ok": False, "error": "topology_not_found", "topology_id": topology_id}
         if scope is not None:
-            for node in existing.get("nodes") or []:
-                if linked_device(node) not in allowed_devices:
-                    return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
+            nodes = existing.get("nodes") or []
+            # Whole-graph deletion also destroys unlinked annotations.  A
+            # scoped Skill has no authority over those user-owned objects, so
+            # reject with a diagnostic that tells the model to leave the graph
+            # alone instead of misclassifying it as another Skill's device.
+            if any(not linked_device(node) for node in nodes) or existing.get("groups") or existing.get("canvas_items"):
+                return {"ok": False, "error": "topology_contains_unmanaged_diagram_content", "topology_id": topology_id}
+            if any(linked_device(node) not in allowed_devices for node in nodes):
+                return {"ok": False, "error": "topology_outside_selected_skill", "topology_id": topology_id}
         deleted = service.delete_topology(invocation.workspace_id, topology_id)
         return {"ok": deleted}
 
@@ -1221,6 +1290,7 @@ def register():
                         "link_updates": {"type": "array", "items": {"type": "object"}},
                         "group_updates": {"type": "array", "items": {"type": "object"}},
                         "remove_node_ids": {"type": "array", "items": {"type": "string"}},
+                        "remove_node_device_ids": {"type": "array", "items": {"type": "string"}},
                         "remove_link_ids": {"type": "array", "items": {"type": "string"}},
                         "remove_group_ids": {"type": "array", "items": {"type": "string"}},
                         "source_device_id": {"type": "string"},

@@ -2196,6 +2196,35 @@ def get_topology(workspace_id: str, topology_id: str) -> dict[str, Any] | None:
     return _public_topology(record) if record else None
 
 
+def _normalize_discovery_provenance(
+    source: str,
+    status: str,
+    metadata: dict[str, Any],
+    *,
+    source_node_id: str,
+    target_node_id: str,
+    linked_by_node_id: dict[str, str | None],
+) -> tuple[str, str, dict[str, Any]]:
+    """Keep a user-owned graph usable when inventory associations change.
+
+    ``discovered`` means the link is currently backed by two managed assets.
+    It is not a stronger ownership model than the diagram itself.  When an
+    endpoint is unlinked (including asset deletion), retain the edge and its
+    evidence history but downgrade its *current* operational claim to a manual
+    unknown link.  Applying this in the common graph normalizer makes every
+    save path safe, rather than teaching each caller a special deletion case.
+    """
+    if source != "discovered" or (
+        linked_by_node_id.get(source_node_id) and linked_by_node_id.get(target_node_id)
+    ):
+        return source, status, metadata
+    return "manual", "unknown", {
+        **metadata,
+        "discovery_state": "association_removed",
+        "discovery_reason": "one_or_more_endpoints_unlinked",
+    }
+
+
 @_connection_transaction
 def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name") or "").strip()
@@ -2363,15 +2392,19 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         source = str(raw.get("source") or "manual").strip().lower()
         if source not in {"manual", "discovered"}:
             source = "manual"
-        linked_by_node_id = {node["node_id"]: node.get("linked_device_id") for node in normalized_nodes}
-        # Discovery is an operational claim about two registered devices.  A
-        # hand-drawn node can be linked manually, but cannot acquire evidence.
-        if source == "discovered" and (not linked_by_node_id.get(src) or not linked_by_node_id.get(tgt)):
-            raise ValueError("discovered topology links require managed devices")
         # A label is a human description, not a generated endpoint caption.
         # Interfaces already have their own compact labels on the canvas.
         label = str(raw.get("label") or "").strip()
         metadata = dict(raw.get("metadata") or {}) if isinstance(raw.get("metadata"), dict) else {}
+        linked_by_node_id = {node["node_id"]: node.get("linked_device_id") for node in normalized_nodes}
+        source, status, metadata = _normalize_discovery_provenance(
+            source,
+            status,
+            metadata,
+            source_node_id=src,
+            target_node_id=tgt,
+            linked_by_node_id=linked_by_node_id,
+        )
         evidence_refs = [str(item).strip() for item in (raw.get("evidence_refs") or []) if str(item).strip()]
         normalized_links.append({
             "link_id": link_id,
@@ -2400,6 +2433,10 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         "updated_at": now_iso(),
     }
     _store(workspace_id).save("topologies", topology_id, record)
+    try:
+        _record_topology_revision(workspace_id, record)
+    except Exception:  # history is a convenience, never a reason to lose a save
+        pass
     return _public_topology(record)
 
 
@@ -2433,16 +2470,17 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
     node_updates = records(payload.get("node_updates"), "node_updates")
     link_updates = records(payload.get("link_updates"), "link_updates")
     group_updates = records(payload.get("group_updates"), "group_updates")
-    remove_node_ids = {
-        str(item).strip() for item in (payload.get("remove_node_ids") or payload.get("remove_node_device_ids") or []) if str(item).strip()
-    }
+    remove_node_ids = {str(item).strip() for item in (payload.get("remove_node_ids") or []) if str(item).strip()}
+    remove_node_device_ids = {str(item).strip() for item in (payload.get("remove_node_device_ids") or []) if str(item).strip()}
     remove_link_ids = {
         str(item).strip() for item in (payload.get("remove_link_ids") or []) if str(item).strip()
     }
     remove_group_ids = {
         str(item).strip() for item in (payload.get("remove_group_ids") or []) if str(item).strip()
     }
-    if any(not isinstance(item, str) for item in (payload.get("remove_node_ids") or payload.get("remove_node_device_ids") or [])):
+    if any(not isinstance(item, str) for item in (payload.get("remove_node_ids") or [])) or any(
+        not isinstance(item, str) for item in (payload.get("remove_node_device_ids") or [])
+    ):
         raise ValueError("remove_node_ids must be a list of strings")
     if any(not isinstance(item, str) for item in (payload.get("remove_link_ids") or [])):
         raise ValueError("remove_link_ids must be a list of strings")
@@ -2458,6 +2496,22 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         if not node_id:
             raise ValueError("node_update_requires_node_id")
         nodes_by_id[node_id] = {**nodes_by_id.get(node_id, {}), **update, "node_id": node_id}
+
+    # Compatibility inputs used registered asset ids before diagrams acquired
+    # their own node ids.  Resolve once and reject ambiguity explicitly: a
+    # silent guess can modify the wrong visual node on a free-form diagram.
+    node_ids_by_device: dict[str, list[str]] = {}
+    for node_id, node in nodes_by_id.items():
+        linked_device_id = str(node.get("linked_device_id") or "").strip()
+        if linked_device_id:
+            node_ids_by_device.setdefault(linked_device_id, []).append(node_id)
+    for device_id in remove_node_device_ids:
+        candidates = node_ids_by_device.get(device_id, [])
+        if len(candidates) == 0:
+            raise ValueError("topology_device_association_not_found")
+        if len(candidates) > 1:
+            raise ValueError("topology_device_association_ambiguous")
+        remove_node_ids.add(candidates[0])
     for node_id in remove_node_ids:
         if node_id not in nodes_by_id:
             raise ValueError("topology_node_not_found")
@@ -2512,26 +2566,34 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
     surviving_nodes = set(nodes_by_id)
     # Legacy patch callers may still address a link by registered device id.
     # Resolve that input once against the current associations before testing
-    # graph integrity; persisted links remain strictly node-keyed.
-    node_ids_by_device: dict[str, list[str]] = {}
+    # graph integrity; persisted links remain strictly node-keyed.  An absent
+    # or ambiguous association is a contract error, never a reason to silently
+    # drop the requested edge.
+    surviving_node_ids_by_device: dict[str, list[str]] = {}
     for node_id, node in nodes_by_id.items():
         linked_device_id = str(node.get("linked_device_id") or "").strip()
         if linked_device_id:
-            node_ids_by_device.setdefault(linked_device_id, []).append(node_id)
+            surviving_node_ids_by_device.setdefault(linked_device_id, []).append(node_id)
     for link in links_by_id.values():
-        if not link.get("source_node_id"):
-            candidates = node_ids_by_device.get(str(link.get("source_device_id") or "").strip(), [])
-            if len(candidates) == 1:
-                link["source_node_id"] = candidates[0]
-        if not link.get("target_node_id"):
-            candidates = node_ids_by_device.get(str(link.get("target_device_id") or "").strip(), [])
-            if len(candidates) == 1:
-                link["target_node_id"] = candidates[0]
-    links = [
-        link for link in links_by_id.values()
-        if str(link.get("source_node_id") or link.get("source_device_id") or "") in surviving_nodes
-        and str(link.get("target_node_id") or link.get("target_device_id") or "") in surviving_nodes
-    ]
+        for node_field, device_field in (("source_node_id", "source_device_id"), ("target_node_id", "target_device_id")):
+            if link.get(node_field):
+                continue
+            device_id = str(link.get(device_field) or "").strip()
+            candidates = surviving_node_ids_by_device.get(device_id, [])
+            if len(candidates) == 0:
+                raise ValueError("topology_link_endpoint_not_found")
+            if len(candidates) > 1:
+                raise ValueError("topology_device_association_ambiguous")
+            link[node_field] = candidates[0]
+    links = []
+    for link in links_by_id.values():
+        source_node_id = str(link.get("source_node_id") or "")
+        target_node_id = str(link.get("target_node_id") or "")
+        if source_node_id not in surviving_nodes or target_node_id not in surviving_nodes:
+            # Explicit node removal owns only its incident edges.  Do not
+            # manufacture a dangling graph in response to a partial patch.
+            continue
+        links.append(link)
     for link in links:
         if str(link.get("source") or "manual").strip().lower() == "discovered" and not [
             str(item).strip() for item in (link.get("evidence_refs") or []) if str(item).strip()
@@ -2574,6 +2636,347 @@ def remove_topology_node(workspace_id: str, topology_id: str, node_id: str, *, e
     return save_topology(workspace_id, payload)
 
 
+# ---------------------------------------------------------------------------
+# Topology revision history
+#
+# A canvas is edited continuously: dragging a node fires a save on every
+# mouse-up.  Versioning every one of those saves would bury the few edits a
+# human actually wants to get back, so a revision is recorded only when the
+# *structure* of the diagram changes — which objects exist and how they are
+# connected.  Pure layout movement is deliberately not a revision.
+# ---------------------------------------------------------------------------
+
+TOPOLOGY_REVISION_LIMIT = 40
+
+
+def _topology_structure_signature(topology: dict[str, Any]) -> str:
+    payload = {
+        "name": str(topology.get("name") or ""),
+        "nodes": sorted(
+            [
+                [
+                    str(node.get("node_id") or ""),
+                    str(node.get("linked_device_id") or ""),
+                    str(node.get("device_type") or ""),
+                    str(node.get("display_name") or ""),
+                    str(node.get("group_id") or ""),
+                    ",".join(sorted(str(item) for item in (node.get("labels") or []))),
+                ]
+                for node in (topology.get("nodes") or [])
+            ]
+        ),
+        "links": sorted(
+            [
+                [
+                    str(link.get("link_id") or ""),
+                    str(link.get("source_node_id") or ""),
+                    str(link.get("target_node_id") or ""),
+                    str(link.get("source_interface") or ""),
+                    str(link.get("target_interface") or ""),
+                    str(link.get("kind") or ""),
+                    str(link.get("source") or ""),
+                    str(link.get("status") or ""),
+                    str(link.get("label") or ""),
+                    ",".join(sorted(str(item) for item in (link.get("evidence_refs") or []))),
+                ]
+                for link in (topology.get("links") or [])
+            ]
+        ),
+        "groups": sorted(
+            [
+                [str(group.get("group_id") or ""), str(group.get("name") or ""), str(group.get("kind") or "")]
+                for group in (topology.get("groups") or [])
+            ]
+        ),
+        "canvas_items": sorted(
+            [
+                [str(item.get("item_id") or ""), str(item.get("kind") or ""), str(item.get("text") or "")]
+                for item in (topology.get("canvas_items") or [])
+            ]
+        ),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:32]
+
+
+def _topology_revisions(workspace_id: str, topology_id: str) -> list[dict[str, Any]]:
+    revisions = [
+        item for item in _store(workspace_id).list("topology_revisions", limit=500)
+        if str(item.get("topology_id") or "") == topology_id
+    ]
+    revisions.sort(key=lambda item: int(item.get("version") or 0))
+    return revisions
+
+
+def _record_topology_revision(workspace_id: str, record: dict[str, Any]) -> None:
+    """Snapshot a topology when its structure, not just its layout, changed."""
+    signature = _topology_structure_signature(record)
+    store = _store(workspace_id)
+    revisions = _topology_revisions(workspace_id, str(record.get("topology_id") or ""))
+    if revisions and str(revisions[-1].get("signature") or "") == signature:
+        return
+    revision_id = _id("rev")
+    store.save("topology_revisions", revision_id, {
+        "revision_id": revision_id,
+        "topology_id": str(record.get("topology_id") or ""),
+        "version": int(record.get("version") or 1),
+        "signature": signature,
+        "saved_at": str(record.get("updated_at") or now_iso()),
+        "name": str(record.get("name") or ""),
+        "summary": {
+            "nodes": len(record.get("nodes") or []),
+            "links": len(record.get("links") or []),
+            "groups": len(record.get("groups") or []),
+            "canvas_items": len(record.get("canvas_items") or []),
+        },
+        "snapshot": json.loads(json.dumps(record)),
+    })
+    # Keep history bounded; the oldest revisions are the least useful ones.
+    overflow = len(revisions) + 1 - TOPOLOGY_REVISION_LIMIT
+    for stale in revisions[:max(0, overflow)]:
+        store.delete("topology_revisions", str(stale.get("revision_id") or ""))
+
+
+def list_topology_revisions(workspace_id: str, topology_id: str) -> list[dict[str, Any]]:
+    """Revisions, newest first, without the snapshots (a list stays cheap).
+
+    Drawings created before history existed have no baseline.  Opening their
+    history would otherwise show "nothing recorded yet" for a canvas that is
+    very much in use, so the current state becomes version one on first look.
+    """
+    revisions = _topology_revisions(workspace_id, topology_id)
+    if not revisions:
+        existing = _store(workspace_id).get("topologies", topology_id)
+        if existing:
+            _record_topology_revision(workspace_id, existing)
+            revisions = _topology_revisions(workspace_id, topology_id)
+    return [
+        {
+            "revision_id": item.get("revision_id"),
+            "version": item.get("version"),
+            "saved_at": item.get("saved_at"),
+            "name": item.get("name"),
+            "summary": item.get("summary") or {},
+        }
+        for item in reversed(revisions)
+    ]
+
+
+def get_topology_revision(workspace_id: str, revision_id: str) -> dict[str, Any] | None:
+    record = _store(workspace_id).get("topology_revisions", revision_id)
+    if not record:
+        return None
+    return record
+
+
+def _index_by_id(items: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
+    return {str(item.get(key) or ""): item for item in items if item.get(key)}
+
+
+def _link_facts(link: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source_node_id": str(link.get("source_node_id") or ""),
+        "target_node_id": str(link.get("target_node_id") or ""),
+        "source_interface": str(link.get("source_interface") or ""),
+        "target_interface": str(link.get("target_interface") or ""),
+        "kind": str(link.get("kind") or ""),
+        "source": str(link.get("source") or ""),
+        "status": str(link.get("status") or ""),
+        "label": str(link.get("label") or ""),
+    }
+
+
+def _node_facts(node: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "linked_device_id": str(node.get("linked_device_id") or ""),
+        "device_type": str(node.get("device_type") or ""),
+        "display_name": str(node.get("display_name") or ""),
+        "group_id": str(node.get("group_id") or ""),
+    }
+
+
+def diff_topology_snapshots(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    """What changed between two topology versions, in canvas vocabulary."""
+    before_nodes = _index_by_id(list(before.get("nodes") or []), "node_id")
+    after_nodes = _index_by_id(list(after.get("nodes") or []), "node_id")
+    before_links = _index_by_id(list(before.get("links") or []), "link_id")
+    after_links = _index_by_id(list(after.get("links") or []), "link_id")
+    before_groups = _index_by_id(list(before.get("groups") or []), "group_id")
+    after_groups = _index_by_id(list(after.get("groups") or []), "group_id")
+    before_items = _index_by_id(list(before.get("canvas_items") or []), "item_id")
+    after_items = _index_by_id(list(after.get("canvas_items") or []), "item_id")
+
+    def label_of(node_id: str) -> str:
+        node = after_nodes.get(node_id) or before_nodes.get(node_id) or {}
+        return str(node.get("display_name") or node_id)
+
+    nodes_added = [
+        {"node_id": node_id, "label": label_of(node_id)}
+        for node_id in after_nodes
+        if node_id not in before_nodes
+    ]
+    nodes_removed = [
+        {"node_id": node_id, "label": label_of(node_id)}
+        for node_id in before_nodes
+        if node_id not in after_nodes
+    ]
+    nodes_changed = []
+    for node_id in before_nodes:
+        if node_id not in after_nodes:
+            continue
+        before_facts = _node_facts(before_nodes[node_id])
+        after_facts = _node_facts(after_nodes[node_id])
+        if before_facts != after_facts:
+            nodes_changed.append({
+                "node_id": node_id,
+                "label": label_of(node_id),
+                "changes": {
+                    field: {"from": before_facts[field], "to": after_facts[field]}
+                    for field in before_facts
+                    if before_facts[field] != after_facts[field]
+                },
+            })
+
+    links_added, links_removed, links_changed = [], [], []
+    for link_id, link in after_links.items():
+        if link_id not in before_links:
+            links_added.append({
+                "link_id": link_id,
+                "label": f"{label_of(str(link.get('source_node_id') or ''))} ↔ {label_of(str(link.get('target_node_id') or ''))}",
+            })
+    for link_id, link in before_links.items():
+        if link_id not in after_links:
+            links_removed.append({
+                "link_id": link_id,
+                "label": f"{label_of(str(link.get('source_node_id') or ''))} ↔ {label_of(str(link.get('target_node_id') or ''))}",
+            })
+    for link_id, link in before_links.items():
+        if link_id not in after_links:
+            continue
+        before_facts = _link_facts(link)
+        after_facts = _link_facts(after_links[link_id])
+        if before_facts != after_facts:
+            links_changed.append({
+                "link_id": link_id,
+                "label": f"{label_of(before_facts['source_node_id'])} ↔ {label_of(before_facts['target_node_id'])}",
+                "changes": {
+                    field: {"from": before_facts[field], "to": after_facts[field]}
+                    for field in before_facts
+                    if before_facts[field] != after_facts[field]
+                },
+            })
+
+    def group_label(group: dict[str, Any]) -> str:
+        return str(group.get("name") or group.get("group_id") or "")
+
+    def item_label(item: dict[str, Any]) -> str:
+        return str(item.get("text") or item.get("kind") or item.get("item_id") or "")
+
+    return {
+        "nodes_added": nodes_added,
+        "nodes_removed": nodes_removed,
+        "nodes_changed": nodes_changed,
+        "links_added": links_added,
+        "links_removed": links_removed,
+        "links_changed": links_changed,
+        "groups_added": [
+            {"group_id": group_id, "label": group_label(after_groups[group_id])}
+            for group_id in after_groups
+            if group_id not in before_groups
+        ],
+        "groups_removed": [
+            {"group_id": group_id, "label": group_label(before_groups[group_id])}
+            for group_id in before_groups
+            if group_id not in after_groups
+        ],
+        "canvas_items_added": [
+            {"item_id": item_id, "label": item_label(after_items[item_id])}
+            for item_id in after_items
+            if item_id not in before_items
+        ],
+        "canvas_items_removed": [
+            {"item_id": item_id, "label": item_label(before_items[item_id])}
+            for item_id in before_items
+            if item_id not in after_items
+        ],
+        "summary": {
+            "nodes_added": len(nodes_added),
+            "nodes_removed": len(nodes_removed),
+            "nodes_changed": len(nodes_changed),
+            "links_added": len(links_added),
+            "links_removed": len(links_removed),
+            "links_changed": len(links_changed),
+            "total_changes": (
+                len(nodes_added) + len(nodes_removed) + len(nodes_changed)
+                + len(links_added) + len(links_removed) + len(links_changed)
+                + len([g for g in after_groups if g not in before_groups])
+                + len([g for g in before_groups if g not in after_groups])
+                + len([i for i in after_items if i not in before_items])
+                + len([i for i in before_items if i not in after_items])
+            ),
+        },
+    }
+
+
+def compare_topology_revision(workspace_id: str, revision_id: str) -> dict[str, Any]:
+    """Diff a stored revision against what the canvas holds now."""
+    record = get_topology_revision(workspace_id, revision_id)
+    if not record:
+        raise ValueError("topology_revision_not_found")
+    snapshot = record.get("snapshot") or {}
+    topology_id = str(record.get("topology_id") or "")
+    current = get_topology(workspace_id, topology_id)
+    if not current:
+        raise ValueError("topology_not_found")
+    return {
+        "revision_id": revision_id,
+        "topology_id": topology_id,
+        "revision_version": record.get("version"),
+        "revision_saved_at": record.get("saved_at"),
+        "current_version": current.get("version"),
+        **diff_topology_snapshots(snapshot, current),
+    }
+
+
+@_connection_transaction
+def restore_topology_revision(workspace_id: str, revision_id: str) -> dict[str, Any]:
+    """Roll the canvas back to a revision.
+
+    Restoring is a forward edit, not a rewrite of history: it writes the old
+    structure as a new version, so the undo trail itself stays intact.
+    """
+    record = get_topology_revision(workspace_id, revision_id)
+    if not record:
+        raise ValueError("topology_revision_not_found")
+    snapshot = json.loads(json.dumps(record.get("snapshot") or {}))
+    topology_id = str(record.get("topology_id") or "")
+    current = get_topology(workspace_id, topology_id)
+    if not current:
+        raise ValueError("topology_not_found")
+    return save_topology(workspace_id, {
+        **snapshot,
+        "topology_id": topology_id,
+        "version": current.get("version"),
+        # Keep the newest layout: a rollback is about structure, and silently
+        # teleporting every node back would destroy work done since.
+        "nodes": _restore_with_current_layout(snapshot.get("nodes") or [], current.get("nodes") or []),
+    })
+
+
+def _restore_with_current_layout(
+    snapshot_nodes: list[dict[str, Any]], current_nodes: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    positions = {
+        str(node.get("node_id") or ""): (node.get("x"), node.get("y"))
+        for node in current_nodes
+    }
+    restored = []
+    for node in snapshot_nodes:
+        node_id = str(node.get("node_id") or "")
+        x, y = positions.get(node_id, (node.get("x"), node.get("y")))
+        restored.append({**node, "x": x, "y": y})
+    return restored
+
+
 @_connection_transaction
 def delete_topology(workspace_id: str, topology_id: str) -> bool:
     record = get_topology(workspace_id, topology_id)
@@ -2584,7 +2987,10 @@ def delete_topology(workspace_id: str, topology_id: str) -> bool:
         if str(skill.get("topology_id") or "") == topology_id:
             skill["topology_id"] = ""
             save_skill(workspace_id, skill)
-    return _store(workspace_id).delete("topologies", topology_id)
+    store = _store(workspace_id)
+    for revision in _topology_revisions(workspace_id, topology_id):
+        store.delete("topology_revisions", str(revision.get("revision_id") or ""))
+    return store.delete("topologies", topology_id)
 
 
 def topology_state(workspace_id: str, topology_id: str, *, scope_device_ids: set[str] | None = None, scope_connection_ids: set[str] | None = None) -> dict[str, Any]:
@@ -2734,4 +3140,220 @@ def compare_topology(workspace_id: str, topology_id: str, *, scope_device_ids: s
             "unknown_evidence_links": unknown_count,
             "available_devices_missing_from_topology": len(devices_in_scope_not_in_topology),
         },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Neighbour discovery
+# ---------------------------------------------------------------------------
+
+_NEIGHBOR_COMMAND_HINTS = ("lldp", "cdp")
+_INTERFACE_RE = re.compile(
+    r"^(?:xge|10ge|25ge|40ge|100ge|ge|gigabitethernet|te|ten-gigabitethernet|tengigabitethernet|"
+    r"fa|fastethernet|ethernet|eth|gi|gig|e|g|xg|hu|fo|bagg|bridge-aggregation|po|port-channel|"
+    r"vlanif|vlan|lo|loopback|mgmt|me|aux|console)[-\s]?[\d/:.]*\d[\d/:.]*$",
+    re.IGNORECASE,
+)
+
+
+# Cisco prints "Gig 1/0/1" with a space; the token has to be joined before it
+# can be recognised as an interface at all.
+_INTERFACE_SPACED_RE = re.compile(
+    r"\b(gig|gi|ten|te|fa|eth|fo|hu|xge|ge|po| hundredgige| fortygige)\s+(\d[\d/:.]*)",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_interface(value: str) -> bool:
+    token = str(value or "").strip().rstrip(",;")
+    if not token or len(token) > 32:
+        return False
+    return bool(_INTERFACE_RE.match(token))
+
+
+def _clean_neighbor_token(value: str) -> str:
+    token = str(value or "").strip().rstrip(",;")
+    # Cisco CDP prints "hostname.domain"; the device record usually holds the
+    # short name, so keep both forms for matching.
+    return token
+
+
+def parse_neighbor_output(output: str) -> list[dict[str, str]]:
+    """Best-effort parse of ``display lldp neighbor`` / ``show cdp neighbors``.
+
+    Vendors disagree on every column, so this handles the two shapes that
+    actually occur: the verbose key/value block and the brief table. Anything
+    unrecognised is skipped rather than guessed at, because a wrong link is
+    worse than no link.
+    """
+    results: list[dict[str, str]] = []
+    if not output:
+        return results
+    local_if = ""
+    remote_name = ""
+    remote_port = ""
+
+    def flush() -> None:
+        nonlocal local_if, remote_name, remote_port
+        if local_if and (remote_name or remote_port):
+            results.append({
+                "local_interface": local_if,
+                "remote_name": _clean_neighbor_token(remote_name),
+                "remote_interface": _clean_neighbor_token(remote_port),
+            })
+        local_if, remote_name, remote_port = "", "", ""
+
+    for raw_line in str(output).splitlines():
+        line = _INTERFACE_SPACED_RE.sub(r"\1\2", raw_line.strip())
+        if not line:
+            continue
+        low = line.lower()
+        if low.startswith(("local interface", "local intf", "local port", "localinterface")):
+            flush()
+            local_if = line.split(":", 1)[-1].strip()
+            continue
+        if low.startswith(("system name", "peer system name", "device id", "remote device id", "sysname")):
+            remote_name = line.split(":", 1)[-1].strip()
+            continue
+        if low.startswith(("port id", "remote port", "portid")):
+            remote_port = line.split(":", 1)[-1].strip()
+            continue
+        parts = line.split()
+        if len(parts) >= 4 and not _looks_like_interface(parts[0]) and _looks_like_interface(parts[1]):
+            # Cisco brief table: <device id> <local iface> <holdtime> ... <port id>
+            flush()
+            remote_name = parts[0]
+            local_if = parts[1]
+            remote_port = parts[-1]
+            continue
+        if len(parts) >= 3 and _looks_like_interface(parts[0]):
+            # Huawei / H3C brief table: <local iface> <chassis id> <port id> <system name>
+            flush()
+            local_if = parts[0]
+            tail = [p for p in parts[1:]]
+            if _looks_like_interface(tail[-1]):
+                remote_name = tail[-1]
+                remote_port = tail[-2] if len(tail) >= 2 and _looks_like_interface(tail[-2]) else ""
+            else:
+                remote_name = tail[-1] if tail else ""
+                remote_port = tail[-2] if len(tail) >= 2 and _looks_like_interface(tail[-2]) else ""
+    flush()
+    return results
+
+
+def _device_match_keys(device: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    name = str(device.get("name") or "").strip().lower()
+    host = str(device.get("host") or "").strip().lower()
+    if name:
+        keys.add(name)
+        keys.add(name.split(".")[0])
+    if host:
+        keys.add(host)
+    return {key for key in keys if key}
+
+
+def discover_topology_neighbors(workspace_id: str, topology_id: str) -> dict[str, Any]:
+    """Suggest links that were observed on the wire but never drawn.
+
+    Neighbour tables are read from evidence that has already been collected;
+    this never connects to a device. A candidate is only offered when both
+    ends resolve to devices already on the canvas, so adopting one always
+    produces a link the drawing can represent.
+    """
+    topo = get_topology(workspace_id, topology_id)
+    if not topo:
+        raise ValueError("topology_not_found")
+    linked_by_node_id = {
+        str(node.get("node_id") or ""): str(node.get("linked_device_id") or "")
+        for node in topo.get("nodes", [])
+    }
+    node_by_device_id = {device_id: node_id for node_id, device_id in linked_by_node_id.items() if device_id}
+    device_ids = set(node_by_device_id)
+    if not device_ids:
+        return {"topology_id": topology_id, "candidates": [], "scanned_devices": 0, "note": "topology_has_no_linked_devices"}
+    devices = [d for d in list_devices(workspace_id) if d.get("device_id") in device_ids]
+    keys_by_device_id = {d["device_id"]: _device_match_keys(d) for d in devices}
+    key_to_device_id: dict[str, str] = {}
+    for device_id, keys in keys_by_device_id.items():
+        for key in keys:
+            key_to_device_id.setdefault(key, device_id)
+
+    observations = list_observations(workspace_id, limit=500)
+    artifact_by_device: dict[str, str] = {}
+    for observation in observations:
+        artifact_id = str(observation.get("artifact_id") or "").strip()
+        if not artifact_id:
+            continue
+        for target in observation.get("target_ids") or []:
+            target_id = str(target)
+            if target_id in device_ids and target_id not in artifact_by_device:
+                artifact_by_device[target_id] = artifact_id
+
+    existing_pairs = set()
+    for link in topo.get("links", []):
+        source = node_by_device_id.get(str(link.get("source_node_id") or ""), str(link.get("source_node_id") or ""))
+        target = node_by_device_id.get(str(link.get("target_node_id") or ""), str(link.get("target_node_id") or ""))
+        existing_pairs.add(frozenset((source, target)))
+
+    candidates: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    scanned = 0
+    for device_id, artifact_id in artifact_by_device.items():
+        try:
+            from artifacts.store import read_artifact_content
+            # Inspection evidence is classified "sensitive"; reading it back for
+            # analysis is the intended use, and "secret" stays blocked regardless.
+            content = read_artifact_content(workspace_id, artifact_id, allow_sensitive=True)
+        except Exception:
+            continue
+        if not content:
+            continue
+        try:
+            payload = json.loads(content)
+        except Exception:
+            continue
+        raw_outputs = payload.get("raw_outputs") if isinstance(payload, dict) else None
+        if not isinstance(raw_outputs, dict):
+            continue
+        scanned += 1
+        for command, entry in raw_outputs.items():
+            if not any(hint in str(command).lower() for hint in _NEIGHBOR_COMMAND_HINTS):
+                continue
+            text = entry.get("output") if isinstance(entry, dict) else entry
+            if not isinstance(text, str):
+                continue
+            for neighbor in parse_neighbor_output(text):
+                remote_key = str(neighbor.get("remote_name") or "").strip().lower()
+                if not remote_key:
+                    continue
+                remote_key = remote_key.split(".")[0]
+                remote_id = key_to_device_id.get(remote_key)
+                if not remote_id or remote_id == device_id:
+                    continue
+                source_node = node_by_device_id.get(device_id)
+                target_node = node_by_device_id.get(remote_id)
+                if not source_node or not target_node:
+                    continue
+                if frozenset((source_node, target_node)) in existing_pairs:
+                    continue
+                signature = (source_node, target_node, neighbor.get("local_interface", ""), neighbor.get("remote_interface", ""))
+                if signature in seen:
+                    continue
+                seen.add(signature)
+                candidates.append({
+                    "source_node_id": source_node,
+                    "target_node_id": target_node,
+                    "source_interface": neighbor.get("local_interface", ""),
+                    "target_interface": neighbor.get("remote_interface", ""),
+                    "source_device_id": device_id,
+                    "target_device_id": remote_id,
+                    "remote_name": neighbor.get("remote_name", ""),
+                    "evidence_artifact_id": artifact_id,
+                })
+    return {
+        "topology_id": topology_id,
+        "candidates": candidates,
+        "scanned_devices": scanned,
+        "note": "" if candidates else "no_unrecorded_neighbours_in_collected_evidence",
     }

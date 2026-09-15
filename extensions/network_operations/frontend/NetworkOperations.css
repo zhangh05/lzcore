@@ -1230,6 +1230,56 @@
   border: 1px solid var(--line);
 }
 
+/* 版本历史：一行一个结构版本，右侧跟操作；差异单独成块，便于快速扫读。 */
+.revision-item {
+  flex-wrap: wrap;
+}
+
+.revision-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.revision-item small {
+  margin-left: 0;
+}
+
+.revision-diff {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--r-6);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.revision-diff h4 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+}
+
+.revision-diff ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-12);
+}
+
+.revision-diff .diff-add {
+  color: var(--ok);
+}
+
+.revision-diff .diff-remove {
+  color: var(--danger);
+}
+
+.revision-diff .diff-change {
+  color: var(--warn);
+}
+
 /* Empty State */
 .topology-empty-state {
   display: flex;

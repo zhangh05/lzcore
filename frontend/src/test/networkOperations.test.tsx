@@ -15,6 +15,10 @@ const sampleTopology = {
   nodes: [{ node_id: "node-d1", linked_device_id: "d1", x: 100, y: 100, display_name: "核心交换机-1" }],
   links: [],
   groups: [{ group_id: "g1", name: "生产DC", kind: "datacenter", x: 50, y: 50, width: 400, height: 300 }],
+  canvas_items: [
+    { item_id: "text-note", kind: "text", text: "核心业务说明", x: 180, y: 160, width: 160, height: 36 },
+    { item_id: "ellipse-note", kind: "ellipse", text: "核心业务域", x: 220, y: 240, width: 220, height: 120 },
+  ],
   created_at: "2026-09-06T00:00:00Z",
   updated_at: "2026-09-06T00:00:00Z",
 };
@@ -205,16 +209,33 @@ test("dedicated topology route keeps the canvas primary and exposes the device p
   expect(screen.getByRole("button", { name: "查看详情" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "添加设备" })).toBeInTheDocument();
   expect(screen.getByTestId("palette-dev-d1")).toBeInTheDocument();
-  expect(within(screen.getByTestId("palette-dev-d1")).getByText("已在画布")).toBeInTheDocument();
+  expect(within(screen.getByTestId("palette-dev-d1")).getByText("已在画布 · 可再添加")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText("普通单击选择对象；直接在空白处按住鼠标拖框多选")).toBeInTheDocument();
+  expect(screen.getByText("单击选择对象；拖动平移画布；Shift + 拖框多选")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "移动布局" }));
   expect(screen.getByRole("button", { name: "移动布局" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText("普通单击只选一个；直接在空白处按住鼠标拖框多选，拖动任一已选对象可整体移动")).toBeInTheDocument();
+  expect(screen.getByText("单击对象打开管理面板；空白处拖动平移画布，拖动对象移动布局")).toBeInTheDocument();
   expect(screen.getByText("插入")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "连线" }));
   expect(screen.getByRole("button", { name: "连线" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: "网格" })).toHaveAttribute("aria-pressed", "true");
+  // 网格与接口标签是画布下方的常驻开关，不是模式按钮。
+  expect(screen.getByRole("checkbox", { name: "网格" })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "接口标签" })).toBeInTheDocument();
+});
+
+test("text and ellipse diagram items share the editable, deletable inspector", async () => {
+  render(<NetworkOperations topologyOnly />);
+  await screen.findByTestId("topo-item-text-note");
+
+  fireEvent.click(screen.getByTestId("topo-item-text-note"));
+  expect(await screen.findByRole("heading", { name: "图纸图元 · 核心业务说明" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "图元类型" })).toHaveValue("text");
+  expect(screen.getByRole("button", { name: "删除图纸图元" })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByTestId("topo-item-ellipse-note"));
+  expect(await screen.findByRole("heading", { name: "图纸图元 · 核心业务域" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "图元类型" })).toHaveValue("ellipse");
+  expect(screen.getByRole("button", { name: "删除图纸图元" })).toBeInTheDocument();
 });
 
 test("topology endpoint failure is shown as a loading error instead of an empty canvas", async () => {

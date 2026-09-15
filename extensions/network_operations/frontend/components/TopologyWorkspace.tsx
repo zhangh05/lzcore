@@ -14,6 +14,7 @@ import {
   IconBox,
   IconBranch,
   IconCheck,
+  IconClock,
   IconClose,
   IconCloud,
   IconEdit,
@@ -169,6 +170,59 @@ export type TopologyCompareResult = {
 };
 
 const base = "/extensions/network.operations";
+
+/** A neighbour seen on the wire that is not on the drawing yet. */
+type DiscoveryCandidate = {
+  source_node_id: string;
+  target_node_id: string;
+  source_interface: string;
+  target_interface: string;
+  source_device_id: string;
+  target_device_id: string;
+  remote_name: string;
+  evidence_artifact_id: string;
+};
+
+/** A stored structural snapshot of the canvas. */
+type TopologyRevision = {
+  revision_id: string;
+  version: number;
+  saved_at: string;
+  name: string;
+  summary: { nodes?: number; links?: number; groups?: number; canvas_items?: number };
+};
+
+/** What moved between a stored revision and the canvas as it stands now. */
+type RevisionDiff = {
+  revision_id: string;
+  revision_version: number;
+  revision_saved_at: string;
+  current_version: number;
+  nodes_added: Array<{ node_id: string; label: string }>;
+  nodes_removed: Array<{ node_id: string; label: string }>;
+  nodes_changed: Array<{ node_id: string; label: string; changes: Record<string, { from: string; to: string }> }>;
+  links_added: Array<{ link_id: string; label: string }>;
+  links_removed: Array<{ link_id: string; label: string }>;
+  links_changed: Array<{ link_id: string; label: string; changes: Record<string, { from: string; to: string }> }>;
+  groups_added: Array<{ group_id: string; label: string }>;
+  groups_removed: Array<{ group_id: string; label: string }>;
+  canvas_items_added: Array<{ item_id: string; label: string }>;
+  canvas_items_removed: Array<{ item_id: string; label: string }>;
+  summary: Record<string, number>;
+};
+
+const DIFF_FIELD_LABELS: Record<string, string> = {
+  linked_device_id: "关联设备",
+  device_type: "设备类型",
+  display_name: "显示名",
+  group_id: "所属分组",
+  source_interface: "本端接口",
+  target_interface: "对端接口",
+  kind: "链路类型",
+  source: "来源",
+  status: "状态",
+  label: "说明",
+};
 
 /** Mirrors the device role options on the registration form. */
 const batchTypeOptions: Array<[string, string]> = [
@@ -354,6 +408,14 @@ export default function TopologyWorkspace({
   const [showManualNodeModal, setShowManualNodeModal] = useState(false);
   const [manualNodeName, setManualNodeName] = useState("");
   const [manualNodeType, setManualNodeType] = useState("switch");
+
+  // Revision history: structural snapshots, never layout-only saves.
+  const [showRevisions, setShowRevisions] = useState(false);
+  const [revisions, setRevisions] = useState<TopologyRevision[]>([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [revisionDiff, setRevisionDiff] = useState<RevisionDiff | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState("");
 
   const [pendingConnection, setPendingConnection] = useState<{
     source: string;
@@ -870,6 +932,57 @@ export default function TopologyWorkspace({
     window.localStorage.setItem(bookmarkKey, JSON.stringify(next));
   };
 
+  /**
+   * Neighbour discovery. Hand-drawing a 200 device topology is not realistic;
+   * the neighbour tables already collected from the devices are, so offer the
+   * links that exist on the wire but were never drawn.
+   */
+  const [discovery, setDiscovery] = useState<{ candidates: DiscoveryCandidate[]; note: string; scanned_devices: number } | null>(null);
+  const [showDiscovery, setShowDiscovery] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [adoptedIds, setAdoptedIds] = useState<string[]>([]);
+  const handleDiscover = useCallback(async () => {
+    if (!activeTopology) return;
+    setDiscovering(true);
+    try {
+      const result = await apiRequest<{ candidates: DiscoveryCandidate[]; note: string; scanned_devices: number }>({
+        method: "GET",
+        url: `${base}/topologies/${activeTopology.topology_id}/discover`,
+        params: { workspace_id: workspaceId },
+      });
+      setDiscovery({ candidates: result.candidates || [], note: result.note || "", scanned_devices: result.scanned_devices || 0 });
+      setAdoptedIds((result.candidates || []).map((_, index) => String(index)));
+      setShowDiscovery(true);
+    } catch {
+      setNotice("邻居发现失败，请稍后重试", false);
+    } finally {
+      setDiscovering(false);
+    }
+  }, [activeTopology, workspaceId, setNotice]);
+
+  const adoptCandidates = useCallback(() => {
+    if (!activeTopology || !discovery) return;
+    const chosen = adoptedIds.map((index) => discovery.candidates[Number(index)]).filter(Boolean);
+    if (!chosen.length) {
+      setNotice("请先选择要采纳的候选链路", false);
+      return;
+    }
+    const links: TopologyLink[] = chosen.map((candidate) => ({
+      link_id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      source_node_id: candidate.source_node_id,
+      target_node_id: candidate.target_node_id,
+      source_interface: candidate.source_interface || "待核实",
+      target_interface: candidate.target_interface || "待核实",
+      kind: "physical",
+      source: "discovered",
+      status: "unknown",
+      evidence_refs: candidate.evidence_artifact_id ? [candidate.evidence_artifact_id] : [],
+    }));
+    pushState({ ...activeTopology, links: [...activeTopology.links, ...links] });
+    setNotice(`已采纳 ${links.length} 条发现链路，接口待现场核实`);
+    setShowDiscovery(false);
+  }, [activeTopology, discovery, adoptedIds, pushState, setNotice]);
+
   // The menu is transient: any gesture outside it dismisses it.
   useEffect(() => {
     if (!contextMenu) return;
@@ -941,9 +1054,11 @@ export default function TopologyWorkspace({
     });
     pushState({
       ...activeTopology,
-      nodes: activeTopology.nodes.map((node) => updates.has(node.node_id)
-        ? { ...node, ...(axis === "horizontal" ? { x: updates.get(node.node_id) } : { y: updates.get(node.node_id) }) }
-        : node),
+      nodes: activeTopology.nodes.map((node) => {
+        const next = updates.get(node.node_id);
+        if (next === undefined) return node;
+        return { ...node, ...(axis === "horizontal" ? { x: next } : { y: next }) };
+      }),
     });
     setNotice(`已等距分布 ${selected.length} 台设备`);
   }, [activeTopology, canvasSelectedElementIds, pushState, setNotice]);
@@ -1241,6 +1356,101 @@ export default function TopologyWorkspace({
       setComparing(false);
     }
   };
+
+  /**
+   * Revision history. Only structural edits are stored, so this list reads as
+   * "the decisions made on this drawing" rather than every mouse-up.
+   */
+  const handleOpenRevisions = useCallback(async () => {
+    if (!activeTopology) return;
+    setRevisionsLoading(true);
+    setRevisionDiff(null);
+    setShowRevisions(true);
+    try {
+      const res = await apiRequest<{ revisions: TopologyRevision[] }>({
+        method: "GET",
+        url: `${base}/topologies/${activeTopology.topology_id}/revisions`,
+        params: { workspace_id: workspaceId },
+      });
+      setRevisions(res.revisions || []);
+    } catch {
+      setNotice("版本历史读取失败，请稍后重试", false);
+    } finally {
+      setRevisionsLoading(false);
+    }
+  }, [activeTopology, workspaceId, setNotice]);
+
+  const handleDiffRevision = useCallback(async (revisionId: string) => {
+    if (!activeTopology) return;
+    setDiffLoading(true);
+    try {
+      const res = await apiRequest<{ diff: RevisionDiff }>({
+        method: "GET",
+        url: `${base}/topologies/${activeTopology.topology_id}/revisions/${revisionId}/diff`,
+        params: { workspace_id: workspaceId },
+      });
+      setRevisionDiff(res.diff);
+    } catch {
+      setNotice("版本差异读取失败，请稍后重试", false);
+    } finally {
+      setDiffLoading(false);
+    }
+  }, [activeTopology, workspaceId, setNotice]);
+
+  /**
+   * Agent conclusions land on the server, not in the canvas component.  After a
+   * turn finishes we reconcile: adopt the server drawing when the local canvas
+   * has nothing unsaved, and never silently overwrite pending local edits.
+   */
+  const handleAgentCompleted = useCallback(async () => {
+    void refreshFacts();
+    if (!activeTopology) return;
+    try {
+      const res = await apiRequest<{ topology: Topology }>({
+        method: "GET",
+        url: `${base}/topologies/${activeTopology.topology_id}`,
+        params: { workspace_id: workspaceId },
+      });
+      const remote = res.topology;
+      if (!remote || remote.version === activeTopology.version) return;
+      if (saveStatus !== "saved") {
+        setNotice("Agent 已更新服务端图纸；本地还有未保存改动，保存后即可看到结论", false);
+        return;
+      }
+      pushState(remote);
+      setNotice(`Agent 已把结论写回画布（版本 ${activeTopology.version} → ${remote.version}）`, true);
+    } catch {
+      // A failed reconciliation must not disturb the canvas the user is on.
+    }
+  }, [activeTopology, workspaceId, saveStatus, pushState, setNotice, refreshFacts]);
+
+  const handleRestoreRevision = useCallback(async (revisionId: string) => {
+    if (!activeTopology) return;
+    setRestoringId(revisionId);
+    try {
+      const res = await apiRequest<{ topology: Topology }>({
+        method: "POST",
+        url: `${base}/topologies/${activeTopology.topology_id}/revisions/${revisionId}/restore`,
+        params: { workspace_id: workspaceId },
+      });
+      if (res.topology) {
+        pushState(res.topology);
+        const restoredVersion = revisions.find((item) => item.revision_id === revisionId)?.version;
+        setNotice(
+          restoredVersion
+            ? `已按版本 ${restoredVersion} 的结构恢复，节点位置保持当前布局`
+            : "已按所选版本的结构恢复，节点位置保持当前布局",
+          true,
+        );
+      }
+      setShowRevisions(false);
+      setRevisionDiff(null);
+    } catch (err: unknown) {
+      setNotice((err as { message?: string })?.message || "恢复失败，请稍后重试", false);
+    } finally {
+      setRestoringId("");
+    }
+  }, [activeTopology, workspaceId, pushState, setNotice, revisions]);
 
   // Node selection inspector helpers
   const selectedNode = useMemo(() => {
@@ -1689,11 +1899,29 @@ export default function TopologyWorkspace({
             </details>
             <Button
               size="sm"
+              icon={<IconBranch size={13} />}
+              onClick={() => void handleDiscover()}
+              disabled={discovering || !activeTopology}
+              title="从已采集的 LLDP / CDP 邻居表中找出尚未绘制的链路"
+            >
+              {discovering ? "发现中…" : "发现邻居"}
+            </Button>
+            <Button
+              size="sm"
               icon={<IconEye size={13} />}
               onClick={handleCompareTopology}
               disabled={comparing}
             >
               {comparing ? "比对中..." : "拓扑比对"}
+            </Button>
+            <Button
+              size="sm"
+              icon={<IconClock size={13} />}
+              onClick={() => void handleOpenRevisions()}
+              disabled={revisionsLoading || !activeTopology}
+              title="查看图纸的结构变更历史并按需恢复"
+            >
+              {revisionsLoading ? "读取中…" : "版本历史"}
             </Button>
             <details className="studio-more"><summary>更多</summary><div>
             <Button
@@ -1802,7 +2030,7 @@ export default function TopologyWorkspace({
         <footer className="studio-statusbar"><span>{stateError || (topologyState ? `记录同步 ${new Date(topologyState.refreshed_at).toLocaleTimeString("zh-CN", { hour12: false })}` : "正在读取设备记录…")}</span><span>节点边框＝运行状态 · 底色＝厂商 · 链路＝图纸标注</span><button onClick={() => void refreshFacts()}><IconRefresh size={12} />刷新状态</button></footer>
       </main>
 
-      {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} skills={skills} selection={canvasSelection} onCompleted={() => { void refreshFacts(); if (saveStatus === "saved") void onReload(); }} /></aside>}
+      {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} skills={skills} selection={canvasSelection} onCompleted={() => { void handleAgentCompleted(); }} /></aside>}
 
       {contextMenu && (
         <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(event) => event.stopPropagation()}>
@@ -1816,6 +2044,7 @@ export default function TopologyWorkspace({
           {contextMenu.kind === "link" && (
             <>
               <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑链路</button>
+              <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setShowAgent(true); setIsInspectorOpen(false); setContextMenu(null); }}>围绕此链路对话</button>
               <button type="button" className="danger" onClick={() => { void handleRemoveLink(contextMenu.id); setContextMenu(null); }}>删除链路</button>
             </>
           )}
@@ -2671,6 +2900,84 @@ export default function TopologyWorkspace({
               </Button>
             </div>
           </form>
+        </dialog>
+      )}
+
+      {showDiscovery && discovery && (
+        <dialog open className="network-dialog-modal compare-modal" aria-label="邻居发现候选">
+          <div className="network-panel modal-panel compare-panel">
+            <div className="modal-header"><div><h3>邻居发现 · {discovery.candidates.length} 条候选</h3><p>来自已采集证据中的 LLDP / CDP 邻居表；不连接设备</p></div><Button aria-label="关闭邻居发现" onClick={() => setShowDiscovery(false)}><IconClose size={14} /></Button></div>
+            <div className="compare-notice-banner">只列出两端都能对应到画布设备的邻居。采纳后链路标记为「发现来源」并带上证据引用，接口待现场核实。</div>
+            <div className="compare-details-area">
+              {discovery.candidates.map((candidate, index) => (
+                <label className="compare-item" key={`${candidate.source_node_id}-${candidate.target_node_id}-${index}`}>
+                  <input type="checkbox" checked={adoptedIds.includes(String(index))} onChange={(event) => setAdoptedIds((current) => event.target.checked ? [...current, String(index)] : current.filter((value) => value !== String(index)))} />
+                  <span>{nodeLabelById.get(candidate.source_node_id) || candidate.source_device_id} {candidate.source_interface || "?"} ↔ {nodeLabelById.get(candidate.target_node_id) || candidate.target_device_id} {candidate.target_interface || "?"}</span>
+                  <small>邻居名 {candidate.remote_name}{candidate.evidence_artifact_id ? " · 已带证据" : ""}</small>
+                </label>
+              ))}
+              {!discovery.candidates.length && (
+                <p>{discovery.scanned_devices ? "已扫描的证据里没有尚未绘制的邻居。可先对设备执行一次包含 LLDP / CDP 命令的巡检，再回来发现。" : "当前设备还没有可解析的采集证据，请先执行巡检。"}</p>
+              )}
+            </div>
+            <div className="modal-actions">
+              <Button variant="primary" disabled={!discovery.candidates.length} onClick={adoptCandidates}>采纳选中的 {adoptedIds.length} 条</Button>
+              <Button onClick={() => setShowDiscovery(false)}>关闭</Button>
+            </div>
+          </div>
+        </dialog>
+      )}
+
+      {showRevisions && (
+        <dialog open className="network-dialog-modal compare-modal" aria-label="版本历史">
+          <div className="network-panel modal-panel compare-panel">
+            <div className="modal-header"><div><h3>版本历史 · {revisions.length} 个结构版本</h3><p>只记录结构变化；拖动位置、缩放不产生版本</p></div><Button aria-label="关闭版本历史" onClick={() => setShowRevisions(false)}><IconClose size={14} /></Button></div>
+            <div className="compare-notice-banner">恢复会把旧结构写成新版本，不会抹掉当前历史；节点位置沿用现在的布局。</div>
+            <div className="compare-details-area">
+              {revisions.map((revision) => (
+                <div className="compare-item revision-item" key={revision.revision_id}>
+                  <span className="compare-status-tag unknown">v{revision.version}</span>
+                  <span>{new Date(revision.saved_at).toLocaleString("zh-CN", { hour12: false })}</span>
+                  <small>{revision.summary.nodes ?? 0} 节点 · {revision.summary.links ?? 0} 链路 · {revision.summary.groups ?? 0} 分组 · {revision.summary.canvas_items ?? 0} 图元</small>
+                  <div className="revision-actions">
+                    <Button size="sm" onClick={() => void handleDiffRevision(revision.revision_id)}>{diffLoading ? "对比中…" : "与当前对比"}</Button>
+                    <Button size="sm" disabled={restoringId === revision.revision_id} onClick={() => void handleRestoreRevision(revision.revision_id)}>{restoringId === revision.revision_id ? "恢复中…" : "恢复到此版本"}</Button>
+                  </div>
+                </div>
+              ))}
+              {!revisions.length && !revisionsLoading && <p>还没有结构变更记录。改动节点、链路或图元后会自动出现版本。</p>}
+              {revisionsLoading && <p>读取中…</p>}
+            </div>
+            {revisionDiff && (
+              <div className="revision-diff">
+                <h4>版本 {revisionDiff.revision_version} → 当前 {revisionDiff.current_version} 的差异</h4>
+                {!revisionDiff.summary.total_changes && <p>与当前图纸一致，没有差异。</p>}
+                <ul>
+                  {revisionDiff.nodes_added.map((item) => <li key={`na-${item.node_id}`} className="diff-add">新增节点 {item.label}</li>)}
+                  {revisionDiff.nodes_removed.map((item) => <li key={`nr-${item.node_id}`} className="diff-remove">删除节点 {item.label}</li>)}
+                  {revisionDiff.nodes_changed.map((item) => (
+                    <li key={`nc-${item.node_id}`} className="diff-change">
+                      节点 {item.label}：{Object.entries(item.changes).map(([field, change]) => `${DIFF_FIELD_LABELS[field] || field} ${change.from || "空"} → ${change.to || "空"}`).join("；")}
+                    </li>
+                  ))}
+                  {revisionDiff.links_added.map((item) => <li key={`la-${item.link_id}`} className="diff-add">新增链路 {item.label}</li>)}
+                  {revisionDiff.links_removed.map((item) => <li key={`lr-${item.link_id}`} className="diff-remove">删除链路 {item.label}</li>)}
+                  {revisionDiff.links_changed.map((item) => (
+                    <li key={`lc-${item.link_id}`} className="diff-change">
+                      链路 {item.label}：{Object.entries(item.changes).map(([field, change]) => `${DIFF_FIELD_LABELS[field] || field} ${change.from || "空"} → ${change.to || "空"}`).join("；")}
+                    </li>
+                  ))}
+                  {revisionDiff.groups_added.map((group) => <li key={`ga-${group.group_id}`} className="diff-add">新增分组 {group.label}</li>)}
+                  {revisionDiff.groups_removed.map((group) => <li key={`gr-${group.group_id}`} className="diff-remove">删除分组 {group.label}</li>)}
+                  {revisionDiff.canvas_items_added.map((item) => <li key={`ia-${item.item_id}`} className="diff-add">新增图元 {item.label}</li>)}
+                  {revisionDiff.canvas_items_removed.map((item) => <li key={`ir-${item.item_id}`} className="diff-remove">删除图元 {item.label}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="modal-actions">
+              <Button onClick={() => setShowRevisions(false)}>关闭</Button>
+            </div>
+          </div>
         </dialog>
       )}
 
