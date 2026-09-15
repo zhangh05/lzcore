@@ -211,10 +211,10 @@ test("dedicated topology route keeps the canvas primary and exposes the device p
   expect(screen.getByTestId("palette-dev-d1")).toBeInTheDocument();
   expect(within(screen.getByTestId("palette-dev-d1")).getByText("已在画布 · 可再添加")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText("单击选择对象；拖动平移画布；Shift + 拖框多选")).toBeInTheDocument();
+  expect(screen.getByText("单击选择对象；拖动对象移动位置，拖动空白平移画布；Shift + 拖框多选")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "移动布局" }));
   expect(screen.getByRole("button", { name: "移动布局" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText("单击对象打开管理面板；空白处拖动平移画布，拖动对象移动布局")).toBeInTheDocument();
+  expect(screen.getByText("单击对象打开管理面板；拖动对象移动布局，拖动空白平移画布")).toBeInTheDocument();
   expect(screen.getByText("插入")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "连线" }));
   expect(screen.getByRole("button", { name: "连线" })).toHaveAttribute("aria-pressed", "true");

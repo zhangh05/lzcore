@@ -307,7 +307,12 @@ export default function NetOpsCanvas(props: Props) {
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
           { selector: "edge", style: { width: 2.5, opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": "14px", "target-text-margin-y": "14px" } },
           { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
-          { selector: ".canvas-item-text", style: { "background-opacity": 0, "border-width": 0, "text-valign": "center", "text-halign": "left", "font-size": 14, "font-weight": 500, "text-max-width": "data(textMaxWidth)" } },
+                    // A text box with no border and no fill is an invisible hit area: the
+          // user sees blank canvas, right-clicks it, and gets item actions they
+          // cannot explain — or aims at the glyphs and misses the box. A faint
+          // dashed outline makes the box look like a text box and makes its
+          // bounds honest, without the weight of a filled plate.
+          { selector: ".canvas-item-text", style: { "background-opacity": 0, "border-width": 1, "border-style": "dashed", "border-opacity": 0.45, "text-valign": "center", "text-halign": "left", "font-size": 14, "font-weight": 500, "text-max-width": "data(textMaxWidth)" } },
           // Selection adds a halo instead of repainting the border: the border
           // carries operational state, and a selected node must still show
           // whether it is reachable.
@@ -409,7 +414,10 @@ export default function NetOpsCanvas(props: Props) {
       const SNAP = 5;
       cy.on("drag", "node", (event) => {
         const node = event.target as CyNode | undefined;
-        if (!node || propsRef.current.mode !== "move" || node.id().startsWith("group-")) return;
+        // Dragging an object moves it in every mode. The mode decides what a
+        // *click* does, not whether the canvas is editable — a drag that snaps
+        // back on release is worse than no drag at all.
+        if (!node || node.id().startsWith("group-")) return;
         const selectedIds = new Set(cy.$("node:selected").map((item) => item.id()));
         const others = propsRef.current.topology.nodes.filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id));
         if (!others.length) return;
@@ -458,9 +466,17 @@ export default function NetOpsCanvas(props: Props) {
         guideSignatureRef.current = "";
         setAlignGuides([]);
       });
-      cy.on("dragfree", "node", () => {
-        if (propsRef.current.mode !== "move") return;
-        const positions = cy.$("node:selected").map((node) => ({ element_id: node.id(), ...node.position() })).filter((node) => !node.element_id.startsWith("group-"));
+      cy.on("dragfree", "node", (event) => {
+        // Persist what was actually dragged, plus the rest of the selection so a
+        // multi-selection still moves together. The dragged node is included even
+        // when it was not selected first, otherwise grabbing a node and letting
+        // go would leave the canvas disagreeing with the renderer.
+        const dragged = (event.target as CyNode | undefined)?.id?.() || "";
+        const ids = new Set(cy.$("node:selected").map((node) => node.id()));
+        if (dragged) ids.add(dragged);
+        const positions = cy.nodes()
+          .filter((node) => ids.has(node.id()) && !node.id().startsWith("group-"))
+          .map((node) => ({ element_id: node.id(), ...node.position() }));
         if (positions.length) propsRef.current.onMoveElements(positions);
       });
     }).catch(() => undefined);
@@ -474,7 +490,12 @@ export default function NetOpsCanvas(props: Props) {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    const layoutEditing = props.mode === "move";
+    // Objects are draggable whenever the canvas is being edited, not only in
+    // the layout mode. Requiring a mode switch to move a node made the default
+    // mode's drag gesture a dead one: the node moved under the pointer and then
+    // snapped back, because the position was never persisted. Connect mode is
+    // the exception — there a drag would compete with picking two endpoints.
+    const layoutEditing = props.mode !== "connect";
     // Panning stays on in every mode: Cytoscape couples wheel zoom to
     // userPanningEnabled, and dragging empty canvas to pan is what every
     // network map does. Marquee selection moved to Shift + drag.
