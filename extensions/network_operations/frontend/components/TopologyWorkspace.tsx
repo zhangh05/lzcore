@@ -432,6 +432,8 @@ export default function TopologyWorkspace({
   const [canvasQuery, setCanvasQuery] = useState("");
   const [legendOpen, setLegendOpen] = useState(true);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  /** The object a locate action is still trying to centre, if any. */
+  const pendingFocusRef = useRef<string>("");
   const [topologyState, setTopologyState] = useState<TopologyState | null>(null);
   const [stateError, setStateError] = useState("");
   const [layoutBusy, setLayoutBusy] = useState(false);
@@ -1239,9 +1241,19 @@ export default function TopologyWorkspace({
     // Release focus, otherwise the shortcut guard keeps swallowing keys and
     // the user has to click the canvas before V/M/C work again.
     searchInputRef.current?.blur();
-    // Let the inspector settle first; it resizes the canvas and would
-    // otherwise drag the focused node away from the centre.
-    window.setTimeout(() => canvasApiRef.current?.focusIds([id], 1.1), 260);
+    // Selecting an object opens the inspector, which resizes the canvas. A
+    // single centring pass therefore lands the object off-centre: the focus
+    // runs first, then the container shrinks underneath it. Centre once so the
+    // object is immediately visible, then again after the inspector's
+    // transition has finished so it ends up where the user expects — which is
+    // also what makes "locate, then click the object" work.
+    pendingFocusRef.current = id;
+    window.setTimeout(() => {
+      if (pendingFocusRef.current === id) canvasApiRef.current?.focusIds([id], 1.1);
+    }, 260);
+    window.setTimeout(() => {
+      if (pendingFocusRef.current === id) canvasApiRef.current?.focusIds([id], 1.1);
+    }, 620);
   }, []);
 
   const nudgeSelected = useCallback((dx: number, dy: number) => {
@@ -2316,6 +2328,10 @@ export default function TopologyWorkspace({
               <button type="button" onClick={() => { void handleAutoLayout(); setContextMenu(null); }}>自动排布</button>
               <hr />
               <button type="button" onClick={() => { handleAddCanvasItem("rectangle"); setContextMenu(null); }}>插入矩形区域</button>
+              {/* All three shapes were reachable from the inspector's type
+                  selector, but only two could be created here — an ellipse had
+                  to be drawn as a rectangle first and then retyped. */}
+              <button type="button" onClick={() => { handleAddCanvasItem("ellipse"); setContextMenu(null); }}>插入椭圆标注</button>
               <button type="button" onClick={() => { handleAddCanvasItem("text"); setContextMenu(null); }}>插入文本框</button>
             </>
           )}
