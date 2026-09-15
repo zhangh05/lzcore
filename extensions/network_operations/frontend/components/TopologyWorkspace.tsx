@@ -371,7 +371,7 @@ export default function TopologyWorkspace({
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "conflict">("saved");
   // A conflict is a decision, not an error: hold both sides until the user picks.
   const [conflict, setConflict] = useState<{
-    mine: Topology; theirs: Topology; merged: Topology;
+    base: Topology; mine: Topology; theirs: Topology; merged: Topology;
     conflicts: MergeConflict[]; stats: MergeStats;
   } | null>(null);
   const [showConflict, setShowConflict] = useState(false);
@@ -611,7 +611,7 @@ export default function TopologyWorkspace({
       // Any resolution writes on top of their version, so the next save is
       // accepted instead of conflicting again.
       serverVersionsRef.current.set(mine.topology_id, theirs.version);
-      setConflict({ mine, theirs, merged: result.topology, conflicts: result.conflicts, stats: result.stats });
+      setConflict({ base: lastConfirmed, mine, theirs, merged: result.topology, conflicts: result.conflicts, stats: result.stats });
       setShowConflict(true);
       saveStatusRef.current = "conflict";
       setSaveStatus("conflict");
@@ -628,6 +628,10 @@ export default function TopologyWorkspace({
     (topo: Topology) => {
       const revision = revisionRef.current;
       const work = async () => {
+      // A conflict is an explicit decision point. Saves queued before it was
+      // detected are stale by definition; sending them would only create more
+      // 409s and could replace the snapshot the user is reviewing.
+      if (saveStatusRef.current === "conflict") return;
       saveStatusRef.current = "saving"; setSaveStatus("saving");
       try {
         const res = await apiRequest<{ topology: Topology }>({
@@ -657,7 +661,7 @@ export default function TopologyWorkspace({
       } catch (err: unknown) {
         const errMsg = (err as { message?: string })?.message || "自动保存拓扑失败";
         if (errMsg.includes("version_conflict") || errMsg.includes("version conflict")) {
-          void resolveConflict(topo);
+          await resolveConflict(topo);
           return;
         }
         saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
@@ -674,11 +678,23 @@ export default function TopologyWorkspace({
   const pushState = useCallback(
     (next: Topology) => {
       if (!activeTopology) return;
+      const conflictPending = saveStatusRef.current === "conflict";
       setHistory((prev) => [...prev.slice(-20), activeTopology]);
       setFuture([]);
       revisionRef.current += 1;
-      saveStatusRef.current = "unsaved";
       setActiveTopology(next);
+      if (conflictPending) {
+        // The user may choose “稍后处理” and keep editing. Recompute against
+        // the same confirmed base so the eventual decision contains every
+        // local edit, not merely the snapshot that first hit the conflict.
+        setConflict((pending) => {
+          if (!pending) return pending;
+          const merged = mergeTopologies(pending.base, next, pending.theirs);
+          return { ...pending, mine: next, merged: merged.topology, conflicts: merged.conflicts, stats: merged.stats };
+        });
+        return;
+      }
+      saveStatusRef.current = "unsaved";
       setSaveStatus("unsaved");
 
       if (saveTimerRef.current) {
@@ -705,6 +721,11 @@ export default function TopologyWorkspace({
       return;
     }
     const target = choice === "merged" ? conflict.merged : conflict.mine;
+    // `pushState` intentionally does not auto-save while a conflict is open.
+    // This choice resolves it, so mark the state writable before scheduling the
+    // new versioned save.
+    saveStatusRef.current = "unsaved";
+    setSaveStatus("unsaved");
     pushState({ ...target, version: conflict.theirs.version });
     setNotice(
       choice === "merged"
@@ -1018,7 +1039,9 @@ export default function TopologyWorkspace({
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    URL.revokeObjectURL(url);
+    // Some browsers start consuming the Object URL after the click handler
+    // returns. Revoking it in the same turn can leave a PDF download empty.
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }, []);
 
   const exportCanvas = useCallback(async (format: "png" | "svg" | "pdf") => {

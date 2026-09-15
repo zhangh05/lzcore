@@ -124,9 +124,10 @@ export async function buildImagePdf(image: RgbImage, options: PdfPageOptions = {
   push(ascii("endstream\nendobj\n"));
 
   mark(5);
+  const filter = compressed ? " /Filter /FlateDecode" : "";
   push(ascii(
     `5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} ` +
-    `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter ${compressed ? "/FlateDecode" : "[ ]"} ` +
+    `/ColorSpace /DeviceRGB /BitsPerComponent 8${filter} ` +
     `/Length ${pixelBytes.length} >>\nstream\n`,
   ));
   push(pixelBytes);

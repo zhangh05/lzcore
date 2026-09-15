@@ -257,6 +257,39 @@ test("a concurrent edit is offered as a merge instead of a dead-end error", asyn
   expect(putPayloads[1].nodes).toEqual([]);                            // my deletion kept
 });
 
+test("edits made while a conflict is deferred are included in its eventual merge", async () => {
+  const theirs = { ...sampleTopology, description: "对方补充的说明", version: 7 };
+  const putPayloads: Array<Record<string, unknown>> = [];
+  const passthrough = vi.mocked(apiRequest).getMockImplementation()!;
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.method === "PUT") {
+      putPayloads.push((request.data || {}) as Record<string, unknown>);
+      if (putPayloads.length === 1) throw new Error("topology_version_conflict");
+      return { ok: true, topology: { ...theirs, version: 8 } } as never;
+    }
+    if (request.url?.endsWith("/topologies/t1")) return { topology: theirs } as never;
+    return passthrough(request);
+  });
+
+  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
+  fireEvent.click(await screen.findByRole("button", { name: "从拓扑中移除节点" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
+
+  const firstDialog = await screen.findByRole("dialog", { name: "编辑冲突" }, { timeout: 4000 });
+  fireEvent.click(within(firstDialog).getByRole("button", { name: "稍后处理" }));
+  fireEvent.click(screen.getByText("更多"));
+  fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
+  fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "我在冲突期间补充的名字" } });
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "保存" }));
+
+  fireEvent.click(screen.getByRole("button", { name: "有冲突待处理" }));
+  fireEvent.click(within(await screen.findByRole("dialog", { name: "编辑冲突" })).getByRole("button", { name: "合并双方改动并保存" }));
+
+  await waitFor(() => expect(putPayloads).toHaveLength(2), { timeout: 4000 });
+  expect(putPayloads[1]).toMatchObject({ version: 7, name: "我在冲突期间补充的名字", description: "对方补充的说明", nodes: [] });
+});
+
 test("a field both sides changed is listed for review, not decided silently", async () => {
   // They renamed the drawing; I renamed it too. Both changed the same field,
   // so the dialog must say so and keep the server value.

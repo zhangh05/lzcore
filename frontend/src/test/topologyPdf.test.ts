@@ -92,7 +92,9 @@ describe("topology PDF export", () => {
       expect(fallback.compressed).toBe(false);
       expect(fallback.bytes).toEqual(image.data);
       const pdf = await buildImagePdf(image);
-      expect(text(pdf)).toContain("/Filter [ ]");
+      // Uncompressed samples need no filter entry. An empty filter array is
+      // accepted by some readers but rejected by stricter PDF consumers.
+      expect(text(pdf)).not.toContain("/Filter");
     } finally {
       globalThis.CompressionStream = original;
     }

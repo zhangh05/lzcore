@@ -266,7 +266,11 @@ export default function NetOpsCanvas(props: Props) {
         maxZoom: 4,
         boxSelectionEnabled: false,
         style: [
-          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "8px", "font-size": 12, "font-weight": 600, color: "#26384a", "text-wrap": "ellipsis", "text-max-width": 132, "text-background-color": "#ffffff", "text-background-opacity": 0.88, "text-background-padding": "2px", width: 94, height: 76, shape: "roundrectangle", "border-width": "data(statusWidth)", "border-color": "data(statusColor)", "background-color": "data(vendorTint)", "text-opacity": "data(labelOpacity)", "z-index": 10 } },
+          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "8px", "font-size": 12, "font-weight": 600, color: "#26384a", "text-wrap": "ellipsis", "text-max-width": 132, "text-background-color": "#ffffff", "text-background-opacity": 0.88, "text-background-padding": "2px", width: 94, height: 76, shape: "roundrectangle", "border-width": "data(statusWidth)", "border-color": "data(statusColor)", "text-opacity": "data(labelOpacity)", "z-index": 10 } },
+          // Drawing items deliberately have no vendor field. Keeping this data
+          // mapping on asset nodes prevents Cytoscape from warning on every
+          // canvas refresh when it encounters a text box or an ellipse.
+          { selector: "node[vendorTint]", style: { "background-color": "data(vendorTint)" } },
           // Canvas items and groups deliberately have no device icon. Apply
           // image mappings only to asset nodes so Cytoscape stays warning-free.
           { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "contain", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
@@ -545,10 +549,11 @@ export default function NetOpsCanvas(props: Props) {
     cy.style()
       .selector("node")
       .style({
-        "background-color": dark ? "#1c242c" : "data(vendorTint)",
         color: dark ? "#dce7ef" : "#26384a",
         "text-background-color": dark ? "#111820" : "#ffffff",
       })
+      .selector("node[vendorTint]")
+      .style({ "background-color": dark ? "#1c242c" : "data(vendorTint)" })
       .selector("edge")
       .style({ color: dark ? "#c8d5df" : "#334155", "text-background-color": dark ? "#111820" : "#ffffff" })
       .selector(".canvas-item")
