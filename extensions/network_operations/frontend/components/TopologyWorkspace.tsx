@@ -417,7 +417,7 @@ export default function TopologyWorkspace({
   // canvas width for every user.
   const [showLibrary, setShowLibrary] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-  const [canvasMode, setCanvasMode] = useState<"select" | "move" | "connect">("select");
+  const [canvasMode, setCanvasMode] = useState<"select" | "connect">("select");
   const [gridEnabled, setGridEnabled] = useState(true);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);
@@ -985,7 +985,7 @@ export default function TopologyWorkspace({
     pushState({ ...activeTopology, canvas_items: [...(activeTopology.canvas_items || []), item] });
     setSelectedElement({ type: "canvas_item", itemId: item.item_id });
     setIsInspectorOpen(true);
-    setCanvasMode("move");
+    setCanvasMode("select");
     setNotice(kind === "text" ? "已添加文本框，可在右侧编辑内容并拖动定位" : "已添加图纸形状，可在右侧编辑说明并拖动定位");
   }, [activeTopology, pushState, setNotice]);
 
@@ -1393,7 +1393,6 @@ export default function TopologyWorkspace({
       }
       switch (e.key.toLowerCase()) {
         case "v": setCanvasMode("select"); break;
-        case "m": setCanvasMode("move"); break;
         case "c": setCanvasMode("connect"); break;
         case "g": if (e.shiftKey) setGridEnabled((value) => !value); break;
         case "i": setShowInterfaces((value) => !value); break;
@@ -2050,7 +2049,6 @@ export default function TopologyWorkspace({
         <div className="topology-editbar">
           <div className="studio-edit-tools" role="group" aria-label="画布工具">
             <button className="studio-mode-button" aria-pressed={canvasMode === "select"} onClick={() => setCanvasMode("select")}><IconMenu size={13} />选择</button>
-            <button className="studio-mode-button" aria-pressed={canvasMode === "move"} onClick={() => setCanvasMode("move")}><IconArrowsX size={13} />移动布局</button>
             <button className="studio-mode-button" aria-pressed={canvasMode === "connect"} onClick={() => setCanvasMode("connect")}><IconLink size={13} />连线</button>
             <details className="studio-insert-menu"><summary><IconBox size={13} />插入</summary><div>
               <button type="button" onClick={() => handleAddCanvasItem("rectangle")}>矩形区域</button>
@@ -2231,7 +2229,7 @@ export default function TopologyWorkspace({
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
         <div className={`topology-canvas-viewport mode-${canvasMode}`}>
           <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}
-            {filterActive && <span className="canvas-selection-count canvas-filter-count">过滤中 · {dimmedNodeIds.length} 个对象已淡化<button type="button" aria-label="清除画布过滤" onClick={() => setCanvasFilter({ vendors: [], statuses: [], groups: [] })}><IconClose size={11} /></button></span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : canvasMode === "move" ? "单击对象打开管理面板；拖动对象移动布局，拖动空白平移画布" : "单击选择对象；拖动对象移动位置，拖动空白平移画布；Shift + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
+            {filterActive && <span className="canvas-selection-count canvas-filter-count">过滤中 · {dimmedNodeIds.length} 个对象已淡化<button type="button" aria-label="清除画布过滤" onClick={() => setCanvasFilter({ vendors: [], statuses: [], groups: [] })}><IconClose size={11} /></button></span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : "单击选择对象，拖动对象移动位置，拖动空白平移画布；Shift + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -2329,7 +2327,7 @@ export default function TopologyWorkspace({
           <div className="shortcut-help" onClick={(event) => event.stopPropagation()}>
             <header><strong>画布快捷键</strong><button type="button" onClick={() => setShowShortcutHelp(false)} aria-label="关闭"><IconClose size={13} /></button></header>
             <dl>
-              <div><dt>V / M / C</dt><dd>选择 / 移动布局 / 连线</dd></div>
+              <div><dt>V / C</dt><dd>选择 / 连线</dd></div>
               <div><dt>Shift + 拖动</dt><dd>框选多个对象</dd></div>
               <div><dt>Delete</dt><dd>删除选中对象</dd></div>
               <div><dt>Ctrl/⌘ + A</dt><dd>全选</dd></div>

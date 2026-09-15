@@ -6,7 +6,7 @@ import type { Device, Topology, TopologyCanvasItem, TopologyLink } from "./Topol
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 
 /** Selecting information must never mutate the drawing by accident. */
-type CanvasMode = "select" | "move" | "connect";
+type CanvasMode = "select" | "connect";
 type Position = { element_id: string; x: number; y: number };
 
 /** Imperative handles the surrounding workspace needs (export, focus, view). */
@@ -357,18 +357,6 @@ export default function NetOpsCanvas(props: Props) {
             cy.getElementById(source).removeClass("node-connecting");
             connectingFromRef.current = null;
             if (source !== id) current.onConnect(source, id);
-            return;
-          }
-          if (current.mode === "move") {
-            // Move mode still needs an explicit selection on a click.  Dragging
-            // is left entirely to Cytoscape so a node drag and a sheet pan can
-            // share the same native pointer stream without a React overlay.
-            window.setTimeout(() => {
-              cy.elements().unselect();
-              cy.getElementById(id).select();
-              current.onSelectionChange([id]);
-            }, 0);
-            current.onSelectNode(id);
             return;
           }
           // Cytoscape must use additive selection for a marquee to retain all
