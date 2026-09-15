@@ -191,6 +191,13 @@
   justify-content: flex-end;
 }
 
+/* The turn separator. With the answer no longer sitting in a box, this rule is
+   what tells the reader where one turn ends and the next begins. */
+.message-row.assistant {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line-2);
+}
+
 .message-stack,
 .message-row.assistant .message-stack {
   width: calc(100% - 44px);
@@ -212,19 +219,24 @@
   font-size: 11px;
 }
 
+/* The agent marker is a quiet glyph, not a filled brand chip. It was the most
+   saturated element in the conversation, which spent the accent — the product's
+   signal colour — on identity rather than on state or action. */
 .message-avatar.agent {
-  color: var(--accent-text);
-  background: var(--accent);
+  color: var(--text-3);
+  background: var(--surface-hover);
 }
 
+/* An answer is a report, not a chat bubble: no tint, no radius, no box. Its
+   hierarchy comes from the rule above it, its own typography, and the space
+   between blocks — the way a technical notebook reads. */
 .chat-bubble.assistant {
   width: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: 0;
   color: var(--text-2);
-  /* Assistant content stays neutral; color is reserved for state and action. */
-  background: var(--message-assistant);
+  background: none;
   border: 0;
-  border-radius: 12px;
+  border-radius: 0;
   box-shadow: none;
   font-size: 14px;
   line-height: 1.78;

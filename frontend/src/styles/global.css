@@ -3015,8 +3015,7 @@ details.collapse[open] summary::before {
 }
 
 .chat-bubble,
-.chat-bubble.user,
-.chat-bubble.assistant {
+.chat-bubble.user {
   width: fit-content;
   max-width: 100%;
   min-width: 0;
@@ -3055,21 +3054,10 @@ details.collapse[open] summary::before {
   border-color: rgba(56, 72, 90, 0.58);
 }
 
-.chat-bubble.assistant {
-  width: 100%;
-  padding: 14px 18px;
-  background: var(--message-assistant);
-  border-color: var(--message-assistant-border);
-  border-radius: 10px;
-  font-size: var(--fs-13);
-  line-height: 1.55;
-  white-space: normal;
-}
-
-[data-theme="dark"] .chat-bubble.assistant {
-  background: rgba(18, 26, 35, 0.84);
-  border-color: rgba(58, 76, 96, 0.78);
-}
+/* `.chat-bubble.assistant` is owned by pages/AgentWorkbench/AgentWorkbench.css.
+   It used to be styled here as a tinted, rounded box, and the dark-theme
+   override below it had higher specificity than the workbench's own rule —
+   so removing the bubble there had no effect in dark theme. */
 
 .chat-bubble.user {
   border-top-right-radius: 5px;
@@ -4413,7 +4401,6 @@ details.collapse[open] summary::before {
 
   .chat-bubble,
   .chat-bubble.user,
-  .chat-bubble.assistant,
   .chat-result-inline {
     max-width: 100%;
     width: fit-content;
@@ -4698,7 +4685,7 @@ details.collapse[open] summary::before {
   .wb-input-bar { padding: 6px 12px; }
 
   /* Chat bubbles full-width */
-  .chat-bubble, .chat-bubble.user, .chat-bubble.assistant {
+  .chat-bubble, .chat-bubble.user {
     max-width: 100%;
   }
   .chat-result-inline {
