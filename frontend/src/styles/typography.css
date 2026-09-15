@@ -516,4 +516,68 @@ h6 {
   padding-bottom: var(--flow-tight);
 }
 
+/* ── Technical metadata ───────────────────────────────────────────────────
+   An operations product talks in identifiers: a run, a trace, a tool, a
+   duration, a source. They are the vocabulary an operator uses to say what
+   happened, so they deserve a deliberate treatment rather than whatever a
+   component happened to inherit.
+
+   The treatment is deliberately plain: mono, tabular figures so columns of
+   numbers align, small, and at the quietest text level. Evidence sits behind
+   the conclusion it supports — never beside it as decoration. No brackets, no
+   coloured terminal, no blinking cursor: this is a workspace, not a console.
+
+   Use `.meta` for a single identifier, `.meta-label` for the micro label that
+   names it, and `.meta-fact` for the label+value pair used in a row. */
+:root {
+  --meta-size: 11.5px;
+  --meta-label-size: 10px;
+  --meta-tracking: 0.02em;
+  --meta-label-tracking: 0.08em;
+  --meta-color: var(--text-4);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--meta-tracking);
+  color: var(--meta-color);
+  /* An identifier is one token: it must not wrap mid-way in a narrow column. */
+  white-space: nowrap;
+}
+
+.meta-label {
+  font-family: var(--font-mono);
+  font-size: var(--meta-label-size);
+  letter-spacing: var(--meta-label-tracking);
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.meta-fact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--flow-hair);
+  min-width: 0;
+}
+
+.meta-fact > .meta-label {
+  flex: 0 0 auto;
+}
+
+.meta-fact > .meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A duration is the one metadata value that is also a measurement, so it keeps
+   tabular figures even when it is the only thing on the line. */
+.meta-duration {
+  font-family: var(--font-mono);
+  font-size: var(--meta-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
 }

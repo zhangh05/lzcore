@@ -1,6 +1,5 @@
 import { memo } from "react";
 import { QUICK_CHIPS } from "../WorkbenchQuickChips";
-import { IconSparkle } from "../../../components/Icon";
 
 export interface WorkbenchEmptyStateProps {
   currentSessionId: string | null;
@@ -11,19 +10,19 @@ export const WorkbenchEmptyState = memo(function WorkbenchEmptyState({
   currentSessionId,
   onPickChip,
 }: WorkbenchEmptyStateProps) {
+  /*
+    The empty state's job is to get work started, not to introduce the product.
+    It is a lead-in to the composer directly below it: one line of intent, then
+    the real starting points. No badge, no title-plus-paragraph block, no
+    marketing copy — the composer already carries the input affordance and its
+    own guidance line, so repeating it here only pushes the cursor further away.
+  */
   return (
     <div className="wb-empty" data-testid="workbench-empty">
-      <div className="wb-empty-badge">
-        <IconSparkle size={13} weight="fill" />
-        <span className="wb-empty-kicker">运维工作台</span>
-      </div>
-      <h2>{currentSessionId ? "开始处理任务" : "请先新建会话"}</h2>
-      <p>
-        {currentSessionId
-          ? "描述问题、上传文件或给出目标。联智中枢会调用合适的工具，实时展示处理进度，并保留执行证据。"
-          : "点击左侧“新会话”，创建后即可开始。"}
-      </p>
-
+      {/* A heading, not a paragraph: the lead line names this block, and screen
+          readers navigate by it. It is sized as a question rather than as a
+          page title, so the heading role costs no visual weight. */}
+      <h2 className="wb-empty-lead">{currentSessionId ? "今天需要处理什么？" : "请先新建会话"}</h2>
       <div className="wb-empty-chips">
         {QUICK_CHIPS.map((chip) => (
           <button

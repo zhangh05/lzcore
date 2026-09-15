@@ -11,7 +11,7 @@
 
 .wb-conversation-column {
   display: grid;
-  grid-template-rows: var(--h-header) minmax(0, 1fr) auto auto;
+  grid-template-rows: var(--h-context) minmax(0, 1fr) auto auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -19,39 +19,58 @@
   border-right: 1px solid var(--line-2);
 }
 
+/* Context bar — 44px, deliberately lighter than the 56px global header.
+   It states which session and which model the conversation belongs to and
+   otherwise stays out of the way; the identifiers are technical metadata, not
+   status copy. Horizontal padding matches `.wb-chat-list` so the title sits on
+   the same left edge as the messages it labels (it used to sit 8px further in,
+   which read as a misalignment rather than as a hierarchy). */
 .wb-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: var(--space-4);
   min-width: 0;
-  padding: 0 var(--space-6);
+  padding: 0 var(--space-4);
   background: var(--surface);
   border-bottom: 1px solid var(--line-2);
 }
 
 .wb-header-context {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
   min-width: 0;
-}
-
-.wb-header-kicker {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--text-4);
-  font-size: var(--fs-11);
-  font-weight: var(--weight-heading);
-  letter-spacing: 0.08em;
 }
 
 .wb-header h1 {
   overflow: hidden;
   color: var(--text);
-  font-size: 16px;
-  font-weight: var(--weight-heading);
-  letter-spacing: -0.015em;
+  font-size: 15px;
+  font-weight: var(--weight-subhead);
+  /* CJK titles take no negative tracking; only Latin display type does. */
+  letter-spacing: var(--tracking-cjk);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.wb-header-fact {
+  flex: 0 0 auto;
+  max-width: 220px;
+  align-items: center;
+  gap: 5px;
+}
+
+.wb-header-fact .dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  background: var(--ok);
+  border-radius: 50%;
+}
+
+.wb-header-fact .dot.warn { background: var(--warn); }
+.wb-header-fact .dot.err { background: var(--danger); }
 
 .wb-header-actions {
   display: flex;
@@ -59,30 +78,6 @@
   gap: 6px;
   min-width: 0;
 }
-
-.wb-header-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  max-width: 220px;
-  margin-right: 8px;
-  overflow: hidden;
-  color: var(--text-3);
-  font-size: var(--fs-12);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wb-header-status .dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  background: var(--ok);
-  border-radius: 50%;
-}
-
-.wb-header-status .dot.warn { background: var(--warn); }
-.wb-header-status .dot.err { background: var(--danger); }
 
 .wb-mode-btn,
 .wb-export-btn {
@@ -130,61 +125,32 @@
   max-width: var(--w-reading);
   flex-direction: column;
   align-items: flex-start;
-  /* 空状态是工作台的默认首屏。之前顶在顶部，下半屏全空，看起来像"没加载完"。
-     垂直居中后构图才成立。 */
-  justify-content: center;
-  padding: var(--space-8) var(--space-6);
+  /* Anchored to the bottom, directly above the composer: the empty state is the
+     composer's lead-in, so the space above it reads as deliberate room rather
+     than as content that failed to load. */
+  justify-content: flex-end;
+  padding: var(--space-8) var(--space-6) var(--space-6);
   color: var(--text-3);
   text-align: left;
 }
 
 .wb-empty::before { display: none; }
 
-/* .wb-empty-kicker 是 .wb-empty-badge 的子元素，之前还带 14px margin-bottom，
-   等于在 4px padding 的胶囊内部再撑 14px，把胶囊顶成一个歪的长条。归零。 */
-.wb-empty-kicker {
-  margin-bottom: 0;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: var(--weight-heading);
-}
-
-.wb-empty-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  margin-bottom: var(--flow-loose);
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  font-size: var(--fs-11);
-  font-weight: 700;
-  line-height: 1;
-}
-
-.wb-empty h2 {
+/* One line of intent. Sized as a question rather than as a page title: this is
+   the top of the composer, not a hero, and the composer's own guidance line
+   carries the explanation. */
+.wb-empty-lead {
   margin: 0 0 var(--flow-base);
-  color: var(--text);
-  font-size: var(--fs-24);
-  font-weight: 750;
-  /* 中文负字距会把"开始处理任务"几个字挤到一起，跟 typography.css 的
-     CJK 字距归零原则冲突。 */
+  color: var(--text-2);
+  font-size: var(--fs-16);
+  font-weight: var(--weight-subhead);
   letter-spacing: var(--tracking-cjk);
-}
-
-.wb-empty p {
-  max-width: 600px;
-  margin-bottom: var(--flow-block);
-  color: var(--text-3);
-  font-size: var(--fs-14);
-  line-height: var(--lh-body);
 }
 
 .wb-empty-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 9px;
+  gap: var(--flow-tight);
 }
 
 .wb-input-chip {
@@ -843,7 +809,8 @@
 @media (max-width: 1180px) {
   .wb-shell { grid-template-columns: minmax(0, 1fr) var(--w-progress); }
   .wb-header { padding-inline: 18px; }
-  .wb-header-status { display: none; }
+  /* The model stays visible; the session id is the first thing to go. */
+  .wb-header-session { display: none; }
   .task-progress-header, .task-phase-list, .task-progress-footer { padding-inline: 16px; }
 }
 
@@ -860,7 +827,7 @@
 }
 
 @media (max-width: 560px) {
-  .wb-header-status { display: none; }
+  .wb-header-fact { display: none; }
   .wb-mode-btn { width: 32px; justify-content: center; padding: 0; font-size: 0; }
   .message-stack,
   .message-row.assistant .message-stack { max-width: calc(100% - 38px); width: calc(100% - 38px); }
@@ -963,8 +930,8 @@
   justify-content: flex-end;
   padding: 0 14px;
 }
+.wb-shell.is-header-collapsed .wb-header-fact,
 .wb-shell.is-header-collapsed .wb-header-context,
-.wb-shell.is-header-collapsed .wb-header-status,
 .wb-shell.is-header-collapsed .wb-export-btn {
   display: none;
 }
@@ -1035,10 +1002,14 @@
 
 /* Component-specific workbench refinements. */
 .thinking-block {
-  margin: 8px 0;
+  margin: var(--flow-tight) 0;
+  /* Reasoning is the lowest-weight content of a turn: it must not outrank the
+     stage output or the answer. It used to carry a 3px accent left border and
+     an accent icon, which made it the most prominent block in the message and
+     spent the product's signal colour on the thing a reader needs least. */
   border: 1px solid var(--line-2);
-  border-left: 3px solid var(--accent);
-  border-radius: 8px;
+  border-left: 2px solid var(--line);
+  border-radius: var(--r-8);
   background: var(--surface);
   overflow: hidden;
   transition: border-color 160ms ease, box-shadow 160ms ease;
@@ -1094,7 +1065,7 @@
 .thinking-header.open .chev { transform: none; }
 
 .thinking-icon {
-  color: var(--accent);
+  color: var(--text-4);
 }
 
 .thinking-header-toggle {

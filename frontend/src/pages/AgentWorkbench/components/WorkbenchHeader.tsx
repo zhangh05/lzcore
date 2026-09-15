@@ -49,27 +49,41 @@ export const WorkbenchHeader = memo(function WorkbenchHeader({
 
   return (
     <header className="wb-header" id="workbench-session-header">
+      {/*
+        A context bar, not a second application header. It answers "which
+        session, which model" and gets out of the way: the title is context
+        weight (15px), and the identifiers beside it are set as technical
+        metadata rather than as status copy competing with the conversation.
+      */}
       <div className="wb-header-context">
-        <span className="wb-header-kicker">{viewMode === "chat" ? "当前会话" : "运行记录"}</span>
         <h1 title={sessionTitle}>{viewMode === "chat" ? sessionTitle : "完整时间线"}</h1>
+        {currentSessionId ? (
+          <span className="meta-fact wb-header-fact wb-header-session" title={`会话 ${currentSessionId}`}>
+            <span className="meta-label">session</span>
+            <span className="meta">{currentSessionId.slice(0, 8)}</span>
+          </span>
+        ) : null}
+        <span className="meta-fact wb-header-fact" title={llmStatusLabel}>
+          <span className={"dot " + (llmHealth.connected ? (llmHealth.recentFailure ? "warn" : "ok") : "err")} />
+          <span className="meta-label">model</span>
+          <span className="meta">
+            {llmHealth.connected ? llmHealth.model || llmHealth.provider || "在线" : "不可用"}
+          </span>
+        </span>
       </div>
       <div className="wb-header-actions">
         <button
           type="button"
           className="wb-header-collapse"
           aria-label={headerCollapsed ? "展开会话栏" : "收起会话栏"}
+          title={headerCollapsed ? "展开会话栏" : "收起会话栏"}
           aria-controls="workbench-session-header"
           aria-expanded={!headerCollapsed}
           onClick={onToggleHeaderCollapsed}
           data-testid="btn-toggle-session-header"
         >
           <IconChevronDown size={14} />
-          <span>{headerCollapsed ? "展开" : "收起"}</span>
         </button>
-        <span className="wb-header-status" title={llmStatusLabel}>
-          <span className={"dot " + (llmHealth.connected ? (llmHealth.recentFailure ? "warn" : "ok") : "err")} />
-          <span className="wb-header-status-text">{llmStatusLabel}</span>
-        </span>
         <button
           type="button"
           className={`wb-mode-btn ${viewMode === "chat" ? "active" : ""}`}

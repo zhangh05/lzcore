@@ -323,7 +323,11 @@ describe("Experience polish", () => {
 
     render(<TaskWorkbench />);
 
-    expect(await screen.findByText("模型可用 · MiniMax-M3", {}, { timeout: 2500 })).toBeInTheDocument();
+    // The indicator is technical metadata now (a MODEL label plus the model
+    // name), so the assertion is the recovered model rather than a sentence.
+    // While the probe is unhealthy the slot reads "不可用", so this only passes
+    // if the workbench actually picked up the healthy probe.
+    expect(await screen.findByText("MiniMax-M3", {}, { timeout: 2500 })).toBeInTheDocument();
   });
 
 });

@@ -132,6 +132,9 @@ body,
   --shadow-focus: 0 0 0 2px var(--focus-ring-shadow);
 
   --h-header: 56px;
+  /* A workspace's context bar must not read as a second application header.
+     44px keeps the two tiers visibly different while staying comfortable. */
+  --h-context: 44px;
   --w-sidebar: 176px;
   --w-sidebar-collapsed: 0px;
   --w-progress: 192px;
@@ -2918,36 +2921,10 @@ details.collapse[open] summary::before {
   overflow-anchor: auto;
 }
 
-.wb-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  max-width: 900px;
-  padding: 50px 72px;
-  color: var(--text-3);
-  text-align: left;
-}
-
-.wb-empty h2 {
-  margin-bottom: 8px;
-  color: var(--text);
-  font-size: var(--fs-20);
-  font-weight: 760;
-}
-
-.wb-empty p {
-  max-width: 650px;
-  margin-bottom: 22px;
-  color: var(--text-3);
-  font-size: var(--fs-13);
-}
-
-.wb-empty-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
+/* `.wb-empty*` composition lives in pages/AgentWorkbench/AgentWorkbench.css.
+   The copy here was not merely redundant: `.wb-empty h2` had higher specificity
+   than the workbench's own rule, so it silently won and the empty-state heading
+   could not be restyled from the file that owns it. */
 
 .message-row {
   display: flex;
@@ -4420,10 +4397,6 @@ details.collapse[open] summary::before {
   .chat-result-inline {
     max-width: 100%;
     width: fit-content;
-  }
-
-  .wb-empty {
-    padding: 34px 22px;
   }
 
   .tbl {
