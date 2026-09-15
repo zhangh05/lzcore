@@ -649,10 +649,50 @@ else if (n.panningEnabled() &amp;&amp; <b data-page-node-id="EHIX6lOy8GZvT0emNKn
   </div>
 </div>
 
+<div data-page-node-id="progress-round3">
+  <h3 data-page-node-id="progress-round3-title">8.6 第三轮：并发编辑不再是无解的死胡同（2026-09-15 傍晚）</h3>
+  <p data-page-node-id="progress-round3-lead">
+    8.4 把「多人协同」列为未做项。完整 CRDT 是产品级决策，但当时的状态比「没做」更糟：
+    第二个人的保存只会失败，提示一闪而过，画布留在「未保存」，下一次编辑再次冲突 —— 没有任何出路。
+    这一轮把冲突变成一次可决策的合并。
+  </p>
+  <table data-page-node-id="progress-round3-table">
+    <thead><tr><th>能力</th><th>实现方式</th><th>验证证据</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>三方合并</td>
+        <td>以「最后一次服务端确认的版本」为基线，按对象 id 做三方合并。双方各自新增/修改、对方未动的部分自动合并；同一字段双方都改则保留服务端值<b>并列出待确认</b>；删除与编辑相撞时删除生效但同样列出。合并后剔除端点已消失的链路（后端不接受悬空链路，否则整次保存都会失败）。</td>
+        <td>8 条单元测试覆盖：单侧修改保留、字段争用、删除对编辑、无争议删除、双方新增、孤儿链路、双方独立新增同 id、服务端原样采纳。</td>
+      </tr>
+      <tr>
+        <td>决策界面</td>
+        <td>冲突时拉取服务端版本、算出合并结果，给出四个明确出口：合并并保存 / 用服务端版本（唯一会丢改动，因此明确写出）/ 保留我的覆盖对方 / 稍后处理。任一出口都写在服务端版本之上，因此不会被再次拒绝。</td>
+        <td>真实双写者场景实测：外部写入者把版本 N 改成 N+1，浏览器内继续编辑 → 冲突对话框出现 → 点「合并并保存」后，<b>对方的改名与我的位移同时保留</b>，版本落在对方版本之上。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="card" data-page-node-id="progress-card-7">
+    <p><strong>7. 验证过程中又挖出两个真缺陷，都不是本轮新写的代码。</strong></p>
+    <p>一是<b>搜索定位只居中、不选中</b>：检视器显示某个节点，画布却认为「没有选中任何对象」，
+    于是方向键微调、批量操作、删除全部静默失效。二是<b>改名走了一条自己的 PUT 分支</b>，
+    带着自己的错误处理，绕过了冲突解决，直接把 <code>topology_version_conflict</code> 这个错误码丢给用户。</p>
+    <p>两个缺陷都不是「功能没做」，而是<b>同一件事存在两条路径、其中一条没跟上</b>。
+    这也解释了为什么此前的验证没抓到：我之前验证搜索时只确认了 V/M/C 快捷键仍可用，
+    而模式切换根本不需要选区 —— 断言选在了不受影响的那一部分。</p>
+  </div>
+  <div class="card" data-page-node-id="progress-card-8">
+    <p><strong>8. 变量名遮蔽（shadowing）又一次造成静默故障。</strong>
+      在冲突处理里我把局部变量命名为 <code>base</code>，正好遮蔽了模块级的 API 前缀常量 <code>base</code>，
+      请求 URL 被拼成 <code>[object Object]/topologies/...</code>，服务端返回 404，
+      于是走了降级分支、只显示旧提示。TypeScript 完全不会报警 —— 两者都是合法字符串用途。
+      同类问题在这个文件里已经出现过一次，所以约定是：<b>不要用 <code>base</code> 作为局部变量名</b>。</p>
+  </div>
+</div>
+
 <h3 data-page-node-id="progress-quantified">8.3 可量化的变化</h3>
   <div class="kv" data-page-node-id="progress-kv">
     <div><span class="k">后端测试</span><span class="v">93 通过（拓扑 / 扩展包 / 邻居发现）</span></div>
-    <div><span class="k">新增测试</span><span class="v">邻居发现 9 例 · 版本历史 8 例 · PDF 生成器 7 例 · 画布过滤 1 例</span></div>
+    <div><span class="k">新增测试</span><span class="v">邻居发现 9 例 · 版本历史 8 例 · PDF 生成器 7 例 · 三方合并 8 例 · 画布交互 3 例</span></div>
     <div><span class="k">前端测试</span><span class="v">199 通过 / 45 个文件</span></div>
     <div><span class="k">类型检查</span><span class="v"><code>tsc -b</code> 0 错误，<code>npm run build</code> 通过</span></div>
     <div><span class="k">实时闭环</span><span class="v">发现→采纳：链路带 <code>source: discovered</code> 与证据引用</span></div>
@@ -661,7 +701,7 @@ else if (n.panningEnabled() &amp;&amp; <b data-page-node-id="EHIX6lOy8GZvT0emNKn
 
   <h3 data-page-node-id="progress-remaining">8.4 仍未做的部分（诚实清单）</h3>
   <ul data-page-node-id="progress-remaining-list">
-    <li><strong>多人协同与冲突合并</strong>：目前是版本乐观锁 + 冲突报错，不是 OT/CRDT。两人同时拖同一张图仍会有一方保存失败。</li>
+    <li><strong>多人协同与冲突合并</strong>：已从「冲突报错」推进到「按对象 id 三方合并 + 待确认清单」（见 8.6）。仍不是 OT/CRDT：同一字段双方都改时保留服务端值并列出，需人工确认；实时协同（同屏看到对方光标）仍未做。</li>
     <li><strong>版本历史的差异粒度</strong>：只到「对象与属性」层，不展示坐标位移轨迹；恢复时刻意保留当前布局。</li>
     <li><strong>邻居发现的覆盖面</strong>：覆盖 H3C/Huawei 详略两种形态与 Cisco CDP/LLDP 简表。极端自定义模板会被跳过而不是猜 —— 这是有意为之，画错一条链路比少一条更贵。</li>
     <li><strong>Agent 结论回写</strong>：目前是回合结束后的服务端对账，不是流式增量上画布；本地有未保存改动时会提示而非覆盖。</li>
