@@ -2698,9 +2698,20 @@ def _topology_structure_signature(topology: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:32]
 
 
+def _revision_collection(topology_id: str) -> str:
+    """Revisions live in a per-drawing collection.
+
+    One shared collection would have to be filtered by topology after a capped
+    read, so a workspace with a dozen busy drawings would silently lose the
+    history of whatever fell past the limit — and the retention cap would be
+    computed from a truncated list, so it would prune the wrong revisions.
+    """
+    return f"topology_revisions_{re.sub(r'[^A-Za-z0-9_]+', '_', str(topology_id or '')).strip('_')}"
+
+
 def _topology_revisions(workspace_id: str, topology_id: str) -> list[dict[str, Any]]:
     revisions = [
-        item for item in _store(workspace_id).list("topology_revisions", limit=500)
+        item for item in _store(workspace_id).list(_revision_collection(topology_id), limit=500)
         if str(item.get("topology_id") or "") == topology_id
     ]
     revisions.sort(key=lambda item: int(item.get("version") or 0))
@@ -2715,7 +2726,8 @@ def _record_topology_revision(workspace_id: str, record: dict[str, Any]) -> None
     if revisions and str(revisions[-1].get("signature") or "") == signature:
         return
     revision_id = _id("rev")
-    store.save("topology_revisions", revision_id, {
+    collection = _revision_collection(str(record.get("topology_id") or ""))
+    store.save(collection, revision_id, {
         "revision_id": revision_id,
         "topology_id": str(record.get("topology_id") or ""),
         "version": int(record.get("version") or 1),
@@ -2733,7 +2745,7 @@ def _record_topology_revision(workspace_id: str, record: dict[str, Any]) -> None
     # Keep history bounded; the oldest revisions are the least useful ones.
     overflow = len(revisions) + 1 - TOPOLOGY_REVISION_LIMIT
     for stale in revisions[:max(0, overflow)]:
-        store.delete("topology_revisions", str(stale.get("revision_id") or ""))
+        store.delete(collection, str(stale.get("revision_id") or ""))
 
 
 def list_topology_revisions(workspace_id: str, topology_id: str) -> list[dict[str, Any]]:
@@ -2761,9 +2773,13 @@ def list_topology_revisions(workspace_id: str, topology_id: str) -> list[dict[st
     ]
 
 
-def get_topology_revision(workspace_id: str, revision_id: str) -> dict[str, Any] | None:
-    record = _store(workspace_id).get("topology_revisions", revision_id)
+def get_topology_revision(workspace_id: str, topology_id: str, revision_id: str) -> dict[str, Any] | None:
+    """Read one revision. The owning drawing is part of the lookup, not trusted
+    from the record alone, so an id from another canvas cannot reach it."""
+    record = _store(workspace_id).get(_revision_collection(topology_id), revision_id)
     if not record:
+        return None
+    if str(record.get("topology_id") or "") != topology_id:
         return None
     return record
 
@@ -2917,13 +2933,12 @@ def diff_topology_snapshots(before: dict[str, Any], after: dict[str, Any]) -> di
     }
 
 
-def compare_topology_revision(workspace_id: str, revision_id: str) -> dict[str, Any]:
+def compare_topology_revision(workspace_id: str, topology_id: str, revision_id: str) -> dict[str, Any]:
     """Diff a stored revision against what the canvas holds now."""
-    record = get_topology_revision(workspace_id, revision_id)
+    record = get_topology_revision(workspace_id, topology_id, revision_id)
     if not record:
         raise ValueError("topology_revision_not_found")
     snapshot = record.get("snapshot") or {}
-    topology_id = str(record.get("topology_id") or "")
     current = get_topology(workspace_id, topology_id)
     if not current:
         raise ValueError("topology_not_found")
@@ -2938,13 +2953,13 @@ def compare_topology_revision(workspace_id: str, revision_id: str) -> dict[str, 
 
 
 @_connection_transaction
-def restore_topology_revision(workspace_id: str, revision_id: str) -> dict[str, Any]:
+def restore_topology_revision(workspace_id: str, topology_id: str, revision_id: str) -> dict[str, Any]:
     """Roll the canvas back to a revision.
 
     Restoring is a forward edit, not a rewrite of history: it writes the old
     structure as a new version, so the undo trail itself stays intact.
     """
-    record = get_topology_revision(workspace_id, revision_id)
+    record = get_topology_revision(workspace_id, topology_id, revision_id)
     if not record:
         raise ValueError("topology_revision_not_found")
     snapshot = json.loads(json.dumps(record.get("snapshot") or {}))
@@ -2988,8 +3003,9 @@ def delete_topology(workspace_id: str, topology_id: str) -> bool:
             skill["topology_id"] = ""
             save_skill(workspace_id, skill)
     store = _store(workspace_id)
+    collection = _revision_collection(topology_id)
     for revision in _topology_revisions(workspace_id, topology_id):
-        store.delete("topology_revisions", str(revision.get("revision_id") or ""))
+        store.delete(collection, str(revision.get("revision_id") or ""))
     return store.delete("topologies", topology_id)
 
 

@@ -83,7 +83,7 @@ def test_structural_edits_are_recorded_and_diffed(workspace):
     assert len(service.list_topology_revisions(workspace, linked["topology_id"])) == 2
 
     first = service.list_topology_revisions(workspace, linked["topology_id"])[-1]
-    diff = service.compare_topology_revision(workspace, first["revision_id"])
+    diff = service.compare_topology_revision(workspace, topo["topology_id"], first["revision_id"])
     assert diff["summary"]["links_added"] == 1
     assert diff["links_added"][0]["label"] == "R1 ↔ R2"
     assert diff["summary"]["nodes_added"] == 0
@@ -103,7 +103,7 @@ def test_diff_reports_status_and_removal_changes(workspace):
         "version": linked["version"],
         "links": [{"link_id": "l1", "source_node_id": "r1", "target_node_id": "r2", "status": "down"}],
     })
-    changed = service.compare_topology_revision(workspace, baseline["revision_id"])
+    changed = service.compare_topology_revision(workspace, topo["topology_id"], baseline["revision_id"])
     assert changed["summary"]["links_changed"] == 1
     assert changed["links_changed"][0]["changes"]["status"] == {"from": "unknown", "to": "down"}
 
@@ -112,7 +112,7 @@ def test_diff_reports_status_and_removal_changes(workspace):
         "version": linked["version"] + 1,
         "links": [],
     })
-    removed = service.compare_topology_revision(workspace, baseline["revision_id"])
+    removed = service.compare_topology_revision(workspace, topo["topology_id"], baseline["revision_id"])
     assert removed["summary"]["links_removed"] == 1
     assert emptied["links"] == []
 
@@ -134,7 +134,7 @@ def test_restore_rewrites_structure_as_a_new_version_and_keeps_current_layout(wo
     revisions = service.list_topology_revisions(workspace, linked["topology_id"])
     baseline = next(item for item in revisions if item["version"] == linked["version"])
 
-    restored = service.restore_topology_revision(workspace, baseline["revision_id"])
+    restored = service.restore_topology_revision(workspace, topo["topology_id"], baseline["revision_id"])
     assert len(restored["links"]) == 1
     assert restored["version"] > linked["version"] + 1
     positions = {node["node_id"]: (node["x"], node["y"]) for node in restored["nodes"]}
@@ -182,3 +182,36 @@ def test_history_stays_bounded(workspace):
     assert len(revisions) == service.TOPOLOGY_REVISION_LIMIT
     # The retained window is the newest one.
     assert revisions[0]["version"] == current["version"]
+
+
+def test_each_drawing_keeps_its_own_history(workspace):
+    """Two busy drawings in one workspace must not mix or starve each other.
+
+    A shared collection read behind a cap would drop one drawing's history as
+    soon as the workspace total grew; per-drawing collections keep every
+    drawing's retention window intact.
+    """
+    first = _two_node_topology(workspace)
+    second = service.save_topology(workspace, {"name": "Second canvas", "nodes": []})
+
+    for drawing, prefix in ((first, "a"), (second, "b")):
+        current = drawing
+        for index in range(6):
+            current = service.save_topology(workspace, {
+                **current,
+                "version": current["version"],
+                "nodes": current["nodes"] + [
+                    {"node_id": f"{prefix}-{index}", "display_name": f"{prefix}{index}", "x": index * 12, "y": 0}
+                ],
+            })
+
+    first_revisions = service.list_topology_revisions(workspace, first["topology_id"])
+    second_revisions = service.list_topology_revisions(workspace, second["topology_id"])
+    assert len(first_revisions) == 7
+    assert len(second_revisions) == 7
+    assert all(item["summary"]["nodes"] == 2 + index for index, item in enumerate(reversed(first_revisions)))
+
+    # A revision id is meaningless without the drawing it belongs to.
+    foreign = first_revisions[0]["revision_id"]
+    assert service.get_topology_revision(workspace, second["topology_id"], foreign) is None
+    assert service.get_topology_revision(workspace, first["topology_id"], foreign) is not None

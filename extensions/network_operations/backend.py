@@ -363,7 +363,7 @@ def register_routes(app):
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         try:
-            return jsonify({"ok": True, "diff": service.compare_topology_revision(ws, revision_id)})
+            return jsonify({"ok": True, "diff": service.compare_topology_revision(ws, topology_id, revision_id)})
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 404
 
@@ -373,7 +373,7 @@ def register_routes(app):
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         try:
-            return jsonify({"ok": True, "topology": service.restore_topology_revision(ws, revision_id)})
+            return jsonify({"ok": True, "topology": service.restore_topology_revision(ws, topology_id, revision_id)})
         except ValueError as exc:
             status = 409 if str(exc) == "topology_version_conflict" else 404
             return jsonify({"ok": False, "error": str(exc)}), status
