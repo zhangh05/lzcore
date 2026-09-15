@@ -43,7 +43,7 @@ import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
 import { LAYOUT_PRESETS, layoutTopology, type LayoutAlgorithm } from "./topologyLayout";
 import { TopologyAgentPanel } from "./TopologyAgentPanel";
-import NetOpsCanvas, { NODE_STATUS_COLORS, type CanvasApi, type CanvasContextTarget, type NodeRuntimeStatus } from "./NetOpsCanvas";
+import NetOpsCanvas, { type CanvasApi, type CanvasContextTarget, type NodeRuntimeStatus } from "./NetOpsCanvas";
 import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
 import { mergeTopologies, type MergeConflict, type MergeStats } from "./topologyMerge";
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
@@ -185,6 +185,20 @@ type DiscoveryCandidate = {
   target_device_id: string;
   remote_name: string;
   evidence_artifact_id: string;
+};
+
+/**
+ * Legend swatches are DOM, so they read the product tokens directly and follow
+ * the theme automatically. The canvas cannot do this (Cytoscape paints to a
+ * bitmap), which is why the literals are mirrored in NetOpsCanvas — but the two
+ * must never disagree, so neither side keeps its own idea of the colours.
+ */
+const NODE_STATUS_ORDER: NodeRuntimeStatus[] = ["ok", "warning", "error", "unknown"];
+const NODE_STATUS_SWATCH: Record<NodeRuntimeStatus, string> = {
+  ok: "var(--ok)",
+  warning: "var(--warn)",
+  error: "var(--danger)",
+  unknown: "var(--text-4)",
 };
 
 /**
@@ -2112,10 +2126,10 @@ export default function TopologyWorkspace({
                 ))}
                 {!filterOptions.vendors.length && <small>画布上的设备还没有厂商信息</small>}
                 <small>运行状态</small>
-                {(Object.keys(NODE_STATUS_COLORS) as NodeRuntimeStatus[]).map((status) => (
+                {NODE_STATUS_ORDER.map((status) => (
                   <label key={`status-${status}`}>
                     <input type="checkbox" checked={canvasFilter.statuses.includes(status)} onChange={() => toggleFilter("statuses", status)} />
-                    <i style={{ background: NODE_STATUS_COLORS[status] }} />
+                    <i style={{ background: NODE_STATUS_SWATCH[status] }} />
                     <span>{status === "ok" ? "正常" : status === "warning" ? "待确认" : status === "error" ? "不可达" : "未采集"}</span>
                   </label>
                 ))}
@@ -2257,10 +2271,10 @@ export default function TopologyWorkspace({
             <button type="button" className="legend-title" onClick={() => setLegendOpen((value) => !value)}>{legendOpen ? "图例" : "图例 ▸"}</button>
             {legendOpen && (
               <div className="legend-body">
-                <span><i className="legend-ring" style={{ borderColor: NODE_STATUS_COLORS.ok }} />管理访问正常</span>
-                <span><i className="legend-ring" style={{ borderColor: NODE_STATUS_COLORS.warning }} />采集不完整</span>
-                <span><i className="legend-ring" style={{ borderColor: NODE_STATUS_COLORS.error }} />管理访问失败</span>
-                <span><i className="legend-ring" style={{ borderColor: NODE_STATUS_COLORS.unknown }} />未纳管 / 未采集</span>
+                <span><i className="legend-ring" style={{ borderColor: "var(--ok)" }} />管理访问正常</span>
+                <span><i className="legend-ring" style={{ borderColor: "var(--warn)" }} />采集不完整</span>
+                <span><i className="legend-ring" style={{ borderColor: "var(--danger)" }} />管理访问失败</span>
+                <span><i className="legend-ring" style={{ borderColor: "var(--text-4)" }} />未纳管 / 未采集</span>
                 <span><i className="legend-line" />物理链路（实线）</span>
                 <span><i className="legend-line dashed" />逻辑链路（虚线）</span>
                 <span><i className="legend-swatch" />节点底色＝厂商</span>

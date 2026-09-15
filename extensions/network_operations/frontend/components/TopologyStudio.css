@@ -79,10 +79,10 @@
 .topology-studio .netops-canvas-wrap.marquee-armed::after { content: "按住 Shift 拖框多选"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 9px; border-radius: 4px; background: #0c8a7a; color: #fff; font-size: 10px; pointer-events: none; }
 .topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid #16837b; background: rgb(22 131 123 / 14%); }
 .topology-studio .netops-link-preview { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
-.topology-studio .netops-link-preview line { stroke: #2563eb; stroke-width: 2; stroke-dasharray: 6 4; }
-.topology-studio .netops-link-preview circle { fill: #2563eb; }
+.topology-studio .netops-link-preview line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+.topology-studio .netops-link-preview circle { fill: var(--accent); }
 .topology-studio .netops-align-guides { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
-.topology-studio .netops-align-guides line { stroke: #ec4899; stroke-width: 1; stroke-dasharray: 4 3; }
+.topology-studio .netops-align-guides line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
 .topology-studio .netops-viewport-controls { position: absolute; right: 14px; bottom: 14px; z-index: 8; display: flex; align-items: center; overflow: hidden; border: 1px solid #cfdbe3; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #273c4a1c; }
 .topology-studio .netops-viewport-controls button { min-width: 32px; height: 31px; padding: 0 8px; border: 0; border-right: 1px solid #e2e8ee; background: #fff; color: #385062; font-size: 13px; font-weight: 650; cursor: pointer; }
 .topology-studio .netops-viewport-controls button:last-child { border-right: 0; font-size: 11px; }
@@ -105,8 +105,8 @@
 .canvas-legend .legend-title { padding: 0; border: 0; background: none; color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
 .canvas-legend .legend-body { display: grid; gap: 3px; margin-top: 5px; }
 .canvas-legend .legend-body > span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.canvas-legend .legend-ring { width: 10px; height: 10px; flex: 0 0 auto; border: 2px solid #94a3b8; border-radius: 3px; }
-.canvas-legend .legend-line { width: 16px; height: 0; flex: 0 0 auto; border-top: 2px solid #64748b; }
+.canvas-legend .legend-ring { width: 10px; height: 10px; flex: 0 0 auto; border: 2px solid var(--text-4); border-radius: 3px; }
+.canvas-legend .legend-line { width: 16px; height: 0; flex: 0 0 auto; border-top: 2px solid var(--line); }
 .canvas-legend .legend-line.dashed { border-top-style: dashed; }
 .canvas-legend .legend-swatch { width: 10px; height: 10px; flex: 0 0 auto; border: 1px solid #dbe5ec; border-radius: 3px; background: linear-gradient(90deg, #f2f7ff 50%, #f4fbfa 50%); }
 .canvas-legend .legend-body small { margin-top: 3px; color: var(--text-3); font-size: 9.5px; line-height: 1.5; white-space: normal; }

@@ -30,11 +30,38 @@ export type CanvasContextTarget = { x: number; y: number; kind: "node" | "link" 
  * is what the node border encodes; vendor stays in the node background.
  */
 export type NodeRuntimeStatus = "ok" | "warning" | "error" | "unknown";
+/**
+ * Cytoscape paints to a canvas and cannot resolve CSS custom properties, so the
+ * product's semantic colours are mirrored here as literals. This is the only
+ * place allowed to duplicate them — keep in sync with `styles/global.css`
+ * (`:root` and `[data-theme="dark"]`). The values used to be a second palette
+ * (Tailwind emerald/amber/red plus blue for selection), which is exactly the
+ * "second brand colour" the design rules forbid.
+ */
 export const NODE_STATUS_COLORS: Record<NodeRuntimeStatus, string> = {
-  ok: "#10b981",
-  warning: "#f59e0b",
-  error: "#ef4444",
-  unknown: "#94a3b8",
+  ok: "#147a55",
+  warning: "#a16207",
+  error: "#bd3040",
+  unknown: "#6c7c7e",
+};
+
+export const NODE_STATUS_COLORS_DARK: Record<NodeRuntimeStatus, string> = {
+  ok: "#77ca9c",
+  warning: "#e2ad4d",
+  error: "#ef7180",
+  unknown: "#95a3b3",
+};
+
+export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, string> {
+  return dark ? NODE_STATUS_COLORS_DARK : NODE_STATUS_COLORS;
+}
+
+/** Transient canvas feedback: selection, drag-to-connect, alignment guides. */
+export const CANVAS_ACCENT = { light: "#0f7773", dark: "#72c3ba" };
+/** Group containers are structure, not signal: accent-soft fill, hairline border. */
+export const CANVAS_GROUP = {
+  light: { fill: "#e5f1ee", border: "#d7e1de", text: "#6c7c7e" },
+  dark: { fill: "#173633", border: "#263442", text: "#95a3b3" },
 };
 
 type Props = {
@@ -278,14 +305,17 @@ export default function NetOpsCanvas(props: Props) {
           { selector: "edge", style: { width: 2.5, opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": "14px", "target-text-margin-y": "14px" } },
           { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
           { selector: ".canvas-item-text", style: { "background-opacity": 0, "border-width": 0, "text-valign": "center", "text-halign": "left", "font-size": 14, "font-weight": 500, "text-max-width": "data(textMaxWidth)" } },
-          { selector: "node:selected", style: { "border-width": 3, "border-color": "#60a5fa" } },
-          { selector: ".node-connecting", style: { "border-width": 3, "border-color": "#3b82f6" } },
+          // Selection adds a halo instead of repainting the border: the border
+          // carries operational state, and a selected node must still show
+          // whether it is reachable.
+          { selector: "node:selected", style: { "border-width": 3, "underlay-color": CANVAS_ACCENT.light, "underlay-opacity": 0.16, "underlay-padding": 7 } },
+          { selector: ".node-connecting", style: { "border-width": 3, "border-color": CANVAS_ACCENT.light } },
           // Filtered-out elements stay visible but recede, so the filtered view
           // keeps its context instead of looking like a different diagram.
           // One opacity value only — stacking a second one on the item fill
           // would make a filtered rectangle indistinguishable from empty space.
           { selector: ".filtered-out", style: { opacity: 0.16, "text-opacity": 0.16 } },
-          { selector: ".lz-group", style: { shape: "roundrectangle", label: "data(label)", "text-valign": "top", "text-halign": "left", "text-margin-x": 12, "text-margin-y": 10, color: "#475569", "font-size": 12, "font-weight": 600, width: "data(width)", height: "data(height)", "background-color": "#dbeafe", "background-opacity": 0.22, "border-color": "#93c5fd", "border-style": "dashed", "border-width": 1, "background-image": "none", "events": "no" } },
+          { selector: ".lz-group", style: { shape: "roundrectangle", label: "data(label)", "text-valign": "top", "text-halign": "left", "text-margin-x": 12, "text-margin-y": 10, color: CANVAS_GROUP.light.text, "font-size": 12, "font-weight": 600, width: "data(width)", height: "data(height)", "background-color": CANVAS_GROUP.light.fill, "background-opacity": 0.5, "border-color": CANVAS_GROUP.light.border, "border-style": "dashed", "border-width": 1, "background-image": "none", "events": "no" } },
         ],
       });
       cyRef.current = cy;
@@ -546,6 +576,8 @@ export default function NetOpsCanvas(props: Props) {
     const cy = cyRef.current;
     if (!cy || !rendererReady) return;
     const dark = theme === "dark";
+    cy.style().selector("node:selected").style({ "underlay-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
+    cy.style().selector(".node-connecting").style({ "border-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
     cy.style()
       .selector("node")
       .style({
@@ -560,9 +592,9 @@ export default function NetOpsCanvas(props: Props) {
       .style({ "text-background-color": dark ? "#111820" : "#ffffff" })
       .selector(".lz-group")
       .style({
-        "background-color": dark ? "#1e3350" : "#dbeafe",
-        "border-color": dark ? "#3f5f8a" : "#93c5fd",
-        color: dark ? "#a3b7c9" : "#475569",
+        "background-color": dark ? CANVAS_GROUP.dark.fill : CANVAS_GROUP.light.fill,
+        "border-color": dark ? CANVAS_GROUP.dark.border : CANVAS_GROUP.light.border,
+        color: dark ? CANVAS_GROUP.dark.text : CANVAS_GROUP.light.text,
       })
       .update();
   }, [rendererReady, theme]);
@@ -571,6 +603,8 @@ export default function NetOpsCanvas(props: Props) {
     const cy = cyRef.current;
     if (!cy) return;
     const byDevice = new Map(props.devices.map((device) => [device.device_id, device]));
+    const statusPalette = nodeStatusColors(theme === "dark");
+    const linkColors = { ok: statusPalette.ok, danger: statusPalette.error, unknown: statusPalette.unknown };
     const dimmed = new Set(props.dimmedNodeIds || []);
     const dimClass = (id: string, base: string) => (dimmed.has(id) ? `${base} filtered-out`.trim() : base);
     const elements: CanvasElementSpec[] = [
@@ -582,7 +616,7 @@ export default function NetOpsCanvas(props: Props) {
         // operator scans for; vendor stays as a background tint so neither
         // signal is lost.
         const status: NodeRuntimeStatus = props.nodeStatus?.[node.node_id] || "unknown";
-        const statusColor = NODE_STATUS_COLORS[status];
+        const statusColor = statusPalette[status];
         const vendorTint = !node.linked_device_id ? "#fbfcfd" : device?.vendor?.toLowerCase().includes("huawei") ? "#f2f7ff" : "#f4fbfa";
         return { group: "nodes", classes: dimClass(node.node_id, node.linked_device_id ? "managed-node" : "manual-node"), data: { id: node.node_id, label: node.display_name || device?.name || "未命名设备", status, statusColor, statusWidth: status === "error" ? 3 : 2, vendorTint, labelOpacity: 1, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
       }),
@@ -601,7 +635,7 @@ export default function NetOpsCanvas(props: Props) {
           // A link is only as visible as its endpoints; dimming one end and
           // leaving the edge bright would draw attention to nothing.
           classes: dimmed.has(link.source_node_id) || dimmed.has(link.target_node_id) ? "filtered-out" : "",
-          data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, label: "", srcPort: "", tgtPort: "", visible: 1, edgeColor: link.status === "down" ? "#ef4444" : link.status === "up" ? "#10b981" : "#64748b", edgeStyle: link.kind === "logical" ? "dashed" : "solid" },
+          data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, label: "", srcPort: "", tgtPort: "", visible: 1, edgeColor: link.status === "down" ? linkColors.danger : link.status === "up" ? linkColors.ok : linkColors.unknown, edgeStyle: link.kind === "logical" ? "dashed" : "solid" },
         })),
     ];
     applyElements(cy, elements, connectingFromRef.current);
@@ -609,7 +643,7 @@ export default function NetOpsCanvas(props: Props) {
       initialTopologyIdRef.current = props.topology.topology_id;
       window.setTimeout(() => { cy.resize(); cy.fit(undefined, 48); setViewport({ ...cy.pan(), zoom: cy.zoom() }); }, 0);
     }
-  }, [rendererReady, props.topology, props.devices, props.dimmedNodeIds]);
+  }, [rendererReady, props.topology, props.devices, props.dimmedNodeIds, theme]);
 
   // Interface labels are display-only controls. Updating edge data in place
   // keeps positions, selection, and the fixed sheet intact.
