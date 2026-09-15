@@ -605,6 +605,15 @@ else if (n.panningEnabled() &amp;&amp; <b data-page-node-id="EHIX6lOy8GZvT0emNKn
       原生 window 监听拿不到正确的事件类型。已拆分命名，构建恢复绿灯。</p>
   </div>
 
+  <div class="card" data-page-node-id="progress-card-4">
+    <p><strong>4. 我的第一版版本历史有规模缺陷。</strong>
+      修订记录原本存在一个共享集合里、按 <code>topology_id</code> 过滤，而读取上限是 500 条。
+      按每图 40 条封顶算，一个工作区约 12 张图之后列表就被截断：部分图纸的历史会静默消失，
+      而且保留条数是从被截断的列表算出来的，淘汰的会是错的记录。已改为<strong>每张图纸一个集合</strong>，
+      并让图纸 id 参与修订查找（A 图的修订 id 不能再用于读 B 图）。
+      这个缺陷单元测试抓不到 —— 它只在「工作区图纸数量」这个维度上成立。</p>
+  </div>
+
   <h3 data-page-node-id="progress-quantified">8.3 可量化的变化</h3>
   <div class="kv" data-page-node-id="progress-kv">
     <div><span class="k">后端测试</span><span class="v">93 通过（拓扑 / 扩展包 / 邻居发现）</span></div>
