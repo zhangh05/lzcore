@@ -146,6 +146,8 @@ UI 原语采纳率约 **50%**：`<Button>` ≈35 处，手写 `<button className
 | `d08fc69` CSS 地基 | 新增 `styles/layers.css` 声明层序；8 个样式表各自归层；`RuntimeEventTimeline.css` 改由入口加载；删除 global.css 中**从未生效**的 `.wb-shell`（它用 `!important` 锁死 `display:grid` 并把最终网格跨两个文件合成） | **布局差异 0 / 颜色差异 0 / 页面错误 0** |
 | `cbcb1e2` 元数据 + 工作台 | 技术元数据体系；Context Bar 56→44px；空状态 Composer 优先；修正思考块权重倒置；删除 global.css 中特异性更高的 `.wb-empty h2` | Context Bar 42px vs 全局 Header 53px；标题与消息列同一左基线；空状态引导行 16px/600、距 Composer 23px |
 | `a1201c4` Shell 降噪 | 一级领域导航改为文字优先，领域图标移入其下拉头部 | 6 个领域 / Header 内 **0 图标** / Header 高度不变 |
+| `dc0353b` 助手回复报告化 | 去掉助手气泡的底色/圆角/内边距，轮次加细分隔线；AI 标记不再是填充品牌色圆点；**删除 global.css 中特异性更高的深色覆盖** | 明暗两主题实测：`background: transparent` / `radius: 0` / `padding: 0` / 行首 1px 分隔线 |
+| `0e04769` 拓扑单色板 | 节点/链路状态、选区、连线反馈、分组容器统一走产品语义色；**选区改为强调色光晕，不再覆盖运行状态边框**；图例与筛选点改用 `var(--ok/--warn/--danger/--text-4)` | 两主题下图例渲染值与画布镜像值完全一致（浅 `#147a55/#a16207/#bd3040/#6c7c7e`，深 `#77ca9c/#e2ad4d/#ef7180/#95a3b3`） |
 | — | 全量前端测试 | **230 通过 / 48 文件**，`tsc -b` 0 错误，`npm run build` 通过 |
 
 ### 一个必须记录的失败尝试
@@ -162,3 +164,12 @@ UI 原语采纳率约 **50%**：`<Button>` ≈35 处，手写 `<button className
 
 **结论**：共享样式拆层是一项需要逐条验证的工程，不是一次机械包裹。当前 `product` 单层
 已经达成两个目标（声明式层序 + 扩展边界），细拆留待冲突逐个清零后进行。
+
+### 两条值得记下的实现约束
+
+1. **Cytoscape 画在 bitmap 上，无法解析 CSS `var()`**。所以画布颜色必须在 JS 里镜像一份字面量 ——
+   这是唯一允许重复令牌的地方（`NetOpsCanvas.tsx` 顶部已写明）。而**凡是 DOM**（图例、筛选点、
+   预览线、对齐辅助线）一律用 `var()`，两者必须同源，否则会出现"图例说绿色、画布画灰色"。
+2. **深色主题的高特异性覆盖是最容易漏的一类 bug**。本轮两次遇到同型问题：
+   `[data-theme="dark"] .chat-bubble.assistant` 与 `[data-theme="dark"] .lz-group` 的特异性
+   都**高于**页面文件里的同名规则，导致"改动只在浅色生效"。凡改颜色/背景，必须在两个主题下各验一次。
