@@ -3,13 +3,13 @@
 .network-admin.is-topology { display: flex; flex-direction: column; overflow: hidden; }
 .network-admin.is-topology > .ui-page-header { flex: 0 0 auto; padding-top: 12px; padding-bottom: 10px; }
 .network-admin.is-topology > .network-tabs { flex: 0 0 42px; }
-.network-admin.topology-route { background: #f5f8fa; }
+.network-admin.topology-route { background: var(--bg); }
 .network-admin.is-topology > .network-notice { position: absolute; bottom: 46px; left: 20px; z-index: 40; max-width: min(520px, 80vw); box-shadow: var(--shadow-md); }
 .network-admin .network-topology-workspace.topology-studio {
   --topology-link: #778ba0;
   display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
   flex: 1; height: auto; min-height: 440px; width: 100%; isolation: isolate;
-  background: #f5f8fa;
+  background: var(--bg);
 }
 .network-admin .topology-studio.library-open { grid-template-columns: 252px minmax(0, 1fr); }
 .network-admin .topology-studio.inspector-open { grid-template-columns: minmax(0, 1fr) 320px; }
@@ -17,55 +17,55 @@
 .network-admin .topology-studio.agent-open { grid-template-columns: minmax(0, 1fr) 380px; }
 .network-admin .topology-studio.library-open.agent-open { grid-template-columns: 252px minmax(0, 1fr) 380px; }
 .network-admin .topology-studio.focus-mode { position: fixed; inset: var(--h-header, 56px) 0 0; z-index: 1000; height: calc(100dvh - var(--h-header, 56px)); min-height: 0; }
-.topology-studio .topology-sidebar { display: none; min-height: 0; grid-column: 1; border-right: 1px solid #dce5ea; background: #fff; }
+.topology-studio .topology-sidebar { display: none; min-height: 0; grid-column: 1; border-right: 1px solid var(--line); background: var(--surface); }
 .topology-studio.library-open .topology-sidebar { display: flex; }
-.topology-studio .topology-canvas-area { min-height: 0; height: 100%; width: 100%; overflow: hidden; grid-column: 1; background: #f8fafb; }
+.topology-studio .topology-canvas-area { min-height: 0; height: 100%; width: 100%; overflow: hidden; grid-column: 1; background: var(--bg); }
 .topology-studio.library-open .topology-canvas-area { grid-column: 2; }
 .topology-studio.inspector-open .topology-canvas-area { grid-column: 1; }
 .topology-studio.library-open.inspector-open .topology-canvas-area { grid-column: 2; }
 .topology-studio.agent-open .topology-canvas-area { grid-column: 1; }
 .topology-studio.library-open.agent-open .topology-canvas-area { grid-column: 2; }
 /* Above the edit bar (z-index 20) so its dropdowns are not covered by it. */
-.topology-studio .topology-canvas-toolbar { position: relative; z-index: 30; flex: 0 0 54px; min-height: 54px; box-sizing: border-box; padding: 0 16px; flex-direction: row; align-items: center; gap: 12px; background: #fff; border-bottom: 1px solid #dce5ea; }
+.topology-studio .topology-canvas-toolbar { position: relative; z-index: 30; flex: 0 0 54px; min-height: 54px; box-sizing: border-box; padding: 0 16px; flex-direction: row; align-items: center; gap: 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .topology-studio .toolbar-left { flex: 1 1 auto; min-width: 0; gap: 10px; }
 .topology-studio .toolbar-right { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; align-items: center; }
-.topology-studio .topology-canvas-title { max-width: none; font-size: 14px; letter-spacing: -.2px; color: #26384a; }
+.topology-studio .topology-canvas-title { max-width: none; font-size: 14px; letter-spacing: -.2px; color: var(--text); }
 .topology-studio .topology-save-indicator { white-space: nowrap; }
 /* 冲突不是错误而是待决策：给一个可点击的入口，而不是一句消失的提示。 */
-.topology-studio .topology-save-indicator.status-conflict button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid #e8b96a; border-radius: 5px; background: #fff7e8; color: #8a5a00; font-size: 11px; cursor: pointer; }
-.topology-studio .topology-save-indicator.status-conflict button:hover { background: #ffefd2; }
+.topology-studio .topology-save-indicator.status-conflict button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--warn); border-radius: 5px; background: var(--warn-soft); color: var(--warn); font-size: 11px; cursor: pointer; }
+.topology-studio .topology-save-indicator.status-conflict button:hover { background: var(--warn-soft); }
 .conflict-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--text-2); font-size: 11.5px; }
-.topology-studio .topology-editbar { position: relative; z-index: 20; flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 16px; border-bottom: 1px solid #dce5ea; background: #fff; }
-.topology-studio .topology-editbar .btn { border-color: #d6e0e6; background: #fff; padding: 5px 8px; height: 30px; white-space: nowrap; box-shadow: none; }
-.topology-studio .topology-editbar .btn:hover { background: #f0f7f6; border-color: #9ac9c0; }
-.studio-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #526779; cursor: pointer; }
-.studio-icon-button:hover, .studio-icon-button[aria-pressed=true] { background: #eaf6f3; border-color: #75b9ac; color: #087a70; }
+.topology-studio .topology-editbar { position: relative; z-index: 20; flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.topology-studio .topology-editbar .btn { border-color: var(--line); background: var(--surface); padding: 5px 8px; height: 30px; white-space: nowrap; box-shadow: none; }
+.topology-studio .topology-editbar .btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+.studio-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); cursor: pointer; }
+.studio-icon-button:hover, .studio-icon-button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .studio-edit-tools { display: flex; align-items: center; gap: 3px; min-width: 0; }
 .studio-edit-tools { overflow: visible; padding-right: 8px; }
-.studio-mode-button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #64778a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-mode-button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-align-menu > summary::-webkit-details-marker, .studio-insert-menu > summary::-webkit-details-marker { display: none; }
-.studio-mode-button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: #f0f5f6; color: #233c4b; }
-.studio-mode-button[aria-pressed=true] { background: #e4f5f1; border-color: #a2d6cd; color: #087a70; font-weight: 650; }
+.studio-mode-button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: var(--accent-soft); color: var(--text); }
+.studio-mode-button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 650; }
 .studio-align-menu { position: relative; }
-.studio-align-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(3, max-content); gap: 4px; min-width: 230px; padding: 8px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
-.studio-align-menu > div button { padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; color: #53697a; font-size: 11px; cursor: pointer; text-align: left; }
-.studio-align-menu > div button:hover { background: #edf7f5; color: #087a70; }
+.studio-align-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(3, max-content); gap: 4px; min-width: 230px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: 0 12px 26px #1e344426; }
+.studio-align-menu > div button { padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 11px; cursor: pointer; text-align: left; }
+.studio-align-menu > div button:hover { background: var(--accent-soft); color: var(--accent); }
 .studio-insert-menu { position: relative; }
-.studio-insert-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; min-width: 128px; padding: 6px; border: 1px solid #cad8df; border-radius: 6px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
-.studio-insert-menu > div button { padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: #53697a; font-size: 12px; cursor: pointer; text-align: left; white-space: nowrap; }
-.studio-insert-menu > div button:hover { background: #edf7f5; color: #087a70; }
+.studio-insert-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; min-width: 128px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: 0 12px 26px #1e344426; }
+.studio-insert-menu > div button { padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; text-align: left; white-space: nowrap; }
+.studio-insert-menu > div button:hover { background: var(--accent-soft); color: var(--accent); }
 .studio-more { position: relative; font-size: 12px; }
 .studio-more > summary { padding: 7px 8px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
 .studio-more > div { position: absolute; right: 0; top: 34px; display: grid; gap: 4px; padding: 8px; width: 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #0002; z-index: 20; }
-.topology-studio .topology-canvas-viewport { height: auto; min-height: 0; flex: 1 1 0; background: #f7fafb; }
+.topology-studio .topology-canvas-viewport { height: auto; min-height: 0; flex: 1 1 0; background: var(--bg); }
 .topology-studio .topology-canvas-viewport.mode-connect { cursor: crosshair; }
 .topology-studio .topology-canvas-viewport.mode-select .netops-cytoscape { cursor: default; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape { cursor: grab; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape:active { cursor: grabbing; }
-.topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: #f8fafc; }
+.topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--bg); }
 /* Grid paper is intentionally fixed; editing changes object coordinates, not
    the viewport or its reference grid. */
-.topology-studio .netops-canvas-wrap.grid-on { background-color: #f8fafc; background-image: linear-gradient(#dbe5ec 1px, transparent 1px), linear-gradient(90deg, #dbe5ec 1px, transparent 1px); }
+.topology-studio .netops-canvas-wrap.grid-on { background-color: var(--bg); background-image: linear-gradient(#dbe5ec 1px, transparent 1px), linear-gradient(90deg, #dbe5ec 1px, transparent 1px); }
 [data-theme="dark"] .topology-studio .netops-canvas-wrap { background-color: #0f1519; }
 [data-theme="dark"] .topology-studio .netops-canvas-wrap.grid-on { background-color: #0f1519; background-image: linear-gradient(#22303b 1px, transparent 1px), linear-gradient(90deg, #22303b 1px, transparent 1px); }
 [data-theme="dark"] .topology-studio .topology-canvas-area { background: #0f1519; }
@@ -76,31 +76,31 @@
    sit on top of the canvas by default. */
 .topology-studio .netops-selection-gesture-layer { position: absolute; inset: 0; z-index: 6; cursor: crosshair; }
 .topology-studio .netops-canvas-wrap.marquee-armed .netops-cytoscape { cursor: crosshair; }
-.topology-studio .netops-canvas-wrap.marquee-armed::after { content: "按住 Shift 拖框多选"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 9px; border-radius: 4px; background: #0c8a7a; color: #fff; font-size: 10px; pointer-events: none; }
-.topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid #16837b; background: rgb(22 131 123 / 14%); }
+.topology-studio .netops-canvas-wrap.marquee-armed::after { content: "按住 Shift 拖框多选"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 9px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-size: 10px; pointer-events: none; }
+.topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid var(--accent); background: rgb(22 131 123 / 14%); }
 .topology-studio .netops-link-preview { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
 .topology-studio .netops-link-preview line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 .topology-studio .netops-link-preview circle { fill: var(--accent); }
 .topology-studio .netops-align-guides { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
 .topology-studio .netops-align-guides line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
-.topology-studio .netops-viewport-controls { position: absolute; right: 14px; bottom: 14px; z-index: 8; display: flex; align-items: center; overflow: hidden; border: 1px solid #cfdbe3; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #273c4a1c; }
-.topology-studio .netops-viewport-controls button { min-width: 32px; height: 31px; padding: 0 8px; border: 0; border-right: 1px solid #e2e8ee; background: #fff; color: #385062; font-size: 13px; font-weight: 650; cursor: pointer; }
+.topology-studio .netops-viewport-controls { position: absolute; right: 14px; bottom: 14px; z-index: 8; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: 0 8px 24px #273c4a1c; }
+.topology-studio .netops-viewport-controls button { min-width: 32px; height: 31px; padding: 0 8px; border: 0; border-right: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 13px; font-weight: 650; cursor: pointer; }
 .topology-studio .netops-viewport-controls button:last-child { border-right: 0; font-size: 11px; }
-.topology-studio .netops-viewport-controls button:hover { background: #edf7f5; color: #087a70; }
-.topology-studio .netops-viewport-controls .netops-zoom-readout { min-width: 48px; color: #617889; font-size: 10px; font-weight: 600; }
-.topology-studio .netops-viewport-controls button.is-active { background: #eaf6f3; color: #087a70; }
+.topology-studio .netops-viewport-controls button:hover { background: var(--accent-soft); color: var(--accent); }
+.topology-studio .netops-viewport-controls .netops-zoom-readout { min-width: 48px; color: var(--text-3); font-size: 10px; font-weight: 600; }
+.topology-studio .netops-viewport-controls button.is-active { background: var(--accent-soft); color: var(--accent); }
 .topology-studio .netops-viewport-controls button:last-child { font-size: 11px; }
 .topology-studio .netops-canvas-accessibility { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
-.studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: #6b8190; pointer-events: none; }
-.studio-canvas-caption strong { color: #2c4555; font-weight: 650; }
-.canvas-mode-hint { margin-left: 8px; color: #6f8795; }
-.topology-canvas-viewport.mode-select .canvas-mode-hint { color: #087a70; font-weight: 600; }
-.studio-canvas-caption label { pointer-events: auto; margin-left: auto; display: flex; align-items: center; gap: 4px; background: #fff; padding: 4px 7px; border: 1px solid #d6e1e7; border-radius: 4px; box-shadow: 0 2px 5px #1025360d; }
+.studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: var(--text-3); pointer-events: none; }
+.studio-canvas-caption strong { color: var(--text); font-weight: 650; }
+.canvas-mode-hint { margin-left: 8px; color: var(--text-3); }
+.topology-canvas-viewport.mode-select .canvas-mode-hint { color: var(--accent); font-weight: 600; }
+.studio-canvas-caption label { pointer-events: auto; margin-left: auto; display: flex; align-items: center; gap: 4px; background: var(--surface); padding: 4px 7px; border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 2px 5px #1025360d; }
 .studio-canvas-caption input { margin: 0; width: 12px; height: 12px; }
-.studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid #dce5ea; background: #fff; color: #718694; font-size: 10px; }
-.studio-statusbar button { margin-left: auto; padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: #52706f; cursor: pointer; white-space: nowrap; }
+.studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--surface); color: var(--text-3); font-size: 10px; }
+.studio-statusbar button { margin-left: auto; padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--text-2); cursor: pointer; white-space: nowrap; }
 /* Legend: colour only means something if the reader is told what. */
-.canvas-legend { position: absolute; left: 16px; bottom: 16px; z-index: 7; min-width: 132px; padding: 6px 8px; border: 1px solid #d6e1e7; border-radius: 7px; background: #ffffffee; backdrop-filter: blur(3px); box-shadow: 0 6px 18px #10253614; font-size: 10.5px; color: var(--text-2); }
+.canvas-legend { position: absolute; left: 16px; bottom: 16px; z-index: 7; min-width: 132px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); backdrop-filter: blur(3px); box-shadow: 0 6px 18px #10253614; font-size: 10.5px; color: var(--text-2); }
 .canvas-legend.is-collapsed { padding: 3px 4px; }
 .canvas-legend .legend-title { padding: 0; border: 0; background: none; color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
 .canvas-legend .legend-body { display: grid; gap: 3px; margin-top: 5px; }
@@ -110,24 +110,24 @@
 .canvas-legend .legend-line.dashed { border-top-style: dashed; }
 .canvas-legend .legend-swatch { width: 10px; height: 10px; flex: 0 0 auto; border: 1px solid #dbe5ec; border-radius: 3px; background: linear-gradient(90deg, #f2f7ff 50%, #f4fbfa 50%); }
 .canvas-legend .legend-body small { margin-top: 3px; color: var(--text-3); font-size: 9.5px; line-height: 1.5; white-space: normal; }
-.canvas-selection-count { padding: 1px 7px; border-radius: 99px; background: #e4f5f1; color: #087a70; font-size: 10px; font-weight: 650; white-space: nowrap; }
+.canvas-selection-count { padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 650; white-space: nowrap; }
 /* In-canvas search: on a large diagram, finding one device by eye is the
    slowest operation there is. */
-.canvas-search-wrap { position: relative; display: flex; align-items: center; gap: 5px; padding: 0 8px; height: 30px; border: 1px solid #d6e0e6; border-radius: 6px; background: #fff; }
-.canvas-search-wrap:focus-within { border-color: #75b9ac; box-shadow: 0 0 0 2px #0c8a7a14; }
-.canvas-search-wrap > svg { color: #8497a5; flex: 0 0 auto; }
+.canvas-search-wrap { position: relative; display: flex; align-items: center; gap: 5px; padding: 0 8px; height: 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.canvas-search-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px #0c8a7a14; }
+.canvas-search-wrap > svg { color: var(--text-3); flex: 0 0 auto; }
 .canvas-search-wrap input { width: 128px; border: 0; outline: none; background: transparent; font-size: 12px; color: var(--text); }
-.canvas-search-results { position: absolute; top: 34px; right: 0; z-index: 40; display: grid; width: 230px; padding: 5px; border: 1px solid #cad8df; border-radius: 7px; background: #fff; box-shadow: 0 14px 30px #1e344428; }
+.canvas-search-results { position: absolute; top: 34px; right: 0; z-index: 40; display: grid; width: 230px; padding: 5px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: 0 14px 30px #1e344428; }
 .canvas-search-results button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
-.canvas-search-results button:hover { background: #edf7f5; }
+.canvas-search-results button:hover { background: var(--accent-soft); }
 .canvas-search-results button span { font-size: 12px; color: var(--text); font-weight: 600; }
 .canvas-search-results button small { font-size: 10px; color: var(--text-3); }
 /* Right-click menu: every diagram tool has one and people reach for it
    before they read the toolbar. */
-.canvas-context-menu { position: fixed; z-index: 1200; display: grid; gap: 2px; min-width: 168px; padding: 5px; border: 1px solid #cad8df; border-radius: 8px; background: #fff; box-shadow: 0 16px 34px #1e344430; }
+.canvas-context-menu { position: fixed; z-index: 1200; display: grid; gap: 2px; min-width: 168px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 16px 34px #1e344430; }
 .canvas-context-menu button { padding: 6px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
-.canvas-context-menu button:hover { background: #edf7f5; color: #087a70; }
-.canvas-context-menu button.danger:hover { background: #fdecec; color: var(--danger); }
+.canvas-context-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.canvas-context-menu button.danger:hover { background: var(--danger-soft); color: var(--danger); }
 .canvas-context-menu hr { margin: 3px 4px; border: 0; border-top: 1px solid var(--line-2); }
 .shortcut-help-backdrop { position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; background: #10253630; }
 .shortcut-help { width: min(420px, 92vw); max-height: 82vh; overflow: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 24px 60px #10253640; }
@@ -144,49 +144,49 @@
    .topology-group-node / .group-node-header 都是 DOM 时代的样式，实测 18 个
    选择器 0 命中，随 Cytoscape 迁移一并删除。节点视觉现在由 NetOpsCanvas 的
    Cytoscape style 数组定义。 */
-.topology-studio .topology-minimap-custom { position: absolute; right: 14px; bottom: 56px; z-index: 8; width: 160px; height: 110px; border-radius: 6px; border: 1px solid #cfdbe3; background: #fff; box-shadow: 0 6px 18px #273c4a1c; display: block; cursor: pointer; }
+.topology-studio .topology-minimap-custom { position: absolute; right: 14px; bottom: 56px; z-index: 8; width: 160px; height: 110px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 6px 18px #273c4a1c; display: block; cursor: pointer; }
 .topology-studio .palette-device-item { cursor: pointer; }
 .topology-studio .palette-device-item[draggable=true] { cursor: grab; }
 .topology-studio .palette-device-item[draggable=true]:active { cursor: grabbing; }
-.topology-studio .palette-device-item:focus-visible { outline: 2px solid #0c8a7a; outline-offset: -2px; }
-.topology-studio .topology-inspector { display: none; min-width: 0; min-height: 0; position: static; grid-column: 3; max-width: none; height: auto; z-index: 10; border: 0; border-left: 1px solid #dce5ea; border-radius: 0; background: #fff; overflow: auto; transform: none; visibility: visible; transition: none; width: auto; box-shadow: none; }
+.topology-studio .palette-device-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.topology-studio .topology-inspector { display: none; min-width: 0; min-height: 0; position: static; grid-column: 3; max-width: none; height: auto; z-index: 10; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: var(--surface); overflow: auto; transform: none; visibility: visible; transition: none; width: auto; box-shadow: none; }
 .topology-studio.inspector-open .topology-inspector { display: block; }
 .topology-studio:not(.library-open).inspector-open .topology-inspector { grid-column: 2; }
 .topology-studio .topology-inspector .inspector-panel { min-height: 100%; }
 .batch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 4px 0 10px; }
 .batch-grid .btn { justify-content: center; padding: 5px 4px; font-size: 11px; }
 .studio-views-menu { position: relative; font-size: 12px; }
-.studio-views-menu > summary { padding: 6px 9px; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #52697a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-views-menu > summary { padding: 6px 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-views-menu > summary::-webkit-details-marker { display: none; }
-.studio-views-menu > summary:hover { background: #f0f7f6; border-color: #9ac9c0; }
-.studio-views-menu > div { position: absolute; right: 0; top: 32px; z-index: 40; display: grid; gap: 3px; width: 190px; padding: 6px; border: 1px solid #cad8df; border-radius: 7px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
+.studio-views-menu > summary:hover { background: var(--accent-soft); border-color: var(--accent); }
+.studio-views-menu > div { position: absolute; right: 0; top: 32px; z-index: 40; display: grid; gap: 3px; width: 190px; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: 0 12px 26px #1e344426; }
 .studio-views-menu > div > button { padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
-.studio-views-menu > div > button:hover { background: #edf7f5; color: #087a70; }
+.studio-views-menu > div > button:hover { background: var(--accent-soft); color: var(--accent); }
 .studio-views-menu > div > small { padding: 4px 8px; color: var(--text-3); font-size: 10.5px; }
 .studio-views-menu .view-row { display: flex; align-items: center; gap: 2px; }
 .studio-views-menu .view-row > button:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studio-views-menu .view-remove { flex: 0 0 auto; width: 20px; padding: 4px 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); cursor: pointer; }
-.studio-views-menu .view-remove:hover { background: #fdecec; color: var(--danger); }
+.studio-views-menu .view-remove:hover { background: var(--danger-soft); color: var(--danger); }
 .studio-layout-menu { position: relative; }
-.studio-layout-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #52697a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-layout-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-layout-menu > summary::-webkit-details-marker { display: none; }
-.studio-layout-menu > summary:hover { background: #f0f7f6; border-color: #9ac9c0; }
+.studio-layout-menu > summary:hover { background: var(--accent-soft); border-color: var(--accent); }
 .studio-layout-menu > summary.is-disabled { opacity: .45; pointer-events: none; }
-.studio-layout-menu > div { position: absolute; right: 0; top: 31px; z-index: 30; display: grid; gap: 3px; width: 218px; padding: 6px; border: 1px solid #cad8df; border-radius: 7px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
+.studio-layout-menu > div { position: absolute; right: 0; top: 31px; z-index: 30; display: grid; gap: 3px; width: 218px; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: 0 12px 26px #1e344426; }
 .studio-layout-menu > div button { display: grid; gap: 1px; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
-.studio-layout-menu > div button:hover { background: #edf7f5; }
+.studio-layout-menu > div button:hover { background: var(--accent-soft); }
 .studio-layout-menu > div strong { font-size: 12px; color: var(--text); }
 .studio-layout-menu > div small { font-size: 10px; color: var(--text-3); }
 /* 过滤菜单：与布局菜单同壳，行是复选项而不是命令。 */
 .studio-filter-menu { position: relative; }
-.studio-filter-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid #d6e0e6; border-radius: 5px; background: #fff; color: #52697a; font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-filter-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-filter-menu > summary::-webkit-details-marker { display: none; }
-.studio-filter-menu > summary:hover { background: #f0f7f6; border-color: #9ac9c0; }
-.studio-filter-menu > div { position: absolute; right: 0; top: 31px; z-index: 30; display: grid; gap: 2px; width: 214px; max-height: 60vh; overflow: auto; padding: 6px; border: 1px solid #cad8df; border-radius: 7px; background: #fff; box-shadow: 0 12px 26px #1e344426; }
+.studio-filter-menu > summary:hover { background: var(--accent-soft); border-color: var(--accent); }
+.studio-filter-menu > div { position: absolute; right: 0; top: 31px; z-index: 30; display: grid; gap: 2px; width: 214px; max-height: 60vh; overflow: auto; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: 0 12px 26px #1e344426; }
 .studio-filter-menu > div > small { padding: 6px 8px 2px; color: var(--text-3); font-size: 10px; letter-spacing: .3px; }
 .studio-filter-menu > div > small:first-child { padding-top: 2px; }
 .studio-filter-menu > div > label { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 5px; color: var(--text-2); font-size: 12px; cursor: pointer; }
-.studio-filter-menu > div > label:hover { background: #edf7f5; }
+.studio-filter-menu > div > label:hover { background: var(--accent-soft); }
 .studio-filter-menu > div > label > i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
 .studio-filter-menu > div > label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studio-filter-menu > div > button { margin-top: 4px; }
@@ -229,7 +229,7 @@
 .topology-agent-composer textarea { border: 0; outline: none; box-shadow: none; background: transparent; width: 100%; resize: vertical; min-height: 60px; max-height: 160px; font-size: 12px; padding: 0; }
 .topology-agent-composer footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; }
 .topology-agent-composer footer small { color: var(--text-3); font-size: 10px; }
-.topology-agent-composer button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border: 0; border-radius: 5px; background: var(--accent); color: white; font-size: 11px; cursor: pointer; }
+.topology-agent-composer button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border: 0; border-radius: 5px; background: var(--accent); color: var(--accent-text); font-size: 11px; cursor: pointer; }
 .topology-agent-composer button:disabled { opacity: .4; cursor: not-allowed; }
 .topology-agent-error, .topology-agent-hint { padding: 10px 16px; font-size: 11px; color: var(--text-3); }
 .topology-agent-error { color: var(--danger); }
@@ -242,7 +242,7 @@
 @media (max-width: 900px) {
   .network-admin .topology-studio.agent-open, .network-admin .topology-studio.library-open.agent-open, .network-admin .topology-studio.library-open, .network-admin .topology-studio.inspector-open, .network-admin .topology-studio.library-open.inspector-open { grid-template-columns: minmax(0, 1fr); }
   .topology-studio.library-open .topology-sidebar { position: absolute; top: 52px; bottom: 30px; left: 0; width: 224px; z-index: 9; max-height: none; box-shadow: 10px 0 24px #0001; }
-  .topology-studio.inspector-open .topology-inspector { position: absolute; top: 52px; right: 0; bottom: 30px; width: min(320px, 92%); grid-column: auto; z-index: 11; border-left: 1px solid #dce5ea; box-shadow: -12px 0 30px #0001; }
+  .topology-studio.inspector-open .topology-inspector { position: absolute; top: 52px; right: 0; bottom: 30px; width: min(320px, 92%); grid-column: auto; z-index: 11; border-left: 1px solid var(--line); box-shadow: -12px 0 30px #0001; }
   .agent-open .studio-agent-dock { position: absolute; top: 53px; right: 0; bottom: 0; width: min(380px, 92%); box-shadow: -12px 0 30px #0001; }
   .topology-studio .topology-save-indicator, .topology-studio .topology-version-badge { display: none; }
   .studio-statusbar > span:nth-child(2) { display: none; }

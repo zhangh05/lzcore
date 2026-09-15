@@ -14,6 +14,43 @@ function assistant(overrides: Partial<ChatMsg> = {}): ChatMsg {
 }
 
 describe("task progress projection", () => {
+  it("keeps pending calls running and never turns a failed done call into success", () => {
+    const model = buildTaskProgress(assistant({ toolCalls: [
+      { tool_id: "workspace.file", tool_name: "文件", ok: false, status: "pending" },
+      { tool_id: "workspace.file", tool_name: "文件", ok: false, status: "done" },
+    ] }));
+    expect(model.evidence.map(item => item.status)).toEqual(["running", "failed"]);
+  });
+
+  it("does not mark later phases complete after an evidence-stage failure", () => {
+    const model = buildTaskProgress(assistant({ status: "error", result: {
+      ok: false, final_response: "采集失败", events: [], trace_id: "trace", session_id: "s", turn_id: "t",
+      tool_calls: [], warnings: [], errors: ["collection_failed"], metadata: {},
+    } }), {
+      status: "failed", stage: "tool_result",
+    });
+    expect(model.status).toBe("failed");
+    expect(model.phases.map(phase => phase.state)).toEqual(["done", "failed", "idle", "idle"]);
+  });
+
+  it("uses the shared call identity and reconciliation rules for unknown writes", () => {
+    const message = assistant({ status: "error", result: {
+      ok: false, final_response: "", events: [], trace_id: "trace", session_id: "s", turn_id: "t",
+      warnings: [], errors: [],
+      tool_calls: [
+        { call_id: "write-1", tool_id: "workspace.file", ok: true },
+        { call_id: "write-2", tool_id: "workspace.file", ok: false },
+      ],
+      metadata: { execution_outcome: "unknown", unknown_outcome: {
+        status: "unknown", tool_id: "workspace.file", call_id: "write-2",
+      } },
+    } });
+    expect(buildTaskProgress(message).evidence.map(item => item.status)).toEqual(["done", "unknown"]);
+    message.result!.metadata.execution_outcome = "complete";
+    message.result!.metadata.unknown_outcome!.status = "reconciled";
+    expect(buildTaskProgress(message).evidence.map(item => item.status)).toEqual(["done", "failed"]);
+  });
+
   it("maps granular runtime stages into four user-facing phases", () => {
     const model = buildTaskProgress(assistant({
       runtimeEvents: [

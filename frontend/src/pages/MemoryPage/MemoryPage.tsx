@@ -296,11 +296,11 @@ export function MemoryPage() {
               // giving every entry its own border and radius nested two
               // containers and turned the page into a card wall.
               return (
-                <div key={e.memory_id || i} className={`memory-card ${isChecked ? "checked" : ""} ${isInactive ? "inactive" : ""}`}
-                  onClick={() => setSel(isSelected ? null : e)}>
+                <div key={e.memory_id || i} className={`memory-card ${isChecked ? "checked" : ""} ${isInactive ? "inactive" : ""}`}>
                   <div className="memory-card-row">
                     {/* Checkbox */}
                     <input type="checkbox" checked={isChecked}
+                      aria-label={`选择记忆：${e.title || e.summary || "未命名记忆"}`}
                       onChange={(ev) => {
                         const next = new Set(checked);
                         if (ev.target.checked) next.add(e.memory_id ?? "");
@@ -313,7 +313,12 @@ export function MemoryPage() {
                     <div className="memory-card-content">
                       <div className="memory-card-title">
                         <StatusDot status={dotColor} />
-                        <strong>{e.title || e.summary || e.content?.slice(0, 80) || "未命名记忆"}</strong>
+                        <button type="button" className="memory-detail-toggle" aria-expanded={isSelected}
+                          aria-controls={`memory-detail-${e.memory_id || i}`}
+                          onClick={() => setSel(isSelected ? null : e)}>
+                          <strong>{e.title || e.summary || e.content?.slice(0, 80) || "未命名记忆"}</strong>
+                          <span aria-hidden="true">{isSelected ? "▾" : "▸"}</span>
+                        </button>
                         {/* Badges are kept for exceptions only. Six of them on
                             every row made the page shout and left nothing to
                             stand out: a state that needs attention, a
@@ -358,9 +363,6 @@ export function MemoryPage() {
                       onClick={(ev) => { ev.stopPropagation(); setDeleteConfirm(e.memory_id || null); }}>
                       <IconTrash size={13} />
                     </button>
-                    <span className="memory-card-chevron">
-                      {isSelected ? "▾" : "▸"}
-                    </span>
                   </div>
 
                   {deleteConfirm === e.memory_id && (
@@ -376,7 +378,7 @@ export function MemoryPage() {
                   )}
 
                   {isSelected && (
-                    <div className="memory-card-detail">
+                    <div className="memory-card-detail" id={`memory-detail-${e.memory_id || i}`}>
                       {e.content && (
                         <pre>{e.content}</pre>
                       )}

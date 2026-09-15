@@ -1,5 +1,6 @@
 import type { ActiveTurnSnapshot, RuntimeEvent } from "../types";
 import type { ChatMsg } from "../stores/workbench";
+import { deriveInlineCardState } from "../components/toolCallState";
 
 export type TaskPhaseState = "idle" | "active" | "done" | "failed";
 
@@ -20,7 +21,7 @@ export type TaskEvidence = {
   id: string;
   title: string;
   source: string;
-  status: "running" | "done" | "failed";
+  status: "running" | "done" | "failed" | "unknown";
   summary?: string;
 };
 
@@ -156,7 +157,7 @@ export function buildTaskProgress(
   // completed UI state.
   const isStreaming = lifecycle.turnRunning ?? (snapshot?.status === "running" || message?.status === "streaming");
   const failed = !isStreaming && (snapshot?.status === "failed" || message?.status === "error" || Boolean(result && !result.ok));
-  const completed = !isStreaming && (snapshot?.status === "succeeded" || Boolean(result && message?.status !== "streaming"));
+  const completed = !isStreaming && !failed && (snapshot?.status === "succeeded" || Boolean(result && message?.status !== "streaming"));
   const activeIndex = completed ? 3 : Math.max(0, STAGE_INDEX[lastStage] ?? (isStreaming ? 0 : 0));
 
   // Phase spans come from the timestamps of the stage events the runtime
@@ -204,10 +205,14 @@ export function buildTaskProgress(
   const evidence = (liveTools.length ? liveTools : messageTools).map((tool, index) => {
     const toolId = String(tool.tool_id || "");
     const rawStatus = String("status" in tool ? tool.status || "" : "");
-    const ok = Boolean(tool.ok);
-    const status: TaskEvidence["status"] = rawStatus === "running"
-      ? "running"
-      : (ok || rawStatus === "done") ? "done" : "failed";
+    const cardState = deriveInlineCardState({
+      tool_id: toolId,
+      call_id: tool.call_id,
+      status: rawStatus,
+      ok: Boolean(tool.ok),
+    }, result);
+    const status: TaskEvidence["status"] = cardState === "pending" ? "running"
+      : cardState === "ok" ? "done" : cardState === "unknown" ? "unknown" : "failed";
     return {
       id: String(("call_id" in tool && tool.call_id) || `${toolId}-${index}`),
       title: displayToolName(toolId),

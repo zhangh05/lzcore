@@ -646,7 +646,7 @@
 }
 
 .task-phase-summary:focus-visible {
-  outline: 2px solid var(--focus-ring-shadow);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -665,7 +665,6 @@
 }
 
 .task-phase.done .task-phase-index {
-  color: var(--accent-text);
   background: var(--surface);
   border-color: var(--line);
   color: var(--ok);

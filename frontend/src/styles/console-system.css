@@ -471,6 +471,7 @@ select.input:focus-visible {
 .memory-page .memory-card {
   border-bottom: 1px solid var(--console-border-soft);
   background: transparent;
+  cursor: default;
 }
 .memory-page .memory-card:last-child { border-bottom: 0; }
 .memory-page .memory-card.checked { background: var(--console-action-soft); }
@@ -484,6 +485,9 @@ select.input:focus-visible {
   box-shadow: none;
 }
 .memory-page .memory-card-row:hover { background: var(--console-action-soft); }
+.memory-detail-toggle { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; color: inherit; text-align: left; }
+.memory-detail-toggle strong { overflow-wrap: anywhere; }
+.memory-detail-toggle > span { color: var(--text-4); }
 /* Provenance and trust, stated once per row in the metadata language. */
 .memory-page .memory-card-meta {
   display: flex;

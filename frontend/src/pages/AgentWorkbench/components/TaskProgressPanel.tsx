@@ -15,8 +15,8 @@ type Props = {
 };
 
 function statusText(status: string, evidenceCount: number): string {
-  if (status === "running") return evidenceCount ? `正在处理 · ${evidenceCount} 项来源` : "正在处理";
-  if (status === "succeeded") return evidenceCount ? `已收集 ${evidenceCount} 项证据` : "本轮已完成";
+  if (status === "running") return evidenceCount ? `正在处理 · ${evidenceCount} 次工具调用完成` : "正在处理";
+  if (status === "succeeded") return evidenceCount ? `本轮已完成 · ${evidenceCount} 次工具调用完成` : "本轮已完成";
   if (status === "failed") return "本轮需要检查";
   return "等待任务";
 }
@@ -113,7 +113,7 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
               {/* Sub-second spans round to "0s" and tell the reader nothing, so
                   they are omitted rather than printed. */}
               {phase.durationMs !== undefined && phase.durationMs >= 1000 ? (
-                <span className="meta-duration">{formatStreamElapsedSeconds(phase.durationMs)}</span>
+                <span className="meta-duration" title="该阶段已观测事件的时间跨度，不代表独占耗时">{formatStreamElapsedSeconds(phase.durationMs)}</span>
               ) : null}
               <span className={`task-phase-status-tag ${phase.state}`}>
                 {phase.state === "done"
@@ -139,12 +139,12 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
                         <span>来源：{item.source}</span>
                         {item.summary ? <small>{item.summary}</small> : null}
                       </div>
-                      <span className="task-evidence-status">
+                      <span className="task-evidence-status" aria-label={item.status === "unknown" ? "结果未知" : item.status === "running" ? "进行中" : item.status === "done" ? "已完成" : "失败"}>
                         {item.status === "running" ? (
                           <span className="spinner-mini" />
                         ) : item.status === "done" ? (
                           <IconCheck size={14} weight="bold" />
-                        ) : (
+                        ) : item.status === "unknown" ? "结果未知" : (
                           "!"
                         )}
                       </span>

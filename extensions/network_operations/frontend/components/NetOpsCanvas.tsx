@@ -213,7 +213,7 @@ const SKIPPED_DATA_KEYS = new Set(["id", "source", "target"]);
  * 200 node diagram stutter for a one pixel move. Element ids are stable and
  * already persisted, so a straight diff is both cheap and correct.
  */
-function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: string | null): void {
+function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: string | null, syncPositions: boolean): void {
   const desired = new Map(elements.map((element) => [String(element.data.id), element]));
   const stale: CyElement[] = [];
   const fresh: CanvasElementSpec[] = [];
@@ -235,7 +235,7 @@ function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: stri
         existing.data("_cls", effective);
         existing.classes(effective);
       }
-      if (existing.isNode() && next.position) {
+      if (syncPositions && existing.isNode() && next.position) {
         const current = (existing as CyNode).position();
         if (Math.abs(current.x - next.position.x) > 0.5 || Math.abs(current.y - next.position.y) > 0.5) {
           (existing as CyNode).position(next.position);
@@ -260,6 +260,9 @@ export default function NetOpsCanvas(props: Props) {
   /** Shift enables marquee selection; see the gesture overlay below. */
   const [shiftHeld, setShiftHeld] = useState(false);
   const initialTopologyIdRef = useRef<string | null>(null);
+  // Theme, filtering and probe updates are presentation-only. Only a new
+  // diagram snapshot may reconcile the renderer's in-progress positions.
+  const reconciledTopologyRef = useRef<Topology | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -638,12 +641,30 @@ export default function NetOpsCanvas(props: Props) {
           data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, label: "", srcPort: "", tgtPort: "", visible: 1, edgeColor: link.status === "down" ? linkColors.danger : link.status === "up" ? linkColors.ok : linkColors.unknown, edgeStyle: link.kind === "logical" ? "dashed" : "solid" },
         })),
     ];
-    applyElements(cy, elements, connectingFromRef.current);
+    applyElements(cy, elements, connectingFromRef.current, reconciledTopologyRef.current !== props.topology);
+    reconciledTopologyRef.current = props.topology;
     if (initialTopologyIdRef.current !== props.topology.topology_id) {
       initialTopologyIdRef.current = props.topology.topology_id;
       window.setTimeout(() => { cy.resize(); cy.fit(undefined, 48); setViewport({ ...cy.pan(), zoom: cy.zoom() }); }, 0);
     }
   }, [rendererReady, props.topology, props.devices, props.dimmedNodeIds, theme]);
+
+  // Probe results can change without a diagram edit. Update only status data:
+  // reconciling positions here could undo a drag while its save is in flight.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !rendererReady) return;
+    const palette = nodeStatusColors(theme === "dark");
+    cy.batch(() => {
+      for (const node of props.topology.nodes) {
+        const status = props.nodeStatus?.[node.node_id] || "unknown";
+        const rendered = cy.getElementById(node.node_id);
+        rendered.data("status", status);
+        rendered.data("statusColor", palette[status]);
+        rendered.data("statusWidth", status === "error" ? 3 : 2);
+      }
+    });
+  }, [rendererReady, props.topology, props.nodeStatus, theme]);
 
   // Interface labels are display-only controls. Updating edge data in place
   // keeps positions, selection, and the fixed sheet intact.

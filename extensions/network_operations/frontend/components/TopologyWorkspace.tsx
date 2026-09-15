@@ -448,10 +448,11 @@ export default function TopologyWorkspace({
   }, [workspaceId]);
   useEffect(() => {
     setTopologyState(null);
+    if (!activeTopology?.topology_id) return;
     void refreshFacts();
     const timer = window.setInterval(() => { if (!document.hidden) void refreshFacts(); }, 10000);
     return () => window.clearInterval(timer);
-  }, [selectedTopologyId, refreshFacts]);
+  }, [activeTopology?.topology_id, refreshFacts]);
   /**
    * What the Agent is told the user is looking at. The canvas selection is
    * authoritative: box-selecting five devices and asking about "these" used

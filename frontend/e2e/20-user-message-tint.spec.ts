@@ -43,7 +43,14 @@ test("20. user message uses the low-saturation green tint", async ({ page, api }
   await expect(userBubble).toBeVisible();
   await expect(userBubble).toHaveCSS("background-color", "rgb(234, 243, 240)");
 
-  const assistantBubble = page.getByTestId("chat-assistant").last().locator(".chat-bubble.assistant");
+  const assistantBubble = page.getByTestId("chat-assistant").last().locator(".chat-bubble.assistant.markdown-body");
   await expect(assistantBubble).toBeVisible();
-  await expect(assistantBubble).toHaveCSS("background-color", "rgb(252, 253, 252)");
+  for (const theme of ["light", "dark"]) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) {
+      await page.getByRole("button", { name: "切换主题", exact: true }).click();
+    }
+    await expect(assistantBubble).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(assistantBubble).toHaveCSS("border-radius", "0px");
+    await expect(assistantBubble).toHaveCSS("padding", "0px");
+  }
 });

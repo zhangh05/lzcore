@@ -1008,7 +1008,7 @@
   gap: var(--space-2);
 }
 
-.stat-card {
+.network-admin .stat-card {
   padding: var(--space-2) var(--space-3);
   border-radius: var(--r-6);
   background: var(--surface-2);
@@ -1076,7 +1076,7 @@
   background: var(--overlay);
 }
 
-.modal-panel {
+.network-panel.modal-panel {
   padding: var(--space-4);
   border-radius: var(--r-12);
   box-shadow: var(--shadow-menu);
@@ -1084,7 +1084,7 @@
   color: var(--text);
 }
 
-.modal-header {
+.network-panel .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1093,13 +1093,13 @@
   border-bottom: 1px solid var(--line);
 }
 
-.modal-header h3 {
+.network-panel .modal-header h3 {
   margin: 0;
   font-size: var(--fs-16);
   color: var(--text);
 }
 
-.modal-actions {
+.network-panel .modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
