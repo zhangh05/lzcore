@@ -7,7 +7,9 @@ import { useToastStore } from "../../stores/toast";
 import { humanFailure } from "../../utils/humanizeError";
 import "./WorkbenchHighlight";
 import { IconAlert, IconChevronDown, IconRefresh } from "../../components/Icon";
-import "../../components/RuntimeEventTimeline.css";
+// RuntimeEventTimeline.css is loaded by the app entry (see main.tsx): it is a
+// shared component stylesheet, and importing it from a page module made the
+// cascade position of a shared stylesheet depend on which route loaded first.
 import { formatFileSize } from "../../utils/format";
 import { MessageRow } from "./components/MessageRow";
 import { scopedLocalStorageKey } from "../../utils/userScope";

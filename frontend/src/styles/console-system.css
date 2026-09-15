@@ -1,5 +1,6 @@
 /* Design System 3.0: shared primitives and page compositions. */
 
+@layer product {
 .page {
   width: 100%;
   max-width: none;
@@ -977,3 +978,5 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 
 /* Static reading surfaces do not need entrance animation. */
 .page .card, .page .hero { animation: none; }
+
+}

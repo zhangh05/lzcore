@@ -1,5 +1,6 @@
 /* rt-* = RuntimeEventTimeline — v3.9 collapsible cards */
 
+@layer product {
 /* ── list (v3.9.1: must be the scroll container, parent .wb-chat is overflow:hidden) ── */
 .rt-list {
   display: flex; flex-direction: column; gap: 10px;
@@ -260,3 +261,5 @@
 
 /* ── dark ── */
 [data-theme="dark"] .rt-diag { background: #3d2e0a; border-color: #ca8a04; }
+
+}

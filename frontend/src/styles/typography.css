@@ -30,6 +30,7 @@
    Must be imported AFTER global.css / product-shell.css / console-system.css /
    AgentWorkbench.css. See src/main.tsx. */
 
+@layer product {
 :root {
   /* ── Vertical rhythm ───────────────────────────────────────────────────
      One 4px-based scale replaces the off-grid spacing scattered across the
@@ -513,4 +514,6 @@ h6 {
 }
 .capability-center .card-title {
   padding-bottom: var(--flow-tight);
+}
+
 }

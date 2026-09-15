@@ -3,6 +3,7 @@
      运行监控共用 global.css 的「统一 tab 条」区块。要改 tab 长相请改那一处，
      不要在这里再写一份 —— 之前就是每页各写一份，才会长出三套长相。 */
 
+@layer extension {
 .network-admin {
   height: 100%;
   min-height: 0;
@@ -1369,4 +1370,6 @@
   .topology-canvas-onboarding-card .ui-button {
     grid-column: 1;
   }
+}
+
 }

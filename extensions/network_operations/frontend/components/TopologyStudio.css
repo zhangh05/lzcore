@@ -1,4 +1,5 @@
 /* The topology is a workspace, with chrome kept outside the drawing surface. */
+@layer extension {
 .network-admin.is-topology { display: flex; flex-direction: column; overflow: hidden; }
 .network-admin.is-topology > .ui-page-header { flex: 0 0 auto; padding-top: 12px; padding-bottom: 10px; }
 .network-admin.is-topology > .network-tabs { flex: 0 0 42px; }
@@ -255,3 +256,5 @@
   .studio-canvas-caption { top: 9px; left: 12px; gap: 4px; }
 }
 @media (prefers-reduced-motion: reduce) { .topology-studio * { transition: none !important; animation: none !important; } }
+
+}

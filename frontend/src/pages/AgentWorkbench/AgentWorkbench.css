@@ -1,3 +1,4 @@
+@layer product {
 .wb-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--w-progress);
@@ -1470,4 +1471,6 @@
 .result-inline-disclosure[open] .result-overview-toggle::before {
   margin-top: 3px;
   transform: rotate(-135deg);
+}
+
 }

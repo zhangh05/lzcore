@@ -2,16 +2,17 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./app/App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+// Cascade order is declared in one place, not decided by import order.
+// See styles/layers.css for the order and the rules that keep it stable.
+import "./styles/layers.css";
+// Shared component styles load from the entry rather than from whichever page
+// module imports the component first: a page deciding the cascade position of a
+// shared stylesheet is how the order became accidental in the first place.
+import "./components/RuntimeEventTimeline.css";
 import "./styles/global.css";
 import "./styles/product-shell.css";
 import "./styles/console-system.css";
-// The workbench owns a dense, two-column composition. Keep its route-specific
-// rules after the shared system so legacy compatibility selectors cannot alter
-// the grid lifecycle when the route chunk is loaded or reloaded.
 import "./pages/AgentWorkbench/AgentWorkbench.css";
-// Typography is the last layer on purpose. It owns the vertical rhythm, the type
-// scale and all `.markdown-body` typography, replacing values that were being
-// redefined in three files at once. Anything that sets type must load before it.
 import "./styles/typography.css";
 
 // Theme initialization — read from Zustand persist store (lzcore_ui) or

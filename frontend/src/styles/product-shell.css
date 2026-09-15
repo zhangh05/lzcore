@@ -1,5 +1,6 @@
 /* Application shell. All visual values come from global Design System 3.0. */
 
+@layer product {
 .app-header {
   min-height: 48px;
   gap: 18px;
@@ -534,3 +535,5 @@
 .sidebar-workspace > div { display: grid; min-width: 0; gap: var(--space-1); }
 .sidebar-workspace span { font-size: var(--fs-11); }
 .sidebar-workspace strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12); font-weight: var(--weight-label); color: var(--text-2); }
+
+}

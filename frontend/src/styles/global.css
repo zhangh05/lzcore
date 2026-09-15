@@ -1,6 +1,7 @@
 /* LZCore UI System
    A single, coherent product UI layer for the Flask + React app. */
 
+@layer product {
 *,
 *::before,
 *::after {
@@ -2837,14 +2838,11 @@ details.collapse[open] summary::before {
   cursor: pointer;
 }
 
-.wb-shell {
-  display: grid !important;
-  grid-template-rows: 48px 42px minmax(0, 1fr) auto;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--bg);
-}
+/* `.wb-shell` composition lives in pages/AgentWorkbench/AgentWorkbench.css.
+   The copy that used to sit here set a four-row grid and a background that the
+   workbench stylesheet always overrode, so it never rendered — but it did lock
+   `display: grid` with `!important` and composed the final grid across two
+   files, which is what made the workbench layout depend on stylesheet order. */
 
 .wb-header {
   display: flex;
@@ -4701,10 +4699,8 @@ details.collapse[open] summary::before {
 @media (max-width: 768px) {
   :root { --h-header: 44px; }
 
-  /* Workbench shell — compact */
-  .wb-shell {
-    grid-template-rows: 44px 38px minmax(0, 1fr) auto;
-  }
+  /* Workbench shell — compact. The row template itself is owned by
+     AgentWorkbench.css, which also overrides this rule's intent. */
   .wb-header { padding: 0 12px; }
   .wb-input-bar { padding: 6px 12px; }
 
@@ -7784,4 +7780,6 @@ summary:focus-visible,
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
 }
