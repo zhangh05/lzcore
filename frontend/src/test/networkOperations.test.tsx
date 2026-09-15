@@ -289,6 +289,41 @@ test("a field both sides changed is listed for review, not decided silently", as
   expect(putPayloads[1].name).toBe("对方改的名字"); // server value wins a contested field
 });
 
+test("restoring a revision does not immediately conflict with itself", async () => {
+  // The restore endpoint already wrote the new version on the server. Adopting
+  // its response as an unsaved edit made the debounced save retry the old
+  // version, so the user was told "someone else changed this" by their own
+  // restore.
+  const restored = { ...sampleTopology, version: 9, name: "恢复后的名字" };
+  const putPayloads: Array<Record<string, unknown>> = [];
+  const passthrough = vi.mocked(apiRequest).getMockImplementation()!;
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.method === "PUT") {
+      putPayloads.push((request.data || {}) as Record<string, unknown>);
+      return { ok: true, topology: restored } as never;
+    }
+    if (request.url?.endsWith("/revisions")) {
+      return {
+        revisions: [{ revision_id: "rev_1", version: 1, saved_at: "2026-09-06T00:00:00Z", name: "数据中心拓扑", summary: { nodes: 1, links: 0, groups: 1, canvas_items: 2 } }],
+      } as never;
+    }
+    if (request.url?.endsWith("/revisions/rev_1/restore")) return { ok: true, topology: restored } as never;
+    return passthrough(request);
+  });
+
+  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  await screen.findByTestId("topo-node-node-d1");
+  fireEvent.click(screen.getByRole("button", { name: "版本历史" }));
+  fireEvent.click(await screen.findByRole("button", { name: "恢复到此版本" }));
+
+  await waitFor(() => expect(screen.getByText(/已按版本 1 的结构恢复/)).toBeInTheDocument(), { timeout: 4000 });
+  // Let the save debounce elapse: a wrongly scheduled save would fire here.
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  expect(putPayloads).toHaveLength(0);
+  expect(screen.queryByRole("dialog", { name: "编辑冲突" })).not.toBeInTheDocument();
+  expect(screen.getByText("已保存")).toBeInTheDocument();
+});
+
 test("canvas filter dims non-matching objects and can be cleared", async () => {
   render(<NetworkOperations topologyOnly />);
   await screen.findByTestId("topo-node-node-d1");

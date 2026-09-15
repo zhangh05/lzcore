@@ -42,10 +42,11 @@ import { apiRequest } from "../../../../frontend/src/api/client";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
 import { LAYOUT_PRESETS, layoutTopology, type LayoutAlgorithm } from "./topologyLayout";
-import { TopologyAgentPanel, type CanvasSelection } from "./TopologyAgentPanel";
+import { TopologyAgentPanel } from "./TopologyAgentPanel";
 import NetOpsCanvas, { NODE_STATUS_COLORS, type CanvasApi, type CanvasContextTarget, type NodeRuntimeStatus } from "./NetOpsCanvas";
 import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
 import { mergeTopologies, type MergeConflict, type MergeStats } from "./topologyMerge";
+import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import "./TopologyStudio.css";
 
@@ -309,7 +310,7 @@ interface TopologyWorkspaceProps {
   busy: boolean;
 }
 
-type SelectedElement =
+export type SelectedElement =
   | { type: "node"; nodeId: string }
   | { type: "link"; linkId: string }
   | { type: "group"; groupId: string }
@@ -377,6 +378,23 @@ export default function TopologyWorkspace({
   const saveTimerRef = useRef<number | null>(null);
   useEffect(() => { setHistory([]); setFuture([]); setSelectedElement(null); }, [selectedTopologyId]);
 
+  /**
+   * Adopt a drawing the server has already written.
+   *
+   * Restore, agent write-back and "take the server version" all end with the
+   * server holding a newer version than the one this tab remembers. Routing
+   * those through `pushState` scheduled another save against the stale
+   * version, so the next thing the user saw was a conflict with themselves.
+   */
+  const adoptServerTopology = useCallback((next: Topology) => {
+    revisionRef.current += 1;
+    serverVersionsRef.current.set(next.topology_id, next.version);
+    serverTopologyRef.current.set(next.topology_id, next);
+    setActiveTopology(next);
+    saveStatusRef.current = "saved";
+    setSaveStatus("saved");
+  }, []);
+
   // Inspector & selection
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -420,28 +438,15 @@ export default function TopologyWorkspace({
     const timer = window.setInterval(() => { if (!document.hidden) void refreshFacts(); }, 10000);
     return () => window.clearInterval(timer);
   }, [selectedTopologyId, refreshFacts]);
-  const canvasSelection: CanvasSelection = useMemo(() => {
-    if (!activeTopology || !selectedElement) return { device_ids: [], link_ids: [], label: "整张拓扑" };
-    if (selectedElement.type === "node") {
-      const node = activeTopology.nodes.find((item) => item.node_id === selectedElement.nodeId);
-      const linkedDeviceId = node?.linked_device_id || "";
-      if (!linkedDeviceId) return { device_ids: [], link_ids: [], label: `${node?.display_name || "图纸设备"}（未关联）` };
-      return { device_ids: [linkedDeviceId], link_ids: [], label: devices.find((dev) => dev.device_id === linkedDeviceId)?.name || linkedDeviceId };
-    }
-    if (selectedElement.type === "link") {
-      const link = activeTopology.links.find((item) => item.link_id === selectedElement.linkId);
-      const nodeById = new Map(activeTopology.nodes.map((node) => [node.node_id, node]));
-      const source = link ? nodeById.get(link.source_node_id) : undefined;
-      const target = link ? nodeById.get(link.target_node_id) : undefined;
-      const operationalEndpointIds = [source?.linked_device_id, target?.linked_device_id].filter(Boolean) as string[];
-      return link ? { device_ids: operationalEndpointIds, link_ids: [link.link_id], label: `${source?.display_name || devices.find((dev) => dev.device_id === source?.linked_device_id)?.name || source?.node_id} ↔ ${target?.display_name || devices.find((dev) => dev.device_id === target?.linked_device_id)?.name || target?.node_id}` } : { device_ids: [], link_ids: [], label: "整张拓扑" };
-    }
-    if (selectedElement.type === "canvas_item") {
-      const item = (activeTopology.canvas_items || []).find((entry) => entry.item_id === selectedElement.itemId);
-      return { device_ids: [], link_ids: [], label: item?.text || "图纸图元" };
-    }
-    return { device_ids: activeTopology.nodes.filter((node) => node.group_id === selectedElement.groupId).map((node) => node.linked_device_id || "").filter(Boolean), link_ids: [], label: activeTopology.groups.find((group) => group.group_id === selectedElement.groupId)?.name || "分组" };
-  }, [activeTopology, selectedElement, devices]);
+  /**
+   * What the Agent is told the user is looking at. The canvas selection is
+   * authoritative: box-selecting five devices and asking about "these" used
+   * to send the whole topology, because this came from the inspector alone.
+   */
+  const canvasSelection: CanvasSelection = useMemo(
+    () => buildCanvasSelection(activeTopology, devices, canvasSelectedElementIds, selectedElement),
+    [activeTopology, devices, canvasSelectedElementIds, selectedElement],
+  );
 
   // Palette filters
   const [deviceSearch, setDeviceSearch] = useState("");
@@ -695,10 +700,7 @@ export default function TopologyWorkspace({
     setShowConflict(false);
     setConflict(null);
     if (choice === "theirs") {
-      serverTopologyRef.current.set(conflict.theirs.topology_id, conflict.theirs);
-      setActiveTopology(conflict.theirs);
-      saveStatusRef.current = "saved";
-      setSaveStatus("saved");
+      adoptServerTopology(conflict.theirs);
       setNotice("已采用服务端版本，本地未保存改动已放弃", true);
       return;
     }
@@ -710,7 +712,7 @@ export default function TopologyWorkspace({
         : "已用本地版本覆盖服务端改动",
       choice === "merged",
     );
-  }, [conflict, pushState, setNotice]);
+  }, [conflict, pushState, adoptServerTopology, setNotice]);
 
   const handleUndo = useCallback(() => {
     if (!history.length || !activeTopology) return;
@@ -1584,12 +1586,14 @@ export default function TopologyWorkspace({
         setNotice("Agent 已更新服务端图纸；本地还有未保存改动，保存后即可看到结论", false);
         return;
       }
-      pushState(remote);
+      // The agent wrote on the server, so this is a server-confirmed state,
+      // not a local edit waiting to be saved.
+      adoptServerTopology(remote);
       setNotice(`Agent 已把结论写回画布（版本 ${activeTopology.version} → ${remote.version}）`, true);
     } catch {
       // A failed reconciliation must not disturb the canvas the user is on.
     }
-  }, [activeTopology, workspaceId, saveStatus, pushState, setNotice, refreshFacts]);
+  }, [activeTopology, workspaceId, saveStatus, adoptServerTopology, setNotice, refreshFacts]);
 
   const handleRestoreRevision = useCallback(async (revisionId: string) => {
     if (!activeTopology) return;
@@ -1601,7 +1605,11 @@ export default function TopologyWorkspace({
         params: { workspace_id: workspaceId },
       });
       if (res.topology) {
-        pushState(res.topology);
+        // Keep the pre-restore drawing on the undo stack, but treat the
+        // restored one as already saved — it is, the server just wrote it.
+        setHistory((prev) => [...prev.slice(-20), activeTopology]);
+        setFuture([]);
+        adoptServerTopology(res.topology);
         const restoredVersion = revisions.find((item) => item.revision_id === revisionId)?.version;
         setNotice(
           restoredVersion
@@ -1617,7 +1625,7 @@ export default function TopologyWorkspace({
     } finally {
       setRestoringId("");
     }
-  }, [activeTopology, workspaceId, pushState, setNotice, revisions]);
+  }, [activeTopology, workspaceId, adoptServerTopology, setNotice, revisions]);
 
   // Node selection inspector helpers
   const selectedNode = useMemo(() => {

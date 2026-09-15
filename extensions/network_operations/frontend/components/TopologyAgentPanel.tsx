@@ -10,10 +10,11 @@ import { MessageRow } from "../../../../frontend/src/pages/AgentWorkbench/compon
 import type { WorkbenchSkill } from "../../../../frontend/src/pages/AgentWorkbench/components/WorkbenchComposer";
 import { IconSparkle, IconSend, IconStop } from "../../../../frontend/src/components/Icon";
 import type { Topology, Skill } from "./TopologyWorkspace";
+import type { CanvasSelection } from "./canvasSelection";
 import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
 
 const EMPTY: ChatMsg[] = [];
-export type CanvasSelection = { device_ids: string[]; link_ids: string[]; label: string };
+export type { CanvasSelection } from "./canvasSelection";
 
 export function buildTopologyRequest(topology: Topology, selection: CanvasSelection, request: string) {
   return `${request}\n\n当前画布上下文（图纸描述不是设备运行结论）：\n${JSON.stringify({
@@ -115,7 +116,10 @@ export function TopologyAgentPanel({ workspaceId, topology, skills, selection, o
     {!selectedSkill && <p className="topology-agent-hint">在 Skill 配置中关联这张拓扑后，即可开始协作。</p>}
     <form className="topology-agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <textarea aria-label="拓扑协作指令" placeholder="选择设备，然后告诉 Agent 你想做什么…" value={input} onChange={(event) => setInput(event.target.value)} rows={3} />
-      <footer><small>{selection.device_ids.length ? `${selection.device_ids.length} 台设备已选中` : "上下文：整张拓扑"}</small>{running ? <button type="button" onClick={() => void cancel()}><IconStop size={14} />停止</button> : <button type="submit" disabled={!selectedSkill || !input.trim() || preparing}><IconSend size={14} />{preparing ? "连接中" : "发送"}</button>}</footer>
+      {/* The footer must agree with the scope chip above. Counting devices said
+    "whole topology" for a selection of unlinked nodes, contradicting the
+    "2 nodes selected" right above it. */}
+            <footer><small>{selection.device_ids.length ? `${selection.device_ids.length} 台设备已选中` : `上下文：${selection.label || "整张拓扑"}`}</small>{running ? <button type="button" onClick={() => void cancel()}><IconStop size={14} />停止</button> : <button type="submit" disabled={!selectedSkill || !input.trim() || preparing}><IconSend size={14} />{preparing ? "连接中" : "发送"}</button>}</footer>
     </form>
   </section>;
 }
