@@ -466,6 +466,15 @@ select.input:focus-visible {
   overflow: hidden;
   background: var(--console-surface);
 }
+/* Continuous rows. The list is the single container, so the separator belongs
+   to the row rather than to a per-entry border box. */
+.memory-page .memory-card {
+  border-bottom: 1px solid var(--console-border-soft);
+  background: transparent;
+}
+.memory-page .memory-card:last-child { border-bottom: 0; }
+.memory-page .memory-card.checked { background: var(--console-action-soft); }
+.memory-page .memory-card.inactive { opacity: 0.7; }
 .memory-page .memory-card-row {
   min-height: 58px;
   margin: 0;
@@ -475,6 +484,13 @@ select.input:focus-visible {
   box-shadow: none;
 }
 .memory-page .memory-card-row:hover { background: var(--console-action-soft); }
+/* Provenance and trust, stated once per row in the metadata language. */
+.memory-page .memory-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  margin-top: 5px;
+}
 .memory-page .memory-card-detail,
 .memory-page .memory-explain-box,
 .memory-page .memory-error-card {

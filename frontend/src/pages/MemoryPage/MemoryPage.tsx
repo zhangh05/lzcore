@@ -292,8 +292,11 @@ export function MemoryPage() {
                 ? meta.merged_from.map((v) => String(v || "")).filter(Boolean)
                 : [];
 
+              // A row, not a card: the list is already one bordered surface, so
+              // giving every entry its own border and radius nested two
+              // containers and turned the page into a card wall.
               return (
-                <div key={e.memory_id || i} className={`card memory-card ${isChecked ? "checked" : ""} ${isInactive ? "inactive" : ""}`}
+                <div key={e.memory_id || i} className={`memory-card ${isChecked ? "checked" : ""} ${isInactive ? "inactive" : ""}`}
                   onClick={() => setSel(isSelected ? null : e)}>
                   <div className="memory-card-row">
                     {/* Checkbox */}
@@ -311,24 +314,44 @@ export function MemoryPage() {
                       <div className="memory-card-title">
                         <StatusDot status={dotColor} />
                         <strong>{e.title || e.summary || e.content?.slice(0, 80) || "未命名记忆"}</strong>
+                        {/* Badges are kept for exceptions only. Six of them on
+                            every row made the page shout and left nothing to
+                            stand out: a state that needs attention, a
+                            user-confirmed authority, a low score. */}
                         {e.status && e.status !== "active" && (
                           <Badge kind={isInactive ? "err" : "warn"}>{e.status}</Badge>
                         )}
-                        {e.memory_type && <Badge kind="info">{memoryTypeLabel(e.memory_type)}</Badge>}
-                        {e.scope && <Badge kind="muted">{e.scope}</Badge>}
-                        {origin && <Badge kind="muted">{memoryOriginLabel(origin)}</Badge>}
-                        {authority && <Badge kind={authority === "explicit_user" ? "ok" : "muted"}>{memoryAuthorityLabel(authority)}</Badge>}
-                        {score != null && Number.isFinite(score) && <Badge kind={score >= 4 ? "ok" : "warn"}>score {score}</Badge>}
+                        {authority === "explicit_user" && <Badge kind="ok">{memoryAuthorityLabel(authority)}</Badge>}
+                        {score != null && Number.isFinite(score) && score < 4 && (
+                          <Badge kind="warn">score {score}</Badge>
+                        )}
+                      </div>
+                      {/* Where this memory came from and how far it can be
+                          trusted, stated once in the product's metadata
+                          language rather than as a row of pills. */}
+                      <div className="memory-card-meta">
+                        {e.memory_type && (
+                          <span className="meta-fact"><span className="meta-label">type</span><span className="meta">{memoryTypeLabel(e.memory_type)}</span></span>
+                        )}
+                        {origin && (
+                          <span className="meta-fact"><span className="meta-label">source</span><span className="meta">{memoryOriginLabel(origin)}</span></span>
+                        )}
+                        {e.scope && (
+                          <span className="meta-fact"><span className="meta-label">scope</span><span className="meta">{e.scope}</span></span>
+                        )}
+                        {authority && (
+                          <span className="meta-fact"><span className="meta-label">authority</span><span className="meta">{memoryAuthorityLabel(authority)}</span></span>
+                        )}
+                        {score != null && Number.isFinite(score) && score >= 4 && (
+                          <span className="meta-fact"><span className="meta-label">score</span><span className="meta">{score}</span></span>
+                        )}
+                        {confidence != null && Number.isFinite(confidence) && (
+                          <span className="meta-fact"><span className="meta-label">confidence</span><span className="meta">{Math.round(confidence * 100)}%</span></span>
+                        )}
                       </div>
                       <div className="memory-card-preview">
                         {e.value_preview || e.content?.substring(0, 150) || "(无内容)"}
                       </div>
-                      {(reason || confidence != null) && (
-                        <div className="memory-card-preview muted text-xs">
-                          {reason ? `提取原因：${memoryReasonLabel(reason)}` : ""}
-                          {confidence != null && Number.isFinite(confidence) ? ` · 置信度 ${Math.round(confidence * 100)}%` : ""}
-                        </div>
-                      )}
                     </div>
 
                     <button className="btn sm ghost memory-card-delete" title="永久删除"
