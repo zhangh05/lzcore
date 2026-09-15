@@ -689,10 +689,50 @@ else if (n.panningEnabled() &amp;&amp; <b data-page-node-id="EHIX6lOy8GZvT0emNKn
   </div>
 </div>
 
+<div data-page-node-id="progress-round4">
+  <h3 data-page-node-id="progress-round4-title">8.7 第四轮：把「两条路径」这个模式系统性排查一遍（2026-09-15）</h3>
+  <p data-page-node-id="progress-round4-lead">
+    8.6 挖出的两个缺陷有共同模式 —— <b>同一件事存在两条路径，其中一条没跟上</b>。
+    这一轮不再逐点修，而是把这个模式当成清单，把画布上所有「同一状态的多条写入/选区路径」列出来逐一核对。
+  </p>
+  <table data-page-node-id="progress-round4-table">
+    <thead><tr><th>排查对象</th><th>发现</th><th>处理</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>所有直连后端的写路径（PUT/POST/DELETE）</td>
+        <td>发现<b>版本恢复</b>与<b>Agent 结论回写</b>两条路径把「服务端已写好的状态」当成「本地待保存的编辑」，于是又按旧版本号发起一次保存 —— 恢复完立刻弹「这张图纸被其他人保存过」，而那个「其他人」就是恢复操作自己。</td>
+        <td>抽出单一入口 <code>adoptServerTopology()</code>：采用服务端已确认的状态并标记为已保存，不再排队一次多余的写。三处（恢复 / Agent 回写 / 采用服务端版本）统一走它。</td>
+      </tr>
+      <tr>
+        <td>画布内所有选区变更点</td>
+        <td>逐个核对 <code>tap</code>、框选、全选、清除、定位：除 8.6 已修的 <code>focusIds</code> 外，其余均已正确上报。</td>
+        <td>无需改动，确认一致。</td>
+      </tr>
+      <tr>
+        <td>工作区内所有 <code>setActiveTopology</code> 调用</td>
+        <td>6 处：服务端同步、采纳服务端状态、保存成功、本地编辑、撤销、重做 —— 各自语义正确。</td>
+        <td>无需改动。</td>
+      </tr>
+      <tr>
+        <td>Agent 上下文来源</td>
+        <td>面板的「选中对象」取自<b>检视器单选</b>，而画布多选是另一套状态。框选 5 台设备后问 Agent，发出去的是「整张拓扑」—— 用户的选区在到达模型前被静默丢弃。页脚还按「关联设备数」判断，于是出现「已选 2 个节点」与「上下文：整张拓扑」同屏矛盾。</td>
+        <td>选区推导提取为纯函数 <code>buildCanvasSelection()</code>，以画布选区为唯一来源；页脚改为与上方一致地展示选区描述。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="card" data-page-node-id="progress-card-9">
+    <p><strong>9. 「同一状态多条路径」是这个画布最容易长出的缺陷类型。</strong>
+      它的危险之处在于<b>每一条路径单看都是对的</b>，只有把它们并排看才会发现不一致；
+      而 TypeScript、lint、单测都不会报警。可操作的结论是两条：</p>
+    <p>一是<b>凡「服务端已写好的状态」必须走同一个采纳入口</b>，不要各自 <code>pushState</code>；
+    二是<b>凡「当前选中了什么」只能有一个真相来源</b>，其余视图都从它派生。</p>
+  </div>
+</div>
+
 <h3 data-page-node-id="progress-quantified">8.3 可量化的变化</h3>
   <div class="kv" data-page-node-id="progress-kv">
     <div><span class="k">后端测试</span><span class="v">93 通过（拓扑 / 扩展包 / 邻居发现）</span></div>
-    <div><span class="k">新增测试</span><span class="v">邻居发现 9 例 · 版本历史 8 例 · PDF 生成器 7 例 · 三方合并 8 例 · 画布交互 3 例</span></div>
+    <div><span class="k">新增测试</span><span class="v">邻居发现 9 例 · 版本历史 8 例 · PDF 生成器 7 例 · 三方合并 8 例 · 选区上下文 11 例 · 画布交互 3 例</span></div>
     <div><span class="k">前端测试</span><span class="v">199 通过 / 45 个文件</span></div>
     <div><span class="k">类型检查</span><span class="v"><code>tsc -b</code> 0 错误，<code>npm run build</code> 通过</span></div>
     <div><span class="k">实时闭环</span><span class="v">发现→采纳：链路带 <code>source: discovered</code> 与证据引用</span></div>
