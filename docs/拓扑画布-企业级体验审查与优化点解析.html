@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="s6rpBogeGzDcuLDYTimIbG">
+<head data-page-node-id="msRhsOuBO0KMsPKhGP72gR">
+<meta charset="UTF-8" data-page-node-id="LG7i6sJNALobKFTulZ3Be8">
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="x0uJDrh9BPX6kb0s8VLg7W">
+<title>网络拓扑画布 · 企业级体验审查与优化点解析</title>
+<style>
+:root{
+  --bg:#f6f8fa; --surface:#ffffff; --surface-2:#fbfcfd;
+  --line:#e2e8ee; --line-2:#eef2f6;
+  --text:#1f2d3a; --text-2:#52697a; --text-3:#8497a5;
+  --accent:#0d8a7c; --accent-soft:#e6f6f3;
+  --p0:#d64545; --p0-soft:#fdecec;
+  --p1:#c77700; --p1-soft:#fff4e3;
+  --p2:#2f6fb5; --p2-soft:#ecf3fc;
+  --p3:#6b5bb5; --p3-soft:#f1eefc;
+  --ok:#0f9d58; --radius:10px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#12171c; --surface:#1a2027; --surface-2:#1f262e;
+    --line:#2c353e; --line-2:#252d35;
+    --text:#e4ebf1; --text-2:#a9bac7; --text-3:#7b8c99;
+    --accent:#3fc7b4; --accent-soft:#12332f;
+    --p0:#ff7b72; --p0-soft:#3a1f1f;
+    --p1:#f0b866; --p1-soft:#3a2c14;
+    --p2:#79b8ff; --p2-soft:#16283c;
+    --p3:#b392f0; --p3-soft:#241f38;
+    --ok:#4ade80;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.75;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:48px 28px 96px}
+header.hero{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:40px}
+.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700}
+h1{font-size:30px;line-height:1.3;margin:12px 0 10px;letter-spacing:-.4px}
+.sub{color:var(--text-2);font-size:13.5px;margin:0}
+.meta{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-size:11px;padding:3px 9px;border:1px solid var(--line);border-radius:99px;color:var(--text-2);background:var(--surface)}
+h2{font-size:20px;margin:56px 0 6px;letter-spacing:-.2px;padding-top:8px}
+h2 .num{color:var(--text-3);font-weight:600;margin-right:10px;font-variant-numeric:tabular-nums}
+h3{font-size:15.5px;margin:30px 0 8px}
+p{margin:10px 0}
+.lead{color:var(--text-2);margin-bottom:22px;font-size:13.5px}
+
+/* scorecards */
+.scores{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin:24px 0 8px}
+.score{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.score .k{font-size:11px;color:var(--text-3);letter-spacing:.04em}
+.score .v{font-size:24px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.score .d{font-size:11px;color:var(--text-3);margin-top:2px}
+.score.bad .v{color:var(--p0)} .score.mid .v{color:var(--p1)} .score.good .v{color:var(--ok)}
+
+table{width:100%;border-collapse:collapse;margin:16px 0;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:12.5px}
+th{background:var(--surface-2);text-align:left;padding:9px 12px;font-weight:650;
+  color:var(--text-2);border-bottom:1px solid var(--line);font-size:11.5px;letter-spacing:.03em;white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line-2);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.no{color:var(--p0);font-weight:600} td.yes{color:var(--ok);font-weight:600}
+td.part{color:var(--p1);font-weight:600}
+code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);
+  border:1px solid var(--line-2);padding:1px 5px;border-radius:4px;color:var(--text)}
+
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);
+  padding:12px 16px;border-radius:0 8px 8px 0;margin:18px 0;font-size:13px}
+.callout.warn{border-left-color:var(--p0);background:var(--p0-soft)}
+.callout strong{color:var(--text)}
+
+/* finding cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;margin:14px 0}
+.card + .card{margin-top:12px}
+.card .top{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;letter-spacing:.05em;white-space:nowrap;flex:0 0 auto;margin-top:3px}
+.b0{background:var(--p0-soft);color:var(--p0)} .b1{background:var(--p1-soft);color:var(--p1)}
+.b2{background:var(--p2-soft);color:var(--p2)} .b3{background:var(--p3-soft);color:var(--p3)}
+.card h4{margin:0;font-size:15px;flex:1}
+.card .id{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.kv{display:grid;grid-template-columns:76px 1fr;gap:4px 12px;margin-top:12px;font-size:12.5px}
+.kv dt{color:var(--text-3);font-size:11.5px;padding-top:1px}
+.kv dd{margin:0;color:var(--text-2)}
+.kv dd b{color:var(--text);font-weight:600}
+.evidence{margin-top:12px;background:var(--surface-2);border:1px solid var(--line-2);
+  border-radius:7px;padding:10px 13px;font-family:var(--mono);font-size:11.5px;
+  color:var(--text-2);white-space:pre-wrap;line-height:1.7;overflow-x:auto}
+.evidence .lbl{color:var(--text-3);font-family:inherit}
+
+ul.clean{margin:10px 0;padding-left:20px}
+ul.clean li{margin:5px 0;color:var(--text-2);font-size:13px}
+ul.clean li b{color:var(--text)}
+
+/* roadmap */
+.road{position:relative;margin:22px 0 8px;padding-left:26px}
+.road::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--line)}
+.phase{position:relative;margin-bottom:22px}
+.phase::before{content:"";position:absolute;left:-25px;top:6px;width:12px;height:12px;
+  border-radius:50%;background:var(--surface);border:2.5px solid var(--accent)}
+.phase h4{margin:0 0 4px;font-size:14.5px}
+.phase .when{font-size:11px;color:var(--text-3);margin-bottom:6px}
+.phase ul{margin:6px 0;padding-left:18px}
+.phase li{font-size:12.5px;color:var(--text-2);margin:3px 0}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:820px){.two{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.panel h5{margin:0 0 8px;font-size:12.5px;color:var(--text-2)}
+.panel ul{margin:0;padding-left:18px}
+.panel li{font-size:12px;color:var(--text-2);margin:3px 0}
+footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);
+  font-size:11.5px;color:var(--text-3)}
+</style>
+</head>
+<body data-page-node-id="iJlfaFTmpOEWARMECXbcGP">
+<div class="wrap" data-page-node-id="zDGagGd32illmrXXUuCjBv">
+
+<header class="hero" data-page-node-id="mjH9SCr7idFvpBnzLfyUDN">
+  <div class="eyebrow" data-page-node-id="92Nj1oN81LchSyJ7MRHugW">Review &amp; Optimization Analysis</div>
+  <h1 data-page-node-id="TILIjIThaExHS7WOuL2fH0">网络拓扑画布 · 企业级体验审查与优化点解析</h1>
+  <p class="sub" data-page-node-id="M6waa0BS9W4rLZz55rqpBQ">对标 draw.io / Lucidchart / Figma / Cisco DNA Center / Zabbix Map / NetBox，把「能画出来」推进到「企业愿意天天用」。</p>
+  <div class="meta" data-page-node-id="olk22EqmKk4R9tn0hkLjlH">
+    <span class="chip" data-page-node-id="EWgdiwvIA8FWzZlSMTjK7t">审查时间 2026-09-14</span>
+    <span class="chip" data-page-node-id="eIPcuXWxVNgQRxZ2szxc1h">范围：extensions/network_operations 前端 5,056 行</span>
+    <span class="chip" data-page-node-id="tFGYbiXGYm6aAdazJwOO8V">方法：静态审查 + Playwright 运行时实测 9 组</span>
+    <span class="chip" data-page-node-id="ln79MgR0LuAvfUGAKeyVRF">基线 commit bbdabdc / 39fabd7</span>
+  </div>
+</header>
+
+<h2 data-page-node-id="RyBDLQnUYVxEQxByVDvjrK"><span class="num" data-page-node-id="avnmzhjxL1TTPBz2kTEc1W">01</span>执行摘要</h2>
+<p class="lead" data-page-node-id="JKaEok1OHFGoOKv634lrE2">先给结论：<b data-page-node-id="xUlv7R3tz0xZ0oq0ZuxHEY">引擎层选对了，产品层还没跟上。</b></p>
+
+<p data-page-node-id="6WBTiSFIFcql3FJTTFfkcK">换到 Cytoscape（<code data-page-node-id="Ucir6hgSdAzefBVB2RXMz1">f14b052</code>）+ 接入 NetOps 真实设备图标集（<code data-page-node-id="S2RKEEtpffJ89YvMNSpMuJ">74aa078</code>）+ 图纸/资产解耦（<code data-page-node-id="evC4bbs4FVGRySdnq3uAdE">bbdabdc</code>）这三步都走对了方向——画布已经从「玩具」变成「像样的图」。但运行时实测暴露出的问题是<b data-page-node-id="YpKFr1idsGQCjbd3Y9dSw8">交互层的</b>，不是渲染层的：核心导航手势失效、双套命中逻辑并存、编辑后全量重建图元。这些在 6 个节点的演示拓扑上看不出来，在 200 个节点的真实拓扑上会放大成「不好用」。</p>
+
+<p data-page-node-id="rXrePStc0yBsTuJeNJc4PA">另一层的差距是<b data-page-node-id="wf6KFIHdGP9FT2l4O4aTnY">企业级能力缺位</b>：没有导出、没有鹰眼、没有画布内搜索、没有右键菜单、没有快捷键体系，而<b data-page-node-id="fHdJWu46WOWPPjt2B5nlZp">设备/链路的真实状态没有上画布</b>——拓扑图在网管产品里的核心价值就是「一眼看到哪里出问题」，现在这一环是断的。</p>
+
+<div class="scores" data-page-node-id="QYbD2t9y2NCNLlJODK8wPo">
+  <div class="score good" data-page-node-id="HNzHCncEp5vEa1PnikCUkq"><div class="k" data-page-node-id="Pg9mOkabSDeCH07kpPpZRs">架构合理性</div><div class="v" data-page-node-id="zEF2FRU1OY7FxdszkQzA7Y">8.0</div><div class="d" data-page-node-id="zyO7sYPvpIdQFRu1FDT1Ew">图纸/资产解耦清晰</div></div>
+  <div class="score good" data-page-node-id="To0JwbsH1kXpfD3yIwhsYd"><div class="k" data-page-node-id="rWB6f1G9WsWP7tdmd80jho">数据完整性</div><div class="v" data-page-node-id="HFU7Ne8vnugpIGk1pUmEIF">8.5</div><div class="d" data-page-node-id="Fz9LK9jttBj219Ido6vhfZ">证据闭环 + 版本乐观锁</div></div>
+  <div class="score bad" data-page-node-id="IszlZsXR6GoGDN1l9g2N43"><div class="k" data-page-node-id="6ZEE1SMhnBQO3C2L8XODHO">画布交互</div><div class="v" data-page-node-id="UW1hA3iaGpyXCZ0X7800pO">4.5</div><div class="d" data-page-node-id="NlCuvwL7hms4zHNsaJPuoJ">滚轮缩放失效</div></div>
+  <div class="score mid" data-page-node-id="iRGkcok0FDDhcCFtSE9z5I"><div class="k" data-page-node-id="lPurDuzDgtwTzOHHlACKcE">信息架构</div><div class="v" data-page-node-id="naZDBiDMnamG0KBTXkOBhi">5.5</div><div class="d" data-page-node-id="kyNL9iqm6fpHvOMGC21aZu">13 控件平铺一行</div></div>
+  <div class="score bad" data-page-node-id="8y80YcZk3GFMCudf8ClVaA"><div class="k" data-page-node-id="InielslBDwVL0kMYeq9bon">企业能力</div><div class="v" data-page-node-id="MCTbfLFUrmi84HbnWKKAtj">4.0</div><div class="d" data-page-node-id="EBYUurArCsUtUU8g8t7zYP">无导出/鹰眼/搜索</div></div>
+  <div class="score mid" data-page-node-id="X248jQNhNFFEuTfzet9SPa"><div class="k" data-page-node-id="493yrY16Y78zwina0fUs1V">状态可视化</div><div class="v" data-page-node-id="s3iqfuOZageyjT1Ga42B7z">4.0</div><div class="d" data-page-node-id="rOz9DrFbCqEDISFKQk5CDU">状态数据没上图</div></div>
+  <div class="score mid" data-page-node-id="O2hXbEjDbKqFY7bU2Pd4RT"><div class="k" data-page-node-id="9Ou3TxTX5gJsZBCjhIhHFU">性能策略</div><div class="v" data-page-node-id="JUD7oAPtmB9bBUWYR64I9v">5.0</div><div class="d" data-page-node-id="oFy2O1xoOIuVFpSMOABbA4">每次编辑全量重建</div></div>
+  <div class="score bad" data-page-node-id="G434JBxHlMUr4ueAyxgm2W"><div class="k" data-page-node-id="fSxG9EJsTs72a6i6YeEBiC">代码卫生</div><div class="v" data-page-node-id="fklliSyZDphernnZdhWh8V">5.0</div><div class="d" data-page-node-id="BctGrFnVwdP9xfGbNpdgBZ">18 条死选择器</div></div>
+</div>
+
+<div class="callout warn" data-page-node-id="OcHz4VvziJIkfITiX3jNzZ">
+  <b data-page-node-id="laWPorFLYVtjNaVBXVcSj5">4 个 P0 实测缺陷</b>（全部在浏览器里复现，非推测）：<br data-page-node-id="KwzQ9U8wKtwGJ0R0nEqQz8">
+  ① 选择模式 / 连线模式下<b data-page-node-id="Yk8m5jz0CYMiIqMJDzBFVn">滚轮缩放完全失效</b>——唯一能缩放的「移动布局」模式又因灵敏度失控一档跳到 400%；<br data-page-node-id="cgTTje1mrssTWvQqKHJS2a">
+  ② 手势层全表面覆盖画布并自建命中测试，与 Cytoscape 原生命中形成<b data-page-node-id="M4oe3sP84n9nnt3OK3LA69">双选中路径</b>；<br data-page-node-id="ADM4qW6JEa43JmarFmNezh">
+  ③ 框选后<b data-page-node-id="ET8VGoA6r2mHQWDSu3CAJp">没有任何视觉反馈</b>（提示文案写死，选中数不显示）；<br data-page-node-id="AWdcpLxarYLEm5dV9jV7e7">
+  ④ 每次编辑（含拖拽结束）<b data-page-node-id="IoZKWY90kTe8LCtkubDpcz">销毁并重建全部图元</b>。
+</div>
+
+<h2 data-page-node-id="4n2UuheOvB2c8tVsgvAnQJ"><span class="num" data-page-node-id="owXlz03FTiFGYiPKF1Si0X">02</span>现状盘点</h2>
+
+<h3 data-page-node-id="IG1KKCPqdn9PVfWEkbgEgN">2.1 代码规模</h3>
+<table data-page-node-id="4kJ5x6uPbBY8kfFCNJ0miO">
+  <tr data-page-node-id="iv4TBOrcWhCGrkBhuuLNpp"><th data-page-node-id="dvbEOktMB4IshazlpOBCQ8">文件</th><th data-page-node-id="GLgBW0eN1dxvCGYX8xP8eD">行数</th><th data-page-node-id="xnBKOgT8FfGSzD57MZQBXC">职责</th><th data-page-node-id="3RC3EP8ZBkKIgmAdoHAQOb">健康度</th></tr>
+  <tr data-page-node-id="mmOa77otbJqumBks6I9S8C"><td data-page-node-id="YT0x7imMlGTw5lrZ8FWAOK"><code data-page-node-id="vgyo0bBFoXQceoLoF1d2dm">TopologyWorkspace.tsx</code></td><td data-page-node-id="vKKWBh0v9D7ngdzb50Je2g">2,228</td><td data-page-node-id="my7RpgXMBTCAXlV8IOvy6u">状态机 + 侧栏 + 工具条 + 检视器 + 弹窗</td><td class="part" data-page-node-id="1RUqIwDRm7xq5RZeTbolcp">过重，85 处 hook</td></tr>
+  <tr data-page-node-id="sYMHsyB3hLGDLFlqYEz2sF"><td data-page-node-id="o31vBT0Twg4Eh7O4tDq9oG"><code data-page-node-id="mLN0ibHxZq0ZCCwsGJ5okU">NetworkOperations.css</code></td><td data-page-node-id="Tj7FhfnOBhIcAzsyr7oeEy">1,322</td><td data-page-node-id="YoAsBIQGnuXEbasHkwR4U9">扩展整体样式</td><td class="part" data-page-node-id="WnKsdeLJ5kMryEY88Mah00">与拓扑样式有重叠</td></tr>
+  <tr data-page-node-id="mmEwlkWC0Vm0kMF9DLZ2dg"><td data-page-node-id="miDEpfwPMnUFAUBCWkXO99"><code data-page-node-id="U8BeYxDDYl2uNB8BoMLlGP">NetworkOperations.tsx</code></td><td data-page-node-id="l7VBmBngjqL1ey0DEhtDYD">625</td><td data-page-node-id="hdy2Bnrx9RExn4y0BNSRDS">页面容器 / 数据装载</td><td class="yes" data-page-node-id="9A1ROQyhb1hoA4GqRpfIm0">清晰</td></tr>
+  <tr data-page-node-id="yLGZsPp17CVk5LibL4CqzL"><td data-page-node-id="Wlv73L5cB4zZnchXx0BeLa"><code data-page-node-id="VbZ5ElcxwLNE4ETQEgxKQL">NetOpsCanvas.tsx</code></td><td data-page-node-id="T4FvBBj96BIxv2DFUCDsei">460</td><td data-page-node-id="79tmHan4pyqU60arrE5S5y">Cytoscape 封装</td><td class="part" data-page-node-id="WytX6so8YC7oR5ki95R79e">含 ~90 行自建命中测试</td></tr>
+  <tr data-page-node-id="3UK3Y0DbstiBKYJ14wLAoZ"><td data-page-node-id="fFICGWOELcDGis87OtT43p"><code data-page-node-id="GQxuhWN0fdBEAfrFEHW5nP">TopologyStudio.css</code></td><td data-page-node-id="BtcWaniB7iVM99s1820zPo">178</td><td data-page-node-id="y7JAOXA0IPgAwkzZG241Ah">工作台布局</td><td class="no" data-page-node-id="qV4UeYjKk55mjKnCRoiacx">27 行死 CSS</td></tr>
+  <tr data-page-node-id="366B0KHe4NnI5kA3zBxbZm"><td data-page-node-id="NzwjbdPB6lLCbcYBSpVmKE"><code data-page-node-id="tUgdwxVVGEb1VfAwS5Q0xY">TopologyAgentPanel.tsx</code></td><td data-page-node-id="11CTsxJoOqsEFQiSXCFKHN">121</td><td data-page-node-id="vwOJtWJfuAqSGBPqFvHGNZ">Agent 协作面板</td><td class="yes" data-page-node-id="zGtA9EAjbfucyKM5hS4yCN">良好</td></tr>
+  <tr data-page-node-id="agjIlEJYJk7S1Av6Uoqy9D"><td data-page-node-id="YNX4gBEaT4YHyg4B92kRru"><code data-page-node-id="0SIFXRQvr7WyT4fEfUTwFN">topologyLayout.ts</code></td><td data-page-node-id="Gsg5fC7T9jZdAKmW7u8SZq">97</td><td data-page-node-id="fotxwFbuGRa47Neh8HA1kP">ELK 分组件布局</td><td class="yes" data-page-node-id="u0wnKdTiguCy6HKqARtC6J">良好，仅 1 种算法</td></tr>
+</table>
+
+<h3 data-page-node-id="mGNhylScv5pwCvUrvaEkbp">2.2 已经做对的事（不要在这些地方推翻重来）</h3>
+<ul class="clean" data-page-node-id="orEPyAJb9YgyPukF2IyI7n">
+  <li data-page-node-id="7FYkgvlulSPxxlWnGwpZ68"><b data-page-node-id="kfKRQfYTXbuRoCvXmcgmZt">图纸与资产解耦</b>：<code data-page-node-id="vfFnJtMH9dzdkSrkbFnaiR">TopologyNode.linked_device_id</code> 为可选，「图纸设备」与「登记资产」分离——这正是 NetBox 的核心哲学，也是这块设计里最有价值的部分。</li>
+  <li data-page-node-id="FdDAxtTYKlMHQEGNob5TO0"><b data-page-node-id="oqxlKFYjHx2zhHQDFeRrHH">证据闭环</b>：<code data-page-node-id="6711q2Mw6dXE6pXToKCDDC">link.evidence_refs</code> + <code data-page-node-id="9rCLQ2tUFDcQbl0E0CLqWN">source: manual|discovered</code> + <code data-page-node-id="pg1bPxGXwIBfM331b6HglH">_normalize_discovery_provenance</code>，链路能说清「这条是人画的还是采到的」。多数画图工具做不到。</li>
+  <li data-page-node-id="7q8mRX3uj6DFspwSxJI9VX"><b data-page-node-id="kUrrbqfMwhlztWVt4De0YQ">描述默认不上图</b>：<code data-page-node-id="hFGGgqo0VLwj0t5vAYhVQc">canvasLinkDescription()</code> 要求 <code data-page-node-id="zDgT7VknIBZAKGJovvILoU">metadata.show_description</code> 显式开启才把描述画到线上——避免图被文字糊死，判断正确。</li>
+  <li data-page-node-id="IQSiTK7HkKhgtTJ5tDJCWI"><b data-page-node-id="oESbmErO5ZFx3WM8aH6hU5">自动保存 + 版本乐观锁 + 卸载前兜底保存</b>：<code data-page-node-id="OjsNHWRjNqCHEKaBNiH4qC">saveChainRef</code> 串行化、<code data-page-node-id="IIl4e3xRKNoEtDNMo9mVqh">revisionRef</code> 判陈旧、版本冲突给中文提示，工程细节到位。</li>
+  <li data-page-node-id="T65tEmi8NLsCDPdRb5MKFR"><b data-page-node-id="o0biAeBpEnhwimVRJibzUV">撤销/重做栈</b>（20 步）+ Ctrl+Z/Y + Escape 退出专注模式。</li>
+  <li data-page-node-id="yfxpWggW3N6Cnr7HT2EjXc"><b data-page-node-id="v6O1OnWPkxrTGia8TVLfLQ">删除语义安全</b>：从拓扑移除节点时明确提示「工作区设备实体完整保留」。</li>
+  <li data-page-node-id="zgbxZ5dTlYuDWuwhDGetIR"><b data-page-node-id="VmsLdYJ0UFSwGktdO3ENg2">Agent 协作入口</b>带上下文（选中设备/链路 → <code data-page-node-id="WsdH6CFhZ0eCfMTEeh1kX5">CanvasSelection</code>），这是相对所有对标产品的差异化优势。</li>
+</ul>
+
+<h2 data-page-node-id="yuNbQMHCEvFpDVREvbedHu"><span class="num" data-page-node-id="pPVS1PKgRuQkZGgpAUebC2">03</span>实测缺陷（P0）</h2>
+<p class="lead" data-page-node-id="QjnXNbv8sCikQ3v0pH7iS6">以下均在 <code data-page-node-id="XkYGHPwMBHL7up3QE2LeGI">http://127.0.0.1:5273/topology</code> 用 Playwright 实测复现，附原始输出。</p>
+
+<div class="card" data-page-node-id="4gXHwWvGd2JnBLEcOcXgXE">
+  <div class="top" data-page-node-id="998G3dixfNlDy4BUWgGzXE"><span class="badge b0" data-page-node-id="uIH1WmNLPZogfs6mfCJFeA">P0-1</span><h4 data-page-node-id="hl8ngsFe1DdKnLnXmrC3sO">选择模式 / 连线模式下滚轮缩放完全失效</h4><span class="id" data-page-node-id="a0Cha7HOL301TVowiq0l6c">最高优先</span></div>
+  <p data-page-node-id="fkmufaXzb03iHKv6evUO2Y">用户打开页面默认就是「选择」模式，此时<b data-page-node-id="DJGtHVmzMGbsnkeMDAN6Az">滚鼠标滚轮没有任何反应</b>。这是画布最基础的两个导航手势之一（另一个是平移），失效等于把用户锁死在初始视口里，只能靠右下角的 +/− 按钮。</p>
+  <div class="kv" data-page-node-id="I4J7b65HeloieiHEZDXemC">
+    <dt data-page-node-id="bAvqxWybl86CJYJONVzSQy">根因</dt><dd data-page-node-id="iIHA7w7pKOJNSKXdnELF9p">Cytoscape 3.28 的滚轮处理器把<b data-page-node-id="Lbg2BpZfCDLhwBrAv21gue">缩放与平移开关耦合在一起</b>。源码条件：<br data-page-node-id="8D0wZIZrspLClcLiF3ylJ5">
+      <code data-page-node-id="NPufsaVAggSk7P6ZJoGoAz">if (panningEnabled() && <b data-page-node-id="N7gWMJLWtSs82FGbXTDxVa">userPanningEnabled()</b> && zoomingEnabled() && userZoomingEnabled())</code><br data-page-node-id="WYFFhlKSSt4cQLJWYRw6o9">
+      而 <code data-page-node-id="xCdeDE0RxbKT5ioiCbF4sK">NetOpsCanvas.tsx:234</code> 写的是 <code data-page-node-id="2bTT1OcXr6rErvrH0KO9IF">cy.userPanningEnabled(layoutEditing)</code> —— 只有「移动布局」模式为 <code data-page-node-id="n3FNOxISZoEdp9n1P1NSFu">true</code>。于是缩放被平移开关一起关掉了。</dd>
+    <dt data-page-node-id="aUP7UwYjN29Ik0tDdDi6o2">附带</dt><dd data-page-node-id="mVmCRGchnABx2Fef6hkcbD">初始化参数 <code data-page-node-id="ujnvLl26ETZFsnxjXIBX4A">userWheelEnabled: true</code>（<code data-page-node-id="EsupcTdHOpMUZc6OtESf2j">NetOpsCanvas.tsx:126</code>）<b data-page-node-id="cBsNKjwZ25J3m9Rgc0PJEB">不是 Cytoscape 3.28 的合法选项</b>（全量构建里 0 命中），是无效配置，给人「已经开了滚轮」的错觉。</dd>
+    <dt data-page-node-id="2aymNIDYrVmTvOOTLSFcOW">修复</dt><dd data-page-node-id="IlqbQl9CELWeOpPPJjwl9P">把平移与缩放解耦：<code data-page-node-id="3fV5hYXpHnx6DV0PZlDG1J">userPanningEnabled(true)</code> 常开，用「Shift 才启用框选覆盖层」来避免抢手势（详见 P0-2）。同时删掉 <code data-page-node-id="N5bIRDT7lZhiS9TbR7jNrk">userWheelEnabled</code> 这个无效项，改设 <code data-page-node-id="a80cTEzSrlnLEMHuz9hPzV">wheelSensitivity</code>。</dd>
+  </div>
+  <div class="evidence" data-page-node-id="5eR18rCaeYUW9XNrCn3SbL"><span class="lbl" data-page-node-id="wjx2zSCkVFBPp9DKnHnnJa">实测输出：</span>选择模式(层在) 滚轮: 131% -&gt; 131%
+选择模式(层已删) 滚轮: 131% -&gt; 131%   ← 排除覆盖层嫌疑
+直接派发 wheel 到 .netops-cytoscape: 131% -&gt; 131%
+连线模式 滚轮x3: 131% -&gt; 131%
+<b data-page-node-id="gYXQxPIvx760ff5eV0ydtG">移动布局模式 滚轮x3: 131% -&gt; 400%</b>   ← 只有这个模式能用</div>
+</div>
+
+<div class="card" data-page-node-id="NOx0m9D7wKI4MlH9kMnb3b">
+  <div class="top" data-page-node-id="MGNEZgKRMvyPosGvCQHGJ6"><span class="badge b0" data-page-node-id="PTQe091hAboPiblNCsWFxi">P0-2</span><h4 data-page-node-id="DREl0HhE6cWK2CCi3SclAT">手势层全表面覆盖 + 自建命中测试，形成双选中路径</h4></div>
+  <p data-page-node-id="zut36xHvDtiuuN7GaiCckk"><code data-page-node-id="VMz27ma3o3GmA81BcYO5PD">.netops-selection-gesture-layer</code> 是一个 <code data-page-node-id="qt0IbMLynouPVpSXuDD4mc">position:absolute; inset:0; z-index:6</code> 的透明层，在「选择」模式下盖住整个画布，并且<b data-page-node-id="PXWs3qGzSTWnE2x7tFGmDu">没有</b> <code data-page-node-id="Sb2HbQCeGX05JAm2qyCBtl">pointer-events:none</code>。它自己用 <code data-page-node-id="07XdQQpC6e8LXOfQNXWY30">canvasObjectAt()</code>（约 90 行）重新实现了一遍节点/图元/链路的命中判断——而 Cytoscape 本身就有精确的命中测试。</p>
+  <div class="kv" data-page-node-id="xAt4TJXY6iG5kApmS6KxFo">
+    <dt data-page-node-id="9CPwPLBYuPqL1GnnBGxbRZ">后果</dt><dd data-page-node-id="yJrpDLvEe1ZKmEUqdinSY4">① Cytoscape 在「选择」模式下收不到任何鼠标事件，原生能力（hover、光标反馈、框选、滚轮）全被旁路；② 命中逻辑与渲染逻辑两份，节点尺寸在 <code data-page-node-id="GcHuhuPRFfixlwb83JVQkj">NetOpsCanvas.tsx:357</code> 硬编码为 <code data-page-node-id="RkdQhhaUwG9MccrHcnYC2m">&lt;=48 / &lt;=40</code>，与样式里的 <code data-page-node-id="ccVluBKdit6XF041eUDvnP">width:94 height:76</code> 靠人工保持同步，改样式就会悄悄失准；③ 代码里已经出现 <code data-page-node-id="1bMh2qH09xXXO3N4eut1Ma">ignoreBoxSelectionTapRef</code>、<code data-page-node-id="QH0C7FesJTBtk8fV6GzsGl">window.setTimeout(...,0)</code> 之类的时序补丁，这是双路径不同步的典型症状。</dd>
+    <dt data-page-node-id="BB66HDxIx6OmywhwMB5lQ2">修复</dt><dd data-page-node-id="F4iVYb40K3LmAF9e3zCnW5">覆盖层默认 <code data-page-node-id="uQmragCYfnzh1qDaVOgjCF">pointer-events:none</code>，仅在按住 <b data-page-node-id="CazZo3GtUfGsAagDl2ADcp">Shift</b> 时切为 <code data-page-node-id="saqFDVCZev2CvxUZoOhgnF">auto</code>。这样：常规操作全部走 Cytoscape 原生（hover / 点击 / 平移 / 滚轮 / 框选），Shift+拖走自建框选。既能保住现有框选手感，又能一次性修复滚轮缩放，并删掉 ~90 行重复命中逻辑。</dd>
+  </div>
+  <div class="evidence" data-page-node-id="FBxaCkfrZEgV81YaS19Bxn"><span class="lbl" data-page-node-id="v3IjSArQOllkqkp2CzwTUc">实测：</span>顶层元素(画布中心): netops-selection-gesture-layer
+getComputedStyle -&gt; z-index: 6, pointer-events: auto</div>
+</div>
+
+<div class="card" data-page-node-id="zCz14DPkalBBhDAdHn6MO9">
+  <div class="top" data-page-node-id="H8OPF0LrG1xkGKjqqtnwib"><span class="badge b0" data-page-node-id="hXHZVb0cT0iK1PQK7HPmfb">P0-3</span><h4 data-page-node-id="BjnQujNuV6U5Z2JJ8YOiB2">框选之后没有任何视觉反馈</h4></div>
+  <p data-page-node-id="uW2uwkae2wEsshzmtekfAb"><code data-page-node-id="jaXgLyrBxc7DlljHSydXqI">canvas-mode-hint</code> 在「选择」模式下是<b data-page-node-id="slgHgUYsrfCO7pyAGevs3p">写死的静态文案</b>「普通单击选择对象；直接在空白处按住鼠标拖框多选」。用户拖完一个框，画布上看不到选中高亮的计数，文案也不变——<b data-page-node-id="DkIIqfvJk0kfnCiCJSLqke">不知道自己选了几个</b>。只有切到「移动布局」模式才会显示「已选 N 个对象」。</p>
+  <div class="kv" data-page-node-id="WBrH54JsDv5xz9LdYyYFJ5">
+    <dt data-page-node-id="E6ELhwGGajeVOuduJDFxLD">修复</dt><dd data-page-node-id="MMBzo7D7GT4R5n9f66SYWA">把「已选 N 个对象」提升为常驻状态（与模式无关），并在 N&gt;0 时激活对齐/批量操作按钮。对标 Figma：选中后面板即时反映选中数与可执行操作。</dd>
+  </div>
+  <div class="evidence" data-page-node-id="B3Co4cieVRnkTTDRHaTEdf"><span class="lbl" data-page-node-id="OcyHgKknO6tFCCH9RwKJVH">实测：</span>全框选后 caption: 「2 个节点 · 1 条连接 普通单击选择对象；直接在空白处按住鼠标拖框多选 接口标签」
+                                                        ↑ 框选了整张画布，文案与选中数均无变化</div>
+</div>
+
+<div class="card" data-page-node-id="4HLF9vWVJsMUmKHuLIfqHD">
+  <div class="top" data-page-node-id="5TIaoakJoVtIzFQBwZ8FFd"><span class="badge b0" data-page-node-id="3MhGzq4eSkaRTJ3B9TeB4s">P0-4</span><h4 data-page-node-id="I4uI0rYGXfX4PARfKWC4Eh">每次编辑都销毁并重建全部图元</h4></div>
+  <p data-page-node-id="mxwIVTtB242eh90J0PPqq5"><code data-page-node-id="SkmAlJ3ZnPI5NoqS3DNSha">NetOpsCanvas.tsx:275</code> 的同步 effect 依赖 <code data-page-node-id="DgowJl9aNvAGsL3o6ZIEUS">[props.topology]</code>，每次 <code data-page-node-id="gLkIrxE4E0lzhr6EnEKYrF">pushState</code> 都执行 <code data-page-node-id="6PCrhRLdzfEpJ7jpuowKbH">cy.elements().remove(); cy.add(elements)</code>。也就是说：<b data-page-node-id="GYBNoDyUoZDaHJ1jil2Nrd">拖完一个节点松手的瞬间，整张图被推倒重画一遍</b>。6 个节点无感，200 个节点会掉帧，且 Cytoscape 内部的选中态、动画、布局缓存一并丢失。</p>
+  <div class="kv" data-page-node-id="cE8oaYtqkvCW9IdI3uSs9a">
+    <dt data-page-node-id="MAuYs0F8NWXW6sHiDhwzTr">修复</dt><dd data-page-node-id="afa3egsagAYVohyatS3P9Y">改为增量 diff：按 id 比对 <code data-page-node-id="Ht7NQ75Xabj1ds1VjYXevg">add / remove / 更新 data / 更新 position</code>。拖拽场景甚至可以只更新 position 不入历史。这是从「能用」到「大图也能用」的分水岭。</dd>
+  </div>
+</div>
+
+<h2 data-page-node-id="k278SS3ghfjH079frFQFJe"><span class="num" data-page-node-id="EK8tjXZ6LIEm0erfSsontP">04</span>与成熟产品对标</h2>
+<p class="lead" data-page-node-id="vFJLHWg9AOiHBxIVWUYPyk">选了 6 个参照物：两个通用绘图（draw.io、Lucidchart）、一个设计工具（Figma）、三个网管/拓扑产品（Cisco DNA Center、Zabbix Map、NetBox）。</p>
+
+<table data-page-node-id="dkd9DJjuigmlktZPnbczwb">
+  <tr data-page-node-id="GjhSKxgG4efbgcnvWHs9EV"><th data-page-node-id="AEGcRphZaOmY2cvtCBIkCo">能力</th><th data-page-node-id="7IjMjGBX2smFnEGA0jfwEc">当前</th><th data-page-node-id="naAETv3e9TaWqTUaPeMCd0">draw.io</th><th data-page-node-id="ani08W6C1Cr6dKhea4jZra">Lucidchart</th><th data-page-node-id="pQIXMyCkf5OWPmB40GLTOv">Figma</th><th data-page-node-id="V47MdT1CGsYMraAyZJlPoM">DNA Center</th><th data-page-node-id="VwCG1ckLfyoOFCFpYRI8iI">Zabbix Map</th><th data-page-node-id="e1vIypZaQFvDt5W8wWTUbQ">说明</th></tr>
+  <tr data-page-node-id="yex1lIWPwCZrKeZJnymiT1"><td data-page-node-id="WXm5bg4wznlmozCFpkETMz">滚轮缩放</td><td class="no" data-page-node-id="3da6CN1IY3sxcqSrVpeNrN">选择模式失效</td><td class="yes" data-page-node-id="mvhh24tt3eRZL4KR9o6zjE">✔</td><td class="yes" data-page-node-id="Gq8B6Zu1L6Z2izBztSPRj1">✔</td><td class="yes" data-page-node-id="4SVk3wSPNvt1Ea9c33Syg8">✔</td><td class="yes" data-page-node-id="mgujJKZGWgnOCL3cxpTsRm">✔</td><td class="yes" data-page-node-id="gcDrKEBTrBV1eLz4zFRhSF">✔</td><td data-page-node-id="fB2gm2R0GBrplpyGMCwBIw">P0-1</td></tr>
+  <tr data-page-node-id="8sCu2HGrv4kXjMIhEnmjeJ"><td data-page-node-id="ixX91MiFGr3gHO8SDLPtn7">拖拽平移</td><td class="part" data-page-node-id="u17bOrgsnH0PFN5FEkhZEC">仅移动模式</td><td class="yes" data-page-node-id="AiDcfxzcF2wAn6ui5aCbLO">✔</td><td class="yes" data-page-node-id="20AExyr88UgC2lOy2qVizt">✔</td><td class="yes" data-page-node-id="4ePo5mLVsX1CbbJyY14ub8">空格+拖</td><td class="yes" data-page-node-id="HEceF0AO9yDnCtMrTa83nO">✔</td><td class="yes" data-page-node-id="uciyzE0IceTs7IBqfO5YCL">✔</td><td data-page-node-id="z5eParQVU2k2cfyiaBtSFd">应与模式解耦</td></tr>
+  <tr data-page-node-id="BPXK5ngOc4t5devX4YB4O1"><td data-page-node-id="igu2J2JSWfPaLCgRayYjxS">框选</td><td class="yes" data-page-node-id="mQAKnI1yFr59rjo0F5RhRj">✔</td><td class="yes" data-page-node-id="0cWIDW0Amh1ez1FHBrdDPe">✔</td><td class="yes" data-page-node-id="QYPvx5gJQSbsSBblh3Rmei">✔</td><td class="yes" data-page-node-id="EZlV5FJB1fkySBw5vFgS5s">✔</td><td class="part" data-page-node-id="nnXIsIfnfzUakkJLwfaBIv">有限</td><td class="no" data-page-node-id="IeEnqoNCJerznoyZDoYaf7">—</td><td data-page-node-id="LbIchHEsUd2xXEeBnx1Ozs">已有，但无反馈</td></tr>
+  <tr data-page-node-id="OY1ybHaF9YmDgo5edB6uUT"><td data-page-node-id="8rr7MFzfOIX6RWY9VSth7Y">右键菜单</td><td class="no" data-page-node-id="7bP0sCmbRiy3qcvIhSg0Ww">✘</td><td class="yes" data-page-node-id="LLMz2YZkxu4lIjX28lQW4B">✔</td><td class="yes" data-page-node-id="kpexcz9gsfKTjlB8DAAnuW">✔</td><td class="yes" data-page-node-id="6wmgdD0FsmXi64cgfyTcac">✔</td><td class="yes" data-page-node-id="TveG7QA8MBTC8G6g2HWPAI">✔</td><td class="part" data-page-node-id="8S4BNPZjUp7LBOqKn4HLxh">部分</td><td data-page-node-id="oDxGZ567WYiWpEJyGmy7A3">企业用户肌肉记忆</td></tr>
+  <tr data-page-node-id="2tgkvoxbnS2U76w5SOfgQl"><td data-page-node-id="lgconII6e055mLe3Ueunjd">快捷键体系</td><td class="part" data-page-node-id="3b82FQePP1ydce5rreNkvk">仅 3 个</td><td class="yes" data-page-node-id="z1zOFOoEdHlTrBzNgQFcpm">全套</td><td class="yes" data-page-node-id="AfIhcxmNPboEiOd6jAvUZj">全套</td><td class="yes" data-page-node-id="xBAaKt9hh13ZjKAYfiqDZy">全套</td><td class="part" data-page-node-id="sy39GeWlD7QWvHwWuMxSGe">部分</td><td class="no" data-page-node-id="LF7RqvLH6BgBTmTNG8UeGN">—</td><td data-page-node-id="eumGUP4xpehL7PgsAGlHXn">详见 P1-5</td></tr>
+  <tr data-page-node-id="yK3OwnJ8hUFcSqdzooUxtA"><td data-page-node-id="z1fSQyRacvbdaSooGodH5g">导出</td><td class="no" data-page-node-id="UJ7A5ueubgmeFSUJG3a2DL">✘</td><td class="yes" data-page-node-id="wQNG9leSukbteMLYTPf94i">PNG/SVG/PDF</td><td class="yes" data-page-node-id="Ya5rdXWhfEoBICBW81RLRR">多格式</td><td class="yes" data-page-node-id="LSoi1GU7RXfirjLAXHv4EP">PNG/SVG/PDF</td><td class="part" data-page-node-id="zkdHzF3g42IJLLR3UCD819">截图</td><td class="part" data-page-node-id="nPNanilMxJ2kTf6ZrWYvmm">PNG</td><td data-page-node-id="gFvNrXDIiAUOLeiKCOZ8v6"><b data-page-node-id="9XFs65vrHGzABtCOss6mTw">企业刚需</b></td></tr>
+  <tr data-page-node-id="UwGQyge28tYPEGPC0cZ6aF"><td data-page-node-id="ElnqCYP0Ui8tt35LG394yj">鹰眼 / 缩略图</td><td class="no" data-page-node-id="jE2kl8Ak2Sfz5uW4DIyJyD">✘（CSS 有，未实现）</td><td class="yes" data-page-node-id="HZcAGgcAOkqlqdPFs0gItW">✔</td><td class="yes" data-page-node-id="iB1zwAeV8d7b7boS7uR8qG">✔</td><td class="yes" data-page-node-id="wZ8OFCmBlXEMDxI9mSKEO9">✔</td><td class="yes" data-page-node-id="ymx8KXqXqbPChEhFOsJjDm">✔</td><td class="no" data-page-node-id="PAWkLsLDY0V9xbQEI5weQm">—</td><td data-page-node-id="wwi85i2V1JK9YDsdVJU3q6">大图必备</td></tr>
+  <tr data-page-node-id="vzn5OUze6CtGugcfuoHL57"><td data-page-node-id="7EtLGriQvUyr3tP0gnkCW3">画布内搜索定位</td><td class="no" data-page-node-id="C5lMPbcneHeH9n9Prr8Twu">✘</td><td class="yes" data-page-node-id="gipneLNcaV9EGBNat2vxMa">✔</td><td class="yes" data-page-node-id="Xs14SDOZsJLHYiPrKDfX9V">✔</td><td class="yes" data-page-node-id="tAR8sWs8RJfBuPoEUIXnx7">✔</td><td class="yes" data-page-node-id="kBki95hzKfzUXwEoDSfZon">✔</td><td class="part" data-page-node-id="j8ZMcGPwDXUBpb7aY1vQ8P">过滤</td><td data-page-node-id="ul7gZtN29DmqO1AYkioufc">200 台设备找不到</td></tr>
+  <tr data-page-node-id="vUoEQA43jTn4iLixqyKI2f"><td data-page-node-id="MEoScAScxe75YFfUZhSlKh">状态/告警上画布</td><td class="part" data-page-node-id="bOGdCQf1Pw4mmAnNA316C6">仅链路，且非实时</td><td class="no" data-page-node-id="RcjjIRzDrz5iGnADkrC0x3">—</td><td class="part" data-page-node-id="WnONYNnzamwVy7QDMVKidR">数据链接</td><td class="no" data-page-node-id="mgCApP206FNWMmegCKjgKz">—</td><td class="yes" data-page-node-id="Kub7NkmwsWdcqXBx9Eeawc">✔✔</td><td class="yes" data-page-node-id="6dFXwGlppVRLde80hNR7HY">✔✔</td><td data-page-node-id="cOAY7aTxipQIZaZ6xD0Kq0"><b data-page-node-id="eMtPkn8t3wBSIXhwIAL2ls">网管核心价值</b></td></tr>
+  <tr data-page-node-id="e339R6NRj1z5opQFp2qiYM"><td data-page-node-id="ju8fGCbNjaCN62oBuXTAHG">图例</td><td class="part" data-page-node-id="al8cWe2CG8r7Ha2M6vUT73">状态栏一行字</td><td class="no" data-page-node-id="zOb22uTt9qWzXzLfOEAPDR">—</td><td class="part" data-page-node-id="Ws3i8lpLygdNYndQu86JYc">✔</td><td class="no" data-page-node-id="s8GFNNjdZgiNaVU9CPdXg2">—</td><td class="yes" data-page-node-id="o9y0Ydn26HoQ8LxwVFuQuf">✔</td><td class="yes" data-page-node-id="CsatYecNff0UAGLeALnFzV">✔</td><td data-page-node-id="HEGOYFluXOBwInULb5KOY5">避免颜色误读</td></tr>
+  <tr data-page-node-id="DejfKWsj3MKoHTbKT57nla"><td data-page-node-id="A7uuqYp27Y4JiW2tdTkOWV">智能对齐参考线</td><td class="no" data-page-node-id="9JkZ9VrpmPXAGMCpXOha1g">✘</td><td class="yes" data-page-node-id="KnzGt200H7llFEhFfrutUX">✔</td><td class="yes" data-page-node-id="uzhBbECds1p1hFuPAT8SUK">✔</td><td class="yes" data-page-node-id="SuQX6yZlAbJLLnCYKWOaum">✔✔</td><td class="no" data-page-node-id="6QkNuPJia39Ef9asrG1VIF">—</td><td class="no" data-page-node-id="iP83ROiujg7SaMr7lTTHLT">—</td><td data-page-node-id="yWJ5jlEOl4DOIPYIiCvZjf">拖拽时实时提示</td></tr>
+  <tr data-page-node-id="UkEQCAz2UHPjf9wa6hXhCq"><td data-page-node-id="h8zHi1at2KBtqAVCUaY3D8">布局算法</td><td class="part" data-page-node-id="xJBi6uAHrgxZHzx8wjQ8WR">1 种（ELK 分层）</td><td class="yes" data-page-node-id="I2W6Np1QnIAmqGmkMMmv4K">多种</td><td class="yes" data-page-node-id="vLZAbmLaYqPZidjQ58Xklk">多种</td><td class="no" data-page-node-id="JU91s0XLXjSGTKmYJFD5Bq">—</td><td class="yes" data-page-node-id="pDB7wGzTlHNfzqPaMA9kbI">层级</td><td class="part" data-page-node-id="POOVX6cxq4ulncSME9SVGS">网格</td><td data-page-node-id="ts139BNEgSdz1rG38k1e5R">见 P2-4</td></tr>
+  <tr data-page-node-id="vn9dKvtWfIQWNikmD4sGn6"><td data-page-node-id="qBEaBTY61rKTQcg7U8CCX0">图层 / 过滤</td><td class="no" data-page-node-id="LN3w4GWZKQbEyXSSHF43AS">✘</td><td class="yes" data-page-node-id="SIDBgEQR8fhlBGK7CX0yqg">✔</td><td class="yes" data-page-node-id="lQ2rLwiQQKt3Q3YvQO10jQ">✔</td><td class="yes" data-page-node-id="BFfPcjERfkdlELwWIDulL6">✔</td><td class="yes" data-page-node-id="bgdxUKrsGvOnsRnJGdJoBC">✔</td><td class="part" data-page-node-id="kOGaV1YaPQYVoVsbSHcVRP">过滤</td><td data-page-node-id="Fce2CvZGbNdf25qiUrEFYT">按区域/厂商/状态</td></tr>
+  <tr data-page-node-id="B9bzXWPdmZN4CODjiw2rA4"><td data-page-node-id="YcMy0ahMNYZJVh0E1U2PsS">版本历史</td><td class="part" data-page-node-id="vNRGFfApLjnLW9AXtaUEpI">仅版本号</td><td class="part" data-page-node-id="TnEoanTaxdAaKxcyGxR6q7">插件</td><td class="yes" data-page-node-id="FEZrMF0X8viS2leSZTpcq5">✔</td><td class="yes" data-page-node-id="f6AcFsoZR3oGmNbW9nMz2v">✔</td><td class="part" data-page-node-id="FyLDVUptlfpfWqcOzSuVRh">时间旅行</td><td class="no" data-page-node-id="tPCVYlHfc0KNkbgvsbpagY">—</td><td data-page-node-id="oHsfKHCPe5vvG7UP3Cy4dA">见 P3-2</td></tr>
+  <tr data-page-node-id="DUWlEY4MAdhz1toqcrc3Fd"><td data-page-node-id="ZUDcmcmcJ136neMsa6Igvx">批量操作</td><td class="part" data-page-node-id="cuffsbJ5nSW0qzcT4vIIqY">仅对齐</td><td class="yes" data-page-node-id="AWlcpglchFWh7Sn1A70uyk">✔</td><td class="yes" data-page-node-id="c4HDpZNSYgOIEBHbuq0XcR">✔</td><td class="yes" data-page-node-id="hN5B7bmXSkDQnLnFWkIJ9R">✔</td><td class="no" data-page-node-id="2FZN8x54NnaFq4sVgQ8Xyg">—</td><td class="no" data-page-node-id="FAHUBP8EEAgDftPM0g7g2r">—</td><td data-page-node-id="xGpelMxjH5IrOr3f7GGyC5">见 P2-3</td></tr>
+  <tr data-page-node-id="FZfmpCJWBG0FUoAbJH4s9G"><td data-page-node-id="UvMxu2iEND8Lil9CxgOlKw">URL 深链</td><td class="no" data-page-node-id="FbnmS5FQWufZSgUtRbGHSt">✘</td><td class="part" data-page-node-id="iiRc2ylANIKsAobnZd2Fn1">部分</td><td class="yes" data-page-node-id="G0rOoPJC0dzh2IPRs0ehOK">✔</td><td class="yes" data-page-node-id="KqNuoQoPY5H4Qc8V58KBac">✔</td><td class="yes" data-page-node-id="kFtr95ViTn7X0ToWOr0mv8">✔</td><td class="yes" data-page-node-id="VZvCeY7eUVPaAXA2Ag3VAd">✔</td><td data-page-node-id="wEkjxyqniRUw7C8kWgW57Z">分享/工单挂载</td></tr>
+  <tr data-page-node-id="oHtM8xXDJrWGCWLiW8FXay"><td data-page-node-id="IlGy9CpAKlCcMeOCYqw4SD">Agent / AI 协作</td><td class="yes" data-page-node-id="42Oy3YRM4MSynoZy0hqbmR">✔✔</td><td class="no" data-page-node-id="A40oNonFQHu9Wr2uW42j3h">—</td><td class="part" data-page-node-id="SDoCIBp5G5WgCrzxVjTe6t">有限</td><td class="part" data-page-node-id="D1eFCSWAhf4rGXcIubperY">插件</td><td class="part" data-page-node-id="pNCAyYC8TsoXp4ggkWk9hv">有限</td><td class="no" data-page-node-id="BNBfkR1IGjE7vGvIPpyTIE">—</td><td data-page-node-id="XvpXxm3ezCDVTAkSiATZT6"><b data-page-node-id="wkFbuUh2ywVk9l7dHWWEi2">领先项，要放大</b></td></tr>
+  <tr data-page-node-id="iLRAdG85AnltI15zuuRqvB"><td data-page-node-id="azytsEFYwBs04Y4QsboHvC">证据 / 溯源</td><td class="yes" data-page-node-id="pS6GxEEzcI2Kkw8t5WiIJY">✔✔</td><td class="no" data-page-node-id="Y6hA4B85GWExgZ0L9tHbSC">—</td><td class="no" data-page-node-id="M49Ro097lcCeeFfUEtwnjE">—</td><td class="no" data-page-node-id="ytoHzB28igbSF27kKC3AMF">—</td><td class="part" data-page-node-id="Xxv6xjtEMXdWpDtrPk8hNk">部分</td><td class="part" data-page-node-id="4nYUbUgovG819tpAgZCvnY">部分</td><td data-page-node-id="aPHdiswIXo0XFmUnce2YNM"><b data-page-node-id="pBSGQGpGZIVn2o497c1H2U">领先项，要放大</b></td></tr>
+</table>
+
+<div class="callout" data-page-node-id="hsfC1AG8mxwRN1pW5vveM2">
+  <b data-page-node-id="UvylbFHea3nUURiYnJzzgm">读这张表的正确方式：</b>通用绘图类（draw.io / Lucidchart / Figma）的交互能力是当前的主要差距来源；网管类（DNA Center / Zabbix）的「状态上画布」是当前的产品价值缺口。而 <b data-page-node-id="5R00mOY6QxWqFRsHAVxc5T">Agent 协作与证据溯源是全部 6 个参照物都不具备的领先项</b>——这应该是差异化叙事的主线，不是补丁。
+</div>
+
+<h2 data-page-node-id="YGvKdXakcRMfaUXjlLZwU3"><span class="num" data-page-node-id="6vEy6iEwc27IlnNcCiLGFL">05</span>优化点解析</h2>
+<p class="lead" data-page-node-id="OnmBK0BZPvGtnrdIIfPc0b">按 P0（必修缺陷）→ P1（企业核心能力）→ P2（体验精修）→ P3（差异化）排列。每项给出：现状 → 问题 → 对标 → 方案。</p>
+
+<h3 data-page-node-id="C0iJNHLPwD4l2WCZE46pei">P0 · 必修缺陷</h3>
+
+<div class="card" data-page-node-id="Zq1GMKvJO5R9rFKdBmJ9A0">
+  <div class="top" data-page-node-id="VlvRaDPRLKE1fjqgVDtgiS"><span class="badge b0" data-page-node-id="fXXkNnJxJDyq65cHJ5nzlw">P0</span><h4 data-page-node-id="TGXH8svKHldonPwfH1DUeS">解耦平移与缩放，修复滚轮导航</h4><span class="id" data-page-node-id="INEivREFhm6rc5RCzHKymQ">见 03 / P0-1·2</span></div>
+  <div class="kv" data-page-node-id="D3bQkJ078FwxjUa6LO7cLa">
+    <dt data-page-node-id="xbwTbIVac9AQhAKcWy2a9i">方案</dt><dd data-page-node-id="Df3CuK7U0iiBX8DGIPM9zC">① <code data-page-node-id="6G0rq9WomG05s3EbMnJAHw">userPanningEnabled(true)</code> 常开；② 手势覆盖层默认 <code data-page-node-id="bFkDDSoEpcmUr2CgInuQmR">pointer-events:none</code>，Shift 按下时启用；③ 删除无效项 <code data-page-node-id="ltmLDDtXWyYM3hiN83vriC">userWheelEnabled</code>；④ 设 <code data-page-node-id="hsaAx6pAcJ8Ez3LN3DNwyd">wheelSensitivity: 0.25</code>。</dd>
+    <dt data-page-node-id="q1LC3nvNyffXdSf9lpS2ci">为什么</dt><dd data-page-node-id="gMYdNHpTkKX9AcUQTLggCU">Cytoscape 默认 <code data-page-node-id="5VbR487EuOcoEc4eQulJ5G">wheelSensitivity: 1</code> 时，滚轮一档 <code data-page-node-id="DpOmnIEEXumaXR41KfBaKC">deltaY=100</code> 的缩放倍率是 <b data-page-node-id="pHgnNReEZvq5m8mxoyAI9x">10^(100/250) ≈ 2.5 倍</b>——实测三档直接顶到 400% 上限。0.25 时约 1.26 倍/档，接近 Figma 手感。</dd>
+    <dt data-page-node-id="XLlUHTwtb9qHdaez3I6BvT">成本</dt><dd data-page-node-id="tpKJESUTWpJGwkMQIxVJO2">约 0.5 天。收益：最高——这是「打开就想用」和「打开就想关」的区别。</dd>
+  </div>
+</div>
+
+<h3 data-page-node-id="O0Hz97EvmX4PULnrVF4eJU">P1 · 企业级核心能力（决定能否进生产环境）</h3>
+
+<div class="card" data-page-node-id="6fqa26USRWijz0begBsRxb">
+  <div class="top" data-page-node-id="MfHYzqwQUcuZbvaVzLPqz9"><span class="badge b1" data-page-node-id="IJJc8izRXpfFZap2GBHdnu">P1-1</span><h4 data-page-node-id="nTbYCp7QDRav6s1bumSBD4">把真实状态画到画布上，并配图例</h4><span class="id" data-page-node-id="AtuFXRjveDNfeVZ4H3Q2pu">最高业务价值</span></div>
+  <p data-page-node-id="jE0ORbVlsu5N0AaIDRHElO"><b data-page-node-id="BRlbOHaMLPIrAm32waIbFw">现状：</b>节点颜色只按厂商分（华为蓝 / 其他青），链路颜色按 <code data-page-node-id="wEmRBw81bO4ETltC869DYc">status: up|down|unknown</code>——但这个 status 是<b data-page-node-id="iZ9kIWDRIZDgvlEgUJ7oB1">人工标注的图纸状态</b>，不是实时探测结果。状态栏那句「链路颜色：图纸连接 · 管理访问状态见设备详情」恰恰暴露了问题。</p>
+  <p data-page-node-id="CAk9HGhp6jNgM1TuhpkZVB"><b data-page-node-id="OKMY5JoPhzeLt3ZrSoA54E">问题：</b>企业用户看到红/绿链路的第一反应是「这条链路通/断」。现在是人工标注，会造成误判；而真正采集到的数据（<code data-page-node-id="YZAF2uGJfpIcbwGN2sxCM5">topologyState.nodes[].connections[].verified</code>、<code data-page-node-id="U8wEag2GCxQ9dzhmBOCzuP">observation.completeness</code>、健康巡检脚本的 CPU/内存/日志告警）明明已经拉回来了，却只躺在右侧检视器里。</p>
+  <p data-page-node-id="exeFopC59ZerLIk2E8sCbP"><b data-page-node-id="0i4izW0pJS2cbaaDp3Dnti">对标：</b>Zabbix Map 的元素颜色 = 触发器状态；DNA Center 拓扑直接用健康分着色并叠加告警计数。这是网管拓扑图的<b data-page-node-id="OhomAbktpcEjN5q6iLorrF">存在理由</b>。</p>
+  <div class="kv" data-page-node-id="hgYPso3pxb3AKdeYf6C4Ev">
+    <dt data-page-node-id="f5eodzXgGiMeKBFKMVagYc">方案</dt><dd data-page-node-id="rg9n1isE6SBFYRsAs2u3xo">① 区分「图纸状态」与「运行态」两种语义：图纸态用线型（实线/虚线）表达，运行态用颜色表达；② 节点按采集结果加状态环（在线/不可达/未采集），与厂商配色叠加而非冲突；③ 画布角落常驻<b data-page-node-id="Dre9kNPpsRKbsn7Z8VDddi">图例</b>；④ 状态数据已有 10 秒轮询，接进画布即可。</dd>
+    <dt data-page-node-id="fIWv67OR9pfxxS7NPrL2Mk">成本</dt><dd data-page-node-id="QhQVL29eWyTNcMfKYlsmL8">约 2–3 天（含后端 <code data-page-node-id="wZJEmAwsDDkDEvMKod4WXK">/state</code> 增补健康摘要）。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="3aEJ0FvFEKzUf4CcB4iDaw">
+  <div class="top" data-page-node-id="Fz2kLh2UqoqFA1C4HVCY6C"><span class="badge b1" data-page-node-id="TD1U5JNxm2uKVK43hlry69">P1-2</span><h4 data-page-node-id="sorkucxlyhCupuUgQr6o1B">导出：PNG / SVG / PDF</h4><span class="id" data-page-node-id="gkgb3ETAdMpPXPpjjHzESF">企业刚需</span></div>
+  <p data-page-node-id="LGkOTrnyGNLrhPJyhc4onK"><b data-page-node-id="v4TTcFBjlA2m7vRy6oDx9Y">现状：</b>完全没有导出。<b data-page-node-id="zzJ3mliERVXMbADADK3IoM">问题：</b>拓扑图最终要进巡检报告、变更方案、工单附件、汇报 PPT，用户只能截图——截图会截断、会带 UI 噪点。这是「做完图用不出去」的断点。</p>
+  <p data-page-node-id="okiH97D8Zi6HiFU0O27UyG"><b data-page-node-id="9pIvGbjk2vjxEc0DdsiuWb">对标：</b>draw.io 支持 PNG/SVG/PDF/XML/VSDX；Figma 一键导出多倍图。</p>
+  <div class="kv" data-page-node-id="PdA26fCybYRnBa7rr8XIqD">
+    <dt data-page-node-id="ZmLadJsfuMNcka50bW8wyg">方案</dt><dd data-page-node-id="XGqBBmxOQZ3MdVYZB5ch6n">Cytoscape 原生 <code data-page-node-id="6qvWYoByEWpiOsKNoGZojD">cy.png({ full:true, scale:2, bg:'#fff' })</code> / <code data-page-node-id="GOgPCWt9E1OyLfJ35y6MPK">cy.svg()</code> 即可，几乎零成本。放进「更多」→ 导出，或做成工具条图标。建议同时提供「导出当前视口 / 导出整图」两个选项。</dd>
+    <dt data-page-node-id="mjVY5LXvkDRWHA6meiRo63">成本</dt><dd data-page-node-id="QfBY8Yu0D7ZYbmEKK2IkmZ"><b data-page-node-id="gauHHj0SVOHKs80LUTHtcs">约 0.5 天，投入产出比最高的一项。</b></dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="2GM6YOkB40MCD9Swo8PN7l">
+  <div class="top" data-page-node-id="ZLrkJuPqqgo8RqKVRY2eXA"><span class="badge b1" data-page-node-id="lhw0Q3pYhPR7eW6nSNQlKg">P1-3</span><h4 data-page-node-id="eiikXsK0E8bspbShmZy6gj">鹰眼缩略图（Minimap）</h4><span class="id" data-page-node-id="dpa53Fnh4B2o8epPAXjd4d">CSS 已预留</span></div>
+  <p data-page-node-id="9TPKNWUdRTe26k1i3DOuvg"><b data-page-node-id="V1zxdysGWjhepKF9QAnplu">现状：</b><code data-page-node-id="PZSk0MEQy1CVIswuzkKYQE">TopologyStudio.css:106</code> 有 <code data-page-node-id="iAOC5HtmRZaE6WyoG9o51y">.topology-minimap-custom</code> 样式、<code data-page-node-id="6RJGQn2VsFx83JpnhQNMAj">:175</code> 有移动端隐藏规则，<b data-page-node-id="kZGnT3ejY3Uyw2E2oD4V9s">但代码里没有任何 minimap 实现</b>——是 React Flow 时代的遗留。</p>
+  <div class="kv" data-page-node-id="jyACWrerLw1CiECGDs3Qvv">
+    <dt data-page-node-id="Hl6HUrV10P8ThwiAQ5EYA4">方案</dt><dd data-page-node-id="Hal5YvUBxOoOwuywa1HC0A">Cytoscape 有官方 <code data-page-node-id="vxvYEnoMDtPmWwEqpSxZR6">cytoscape-navigator</code> 扩展；或自绘一个 160×110 的小 canvas，在 <code data-page-node-id="oDMa5HFuCA2ffayoTptNEB">zoom pan</code> 事件里同步视口矩形。放在右下角缩放控件上方，可折叠。</dd>
+    <dt data-page-node-id="BkLy5l1RBPeScVqdNqx7Xl">成本</dt><dd data-page-node-id="Z7WNyZMVB1gAPf6ZX4P94y">约 1 天（自绘）/ 0.5 天（引扩展）。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="UFPkxtKHqaFMOtOn4mr9h2">
+  <div class="top" data-page-node-id="ECwiBabcuHyP3gHGYk02gU"><span class="badge b1" data-page-node-id="kV8tfBgfD8ijefK6QvB7Aj">P1-4</span><h4 data-page-node-id="XDgQqoModO0y7mdyxe6VSr">画布内搜索与定位</h4><span class="id" data-page-node-id="B2q9jLhwvmIvgCSDv7AceP">Ctrl+F</span></div>
+  <p data-page-node-id="Oho8p6MNvzI2l9UydEpsZj"><b data-page-node-id="JTXpoGVduQF2q1LEEdd6ZP">现状：</b>左侧设备库有搜索框，但只能搜「还没加入画布的设备」并定位已有节点；<b data-page-node-id="i7LJDQNFEDkx9EZ79zusFZ">画布上无法直接搜索</b>。真实拓扑 50+ 节点时，找一台设备要靠肉眼扫。</p>
+  <div class="kv" data-page-node-id="G9gnhGxFUgSKZ9ONsmEw8B">
+    <dt data-page-node-id="3KHRN2AnxP4jpAHGBB36Fd">方案</dt><dd data-page-node-id="JLM3rFZh00GsDO5eX1Awlc">工具条加搜索框（或 <code data-page-node-id="Aw3zGNiSJl2AI2djHPtzBC">Ctrl+F</code> 唤起）：匹配设备名/IP/接口/分组，下拉结果点击后 <code data-page-node-id="ceSaRpujxr2z0VFMKRBFBs">cy.animate({ center:{eles:target}, zoom:1.2 })</code> 并高亮 2 秒。顺带把「缩放至选中」补上（<code data-page-node-id="wC81xB3rTTJLmYXzByMz29">Z</code> 键）。</dd>
+    <dt data-page-node-id="szBbxnzR0Mg7h3J7B8sd7h">成本</dt><dd data-page-node-id="K8zJSomSHObJMGjIABqYNH">约 1 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="MyZpqRJ7fIWpNtdw6Upolz">
+  <div class="top" data-page-node-id="zrLtB5RkNZDsQWxeKDDd7w"><span class="badge b1" data-page-node-id="TmkY8wKcYfB76E9dLXRalu">P1-5</span><h4 data-page-node-id="n5OLRkPwFZghJ0rCaxsXiw">右键菜单 + 快捷键体系</h4><span class="id" data-page-node-id="x2SISrxbJhBDHp3WYfeNZG">肌肉记忆</span></div>
+  <p data-page-node-id="cs9SScl8FPD8Bjuj1oAIau"><b data-page-node-id="blmRSFFAQiKBY7ArWO03QW">现状：</b>右键无菜单（实测：右键后页面无任何菜单元素）。快捷键只有 Ctrl+Z / Ctrl+Y / Escape 三个，且<b data-page-node-id="g2eTpcSVWe97Mpuy8l1RRv">没有任何快捷键帮助入口</b>。</p>
+  <p data-page-node-id="dhVEAji3IbXFGDmbHUPgk4"><b data-page-node-id="F0szEowH6lIi6aGvWKC3Cg">对标：</b>draw.io / Figma 都有完整快捷键表并按 <code data-page-node-id="7lDg1h2QCR4KwhAiAwQeQJ">?</code> 唤起。</p>
+  <div class="kv" data-page-node-id="BlR620DWVZ3DmY4H83HmwP">
+    <dt data-page-node-id="7g6QrBwyd4z1gkU7nlxL9P">右键菜单</dt><dd data-page-node-id="ICJbpGp5vinm3EH4JQAEDQ">节点：重命名 / 关联设备 / 从拓扑移除 / 复制 / 对齐 / 围绕此设备对话；链路：编辑 / 删除 / 反转方向；画布：粘贴 / 全选 / 插入图元 / 自动排布 / 适配视图。</dd>
+    <dt data-page-node-id="FtbJzi27ZV03FI7k7AKykD">快捷键</dt><dd data-page-node-id="ShkrztXG2cAFBSyZElEw0M"><code data-page-node-id="X6B4dB4SkJ0Xd2X47BXBza">V</code> 选择 · <code data-page-node-id="PxMjZp57TBTWbtrhccRFBU">M</code> 移动 · <code data-page-node-id="hfJBvwkCLzS1xwcdM4xAAp">C</code> 连线 · <code data-page-node-id="pHMIHoDPd3xIc15Tplakuh">Del</code> 删除 · <code data-page-node-id="7YL1X7mexKYEzSWqQSp7Vg">Ctrl+A</code> 全选 · <code data-page-node-id="e93KuKD3xJwfUue2fwdAz3">Ctrl+D</code> 复制 · <code data-page-node-id="5bl9nzYE3dDggjHzXDJAgx">Ctrl+G</code> 成组 · <code data-page-node-id="vEqk3VWDErHFr0xF6AE1b7">Ctrl+S</code> 立即保存 · 方向键微移（<code data-page-node-id="DA18EvKoI7J28RU9nEkPfd">Shift</code> 加速）· <code data-page-node-id="GnMBAuKWAs1nL2B4NFJac1">F</code> 适配 · <code data-page-node-id="LudgrIHvuctvX0nXwwhVvV">Shift+F</code> 缩放至选中 · <code data-page-node-id="cgxsDAFosNG5IBGvcMC05Y">/</code> 搜索 · <code data-page-node-id="KtatVv8nZ8iPaBV2SgVpXE">?</code> 快捷键帮助。</dd>
+    <dt data-page-node-id="ay2bFgL6QhkbPw1puY76C5">注意</dt><dd data-page-node-id="0gcLYCp5ZivI1dPfvXJPxU">现有 keydown 监听已正确排除输入框，扩展时保持这个守卫。</dd>
+    <dt data-page-node-id="NBtK8wBwDN9L4ZzG9l8Jt0">成本</dt><dd data-page-node-id="jTUeMigCe53xk8SOjapp3L">菜单 1 天 + 快捷键 1 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="Kq6ogxyKxLeZnlDHeXBgwo">
+  <div class="top" data-page-node-id="ib2p5CbGHEezJAcvkGTGKB"><span class="badge b1" data-page-node-id="HOdogwCpeiFXQthQ2J2Yx0">P1-6</span><h4 data-page-node-id="xQLrLn7oJvKRGWXCLLYi4X">工具条信息架构重整</h4><span class="id" data-page-node-id="GvJZcAd34TMo2auGR224it">13 控件平铺</span></div>
+  <p data-page-node-id="yFCeeKVKIhFgp1qEmPb9g9"><b data-page-node-id="DVxEGBQVgM1E0lpp8ytFp1">现状：</b>一条 65px 高的工具条里塞了 4 个模式按钮 + 2 个 details 菜单 + 7 个操作按钮 + 1 个「更多」菜单，靠 <code data-page-node-id="KZ6Q35VmzD2YRiYI3DPie2">@media (max-width:1180px)</code> 换行兜底。功能一多必然溢出。</p>
+  <p data-page-node-id="vZ16IUbC1L0HlFjaJsAWBJ"><b data-page-node-id="3kqTbULSGcf5BEXEvyJDtx">对标：</b>Figma 的做法是「左侧工具箱（模式）+ 顶部上下文条（随选中变化）+ 右侧属性面板」——<b data-page-node-id="AZL7hq6abiFD6j5v4meiGJ">操作与对象绑定，而不是全部常驻</b>。</p>
+  <div class="kv" data-page-node-id="D8mgDEjHqoJEmmrye4KzKu">
+    <dt data-page-node-id="EORQMLQ4o21LHEyigTO688">方案</dt><dd data-page-node-id="wKCMKVwttzKBE5MJaaFFZN">① 模式切换（选择/移动/连线）收成左侧竖直工具岛或保持左侧一组；② 「插入/对齐/撤销/重做」随选中态启用；③ 「新建链路 / 添加设备 / 自动排布 / 拓扑比对」这四个高频主操作保留，其余（编辑信息/删除/导出/查看详情）归入「更多」；④ <b data-page-node-id="kngQurC2Gve3ZIFiIFaQp2">把「接口标签」「网格」这类视图开关移到画布右下角的视图控件区</b>，与缩放、鹰眼组成「视图控制簇」——这是 draw.io 和 DNAC 的共同做法，把「编辑」与「看」分开。</dd>
+    <dt data-page-node-id="FTlIM92v2Aww3GrBKRYddc">成本</dt><dd data-page-node-id="RjFW2UGcy22z3myBleYdCU">约 1.5 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="LL4Lr7jtv9RNUdr2vim5tr">
+  <div class="top" data-page-node-id="iF8aJq1BrLQSAjaJ8zIC5d"><span class="badge b1" data-page-node-id="jznsUo5ZK6kwIgh2AQ2t4M">P1-7</span><h4 data-page-node-id="7VcCnCsc2Xyfez34ucgCPn">增量渲染 + 大图性能策略</h4><span class="id" data-page-node-id="N1QEDiG94azbAJHOevbV7b">见 03 / P0-4</span></div>
+  <div class="kv" data-page-node-id="yZYjd5VOYjnOCN1g0hrUon">
+    <dt data-page-node-id="4aCNapSb8XxL685ci4QISh">方案</dt><dd data-page-node-id="qmLm4eRxRWwtDyUuzi9DqZ">① 元素同步改 diff（add/remove/update data/update position）；② 拖拽中只走 Cytoscape 本地渲染，<code data-page-node-id="j4qhzTm8GL0ZYMBz7FgzWr">dragfree</code> 才提交并增量更新；③ 节点数 &gt; 阈值（如 150）时自动降级：关闭接口标签、关闭边动画、降低 <code data-page-node-id="knHCYF6G7JMUJbXfiNArh5">pixelRatio</code>，并在状态栏提示「大图模式：已隐藏接口标签」。</dd>
+    <dt data-page-node-id="QoXE1KLWqL1SW5gn1k6Fr3">成本</dt><dd data-page-node-id="yfxaGE0gwFiUGkV3i2TsL6">约 2 天。这是「演示能用」到「生产能用」的分水岭。</dd>
+  </div>
+</div>
+
+<h3 data-page-node-id="Hbm0OI9vmrvhb6cQOBx0xo">P2 · 体验精修（决定「好用」而不是「能用」）</h3>
+
+<div class="card" data-page-node-id="OpHcYTJAbdL2aoC4NOLNg1">
+  <div class="top" data-page-node-id="ozQDjVmajTPF2Z6yCukRm6"><span class="badge b2" data-page-node-id="tZ9RXfEWEgYhFekI0jDCsq">P2-1</span><h4 data-page-node-id="T86mLHXy4Ez8uTcKSzYRjt">拖拽时的智能对齐参考线</h4></div>
+  <p data-page-node-id="TdzAvzA1xfb9JZYmrAwHTR"><b data-page-node-id="nYK13FC3rqhtyzRlgUMOex">现状：</b>只有事后手动对齐（6 个方向，需 ≥2 个选中）。拖拽过程中<b data-page-node-id="CxuSv82UJKb2LmZfIKZtMM">没有任何提示</b>，用户只能目测。</p>
+  <p data-page-node-id="RXL3A5qGaTXziMz4OjUbhT"><b data-page-node-id="HKNcVEmB6tLvu1ZyoDoZgF">对标：</b>Figma 的核心体验之一——拖拽时实时出现品红色参考线并吸附。</p>
+  <div class="kv" data-page-node-id="QQWcoBr3wgxHDFJ68uttWA">
+    <dt data-page-node-id="E0AkhTYdlFeXtBb30BOMix">方案</dt><dd data-page-node-id="vUGYxGeOZuPKXhPGiouacE">在 <code data-page-node-id="xKwQGkHUXbDXevEKrb3w43">drag</code> 事件中计算与邻近节点的中线/边线对齐，绘制 SVG 参考线并在 ±3px 内吸附；同时给「分布」补两个操作（水平等距 / 垂直等距）。</dd>
+    <dt data-page-node-id="PQIsa9FyWB2aWHBMuyIPr8">成本</dt><dd data-page-node-id="QM6Tci6teUUlX9pD6poznE">约 1.5 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="xDJEpkY6n4yF9VG0er4wRf">
+  <div class="top" data-page-node-id="PrJra3brc0bqEIYNI9HFrM"><span class="badge b2" data-page-node-id="L0NwEOrJ6ee43mqV4D5x1E">P2-2</span><h4 data-page-node-id="5nwfU5vHFybHdnBJvIXhjI">LOD：按缩放层级显示细节</h4></div>
+  <p data-page-node-id="gNd8zpVLC7shlIkv3ML4wE"><b data-page-node-id="MZfg0eB0KPCrRbvn3xCSHn">现状：</b>接口标签是全局开关，缩放再小也照常画，节点一多就糊成一团。Cytoscape 已设了 <code data-page-node-id="eu6rP3WaRpZJQgBdMonRwa">min-zoomed-font-size: 8</code>，但只有字号下限，没有分级显隐。</p>
+  <div class="kv" data-page-node-id="aX1ZHtTkFG4xroS1ckgNvq">
+    <dt data-page-node-id="nqRlK6PbkkAkDHjUZJME4b">方案</dt><dd data-page-node-id="kQuh1lRDOPP3Zv8POKmaNR">zoom &lt; 0.5 隐藏接口标签与图元文字；zoom &lt; 0.3 只画图标不画名字；zoom &gt; 1.5 显示更多元信息（IP、型号）。对标 Grafana Node Graph 的分级渲染。</dd>
+    <dt data-page-node-id="XxTXBCWPJ3ynQGoyj9fH1I">成本</dt><dd data-page-node-id="PDZaFg6lvzNmy9hZEbAWJG">约 0.5 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="owe40ZEooq7GqbmIl5GWhN">
+  <div class="top" data-page-node-id="VyGQRbJn8y9mfALwmubJqa"><span class="badge b2" data-page-node-id="zca4AE0UbQgSk1EGAN4jD8">P2-3</span><h4 data-page-node-id="7qQz7kxluTs6J6aA7b7W4C">批量操作面板</h4></div>
+  <p data-page-node-id="4QG8KbMt41JKoNQMTSFtK6"><b data-page-node-id="dpHOZN3jHvM0LAT05AI4XP">现状：</b>多选后只能对齐。<b data-page-node-id="8bvosRO0REdCzbzo2Jdpn6">缺失：</b>批量删除、批量移动、批量修改设备类型、批量关联/取消关联、批量归入分组。</p>
+  <div class="kv" data-page-node-id="6EASfTFfNVw1sc8UFPUTKx">
+    <dt data-page-node-id="2TAtSCcPi2xFJEfTTgLXQK">方案</dt><dd data-page-node-id="bNTnAuALLVwMp7RElCj0p9">选中 &gt;1 个对象时，检视器切换为「多选面板」：显示「已选 N 个（M 设备 / K 图元）」+ 可用批量操作。这是 Figma / draw.io 的标准形态，也顺带解决 P0-3 的反馈缺失。</dd>
+    <dt data-page-node-id="nv6FWAfBfaGf19ldWGRjrS">成本</dt><dd data-page-node-id="lczkuFjHgGdG29vD78zuAY">约 1.5 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="ZRqTZbaKRZu7RKGeT6TeLq">
+  <div class="top" data-page-node-id="y6XlJJc0FMp7Hye2bha5D1"><span class="badge b2" data-page-node-id="2CFBtf6VsxAvRGqya7qKDf">P2-4</span><h4 data-page-node-id="HJidIE24DCTmfowDbfE5Cx">布局算法扩展</h4></div>
+  <p data-page-node-id="ALoJj8YQGCmztRC5YrGctY"><b data-page-node-id="9eAUyVALfJpYeERlyNE0zx">现状：</b>只有 ELK <code data-page-node-id="poiMBz2kAXJivxRqutVfUG">layered / direction RIGHT</code> 一种，分连通组件后按 920px 行宽打包（<code data-page-node-id="7NbrEqSj83WYSARjtHCWif">topologyLayout.ts</code>）。</p>
+  <p data-page-node-id="ghD0F4ULXMi4bX3zarGs6t"><b data-page-node-id="0ulQ16mIDNE7nq2rI6BHSz">问题：</b>企业网络拓扑是有<b data-page-node-id="v5TqLrnnaZk2MdavAGqQol">语义层级</b>的——核心 / 汇聚 / 接入，或 MPLS 的 P / PE / CE。纯分层算法不会知道谁是核心。</p>
+  <div class="kv" data-page-node-id="whniWccCbJ4sMAOBs2bJkX">
+    <dt data-page-node-id="MP2zG2hNDikdrQBOky1CDc">方案</dt><dd data-page-node-id="fMk2B1r2BYDW9e73juaDnN">提供 4 种预设：<b data-page-node-id="dCU5DHXks3t0D8p4ZnDM6Y">水平分层</b>（现有）、<b data-page-node-id="xTMeDG6TFDNRDgtBufnLWE">垂直分层</b>（核心在上、接入在下，最符合网络工程师直觉）、<b data-page-node-id="CZHJG9f6oW8ZzWbOJ3Axmc">径向/星型</b>（以选中节点为中心，适合看某台设备的邻居）、<b data-page-node-id="Fgbq2Wx6E2k6FkN2Grs0jC">网格</b>（适合设备清单式排布）。ELK 换 <code data-page-node-id="AIlg2vVHMWg0MMHwug3eeN">elk.direction: DOWN</code> 即可拿到垂直分层。</dd>
+    <dt data-page-node-id="Pz4TErHnhKNhKp9a3nd4Ie">成本</dt><dd data-page-node-id="kkfgGNJFFhHuCJ5SXIE4Ix">约 1 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="nW3baPPw8DYTXpEEffS68D">
+  <div class="top" data-page-node-id="OyEZgZQiTzGHvJNgHDbqsi"><span class="badge b2" data-page-node-id="vUDpFcvATeAIKaqdlr2Z4Y">P2-5</span><h4 data-page-node-id="NCxaNlsO9uFdJV64Wtocco">恢复拖拽连线</h4></div>
+  <p data-page-node-id="2ESdjqrJ1gv5H8m0lJwPaG"><b data-page-node-id="24O5MkCPFVMuQgire547Vb">现状：</b>「连线」模式要<b data-page-node-id="UO2uho34f6woAffWozJCRR">依次点两个节点</b>，且没有拖拽反馈（只有边框变色）。React Flow 时代有连接手柄（handle），切 Cytoscape 后失去了<b data-page-node-id="FC9VT6HMzYjNicAOvhTI0k">拖拽建边</b>的能力——这是交互上的退步。</p>
+  <div class="kv" data-page-node-id="lcBQI3bYlOov3JBIwZPnHj">
+    <dt data-page-node-id="wLYuOtCoPUr7wHYKg5a24R">方案</dt><dd data-page-node-id="7v6TYhCONmU5C1939YMhde">用 <code data-page-node-id="Zv50LBynSLEALwepwuJJPG">cytoscape-edgehandles</code> 扩展，或在 <code data-page-node-id="hZ1ekK9zmmBFhOrQDW0Ghm">grab</code>/<code data-page-node-id="qincCiC81MeSu5k1NiBuZN">free</code> 事件里自绘一条跟随鼠标的预览线，落到目标节点上即打开链路编辑弹窗（复用现有 <code data-page-node-id="yYjqVAufckks2msCF8zNOG">openLinkComposer</code>）。后者约 1 天，可控性更好。</dd>
+    <dt data-page-node-id="cHXnAG7MNUYEazL9OIct6E">补充</dt><dd data-page-node-id="icnibBW59AzJ0EZk75a3Bm">连线弹窗里的接口默认值是写死的 <code data-page-node-id="RfUAqp2berYeTIjlMqgEJI">GE0/1</code> / <code data-page-node-id="bCxGuENPbPxShq7M1dx6tm">GE0/0</code>，建议按设备型号推断可选接口，或至少留空提示「待核实」避免假数据。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="kZ8pJ1OJbpoJ6rUToLYee9">
+  <div class="top" data-page-node-id="9BhRFRbIvpGrQxPSdJDtCi"><span class="badge b2" data-page-node-id="AnDfovMFOdNyuAYZdoM3dB">P2-6</span><h4 data-page-node-id="mfkqHP78hE22OQZzIw4qeU">视图书签与 URL 深链</h4></div>
+  <p data-page-node-id="k1JlMklUwtFkhjfWq744Fv"><b data-page-node-id="AXiVFOzCD6VP16nXeHn1xD">现状：</b>无。切换拓扑时视口重置为 <code data-page-node-id="dDNrxxxwEtEIkJEAZthcol">fit</code>，看过的区域要重新找；也无法把「某张图的某个视口」分享出去。</p>
+  <div class="kv" data-page-node-id="1HU0GzZub9i7NPzigkVcvO">
+    <dt data-page-node-id="STHiMGMXS92TzfuzdBTGNg">方案</dt><dd data-page-node-id="0NqC8GyXmQl3SEwWJkISD3">① URL 携带 <code data-page-node-id="o9eNwLNK04d3hyygyBnsA8">?topology=xx&amp;node=yy&amp;x=&amp;y=&amp;z=</code>，刷新与分享可还原；② 用户可保存命名视图（「核心层」「XX 园区」），存在拓扑 metadata 里。大拓扑场景下这两项的实用度极高。</dd>
+    <dt data-page-node-id="YO8ia7SSZMG0Nh2TJjO126">成本</dt><dd data-page-node-id="adyOgmdfGD3LnG99K2kOGh">深链 0.5 天 + 书签 1 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="JLp3rZSSIsvYBMQqyr6ZEi">
+  <div class="top" data-page-node-id="sGxD45Hhp4AQ0ZP7UFCtTK"><span class="badge b2" data-page-node-id="J98LBVWOaoVDXpSAQyiLkp">P2-7</span><h4 data-page-node-id="VNNN2ztXbKsAxZfYc68M8L">主题适配与代码卫生</h4></div>
+  <div class="kv" data-page-node-id="rzg8T8qBaZfdXkANUJlfBi">
+    <dt data-page-node-id="7N4krPDVbmpEAK6fI7jD8N">主题</dt><dd data-page-node-id="tufN4wnVtghMqlzi7MM55a">节点 <code data-page-node-id="8DpC1dChvBgBSNKoTp8dRc">background-color:#ffffff</code>、标签 <code data-page-node-id="2IbR7F8z8OFrj6k6xtNrlp">text-background-color:#ffffff</code> 在 Cytoscape style 里写死，dark 主题下是白底黑字块。改为 CSS 变量驱动，在主题切换时调用 <code data-page-node-id="BIT9rok8a0JoPsCCtbvdET">cy.style()</code> 重设。</dd>
+    <dt data-page-node-id="FEnH8l7qFRmdI6h6AKqao7">死代码</dt><dd data-page-node-id="m6s5IqLL7cIxYUXmkNtJJC">实测 <b data-page-node-id="G6rSFwFqjtq57xBzihnTiT">18 个选择器 0 命中</b>（React Flow 自定义节点 DOM 时代遗留）：<code data-page-node-id="pgGxhzwemRKTXYeJGDYQDa">.topology-device-node</code>、<code data-page-node-id="RZfjRusfhOnEkeC57nD8Ze">.device-node-body</code>、<code data-page-node-id="DkzoUsBT8HXwlEjPACTTog">.device-node-icon</code>、<code data-page-node-id="NZ1qgD8FbnFA5DOZNorMa6">.device-node-main</code>、<code data-page-node-id="5f82Gncvn2NjUp6fE1UF4E">.device-node-title-row</code>、<code data-page-node-id="mPrp6iVZDMVyuREbs5uKeA">.device-node-name</code>、<code data-page-node-id="AdGBAKo1A6sgil7BFamfiE">.device-node-meta</code>、<code data-page-node-id="zLPuRzIK9Wi4ymv7acSVK1">.device-node-type</code>、<code data-page-node-id="pqpopvZos5bBEOaUPhCNzF">.device-node-footer</code>、<code data-page-node-id="OJjBFy0es4wwz6EWyEQdfE">.device-node-label-chip</code>、<code data-page-node-id="tRGPId7vimZAFC6fMMJHB3">.device-node-group-chip</code>、<code data-page-node-id="EuDhYW2e4Q7JunT4PZvuXp">.node-access-dot</code>、<code data-page-node-id="5Xm3zT2BOaWlnpe4bA1Kni">.edge-if-badge</code>、<code data-page-node-id="ICzoztmag8Nzynr7Ito4SO">.edge-center-badge</code>、<code data-page-node-id="E4NMfL3GapP6FWtxVYQqvQ">.topology-group-node</code>、<code data-page-node-id="dAzbAexYIHYkPbsICM49HR">.group-node-header</code>、<code data-page-node-id="4dNVy1u5pgHaC37uYE4XhK">.topology-minimap-custom</code>、<code data-page-node-id="lY3MjBSV8yr1wZjAt3JP3v">.topology-version-badge</code>（<code data-page-node-id="2wAOEbPerBCHl3ifk8dmiU">TopologyStudio.css</code> 第 80–106 行 + 175 行，约 27 行）。</dd>
+    <dt data-page-node-id="AG8iyRsnL384htYJ0DhrDI">拆分</dt><dd data-page-node-id="2EYDWboydXEMecTTAjVwb6"><code data-page-node-id="1pUDYrJWfO48wQ08hoYC6f">TopologyWorkspace.tsx</code> 2,228 行 / 85 个 hook，建议拆出 <code data-page-node-id="q0eGpIsRWk6dQcDhtawtKe">useTopologyEditor</code>（状态+历史+保存）、<code data-page-node-id="fPPjMMyBf4EfNndFhrdGFp">DevicePalette</code>、<code data-page-node-id="WbmtOzgrnshX2hbZalHeNs">Inspector</code>、<code data-page-node-id="0AhnOmNqwuCQXb7iVMAFRE">CanvasToolbar</code> 四个模块。这不是洁癖——当前文件已经是「改一处要读全篇」的状态。</dd>
+    <dt data-page-node-id="JLyU7SOUOypPOLabFiyeMI">成本</dt><dd data-page-node-id="fDHtuGlqrKvjGvGjdy5I6i">死代码清理 0.5 天（低风险，可立即做）；主题 1 天；拆分 2–3 天（建议与 P1 改造同批做）。</dd>
+  </div>
+</div>
+
+<h3 data-page-node-id="53K8HhD8CtFaiPdos0YiSk">P3 · 差异化（把领先项放大）</h3>
+
+<div class="card" data-page-node-id="tqcoUjzpHNyNzrR9fzhjTH">
+  <div class="top" data-page-node-id="f1jeexPkmYQzhlHmi57psF"><span class="badge b3" data-page-node-id="H5BwilC28XOJJOfK4cL9i3">P3-1</span><h4 data-page-node-id="ftAUDcp6E4zaHgbSWkXoxz">LLDP/CDP 邻居发现 → 自动成图</h4><span class="id" data-page-node-id="lMl8LDQZu33SqdD7ugCEvD">最大差异化</span></div>
+  <p data-page-node-id="BSc1Lhp6zEl5VGfAaeC9IE"><b data-page-node-id="d4KIEVC5ks71xho4GGSRPC">现状：</b>后端 <code data-page-node-id="4yDGFvI3XsvFtlZXTxP35v">link.source</code> 的 <code data-page-node-id="EnmuAjOAXsVP91GsDipZg8">"discovered"</code> 只表示「这条链路两端都关联了资产」，<b data-page-node-id="EUgkI6iUuDyvXAjpzmzScZ">没有真正的邻居发现</b>（全仓 <code data-page-node-id="Nq7vkMGSey9fyQu8w0BJOg">lldp/cdp/neighbor</code> 0 处实现）。所有链路都是人画的。</p>
+  <p data-page-node-id="BNDZCeAbGXFa77sC8MMVln"><b data-page-node-id="mlFtJe63qU8vPdjNTW7mC7">对标：</b>LibreNMS / NetBox 的自动发现是它们不可替代的原因。手画 200 台设备的拓扑不现实。</p>
+  <div class="kv" data-page-node-id="5Gd0B2cbvBtv79sA1yEukV">
+    <dt data-page-node-id="sTTUU3tu2to1hvtXOcTZpC">方案</dt><dd data-page-node-id="Km9hIjgV8s8rkBiJJnXXm0">扩展健康巡检脚本，解析 <code data-page-node-id="tBCPdXNWOfrzqCFrB3dV7j">display lldp neighbor</code> / <code data-page-node-id="xqqCbw8ZMQG2lcDFUXEyOB">show cdp neighbors</code>，产出「发现但未入图」的候选链路列表，在画布上以虚线幽灵线呈现，用户一键采纳。这与现有「证据闭环」设计天然契合——采纳即带上证据引用。</dd>
+    <dt data-page-node-id="dUiIHjLSv5XAGIMmBYG48Q">成本</dt><dd data-page-node-id="TImea7Es0VUKJ48yJWUiuW">后端 3–5 天 + 前端 2 天。<b data-page-node-id="HTtizTSIUTVW2UiMb1uQjX">做完这一项，产品从「画图工具」变成「网管系统」。</b></dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="qPB8w3Ah1pKozSxBD9glfA">
+  <div class="top" data-page-node-id="PWuMKKoCkkq68lXI1swTS6"><span class="badge b3" data-page-node-id="5vwD14ixyrbaLfeV6cZBRO">P3-2</span><h4 data-page-node-id="4J7a6HusfyfQEOgPj301NR">拓扑版本历史与快照对比</h4></div>
+  <p data-page-node-id="aOepsE3oJpHDhGSm4YViqx"><b data-page-node-id="OTgWka9xut67WEwQBCvDbw">现状：</b>有 <code data-page-node-id="USDl9AllZwGNqs1EKAXMkb">version</code> 字段做乐观锁，但<b data-page-node-id="VOIP6lphtPngqyYjt3DOzW">没有历史记录</b>，改坏了回不去（撤销栈只有 20 步且随会话消失）。</p>
+  <div class="kv" data-page-node-id="qQ1UcbwRANnDHpPk2ajupG">
+    <dt data-page-node-id="CFoBiRAwkOFv5j9LnSwAUO">方案</dt><dd data-page-node-id="ClUkXCcB9egJTuc3iX3b95">每次保存落一份快照（可只存 diff），提供「历史」面板：时间线 + 差异高亮（新增/移动/删除），支持回滚。与已有的「拓扑比对」能力可以复用同一套 diff 视觉语言。</dd>
+    <dt data-page-node-id="vis1nybFhkqdrRju5LHEvt">成本</dt><dd data-page-node-id="exkhrexxYePnKYqeKfYAKL">后端 2 天 + 前端 2 天。</dd>
+  </div>
+</div>
+
+<div class="card" data-page-node-id="0gcHgeRMCUnu8VLLutZaww">
+  <div class="top" data-page-node-id="gsV8Qy0LcQcIqPDDDF1Hy2"><span class="badge b3" data-page-node-id="KmKqatPRfiDraPNJVq2yTb">P3-3</span><h4 data-page-node-id="E2AyoLEu3ZpquAGds5XMpf">把 Agent 协作做成主叙事</h4></div>
+  <p data-page-node-id="cSN8FXENpsUDA5JeNDwqLF"><b data-page-node-id="ry6dunxXu1MxTuI8iO66Df">现状：</b>Agent 面板能带选中上下文发起对话，能力已经打通，但入口只是右上角一个按钮，且打开后 380px 的侧栏把画布挤窄。</p>
+  <div class="kv" data-page-node-id="m3fi1ZHFoy22SZn6JHCZRF">
+    <dt data-page-node-id="VpdhUwpdzu7Xwv8UK9Tnmj">方案</dt><dd data-page-node-id="IdFuJCvV7SnIURhRFQOyJI">① 节点/链路悬浮时提供「问 Agent」快捷入口，不只是右侧面板；② Agent 产出的结论可以<b data-page-node-id="zPfCnwVBytbQxAmSybcBJq">回写到画布</b>（例如「标记这条链路为待核实」「给这台设备打标签」）——让 Agent 从「聊天」变成「操作画布的一种手段」；③ 预设场景卡片（现有 intro 已有雏形）按角色分：故障排查 / 变更影响面 / 合规核查。</dd>
+    <dt data-page-node-id="H6igJR6HJS7fXvbBYYRDY6">成本</dt><dd data-page-node-id="uRXSvxS3ppANCvRfakPko2">约 3 天。这是所有对标产品都没有的能力，值得投。</dd>
+  </div>
+</div>
+
+<h2 data-page-node-id="dS0vD0oCKdydBSFr4OIQDN"><span class="num" data-page-node-id="uZzAwHEAPBu309BErSogq1">06</span>实施路线图</h2>
+<div class="road" data-page-node-id="WvOFJvqWGI1KYE9g5VAF5P">
+  <div class="phase" data-page-node-id="SJRj3zGPddEAM6U2ATQxiB">
+    <h4 data-page-node-id="ORnJZs7XThpgVYBZiQeDrv">M1 · 止血（约 2 天）</h4>
+    <div class="when" data-page-node-id="GVfQf2DrwyxjPbZlXfZVue">目标：让画布「导航正常」</div>
+    <ul data-page-node-id="IxUUTjY0NgS9koD9SWDF0e">
+      <li data-page-node-id="HhP8MheKmIyIaOrWxO5Bzn">P0-1 平移/缩放解耦 + <code data-page-node-id="vp0qplGnznorPVQseB9oD4">wheelSensitivity</code> 校准</li>
+      <li data-page-node-id="sumQMGggoaPbi0yLNKveLV">P0-2 手势层改 Shift 触发，删除重复命中逻辑</li>
+      <li data-page-node-id="gFKTmqwBPLwRQaMnK9iBwt">P0-3 选中数常驻反馈</li>
+      <li data-page-node-id="SBOSr6Jg3iVZVQfMSaDEsk">P2-7 清理 18 条死选择器（独立低风险，可先合）</li>
+    </ul>
+  </div>
+  <div class="phase" data-page-node-id="6OVWG3U7254uwN0xcZz3NS">
+    <h4 data-page-node-id="MVQDTvwZ31DGD0iYa8oLJx">M2 · 补齐企业刚需（约 5 天）</h4>
+    <div class="when" data-page-node-id="GuH7qPSh6FjvAqM4dNojW5">目标：能进生产、能对外交付</div>
+    <ul data-page-node-id="6Y8ZCpXEXxu68OXuIQzE3Z">
+      <li data-page-node-id="ZcTSx7fUd0etNehBYXfinU">P1-2 导出 PNG/SVG/PDF（半天，先做，立竿见影）</li>
+      <li data-page-node-id="6uxoHF5xiHhpJyGbKIefOz">P1-5 右键菜单 + 快捷键体系 + <code data-page-node-id="cAGeWfiqgnOlPtQsjGCB7B">?</code> 帮助</li>
+      <li data-page-node-id="GutvahhoxC7zOkRdKzpkTT">P1-4 画布内搜索定位 + 缩放至选中</li>
+      <li data-page-node-id="ZMl6rJl6Hqouq3a73oPPSE">P1-3 鹰眼缩略图</li>
+      <li data-page-node-id="eEJ8uLI5Pd8R0h7CJ7tueL">P1-6 工具条信息架构重整</li>
+    </ul>
+  </div>
+  <div class="phase" data-page-node-id="V4l1YDUJLFzDEVpqDNujSz">
+    <h4 data-page-node-id="sGcmInuGfmqwh3Urb3pK4a">M3 · 状态上画布 + 性能（约 6 天）</h4>
+    <div class="when" data-page-node-id="dkm7TjJo2VjUBCnMpMLkVq">目标：从「画图」变成「看得懂的网络」</div>
+    <ul data-page-node-id="pBZEmUoU4siymgQixPpHlg">
+      <li data-page-node-id="WHW4eGh7ESmWj8RfGtiTsJ">P1-1 运行态着色 + 图例（含后端健康摘要）</li>
+      <li data-page-node-id="ZrGOe11t8neGzwPQCJP6SS">P1-7 增量渲染 + 大图降级策略</li>
+      <li data-page-node-id="EWB12Np6qnkRNJQHE9KnhK">P2-1 智能对齐参考线 · P2-2 LOD · P2-3 批量操作面板</li>
+      <li data-page-node-id="OxbWPbHJlHG8ZqD6dY6Pvm">P2-4 布局算法扩展（垂直分层优先）</li>
+    </ul>
+  </div>
+  <div class="phase" data-page-node-id="XQ54EreNCqc5Rz8yfScxJp">
+    <h4 data-page-node-id="67wrdT9G6RAdvsM1vasmtO">M4 · 差异化（约 8–10 天）</h4>
+    <div class="when" data-page-node-id="8pjc0pvs9I79jSvP4Id7jz">目标：别人没有的</div>
+    <ul data-page-node-id="YnCsQ9FnEkGF7Y0pbJsaBc">
+      <li data-page-node-id="5EJkNKjuFStc8LpD7mDRjZ">P3-1 LLDP/CDP 邻居发现 → 幽灵链路采纳</li>
+      <li data-page-node-id="MSvdbWkffTAmAwwxwAYz6t">P3-3 Agent 深度集成（画布内入口 + 结论回写）</li>
+      <li data-page-node-id="UAmhmjnebCtIxGLAKVf4Nk">P3-2 版本历史与快照对比</li>
+      <li data-page-node-id="XilqOWhFbPy71XjBs8OA6M">P2-5 拖拽连线 · P2-6 视图书签与深链 · P2-7 组件拆分与主题适配</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout" data-page-node-id="l0phMzzAEeEjLNaJOCcrJ5">
+  <b data-page-node-id="Z1mzSxpI25ClTSvliZD0F0">如果只能做三件事：</b>① <b data-page-node-id="0KGQHfVBLKdfaCq1PxfKE2">修滚轮缩放</b>（0.5 天，解锁基础导航）；② <b data-page-node-id="YBDmYnrR86eBQ9oOvLDjye">加导出</b>（0.5 天，让图能出得去）；③ <b data-page-node-id="RKHm9d5pYezpF5LABEQlZs">状态上画布 + 图例</b>（2–3 天，让拓扑图有网管价值）。这三件加起来约 4 天，能把「能画出来」推进到「敢给客户看」。
+</div>
+
+<h2 data-page-node-id="CLPilYkNUEfejxac7D3HBf"><span class="num" data-page-node-id="Gh0CfVCWNMkdj1Ts0CkSaS">07</span>附录：实测数据</h2>
+<h3 data-page-node-id="XTYivpwZKCtz3dVKnQlQtN">7.1 运行时探测结果</h3>
+<table data-page-node-id="QmzDI5Qdob0EYKAtX0mMPd">
+  <tr data-page-node-id="f6ItoYTXliR1HZkje8ybJy"><th data-page-node-id="j6BXVwfdAAp5ksUFBkUxEH">探测项</th><th data-page-node-id="vNgeNObo5YSGWz3pk1m0aQ">结果</th></tr>
+  <tr data-page-node-id="g9cgsdbq2e22H3ZNdUUeVN"><td data-page-node-id="EA67A6LjcktddsNAWEqRtE">选择模式滚轮缩放</td><td class="no" data-page-node-id="CS4eSPXIXGzFNP5wlc2Rxj">131% → 131%（无效）</td></tr>
+  <tr data-page-node-id="HE9xyRGaUCkTEypsMLAuBP"><td data-page-node-id="EC1jWk6u5JRi0rkzXzNSjd">连线模式滚轮缩放</td><td class="no" data-page-node-id="D27bjhh0YYz5ciioL7Xfed">131% → 131%（无效）</td></tr>
+  <tr data-page-node-id="ta1SXfK1uKDBUswWF7AxHJ"><td data-page-node-id="FpSlVLA5MJQjEx9dPkOTh3">移动布局模式滚轮缩放</td><td class="part" data-page-node-id="ctE3KToNA2IGsVuit7aQOr">131% → 400%（有效但失控）</td></tr>
+  <tr data-page-node-id="H1sedOiEYpJJjfGBQoww94"><td data-page-node-id="7FWvYrrC3FCdRHNG8tIKY3">画布中心顶层元素</td><td class="no" data-page-node-id="KlMSM5mzyiADKM9D0dCTOW"><code data-page-node-id="avp9CB8n6wNTGHSGKx5Yh4">.netops-selection-gesture-layer</code>（z-index 6, pointer-events auto）</td></tr>
+  <tr data-page-node-id="8h6ML1SBZhPRaDBoX9dbtf"><td data-page-node-id="uFD8kjpkCDjaMV8dS2RXLh">右键菜单</td><td class="no" data-page-node-id="p8fkpvtkdWmcqmD0HCJMoq">无任何菜单元素</td></tr>
+  <tr data-page-node-id="LRT1r9g3gGWgMzaZWuyDV9"><td data-page-node-id="IyuUOHawSSuUwRLJBJnmBR">hover tooltip</td><td class="no" data-page-node-id="v8fKdu5gf3t3FEpoagcly4">0 个</td></tr>
+  <tr data-page-node-id="QfGu2QEU7Fkz8Cl0H8xfy2"><td data-page-node-id="Ksnnnjr9emnnWgi2qdRtTc">框选后反馈</td><td class="no" data-page-node-id="NZ9g6lKEIxCaBE4q06KFWF">文案静态，无选中数</td></tr>
+  <tr data-page-node-id="iJ1nDpr607unKa7Y9B6RQm"><td data-page-node-id="sPhQS1j8DAUFDnDJBEJM3L">死 CSS 选择器</td><td class="no" data-page-node-id="0oVpCvnJDTByRGAYuyAnAQ">20 个候选中 18 个 0 命中</td></tr>
+  <tr data-page-node-id="BSujDZ43XGY1OzXHsFYaXF"><td data-page-node-id="y1iP2pADTipWEMAyGPagHN">控制台错误</td><td class="yes" data-page-node-id="JaAKCst6ENLV4Da9a1W9IO">0 条</td></tr>
+  <tr data-page-node-id="lwCBPps60aloHt04GmMiqc"><td data-page-node-id="f1FWCAFNI3qzDoevUhcqnA">可见按钮总数</td><td data-page-node-id="LzSiPUxGZ6RDoU9L7XeID3">46 个（其中画布工具条 13 个）</td></tr>
+</table>
+
+<h3 data-page-node-id="UPElFKiNaCizCvhJJfMYu9">7.2 关键证据：Cytoscape 3.28.1 滚轮处理器</h3>
+<div class="evidence" data-page-node-id="9LB9ZBV9oTzGzYfvmUERAk">// frontend/public/netops-canvas/cytoscape.min.js @278487
+if (e.hoverData.draggingEles || e.hoverData.dragging || e.hoverData.cxtStarted || 0 !== e.selection[4])
+  t.preventDefault();
+else if (n.panningEnabled() &amp;&amp; <b data-page-node-id="EHIX6lOy8GZvT0emNKnKoa">n.userPanningEnabled()</b> &amp;&amp; n.zoomingEnabled() &amp;&amp; n.userZoomingEnabled()) {
+  var s = ... t.deltaY / -250 ... * e.wheelSensitivity;
+  var l = n.zoom() * Math.pow(10, s);   // deltaY=100, sensitivity=1 → ×2.51
+  n.zoom({ level: l, renderedPosition: {...} });
+}</div>
+
+<h3 data-page-node-id="gfA32piIj5J1HF9XiQGDaN">7.3 审查覆盖的文件</h3>
+<div class="two" data-page-node-id="FpsjSXuKTZOCr9sDGSiNsY">
+  <div class="panel" data-page-node-id="HrJ5TnkrGF34e1KXb48K1v">
+    <h5 data-page-node-id="lPOtq0RHRCgi9FGNXiQPw8">前端（extensions/network_operations/frontend）</h5>
+    <ul data-page-node-id="ShW45EuvNGoy6pIjJyNQ5J">
+      <li data-page-node-id="05jKNQwFazMDrumDP8g0wX"><code data-page-node-id="PBBEE0EDM9j4AxyOwgEvxQ">components/TopologyWorkspace.tsx</code> 2,228 行</li>
+      <li data-page-node-id="haATkGaHWRAZjWHJxWMjC3"><code data-page-node-id="T7rBEK6lDxWDcgF4ZrHui5">components/NetOpsCanvas.tsx</code> 460 行</li>
+      <li data-page-node-id="hzXA1EjrKZN1iaEHkSHFj5"><code data-page-node-id="geJsLu2vJL74NSm7M8cJFk">components/TopologyStudio.css</code> 178 行</li>
+      <li data-page-node-id="GS1MZ4BDyUcMsLaXuDPSP1"><code data-page-node-id="kooPQK9y56DPvJutJGfEG2">components/topologyLayout.ts</code> 97 行</li>
+      <li data-page-node-id="jAClDH4Ct2SWPnOKjuItYo"><code data-page-node-id="57FYSE8krm99kW0EozpRte">components/TopologyAgentPanel.tsx</code> 121 行</li>
+      <li data-page-node-id="imDpAsALPIju3jjwp03RmB"><code data-page-node-id="J9OKBwMBGkGBSqghogSmYF">components/netopsCanvasAssets.ts</code> 15 行</li>
+      <li data-page-node-id="UgABgUoCFE4cOzyamibL3s"><code data-page-node-id="S715R0b0QnzwpYofMbb3XC">NetworkOperations.tsx / .css</code></li>
+    </ul>
+  </div>
+  <div class="panel" data-page-node-id="6Ejwotq20vmwASMQHnjG7x">
+    <h5 data-page-node-id="Gp74NvEruPP8RZqSkjPNCw">运行时与依赖</h5>
+    <ul data-page-node-id="clmrxOwVq0aZkjLNKDURvE">
+      <li data-page-node-id="XLZtdKuM839KHjlCfReXIS">Cytoscape <b data-page-node-id="Ab0KZEg0oYgAZsMeyYK6Uo">3.28.1</b>（vendored，非 npm）</li>
+      <li data-page-node-id="M2HTIw4r6oCHQ8LhM4itZ0">ELK（elkjs，动态 import）</li>
+      <li data-page-node-id="REspTR5IsuOGLkE9cGVeDj">Playwright 实测：9 组探测</li>
+      <li data-page-node-id="OAnnoBcuWirvxsKGtasIiy">后端 API：<code data-page-node-id="I5SNWDPfuYdVr2qLsdNjb8">/topologies</code>、<code data-page-node-id="XmpuO0EAcufcegAOwSzGWJ">/state</code>、<code data-page-node-id="KplpdtlYtIgsoXM61AIf9X">/compare</code>、<code data-page-node-id="iaXztSPHrQmz0SZ32raB4O">/nodes/&lt;id&gt;</code></li>
+      <li data-page-node-id="Fw76q7dfGcM109FUTKu29F">后端 <code data-page-node-id="AfRkaCDIuidHG2z7SRwBWA">service.py</code> 135k / <code data-page-node-id="wjl3Frhc9lhX2WUHP5GkrW">backend.py</code> 72k（抽查）</li>
+    </ul>
+  </div>
+</div>
+
+<div data-page-node-id="progress-chapter">
+  <h2 data-page-node-id="progress-title">8. 实施进度与实测证据（2026-09-15 更新）</h2>
+  <p data-page-node-id="progress-lead">
+    审查之后按 M1–M4 四期全部落地。以下每一项都经过运行时验证：后端 pytest、前端 vitest、
+    以及针对开发后端（8011）与 Vite 前端（5273）的浏览器实测。没有「写完就算完」的条目。
+  </p>
+
+  <h3 data-page-node-id="progress-m1">8.1 交付清单</h3>
+  <table data-page-node-id="progress-table">
+    <thead>
+      <tr>
+        <th>阶段</th><th>交付内容</th><th>验证方式</th><th>状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>M1 止血</td>
+        <td>滚轮缩放恢复（<code>userPanningEnabled(true)</code> + <code>wheelSensitivity 0.25</code>）；Shift 拖框多选；增量渲染 <code>applyElements</code>；删除 90 行自研命中测试与 27 行死 CSS</td>
+        <td>浏览器实测：一格滚轮 1.26×；Shift 拖框跨浮层松手仍完成选择</td>
+        <td class="yes">已完成</td>
+      </tr>
+      <tr>
+        <td>M2 企业刚需</td>
+        <td>PNG/SVG 导出、右键菜单、快捷键与帮助面板（<code>?</code>）、画布内搜索、鹰眼小地图、工具条层级重整</td>
+        <td>浏览器实测：导出文件真实下载；<code>?</code> 面板可开；搜索定位后快捷键仍生效</td>
+        <td class="yes">已完成</td>
+      </tr>
+      <tr>
+        <td>M3 专业绘制</td>
+        <td>运行状态上节点边框 + 图例、LOD 分级渲染、拖动智能对齐参考线（5px 吸附）、批量操作面板、4 种布局预设</td>
+        <td>浏览器实测：四种布局均可产出坐标；网格/接口标签开关持久化</td>
+        <td class="yes">已完成</td>
+      </tr>
+      <tr>
+        <td>M4 差异化</td>
+        <td>拖拽连线、<code>?topology=&amp;node=</code> 深链、命名视图书签、主题感知画布、LLDP/CDP 邻居发现、结构版本历史与差异/恢复、Agent 结论回写</td>
+        <td>浏览器实测：连线预览出现/消失；书签恢复缩放 400%→206%；发现→采纳闭环；改动→对比→恢复闭环</td>
+        <td class="yes">已完成</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 data-page-node-id="progress-findings">8.2 实施过程中发现的三个真实问题</h3>
+  <div class="card" data-page-node-id="progress-card-1">
+    <p><strong>1. 扩展路由必须在 manifest 声明。</strong>
+      新增 <code>/discover</code> 后后端直接启动失败：<code>ExtensionValidationError: registered undeclared routes</code>。
+      平台把扩展可暴露的路由当作安全边界来校验，这比事后审计更可靠 —— 代价是加接口必须同步
+      <code>extension.json</code>。</p>
+  </div>
+  <div class="card" data-page-node-id="progress-card-2">
+    <p><strong>2. 采集证据默认读不出来。</strong>
+      巡检产物被分类器标为 <code>sensitive</code>，而 <code>read_artifact_content</code> 默认拒绝敏感内容，
+      于是邻居发现在线上会永远返回空。这个缺陷只有真跑一遍端到端才会暴露 —— 单元测试里手写的内容
+      不会被判敏感。已改为显式 <code>allow_sensitive=True</code>；<code>secret</code> 仍然一律拒绝。</p>
+  </div>
+  <div class="card" data-page-node-id="progress-card-3">
+    <p><strong>3. <code>npm run build</code> 与 <code>npx tsc --noEmit</code> 不是一回事。</strong>
+      此前只跑了后者（不含 <code>tsc -b</code> 的项目引用），14 个类型错误被带进了提交。根因是
+      <code>import { type MouseEvent } from "react"</code> 遮蔽了 DOM 的 <code>MouseEvent</code>，
+      原生 window 监听拿不到正确的事件类型。已拆分命名，构建恢复绿灯。</p>
+  </div>
+
+  <h3 data-page-node-id="progress-quantified">8.3 可量化的变化</h3>
+  <div class="kv" data-page-node-id="progress-kv">
+    <div><span class="k">后端测试</span><span class="v">93 通过（拓扑 / 扩展包 / 邻居发现）</span></div>
+    <div><span class="k">新增测试</span><span class="v">邻居发现 9 例 · 版本历史 8 例</span></div>
+    <div><span class="k">前端测试</span><span class="v">199 通过 / 45 个文件</span></div>
+    <div><span class="k">类型检查</span><span class="v"><code>tsc -b</code> 0 错误，<code>npm run build</code> 通过</span></div>
+    <div><span class="k">实时闭环</span><span class="v">发现→采纳：链路带 <code>source: discovered</code> 与证据引用</span></div>
+    <div><span class="k">实时闭环</span><span class="v">改动→对比→恢复：v33 → v34（+1 节点）→ 恢复为 v35，历史只增不删</span></div>
+  </div>
+
+  <h3 data-page-node-id="progress-remaining">8.4 仍未做的部分（诚实清单）</h3>
+  <ul data-page-node-id="progress-remaining-list">
+    <li><strong>多人协同与冲突合并</strong>：目前是版本乐观锁 + 冲突报错，不是 OT/CRDT。两人同时拖同一张图仍会有一方保存失败。</li>
+    <li><strong>版本历史的差异粒度</strong>：只到「对象与属性」层，不展示坐标位移轨迹；恢复时刻意保留当前布局。</li>
+    <li><strong>邻居发现的覆盖面</strong>：覆盖 H3C/Huawei 详略两种形态与 Cisco CDP/LLDP 简表。极端自定义模板会被跳过而不是猜 —— 这是有意为之，画错一条链路比少一条更贵。</li>
+    <li><strong>Agent 结论回写</strong>：目前是回合结束后的服务端对账，不是流式增量上画布；本地有未保存改动时会提示而非覆盖。</li>
+  </ul>
+</div>
+
+<footer data-page-node-id="teMZVDxvYs5HymVKJeg7AD">
+  审查基线：commit <code data-page-node-id="cHR7xHO4cK8dbJzfHRM2ND">39fabd7</code>（在 <code data-page-node-id="239hpLKFGx9pse1KU2QprT">bbdabdc</code> 之上）· 生成时间 2026-09-14 ·
+  所有缺陷结论均来自浏览器运行时实测，非静态推测 · 对标产品的能力描述基于其公开版本的通用行为 ·
+  第 8 章为 2026-09-15 追加的实施进度，落地于 commit <code>fa6d8c0</code>。
+</footer>
+
+</div>
+</body>
+</html>
