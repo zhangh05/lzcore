@@ -93,12 +93,19 @@ const NavGroupItem = memo(function NavGroupItem({ group, currentPath }: { group:
         aria-expanded={hasMenu ? (active ? "true" : "false") : undefined}
         viewTransition
       >
-        <Icon size={16} weight="duotone" />
+        {/*
+          Text only. The global switcher is a destination list, not an icon
+          wall: repeating an icon beside every domain doubles the signal for no
+          extra information. The domain icon lives in the menu it opens, and in
+          the surfaces where an icon genuinely aids scanning (dropdown rows,
+          sidebar, mobile navigation).
+        */}
         <span>{group.label}</span>
       </NavLink>
       {hasMenu ? (
         <div className="app-nav-menu" role="menu" aria-label={group.label}>
           <div className="app-nav-menu-head">
+            <Icon size={14} weight="duotone" />
             <strong>{group.label}</strong>
             <span>{group.description}</span>
           </div>

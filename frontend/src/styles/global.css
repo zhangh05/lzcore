@@ -721,12 +721,32 @@ pre code {
   transform: translateY(0);
 }
 
+/* The domain icon identifies the menu it belongs to, so it sits beside the
+   label rather than beside the trigger in the header. */
 .app-nav-menu-head {
   display: grid;
-  gap: 3px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 8px;
+  align-items: center;
   padding: 7px 8px 8px;
   border-bottom: 1px solid var(--line-2);
   margin-bottom: 4px;
+}
+
+.app-nav-menu-head > svg {
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--accent);
+}
+
+.app-nav-menu-head > strong {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.app-nav-menu-head > span {
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .app-nav-menu-head strong {
