@@ -2699,19 +2699,45 @@ def _topology_structure_signature(topology: dict[str, Any]) -> str:
 
 
 def _revision_collection(topology_id: str) -> str:
-    """Revisions live in a per-drawing collection.
+    """Revisions live in a per-drawing collection with a collision-free key.
 
     One shared collection would have to be filtered by topology after a capped
     read, so a workspace with a dozen busy drawings would silently lose the
     history of whatever fell past the limit — and the retention cap would be
     computed from a truncated list, so it would prune the wrong revisions.
     """
-    return f"topology_revisions_{re.sub(r'[^A-Za-z0-9_]+', '_', str(topology_id or '')).strip('_')}"
+    topology_key = str(topology_id or "")
+    return f"topology_revisions_{hashlib.sha256(topology_key.encode('utf-8')).hexdigest()[:32]}"
+
+
+def _legacy_revision_collections(topology_id: str) -> list[str]:
+    """Collections used by the two pre-migration revision layouts."""
+    old_per_drawing = (
+        f"topology_revisions_{re.sub(r'[^A-Za-z0-9_]+', '_', str(topology_id or '')).strip('_')}"
+    )
+    return [collection for collection in (old_per_drawing, "topology_revisions")
+            if collection != _revision_collection(topology_id)]
 
 
 def _topology_revisions(workspace_id: str, topology_id: str) -> list[dict[str, Any]]:
+    store = _store(workspace_id)
+    collection = _revision_collection(topology_id)
+    # Revision history is operational data. Move records written by either
+    # earlier layout before listing so upgrading never makes old snapshots
+    # disappear. Copy before deleting so an interrupted migration preserves the
+    # original record for the next read.
+    for legacy_collection in _legacy_revision_collections(topology_id):
+        for item in store.list(legacy_collection, limit=500):
+            if str(item.get("topology_id") or "") != topology_id:
+                continue
+            revision_id = str(item.get("revision_id") or "")
+            if not revision_id:
+                continue
+            if not store.get(collection, revision_id):
+                store.save(collection, revision_id, item)
+            store.delete(legacy_collection, revision_id)
     revisions = [
-        item for item in _store(workspace_id).list(_revision_collection(topology_id), limit=500)
+        item for item in store.list(collection, limit=500)
         if str(item.get("topology_id") or "") == topology_id
     ]
     revisions.sort(key=lambda item: int(item.get("version") or 0))
@@ -3284,16 +3310,27 @@ def discover_topology_neighbors(workspace_id: str, topology_id: str) -> dict[str
         str(node.get("node_id") or ""): str(node.get("linked_device_id") or "")
         for node in topo.get("nodes", [])
     }
-    node_by_device_id = {device_id: node_id for node_id, device_id in linked_by_node_id.items() if device_id}
+    node_ids_by_device_id: dict[str, list[str]] = {}
+    for node_id, device_id in linked_by_node_id.items():
+        if device_id:
+            node_ids_by_device_id.setdefault(device_id, []).append(node_id)
+    # A discovered fact may be written back only when each asset has one
+    # unambiguous drawing node. A device can intentionally appear more than
+    # once, but choosing one depiction here would turn evidence into a guess.
+    node_by_device_id = {
+        device_id: node_ids[0]
+        for device_id, node_ids in node_ids_by_device_id.items()
+        if len(node_ids) == 1
+    }
     device_ids = set(node_by_device_id)
-    if not device_ids:
+    if not node_ids_by_device_id:
         return {"topology_id": topology_id, "candidates": [], "scanned_devices": 0, "note": "topology_has_no_linked_devices"}
     devices = [d for d in list_devices(workspace_id) if d.get("device_id") in device_ids]
     keys_by_device_id = {d["device_id"]: _device_match_keys(d) for d in devices}
-    key_to_device_id: dict[str, str] = {}
+    device_ids_by_key: dict[str, set[str]] = {}
     for device_id, keys in keys_by_device_id.items():
         for key in keys:
-            key_to_device_id.setdefault(key, device_id)
+            device_ids_by_key.setdefault(key, set()).add(device_id)
 
     observations = list_observations(workspace_id, limit=500)
     artifact_by_device: dict[str, str] = {}
@@ -3308,8 +3345,8 @@ def discover_topology_neighbors(workspace_id: str, topology_id: str) -> dict[str
 
     existing_pairs = set()
     for link in topo.get("links", []):
-        source = node_by_device_id.get(str(link.get("source_node_id") or ""), str(link.get("source_node_id") or ""))
-        target = node_by_device_id.get(str(link.get("target_node_id") or ""), str(link.get("target_node_id") or ""))
+        source = str(link.get("source_node_id") or "")
+        target = str(link.get("target_node_id") or "")
         existing_pairs.add(frozenset((source, target)))
 
     candidates: list[dict[str, Any]] = []
@@ -3344,7 +3381,8 @@ def discover_topology_neighbors(workspace_id: str, topology_id: str) -> dict[str
                 if not remote_key:
                     continue
                 remote_key = remote_key.split(".")[0]
-                remote_id = key_to_device_id.get(remote_key)
+                remote_candidates = device_ids_by_key.get(remote_key, set())
+                remote_id = next(iter(remote_candidates)) if len(remote_candidates) == 1 else None
                 if not remote_id or remote_id == device_id:
                     continue
                 source_node = node_by_device_id.get(device_id)

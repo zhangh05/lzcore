@@ -154,13 +154,31 @@ def test_history_gets_a_baseline_for_drawings_that_predate_it(workspace):
     topo = _two_node_topology(workspace)
     store = ExtensionDataStore("network.operations", workspace_id=workspace)
     for revision in service._topology_revisions(workspace, topo["topology_id"]):
-        store.delete("topology_revisions", str(revision["revision_id"]))
+        store.delete(service._revision_collection(topo["topology_id"]), str(revision["revision_id"]))
 
     revisions = service.list_topology_revisions(workspace, topo["topology_id"])
     assert len(revisions) == 1
     assert revisions[0]["summary"] == {"nodes": 2, "links": 0, "groups": 0, "canvas_items": 0}
     # The baseline is created once, not on every read.
     assert len(service.list_topology_revisions(workspace, topo["topology_id"])) == 1
+
+
+@pytest.mark.parametrize("legacy_collection", ("topology_revisions", "old_per_drawing"))
+def test_history_migrates_legacy_records_without_hiding_them(workspace, legacy_collection):
+    topo = _two_node_topology(workspace)
+    store = ExtensionDataStore("network.operations", workspace_id=workspace)
+    revision = service._topology_revisions(workspace, topo["topology_id"])[0]
+    revision_id = str(revision["revision_id"])
+    if legacy_collection == "old_per_drawing":
+        legacy_collection = service._legacy_revision_collections(topo["topology_id"])[0]
+    store.delete(service._revision_collection(topo["topology_id"]), revision_id)
+    store.save(legacy_collection, revision_id, revision)
+
+    history = service.list_topology_revisions(workspace, topo["topology_id"])
+
+    assert [item["revision_id"] for item in history] == [revision_id]
+    assert store.get(service._revision_collection(topo["topology_id"]), revision_id) is not None
+    assert store.get(legacy_collection, revision_id) is None
 
 
 def test_missing_topology_has_no_history(workspace):

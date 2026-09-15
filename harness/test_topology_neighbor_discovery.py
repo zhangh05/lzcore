@@ -195,6 +195,51 @@ def test_discovery_skips_pairs_already_on_the_canvas(workspace):
     assert result["note"] == "no_unrecorded_neighbours_in_collected_evidence"
 
 
+def test_discovery_skips_devices_with_multiple_drawing_nodes(workspace):
+    pe1 = service.save_device(workspace, {"name": "PE1", "host": "10.9.3.1", "vendor": "h3c"})
+    pe2 = service.save_device(workspace, {"name": "PE2", "host": "10.9.3.2", "vendor": "h3c"})
+    topo = service.save_topology(workspace, {
+        "name": "Duplicate depiction",
+        "nodes": [
+            {"node_id": "pe1-core", "linked_device_id": pe1["device_id"]},
+            {"node_id": "pe1-edge", "linked_device_id": pe1["device_id"]},
+            {"node_id": "pe2", "linked_device_id": pe2["device_id"]},
+        ],
+    })
+    _seed_neighbor_evidence(workspace, pe1["device_id"], "\n".join([
+        "Local Interface: GE1/0/1",
+        "System Name   : PE2",
+        "Port ID       : GE1/0/2",
+    ]))
+
+    result = service.discover_topology_neighbors(workspace, topo["topology_id"])
+
+    assert result["candidates"] == []
+
+
+def test_discovery_skips_ambiguous_device_names(workspace):
+    pe1 = service.save_device(workspace, {"name": "PE1", "host": "10.9.4.1", "vendor": "h3c"})
+    first_peer = service.save_device(workspace, {"name": "PE2", "host": "10.9.4.2", "vendor": "h3c"})
+    second_peer = service.save_device(workspace, {"name": "PE2", "host": "10.9.4.3", "vendor": "h3c"})
+    topo = service.save_topology(workspace, {
+        "name": "Ambiguous device name",
+        "nodes": [
+            {"node_id": "pe1", "linked_device_id": pe1["device_id"]},
+            {"node_id": "pe2-a", "linked_device_id": first_peer["device_id"]},
+            {"node_id": "pe2-b", "linked_device_id": second_peer["device_id"]},
+        ],
+    })
+    _seed_neighbor_evidence(workspace, pe1["device_id"], "\n".join([
+        "Local Interface: GE1/0/1",
+        "System Name   : PE2",
+        "Port ID       : GE1/0/2",
+    ]))
+
+    result = service.discover_topology_neighbors(workspace, topo["topology_id"])
+
+    assert result["candidates"] == []
+
+
 def test_discovery_reports_when_nothing_can_be_scanned(workspace):
     topo = service.save_topology(workspace, {
         "name": "Symbols only",
