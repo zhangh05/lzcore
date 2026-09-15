@@ -66,6 +66,7 @@ type Props = {
 
 type CyCollection<T> = {
   map: <R>(callback: (element: T) => R) => R[];
+  filter: (callback: (element: T) => boolean) => CyCollection<T>;
   forEach: (callback: (element: T) => void) => void;
   remove: () => void;
   unselect: () => void;
@@ -482,6 +483,14 @@ export default function NetOpsCanvas(props: Props) {
         if (!ids.length) return;
         const collection = cy.$(ids.map((id) => `[id = "${id}"]`).join(","));
         if (!collection.length) return;
+        // Locating an object must also select it. Centring the viewport alone
+        // left the inspector showing a node that the canvas did not consider
+        // selected, so every selection-dependent action (nudge, batch edit,
+        // delete) silently did nothing after a search jump.
+        const selectable = collection.filter((element) => !element.id().startsWith("group-"));
+        cy.elements().unselect();
+        selectable.forEach((element) => element.select());
+        propsRef.current.onSelectionChange(selectable.map((element) => element.id()));
         // Selecting an object usually opens the inspector, which resizes the
         // container. Centring against a stale size lands the node off screen,
         // so measure again first and zoom about the rendered centre.

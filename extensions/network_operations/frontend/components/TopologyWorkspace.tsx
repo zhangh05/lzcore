@@ -10,6 +10,7 @@ import {
 // 图标全部走平台统一出口 components/Icon.tsx —— 这是全站唯一的 Phosphor
 // 门面，直接 import "@phosphor-icons/react" 会让扩展页与平台图标语义脱钩。
 import {
+  IconAlert,
   IconArrowsX,
   IconBox,
   IconBranch,
@@ -44,6 +45,7 @@ import { LAYOUT_PRESETS, layoutTopology, type LayoutAlgorithm } from "./topology
 import { TopologyAgentPanel, type CanvasSelection } from "./TopologyAgentPanel";
 import NetOpsCanvas, { NODE_STATUS_COLORS, type CanvasApi, type CanvasContextTarget, type NodeRuntimeStatus } from "./NetOpsCanvas";
 import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
+import { mergeTopologies, type MergeConflict, type MergeStats } from "./topologyMerge";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import "./TopologyStudio.css";
 
@@ -205,6 +207,14 @@ async function pngToRgbImage(dataUrl: string): Promise<RgbImage> {
   return rgbFromRgba(data, canvas.width, canvas.height);
 }
 
+/** Show a merged field value the way a person reads it, not as raw JSON. */
+function describeMergeValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "空";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
+}
+
 /** A stored structural snapshot of the canvas. */
 type TopologyRevision = {
   revision_id: string;
@@ -335,20 +345,35 @@ export default function TopologyWorkspace({
   }, [topologies, selectedTopologyId]);
 
   const [activeTopology, setActiveTopology] = useState<Topology | null>(currentTopology);
-  const saveStatusRef = useRef<"saved" | "saving" | "unsaved">("saved");
+  const saveStatusRef = useRef<"saved" | "saving" | "unsaved" | "conflict">("saved");
   const revisionRef = useRef(0);
   const serverVersionsRef = useRef(new Map<string, number>());
+  /**
+   * The last version the server confirmed, kept per drawing. A conflict can
+   * only be merged against this base: without it we would know that two
+   * drawings differ but not which side changed what.
+   */
+  const serverTopologyRef = useRef(new Map<string, Topology>());
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (saveStatusRef.current !== "saved") return;
     setActiveTopology(currentTopology);
-    if (currentTopology) serverVersionsRef.current.set(currentTopology.topology_id, currentTopology.version);
+    if (currentTopology) {
+      serverVersionsRef.current.set(currentTopology.topology_id, currentTopology.version);
+      serverTopologyRef.current.set(currentTopology.topology_id, currentTopology);
+    }
   }, [currentTopology]);
 
   // Undo / Redo history
   const [history, setHistory] = useState<Topology[]>([]);
   const [future, setFuture] = useState<Topology[]>([]);
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "conflict">("saved");
+  // A conflict is a decision, not an error: hold both sides until the user picks.
+  const [conflict, setConflict] = useState<{
+    mine: Topology; theirs: Topology; merged: Topology;
+    conflicts: MergeConflict[]; stats: MergeStats;
+  } | null>(null);
+  const [showConflict, setShowConflict] = useState(false);
   const saveTimerRef = useRef<number | null>(null);
   useEffect(() => { setHistory([]); setFuture([]); setSelectedElement(null); }, [selectedTopologyId]);
 
@@ -558,6 +583,41 @@ export default function TopologyWorkspace({
     if (selectedElement && !showAgent) setIsInspectorOpen(true);
   }, [selectedElement, showAgent]);
 
+  /**
+   * Someone else saved this drawing while we were editing it.
+   *
+   * Refusing the save and leaving the canvas dirty is a dead end: the next
+   * edit conflicts again and the user has no way forward. Fetch their version,
+   * merge it against the last confirmed base, and let the user decide.
+   */
+  const resolveConflict = useCallback(async (mine: Topology) => {
+    // Not named `base`: that is the module-level API prefix, and shadowing it
+    // silently turned the request URL into "[object Object]/topologies/...".
+    const lastConfirmed = serverTopologyRef.current.get(mine.topology_id) || mine;
+    try {
+      const res = await apiRequest<{ topology: Topology }>({
+        method: "GET",
+        url: `${base}/topologies/${mine.topology_id}`,
+        params: { workspace_id: workspaceId },
+      });
+      const theirs = res.topology;
+      if (!theirs) throw new Error("topology_not_found");
+      const result = mergeTopologies(lastConfirmed, mine, theirs);
+      // Any resolution writes on top of their version, so the next save is
+      // accepted instead of conflicting again.
+      serverVersionsRef.current.set(mine.topology_id, theirs.version);
+      setConflict({ mine, theirs, merged: result.topology, conflicts: result.conflicts, stats: result.stats });
+      setShowConflict(true);
+      saveStatusRef.current = "conflict";
+      setSaveStatus("conflict");
+      setNotice("这张图纸在你编辑期间被其他人保存过，请选择如何处理", false);
+    } catch {
+      saveStatusRef.current = "unsaved";
+      setSaveStatus("unsaved");
+      setNotice("拓扑版本冲突：已被其他操作修改，当前未保存编辑仍保留", false);
+    }
+  }, [workspaceId, setNotice]);
+
   // Execute Save
   const executeSave = useCallback(
     (topo: Topology) => {
@@ -580,6 +640,7 @@ export default function TopologyWorkspace({
           },
         });
         serverVersionsRef.current.set(topo.topology_id, res.topology.version);
+        serverTopologyRef.current.set(topo.topology_id, res.topology);
         if (revision === revisionRef.current) {
           setActiveTopology(res.topology);
           saveStatusRef.current = "saved"; setSaveStatus("saved");
@@ -589,15 +650,19 @@ export default function TopologyWorkspace({
           saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
         }
       } catch (err: unknown) {
-        saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
         const errMsg = (err as { message?: string })?.message || "自动保存拓扑失败";
-        setNotice(errMsg.includes("version_conflict") || errMsg.includes("version conflict") ? "拓扑版本冲突：已被其他操作修改，当前未保存编辑仍保留" : errMsg, false);
+        if (errMsg.includes("version_conflict") || errMsg.includes("version conflict")) {
+          void resolveConflict(topo);
+          return;
+        }
+        saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
+        setNotice(errMsg, false);
       }
       };
       saveChainRef.current = saveChainRef.current.then(work, work);
       return saveChainRef.current;
     },
-    [workspaceId, onReload, setNotice]
+    [workspaceId, onReload, setNotice, resolveConflict]
   );
 
   // Push state with debounced save
@@ -620,6 +685,32 @@ export default function TopologyWorkspace({
     },
     [activeTopology, executeSave]
   );
+
+  /**
+   * Resolve a conflict the way the user asked. "Take theirs" is the only
+   * branch that discards work, so it is also the only one that says so.
+   */
+  const applyConflictChoice = useCallback((choice: "merged" | "theirs" | "mine") => {
+    if (!conflict) return;
+    setShowConflict(false);
+    setConflict(null);
+    if (choice === "theirs") {
+      serverTopologyRef.current.set(conflict.theirs.topology_id, conflict.theirs);
+      setActiveTopology(conflict.theirs);
+      saveStatusRef.current = "saved";
+      setSaveStatus("saved");
+      setNotice("已采用服务端版本，本地未保存改动已放弃", true);
+      return;
+    }
+    const target = choice === "merged" ? conflict.merged : conflict.mine;
+    pushState({ ...target, version: conflict.theirs.version });
+    setNotice(
+      choice === "merged"
+        ? `已合并双方改动并保存（自动合并 ${conflict.stats.autoMerged} 处，需人工确认 ${conflict.conflicts.length} 处）`
+        : "已用本地版本覆盖服务端改动",
+      choice === "merged",
+    );
+  }, [conflict, pushState, setNotice]);
 
   const handleUndo = useCallback(() => {
     if (!history.length || !activeTopology) return;
@@ -1379,27 +1470,13 @@ export default function TopologyWorkspace({
         setNotice((err as { message?: string })?.message || "创建拓扑失败", false);
       }
     } else if (topologyModalMode === "edit" && activeTopology) {
-      try {
-        const res = await apiRequest<{ topology: Topology }>({
-          method: "PUT",
-          url: `${base}/topologies/${activeTopology.topology_id}`,
-          data: {
-            workspace_id: workspaceId,
-            name: topologyNameInput.trim(),
-            description: topologyDescInput.trim(),
-            version: activeTopology.version,
-            nodes: activeTopology.nodes,
-            links: activeTopology.links,
-            groups: activeTopology.groups,
-          },
-        });
-        setTopologyModalMode(null);
-        setActiveTopology(res.topology);
-        await onReload();
-        setNotice("拓扑信息已更新");
-      } catch (err: unknown) {
-        setNotice((err as { message?: string })?.message || "更新拓扑失败", false);
-      }
+      // Renaming is an ordinary canvas edit, so it goes through the same
+      // save path. A second hand-rolled PUT here reported a raw
+      // "topology_version_conflict" to the user instead of offering the merge.
+      const nextName = topologyNameInput.trim();
+      setTopologyModalMode(null);
+      pushState({ ...activeTopology, name: nextName, description: topologyDescInput.trim() });
+      setNotice(`拓扑“${nextName}”信息已更新`);
     }
   };
 
@@ -1871,6 +1948,11 @@ export default function TopologyWorkspace({
                   <IconSave size={12} className="spin-icon" />
                   <span>正在保存...</span>
                 </>
+              ) : saveStatus === "conflict" ? (
+                <button type="button" onClick={() => setShowConflict(true)} title="这张图纸被其他人修改过，点击选择如何处理">
+                  <IconAlert size={12} />
+                  <span>有冲突待处理</span>
+                </button>
               ) : (
                 <>
                   <IconSave size={12} />
@@ -3052,6 +3134,50 @@ export default function TopologyWorkspace({
             <div className="modal-actions">
               <Button variant="primary" disabled={!discovery.candidates.length} onClick={adoptCandidates}>采纳选中的 {adoptedIds.length} 条</Button>
               <Button onClick={() => setShowDiscovery(false)}>关闭</Button>
+            </div>
+          </div>
+        </dialog>
+      )}
+
+      {showConflict && conflict && (
+        <dialog open className="network-dialog-modal compare-modal" aria-label="编辑冲突">
+          <div className="network-panel modal-panel compare-panel">
+            <div className="modal-header">
+              <div>
+                <h3>这张图纸被其他人修改过</h3>
+                <p>你编辑的是版本 {serverVersionsRef.current.get(conflict.mine.topology_id) ?? conflict.mine.version} 之前的图纸，服务端已是版本 {conflict.theirs.version}</p>
+              </div>
+              <Button aria-label="关闭冲突处理" onClick={() => setShowConflict(false)}><IconClose size={14} /></Button>
+            </div>
+            <div className="compare-notice-banner">
+              系统已按对象 id 做了三方合并：双方各自新增或修改、对方没动的部分都会保留；
+              同一字段双方都改了、或删除与编辑撞在一起时，保留服务端值并列在下面，请人工确认。
+            </div>
+            <div className="compare-metrics-row">
+              <div className="metric-box"><span className="metric-val">{conflict.stats.autoMerged}</span><span className="metric-lbl">自动合并</span></div>
+              <div className="metric-box"><span className="metric-val">{conflict.stats.added}</span><span className="metric-lbl">新增对象</span></div>
+              <div className="metric-box"><span className="metric-val">{conflict.stats.removed}</span><span className="metric-lbl">删除对象</span></div>
+              <div className="metric-box"><span className="metric-val">{conflict.conflicts.length}</span><span className="metric-lbl">需人工确认</span></div>
+            </div>
+            {conflict.stats.orphanedLinks > 0 && (
+              <p className="conflict-note">另有 {conflict.stats.orphanedLinks} 条链路的端点已不存在，合并时一并移除（服务端不接受悬空链路）。</p>
+            )}
+            <div className="compare-details-area">
+              {conflict.conflicts.slice(0, 12).map((item, index) => (
+                <div className="compare-item" key={`conflict-${item.collection}-${item.id}-${item.field}-${index}`}>
+                  <span className="compare-status-tag warn">需确认</span>
+                  <span>{item.collection} {nodeLabelById.get(item.id) || item.id} · {DIFF_FIELD_LABELS[item.field] || item.field}</span>
+                  <small>{item.field === "删除" ? "一方删除、另一方编辑；已按删除处理" : `保留服务端值 ${describeMergeValue(item.theirs)}`}</small>
+                </div>
+              ))}
+              {conflict.conflicts.length > 12 && <p>还有 {conflict.conflicts.length - 12} 处未列出。</p>}
+              {!conflict.conflicts.length && <p>没有需要人工确认的冲突。</p>}
+            </div>
+            <div className="modal-actions">
+              <Button variant="primary" onClick={() => applyConflictChoice("merged")}>合并双方改动并保存</Button>
+              <Button onClick={() => applyConflictChoice("theirs")}>用服务端版本（放弃我的改动）</Button>
+              <Button onClick={() => applyConflictChoice("mine")}>保留我的（覆盖对方）</Button>
+              <Button onClick={() => setShowConflict(false)}>稍后处理</Button>
             </div>
           </div>
         </dialog>

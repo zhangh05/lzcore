@@ -223,6 +223,72 @@ test("dedicated topology route keeps the canvas primary and exposes the device p
   expect(screen.getByRole("checkbox", { name: "接口标签" })).toBeInTheDocument();
 });
 
+test("a concurrent edit is offered as a merge instead of a dead-end error", async () => {
+  // Someone else renamed the drawing and bumped it to version 7 while we were
+  // removing a node locally. My removal and their rename must both survive, and
+  // the resolution must write on top of their version — not retry the stale one.
+  const theirs = { ...sampleTopology, name: "数据中心拓扑（对方改名）", version: 7 };
+  const putPayloads: Array<Record<string, unknown>> = [];
+  const passthrough = vi.mocked(apiRequest).getMockImplementation()!;
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.method === "PUT") {
+      putPayloads.push((request.data || {}) as Record<string, unknown>);
+      if (putPayloads.length === 1) throw new Error("topology_version_conflict");
+      return { ok: true, topology: { ...theirs, version: 8 } } as never;
+    }
+    if (request.url?.endsWith("/topologies/t1")) return { topology: theirs } as never;
+    return passthrough(request);
+  });
+
+  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
+  fireEvent.click(await screen.findByRole("button", { name: "从拓扑中移除节点" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
+
+  const dialog = await screen.findByRole("dialog", { name: "编辑冲突" }, { timeout: 4000 });
+  expect(within(dialog).getByText(/服务端已是版本 7/)).toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "合并双方改动并保存" })).toBeInTheDocument();
+
+  fireEvent.click(within(dialog).getByRole("button", { name: "合并双方改动并保存" }));
+
+  await waitFor(() => expect(putPayloads).toHaveLength(2), { timeout: 4000 });
+  expect(putPayloads[1].version).toBe(7);                              // writes on top of their version
+  expect(putPayloads[1].name).toBe("数据中心拓扑（对方改名）");          // their rename kept
+  expect(putPayloads[1].nodes).toEqual([]);                            // my deletion kept
+});
+
+test("a field both sides changed is listed for review, not decided silently", async () => {
+  // They renamed the drawing; I renamed it too. Both changed the same field,
+  // so the dialog must say so and keep the server value.
+  const theirs = { ...sampleTopology, name: "对方改的名字", version: 7 };
+  const putPayloads: Array<Record<string, unknown>> = [];
+  const passthrough = vi.mocked(apiRequest).getMockImplementation()!;
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.method === "PUT") {
+      putPayloads.push((request.data || {}) as Record<string, unknown>);
+      if (putPayloads.length === 1) throw new Error("topology_version_conflict");
+      return { ok: true, topology: { ...theirs, version: 8 } } as never;
+    }
+    if (request.url?.endsWith("/topologies/t1")) return { topology: theirs } as never;
+    return passthrough(request);
+  });
+
+  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  await screen.findByTestId("topo-node-node-d1");
+  fireEvent.click(screen.getByText("更多"));
+  fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
+  fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "我改的名字" } });
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "保存" }));
+
+  const dialog = await screen.findByRole("dialog", { name: "编辑冲突" }, { timeout: 4000 });
+  expect(within(dialog).getByText("需人工确认")).toBeInTheDocument();
+  expect(within(dialog).getByText(/保留服务端值 对方改的名字/)).toBeInTheDocument();
+
+  fireEvent.click(within(dialog).getByRole("button", { name: "合并双方改动并保存" }));
+  await waitFor(() => expect(putPayloads).toHaveLength(2), { timeout: 4000 });
+  expect(putPayloads[1].name).toBe("对方改的名字"); // server value wins a contested field
+});
+
 test("canvas filter dims non-matching objects and can be cleared", async () => {
   render(<NetworkOperations topologyOnly />);
   await screen.findByTestId("topo-node-node-d1");
