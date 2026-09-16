@@ -2415,6 +2415,18 @@ export default function TopologyWorkspace({
               </Button>
             </div>
 
+            {/* The most frequent thing an operator does with a node is ask about
+                it, so the action sits above the configuration. It used to live
+                inside the management-status block, which only renders once the
+                node is linked to a device — so on an unlinked node the action
+                was missing entirely, even though the Agent can discuss a
+                drawing node perfectly well. */}
+            <div className="inspector-section inspector-quick-actions">
+              <Button variant="primary" icon={<IconSparkle size={14} />} onClick={() => { setShowAgent(true); setIsInspectorOpen(false); }}>
+                围绕此设备对话
+              </Button>
+            </div>
+
             <div className="inspector-section">
               <label className="inspector-field">
                 关联登记设备（可选）
@@ -2439,7 +2451,7 @@ export default function TopologyWorkspace({
               </div> : <div className="inspector-entity-card"><strong>未关联登记设备</strong><div className="entity-card-note">该节点只属于当前图纸，不会成为管理连接、巡检或 Agent 操作目标。</div></div>}
             </div>
 
-            {selectedNodeDevice ? <div className="inspector-section studio-device-status"><span className="inspector-label">管理访问与观察记录</span>{(topologyState?.nodes.find((node) => node.node_id === selectedNode.node_id)?.connections || []).map((connection) => <div key={connection.connection_id}><strong>{connection.protocol.toUpperCase()} : {connection.port}</strong><span>{connection.last_tested_at ? `${connection.verified ? "上次验证成功" : "上次验证未通过"} · ${formatObservedTime(connection.last_tested_at)}` : "尚无连接测试记录"}</span></div>)}<p>最近采集：{formatObservedTime(topologyState?.nodes.find((node) => node.node_id === selectedNode.node_id)?.observation?.observed_at)}</p><Button variant="primary" icon={<IconSparkle size={14} />} onClick={() => { setShowAgent(true); setIsInspectorOpen(false); }}>围绕此设备对话</Button></div> : null}
+            {selectedNodeDevice ? <div className="inspector-section studio-device-status"><span className="inspector-label">管理访问与观察记录</span>{(topologyState?.nodes.find((node) => node.node_id === selectedNode.node_id)?.connections || []).map((connection) => <div key={connection.connection_id}><strong>{connection.protocol.toUpperCase()} : {connection.port}</strong><span>{connection.last_tested_at ? `${connection.verified ? "上次验证成功" : "上次验证未通过"} · ${formatObservedTime(connection.last_tested_at)}` : "尚无连接测试记录"}</span></div>)}<p>最近采集：{formatObservedTime(topologyState?.nodes.find((node) => node.node_id === selectedNode.node_id)?.observation?.observed_at)}</p></div> : null}
 
             <div className="inspector-section">
               <label className="inspector-field">
