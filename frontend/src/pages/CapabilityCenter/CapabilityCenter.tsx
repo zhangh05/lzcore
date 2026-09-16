@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from "react";
 import { capabilitiesApi, toolsApi } from "../../api";
-import { useAsync, AsyncView, Badge, InlineCode } from "../../components/common";
+import { useAsync, AsyncView, Badge, EmptyState, InlineCode } from "../../components/common";
 import { SearchInput } from "../../components/ui";
 import type { BusinessCapability, RiskLevel, ToolCatalogCategory, ToolCatalogItem, ToolGovernanceStatus } from "../../types";
 import { IconAlert, IconBolt, IconShield } from "../../components/Icon";
@@ -130,7 +130,7 @@ function ToolTree({ cats, query, filter }: { cats: ToolCatalogCategory[]; query:
     })).filter((c) => c.groups.length > 0);
   }, [cats, query, filter]);
 
-  if (!cats.length) return <div className="cc-empty-state">暂无目录数据</div>;
+  if (!cats.length) return <EmptyState text="暂无目录数据" />;
 
   return (
     <div className="tool-tree">

@@ -1,4 +1,5 @@
 import { IconUser } from "../../components/Icon";
+import { EmptyState } from "../../components/common";
 import { useCallback, useEffect, useState } from "react";
 import {
   authApi,
@@ -157,7 +158,7 @@ export function UserManagement() {
           {users.length ? users.map((user) => <button key={user.username} className={selectedUsername === user.username ? "selected" : ""} onClick={() => selectUser(user)}>
             <span className={`user-status-dot ${user.enabled === false ? "disabled" : ""}`} />
             <span><b>{user.username}</b><small>{ROLE_OPTIONS.find((item) => item.value === user.role)?.label || user.role}</small></span>
-          </button>) : <div className="user-access-empty"><b>还没有普通用户</b><p>点击“新建用户”添加第一个账户。</p></div>}
+          </button>) : <EmptyState text="还没有普通用户" hint="点击“新建用户”添加第一个账户。" />}
         </aside>
         <main className="user-access-editor">
           {!creating && !selectedUsername ? <div className="user-access-placeholder"><IconUser size={24} aria-hidden="true" /><h2>选择一个用户</h2><p>在左侧选择用户查看和修改权限，或新建普通用户。</p></div> : <>

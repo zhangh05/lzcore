@@ -79,23 +79,40 @@ export function ErrorState({
 
 /* ── Empty state ── */
 
+/**
+ * The empty state, in the two roles it actually has.
+ *
+ * Five implementations had grown up around this: `.empty`, `.hero` (twice),
+ * `.user-access-empty`, `.data-onboarding-empty` and `.cc-empty-state`. Read
+ * closely they were two roles, not five designs — a first-run state that tells a
+ * new user what to do (a mark, a title, an explanation, the primary action) and
+ * an inline one that says a panel has nothing in it yet (one line).
+ *
+ * `inline` is the default so existing call sites keep their weight; pass
+ * `onboarding` for the first-run case.
+ */
 export function EmptyState({
+  icon,
   text = "暂无数据",
   hint,
   action,
+  variant = "inline",
 }: {
+  /** Shown above the title. Defaults to the neutral box glyph. */
+  icon?: ReactNode;
   text?: string;
   hint?: string;
   action?: ReactNode;
+  variant?: "inline" | "onboarding";
 }) {
   return (
-    <div className="empty" data-testid="empty-state">
-      <div className="empty-icon">
-        <IconBox size={20} aria-hidden="true" />
+    <div className={`empty empty-${variant}`} data-testid="empty-state">
+      <div className={icon ? "empty-mark" : "empty-icon"}>
+        {icon ?? <IconBox size={20} aria-hidden="true" />}
       </div>
-      <div className="empty-text">{text}</div>
-      {hint && <div className="empty-hint">{hint}</div>}
-      {action && <div className="mt-2">{action}</div>}
+      <h2 className="empty-text">{text}</h2>
+      {hint && <p className="empty-hint">{hint}</p>}
+      {action && <div className="empty-action">{action}</div>}
     </div>
   );
 }

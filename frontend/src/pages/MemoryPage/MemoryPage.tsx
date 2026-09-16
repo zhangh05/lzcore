@@ -2,8 +2,9 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { memoryApi } from "../../api";
 import { useSessionStore } from "../../stores/session";
 import { Badge, StatusDot } from "../../components/common";
-import { IconAlert, IconSearch, IconPlus, IconRefresh, IconClose, IconCheck, IconTrash } from "../../components/Icon";
+import { IconAlert, IconSearch, IconPlus, IconRefresh, IconClose, IconCheck, IconTrash, IconLayers } from "../../components/Icon";
 import { PageHeader, FilterBar, SearchInput } from "../../components/ui";
+import { EmptyState } from "../../components/common";
 
 interface MemEntry {
   memory_id?: string;
@@ -166,20 +167,17 @@ export function MemoryPage() {
               </div>
             </div>
           )}
-          <div className="hero">
-            <div className="hero-mark hero-mark-memory">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <h2 className="hero-title">暂无记忆数据</h2>
-            <p className="hero-sub">智能体处理任务时会自动记录重要的决策、偏好和知识。你也可以手动创建记忆。</p>
-            <button className="btn primary hero-create-btn" onClick={() => setShowCreate(true)}>
-              <IconPlus size={14} /> 创建第一条记忆
-            </button>
-          </div>
+          <EmptyState
+            variant="onboarding"
+            icon={<IconLayers size={18} aria-hidden="true" />}
+            text="暂无记忆数据"
+            hint="智能体处理任务时会自动记录重要的决策、偏好和知识。你也可以手动创建记忆。"
+            action={
+              <button className="btn primary" onClick={() => setShowCreate(true)}>
+                <IconPlus size={14} /> 创建第一条记忆
+              </button>
+            }
+          />
         </div>
       </div>
     );

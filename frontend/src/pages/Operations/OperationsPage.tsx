@@ -520,16 +520,12 @@ export function OperationsPage() {
               <IconTrash size={13} />删除已选 (0)
             </Button>
           </div>
-          <div className="hero">
-            <div className="hero-mark operations-hero-mark">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-              </svg>
-            </div>
-            <h2 className="hero-title">暂无任务记录</h2>
-            <p className="hero-sub">当前没有可选择的终态任务。发起任务后，可在此勾选并批量永久删除。</p>
-          </div>
+          <EmptyState
+            variant="onboarding"
+            icon={<IconDocument size={18} aria-hidden="true" />}
+            text="暂无任务记录"
+            hint="当前没有可选择的终态任务。发起任务后，可在此勾选并批量永久删除。"
+          />
         </div>
       </div>
     );

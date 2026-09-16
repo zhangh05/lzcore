@@ -384,7 +384,6 @@ select.input:focus-visible {
 .data-center .data-detail-section { border-bottom-color: var(--console-border-soft); }
 .data-center .data-relation-card { border-color: var(--console-border-soft); border-radius: var(--r-4); box-shadow: none; }
 .data-center .data-compact-empty,
-.data-center .data-onboarding-empty { border-color: var(--console-border-soft); border-radius: var(--r-6); background: var(--console-muted); }
 
 .knowledge-library .page-header { align-items: flex-start; }
 .knowledge-library .page-body { display: grid; gap: 0; }
@@ -449,17 +448,45 @@ select.input:focus-visible {
 }
 .knowledge-library .kl-modal-detail { border-color: var(--console-border-soft); border-radius: var(--r-6); box-shadow: none; }
 
-.memory-page .hero {
-  min-height: 0;
+/* ── Empty state ──────────────────────────────────────────────────────────
+   Two roles, one implementation. `inline` says a panel has nothing in it yet;
+   `onboarding` is the first-run state that tells a new user what to do. Memory
+   and Operations had each styled their own "hero" for the second role, and
+   three other pages had invented their own one-line version of the first. */
+.empty-onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--flow-tight);
   padding: 16px 18px;
   border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-6);
+  border-radius: var(--r-8);
   background: var(--console-surface);
-  box-shadow: none;
 }
-.memory-page .hero-mark { color: var(--console-action); background: var(--console-action-soft); }
-.memory-page .hero-title { color: var(--console-ink); font-size: 17px; }
-.memory-page .hero-sub { color: var(--console-muted-ink); }
+
+.empty-onboarding .empty-text {
+  font-size: 17px;
+  margin-bottom: 0;
+}
+
+.empty-onboarding .empty-hint {
+  margin: 0;
+  max-width: 62ch;
+}
+
+.empty-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: var(--console-action);
+  background: var(--console-action-soft);
+  border-radius: var(--r-8);
+}
+
+.empty-action { margin-top: var(--flow-tight); }
+
 /* ── Search field ─────────────────────────────────────────────────────────
    One control for every page. The icon sits in the field, the input keeps its
    own padding so text never runs under either affordance, and the clear button
@@ -614,17 +641,6 @@ select.input:focus-visible {
 }
 
 /* Per-page observation refinements: prioritise current state, evidence, then remediation. */
-.operations-page .hero {
-  min-height: 0;
-  padding: 16px 18px;
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-6);
-  background: var(--console-surface);
-  box-shadow: none;
-}
-.operations-page .hero-mark{ color: var(--console-action); background: var(--console-action-soft); }
-.operations-page .hero-title{ color: var(--console-ink); font-size: 17px; }
-.operations-page .hero-sub{ color: var(--console-muted-ink); }
 .operations-page .operations-tabs {
   min-height: 38px;
   margin-bottom: 12px;

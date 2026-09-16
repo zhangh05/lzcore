@@ -493,11 +493,13 @@ function Overview({ overview, files, onImport, onOpenFiles, onOpenLifecycle }: {
             <span><b>{file.original_name || file.file_id}</b><small>{typeLabel(file.logical_type)} · {sourceLabel(file.source)}</small></span>
             <span><b>{formatFileSize(file.size_bytes)}</b><small>{formatDate(file.created_at, "short")}</small></span>
           </div>)}
-        </div> : <div className="data-onboarding-empty">
-          <div className="data-empty-mark"><IconPlus size={18} aria-hidden="true" /></div>
-          <div><strong>还没有数据</strong><p>导入文件，或运行一次会生成结果文件的任务。</p></div>
-          <Button variant="primary" size="sm" onClick={onImport}>导入第一份数据</Button>
-        </div>}
+        </div> : <EmptyState
+          variant="onboarding"
+          icon={<IconPlus size={18} aria-hidden="true" />}
+          text="还没有数据"
+          hint="导入文件，或运行一次会生成结果文件的任务。"
+          action={<Button variant="primary" size="sm" onClick={onImport}>导入第一份数据</Button>}
+        />}
       </section>
 
       <aside className="data-governance-panel" aria-label="数据治理">
