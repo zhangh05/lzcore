@@ -1380,12 +1380,16 @@ export default function TopologyWorkspace({
           setFocusMode(false);
           return;
         case "Delete":
-        case "Backspace":
-          if (selectedElement) {
-            e.preventDefault();
-            deleteSelection();
-          }
+        case "Backspace": {
+          // Delete removes what is selected, whether that is one object or
+          // several. It used to act only on the single inspector selection, so
+          // pressing it with a marquee or Ctrl+A selection did nothing at all
+          // while the batch panel happily removed the same set.
+          e.preventDefault();
+          if (canvasSelectedElementIds.length > 1) void removeSelectedObjects();
+          else deleteSelection();
           return;
+        }
         case "ArrowLeft":
         case "ArrowRight":
         case "ArrowUp":
@@ -1424,7 +1428,7 @@ export default function TopologyWorkspace({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleUndo, handleRedo, executeSave, deleteSelection, nudgeSelected, canvasSelectedElementIds]);
+  }, [handleUndo, handleRedo, executeSave, deleteSelection, removeSelectedObjects, nudgeSelected, canvasSelectedElementIds]);
 
   const layoutTopologyNodes = useCallback(
     (topology: Topology, nodesToLayout = topology.nodes) => {
