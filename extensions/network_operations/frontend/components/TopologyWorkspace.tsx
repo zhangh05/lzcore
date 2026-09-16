@@ -1267,6 +1267,13 @@ export default function TopologyWorkspace({
   const selectedNodes = useMemo(() => (activeTopology?.nodes || []).filter((node) => canvasSelectedElementIds.includes(node.node_id)), [activeTopology, canvasSelectedElementIds]);
   const selectedCanvasItems = useMemo(() => (activeTopology?.canvas_items || []).filter((item) => canvasSelectedElementIds.includes(`canvas-${item.item_id}`)), [activeTopology, canvasSelectedElementIds]);
   const hasMultiSelection = selectedNodes.length + selectedCanvasItems.length > 1;
+  // A marquee or Ctrl+A only changes the canvas selection, so nothing opened
+  // the inspector and the batch panel stayed rendered-but-unreachable behind
+  // `display: none`. Opening on the transition into a multi-selection keeps a
+  // deliberate gesture as the trigger, so closing the panel afterwards holds.
+  useEffect(() => {
+    if (hasMultiSelection && !showAgent) setIsInspectorOpen(true);
+  }, [hasMultiSelection, showAgent]);
 
   const distributeSelected = useCallback((axis: "horizontal" | "vertical") => {
     if (!activeTopology) return;
