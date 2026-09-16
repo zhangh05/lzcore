@@ -454,22 +454,12 @@ ol {
   list-style: none;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  color: var(--text);
-  font-family: var(--font-display);
-  font-weight: 720;
-  letter-spacing: 0;
-}
-
-h1 { font-size: var(--fs-20); line-height: 1.25; }
-h2 { font-size: var(--fs-18); line-height: 1.3; }
-h3 { font-size: var(--fs-16); line-height: 1.35; }
-h4 { font-size: var(--fs-14); line-height: 1.45; }
+/* Headings are not defined here. typography.css owns the element-level scale
+   (h1-h6, complete and monotonic) and it loads after this file at equal
+   specificity, so the copy that used to live here was dead: not one heading
+   on any route rendered at its font-weight: 720. Keeping a second, partial
+   copy — it stopped at h4 and hardcoded line-heights — only invites someone
+   to edit the one that does nothing. */
 
 ::selection {
   background: var(--accent-soft);
