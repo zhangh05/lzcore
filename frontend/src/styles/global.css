@@ -6477,11 +6477,19 @@ summary:focus-visible,
   font-weight: 500;
   margin-bottom: 8px;
 }
-.kl-chunk-card {
-  padding: 10px;
-  margin-bottom: 6px;
-  box-shadow: none;
+/* Chunks and results are rows in one container, not a card per item: a search
+   that returns ten results used to stack ten bordered boxes. */
+.kl-chunks-list,
+.kl-results-list {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  overflow: hidden;
 }
+.kl-chunk-row {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-2);
+}
+.kl-chunk-row:last-child { border-bottom: 0; }
 .kl-chunk-header {
   justify-content: space-between;
   margin-bottom: 4px;
@@ -6490,11 +6498,12 @@ summary:focus-visible,
   white-space: pre-wrap;
   color: var(--ink-soft);
 }
-.kl-result-card {
+.kl-result-row {
   padding: 12px;
-  margin-bottom: 8px;
-  box-shadow: none;
+  border-bottom: 1px solid var(--line-2);
 }
+.kl-result-row:last-child { border-bottom: 0; }
+.kl-result-row:hover { background: var(--surface-2); }
 .kl-result-header {
   justify-content: space-between;
 }

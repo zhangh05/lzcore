@@ -398,8 +398,8 @@ select.input:focus-visible {
 .knowledge-library .page-body > .card:first-of-type { padding-top: var(--space-4); }
 .knowledge-library .knowledge-upload-row,
 .knowledge-library .kl-summary-box,
-.knowledge-library .kl-result-card,
-.knowledge-library .kl-chunk-card {
+.knowledge-library .kl-result-row,
+.knowledge-library .kl-chunk-row {
   border-color: var(--console-border-soft);
   border-radius: var(--r-6);
   box-shadow: none;
@@ -437,10 +437,9 @@ select.input:focus-visible {
   letter-spacing: 0.035em;
   text-transform: uppercase;
 }
-.knowledge-library .kl-result-card,
-.knowledge-library .kl-chunk-card { background: var(--console-surface); }
-.knowledge-library .kl-result-card:hover,
-.knowledge-library .kl-chunk-card:hover { border-color: var(--console-border); }
+.knowledge-library .kl-result-row,
+.knowledge-library .kl-chunk-row { background: var(--console-surface); }
+.knowledge-library .kl-result-row:hover { background: var(--console-muted); }
 .knowledge-library .kl-result-header,
 .knowledge-library .kl-chunk-header {
   padding-bottom: 8px;

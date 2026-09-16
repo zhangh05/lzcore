@@ -689,8 +689,9 @@ export function KnowledgeLibrary() {
               {detailSource.chunks && detailSource.chunks.length > 0 && (
                 <div className="mt-3">
                   <div className="text-sm kl-chunks-title">知识片段 ({detailSource.chunks.length})</div>
+                  <div className="kl-chunks-list">
                   {detailSource.chunks.map((c: KnowledgeChunkDetail, i: number) => (
-                    <div key={c.chunk_id || i} className="card kl-chunk-card">
+                    <div key={c.chunk_id || i} className="kl-chunk-row">
                       <div className="row-flex kl-chunk-header">
                         <InlineCode>{c.chunk_id || `#${i + 1}`}</InlineCode>
                         <span className="text-xs muted">{c.token_count ?? c.size ?? ""}</span>
@@ -700,6 +701,7 @@ export function KnowledgeLibrary() {
                       </div>
                     </div>
                   ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -732,9 +734,10 @@ function SearchResults({
         <span>命中 {results.length} 个</span>
         {data.note && <span>· {data.note}</span>}
       </div>
+      <div className="kl-results-list">
       {results.slice(0, 10).map((r, i) => (
         <div
-          className="card kl-result-card"
+          className="kl-result-row"
           key={r.chunk_id}
           data-testid={`search-result-${i}`}
         >
@@ -752,6 +755,7 @@ function SearchResults({
           )}
         </div>
       ))}
+      </div>
       <details className="collapse">
         <summary>开发诊断 JSON</summary>
         <CodeBlock language="json">
