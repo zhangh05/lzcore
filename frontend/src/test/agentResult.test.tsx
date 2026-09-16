@@ -79,7 +79,10 @@ describe("RuntimeEventTimeline", () => {
     render(<RuntimeEventTimeline messages={messagesFor(sampleResult)} />);
     // Click the card bar to expand
     fireEvent.click(screen.getByText(/turn_001/).closest(".rt-card-bar")!);
-    expect(screen.getByText("turn_started")).toBeInTheDocument();
+    // The row states the step in words now: the stage's own label, its kind, and
+    // the runtime's summary. It used to print the raw machine name as the label.
+    expect(screen.getByText("开始处理")).toBeInTheDocument();
+    expect(screen.getByText("调度")).toBeInTheDocument();
     expect(screen.getByText("轮次启动")).toBeInTheDocument();
   });
 

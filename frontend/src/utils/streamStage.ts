@@ -47,6 +47,127 @@ export const STREAM_STAGE_LABELS: Record<string, string> = {
   cognitive_model_state_recorded: "模型决策状态已记录",
 };
 
+/* ── Event taxonomy ──────────────────────────────────────────────────────────
+   A timeline row has to say what kind of step it was. The previous version
+   guessed from substrings of the event name — `tool` was coloured as a warning,
+   `semantic_invalid` fell through to "no colour", and any new stage inherited
+   whatever tone its spelling happened to match. The kinds below are explicit,
+   and a stage that is not listed is reported as `unknown` rather than guessed.
+   Colour is deliberately not part of this: it carries the outcome, while the
+   kind is carried by an icon and a label so the row reads without colour. */
+
+export type RuntimeEventKind =
+  | "agent" | "reasoning" | "context" | "tool"
+  | "validation" | "recovery" | "approval" | "response" | "unknown";
+
+export const RUNTIME_EVENT_KIND_LABELS: Record<RuntimeEventKind, string> = {
+  agent: "调度",
+  reasoning: "推理",
+  context: "上下文",
+  tool: "工具",
+  validation: "校验",
+  recovery: "恢复",
+  approval: "审批",
+  response: "答复",
+  unknown: "步骤",
+};
+
+/**
+ * The persisted run trace uses its own vocabulary, and it is what the timeline
+ * actually renders. Measured from a real trace: `turn_start`, `model`, `final`,
+ * `tool_call`, `tool_result`, `orchestration_layer_completed`. Only the last one
+ * matches the live-stream name, which is why the old substring rule existed —
+ * and why a taxonomy built from the stream alone classified most rows as
+ * "unknown". Both vocabularies are listed here.
+ */
+export const TRACE_EVENT_LABELS: Record<string, string> = {
+  turn_start: "开始处理",
+  model: "模型调用",
+  final: "最终答复",
+  tool_call: "工具调用",
+  tool_result: "工具结果",
+};
+
+/** One entry per name in either label map; a unit test keeps them in step. */
+export const STREAM_STAGE_KINDS: Record<string, RuntimeEventKind> = {
+  turn_started: "agent",
+  planner_started: "reasoning",
+  planner_completed: "reasoning",
+  graph_compiled: "reasoning",
+  model_started: "reasoning",
+  model_completed: "reasoning",
+  cognitive_plan_selected: "reasoning",
+  cognitive_decision_made: "reasoning",
+  structural_validated: "validation",
+  semantic_validated: "validation",
+  semantic_invalid: "validation",
+  risk_assessed: "validation",
+  budget_ok: "validation",
+  cognitive_gap_detected: "validation",
+  cognitive_reflection_started: "validation",
+  cognitive_reflection_completed: "validation",
+  execution_started: "tool",
+  execution_completed: "tool",
+  pre_repair_started: "recovery",
+  pre_repair_completed: "recovery",
+  repair_attempt: "recovery",
+  orchestration_planned: "agent",
+  orchestration_layer_started: "agent",
+  orchestration_layer_completed: "agent",
+  merge_completed: "agent",
+  turn_completed: "agent",
+  cognitive_initialized: "context",
+  cognitive_goal_normalized: "context",
+  cognitive_evidence_registered: "context",
+  cognitive_model_state_recorded: "context",
+  response_started: "response",
+  response_completed: "response",
+  // Persisted run trace.
+  turn_start: "agent",
+  model: "reasoning",
+  final: "response",
+  tool_call: "tool",
+  tool_result: "tool",
+};
+
+export function runtimeEventKind(stageName: string): RuntimeEventKind {
+  return STREAM_STAGE_KINDS[stageName] ?? "unknown";
+}
+
+/** Human label for an event name from either vocabulary. */
+export function runtimeEventLabel(eventName: string): string {
+  return TRACE_EVENT_LABELS[eventName] || STREAM_STAGE_LABELS[eventName] || eventName;
+}
+
+export type RuntimeEventTone = "neutral" | "ok" | "warn" | "danger";
+
+/** Stages that are observations about a problem rather than failures of a call. */
+const TONE_BY_STAGE: Record<string, RuntimeEventTone> = {
+  semantic_invalid: "warn",
+  repair_attempt: "warn",
+  pre_repair_started: "warn",
+  cognitive_gap_detected: "warn",
+  turn_completed: "ok",
+  final: "ok",
+  response_completed: "ok",
+  execution_completed: "ok",
+  merge_completed: "ok",
+  budget_ok: "ok",
+};
+
+/**
+ * The outcome a row should show. Only real signals move it off neutral: an error
+ * the runtime recorded, a level it set, or a stage that is itself a finding.
+ */
+export function runtimeEventTone(event: { event_type?: string; type?: string; level?: string; error?: string }): RuntimeEventTone {
+  if (event.error) return "danger";
+  const level = String(event.level || "").toLowerCase();
+  if (level === "error" || level === "critical") return "danger";
+  if (level === "warn" || level === "warning") return "warn";
+  const name = String(event.event_type || event.type || "");
+  return TONE_BY_STAGE[name] ?? "neutral";
+}
+
 function toElapsedMs(value: unknown): number | undefined {
   const elapsed = typeof value === "number" ? value : parseInt(String(value ?? ""), 10);
   return Number.isFinite(elapsed) && elapsed > 0 ? elapsed : undefined;

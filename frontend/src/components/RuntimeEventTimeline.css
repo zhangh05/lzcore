@@ -73,6 +73,20 @@
   margin-left: calc(-14px - 4px); flex-shrink: 0; border: 2px solid var(--surface);
 }
 .rt-step-body { flex: 1; min-width: 0; }
+/* What kind of step this is, in words.
+   Deliberately not coloured by kind: colour on this row already means "how did
+   it go", and a second colour scale for "what kind" would make both unreadable.
+   One quiet outline tag, same treatment for every kind. */
+.rt-step-kind {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  color: var(--text-4);
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 15px;
+}
+
 .rt-step-line { display: flex; align-items: center; gap: 8px; }
 .rt-step-label {
   font-size: 13px; color: var(--text-2); font-weight: 500;

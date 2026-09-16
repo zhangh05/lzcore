@@ -16,6 +16,13 @@ import type { ChatMsg } from "../stores/workbench";
 import { useWorkbenchStore } from "../stores/workbench";
 import { useSessionStore } from "../stores/session";
 import { shortId } from "../utils/displayText";
+import {
+  RUNTIME_EVENT_KIND_LABELS,
+  runtimeEventKind,
+  runtimeEventLabel,
+  runtimeEventTone,
+  type RuntimeEventTone,
+} from "../utils/streamStage";
 import { IconAlert, IconCheck, IconClose } from "./Icon";
 import {
   UNKNOWN_OUTCOME_COPY,
@@ -48,19 +55,22 @@ function eventCallId(evt: RuntimeEvent): string {
 
 /* ── step label & colour ── */
 
+/** Tone is the row's outcome; the kind is shown as text so colour is optional. */
+const TONE_CLASS: Record<RuntimeEventTone, string> = {
+  neutral: "muted",
+  ok: "ok",
+  warn: "warn",
+  danger: "danger",
+};
+
 function stepLabel(evt: RuntimeEvent): string {
-  return evt.name || evt.event_type || evt.type || "步骤";
-}
-function stepColorClass(evt: RuntimeEvent): string {
-  const t = (evt.event_type || evt.type || "").toLowerCase();
-  if (t.includes("error")) return "danger";
-  if (t.includes("retry")) return "accent";
-  if (t.includes("warn"))  return "warn";
-  if (t.includes("tool"))  return "warn";
-  if (t.includes("model")) return "accent";
-  if (t.includes("final") || t.includes("response")) return "accent";
-  if (t.includes("complete") || t.includes("ok")) return "ok";
-  return "muted";
+  const name = String(evt.event_type || evt.type || "");
+  const supplied = String(evt.name || "");
+  // Some events carry a real human name ("轮次开始"); others repeat the machine
+  // name in the same field ("model"), which would otherwise shadow the label we
+  // already know for it.
+  if (supplied && supplied !== name) return supplied;
+  return runtimeEventLabel(name) || "步骤";
 }
 
 /* ── tiny tool chip ── */
@@ -123,14 +133,19 @@ const ToolChip: React.FC<{
 /* ── step row ── */
 
 const StepRow: React.FC<{ evt: RuntimeEvent }> = React.memo(({ evt }) => {
-  const colorClass = stepColorClass(evt);
+  const kind = runtimeEventKind(String(evt.event_type || evt.type || ""));
+  const tone = runtimeEventTone(evt);
   const label = stepLabel(evt);
   const msg = evt.summary || evt.message || evt.error || "";
   return (
     <div className="rt-step">
-      <span className={`rt-dot rt-dot-${colorClass}`} />
+      <span className={`rt-dot rt-dot-${TONE_CLASS[tone]}`} />
       <div className="rt-step-body">
         <div className="rt-step-line">
+          {/* What kind of step this is, in words. The previous version encoded
+              it in the dot's colour, which made a tool call read as a warning
+              and left an unlisted stage with no indication at all. */}
+          <span className={`rt-step-kind rt-step-kind-${kind}`}>{RUNTIME_EVENT_KIND_LABELS[kind]}</span>
           <span className="rt-step-label">{label}</span>
           <span className="rt-step-ts">{timeStr(evt)}</span>
         </div>
