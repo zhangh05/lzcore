@@ -6,7 +6,7 @@ import {
   CodeBlock,
   InlineCode,
 } from "../../components/common";
-import { PageHeader, DataTable } from "../../components/ui";
+import { PageHeader, DataTable, SearchInput } from "../../components/ui";
 import { PortalModal } from "../../components/PortalModal";
 import { knowledgeApi, artifactsApi, storageApi } from "../../api";
 import { useSessionStore } from "../../stores/session";
@@ -455,20 +455,17 @@ export function KnowledgeLibrary() {
         {/* 检索常驻工具条：原先是页面最底部一个独立 card，要滚到底才能用。
             搜索框提到这里，结果在下方 inline 展开。 */}
         <div className="kl-toolbar">
-          <div className="kl-search-box">
-            <IconSearch size={14} />
-            <input
-              className="input kl-search-input"
-              placeholder="搜索全部文档…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") search.reload();
-              }}
-              data-testid="knowledge-search-input"
-              aria-label="搜索知识库"
-            />
-          </div>
+          <SearchInput
+            placeholder="搜索全部文档…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") search.reload();
+            }}
+            data-testid="knowledge-search-input"
+            aria-label="搜索知识库"
+            onClear={() => setQuery("")}
+          />
           <button
             className="btn"
             onClick={search.reload}

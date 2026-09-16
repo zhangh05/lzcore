@@ -460,6 +460,55 @@ select.input:focus-visible {
 .memory-page .hero-mark { color: var(--console-action); background: var(--console-action-soft); }
 .memory-page .hero-title { color: var(--console-ink); font-size: 17px; }
 .memory-page .hero-sub { color: var(--console-muted-ink); }
+/* ── Search field ─────────────────────────────────────────────────────────
+   One control for every page. The icon sits in the field, the input keeps its
+   own padding so text never runs under either affordance, and the clear button
+   occupies a fixed slot so the field does not resize when it appears. */
+.ui-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* The wrapper is the flex item now, so it has to grow the way the bare input
+     used to; otherwise the field collapses to its intrinsic width and every
+     page that sized it with max-width looks narrower than before. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ui-search-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--text-4);
+  pointer-events: none;
+}
+
+.ui-search-input {
+  width: 100%;
+  padding-left: 30px;
+  padding-right: 30px;
+}
+
+.ui-search-clear {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-4);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-8);
+  cursor: pointer;
+}
+
+.ui-search-clear:hover {
+  color: var(--text-2);
+  background: var(--console-action-soft);
+}
+
 .memory-page .memory-list {
   border: 1px solid var(--console-border-soft);
   border-radius: var(--r-6);

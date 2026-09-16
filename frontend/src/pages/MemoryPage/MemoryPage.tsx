@@ -3,7 +3,7 @@ import { memoryApi } from "../../api";
 import { useSessionStore } from "../../stores/session";
 import { Badge, StatusDot } from "../../components/common";
 import { IconAlert, IconSearch, IconPlus, IconRefresh, IconClose, IconCheck, IconTrash } from "../../components/Icon";
-import { PageHeader, FilterBar } from "../../components/ui";
+import { PageHeader, FilterBar, SearchInput } from "../../components/ui";
 
 interface MemEntry {
   memory_id?: string;
@@ -199,19 +199,14 @@ export function MemoryPage() {
       <div className="page-body">
         {/* Search + filter bar */}
         <FilterBar>
-          <div className="search-input-wrapper">
-            <svg className="search-input-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
-            </svg>
-            <input className={`input ${searchQ ? "search-input--has-clear" : ""}`} type="text" placeholder="搜索记忆..." value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }} />
-            {searchQ && (
-              <button className="search-input-clear" onClick={() => { setSearchQ(""); setSearchRes(null); }}>
-                <IconClose size={12} />
-              </button>
-            )}
-          </div>
+          <SearchInput
+            placeholder="搜索记忆..."
+            aria-label="搜索记忆"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+            onClear={() => { setSearchQ(""); setSearchRes(null); }}
+          />
           <button className="btn sm" onClick={handleSearch}><IconSearch size={14} /> 搜索</button>
           <select className="input" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
             <option value="">全部分类</option>

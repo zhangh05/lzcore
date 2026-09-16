@@ -12,7 +12,7 @@ import {
 } from "../../api";
 import { Badge, CodeBlock, EmptyState, LoadingState } from "../../components/common";
 import { confirm } from "../../components/ConfirmDialog";
-import { Button, DetailPanel, FilterBar, Input, PageHeader, TabButton } from "../../components/ui";
+import { Button, DetailPanel, FilterBar, PageHeader, SearchInput, TabButton } from "../../components/ui";
 import { useSessionStore } from "../../stores/session";
 import { useToastStore } from "../../stores/toast";
 import type { ArchivedDataItem, Artifact, DataOverview, ManagedFile } from "../../types";
@@ -547,7 +547,7 @@ function FilesView({ files, search, onSearch, typeFilter, typeOptions, onTypeFil
 
   return <>
     <FilterBar className="data-file-filters">
-      <Input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="搜索文件名、ID、来源或任务" aria-label="搜索数据" />
+      <SearchInput value={search} onChange={(event) => onSearch(event.target.value)} onClear={() => onSearch("")} placeholder="搜索文件名、ID、来源或任务" aria-label="搜索数据" />
       <select className="select" value={typeFilter} onChange={(event) => onTypeFilter(event.target.value)} aria-label="按数据类型筛选">
         <option value="all">全部类型</option>
         {typeOptions.map((type) => <option key={type} value={type}>{typeLabel(type)}</option>)}
@@ -673,7 +673,7 @@ function ArtifactDetail({ artifact, content, note, onDelete }: { artifact: Artif
 
 function RelationsView({ files, search, onSearch, onSelect }: { files: ManagedFile[]; search: string; onSearch: (value: string) => void; onSelect: (file: ManagedFile) => void }) {
   return <>
-    <FilterBar className="data-relation-filters"><Input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="搜索关系中的文件或任务" aria-label="搜索数据关系" /><span className="status-pill">{files.length} 个文件节点</span></FilterBar>
+    <FilterBar className="data-relation-filters"><SearchInput value={search} onChange={(event) => onSearch(event.target.value)} onClear={() => onSearch("")} placeholder="搜索关系中的文件或任务" aria-label="搜索数据关系" /><span className="status-pill">{files.length} 个文件节点</span></FilterBar>
     <div className="data-relations-grid">
       {files.map((file) => <button type="button" className="card data-relation-card" key={file.file_id} onClick={() => onSelect(file)}>
         <span className="data-relation-file"><b>{file.original_name || file.file_id}</b><small>{typeLabel(file.logical_type)}</small></span>

@@ -6,6 +6,7 @@
 import { useMemo, useState } from "react";
 import { capabilitiesApi, toolsApi } from "../../api";
 import { useAsync, AsyncView, Badge, InlineCode } from "../../components/common";
+import { SearchInput } from "../../components/ui";
 import type { BusinessCapability, RiskLevel, ToolCatalogCategory, ToolCatalogItem, ToolGovernanceStatus } from "../../types";
 import { IconAlert, IconBolt, IconShield } from "../../components/Icon";
 
@@ -100,7 +101,7 @@ export function CapabilityCenter() {
             <span className="cc-controls-desc">
               {catalog.state.kind === "success" && <>AI 当前可调用 {plannerVisibleCount} 个底层工具</>}
             </span>
-            <input className="input cc-search-input" value={tq} onChange={(e) => setTq(e.target.value)} placeholder="搜索工具名称或功能…" />
+            <SearchInput className="cc-search-input" value={tq} onChange={(e) => setTq(e.target.value)} onClear={() => setTq("")} placeholder="搜索工具名称或功能…" aria-label="搜索工具" />
           </div>
           <div className="segmented cc-segmented">
             {T_FILTERS.map((f) => (

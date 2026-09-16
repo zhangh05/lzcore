@@ -5630,41 +5630,8 @@ summary:focus-visible,
   font-size: 13px;
 }
 
-/* ── Search input with icon ── */
-.search-input-wrapper {
-  position: relative;
-  flex: 1;
-  min-width: 180px;
-}
-
-.search-input-wrapper input {
-  width: 100%;
-  padding-left: 34px;
-  padding-right: 32px;
-}
-
-.search-input-icon {
-  position: absolute;
-  left: 11px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--text-4);
-}
-
-.search-input-clear {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-4);
-  padding: 2px;
-  line-height: 0;
-}
-
-.search-input-clear:hover {
-  color: var(--text);
-}
+/* The search field is `components/ui/SearchInput` now; the four page-local
+   implementations it replaced are gone, along with their rules. */
 
 .select-all {
   display: flex;
@@ -6255,7 +6222,13 @@ summary:focus-visible,
 }
 .cc-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .cc-controls-desc { font-size: var(--fs-12); color: var(--text-3); flex: 1; min-width: 0; }
-.cc-search-input { max-width: 240px; height: 30px; font-size: var(--fs-12); }
+/* The class lands on the shared search wrapper, so sizing has to reach the input
+   inside it — a height on the wrapper alone would fight the input's own height.
+   The wrapper settles at 228px where the bare input was 240px: the field is a
+   flex container now and the toolbar sizes it slightly differently. Measured at
+   1440/1200/1024, with no overflow at any of them. */
+.cc-search-input { flex: 0 1 240px; max-width: 240px; }
+.cc-search-input .ui-search-input { height: 30px; font-size: var(--fs-12); }
 .cc-segmented { flex-wrap: wrap; margin-bottom: 12px; }
 .capability-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; }
 .cc-empty-state { padding: 20px; text-align: center; color: var(--text-3); font-size: var(--fs-12); }
@@ -6353,37 +6326,6 @@ summary:focus-visible,
   display: flex;
   gap: var(--flow-tight);
   margin-bottom: var(--flow-base);
-}
-.kl-search-box {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: var(--flow-tight);
-  min-width: 0;
-  padding: 0 var(--flow-base);
-  color: var(--text-3);
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-8);
-  transition: border-color var(--dur-2) var(--ease);
-}
-.kl-search-box:focus-within {
-  border-color: var(--accent);
-}
-.kl-search-box > svg {
-  flex-shrink: 0;
-}
-/* 剥掉 .input 自带的边框和底色，让整个容器看起来就是一个搜索框 */
-.kl-search-box .kl-search-input {
-  min-width: 0;
-  padding-right: 0;
-  padding-left: 0;
-  background: transparent;
-  border: 0;
-}
-.kl-search-box .kl-search-input:focus {
-  box-shadow: none;
-  outline: none;
 }
 
 .kl-search-results-card {
@@ -6824,7 +6766,6 @@ summary:focus-visible,
 
 .quick-stat-value-danger { color: var(--danger); }
 
-.search-input--has-clear { padding-right: 32px; }
 
 .btn-info-soft {
   background: var(--info-soft);
