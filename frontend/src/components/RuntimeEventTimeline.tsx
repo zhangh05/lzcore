@@ -328,6 +328,20 @@ const FallbackBody: React.FC<{
 
 /* ── group messages into runs ── */
 
+/**
+ * A message's `run_id` is not always a run id.
+ *
+ * When a client request id exists, the backend stores the user message under a
+ * durable key `request_<sha256(client_request_id)>` so the same message survives
+ * retry, stream reconnect and the pre-execution checkpoint
+ * (agent/runtime/message_identity.py). That key never resolves to a run, so
+ * asking for its detail produced a 404 and a retry button for something that
+ * cannot ever load. `orphan-` placeholders are skipped for the same reason.
+ */
+function isLoadableRunId(runId: string): boolean {
+  return Boolean(runId) && !runId.startsWith("orphan-") && !runId.startsWith("request_");
+}
+
 interface RunGroup {
   runId: string;
   userMsg?: ChatMsg;
@@ -403,8 +417,7 @@ const RunCard: React.FC<{ group: RunGroup; runIdx: number }> = React.memo(({ gro
       !loading &&
       !loadError &&
       currentWorkspaceId &&
-      group.runId &&
-      !group.runId.startsWith("orphan-") // skip orphan placeholders
+      isLoadableRunId(group.runId)
     ) {
       void loadRunDetail(currentWorkspaceId, group.runId);
     }
@@ -414,7 +427,7 @@ const RunCard: React.FC<{ group: RunGroup; runIdx: number }> = React.memo(({ gro
   }, [open, hasResultBody]);
 
   const tryLoad = () => {
-    if (currentWorkspaceId && group.runId && !group.runId.startsWith("orphan-")) {
+    if (currentWorkspaceId && isLoadableRunId(group.runId)) {
       void loadRunDetail(currentWorkspaceId, group.runId);
     }
   };
