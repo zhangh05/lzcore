@@ -887,7 +887,11 @@ pre code {
   display: none;
 }
 
-.status-pill {
+/* A count or filter chip — "12 类能力", "5 项", "任务 abc123".
+   It used to be called `.status-pill`, but none of its nine call sites showed a
+   status: it is a metric chip, and the name sent every new page looking for a
+   status component that was actually `Badge`. */
+.metric-chip {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -903,7 +907,7 @@ pre code {
   white-space: nowrap;
 }
 
-.status-pill .dot,
+.metric-chip .dot,
 .status-dot {
   display: inline-block;
   width: 6px;
@@ -913,11 +917,11 @@ pre code {
   border-radius: 50%;
 }
 
-.status-pill .dot.warn,
+.metric-chip .dot.warn,
 .status-dot.warn { background: var(--warn); }
-.status-pill .dot.err,
+.metric-chip .dot.err,
 .status-dot.err { background: var(--danger); }
-.status-pill .dot.accent,
+.metric-chip .dot.accent,
 .status-dot.accent { background: var(--accent); }
 .status-dot.idle { background: var(--text-4); }
 .status-dot.busy,
@@ -4086,20 +4090,7 @@ details.collapse[open] summary::before {
   margin-top: 6px;
 }
 
-.provider-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 7px;
-  border-radius: var(--r-pill);
-  font-size: var(--fs-10);
-  font-weight: 700;
-  line-height: 16px;
-}
-
-.provider-badge.active-badge {
-  color: var(--ok);
-  background: var(--ok-soft);
-}
+/* The "current provider" marker is `Badge kind="ok"`; its local variant is gone. */
 
 .settings-form-card {
   padding: 24px;
@@ -4247,7 +4238,7 @@ details.collapse[open] summary::before {
     padding: 0 10px;
   }
 
-  .app-header > .status-pill {
+  .app-header > .metric-chip {
     display: none;
   }
 }
@@ -5214,16 +5205,9 @@ summary:focus-visible,
   font-size: var(--fs-13);
   color: var(--text);
 }
-.diag-status-tag {
-  margin-left: auto;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-weight: 600;
-}
-.diag-status-tag-ok { background: color-mix(in srgb, var(--ok, #2e7d32) 14%, transparent); color: var(--ok, #2e7d32); }
-.diag-status-tag-warning { background: color-mix(in srgb, #ed6c02 14%, transparent); color: #e65100; }
-.diag-status-tag-error { background: color-mix(in srgb, #d32f2f 14%, transparent); color: #c62828; }
+/* Service health is `Badge kind="ok|warn|err"`. The local variant it replaced
+   carried a legacy Material palette (#ed6c02 / #d32f2f), which is now gone with
+   it — health states read from the product's own semantic colours. */
 
 .diag-comp-desc {
   font-size: var(--fs-11);

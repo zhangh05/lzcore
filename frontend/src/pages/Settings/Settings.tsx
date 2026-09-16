@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { settingsApi } from "../../api";
-import { EmptyState, LoadingState } from "../../components/common";
+import { Badge, EmptyState, LoadingState } from "../../components/common";
 import { Button, Input, FormField } from "../../components/ui";
 import { confirm } from "../../components/ConfirmDialog";
 import { useSessionStore } from "../../stores/session";
@@ -382,7 +382,7 @@ export function Settings() {
                 >
                   <div className="provider-card-top">
                     <span className="provider-card-label">{preset.label}</span>
-                    {active && <span className="provider-badge active-badge">当前</span>}
+                    {active && <Badge kind="ok">当前</Badge>}
                   </div>
                   <div className="provider-card-hint">{preset.hint}</div>
                   <div className="provider-card-meta">

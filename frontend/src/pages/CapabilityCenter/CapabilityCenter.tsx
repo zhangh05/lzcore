@@ -47,9 +47,9 @@ export function CapabilityCenter() {
           <p className="subtitle">先看系统能做哪几类事，再按需展开底层可调用工具</p>
         </div>
         <div className="cc-pill-row">
-          <span className="status-pill"><span className="dot accent" />{counts.tot} 类能力</span>
-          <span className="status-pill"><span className="dot accent" />{toolCount} 个工具</span>
-          {counts.dep > 0 && <span className="status-pill"><IconBolt size={10} />{counts.dep} 涉及产物</span>}
+          <span className="metric-chip"><span className="dot accent" />{counts.tot} 类能力</span>
+          <span className="metric-chip"><span className="dot accent" />{toolCount} 个工具</span>
+          {counts.dep > 0 && <span className="metric-chip"><IconBolt size={10} />{counts.dep} 涉及产物</span>}
         </div>
       </div>
 

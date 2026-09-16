@@ -13,7 +13,7 @@ import {
 } from "../../api";
 import type { OperationLedgerSummary } from "../../api";
 import { useSessionStore } from "../../stores/session";
-import { LoadingState } from "../../components/common";
+import { Badge, LoadingState } from "../../components/common";
 import { IconAlert, IconCheck, IconRefresh } from "../../components/Icon";
 import { formatDate } from "../../utils/format";
 import { PageHeader, DataTable } from "../../components/ui";
@@ -425,7 +425,9 @@ export function Diagnostics() {
                         <div className="diag-health-head">
                           <span className={`diag-status-dot diag-status-${c.status}`} />
                           <span className="diag-comp-name">{label}</span>
-                          <span className={`diag-status-tag diag-status-tag-${c.status}`}>{c.status === "ok" ? "正常" : c.status === "warning" ? "警告" : "异常"}</span>
+                          <Badge kind={c.status === "ok" ? "ok" : c.status === "warning" ? "warn" : "err"}>
+                            {c.status === "ok" ? "正常" : c.status === "warning" ? "警告" : "异常"}
+                          </Badge>
                         </div>
                         {desc && <div className="diag-comp-desc">{desc}</div>}
                         {c.message && <div className="diag-comp-msg">{c.message}</div>}

@@ -502,7 +502,7 @@ function Overview({ overview, files, onImport, onOpenFiles, onOpenLifecycle }: {
 
       <aside className="data-governance-panel" aria-label="数据治理">
         <section className="data-governance-section">
-          <div className="data-panel-head"><div><h3>数据构成</h3><p>按类型汇总</p></div><span className="status-pill">{overview.files.active} 项</span></div>
+          <div className="data-panel-head"><div><h3>数据构成</h3><p>按类型汇总</p></div><span className="metric-chip">{overview.files.active} 项</span></div>
           {typeEntries.length ? typeEntries.map(([type, count]) => (
             <div className="data-breakdown-row" key={type}><span>{typeLabel(type)}</span><b>{count}</b></div>
           )) : <p className="data-compact-empty">导入数据后将在这里显示类型分布。</p>}
@@ -552,7 +552,7 @@ function FilesView({ files, search, onSearch, typeFilter, typeOptions, onTypeFil
         <option value="all">全部类型</option>
         {typeOptions.map((type) => <option key={type} value={type}>{typeLabel(type)}</option>)}
       </select>
-      <span className="status-pill">{files.length} 项</span>
+      <span className="metric-chip">{files.length} 项</span>
     </FilterBar>
     <div className="split-shell data-split">
       <aside className="data-list" aria-label="数据列表">
@@ -636,7 +636,7 @@ function ArtifactsView({ artifacts, governance, view, onView, producerId, onClea
       {([ ["", "全部"], ["current", "当前有效"], ["history", "历史或不完整"], ["deliverables", "交付结果"] ] as Array<[ArtifactView, string]>).map(([key, label]) => (
         <Button key={key || "all"} size="sm" variant={view === key ? "primary" : "default"} onClick={() => onView(key)}>{label}</Button>
       ))}
-      {producerId && <span className="status-pill">任务 {shortId(producerId)} <button type="button" className="link-button" onClick={onClearProducer}>清除</button></span>}
+      {producerId && <span className="metric-chip">任务 {shortId(producerId)} <button type="button" className="link-button" onClick={onClearProducer}>清除</button></span>}
       <div className="spacer" />
       {governance && <><Badge kind="ok">过程结果 {governance.evidence_streams || 0}</Badge><Badge kind="muted">交付结果 {governance.deliverables || 0}</Badge></>}
     </FilterBar>
@@ -673,7 +673,7 @@ function ArtifactDetail({ artifact, content, note, onDelete }: { artifact: Artif
 
 function RelationsView({ files, search, onSearch, onSelect }: { files: ManagedFile[]; search: string; onSearch: (value: string) => void; onSelect: (file: ManagedFile) => void }) {
   return <>
-    <FilterBar className="data-relation-filters"><SearchInput value={search} onChange={(event) => onSearch(event.target.value)} onClear={() => onSearch("")} placeholder="搜索关系中的文件或任务" aria-label="搜索数据关系" /><span className="status-pill">{files.length} 个文件节点</span></FilterBar>
+    <FilterBar className="data-relation-filters"><SearchInput value={search} onChange={(event) => onSearch(event.target.value)} onClear={() => onSearch("")} placeholder="搜索关系中的文件或任务" aria-label="搜索数据关系" /><span className="metric-chip">{files.length} 个文件节点</span></FilterBar>
     <div className="data-relations-grid">
       {files.map((file) => <button type="button" className="card data-relation-card" key={file.file_id} onClick={() => onSelect(file)}>
         <span className="data-relation-file"><b>{file.original_name || file.file_id}</b><small>{typeLabel(file.logical_type)}</small></span>

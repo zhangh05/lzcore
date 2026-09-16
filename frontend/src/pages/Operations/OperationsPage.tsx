@@ -690,7 +690,7 @@ function OperationsPageHeader({ count, onRefresh }: { count: number; onRefresh: 
       subtitle="查看任务进度、执行记录和详细过程"
     >
       {count > 0 && (
-        <div className="status-pill"><span className="dot accent" />{count} 项</div>
+        <div className="metric-chip"><span className="dot accent" />{count} 项</div>
       )}
       <Button size="sm" variant="ghost" onClick={onRefresh} title="刷新"><IconRefresh size={14} /></Button>
     </PageHeader>

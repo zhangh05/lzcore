@@ -1016,7 +1016,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 .diagnostics-page .diag-health-ok { border-left: 0; }
 .diagnostics-page .diag-health-warning { border-left-color: var(--warn); }
 .diagnostics-page .diag-health-error { border-left-color: var(--danger); }
-.diagnostics-page .diag-status-tag-ok { background: transparent; color: var(--text-3); }
 .diagnostics-page .diag-comp-detail { color: var(--text-3); font-size: var(--fs-12); overflow-wrap: anywhere; }
 .settings-page .settings-form-header { padding: 0 0 var(--space-4); background: transparent; }
 .settings-page .settings-row { padding: var(--space-3) 0; }
@@ -1042,8 +1041,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 .diagnostics-page .diag-comp-msg { font-size: var(--fs-12); color: var(--text-3); overflow-wrap: anywhere; }
 .diagnostics-page .diag-summary-icon { color: var(--ok); background: var(--ok-soft); }
 .diagnostics-page .diag-summary-icon[data-healthy="false"] { color: var(--warn); background: var(--warn-soft); }
-.diagnostics-page .diag-status-tag-warning { color: var(--warn); background: var(--warn-soft); }
-.diagnostics-page .diag-status-tag-error { color: var(--danger); background: var(--danger-soft); }
 
 /* Static reading surfaces do not need entrance animation. */
 .page .card, .page .hero { animation: none; }
