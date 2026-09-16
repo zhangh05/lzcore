@@ -208,8 +208,12 @@ body,
      刻意不复用 --danger：把「结果未确定」渲染成与「工具失败」同色，
      正是用户误判成「没写进去」并重复下发配置的直接原因。
      该语义既不是成功也不是失败，因此需要自己的色相。 */
-  --unknown: var(--region-purple);
-  --unknown-soft: var(--region-purple-soft);
+  /* `unknown` is a first-class outcome in this product (see the outcome rules in
+     DESIGN.md), so it needs its own colour — one that reads as neither good nor
+     failed. It used to be an alias of the region palette, which meant editing a
+     categorical data colour would silently repaint every unknown state. */
+  --unknown: #7e22ce;
+  --unknown-soft: #f3e8ff;
 
 }
 
@@ -5459,7 +5463,8 @@ summary:focus-visible,
 .stat-value-accent { color: var(--accent); }
 .stat-value-ok { color: var(--ok); }
 .stat-value-info { color: var(--info); }
-.stat-value-purple { color: #7e22ce; }
+/* `.stat-value-purple` had no call site; a decorative purple is exactly what the
+   design rules forbid, and it duplicated the `unknown` state's colour by hand. */
 .stat-value-red { color: #cf0a2c; }
 .stat-value-orange { color: #e65100; }
 .stat-value-slate { color: #475569; }
