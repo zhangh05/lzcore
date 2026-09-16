@@ -38,8 +38,14 @@ body,
   --text: #172326;
   --text-1: var(--text);
   --text-2: #334348;
-  --text-3: #66777b;
-  --text-4: #6c7c7e;
+  /* The two muted levels used to sit 0.3 contrast apart (4.68 / 4.36 on
+     white), close enough that nobody could tell them apart, and the lighter of
+     the two was under WCAG AA for the 10–11px text it carries. They are
+     re-spaced here: --text-4 takes the old --text-3 value and --text-3 moves
+     down, so both clear 4.5 on white and on --surface-2 and the step between
+     them is visible. 72 element classes across 11 routes depended on this. */
+  --text-3: #5d6b6f;
+  --text-4: #66777b;
 
   --line: #d7e1de;
   --line-2: #e7ecea;
@@ -52,12 +58,21 @@ body,
 
   --ok: #147a55;
   --ok-soft: #dff1e8;
+  /* Ink for text sitting ON a filled semantic colour. In the light theme the
+     fills are dark, so the ink is white; in the dark theme every semantic
+     colour flips to a light tint meant as a foreground, so the ink flips too.
+     Without these, `color: #fff` on `background: var(--info)` measures 2.1:1
+     in dark mode — legible in one theme and invisible in the other. */
+  --ok-text: #ffffff;
   --warn: #a16207;
   --warn-soft: #f7ebca;
+  --warn-text: #ffffff;
   --danger: #bd3040;
   --danger-soft: #f7dfe3;
+  --danger-text: #ffffff;
   --info: #365f85;
   --info-soft: #e3eef6;
+  --info-text: #ffffff;
   --surface-hover: #f0f5f3;
   --surface-selected: #e4efec;
   --field: #fcfdfc;
@@ -237,12 +252,16 @@ body,
   --accent-text: #09111a;
   --ok: #77ca9c;
   --ok-soft: #173526;
+  --ok-text: #08160f;
   --warn: #e2ad4d;
   --warn-soft: #372913;
+  --warn-text: #1c1206;
   --danger: #ef7180;
   --danger-soft: #3b1b23;
+  --danger-text: #1a070b;
   --info: #80badc;
   --info-soft: #183044;
+  --info-text: #09111a;
   --surface-hover: #19242a;
   --surface-selected: #183538;
   --field: #111a20;
@@ -4731,7 +4750,7 @@ details.collapse[open] summary::before {
 }
 .scroll-bottom-btn:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border-color: var(--accent);
   box-shadow: 0 4px 14px rgba(0,0,0,0.18);
 }
@@ -4840,7 +4859,7 @@ details.collapse[open] summary::before {
 }
 .msg-error-box button {
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-text);
   border: none;
   border-radius: 4px;
   padding: 2px 8px;
@@ -5133,12 +5152,13 @@ summary:focus-visible,
   justify-content: center;
   font-size: 22px;
   font-weight: 800;
-  color: #fff;
+  color: var(--ok-text);
   border-radius: 50%;
   background: var(--ok, #2e7d32);
   box-shadow: 0 0 14px var(--lz-glow-ok);
 }
 .diag-summary-icon[data-healthy="false"] {
+  color: var(--warn-text);
   background: var(--warn, #ed6c02);
   box-shadow: 0 0 14px var(--lz-glow-warn);
 }
@@ -5799,17 +5819,20 @@ summary:focus-visible,
   right: 24px;
   padding: 10px 16px;
   border-radius: var(--r-6);
-  color: #fff;
   font-size: var(--fs-13);
   z-index: 9999;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
+/* The ink belongs with the fill, not on the base rule: `kind` is typed to
+   "ok" | "err", so there is no third state that needs a default. */
 .toast-notification.ok {
+  color: var(--ok-text);
   background: var(--ok);
 }
 
 .toast-notification.err {
+  color: var(--danger-text);
   background: var(--danger);
 }
 
@@ -6401,7 +6424,7 @@ summary:focus-visible,
    但用色区分主次，不会有"一个描边一个实底"的视觉冲突。 */
 .btn-info,
 .btn-info.btn {
-  color: #fff;
+  color: var(--info-text);
   background: var(--info);
   border-color: var(--info);
 }
@@ -6612,7 +6635,7 @@ summary:focus-visible,
 
 .error-boundary-retry {
   padding: 8px 24px;
-  color: #fff;
+  color: var(--accent-text);
   font-size: 14px;
   font-weight: 600;
   background: var(--accent);
@@ -7550,7 +7573,7 @@ summary:focus-visible,
 .user-access-summary article div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .user-access-summary article b { font-size: var(--fs-12); }
 .user-access-summary article small { overflow: hidden; color: var(--text-4); font-size: var(--fs-10); text-overflow: ellipsis; white-space: nowrap; }
-.user-avatar { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; color: white; font-weight: 800; border-radius: 10px; background: var(--accent); }
+.user-avatar { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; color: var(--accent-text); font-weight: 800; border-radius: 10px; background: var(--accent); }
 .user-avatar.admin { background: var(--accent-2); }
 .user-access-layout { display: grid; grid-template-columns: 285px minmax(0, 1fr); min-height: 620px; overflow: hidden; border: 1px solid var(--line-2); border-radius: var(--r-8); background: var(--surface); }
 .user-access-list { padding: 15px; background: var(--surface-2); border-right: 1px solid var(--line-2); }
