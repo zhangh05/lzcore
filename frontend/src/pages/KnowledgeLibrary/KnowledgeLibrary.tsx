@@ -6,7 +6,7 @@ import {
   CodeBlock,
   InlineCode,
 } from "../../components/common";
-import { PageHeader, DataTable, SearchInput } from "../../components/ui";
+import { PageHeader, DataTable, SearchInput, SegmentedControl } from "../../components/ui";
 import { PortalModal } from "../../components/PortalModal";
 import { knowledgeApi, artifactsApi, storageApi } from "../../api";
 import { useSessionStore } from "../../stores/session";
@@ -403,18 +403,16 @@ export function KnowledgeLibrary() {
           scope === "workspace" ? "工作区" : scope === "global" ? "全局" : "会话"
         }`}
       >
-        <div className="segmented">
-          {(["workspace", "global", "session"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={scope === s ? "active" : ""}
-              onClick={() => setScope(s)}
-            >
-              {s === "workspace" ? "工作区" : s === "global" ? "全局" : "会话"}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          ariaLabel="检索范围"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: "workspace", label: "工作区" },
+            { value: "global", label: "全局" },
+            { value: "session", label: "会话" },
+          ]}
+        />
       </PageHeader>
 
       <div className="page-body">

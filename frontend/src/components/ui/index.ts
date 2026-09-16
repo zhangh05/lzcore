@@ -5,6 +5,7 @@ export { DetailPanel } from "./DetailPanel";
 export { Button } from "./Button";
 export { Input } from "./Input";
 export { SearchInput } from "./SearchInput";
+export { SegmentedControl } from "./SegmentedControl";
 export { Select } from "./Select";
 export { Textarea } from "./Textarea";
 export { ModalShell } from "./ModalShell";

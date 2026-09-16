@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { capabilitiesApi, toolsApi } from "../../api";
 import { useAsync, AsyncView, Badge, EmptyState, InlineCode } from "../../components/common";
-import { SearchInput } from "../../components/ui";
+import { SearchInput, SegmentedControl } from "../../components/ui";
 import type { BusinessCapability, RiskLevel, ToolCatalogCategory, ToolCatalogItem, ToolGovernanceStatus } from "../../types";
 import { IconAlert, IconBolt, IconShield } from "../../components/Icon";
 
@@ -103,11 +103,13 @@ export function CapabilityCenter() {
             </span>
             <SearchInput className="cc-search-input" value={tq} onChange={(e) => setTq(e.target.value)} onClear={() => setTq("")} placeholder="搜索工具名称或功能…" aria-label="搜索工具" />
           </div>
-          <div className="segmented cc-segmented">
-            {T_FILTERS.map((f) => (
-              <button key={f.id} className={tf === f.id ? "active" : ""} onClick={() => setTf(f.id)} type="button">{f.label}</button>
-            ))}
-          </div>
+          <SegmentedControl
+            className="cc-segmented"
+            ariaLabel="工具分类"
+            value={tf}
+            onChange={setTf}
+            options={T_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
+          />
           <AsyncView state={catalog.state} onRetry={catalog.reload} emptyText="无工具目录" emptyHint="/api/tools/catalog 未返回数据">
             {(d) => <ToolTree cats={d.categories ?? []} query={tq} filter={tf} />}
           </AsyncView>
