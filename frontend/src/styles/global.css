@@ -311,7 +311,7 @@ body {
   min-height: 100%;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 48px 24px;
   background: var(--bg);
 }
 
@@ -319,25 +319,25 @@ body {
   background: var(--bg);
 }
 
+/* The form sits on the canvas rather than in a bordered, shadowed card: the
+   only boundaries are the inputs themselves, which is what makes a sign-in page
+   read as a workspace entrance instead of a marketing panel. */
 .login-panel {
-  width: min(100%, 390px);
-  padding: 28px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-8);
-  background: var(--surface);
-  box-shadow: var(--shadow-menu);
+  width: min(100%, 380px);
 }
 
 .login-brand {
-  margin-bottom: 24px;
+  margin-bottom: 34px;
 }
 
 .login-kicker {
   display: block;
-  margin-bottom: 8px;
-  color: var(--accent);
-  font-size: var(--fs-11);
-  font-weight: 760;
+  margin-bottom: 10px;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: var(--meta-label-size);
+  font-weight: 500;
+  letter-spacing: var(--meta-label-tracking);
   text-transform: uppercase;
 }
 

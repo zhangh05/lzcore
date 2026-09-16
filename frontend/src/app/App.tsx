@@ -279,10 +279,16 @@ function LoginScreen({ onLogin }: { onLogin: (status: Awaited<ReturnType<typeof 
   return (
     <main className="login-page">
       <section className="login-panel" aria-labelledby="login-title">
+        {/*
+          Brand, one line of description, then the form. The category line is set
+          in the product's metadata voice — the same restrained mono treatment
+          used for identifiers elsewhere — and carries the product's own identity
+          rather than a decorative motif with invented ids in it.
+        */}
         <div className="login-brand">
-          <span className="login-kicker">联智中枢</span>
-          <h1 id="login-title">登录工作台</h1>
-          <p>请输入账户凭据继续。</p>
+          <span className="login-kicker">AI Operations Workspace</span>
+          <h1 id="login-title">联智中枢</h1>
+          <p>把运维任务交给 Agent：它会调用工具、留下证据，并说明结论。</p>
         </div>
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
