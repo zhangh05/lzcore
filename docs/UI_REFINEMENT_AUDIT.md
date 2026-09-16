@@ -258,3 +258,91 @@ Runtime Rail 相同的**技术元数据语言**（`.meta` / `.meta-label` / `.me
 修复循环需要「改一条 → 构建 → 探针 → 对比」重复 7 次以上，属于多轮迭代任务。
 在上下文余量不足时启动它，中途耗尽可能把样式留在更糟的状态。
 因此本轮**只做分析、不动代码**，代码库保持在已验证的单层状态。
+
+---
+
+## 八、共享样式细拆层：实测结论（Phase 7 续）
+
+上一节留下的是「7 条冲突 / 207 个盒子」。本轮把每一条都定位到了具体规则，
+**实测结果与那份清单不同，而且原因不同**。
+
+### 工具：原来那套不够用
+
+| 工具 | 覆盖 | 本次发现 |
+|---|---|---|
+| `layout_probe.py`（10 路由 × 25 选择器） | 25 个选择器 | 报 39 处差异 |
+| `dump_boxes.py`（**新增**） | 每条路由的**每一个元素** | 报 **1280 处** |
+| `cascade_conflicts.py`（**新增**） | 每条规则的胜出者，按两套级联各算一次 | 22 类真实翻转 |
+
+`cascade_conflicts.py` 的做法：对同一元素的同一属性，把两条候选声明
+**各自强制成内联样式再读一次真实计算值**再比较 —— 这样才能区分
+「同一像素、不同写法」的假翻转（`var(--weight-subhead)` vs `650`）。
+
+### 实测数据
+
+per-file 拆层（`base`=global / `shell` / `console` / `workbench` / `typography` / `runtime`）：
+**109 处翻转，聚类后 22 类真实冲突**。约 14 类是同一个形状 ——
+typography.css 的裸元素选择器（`h1`–`h6`）压过各组件的限定标题规则，
+例如 `.task-phase-summary h3 { font-size: 13px }` 败给 `h3 { font-size: 16px }`。
+
+试算过 5 种层序，没有一种可行：
+
+| 层序 | 翻转 / 类数 |
+|---|---|
+| base, shell, console, workbench, typography, runtime | 64 / 22 |
+| base, typography, shell, console, workbench, runtime | 96 / 30 |
+| typography, base, shell, console, workbench, runtime | 144 / 36 |
+| base, shell, console, workbench, runtime, typography | 64 / 22 |
+| runtime, base, shell, console, workbench, typography | 64 / 22 |
+
+### 两个结构性阻塞
+
+**1. typography.css 装着两个相反的角色。**
+
+- *元素级默认*（h1–h6、`.markdown-body`、`.meta`）必须是**最早**的层，组件才能覆盖它；
+- *容器节奏归一*（`.card`、`.page-body`、`.ui-filter-bar`、`.stat-grid`）必须是**最晚**的层 ——
+  它当初就是靠「后加载 + 同特异性」盖住 global.css 与 console-system.css 的硬编码值。
+
+把文件按角色切成 `typography`（早）+ `rhythm`（晚）两层试过：14 类标题冲突消失，
+但暴露出阻塞 2。
+
+**2. 晚层的 `padding` 简写会压掉早期层里的长写与更高特异性覆盖。**
+
+`.capability-center .page-body { padding-top: 16px }`（console，特异性 0-2-0）被
+`.page-body` 的 `padding` 简写（rhythm，最后一层）盖掉 → **能力中心 878 个元素位移**。
+
+**这条是本轮最重要的工具教训**：冲突枚举器按属性名比较，
+**抓不到简写 vs 长写**（`padding` / `padding-block`、`background` / `background-color`）。
+只有全元素几何对比才暴露。**验证手段选错比不验证更危险** —— 这一条今天第二次命中。
+
+### 结论与当前状态
+
+按上一节定下的判据（不能验证就回退），六个样式表已 `git checkout` 回**已验证的单层状态**，
+探针重跑 **0 差异**。代码库没有留在半途。
+
+细拆层的前置工作（做完它才谈得上拆）：
+
+1. **删掉 `global.css:438-453` 的裸标题规则**（`font-weight: 720`、line-height 1.25/1.3/1.35/1.45）。
+   它与 typography.css 的（700/650、1.24/1.34/1.34/1.34）重复且取值不同。
+   typography.css 自称元素排版的唯一来源，那么该删的是 global.css 这份，
+   而不是继续靠「谁后加载」决定。
+2. 把 typography.css 的容器节奏段**就地并入** global.css / console-system.css（合并到源头），
+   而不是叠在最外层 —— 只有这样，特异性才能继续在那一层内部裁决
+   （`.knowledge-library .page-body > .card` 这类覆盖才活得下来）。
+3. 逐条消解剩下的跨文件倒置：`.data-center .data-center-tabs button` 与 global 的三选择器规则、
+   `.message-avatar.user`（global）与 `.message-avatar`（AgentWorkbench）、
+   `.page-body.no-pad`（global）与 `.page-body`（console-system）。
+   后一条已有现成先例：typography.css:375 用的是 `.page-body:where(:not(.no-pad))`。
+
+### Data / Capabilities 列表行化（已完成）
+
+- **能力中心工具目录**：原本四层嵌套边框盒（category → group → row → detail-card）。
+  `.tool-row` 拆出共享的 border/radius/background 规则，改为 `border-bottom` 分隔 + 透明底；
+  `.tool-list` 成为唯一容器。`.capability-center .tool-row` 的 `surface-2` 填充也去掉了 ——
+  否则每行一块底色，读起来仍是一叠面板。
+- **数据中心文件列表**：`.data-row` 原本是带 border/radius/box-shadow 的卡片，改为行。
+  hover 从「上浮 1px + 边框变色」改为换底色（上浮是卡片的语言，行不该动）。
+
+**验证边界（如实）**：本工作区**数据 0 个文件**，`.data-row` 一行都渲染不出来。
+用注入探针行的方式验证了计算样式（borderTop 0 / radius 0 / 背景透明 / margin-top 0），
+验证的是 CSS 本身而非业务数据。与知识库结果行同一类边界。

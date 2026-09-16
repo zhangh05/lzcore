@@ -2520,9 +2520,11 @@ details.collapse[open] summary::before {
   margin-top: 12px;
 }
 
+/* `.tool-category` and `.tool-group` are groupings, so a box is their right
+   shape. A tool is an entry in a list, so it is a row — it must not carry its
+   own border box inside the list that already contains it. */
 .tool-category,
-.tool-group,
-.tool-row {
+.tool-group {
   border: 1px solid var(--line);
   border-radius: var(--r-6);
   background: var(--surface);
@@ -2543,9 +2545,12 @@ details.collapse[open] summary::before {
 }
 
 .tool-row {
-  padding: 7px 9px;
-  background: var(--surface);
+  padding: 9px 10px;
+  background: transparent;
+  border-bottom: 1px solid var(--line-2);
+  border-radius: 0;
 }
+.tool-row:last-child { border-bottom: 0; }
 
 .tool-category > summary,
 .tool-group > summary,
@@ -2574,10 +2579,10 @@ details.collapse[open] summary::before {
 }
 
 .tool-category:hover,
-.tool-group:hover,
-.tool-row:hover {
+.tool-group:hover {
   border-color: var(--line-3);
 }
+.tool-row:hover { background: var(--surface-2); }
 
 .tool-category[open] > summary::before,
 .tool-group[open] > summary::before,
@@ -2596,11 +2601,19 @@ details.collapse[open] summary::before {
   font-size: var(--fs-10);
 }
 
-.tool-groups,
-.tool-list {
+.tool-groups {
   display: grid;
   gap: 8px;
   margin-top: 8px;
+}
+/* One container for the whole list: it owns the border, the rows own the
+   separators, and nothing in between is a box. */
+.tool-list {
+  display: grid;
+  margin-top: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-6);
+  overflow: hidden;
 }
 
 .tool-label {
@@ -7258,6 +7271,9 @@ summary:focus-visible,
   font-size: var(--fs-12);
 }
 
+/* A file is a row, not a card. The pane it sits in is the single container, so
+   the separator belongs to the row and there is no per-entry border box — same
+   language as MemoryPage and KnowledgeLibrary. */
 .data-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
@@ -7267,16 +7283,21 @@ summary:focus-visible,
   padding: 12px 10px;
   color: var(--text);
   text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-8);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line-2);
+  border-radius: 0;
   cursor: pointer;
-  box-shadow: 0 1px 1px rgba(16, 24, 40, 0.04);
+  box-shadow: none;
 }
 
-.data-row + .data-row { margin-top: 8px; }
-.data-row:hover { border-color: color-mix(in srgb, var(--accent) 34%, var(--line)); transform: translateY(-1px); }
-.data-row.selected { background: var(--accent-soft); border-color: var(--accent); }
+.data-row:last-child { border-bottom: 0; }
+/* Hover was a lift plus a border tint — both card affordances. A row answers
+   with its surface instead, so it stays in place while the pointer moves. */
+.data-row:hover { background: var(--surface-2); }
+/* Selected keeps the tint it always had; the accent border it used to rely on
+   is gone with the per-row box, so the row's own surface carries the state. */
+.data-row.selected { background: var(--accent-soft); }
 .data-row:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 34%, transparent); outline-offset: 2px; }
 
 .data-row-main {

@@ -1025,7 +1025,9 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 .capability-center :is(.tool-category, .tool-group, .tool-row) { border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; box-shadow: none; }
 .capability-center .tool-group { background: transparent; padding-left: var(--space-4); }
 .capability-center summary { min-height: var(--h-control); }
-.capability-center .tool-row { background: var(--surface-2); }
+/* The list now owns the border, so a row needs no fill of its own — it would
+   read as a stack of panels rather than as entries in one list. */
+.capability-center .tool-row { background: transparent; }
 .diagnostics-page .diag-health-grid { gap: 0 var(--space-4); border: 0; }
 .diagnostics-page .diag-health-card { border-radius: 0; border-top: 0; }
 .diagnostics-page .diag-health-ok { border-left: 0; }
