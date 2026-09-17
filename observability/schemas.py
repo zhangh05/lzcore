@@ -3,7 +3,6 @@
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional
 
 from agent.runtime.utils import now_iso
 

@@ -6,7 +6,7 @@ Commands are registered with a name and handler, and can be invoked
 via the /slash.run tool or directly through the runtime.
 """
 
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 import logging
 
 # dict of command_name -> handler
@@ -224,7 +224,6 @@ def _cmd_context(args: str, session_id: Optional[str], context: Optional[dict]) 
 
     # Try to get token usage
     try:
-        from agent.runtime.token_tracker import estimate_messages
         # This is a rough estimate — actual tracking depends on session state
         lines.append("Token tracking: available via /usage")
     except Exception:
@@ -232,7 +231,6 @@ def _cmd_context(args: str, session_id: Optional[str], context: Optional[dict]) 
 
     # Try history length
     try:
-        from agent.core.session import AgentSession
         if session_id:
             lines.append("History: check /sessions for details")
     except Exception:
@@ -263,7 +261,6 @@ def _cmd_sessions(args: str, session_id: Optional[str], context: Optional[dict])
 def _cmd_usage(args: str, session_id: Optional[str], context: Optional[dict]) -> str:
     """Show token usage stats."""
     try:
-        from agent.runtime.token_tracker import estimate_messages
         ws_id = (context or {}).get("workspace_id", "")
         # Try to get real usage from token tracker
         usage_stats = {}

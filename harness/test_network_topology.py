@@ -11,7 +11,7 @@ from extensions.sdk import ExtensionDataStore
 from core.tools.client import ToolRuntimeClient
 from core.tools.context import ToolRuntimeContext
 from core.tools.registry import ToolRegistry
-from core.tools.schemas import ToolInvocation, ToolSpec
+from core.tools.schemas import ToolSpec
 
 
 @pytest.fixture

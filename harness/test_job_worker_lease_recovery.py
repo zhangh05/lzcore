@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 
 def test_reclaimed_running_job_is_fenced_without_reexecution(monkeypatch, tmp_path):

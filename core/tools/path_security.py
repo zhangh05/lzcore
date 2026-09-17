@@ -16,7 +16,6 @@ Usage:
     # Returns a resolved Path or raises PathSecurityError
 """
 
-import os
 import re
 import urllib.parse
 from pathlib import Path

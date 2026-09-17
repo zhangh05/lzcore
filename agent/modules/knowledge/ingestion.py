@@ -48,7 +48,6 @@ v1.0.1.1 — Knowledge Ingestion Security:
 from __future__ import annotations
 
 import os
-import re
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,7 +58,7 @@ from agent.modules.knowledge import chunking as _chunking
 from agent.modules.knowledge import index as _index
 from agent.modules.knowledge import store as _store
 from agent.modules.knowledge.schemas import (
-    KnowledgeChunk, NormalizedDocument, SOURCE_TYPES, SCOPES,
+    NormalizedDocument, SOURCE_TYPES, SCOPES,
 )
 
 

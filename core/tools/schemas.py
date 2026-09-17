@@ -8,7 +8,7 @@ Tool Runtime uses its own data model, not the Agent's skill execution records.
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Any, Optional
+from typing import Callable, Optional
 
 
 # ── Valid enums ──

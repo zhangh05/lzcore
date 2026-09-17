@@ -17,7 +17,6 @@ import json
 import os
 import uuid
 from pathlib import Path
-from typing import Any, Optional
 
 from storage.paths import workspace_root
 from storage.locking import FileLock

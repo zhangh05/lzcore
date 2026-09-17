@@ -1,7 +1,7 @@
 # context/selector.py
 """Context selector — excludes inaccessible data without dropping usable context."""
 
-from core.context.schemas import ContextItem, ContextBudget
+from core.context.schemas import ContextBudget
 
 
 def select_context_items(items: list, intent: str = "", capability_id: str = "",

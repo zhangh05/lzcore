@@ -8,9 +8,8 @@ visibility, or bypass manifest policy.
 from __future__ import annotations
 
 from core.tools.schemas import ToolInvocation
-from storage.ids import validate_workspace_id
 
-from core.tools.general_tools.shared import _caller_workspace, _contract, _error, _error_inv, _ok, _result, _unavailable, _workspace_path
+from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok
 
 
 # v3.9.4 projected from agent.capabilities.catalog

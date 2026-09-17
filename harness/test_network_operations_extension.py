@@ -1376,7 +1376,6 @@ def test_evidence_failure_transitions_task_to_terminal_failure(monkeypatch, tmp_
     failed = _run_inspection(monkeypatch,
         "default", [asset["connection_id"]], commands=["display version"], collector=lambda _asset, commands: {command: "ok" for command in commands}, background=False,
     )
-    from jobs.store import get_job
     assert "job_id" not in failed
     assert failed["status"] == "failed"
     assert failed["error"] == "inspection_evidence_persist_failed"

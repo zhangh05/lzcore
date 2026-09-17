@@ -1,7 +1,7 @@
 # Prompt message and import contracts.
 """Prompt Runtime renderer, safe_generate wiring, fake ref regex, text blocking tests."""
 
-import json, pytest
+import pytest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -19,7 +19,7 @@ def client(temp_dirs):
 
 class TestRenderer:
     def test_module_exists(self):
-        from prompts.renderer import render_prompt, RenderedPrompt
+        from prompts.renderer import render_prompt
         assert callable(render_prompt)
 
     def test_render_reads_template(self):

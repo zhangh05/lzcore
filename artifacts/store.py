@@ -13,11 +13,11 @@ Current runtime storage model:
   read model carrying ssot_event_id
 """
 
-import json, hashlib, os, re, time, shutil, uuid
+import os, re, uuid
 from pathlib import Path
 from typing import Optional
 
-from artifacts.schemas import ArtifactRecord, ArtifactIndex, RunArtifactIndex
+from artifacts.schemas import ArtifactRecord, ArtifactIndex
 from artifacts.redaction import redact_artifact_content, contains_secret, redact_metadata
 from artifacts.classifier import classify_file
 from storage.schemas import FileRecord

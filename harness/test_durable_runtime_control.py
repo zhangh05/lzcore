@@ -1,17 +1,15 @@
 # Durable checkpoint, cancel, retry, and resume contracts.
 """Phase 3: Runtime control — checkpoint, cancel, retry, resume."""
 
-import pytest, uuid
+import uuid
 from agent.runtime.durable.models import (
-    TaskState, RuntimeStep, RuntimeEvent,
-    _next_id,
+    TaskState, RuntimeStep,
 )
 from agent.runtime.durable.control import (
     checkpoint_task, cancel_task, retry_step, resume_task,
 )
 from agent.runtime.durable.store import (
     save_task, get_task, get_events, get_checkpoints,
-    append_event,
 )
 
 

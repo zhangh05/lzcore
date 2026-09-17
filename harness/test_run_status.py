@@ -126,7 +126,6 @@ def test_merge_result_projection_reconciles_status_on_failure(monkeypatch, tmp_p
     tp._merge_result_projection(rid, "default", _FakeResult(), context=None)
 
     # Now read back the file
-    from pathlib import Path
     import json
     rec = json.loads((tmp_path / "default" / "runs" / f"{rid}.json").read_text())
     assert rec["ok"] is False, f"ok must be False, got {rec['ok']}"

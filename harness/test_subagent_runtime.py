@@ -1,7 +1,7 @@
 # Subagent runtime isolation and lifecycle contracts.
 """Phase 9: Subagent Runtime tests."""
 
-import pytest, uuid
+import uuid
 from agent.runtime.durable.subagent import (
     get_profile, create_subagent_task, run_subagent_task,
     merge_subagent_result, BUILTIN_PROFILES, cancel_subagent_task,
@@ -368,7 +368,6 @@ class TestProfileToolsFilter:
         assert cancel_subagent_task(cr["subtask_id"], ws_a)["ok"] is False
 
     def test_reconcile_marks_phantom_running_failed(self, monkeypatch, tmp_path):
-        import storage.run_record_store as run_store
 
         ws = f"ws_restart_{uuid.uuid4().hex[:8]}"
         cr = create_subagent_task("t1", ws, "s1", "research_agent", "Research")

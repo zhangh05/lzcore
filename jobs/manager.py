@@ -4,9 +4,8 @@
 import logging
 
 from agent.runtime.utils import now_iso
-from jobs.schemas import JobRecord, JobEvent, JobProgress, ENABLED_JOB_TYPES
-from jobs.store import create_job as _create, get_job, update_job, append_event, append_log
-from jobs.redaction import sanitize_job_record_for_api, sanitize_job_record_for_storage
+from jobs.schemas import JobRecord, JobEvent, ENABLED_JOB_TYPES
+from jobs.store import create_job as _create, get_job, update_job, append_event
 
 _LOG = logging.getLogger(__name__)
 

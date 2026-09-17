@@ -37,7 +37,7 @@ tool id -> manifest -> caller gate -> policy / authorization
 
 调用级 `dry_run` 默认关闭并拒绝执行。即使工具声明 `dry_run_supported`，执行器也不调用会写的 handler，只返回 `executed=False` 的预览。公开 `/api/tools/dry-run` 只生成策略与调用元数据，不进入工具 handler。
 
-`network.operations.device.manage` 的只读、并行与重试判定以原始命令的 `command_semantics` 分类为准，不信任模型填写的 `action`。`workspace.file` glob 不得用 `..` 或绝对路径离开工作区。`exec.run` 的 shell / PowerShell 在主机上执行，但拦截破坏性命令。Python 仍按 `requires_strong_isolation()` 选择 Docker 或 fail-closed。
+`network.operations.device.manage` 的只读、并行与重试判定以原始命令的 `command_semantics` 分类为准，不信任模型填写的 `action`。`workspace.file` glob 不得用 `..` 或绝对路径离开工作区。`exec.run` 的 shell / PowerShell 在主机上执行，但拦截破坏性命令。Python 按运行时绑定与身份策略选择 Docker 或 fail-closed。
 
 ## 目标驱动恢复
 

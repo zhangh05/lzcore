@@ -2,7 +2,6 @@
 """Observability Runtime tests — trace, timeline, agent integration."""
 
 import json
-import time
 import pytest
 from pathlib import Path
 
@@ -91,7 +90,7 @@ class TestTraceStore:
 
     def test_trace_redacts_key(self, temp_dirs):
         from observability.schemas import TraceRecord, TraceEvent
-        from observability.store import write_trace, get_trace
+        from observability.store import write_trace
         from storage.workspace_store import ensure_workspace
 
         ws_id = "trace_redact_ws"

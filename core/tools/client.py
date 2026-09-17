@@ -17,7 +17,7 @@ Example:
 import logging
 from typing import Optional
 
-from core.tools.schemas import ToolSpec, ToolInvocation, ToolResult
+from core.tools.schemas import ToolInvocation, ToolResult
 from core.tools.registry import ToolRegistry
 from core.tools.policy import ToolPolicy
 from core.tools.executor import ToolExecutor, canonicalize_tool_arguments

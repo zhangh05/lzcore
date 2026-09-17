@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import threading
-import time
 
 
 def test_shell_execution_cooperatively_cancels_process_tree(tmp_path):

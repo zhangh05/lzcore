@@ -8,9 +8,8 @@ v3.1.0 refactoring:
 """
 
 import json
-import re
 from difflib import SequenceMatcher
-from core.context.schemas import ContextItem, ContextBudget, resolve_budget_for_model
+from core.context.schemas import ContextBudget, resolve_budget_for_model
 from core.context.schema_registry import strip_by_schema, is_metadata_key_blocked
 
 

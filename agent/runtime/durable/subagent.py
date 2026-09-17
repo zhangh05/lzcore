@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import re
 import threading
-import uuid, time as _time
+import uuid
 from agent.runtime.utils import now_iso
 from storage.redaction import redact_text
 

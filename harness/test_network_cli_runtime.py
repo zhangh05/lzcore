@@ -764,7 +764,6 @@ def test_authorized_device_confirmation_receives_one_protocol_answer():
 
 @pytest.mark.parametrize("failure", ["disconnect", "timeout", "cancel"])
 def test_incomplete_command_does_not_send_the_next_command(monkeypatch, failure):
-    from extensions.network_operations import cli_runtime
     from core.tools.context import bind_runtime_cancel_check, reset_runtime_cancel_check
     driver, _ = resolve_driver("h3c")
     chunks = [b"display version\r\npartial\r\n"]

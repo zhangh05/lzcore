@@ -20,7 +20,6 @@ from storage.session_store import (
     delete_session_permanently,
     get_session_messages,
     get_or_create_default_session,
-    auto_title_from_input,
     get_session_count,
 )
 

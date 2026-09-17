@@ -4,7 +4,6 @@
 import os
 import yaml
 from pathlib import Path
-from typing import Any, Dict, Optional
 
 from agent.runtime.utils import now_iso
 from agent.llm.key_resolver import resolve_api_key, get_key_source, is_key_loaded

@@ -13,7 +13,6 @@ from core.tools.registry import ToolRegistry
 from core.tools.policy import ToolPolicy
 from core.tools.client import ToolRuntimeClient
 from core.tools.canonical_registry import to_tool_specs
-from core.tools.trace_metadata import build_trace_metadata_from_tool_result
 
 # ── Module-level default (lazy singleton, double-checked locking) ──
 _default_client: ToolRuntimeClient = None

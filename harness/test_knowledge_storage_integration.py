@@ -3,7 +3,6 @@
 
 import os
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -17,7 +16,7 @@ def knowledge_ws(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(ws))
     monkeypatch.setenv("LZCORE_WORKSPACE_DIR", str(ws))
     try:
-        import artifacts.store as _as
+        pass
     except Exception:
         pass
     from storage.paths import ensure_workspace_storage_dirs

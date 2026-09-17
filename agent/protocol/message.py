@@ -2,7 +2,6 @@
 """Message types for LLM conversation protocol."""
 
 from dataclasses import dataclass, field
-from typing import Optional, List
 
 
 @dataclass

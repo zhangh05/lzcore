@@ -1,17 +1,17 @@
 # Trajectory evaluation contracts.
 """Phase 10: Trajectory evaluation tests."""
 
-import pytest, uuid
+import uuid
 from agent.runtime.durable.trajectory import (
     build_trajectory, persist_trajectory, get_trajectory,
-    list_trajectories, evaluate_trajectory, save_feedback,
+    list_trajectories, save_feedback,
     TrajectoryRecord, TrajectoryMetrics,
 )
 
 
 class TestTrajectoryBuilder:
     def test_build_from_task(self):
-        from agent.runtime.durable.store import save_task, get_task
+        from agent.runtime.durable.store import save_task
         from agent.runtime.durable.models import TaskState, RuntimeStep
         ws = f"ws_t10_{uuid.uuid4().hex[:8]}"
         task = TaskState.new(workspace_id=ws, session_id="s1", run_id="r1",

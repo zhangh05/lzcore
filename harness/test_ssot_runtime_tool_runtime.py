@@ -34,12 +34,9 @@ These tests assert the new behavior:
 from __future__ import annotations
 
 import asyncio
-import json
-from typing import Any
 
-import pytest
 
-from core.runtime_engine.models import ExecutionStatus, SSOTRuntimeConfig, ToolResult
+from core.runtime_engine.models import SSOTRuntimeConfig, ToolResult
 from core.runtime_engine.tool_runtime import ToolRuntime
 
 

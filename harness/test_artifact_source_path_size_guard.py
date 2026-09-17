@@ -1,7 +1,7 @@
 # harness/test_artifact_source_path_size_guard.py
 """Artifact source_path size guard: stat().st_size before read_text()."""
 
-import os, pytest
+import pytest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -66,7 +66,7 @@ class TestSourcePathSizeGuard:
         assert len(arts) == 0
 
     def test_small_source_path_saves(self, temp_dirs):
-        from artifacts.store import save_artifact, get_artifact
+        from artifacts.store import save_artifact
         from storage.workspace_store import ensure_workspace
 
         ws = "sz_small"

@@ -1,7 +1,7 @@
 # Workspace isolation contracts.
 """Phase 7: Workspace / Session / Run / Job boundary enforcement."""
 
-import pytest, uuid, json
+import uuid
 
 
 class TestWorkspaceRequired:

@@ -21,6 +21,8 @@ python3 scripts/extension_cli.py validate plugins/acme_insights
 
 模型可以选择 Skill 内的一部分设备。单台连接失败必须以该设备的工具结果返回，不能阻断其他独立设备。网络 Skill 默认可读取和配置其范围内设备；没有危险命令审核、等待状态或后台续跑。`network.operations.topology` 工具提供拓扑图的读取、创建、保留式 `patch`、`record_discovered_link`、完整快照 `update`、删除与对比；Agent 写入既有图纸必须先读取当前 `version`，再以 `patch` 提交涉及的既有节点、链路或分组，未提及的图元由服务端保留。新增、已发现链路必须使用扁平强类型 `record_discovered_link`，提交两端设备/接口、`physical|logical`、`unknown|up|down` 和非空字符串证据 ID 数组；设备命名、管理连接、单端接口输出与协议预期均不能自动画成事实。读取单张图会同时返回画布记录与受 Skill 范围约束的设备连接、最近巡检事实。`GET /topologies/<topology_id>/state` 为画布提供同一份只读记录投影，刷新不会触发设备探测；手绘链路、历史连接测试和巡检完成都不会被伪装成链路运行状态。对比分析输出存量拓扑与运行事实的差异，无证据时保持 unknown 状态。工作区拓扑支持与 Skill 多对多引用，删除拓扑自动清理引用，图内删除节点绝不删除设备实体与管理连接。
 
+可选的 configure 审批见 [审批扩展](APPROVAL_EXTENSION.md)。
+
 ## 恢复集成
 
 扩展不维护自己的 LLM 循环。平台可接受经过合同校验的领域无关 `runtime_recoveries`，但 `network.operations` 对厂商 CLI 拒绝只返回模型可读的结构化反馈，不自动选择替代命令、语义模板或文档检索。厂商命令模板和语义映射留在驱动内，平台内核只保存 Observation / Reference 的通用来源与生命周期，不固化网络协议或厂商 CLI。

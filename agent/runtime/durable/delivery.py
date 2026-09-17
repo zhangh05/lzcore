@@ -6,10 +6,8 @@ Validation gates enforce: no unvalidated success, no destructive without rollbac
 """
 
 from __future__ import annotations
-import json
 import logging
 import uuid
-import time as _time
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -110,7 +108,7 @@ def build_audit_report(task_id: str, ws_id: str) -> dict:
     """Build a comprehensive audit report from all runtime data."""
     report = {"task_id": task_id, "workspace_id": ws_id, "generated_at": _now()}
     try:
-        from agent.runtime.durable.store import get_task, get_events
+        from agent.runtime.durable.store import get_task
         from agent.runtime.durable.trajectory import build_trajectory, evaluate_trajectory
         task = get_task(ws_id, task_id)
         if task:
@@ -158,7 +156,7 @@ def git_status_check(ws_id: str) -> dict:
     result = {"ok": True, "workspace": ws_id, "dirty": False, "branch": "unknown",
               "changed_files": [], "untracked": []}
     try:
-        import subprocess, os
+        import subprocess
         repo_dir = _resolve_repo_dir(ws_id)
         # Check if it's a git repo
         r = subprocess.run(
@@ -203,7 +201,7 @@ def git_commit(ws_id: str, message: str = "", confirm: bool = False) -> dict:
     if not message:
         return {"ok": False, "error": "commit message required"}
     try:
-        import subprocess, uuid
+        import subprocess
         repo_dir = _resolve_repo_dir(ws_id)
         r = subprocess.run(
             ["git", "add", "-A"],
@@ -230,7 +228,7 @@ def git_push(ws_id: str, remote: str = "origin", confirm: bool = False) -> dict:
     if not confirm:
         return {"ok": False, "error": "confirm=true required to push"}
     try:
-        import subprocess, uuid
+        import subprocess
         repo_dir = _resolve_repo_dir(ws_id)
         # Get current branch
         r = subprocess.run(

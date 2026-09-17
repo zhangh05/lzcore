@@ -2,10 +2,8 @@
 """Phase 10: Trajectory builder, eval rules, and persistence."""
 
 from __future__ import annotations
-import json, logging, re, uuid, time as _time
+import logging, re, uuid
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
-from pathlib import Path
 from typing import Optional
 from storage.ids import validate_workspace_id
 from core.tools.redaction import redact_tool_output

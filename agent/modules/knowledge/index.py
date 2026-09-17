@@ -7,9 +7,8 @@ Search uses UnifiedRetriever (single BM25 engine).
 
 from __future__ import annotations
 
-import time
 import uuid
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from agent.modules.knowledge.schemas import KnowledgeChunk
 from core.context.context_store import get_context_store

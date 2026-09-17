@@ -15,11 +15,10 @@ Pipeline:
 
 import time
 from copy import deepcopy
-from core.tools.schemas import ToolSpec, ToolInvocation, ToolResult, PolicyDecision
+from core.tools.schemas import ToolInvocation, ToolResult, PolicyDecision
 from core.tools.registry import ToolRegistry
 from core.tools.policy import ToolPolicy
 from core.tools.redaction import redact_tool_output
-from core.tools.audit import build_audit_event
 
 
 class ToolExecutor:

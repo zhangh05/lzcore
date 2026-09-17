@@ -1,7 +1,6 @@
 """Turn persistence — write run records, messages, and trace events to disk."""
 
 from agent.runtime.message_identity import user_message_storage_run_id
-import json
 import logging
 from datetime import datetime, timezone
 from types import SimpleNamespace

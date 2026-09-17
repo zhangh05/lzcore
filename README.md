@@ -67,6 +67,11 @@ bash stop.sh
 - [前端](docs/FRONTEND.md)
 - [生产部署](docs/PRODUCTION.md)
 - [运维处置](docs/OPERATIONS_RUNBOOK.md)
+- [审批扩展](docs/APPROVAL_EXTENSION.md)
+- [记忆子系统](docs/MEMORY_SUBSYSTEM.md)
+- [Skill 与提示词](docs/SKILL_PROMPT_ARCHITECTURE.md)
+- [组织与工作区隔离](docs/TENANCY.md)
+- [平台演进路线](docs/PLATFORM_ROADMAP.md)
 
 ## 验证
 

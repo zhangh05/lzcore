@@ -34,10 +34,6 @@ def _loopback_host(host: str) -> bool:
     )
 
 
-def requires_strong_isolation() -> bool:
-    return _requires_strong_isolation()
-
-
 def _requires_strong_isolation() -> bool:
     host = os.environ.get("LZCORE_RUNTIME_BIND_HOST", "127.0.0.1")
     if not _loopback_host(host):

@@ -7,7 +7,6 @@ from pathlib import Path
 
 from storage.atomic_io import atomic_write_bytes
 from storage.paths import get_workspace_root, runtime_root, workspace_root
-from storage.backend import backend_mode
 
 
 class LocalObjectStore:

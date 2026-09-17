@@ -5,10 +5,8 @@ Error diagnostics: preserves HTTP status, error type, and non-sensitive details.
 Only masks real tokens/Authorization/Bearer values.
 """
 
-import json, logging, os, time, urllib.request, urllib.error
-from typing import Optional
+import json, logging, time, urllib.request, urllib.error
 from agent.llm.schemas import LLMMessage, LLMRequest, LLMResponse, LLMToolCall
-from agent.llm.key_resolver import mask_secret
 
 _LOG = logging.getLogger(__name__)
 
@@ -502,7 +500,6 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     Accumulates the full response while pushing tokens in real-time.
     """
     import requests as _requests
-    from agent.runtime.stream_emitter import StreamEmitter
 
     headers = {
         "Content-Type": "application/json",

@@ -118,7 +118,6 @@ def get_diagnostics(workspace_id: str = "default") -> DiagnosticReport:
 
     # 10. Memory
     try:
-        from backend.api.memory import handle_memory_status
         components.append(ComponentStatus("memory", "ok", "Memory system available"))
     except Exception:
         components.append(ComponentStatus("memory", "warning", "Memory status unavailable"))

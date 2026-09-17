@@ -11,8 +11,6 @@ Covers:
 
 import sys
 import os
-import time
-import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -29,7 +27,6 @@ from storage.session_store import (
     auto_title_from_input,
     ensure_session,
     get_session_count,
-    list_sessions_by_status,
 )
 from storage.run_record_store import write_run_record
 from agent.state import AgentState

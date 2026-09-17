@@ -6,15 +6,10 @@ Each fix should have at least one focused test that fails on the old code
 and passes on the new code.
 """
 
-import json
-import os
 import sys
-import threading
 import time
-from collections import OrderedDict
 from pathlib import Path
 
-import pytest
 
 # Ensure repo root on path
 ROOT = Path(__file__).resolve().parents[1]

@@ -3,7 +3,7 @@
 
 from agent.llm.schemas import (
     LLMRequest, LLMResponse, PolicyDecision,
-    ALLOWED_TASKS, BLOCKED_TASKS, LLMTask,
+    ALLOWED_TASKS, BLOCKED_TASKS,
 )
 
 SECRET_PATTERNS = ["password", "secret", "token", "api_key", "private_key", "credential", "key_string"]

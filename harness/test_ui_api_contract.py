@@ -11,7 +11,6 @@ Ensures the Vite/React frontend source aligns with Foundation Baseline:
 - No secret/key/token leaks
 """
 
-import re
 import os
 import pytest
 

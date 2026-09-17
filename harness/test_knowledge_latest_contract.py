@@ -152,7 +152,6 @@ def test_llm_tool_catalog_exposes_current_knowledge_search():
 
 
 def test_import_from_artifact_uses_current_store_and_is_searchable(tmp_path, monkeypatch):
-    from artifacts import store as artifact_store
     from artifacts.store import save_artifact
     from backend.main import app
 

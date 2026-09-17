@@ -1,7 +1,7 @@
 # MCP, skill, and plugin ecosystem registry contracts.
 """Phase 11: MCP / Skill / Plugin ecosystem interface tests."""
 
-import pytest, uuid
+import uuid
 from core.tools.ecosystem import (
     ExternalToolManifest, ExternalProvider, EcoRegistry,
     validate_external_manifest, validate_skill_manifest,

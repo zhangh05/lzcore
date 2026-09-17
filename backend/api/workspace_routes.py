@@ -3,7 +3,6 @@
 
 from flask import jsonify, request
 from storage.ids import validate_session_id, validate_workspace_id
-from artifacts.store import sanitize_record
 
 
 def _trace_event_type(event: dict) -> str:

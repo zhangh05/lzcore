@@ -17,8 +17,6 @@ Three rules:
 
 from __future__ import annotations
 
-from typing import Any, Iterable
-
 from core.tools.tool_namespace import TOOL_NAMESPACE
 
 

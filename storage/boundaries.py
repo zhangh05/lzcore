@@ -11,7 +11,6 @@ called during tests and optionally at runtime for validation.
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 # ═══════════════════════════════════════════════════════════════════════
 # FileStore guards

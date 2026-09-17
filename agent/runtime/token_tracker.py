@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 from agent.runtime.utils import now_iso
 from storage.usage_store import append_usage, clear_usage, read_usage

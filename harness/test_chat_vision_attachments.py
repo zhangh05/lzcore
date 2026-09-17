@@ -1,6 +1,5 @@
 """Focused contracts for pasted-image chat attachments."""
 
-from pathlib import Path
 
 import pytest
 

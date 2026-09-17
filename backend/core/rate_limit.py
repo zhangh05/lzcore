@@ -13,7 +13,6 @@ Default limits:
 import os
 import time
 import threading
-from collections import defaultdict
 from flask import request, jsonify
 
 

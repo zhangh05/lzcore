@@ -5,7 +5,7 @@ v4.0.0: Memory and knowledge retrieval moved to runtime/memory and
 runtime/knowledge modules. Loader handles workspace/artifact/job/report only.
 """
 
-from core.context.schemas import ContextItem, ContextRef
+from core.context.schemas import ContextItem
 import logging
 _LOG = logging.getLogger(__name__)
 

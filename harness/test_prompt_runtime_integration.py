@@ -1,7 +1,7 @@
 # Prompt runtime integration contracts.
 """Prompt Policy, safe_generate wiring, composer task selection, injection tests."""
 
-import json, pytest
+import pytest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

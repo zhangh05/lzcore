@@ -194,7 +194,7 @@ def build_catalog_snapshot() -> dict:
     # v3.9.3: capability_actions and tool_governance modules removed.
     # Each canonical_id is its own "capability action" (1:1).
     from core.tools.canonical_registry import CANONICAL_REGISTRY, list_canonical_ids, to_tool_specs
-    from core.tools.tool_namespace import TOOL_NAMESPACE, category_tree_from_specs, metadata_for_tool
+    from core.tools.tool_namespace import category_tree_from_specs, metadata_for_tool
 
     tools = []
     # v3.10 Phase 5: enrich with Capability Manifest fields

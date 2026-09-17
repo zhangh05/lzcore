@@ -9,13 +9,12 @@ All operations:
 """
 
 from __future__ import annotations
-import time as _time
 from typing import Optional
 from .models import (
     TaskState, RuntimeStep, RuntimeEvent, RuntimeCheckpoint,
-    StepStatus, TaskStatus, _next_id, _now,
+    _next_id, _now,
 )
-from .store import save_task, append_event, save_checkpoint, get_task, get_events, get_checkpoints
+from .store import save_task, append_event, save_checkpoint, get_task, get_checkpoints
 
 # ── Idempotency / Destructive — derived from Capability Manifest ──
 

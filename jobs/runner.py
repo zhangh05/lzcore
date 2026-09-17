@@ -1,7 +1,6 @@
 # jobs/runner.py
 """Job runner — executes generic base jobs."""
 
-import time, sys, os, traceback
 
 from jobs.schemas import JobRecord, JobEvent
 from jobs.store import get_job, update_job, append_event, append_log, claim_job_for_execution

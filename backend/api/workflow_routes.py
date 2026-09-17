@@ -1,5 +1,5 @@
 """Workspace workflow definition, template and execution APIs."""
-from flask import jsonify, request, session
+from flask import jsonify, request
 
 
 def _workspace_id(value) -> str:

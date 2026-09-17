@@ -1,11 +1,7 @@
 # backend/api/runtime_routes.py
 """Runtime routes — diagnostics, selfcheck, retention, archive, tool invocation."""
 
-import json
 import logging
-import os
-import threading
-from collections import OrderedDict
 
 from flask import jsonify, request
 

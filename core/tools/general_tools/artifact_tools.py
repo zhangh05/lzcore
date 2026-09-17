@@ -3,7 +3,7 @@ from __future__ import annotations
 from core.tools.schemas import ToolInvocation
 from storage.ids import validate_workspace_id
 
-from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok, _safe_preview
+from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok
 """Split general tool handlers."""
 
 

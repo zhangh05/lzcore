@@ -33,8 +33,8 @@ from typing import List, Tuple, Optional
 
 from agent.modules.knowledge.schemas import (
     KnowledgeChunk, NormalizedDocument,
-    CHILD_TARGET, CHILD_MIN, CHILD_MAX, CHILD_OVERLAP,
-    PARENT_MIN, PARENT_MAX,
+    CHILD_TARGET, CHILD_MAX, CHILD_OVERLAP,
+    PARENT_MAX,
 )
 
 

@@ -1,6 +1,5 @@
 """Framework regressions for append-only context and no-progress recovery."""
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 from agent.llm.schemas import LLMMessage, LLMToolCall

@@ -1,13 +1,12 @@
 # Delivery and GitOps contracts.
 """Phase 12: Delivery / GitOps / Change Closure tests."""
 
-import pytest, uuid
+import uuid
 from agent.runtime.durable.delivery import (
     validate_delivery, requires_rollback,
     save_rollback_plan, get_rollback_plan,
-    build_audit_report, export_audit_report_markdown,
-    git_status_check, git_commit, git_push,
-    RollbackPlan, DeliveryArtifact, VALIDATION_REQUIREMENTS,
+    build_audit_report, git_status_check, git_commit, git_push,
+    RollbackPlan,
 )
 
 

@@ -1,8 +1,6 @@
 """Runtime Archive Tests — v0.1"""
 import os
 import json
-import sys
-import pytest
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -124,7 +122,7 @@ class TestApplyArchive:
 
     def test_archive_structure_correct(self):
         """Archived items should honor workspace boundary."""
-        from core.runtime.archive import apply_archive, preview_archive_candidates
+        from core.runtime.archive import preview_archive_candidates
         preview = preview_archive_candidates("default")
         # All candidates should have type and name
         for c in preview.candidates:

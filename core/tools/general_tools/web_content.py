@@ -457,7 +457,6 @@ def fetch_and_extract(
 
     # Fetch
     try:
-        import socket
 
         # DNS safety check
         parsed = urlparse(url)

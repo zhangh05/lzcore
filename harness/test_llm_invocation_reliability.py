@@ -10,7 +10,6 @@
 6. disabled_or_missing_key_still_fails_normally
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
 

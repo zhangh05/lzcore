@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Optional, Literal
+from typing import Literal
 
 ActionClass = Literal["read","write","execute","network","delete","admin"]
 RiskLevel = Literal["low","medium","high","critical"]

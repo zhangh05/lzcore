@@ -1,7 +1,7 @@
 """Memory Governance — canonical schema, gate, retrieval, and conflict lifecycle."""
 
 from __future__ import annotations
-import json, time as _time, hashlib, logging, re, uuid
+import json, time as _time, logging, re, uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Callable, Optional, Literal
