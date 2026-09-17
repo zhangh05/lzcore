@@ -101,8 +101,12 @@ class ProbeJournal:
             raise AssertionError(
                 f"探针日志无法读取：{self.path}。手工检查后再删除它。")
 
+        if payload.get("topology_id") != topology_id:
+            raise AssertionError("探针日志属于另一张图纸；保留日志并停止恢复。")
         was = {n["node_id"]: n for n in payload.get("nodes", []) if n.get("node_id")}
         current = read_topology()
+        if current.get("topology_id") != topology_id:
+            raise AssertionError("读取的图纸与恢复目标不一致；保留日志并停止恢复。")
         moved = []
         for node in current.get("nodes", []):
             before = was.get(node.get("node_id"))

@@ -15,20 +15,17 @@ Delete, answer the confirm dialog.
 
 Safety
 ------
-It only ever removes nodes whose label is *not* in the keep list, and it prints
-the before/after sets so the change is visible rather than assumed. Take a copy
-of the topology file first if the content matters:
-
-    cp .../topo_XXXX.json /tmp/lz_backup/
+Only explicit node IDs in an explicit topology are eligible. The default is a
+read-only preview; --apply is required to perform the listed removals.
 
 Usage:
-  python canvas_cleanup.py                      # keep AR1, CE1
-  python canvas_cleanup.py --keep AR1,CE1,SW1
-  python canvas_cleanup.py --shot DIR
+  python canvas_cleanup.py --topology-id topo_example --remove node_probe
+  python canvas_cleanup.py --topology-id topo_example --remove node_probe --apply
 """
 
 import argparse
 import sys
+from urllib.parse import urlencode
 
 from playwright.sync_api import sync_playwright
 
@@ -52,18 +49,24 @@ NODES = """
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--keep", default="AR1,CE1", help="逗号分隔：保留哪些设备的名称")
+    ap.add_argument("--topology-id", required=True, help="清理目标图纸 ID")
+    ap.add_argument("--remove", required=True, help="逗号分隔：明确要删除的节点 ID")
+    ap.add_argument("--apply", action="store_true", help="执行删除；默认只预览")
     ap.add_argument("--shot", default=None, help="目录：前后截图")
     args = ap.parse_args()
 
-    keep = [name.strip() for name in args.keep.split(",") if name.strip()]
+    remove_ids = {value.strip() for value in args.remove.split(",") if value.strip()}
+    if not remove_ids:
+        ap.error("--remove 必须包含至少一个节点 ID")
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 900})
 
-        page.goto(f"{BASE}/topology", wait_until="networkidle")
+        page.goto(f"{BASE}/topology?{urlencode({'topology': args.topology_id})}", wait_until="networkidle")
         page.wait_for_timeout(3200)
+        if page.get_by_label("选择网络拓扑", exact=True).input_value() != args.topology_id:
+            raise AssertionError("当前图纸与清理目标不一致；未执行删除。")
         page.evaluate(SETUP)
 
         before = page.evaluate(NODES)
@@ -71,14 +74,21 @@ def main() -> int:
         if args.shot:
             page.screenshot(path=f"{args.shot}/cleanup_00_before.png")
 
-        doomed = [n for n in before if n["label"] not in keep]
+        missing = remove_ids - {node["id"] for node in before}
+        if missing:
+            raise AssertionError(f"目标节点不存在，停止清理：{sorted(missing)}")
+        doomed = [n for n in before if n["id"] in remove_ids]
         if not doomed:
             print("没有需要清理的设备，画布已是目标状态。")
             browser.close()
             return 0
 
         print(f"将移除 {len(doomed)} 台：{[n['label'] for n in doomed]}")
-        print(f"保留 {len(before) - len(doomed)} 台：{keep}")
+        print(f"保留其余 {len(before) - len(doomed)} 台")
+        if not args.apply:
+            print("只预览，未修改图纸。确认节点 ID 后使用 --apply 执行。")
+            browser.close()
+            return 0
 
         # Select exactly the doomed set. Everything else is unselected first so
         # the batch delete cannot reach past its target.
@@ -126,13 +136,13 @@ def main() -> int:
         if args.shot:
             page.screenshot(path=f"{args.shot}/cleanup_01_after.png")
 
-        leftover = [n["label"] for n in after if n["label"] not in keep]
+        leftover = [n["id"] for n in after if n["id"] in remove_ids]
         browser.close()
 
         if leftover:
             print(f"失败：仍有残留 {leftover}")
             return 1
-        print(f"完成：画布已回到 {keep}")
+        print("完成：已移除明确指定的节点")
         return 0
 
 

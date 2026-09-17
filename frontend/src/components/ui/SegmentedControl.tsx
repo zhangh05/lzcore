@@ -29,14 +29,26 @@ export function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   return (
     <div className={`segmented ${className}`.trim()} role="radiogroup" aria-label={ariaLabel}>
-      {options.map((option) => (
+      {options.map((option, index) => (
         <button
           key={option.value}
           type="button"
           role="radio"
           aria-checked={value === option.value}
+          tabIndex={value === option.value || (!options.some((item) => item.value === value) && index === 0) ? 0 : -1}
           className={value === option.value ? "active" : ""}
           onClick={() => onChange(option.value)}
+          onKeyDown={(event) => {
+            const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1
+              : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+            if (!delta && event.key !== "Home" && event.key !== "End") return;
+            event.preventDefault();
+            const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1
+              : (index + delta + options.length) % options.length;
+            const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+            buttons?.[next]?.focus();
+            onChange(options[next].value);
+          }}
         >
           {option.label}
         </button>

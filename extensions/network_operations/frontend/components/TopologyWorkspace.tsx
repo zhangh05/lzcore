@@ -670,6 +670,11 @@ export default function TopologyWorkspace({
    * merge it against the last confirmed base, and let the user decide.
    */
   const resolveConflict = useCallback(async (mine: Topology) => {
+    // Freeze queued saves before the conflict GET, not after it. The user can
+    // still edit locally while it loads; those edits must join the resolution.
+    saveStatusRef.current = "conflict";
+    setSaveStatus("conflict");
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     // Not named `base`: that is the module-level API prefix, and shadowing it
     // silently turned the request URL into "[object Object]/topologies/...".
     const lastConfirmed = serverTopologyRef.current.get(mine.topology_id) || mine;
@@ -681,11 +686,13 @@ export default function TopologyWorkspace({
       });
       const theirs = res.topology;
       if (!theirs) throw new Error("topology_not_found");
-      const result = mergeTopologies(lastConfirmed, mine, theirs);
+      const latestMine = activeTopologyRef.current?.topology_id === mine.topology_id
+        ? activeTopologyRef.current : mine;
+      const result = mergeTopologies(lastConfirmed, latestMine, theirs);
       // Any resolution writes on top of their version, so the next save is
       // accepted instead of conflicting again.
       serverVersionsRef.current.set(mine.topology_id, theirs.version);
-      setConflict({ base: lastConfirmed, mine, theirs, merged: result.topology, conflicts: result.conflicts, stats: result.stats });
+      setConflict({ base: lastConfirmed, mine: latestMine, theirs, merged: result.topology, conflicts: result.conflicts, stats: result.stats });
       setShowConflict(true);
       saveStatusRef.current = "conflict";
       setSaveStatus("conflict");
@@ -810,7 +817,7 @@ export default function TopologyWorkspace({
   }, [conflict, pushState, adoptServerTopology, setNotice]);
 
   const handleUndo = useCallback(() => {
-    if (!history.length || !activeTopology) return;
+    if (!history.length || !activeTopology || saveStatusRef.current === "conflict") return;
     const previous = history[history.length - 1];
     setHistory((prev) => prev.slice(0, -1));
     setFuture((prev) => [activeTopology, ...prev]);
@@ -823,7 +830,7 @@ export default function TopologyWorkspace({
   }, [history, activeTopology, executeSave]);
 
   const handleRedo = useCallback(() => {
-    if (!future.length || !activeTopology) return;
+    if (!future.length || !activeTopology || saveStatusRef.current === "conflict") return;
     const next = future[0];
     setFuture((prev) => prev.slice(1));
     setHistory((prev) => [...prev, activeTopology]);
@@ -1470,6 +1477,10 @@ export default function TopologyWorkspace({
    */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // A modal owns keyboard input, including when its focused control is a
+      // button. Otherwise Delete can replace a confirmation and arrows can
+      // change the drawing behind the dialog.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable=true]")) return;
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.key.toLowerCase() === "z") {
@@ -1509,7 +1520,7 @@ export default function TopologyWorkspace({
           // pressing it with a marquee or Ctrl+A selection did nothing at all
           // while the batch panel happily removed the same set.
           e.preventDefault();
-          if (canvasSelectedElementIds.length > 1) void removeSelectedObjects();
+          if (canvasSelectedElementIds.length > 0) void removeSelectedObjects();
           else deleteSelection();
           return;
         }
@@ -2248,7 +2259,7 @@ export default function TopologyWorkspace({
             <Button
               size="sm"
               icon={<IconUndo size={13} />}
-              disabled={!history.length}
+              disabled={!history.length || saveStatus === "conflict"}
               onClick={handleUndo}
               title="撤销 (Ctrl+Z / Cmd+Z)"
             >
@@ -2257,7 +2268,7 @@ export default function TopologyWorkspace({
             <Button
               size="sm"
               icon={<IconRedo size={13} />}
-              disabled={!future.length}
+              disabled={!future.length || saveStatus === "conflict"}
               onClick={handleRedo}
               title="重做 (Ctrl+Y / Cmd+Shift+Z)"
             >
@@ -2442,7 +2453,14 @@ export default function TopologyWorkspace({
             onSelectCanvasItem={(itemId) => setSelectedElement({ type: "canvas_item", itemId })}
             onSelectLink={(linkId) => setSelectedElement({ type: "link", linkId })}
             onClearSelection={() => { setSelectedElement(null); setIsInspectorOpen(false); }}
-            onSelectionChange={setCanvasSelectedElementIds}
+            onSelectionChange={(ids) => {
+              setCanvasSelectedElementIds(ids);
+              if (ids.length === 1) {
+                const id = ids[0];
+                if (id.startsWith("canvas-")) setSelectedElement({ type: "canvas_item", itemId: id.slice(7) });
+                else setSelectedElement({ type: "node", nodeId: id });
+              } else if (!ids.length) setSelectedElement(null);
+            }}
             onMoveElements={handleNetOpsMove}
             onConnect={(source, target) => { openLinkComposer(source, target); setCanvasMode("select"); }}
             onDropDevice={handleNetOpsDrop}

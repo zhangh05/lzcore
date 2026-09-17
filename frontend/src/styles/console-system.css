@@ -383,7 +383,7 @@ select.input:focus-visible {
 .data-center .data-archive-row:hover { background: var(--console-action-soft); }
 .data-center .data-detail-section { border-bottom-color: var(--console-border-soft); }
 .data-center .data-relation-card { border-color: var(--console-border-soft); border-radius: var(--r-4); box-shadow: none; }
-.data-center .data-compact-empty,
+.data-center .data-compact-empty { border-color: var(--console-border-soft); border-radius: var(--r-6); background: var(--console-muted); }
 
 .knowledge-library .page-header { align-items: flex-start; }
 .knowledge-library .page-body { display: grid; gap: 0; }

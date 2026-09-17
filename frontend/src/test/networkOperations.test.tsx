@@ -211,7 +211,7 @@ test("dedicated topology route keeps the canvas primary and exposes the device p
   expect(screen.getByTestId("palette-dev-d1")).toBeInTheDocument();
   expect(within(screen.getByTestId("palette-dev-d1")).getByText("已在画布 · 可再添加")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText("单击选择对象，拖动对象移动位置，拖动空白平移画布；Shift + 拖框多选")).toBeInTheDocument();
+  expect(screen.getByText("单击选择，Ctrl/⌘ + 单击加选，拖空白平移；Shift 或 Ctrl/⌘ + 拖框多选")).toBeInTheDocument();
   // There is no separate layout mode: objects are draggable in select mode, so a
   // second mode that behaved identically would only be a redundant control.
   expect(screen.queryByRole("button", { name: "移动布局" })).not.toBeInTheDocument();
@@ -279,6 +279,11 @@ test("edits made while a conflict is deferred are included in its eventual merge
 
   const firstDialog = await screen.findByRole("dialog", { name: "编辑冲突" }, { timeout: 4000 });
   fireEvent.click(within(firstDialog).getByRole("button", { name: "稍后处理" }));
+  // Undo must not reset conflict to unsaved and silently overwrite the server
+  // against the version read by the conflict resolver.
+  expect(screen.getByRole("button", { name: "撤销" })).toBeDisabled();
+  fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+  expect(screen.getByRole("button", { name: "有冲突待处理" })).toBeInTheDocument();
   fireEvent.click(screen.getByText("更多"));
   fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
   fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "我在冲突期间补充的名字" } });
@@ -289,6 +294,37 @@ test("edits made while a conflict is deferred are included in its eventual merge
 
   await waitFor(() => expect(putPayloads).toHaveLength(2), { timeout: 4000 });
   expect(putPayloads[1]).toMatchObject({ version: 7, name: "我在冲突期间补充的名字", description: "对方补充的说明", nodes: [] });
+});
+
+test("edits made while the conflict snapshot loads survive resolution", async () => {
+  const theirs = { ...sampleTopology, description: "远端说明", version: 7 };
+  let releaseSnapshot!: (value: unknown) => void;
+  const snapshot = new Promise((resolve) => { releaseSnapshot = resolve; });
+  const putPayloads: Array<Record<string, unknown>> = [];
+  const passthrough = vi.mocked(apiRequest).getMockImplementation()!;
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.method === "PUT") {
+      putPayloads.push((request.data || {}) as Record<string, unknown>);
+      if (putPayloads.length === 1) throw new Error("topology_version_conflict");
+      return { topology: { ...theirs, ...request.data, version: 8 } } as never;
+    }
+    if (request.url?.endsWith("/topologies/t1")) return await snapshot as never;
+    return passthrough(request);
+  });
+  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
+  fireEvent.click(screen.getByRole("button", { name: "从拓扑中移除节点" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
+  await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({ method: "GET", url: "/extensions/network.operations/topologies/t1" })), { timeout: 3000 });
+  fireEvent.click(screen.getByText("更多"));
+  fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
+  fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "等待期间修改" } });
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "保存" }));
+  releaseSnapshot({ topology: theirs });
+  const dialog = await screen.findByRole("dialog", { name: "编辑冲突" });
+  fireEvent.click(within(dialog).getByRole("button", { name: "合并双方改动并保存" }));
+  await waitFor(() => expect(putPayloads).toHaveLength(2), { timeout: 3000 });
+  expect(putPayloads[1]).toMatchObject({ name: "等待期间修改", description: "远端说明", nodes: [], version: 7 });
 });
 
 test("a field both sides changed is listed for review, not decided silently", async () => {

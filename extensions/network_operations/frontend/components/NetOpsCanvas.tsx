@@ -508,7 +508,12 @@ export default function NetOpsCanvas(props: Props) {
         }
         if (event.target.isEdge?.()) {
           const id = event.target.id?.();
-          if (id) current.onSelectLink(id);
+          if (id) {
+            cy.elements().unselect();
+            cy.getElementById(id).select();
+            current.onSelectionChange([]);
+            current.onSelectLink(id);
+          }
           current.onDisarmNodeType();
           return;
         }

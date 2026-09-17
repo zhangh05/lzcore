@@ -1,8 +1,30 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Button, DataTable, ModalShell } from "../components/ui";
+import { Button, DataTable, ModalShell, SegmentedControl } from "../components/ui";
 
 describe("shared UI accessibility contracts", () => {
+  it("moves radio focus and selection with arrows while retaining one tab stop", () => {
+    function Choices() {
+      const [value, setValue] = useState("one");
+      return <SegmentedControl ariaLabel="范围" value={value} onChange={setValue}
+        options={[{ value: "one", label: "一" }, { value: "two", label: "二" }, { value: "three", label: "三" }]} />;
+    }
+    render(<Choices />);
+    const radios = screen.getAllByRole("radio");
+    radios[0].focus();
+    fireEvent.keyDown(radios[0], { key: "ArrowLeft" });
+    expect(radios[2]).toHaveFocus();
+    expect(radios[2]).toHaveAttribute("aria-checked", "true");
+    expect(radios.map((radio) => radio.tabIndex)).toEqual([-1, -1, 0]);
+    fireEvent.keyDown(radios[2], { key: "Home" });
+    expect(radios[0]).toHaveFocus();
+    fireEvent.keyDown(radios[0], { key: "ArrowDown" });
+    expect(radios[1]).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(radios[1], { key: "End" });
+    expect(radios[2]).toHaveFocus();
+  });
+
   it("lets keyboard users activate an interactive data row", () => {
     type Row = { id: string; name: string };
     const onRowClick = vi.fn();
