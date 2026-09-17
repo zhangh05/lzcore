@@ -1034,9 +1034,16 @@ export default function TopologyWorkspace({
    * whereas the cost of a mandatory dialog is that you cannot see the topology
    * you are building. Renaming and linking a registered asset both live in the
    * node inspector, which opens on placement.
+   *
+   * Snapping to the grid happens here rather than on the way in, because the
+   * grid belongs to the drawing and not to a particular gesture. It used to sit
+   * on the drag-and-drop path only, so dragging a type snapped to the grid while
+   * clicking the sheet did not — the same action landing two different ways,
+   * with the grid visibly on.
    */
   const placeDrawingNode = useCallback((deviceType: string, position: { x: number; y: number }) => {
     if (!activeTopology) return;
+    const snap = (value: number) => gridEnabled ? Math.round(value / 32) * 32 : Math.round(value);
     const label = DRAWING_DEVICE_TYPES.find((type) => type.value === deviceType)?.label || "图纸设备";
     // Highest existing index + 1, so deleting 路由器2 and adding another does
     // not produce a second 路由器2.
@@ -1054,15 +1061,15 @@ export default function TopologyWorkspace({
       node_id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       device_type: deviceType,
       display_name: `${label}${index}`,
-      x: Math.round(position.x),
-      y: Math.round(position.y),
+      x: snap(position.x),
+      y: snap(position.y),
     };
     pushState({ ...activeTopology, nodes: [...activeTopology.nodes, node] });
     setSelectedElement({ type: "node", nodeId: node.node_id });
     setIsInspectorOpen(true);
     setArmedNodeType(null);
     setNotice(`已放入“${node.display_name}”。右侧可改名，或关联一台已登记设备。`);
-  }, [activeTopology, pushState, setNotice]);
+  }, [activeTopology, gridEnabled, pushState, setNotice]);
 
   const disarmNodeType = useCallback(() => setArmedNodeType(null), []);
 

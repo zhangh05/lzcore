@@ -982,7 +982,12 @@ export default function NetOpsCanvas(props: Props) {
     const y = (local.y - pan.y) / zoom;
     const snap = (value: number) => props.gridEnabled ? Math.round(value / 32) * 32 : Math.round(value);
     if (nodeType) {
-      props.onPlaceNodeType(nodeType, { x: snap(x), y: snap(y) });
+      // No snapping here: the grid is a property of the drawing, so it belongs
+      // to the placement itself rather than to one of the two ways of asking
+      // for it. Snapping only on the drop path meant a dragged type landed on
+      // the grid while a clicked one did not — measured, (-416,352) against
+      // (-184,-8) for the same action on the same sheet.
+      props.onPlaceNodeType(nodeType, { x, y });
       return;
     }
     props.onDropDevice(deviceId, { x: snap(x), y: snap(y) });
