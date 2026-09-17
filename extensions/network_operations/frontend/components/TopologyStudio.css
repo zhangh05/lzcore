@@ -104,6 +104,12 @@
    canvas, and swallowing a press on a device is what used to make Shift + click
    clear the selection instead of adding to it. */
 .topology-studio .netops-canvas-wrap.marquee-armed .netops-cytoscape { cursor: crosshair; }
+/* A picked palette type leaves the canvas waiting for a click. The cursor and
+   the banner are the only signals of that state, so neither is decoration.
+   Sits below the marquee banner so that holding Shift while armed — which is
+   legal — shows both instead of stacking them on one line. */
+.topology-studio .netops-canvas-wrap.placing-armed .netops-cytoscape { cursor: copy; }
+.topology-studio .netops-placing-hint { position: absolute; top: 34px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 9px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-size: 10px; white-space: nowrap; pointer-events: none; }
 .topology-studio .netops-canvas-wrap.marquee-armed::after { content: "按住 Shift 拖框多选"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 9px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-size: 10px; pointer-events: none; }
 .topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid var(--accent); background: rgb(22 131 123 / 14%); }
 .topology-studio .netops-link-preview { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }

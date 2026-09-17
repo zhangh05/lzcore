@@ -78,6 +78,15 @@ type Props = {
   onMoveElements: (positions: Position[]) => void;
   onConnect: (sourceId: string, targetId: string) => void;
   onDropDevice: (deviceId: string, position: { x: number; y: number }) => void;
+  /**
+   * A drawing-device type picked in the palette and not yet placed. While it is
+   * set the canvas is waiting for a click on empty sheet, the way eNSP and HCL
+   * behave after you choose a model.
+   */
+  armedNodeType?: string | null;
+  onPlaceNodeType: (deviceType: string, position: { x: number; y: number }) => void;
+  /** Called when the user gives up on placing (Esc, or a click on a device). */
+  onDisarmNodeType: () => void;
   /** Handed to the workspace once the renderer exists, null when it is gone. */
   onReady?: (api: CanvasApi | null) => void;
   onContextMenu?: (target: CanvasContextTarget) => void;
@@ -146,7 +155,7 @@ type CyElement = {
 };
 type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean; grabbed: () => boolean; width: () => number; height: () => number };
 type CyStyleChain = { selector: (selector: string) => { style: (style: Record<string, unknown>) => CyStyleChain }; update: () => void };
-type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void }; originalEvent?: MouseEvent };
+type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void }; originalEvent?: MouseEvent; position?: { x: number; y: number }; renderedPosition?: { x: number; y: number } };
 
 declare global {
   interface Window {
@@ -423,6 +432,10 @@ export default function NetOpsCanvas(props: Props) {
           const id = event.target.id?.() || "";
           if (!id) return;
           if (id.startsWith("group-")) return;
+          // Clicking an object is a decision about that object, not a
+          // placement; it ends the palette's wait rather than dropping a
+          // device on top of what was just clicked.
+          current.onDisarmNodeType();
           if (id.startsWith("canvas-")) {
             if (current.mode !== "connect") {
               const next = nextSelectionFor(id);
@@ -462,11 +475,33 @@ export default function NetOpsCanvas(props: Props) {
         if (event.target.isEdge?.()) {
           const id = event.target.id?.();
           if (id) current.onSelectLink(id);
+          current.onDisarmNodeType();
           return;
         }
         connectingFromRef.current = null;
         // The release of our own marquee is not an intent to clear selection.
         if (ignoreBoxSelectionTapRef.current) return;
+        // A picked palette type turns the next empty-sheet click into a
+        // placement, the way eNSP and HCL behave after you choose a model.
+        // Cytoscape reports the tap's own model position, which is what the
+        // node should land on; the client-coordinate fallback exists only
+        // because the field is not guaranteed on every event flavour.
+        if (current.armedNodeType) {
+          const point = event.position || (() => {
+            const native = event.originalEvent;
+            const host = hostRef.current;
+            if (!native || !host) return null;
+            const rect = host.getBoundingClientRect();
+            const pan = cy.pan();
+            const zoom = cy.zoom();
+            return {
+              x: (native.clientX - rect.left - pan.x) / zoom,
+              y: (native.clientY - rect.top - pan.y) / zoom,
+            };
+          })();
+          if (point) current.onPlaceNodeType(current.armedNodeType, point);
+          return;
+        }
         cy.elements().unselect();
         current.onClearSelection();
       });
@@ -899,16 +934,26 @@ export default function NetOpsCanvas(props: Props) {
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const deviceId = event.dataTransfer.getData("application/x-lzcore-device-id") || event.dataTransfer.getData("text/plain");
+    // Two payloads arrive here. A registered device is an existing asset and
+    // becomes a node linked to it; a palette type is a shape to create. They
+    // are told apart by MIME type rather than by value, because a device may
+    // legitimately be named after its type.
+    const nodeType = event.dataTransfer.getData("application/x-lzcore-node-type");
+    const deviceId = event.dataTransfer.getData("application/x-lzcore-device-id")
+      || (nodeType ? "" : event.dataTransfer.getData("text/plain"));
     const cy = cyRef.current;
     const host = hostRef.current;
-    if (!deviceId || !cy || !host) return;
+    if ((!deviceId && !nodeType) || !cy || !host) return;
     const rect = host.getBoundingClientRect();
     const pan = cy.pan();
     const zoom = cy.zoom();
     const x = (event.clientX - rect.left - pan.x) / zoom;
     const y = (event.clientY - rect.top - pan.y) / zoom;
     const snap = (value: number) => props.gridEnabled ? Math.round(value / 32) * 32 : Math.round(value);
+    if (nodeType) {
+      props.onPlaceNodeType(nodeType, { x: snap(x), y: snap(y) });
+      return;
+    }
     props.onDropDevice(deviceId, { x: snap(x), y: snap(y) });
   };
 
@@ -1162,8 +1207,13 @@ export default function NetOpsCanvas(props: Props) {
     };
   }, [marqueeDrag]);
 
-  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: "0 0" } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
+  // A picked palette type waits for a click. The cursor and the banner are the
+  // only things telling the user the canvas is in that state, so they are not
+  // optional decoration.
+  const placing = props.mode === "select" && !!props.armedNodeType;
+  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: "0 0" } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
+    {placing && <div className="netops-placing-hint" aria-live="polite">在空白处单击放置设备 · Esc 取消</div>}
     {marquee && <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     {linkPreview && (
       <svg className="netops-link-preview" aria-hidden="true">

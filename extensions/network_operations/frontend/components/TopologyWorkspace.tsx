@@ -188,6 +188,28 @@ const base = "/extensions/network.operations";
  */
 const NO_DIM: string[] = [];
 
+/**
+ * The drawing-device palette.
+ *
+ * eNSP and HCL both put a *type* palette down the left side, so adding a device
+ * is "pick the model, click the canvas" — two gestures and no dialog. This
+ * canvas only had the registered-device list (pick an asset, drag it) plus a
+ * modal for drawing-only nodes, so putting a firewall on the sheet meant
+ * opening a form and typing a name before you could see anything at all.
+ *
+ * These are the same six types the modal offers. The modal stays for the case
+ * where the name matters up front; the palette is for sketching a topology,
+ * which is when the name does not.
+ */
+const DRAWING_DEVICE_TYPES = [
+  { value: "router", label: "路由器" },
+  { value: "switch", label: "交换机" },
+  { value: "firewall", label: "防火墙" },
+  { value: "server", label: "服务器" },
+  { value: "cloud", label: "云 / Internet" },
+  { value: "wireless", label: "无线 AP" },
+] as const;
+
 /** A neighbour seen on the wire that is not on the drawing yet. */
 type DiscoveryCandidate = {
   source_node_id: string;
@@ -506,6 +528,15 @@ export default function TopologyWorkspace({
   const [showManualNodeModal, setShowManualNodeModal] = useState(false);
   const [manualNodeName, setManualNodeName] = useState("");
   const [manualNodeType, setManualNodeType] = useState("switch");
+  /**
+   * A drawing-device type the user has picked and not yet placed.
+   *
+   * The palette is modal in the way eNSP and HCL are: choosing a type arms the
+   * canvas, and the next click on empty sheet puts the device down. Holding it
+   * as state rather than as a one-shot event is what lets the canvas show that
+   * it is waiting for a click.
+   */
+  const [armedNodeType, setArmedNodeType] = useState<string | null>(null);
 
   // Revision history: structural snapshots, never layout-only saves.
   const [showRevisions, setShowRevisions] = useState(false);
@@ -994,6 +1025,47 @@ export default function TopologyWorkspace({
     setNotice(`已在画布创建图纸设备“${name}”。可随时在节点详情中关联登记设备。`);
   }, [activeTopology, manualNodeName, manualNodeType, pushState, setNotice]);
 
+  /**
+   * Put a drawing device down at a point the user chose.
+   *
+   * The name is generated rather than asked for. In eNSP and HCL a freshly
+   * dropped router is `Router1` and stays that way until you rename it, which
+   * is the right default for sketching: the cost of a wrong name is one edit,
+   * whereas the cost of a mandatory dialog is that you cannot see the topology
+   * you are building. Renaming and linking a registered asset both live in the
+   * node inspector, which opens on placement.
+   */
+  const placeDrawingNode = useCallback((deviceType: string, position: { x: number; y: number }) => {
+    if (!activeTopology) return;
+    const label = DRAWING_DEVICE_TYPES.find((type) => type.value === deviceType)?.label || "图纸设备";
+    // Highest existing index + 1, so deleting 路由器2 and adding another does
+    // not produce a second 路由器2.
+    const taken = new Set(
+      activeTopology.nodes
+        .map((node) => node.display_name || "")
+        .filter((name) => name.startsWith(label))
+        .map((name) => Number.parseInt(name.slice(label.length), 10))
+        .filter((index) => Number.isFinite(index)),
+    );
+    let index = 1;
+    while (taken.has(index)) index += 1;
+
+    const node: TopologyNode = {
+      node_id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      device_type: deviceType,
+      display_name: `${label}${index}`,
+      x: Math.round(position.x),
+      y: Math.round(position.y),
+    };
+    pushState({ ...activeTopology, nodes: [...activeTopology.nodes, node] });
+    setSelectedElement({ type: "node", nodeId: node.node_id });
+    setIsInspectorOpen(true);
+    setArmedNodeType(null);
+    setNotice(`已放入“${node.display_name}”。右侧可改名，或关联一台已登记设备。`);
+  }, [activeTopology, pushState, setNotice]);
+
+  const disarmNodeType = useCallback(() => setArmedNodeType(null), []);
+
   const handleAddCanvasItem = useCallback((kind: TopologyCanvasItem["kind"]) => {
     if (!activeTopology) return;
     const itemCount = (activeTopology.canvas_items || []).length;
@@ -1017,10 +1089,25 @@ export default function TopologyWorkspace({
     setNotice(kind === "text" ? "已添加文本框，可在右侧编辑内容并拖动定位" : "已添加图纸形状，可在右侧编辑说明并拖动定位");
   }, [activeTopology, pushState, setNotice]);
 
-  const handlePaletteDragStart = useCallback((event: DragEvent<HTMLDivElement>, deviceId: string) => {
+  const handlePaletteDragStart = useCallback((event: DragEvent<HTMLElement>, deviceId: string) => {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-lzcore-device-id", deviceId);
     event.dataTransfer.setData("text/plain", deviceId);
+  }, []);
+
+  /**
+   * Dragging a *type* onto the canvas carries its own MIME type.
+   *
+   * The registered-device list already claims `application/x-lzcore-device-id`,
+   * and the two payloads mean different things — an existing asset versus a
+   * shape to create — so the canvas has to be able to tell them apart. Sharing
+   * one type would have made a dropped 路由器 indistinguishable from a dropped
+   * device called 路由器.
+   */
+  const handleTypeDragStart = useCallback((event: DragEvent<HTMLElement>, deviceType: string) => {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("application/x-lzcore-node-type", deviceType);
+    event.dataTransfer.setData("text/plain", deviceType);
   }, []);
 
   const handleNetOpsDrop = useCallback((deviceId: string, position: { x: number; y: number }) => {
@@ -1404,6 +1491,9 @@ export default function TopologyWorkspace({
           setContextMenu(null);
           setShowShortcutHelp(false);
           setFocusMode(false);
+          // Escape is also how a user abandons a palette placement without
+          // putting anything down.
+          setArmedNodeType(null);
           return;
         case "Delete":
         case "Backspace": {
@@ -1898,6 +1988,44 @@ export default function TopologyWorkspace({
           </div>
         </div>
 
+        {/* Drawing-device palette. Type first, asset second: eNSP and HCL both
+            lead with the model palette, because sketching a topology starts
+            from "a firewall goes here", not from "which firewall is it". */}
+        <div className="topology-sidebar-section palette-type-section">
+          <div className="section-title-row">
+            <span className="section-title">图纸设备</span>
+            <small className="section-subtitle">{armedNodeType ? "已选中 · 待放置" : "点选后在画布单击"}</small>
+          </div>
+          <div className="palette-type-grid">
+            {DRAWING_DEVICE_TYPES.map((type) => (
+              <button
+                key={type.value}
+                type="button"
+                className={`palette-type-item ${armedNodeType === type.value ? "is-armed" : ""}`}
+                data-testid={`palette-type-${type.value}`}
+                aria-pressed={armedNodeType === type.value}
+                draggable
+                onDragStart={(event) => handleTypeDragStart(event, type.value)}
+                onClick={() => {
+                  setCanvasMode("select");
+                  setArmedNodeType((current) => (current === type.value ? null : type.value));
+                }}
+                title={`${type.label}：点选后在画布空白处单击放置，或直接拖到画布上`}
+              >
+                <DeviceTypeIcon deviceType={type.value} size={16} />
+                <span>{type.label}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="palette-type-more"
+            onClick={() => { setManualNodeName(""); setManualNodeType("switch"); setShowManualNodeModal(true); }}
+          >
+            需要先定名称？新建图纸设备…
+          </button>
+        </div>
+
         {/* Device Palette */}
         <div className="topology-sidebar-section palette-device-section">
           <div className="section-title-row">
@@ -2311,6 +2439,9 @@ export default function TopologyWorkspace({
             onMoveElements={handleNetOpsMove}
             onConnect={(source, target) => { openLinkComposer(source, target); setCanvasMode("select"); }}
             onDropDevice={handleNetOpsDrop}
+            armedNodeType={armedNodeType}
+            onPlaceNodeType={placeDrawingNode}
+            onDisarmNodeType={disarmNodeType}
             onReady={(api) => { canvasApiRef.current = api; }}
             onContextMenu={setContextMenu}
             nodeStatus={nodeStatus}
