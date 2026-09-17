@@ -42,11 +42,47 @@ Usage:
   python interface_label_probe.py
 """
 
+import json
 import sys
+import urllib.request
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://127.0.0.1:5273"
+API = "http://127.0.0.1:8011/api/extensions/network.operations"
+TOPO = "topo_894e4566e217"
+
+# The drag below is a *real* drag, so it commits and persists. Without putting
+# the node back this probe silently walks the user's drawing across the sheet,
+# one run at a time — and the damage is not obvious from the probe's own output,
+# which reports only that the labels survived. It was found by reading the
+# topology file, not by reading this script.
+NODE_POSITIONS = """
+() => window.__cy.nodes()
+  .filter(n => !n.id().startsWith('group-') && !n.id().startsWith('canvas-'))
+  .map(n => ({ node_id: n.id(), x: n.position().x, y: n.position().y }))
+"""
+
+
+def read_topology():
+    return json.load(urllib.request.urlopen(
+        f"{API}/topologies/{TOPO}?workspace_id=default", timeout=5))["topology"]
+
+
+def write_topology(t):
+    """Put the nodes back through the product's own endpoint.
+
+    Not a hand-edit of the JSON file: the app owns a version counter and a
+    revision history, and writing the file directly desynchronises both. This
+    is the same PUT the canvas itself issues, including the optimistic-lock
+    `version` field.
+    """
+    body = {"workspace_id": "default", "name": t["name"], "description": t.get("description", ""),
+            "version": t["version"], "nodes": t["nodes"], "links": t["links"],
+            "groups": t.get("groups", []), "canvas_items": t.get("canvas_items", [])}
+    req = urllib.request.Request(f"{API}/topologies/{TOPO}", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"}, method="PUT")
+    return json.load(urllib.request.urlopen(req, timeout=10))
 
 READ = """
 () => {
@@ -93,6 +129,10 @@ def label_state(page):
 
 def main() -> int:
     rows = []
+    # Set before the drag. If the probe dies earlier there is nothing to undo,
+    # and an empty list says that rather than raising a NameError over the top
+    # of the real failure.
+    arrival = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1400, "height": 900})
@@ -116,7 +156,13 @@ def main() -> int:
         page.wait_for_timeout(20000)
         check("静置 20 秒（跨两次状态轮询）")
 
-        # 2. a real drag: commit + reload
+        # 2. a real drag: commit + reload.
+        #
+        #    The position is captured first and written back at the end. A real
+        #    drag persists, so without this the probe moves the user's drawing a
+        #    little on every run — measured: AR1 walked from (292,503) to
+        #    (362,542) over a handful of runs, and nothing in the output said so.
+        arrival = page.evaluate(NODE_POSITIONS)
         start = page.evaluate(WHERE)
         page.mouse.move(start["x"], start["y"])
         page.wait_for_timeout(120)
@@ -170,6 +216,25 @@ def main() -> int:
               f"text-opacity {before['shown']} → {after['shown']}")
 
         browser.close()
+
+    # Put the dragged node back. Done after the browser closes because the
+    # canvas would otherwise reconcile against a topology it did not write and
+    # fight the restore.
+    current = read_topology()
+    by_id = {n["node_id"]: n for n in arrival}
+    moved = []
+    for node in current["nodes"]:
+        was = by_id.get(node["node_id"])
+        if was and (node.get("x") != was["x"] or node.get("y") != was["y"]):
+            moved.append((node.get("display_name"),
+                          (node.get("x"), node.get("y")), (was["x"], was["y"])))
+            node["x"], node["y"] = was["x"], was["y"]
+    if moved:
+        write_topology(current)
+        for name, now, back in moved:
+            print(f"  ----  复原 {name}: {now} → {back}")
+    else:
+        print("  ----  拖动未落盘，无需复原")
 
     bad = [r for r in rows if not r[1]]
     print(f"\n{len(rows)} 项断言，{len(bad)} 项失败")
