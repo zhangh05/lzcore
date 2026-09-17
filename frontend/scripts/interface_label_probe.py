@@ -48,22 +48,18 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
+from probe_journal import ProbeJournal
+
 BASE = "http://127.0.0.1:5273"
 API = "http://127.0.0.1:8011/api/extensions/network.operations"
 TOPO = "topo_894e4566e217"
 
-# The drag below is a *real* drag, so it commits and persists. Without putting
-# the node back this probe silently walks the user's drawing across the sheet,
-# one run at a time — and the damage is not obvious from the probe's own output,
-# which reports only that the labels survived. It was found by reading the
-# topology file, not by reading this script.
-NODE_POSITIONS = """
-() => window.__cy.nodes()
-  .filter(n => !n.id().startsWith('group-') && !n.id().startsWith('canvas-'))
-  .map(n => ({ node_id: n.id(), x: n.position().x, y: n.position().y }))
-"""
-
-
+# The drag below is a *real* drag, so it commits and persists. Putting the node
+# back only on the way out is not enough: a killed run never gets there, and
+# then the next run reads the drifted value as the original and preserves it.
+# Measured — AR1 was left at (362,542) instead of (292,503) by exactly that
+# sequence. The journal makes the restore happen on the way *in* as well.
+journal = ProbeJournal("interface_label_probe")
 def read_topology():
     return json.load(urllib.request.urlopen(
         f"{API}/topologies/{TOPO}?workspace_id=default", timeout=5))["topology"]
@@ -131,10 +127,16 @@ def label_state(page):
 
 def main() -> int:
     rows = []
-    # Set before the drag. If the probe dies earlier there is nothing to undo,
-    # and an empty list says that rather than raising a NameError over the top
-    # of the real failure.
-    arrival = []
+
+    # Undo whatever a previous run left behind, *before* touching anything.
+    # This is the part that survives a kill: the previous run may have died
+    # between the drag and its own restore, and only a check on the way in can
+    # catch that. Doing it first also means the run starts from the true
+    # original, so it cannot record a drifted value as "before".
+    stale = journal.repair(read_topology, write_topology, TOPO)
+    for name, now, back in stale:
+        print(f"  !!!!  上次运行被中断，先复原 {name}: {now} → {back}")
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1400, "height": 900})
@@ -160,11 +162,12 @@ def main() -> int:
 
         # 2. a real drag: commit + reload.
         #
-        #    The position is captured first and written back at the end. A real
-        #    drag persists, so without this the probe moves the user's drawing a
-        #    little on every run — measured: AR1 walked from (292,503) to
-        #    (362,542) over a handful of runs, and nothing in the output said so.
-        arrival = page.evaluate(NODE_POSITIONS)
+        #    The positions go to the journal *before* the drag, not after it.
+        #    A real drag persists, so without this the probe moves the user's
+        #    drawing — measured: AR1 walked from (292,503) to (362,542), and
+        #    nothing in the output said so. Recording beforehand is what makes
+        #    the restore survive the process being killed mid-drag.
+        journal.record(read_topology(), TOPO)
         start = page.evaluate(WHERE)
         page.mouse.move(start["x"], start["y"])
         page.wait_for_timeout(120)
@@ -221,18 +224,10 @@ def main() -> int:
 
     # Put the dragged node back. Done after the browser closes because the
     # canvas would otherwise reconcile against a topology it did not write and
-    # fight the restore.
-    current = read_topology()
-    by_id = {n["node_id"]: n for n in arrival}
-    moved = []
-    for node in current["nodes"]:
-        was = by_id.get(node["node_id"])
-        if was and (node.get("x") != was["x"] or node.get("y") != was["y"]):
-            moved.append((node.get("display_name"),
-                          (node.get("x"), node.get("y")), (was["x"], was["y"])))
-            node["x"], node["y"] = was["x"], was["y"]
+    # fight the restore. The journal is cleared by `repair`, so a normal run
+    # leaves nothing behind for the next one to undo.
+    moved = journal.repair(read_topology, write_topology, TOPO)
     if moved:
-        write_topology(current)
         for name, now, back in moved:
             print(f"  ----  复原 {name}: {now} → {back}")
     else:

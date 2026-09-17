@@ -50,3 +50,7 @@ reports/tool_catalog.json
 ._*
 .playwright-cli/
 .graph/events.jsonl
+
+# Probe write-ahead journals: written before a probe moves the drawing and
+# removed once it is put back, so one only exists if a run was killed.
+frontend/scripts/.probe-journal-*.json
