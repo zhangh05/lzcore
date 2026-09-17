@@ -227,6 +227,28 @@
   background: var(--surface-hover);
 }
 
+/* Moved here from global.css. These are the avatar's own colours, so they
+   belong in the sheet that owns the avatar rather than in the foundation sheet,
+   where they only won on a (0-2-0) selector. The `.agent` colour is not carried
+   over: the rule above already decides it, and the copy in global.css had been
+   losing to this one for as long as both existed. */
+.message-avatar.user {
+  color: var(--accent-2);
+  background: rgba(227, 238, 246, 0.9);
+  border-color: rgba(128, 186, 220, 0.42);
+}
+
+[data-theme="dark"] .message-avatar,
+[data-theme="dark"] .message-avatar.agent {
+  background: rgba(20, 27, 36, 0.72);
+  border-color: rgba(56, 72, 90, 0.62);
+}
+
+[data-theme="dark"] .message-avatar.user {
+  background: rgba(128, 186, 220, 0.16);
+  border-color: rgba(128, 186, 220, 0.32);
+}
+
 /* An answer is a report, not a chat bubble: no tint, no radius, no box. Its
    hierarchy comes from the rule above it, its own typography, and the space
    between blocks — the way a technical notebook reads. */

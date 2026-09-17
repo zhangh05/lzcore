@@ -3018,27 +3018,13 @@ details.collapse[open] summary::before {
   font-weight: 760;
 }
 
-.message-avatar.user {
-  color: var(--accent-2);
-  background: rgba(227, 238, 246, 0.9);
-  border-color: rgba(128, 186, 220, 0.42);
-}
-
-.message-avatar.agent {
-  color: var(--accent-2);
-  background: rgba(255, 255, 255, 0.72);
-}
-
-[data-theme="dark"] .message-avatar,
-[data-theme="dark"] .message-avatar.agent {
-  background: rgba(20, 27, 36, 0.72);
-  border-color: rgba(56, 72, 90, 0.62);
-}
-
-[data-theme="dark"] .message-avatar.user {
-  background: rgba(128, 186, 220, 0.16);
-  border-color: rgba(128, 186, 220, 0.32);
-}
+/* `.message-avatar.user`, `.message-avatar.agent` and the dark-theme variants
+   moved to AgentWorkbench.css. The avatar is used by exactly one component
+   (AgentWorkbench/components/MessageRow.tsx), so the sheet that owns the
+   component should own its colours. Here they only worked because a (0-2-0)
+   selector beat the component's (0-1-0) one on specificity; under a cascade
+   layer the component's own layer would win and the user bubble would lose its
+   tint. The base `.message-avatar` box stays here — nothing overrides it. */
 
 .chat-bubble,
 .chat-bubble.user {
