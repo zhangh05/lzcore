@@ -14,6 +14,10 @@ import "./styles/product-shell.css";
 import "./styles/console-system.css";
 import "./pages/AgentWorkbench/AgentWorkbench.css";
 import "./styles/typography.css";
+// Narrow-width adaptations last: they must outrank the unconditional rules they
+// refine, and a declared layer is what makes that true regardless of import
+// order. See styles/responsive.css.
+import "./styles/responsive.css";
 
 // Theme initialization — read from Zustand persist store (lzcore_ui) or
 // fall back to prefers-color-scheme. We do this BEFORE React mounts so

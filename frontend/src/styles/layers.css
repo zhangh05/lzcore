@@ -13,6 +13,9 @@
  *   1. product    the product's own stylesheets (global, shell, console,
  *                 typography, workbench, shared component styles)
  *   2. extension  extension pages
+ *   3. responsive narrow-width adaptations, which must outrank the
+ *                 unconditional rules they refine — see responsive.css for why
+ *                 they cannot simply live in the sheet that owns the concern
  *
  * Why `product` is still one layer rather than one layer per stylesheet:
  * a layer beats specificity, but the previous cascade resolved conflicts by
@@ -34,4 +37,4 @@
  *     a layer silently wins over all of these. Keep every sheet layered.
  *   - Extension styles must stay scoped to the extension's own root class.
  */
-@layer product, extension;
+@layer product, extension, responsive;

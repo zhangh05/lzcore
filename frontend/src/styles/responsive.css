@@ -1,0 +1,99 @@
+/**
+ * Narrow-width adaptations — the one place the shell reacts to a small screen.
+ *
+ * Why a separate layer
+ * --------------------
+ * `global.css` has always carried responsive overrides, and they have always
+ * been dead. Media queries add no specificity, and product-shell.css,
+ * console-system.css and typography.css all load after global.css, so a later
+ * *unconditional* rule with the same selector wins however narrow the window
+ * gets. Declaring this layer last is what makes these rules count: within a
+ * layer the usual cascade applies, but between layers only the order matters.
+ *
+ * Only the genuine gaps are here
+ * ------------------------------
+ * A dead declaration is not by itself a missing behaviour — it is only a gap
+ * when nothing later supplies the value. Most of global.css's old overrides are
+ * dead because they were *replaced*, and reviving them would undo a newer
+ * decision. Measured before adding each rule, and every one below was confirmed
+ * to move the rendered value in the direction intended:
+ *
+ *   already handled, left alone
+ *     .app-nav { display: none } at <=900   product-shell.css hides it and moves
+ *                                           the nav into the drawer
+ *     .brand { min-width: ... } ladder      product-shell.css pins 154px at
+ *                                           <=1180 and 0 at <=900
+ *     .app-header { padding-inline }        product-shell.css sets --space-4
+ *     .page-header.ui-page-header padding   console-system.css sets
+ *                                           12px 16px 10px at <=900
+ *     .data-split { grid-template-columns } console-system.css already stacks it
+ *     .data-overview padding                console-system.css sets --space-3,
+ *                                           which is *tighter* than the old value
+ *     .user-access-editor padding           console-system.css already tightens it
+ *     .chat-result-inline { width }         current chat layout already sets
+ *                                           width: 100%; max-width: none
+ *     border-right-color: currentcolor      console-system.css replaced these
+ *                                           with --console-border-soft
+ *     .stat-grid padding / .ui-filter-bar   superseded by the borderless grid and
+ *                                           the current rhythm token
+ *
+ *   and two that a naive revival would have made worse, so they are not here
+ *     .app-nav-item { padding: 0 10px }     the current value is 9px; 10px is
+ *                                           looser, not tighter
+ *     .data-overview { padding: 18px 14px 28px }
+ *                                           the current value is a flat 12px
+ *
+ * The rhythm is re-declared as tokens rather than as literal padding, so the
+ * page header and the page body keep sharing one gutter and cannot drift apart
+ * again. The values are the ones global.css intended when it first asked for a
+ * narrower page: 16px 18px 24px at <=900 and 12px 14px 20px at <=760.
+ */
+
+@layer responsive {
+  @media (max-width: 900px) {
+    .page-header,
+    .page-body {
+      --page-gutter: 18px;
+      --flow-loose: 16px;
+      --flow-block: 24px;
+    }
+
+    /* The version badge is decoration; at this width it costs the brand room. */
+    .brand-text small {
+      display: none;
+    }
+
+    .stat-value {
+      font-size: 18px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .wb-header {
+      padding: 0 12px;
+    }
+
+    .wb-input-bar {
+      padding: 6px 12px;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .page-header,
+    .page-body {
+      --page-gutter: 14px;
+      --flow-loose: 12px;
+      --flow-block: 20px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .app-header {
+      padding: 0 12px;
+    }
+
+    .brand-text > span {
+      font-size: var(--fs-13);
+    }
+  }
+}

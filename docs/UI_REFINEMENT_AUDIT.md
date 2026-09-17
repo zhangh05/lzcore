@@ -434,7 +434,7 @@ toast 的墨色从基础规则**移到了变体上**：`kind` 被类型约束为
 
 ---
 
-## 十、响应式层被整体架空（未修，需设计判断）
+## 十、响应式层被整体架空（已修，见第十二节）
 
 `shadow_cssom.py`（**新增，已入库**）用浏览器 CSSOM 取代手写的 CSS 解析 ——
 手写版丢了 `@media` 嵌套，产出全是垃圾。CSSOM 直接给出准确顺序、准确选择器、
@@ -446,51 +446,58 @@ toast 的墨色从基础规则**移到了变体上**：`kind` 被类型约束为
 `typography.css` 都在 `global.css` **之后**加载，且其中的基础规则是**无条件**的。
 于是 global.css 里所有同选择器的响应式覆盖**全部失效**：
 
-- 响应式覆盖被后置无条件规则压掉：**29 处**
-- 其中取值确实不同（即重放后会真的改变渲染）：**25 处**
+- 响应式覆盖被后置无条件规则压掉：**82 条声明、31 个块**（订正，见下）
 - 另有「同特异性、无条件」的死声明：168 处（覆盖架构下的正常噪声，不在此列）
+
+**计数订正（2026-09-17）**：初版报「29 处 / 25 处」，两个数都错了。
+`shadow_values.py` 当时拿**整条选择器字符串**做比较，于是
+`.chat-bubble, .chat-bubble.user, .chat-result-inline { width: ... }` 这种分组规则
+永远匹配不上后面单独的 `.chat-result-inline { ... }`，藏在里面的死声明全部漏掉。
+按**选择器逐项拆分**后是 82 条 / 31 个块（多出的 23 条里有 `.app-nav` 的
+`display: none`、`.page-header` 的 `min-height`、`.ui-detail-panel` 的 padding 等）。
+这是当天第五次「度量方式会骗人」，这次是**比较的粒度太粗**。
+
+同时初版把「取值不同」直接写成「重放后会真的改变渲染」—— **这句是错的**，
+「死的」不等于「缺的」，订正见本节末。
 
 实测佐证：`.page-body` 的 padding 在 1200 / 1000 / 900 / 760 / 700 / 600px
 **始终是 `20px 24px 28px`**，而 ≤900px 本应是 `16px 18px 24px`、≤768px 本应是
 `12px 14px 20px`。
 
-### 影响评估（这是不改的理由）
+### 影响评估
 
 把矩阵扩展到 **768 / 640px** 重跑：**横向溢出 0、对比度问题 0、不可点击元素 0**。
-逐项量了实际值：
+global.css 想要的收紧确实没有发生（`.page-body` 各宽度恒为 `20px 24px 28px`），
+但**这不等于功能故障**：不溢出、点得到、看得清，差异是「该收紧的留白没收紧」，
+量级 2–10px。
 
-| 元素 | 现值（各宽度恒定） | 响应式本想给 | 差值 |
-|---|---|---|---|
-| `.page-body` | `20px 24px 28px` | ≤768px: `12px 14px 20px` | 左右各 10px |
-| `.page-header` | `12px 16px 10px` | ≤768px: `12px 14px` | 2px |
-| `.app-header` | `0px 16px` | ≤640px: `0px 12px` | 4px |
-| `.data-split` | `clamp(320px,31%,420px) minmax(0,1fr)` | ≤760px: `1fr`（堆叠） | 不堆叠 |
-
-**没有一处构成功能故障**：不溢出、点得到、看得清。差异是「该收紧的留白没收紧」，
-量级是 2–10px。
-
-### 为什么没有直接改
+### 为什么不能整体后置
 
 第一反应是「把响应式规则搬到最后加载」，甚至「开一个 `@layer responsive` 声明在最后」——
-**这两条都不对**，因为 blanket 提升会把**有意为之**的覆盖也一起翻过来：
-例如 `console-system.css` 无条件的 `.stat-grid { padding: 0 }` 是新版的刻意设计
+**整体后置不对**，因为 blanket 提升会把**有意为之**的覆盖也一起翻过来：
+`console-system.css` 无条件的 `.stat-grid { padding: 0 }` 是新版的刻意设计
 （无边框网格），而 global.css 响应式里 `.stat-grid { padding: 14px }` 是旧版遗留。
-一旦响应式层整体后置，这个意图就被反转了。
 
-所以这 25 处**必须逐条判断**，不能机械搬运：
+### 订正（2026-09-17）：多数不是「丢失」，而是「被替换」
 
-- 该修（留白收紧，意图明确）：`.page-body`、`.wb-header`、`.wb-input-bar`、
-  `.user-access-editor`、`.data-overview`、`.chat-result-inline` 宽度、
-  `.brand-text small` 隐藏、`.stat-value` 字号、`.message-row` gap
-- 有疑义（新版刻意设计，或旧值已不适用）：`.stat-grid`（新版 padding 应为 0）、
-  三处 `border-right-color: currentcolor`、`.ui-filter-bar`（8px vs 10px，差 2px）、
-  `.brand` 的 min-width 阶梯（≤640px 时侧栏是抽屉，未必可见）
+上面这版结论只做了一半功课 —— 它证明了「这些声明是死的」，
+却把「死的」直接当成了「缺的」。逐条量下来，绝大多数是**新版在别处重新实现了**：
 
-### 建议
+| 选择器 | global.css 想给 | 现在实际由谁负责 |
+|---|---|---|
+| `.app-nav` ≤900 | `display: none` | `product-shell.css` 同宽度也写了 `display: none`，**已生效** |
+| `.brand` min-width 阶梯 | 150 / 124 / 112px | `product-shell.css` ≤1180 定 154px、≤900 定 0 |
+| `.app-header` | `0 12px` | `product-shell.css` ≤1180 用 `--space-4` |
+| `.page-header.ui-page-header` | `16px 18px 12px` | `console-system.css` ≤900 定 `12px 16px 10px` |
+| `.data-split` ≤760 | `1fr` | `console-system.css` ≤900 已堆叠 |
+| `.data-overview` ≤760 | `18px 14px 28px` | `console-system.css` ≤760 定 `--space-3`（**比旧值更紧**） |
+| `.user-access-editor` ≤620 | `12px` | `console-system.css` 已收紧 |
+| `.chat-result-inline` | `width: 100%` | 现行聊天布局已是 `width: 100%; max-width: none` |
+| 三处 `border-right-color` | `currentcolor` | `console-system.css` 改用 `--console-border-soft` |
 
-若要动，最小改动是把这 25 处**逐条**搬进一个声明在最后的 `@layer responsive`，
-每搬一条都在 900 / 768 / 640 三个宽度上量一次。这比 per-file 拆层的价值大得多 ——
-**响应式被架空是真实存在的缺陷，而 per-file 拆层只是可维护性偏好。**
+**真正的缺口只有一个**：`typography.css` 把页面节奏（`--page-gutter` 24px、
+`--flow-loose` 20px、`--flow-block` 28px）**只声明一次、永不变动**，
+所以建立在节奏体系上的页面在窄屏下不会收紧。修法与验证见第十二节。
 
 ### 本轮实际改动
 
@@ -597,4 +604,90 @@ Cytoscape 对此一无所知：它的 `renderedPosition()` 是容器局部坐标
 **所以任何真实拖拽测试都会污染用户数据。** 本次测试把 AR1 从 `(677,-70)`
 拖到了 `(1257,-146)`（version 103 → 106），事后已按测试前的值还原（version 107）。
 后续验证脚本改为 `route.abort()` 拦掉写回请求，只跑渲染与拖拽逻辑，不再落盘。
+
+---
+
+## 十二、窄屏节奏：只修真正的缺口（已修）
+
+第十节的结论是「响应式层被架空」，订正后真正的缺口只有一句话：
+**页面节奏令牌不是响应式的。**
+
+`typography.css` 把 `--page-gutter`（24px）、`--flow-loose`（20px）、
+`--flow-block`（28px）声明在 `:root` 上，**一次，无条件**。`.page-body` 与
+`.page-header` 的 padding 都取自这三个令牌，所以它们在任何宽度下都一模一样 ——
+1200px 和 600px 的页面留白完全相同。`global.css` 当年想收紧，写下的
+`@media (max-width: 768px) { .page-body { padding: 12px 14px 20px } }`
+被后置的无条件规则压掉，从此没人再碰过。
+
+### 修法
+
+新增 `src/styles/responsive.css`，落在**声明在最后的 `@layer responsive`** 里
+（`layers.css` 的顺序改为 `product, extension, responsive`）。
+层之间不看特异性只看顺序，所以这里的规则一定压得住 `product` 里的无条件规则，
+而不用管谁先谁后加载。
+
+令牌是**就地重声明**的，不是写死 padding：
+
+```css
+@media (max-width: 900px) {
+  .page-header, .page-body {
+    --page-gutter: 18px; --flow-loose: 16px; --flow-block: 24px;
+  }
+}
+```
+
+这样 `.page-body` 拿到 `16px 18px 24px`、`.page-header` 拿到 `16px 18px 12px`，
+两者的左右边距仍然是**同一个令牌**，不会再出现「页头 26px、页身 24px」那种错位
+（见 `typography.css` 里 `--page-gutter` 的注释）。
+
+### 验证
+
+`responsive_probe.py`（**新增，已入库**）在 7 个宽度 × 11 条路由 = **77 个组合**上
+记录 25 个选择器的计算值，改动前后各跑一次，差异即效果。
+
+结果：**149 处计算值变化，落在 8 个 (选择器, 属性) 上，全部是收紧方向，其余一律没动。**
+
+| 选择器 | 属性 | 宽度 | 变化 |
+|---|---|---|---|
+| `.page-body` | padding | ≤900 / ≤760 | `20px 24px 28px` → `16px 18px 24px` / `12px 14px 20px` |
+| `.page-header` | padding | ≤900 / ≤760 | `20px 24px 12px` → `16px 18px 12px` / `12px 14px` |
+| `.brand-text small` | display | ≤900 | `block` → `none` |
+| `.brand-text > span` | font-size | ≤640 | `16px` → `13px` |
+| `.stat-value` | font-size | ≤900 | `24px` → `18px` |
+| `.wb-header` | padding | ≤768 | `0 18px` → `0 12px` |
+| `.wb-input-bar` | padding | ≤768 | `8px 12px` → `6px 12px` |
+| `.app-header` | padding | ≤640 | `0 16px` → `0 12px` |
+
+`npx tsc -b --noEmit` 0 错误；`qa_matrix.py 900 768 640` 复跑仍是
+**溢出 0 / 对比度问题 0 / 不可点击 0**。
+
+### 有两条「想当然的修复」反而会改坏 —— 被量出来挡下了
+
+先按「global.css 想要什么就恢复什么」写了一版，把 31 个块里看着合理的全搬进去，
+再量一次，diff 立刻指出两条是**倒退**：
+
+| 规则 | 现值 | 我差点改成 | 问题 |
+|---|---|---|---|
+| `.app-nav-item` padding | 9px | 10px | 新版**更紧**，我把它放松了 |
+| `.data-overview` padding | `12px`（`--space-3`） | `18px 14px 28px` | 新版更紧，我把它放大且改成非对称 |
+
+还有三条（`.data-split`、`.user-access-editor`、`.ui-detail-panel`）**改了等于没改** ——
+`console-system.css` 早就做过了 —— 也一并删掉。
+
+于是最终文件只剩 8 条，每一条都有 diff 作证。**「旧代码想要什么」不是恢复的理由，
+「现在缺什么」才是。**
+
+### 方法论
+
+这一节推翻了同一份文档里两次先前的判断，两次都是度量方式的问题：
+
+1. **粒度太粗**：比较整条选择器字符串，漏掉分组规则里的死声明（29 → 82）。
+2. **把「不同」当成「缺失」**：取值不同 ≠ 渲染不同，因为可能有第三条规则已经提供了它。
+   `.app-nav { display: none }` 就是例子 —— 它确实死了，但 `product-shell.css`
+   在同宽度写了同样的一条，导航其实是隐藏的。
+
+所以最终的判据不是静态分析，而是**在真实宽度上量计算值，再做前后 diff**。
+静态工具（`shadow_cssom.py` / `shadow_values.py`）负责**缩小范围**，
+`responsive_probe.py` 负责**下结论**。
+
 
