@@ -17,10 +17,17 @@ What it asserts, and how
   型号按钮        the six drawing types are offered
   点选            clicking a type arms it, and the canvas says so
   单击放置        the next empty-sheet click puts a node down at that point
+  落点准确        it lands where the click was, in model units — for both the
+                  click path and the drag-and-drop path
   自动命名        the name is generated, and never repeats a number
   拖放            dragging a type onto the sheet also places it
   点设备取消      clicking an object ends the wait instead of placing on it
   Esc 取消        Escape ends the wait
+
+The position checks exist because the canvas converts a pointer position
+through the rect/client ratio before subtracting pan and dividing by zoom, and
+skipping that ratio is a mistake this codebase has already shipped once (it put
+every drop up to 38px from where it was aimed). Nothing else here would notice.
 
 Two disciplines, both learned the hard way on this canvas:
 
@@ -42,6 +49,7 @@ Usage:
 """
 
 import argparse
+import math
 import sys
 
 from playwright.sync_api import sync_playwright
@@ -130,6 +138,74 @@ HIT = """
 }
 """
 
+POSITION_OF = """
+(label) => {
+  const n = window.__cy.nodes().filter(x => x.data('label') === label)[0];
+  if (!n) return null;
+  const p = n.position();
+  return { x: p.x, y: p.y };
+}
+"""
+
+# The conversion inputs must be read BEFORE the click that uses them. Placing a
+# device opens the inspector, which reflows the canvas - measured, `rect.top`
+# moves ~37px - so reading them afterwards describes a different layout.
+CONVERSION_CONTEXT = """
+() => {
+  const h = window.__host, cy = window.__cy, r = h.getBoundingClientRect();
+  return { left: r.left, top: r.top,
+           sx: r.width / h.clientWidth, sy: r.height / h.clientHeight,
+           pan: cy.pan(), zoom: cy.zoom() };
+}
+"""
+
+
+# The grid state is a class on the canvas wrapper, so it can be read rather
+# than inferred. Inferring it from "is the position a multiple of 32" misfires:
+# a real multiple looks identical to a snapped one, which silently loosens the
+# tolerance on the very check that is supposed to be strict.
+GRID_ON = "() => !!document.querySelector('.netops-canvas-wrap.grid-on')"
+
+
+def expected_model(context, point):
+    """Where a drop at `point` should land, in model units.
+
+    Mirrors the canvas's own conversion: visual client px -> container layout
+    px (divide by the rect/client ratio) -> model px (subtract pan, divide by
+    zoom). Getting this wrong is the whole reason this check exists.
+    """
+    lx = (point["x"] - context["left"]) / context["sx"]
+    ly = (point["y"] - context["top"]) / context["sy"]
+    return {"x": (lx - context["pan"]["x"]) / context["zoom"],
+            "y": (ly - context["pan"]["y"]) / context["zoom"]}
+
+
+def js_round(value):
+    """`Math.round` semantics: halves go up, not to even."""
+    return math.floor(value + 0.5)
+
+
+def position_error(actual, wanted, snapping):
+    """How far the node landed from where it was asked to be.
+
+    With the grid on, the product snaps, so the expectation is snapped too and
+    held to 2px. Comparing against the raw point instead would force the
+    tolerance to absorb half a cell (16px), and a check that loose cannot see a
+    small regression — it would only catch the gross one it was written for.
+
+    Returns (error, tolerance, the expectation actually compared against), so
+    the report can print the number that was really used rather than one that
+    looks inconsistent with the error beside it.
+    """
+    if snapping:
+        wanted = {"x": js_round(wanted["x"] / 32) * 32, "y": js_round(wanted["y"] / 32) * 32}
+        tol = 2
+    else:
+        tol = 3
+    dx, dy = abs(actual["x"] - wanted["x"]), abs(actual["y"] - wanted["y"])
+    return max(dx, dy), tol, wanted
+
+
 FIRST_NODE_POINT = """
 () => {
   const host = window.__host, cy = window.__cy;
@@ -212,12 +288,29 @@ def main() -> int:
             return pt
 
         def click_empty(what):
+            """Click an empty point and return it, with the layout it was aimed in.
+
+            The context is captured before the click on purpose: placing a
+            device opens the inspector, which reflows the canvas, so reading the
+            conversion inputs afterwards describes a different layout and makes
+            the position check meaningless.
+            """
             pt = page.evaluate(EMPTY_POINT)
             if not pt:
                 raise AssertionError(f"探针自身失效：找不到空白落点（{what}）")
             aim(pt, what)
+            context = page.evaluate(CONVERSION_CONTEXT)
             page.mouse.click(pt["x"], pt["y"])
             page.wait_for_timeout(2500)
+            return pt, context
+
+        def placed_position(before_labels, what):
+            """The node this step created, and where it actually landed."""
+            after = labels()
+            added = [name for name in after if name not in before_labels]
+            if len(added) != 1:
+                raise AssertionError(f"探针自身失效：{what} 之后新增了 {added}，期望正好 1 台")
+            return added[0], page.evaluate(POSITION_OF, added[0])
 
         fresh()
         baseline = labels()
@@ -241,14 +334,14 @@ def main() -> int:
             #    it. This runs here, on a sheet that still holds only what the
             #    user put there, and not after the placement steps below.
             #
-            #    Why it has to: with five or more devices on the sheet the
-            #    renderer's hit test and `renderedPosition()` come apart —
-            #    measured, the node answered clicks about 40px above the point
-            #    `renderedPosition()` reports, so a click aimed at it lands on
-            #    the background and *places a device*, which reads exactly like
-            #    the disarm being broken. Neither `cy.fit()` nor the canvas's
-            #    own 适配 button avoided it; only the smaller drawing does. The
-            #    tap is checked either way, so a miss is reported as a probe
+            #    Why it has to: this assertion clicks a device by aiming at its
+            #    `renderedPosition()`, and that aim used to be wrong by up to
+            #    38px — the canvas was mixing visual pixels (the rect) with
+            #    layout pixels (renderedPosition), so a click meant for a device
+            #    landed on the background and *placed a device*, which reads
+            #    exactly like the disarm being broken. That is fixed (see
+            #    marquee_hit_probe.py), but the aim still deserves a clean sheet
+            #    and an explicit tap check, so a miss is reported as a probe
             #    failure rather than a product one.
             count_before = len(labels())
             arm("switch")
@@ -285,15 +378,28 @@ def main() -> int:
 
             # 5. the next empty-sheet click places a device
             fresh()
-            count_before = len(labels())
+            before5 = labels()
+            count_before = len(before5)
             arm("firewall")
-            click_empty("空白处单击")
+            point, context = click_empty("空白处单击")
             after = labels()
             report("空白处单击即放置",
                    len(after) == count_before + 1 and any(n.startswith("防火墙") for n in after),
                    f"{count_before} → {len(after)} 台，新增={[n for n in after if n not in baseline]}")
             got = armed()
             report("放置后解除待放置", not got["armed"] and not got["hint"])
+
+            # 5b. and it lands where it was asked to. The canvas converts the
+            #     click through the rect/client ratio before subtracting pan and
+            #     dividing by zoom; skipping that ratio is a bug that has already
+            #     been shipped once here, and it is invisible without this check.
+            label5, actual = placed_position(before5, "单击放置")
+            err, tol, wanted = position_error(
+                actual, expected_model(context, point), snapping=page.evaluate(GRID_ON))
+            report("单击落点准确",
+                   err <= tol,
+                   f"{label5} 实际=({actual['x']:.0f},{actual['y']:.0f}) "
+                   f"应为=({wanted['x']:.0f},{wanted['y']:.0f}) 偏差={err:.1f}px 容差={tol}")
             if args.shot:
                 page.screenshot(path=f"{args.shot}/02_已放置.png")
 
@@ -313,16 +419,46 @@ def main() -> int:
                    and len(firewalls) == len(set(firewalls)),
                    f"新增={added}  画布上的防火墙={firewalls}")
 
-            # 7. dragging a type onto the sheet places it too
+            # 7. dragging a type onto the sheet places it too - and, again,
+            #    where it was dropped rather than 38px below.
             fresh()
-            before = labels()
-            page.drag_and_drop('[data-testid="palette-type-router"]', ".netops-cytoscape")
+            before7 = labels()
+            target = page.locator(".netops-cytoscape")
+            box = target.bounding_box()
+            # A drop point well inside the canvas and clear of the devices.
+            drop = {"x": box["x"] + box["width"] * 0.28, "y": box["y"] + box["height"] * 0.74}
+            context7 = page.evaluate(CONVERSION_CONTEXT)
+            page.drag_and_drop('[data-testid="palette-type-router"]', ".netops-cytoscape",
+                               target_position={"x": drop["x"] - box["x"], "y": drop["y"] - box["y"]})
             page.wait_for_timeout(2600)
             dragged = labels()
             routers = sorted(n for n in dragged if n.startswith("路由器"))
             report("拖拽型号到画布",
-                   len(dragged) == len(before) + 1 and len(routers) == 1,
-                   f"{len(before)} → {len(dragged)} 台，名称={routers}")
+                   len(dragged) == len(before7) + 1 and len(routers) == 1,
+                   f"{len(before7)} → {len(dragged)} 台，名称={routers}")
+            if len(routers) == 1:
+                drop_actual = page.evaluate(POSITION_OF, routers[0])
+                derr, dtol, drop_wanted = position_error(
+                    drop_actual, expected_model(context7, drop), snapping=page.evaluate(GRID_ON))
+                report("拖放落点准确",
+                       derr <= dtol,
+                       f"{routers[0]} 实际=({drop_actual['x']:.0f},{drop_actual['y']:.0f}) "
+                       f"应为=({drop_wanted['x']:.0f},{drop_wanted['y']:.0f}) 偏差={derr:.1f}px 容差={dtol}")
+
+            # 8. both ways of placing must land the same way. The grid is a
+            #    property of the drawing, so it cannot apply to one gesture and
+            #    not the other: measured before the fix, a dragged type snapped
+            #    to (-416,352) while a clicked one sat at (-184,-8) with the
+            #    grid visibly on.
+            if len(routers) == 1:
+                grid = page.evaluate(GRID_ON)
+                click_on_grid = actual["x"] % 32 == 0 and actual["y"] % 32 == 0
+                drop_on_grid = drop_actual["x"] % 32 == 0 and drop_actual["y"] % 32 == 0
+                report("两种放置方式一致",
+                       (not grid) or (click_on_grid == drop_on_grid),
+                       f"网格={'开' if grid else '关'}  "
+                       f"单击{'在' if click_on_grid else '不在'}格点  "
+                       f"拖放{'在' if drop_on_grid else '不在'}格点")
         finally:
             # Leave the drawing as it was found. Anything whose label was not
             # there at the start is the probe's, and goes back through the
