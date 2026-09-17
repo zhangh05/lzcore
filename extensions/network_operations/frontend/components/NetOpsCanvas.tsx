@@ -165,6 +165,40 @@ declare global {
 }
 
 /**
+ * The ratio between the container's visual pixels and its own layout pixels.
+ *
+ * The sheet sits under a `zoom` on <body> (the app's `--ui-scale`, 0.95), so
+ * the two spaces are not the same size: `getBoundingClientRect()` reports
+ * **visual** pixels, while everything Cytoscape reports — `pan()`, `zoom()`,
+ * `renderedPosition()`, `width()` — is in the container's **layout** pixels.
+ *
+ * Subtracting one from the other without this ratio is off by a factor that
+ * grows with distance from the container's origin: measured 0.9497 here, which
+ * is ~38px at the bottom of the sheet and ~60px for a device sitting low once
+ * its own half-height is taken into account. That is more than a device is
+ * tall, so a press squarely on a device was being read as a press on empty
+ * canvas and the marquee took the gesture instead of the device.
+ *
+ * Cytoscape's own hit test is not affected — it works in its own space
+ * throughout — which is why plain clicking a device always worked and only the
+ * hand-rolled conversions here were wrong.
+ */
+function hostScale(host: HTMLElement): { x: number; y: number } {
+  const rect = host.getBoundingClientRect();
+  return {
+    x: host.clientWidth ? rect.width / host.clientWidth : 1,
+    y: host.clientHeight ? rect.height / host.clientHeight : 1,
+  };
+}
+
+/** A pointer position in the container's own layout pixels. */
+function toHostPoint(host: HTMLElement, clientX: number, clientY: number): { x: number; y: number } {
+  const rect = host.getBoundingClientRect();
+  const scale = hostScale(host);
+  return { x: (clientX - rect.left) / scale.x, y: (clientY - rect.top) / scale.y };
+}
+
+/**
  * Is there a device or drawing item under this press?
  *
  * The marquee has to be able to tell "the user pressed on empty canvas" from
@@ -179,17 +213,17 @@ declare global {
  * un-marqueeable — which is exactly where a box tends to be started.
  */
 function nodeUnderPointer(cy: Cy, host: HTMLElement, event: MouseEvent): boolean {
-  const rect = host.getBoundingClientRect();
+  const point = toHostPoint(host, event.clientX, event.clientY);
   const pan = cy.pan();
   const zoom = cy.zoom();
   return cy.$("node").some((node) => {
     if (node.id().startsWith("group-")) return false;
     const position = node.position();
-    const cx = rect.left + pan.x + position.x * zoom;
-    const cyY = rect.top + pan.y + position.y * zoom;
+    const cx = pan.x + position.x * zoom;
+    const cyY = pan.y + position.y * zoom;
     const halfWidth = (node.width() * zoom) / 2 + 4;
     const halfHeight = (node.height() * zoom) / 2 + 4;
-    return Math.abs(event.clientX - cx) <= halfWidth && Math.abs(event.clientY - cyY) <= halfHeight;
+    return Math.abs(point.x - cx) <= halfWidth && Math.abs(point.y - cyY) <= halfHeight;
   });
 }
 
@@ -491,13 +525,10 @@ export default function NetOpsCanvas(props: Props) {
             const native = event.originalEvent;
             const host = hostRef.current;
             if (!native || !host) return null;
-            const rect = host.getBoundingClientRect();
+            const local = toHostPoint(host, native.clientX, native.clientY);
             const pan = cy.pan();
             const zoom = cy.zoom();
-            return {
-              x: (native.clientX - rect.left - pan.x) / zoom,
-              y: (native.clientY - rect.top - pan.y) / zoom,
-            };
+            return { x: (local.x - pan.x) / zoom, y: (local.y - pan.y) / zoom };
           })();
           if (point) current.onPlaceNodeType(current.armedNodeType, point);
           return;
@@ -944,11 +975,11 @@ export default function NetOpsCanvas(props: Props) {
     const cy = cyRef.current;
     const host = hostRef.current;
     if ((!deviceId && !nodeType) || !cy || !host) return;
-    const rect = host.getBoundingClientRect();
+    const local = toHostPoint(host, event.clientX, event.clientY);
     const pan = cy.pan();
     const zoom = cy.zoom();
-    const x = (event.clientX - rect.left - pan.x) / zoom;
-    const y = (event.clientY - rect.top - pan.y) / zoom;
+    const x = (local.x - pan.x) / zoom;
+    const y = (local.y - pan.y) / zoom;
     const snap = (value: number) => props.gridEnabled ? Math.round(value / 32) * 32 : Math.round(value);
     if (nodeType) {
       props.onPlaceNodeType(nodeType, { x: snap(x), y: snap(y) });
@@ -1025,9 +1056,11 @@ export default function NetOpsCanvas(props: Props) {
     const host = hostRef.current;
     const transform = miniTransformRef.current;
     if (!canvas || !cy || !host || !transform) return;
-    const rect = canvas.getBoundingClientRect();
-    const modelX = (event.clientX - rect.left - transform.offX) / transform.scale + transform.minX;
-    const modelY = (event.clientY - rect.top - transform.offY) / transform.scale + transform.minY;
+    // The minimap canvas is a fixed 160x110 layout px, and `transform` is built
+    // from those numbers — so the click has to be converted into the same space.
+    const local = toHostPoint(canvas, event.clientX, event.clientY);
+    const modelX = (local.x - transform.offX) / transform.scale + transform.minX;
+    const modelY = (local.y - transform.offY) / transform.scale + transform.minY;
     const zoom = cy.zoom();
     cy.pan({ x: host.clientWidth / 2 - modelX * zoom, y: host.clientHeight / 2 - modelY * zoom });
     setViewport({ ...cy.pan(), zoom });
@@ -1044,18 +1077,18 @@ export default function NetOpsCanvas(props: Props) {
       const cy = cyRef.current;
       const host = hostRef.current;
       if (!cy || !host) return null;
-      const rect = host.getBoundingClientRect();
+      const local = toHostPoint(host, clientX, clientY);
       const pan = cy.pan();
       const zoom = cy.zoom();
-      const modelX = (clientX - rect.left - pan.x) / zoom;
-      const modelY = (clientY - rect.top - pan.y) / zoom;
+      const modelX = (local.x - pan.x) / zoom;
+      const modelY = (local.y - pan.y) / zoom;
       return propsRef.current.topology.nodes.find((node) => Math.abs(node.x - modelX) <= 47 && Math.abs(node.y - modelY) <= 38) || null;
     };
     const pointInHost = (clientX: number, clientY: number) => {
       const host = hostRef.current;
       if (!host) return null;
-      const rect = host.getBoundingClientRect();
-      return { x: clientX - rect.left, y: clientY - rect.top };
+      // Layout pixels, because these are used as CSS offsets inside the host.
+      return toHostPoint(host, clientX, clientY);
     };
     const onDown = (event: MouseEvent) => {
       if (event.button !== 0) return;
@@ -1110,8 +1143,10 @@ export default function NetOpsCanvas(props: Props) {
   const gridSize = 32;
 
   const clientPoint = (event: { clientX: number; clientY: number }) => {
-    const rect = hostRef.current?.getBoundingClientRect();
-    return rect ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null;
+    const host = hostRef.current;
+    if (!host) return null;
+    // Layout pixels, because the marquee box is a CSS offset inside the host.
+    return toHostPoint(host, event.clientX, event.clientY);
   };
   const modelPoint = (point: { x: number; y: number }) => {
     const cy = cyRef.current;
