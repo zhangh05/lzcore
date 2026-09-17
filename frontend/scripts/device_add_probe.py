@@ -248,6 +248,8 @@ WATCH_TAP = """
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--shot", default=None, help="目录：关键步骤截图")
+    ap.add_argument("--expect-nodes", type=int, default=2,
+                    help="进场时画布应有的设备数（默认 2：AR1 + CE1）")
     args = ap.parse_args()
 
     rows = []
@@ -316,6 +318,19 @@ def main() -> int:
         baseline = labels()
         buttons = page.locator(".palette-type-item").count()
         print(f"画布基线 {len(baseline)} 台设备：{baseline}")
+
+        # Refuse to run on a canvas that is not the one the numbers below were
+        # calibrated against. Debris from a killed run is the usual cause, and
+        # it is not cosmetic: an inflated drawing spreads the nodes out, which
+        # is exactly the state that amplified the hit-test defect this probe
+        # was written to catch — so leftovers produce failures that look like
+        # product defects. Better to stop than to report a lie.
+        if len(baseline) != args.expect_nodes:
+            print(f"  FAIL  进场前置检查：画布有 {len(baseline)} 台设备，期望 {args.expect_nodes} 台。")
+            print("       多半是某次探针被中断留下的残骸。先跑 canvas_cleanup.py 清理，"
+                  "或确认这是你要的状态后加 --expect-nodes。")
+            browser.close()
+            return 1
 
         try:
             # 1. the palette offers the drawing types

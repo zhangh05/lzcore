@@ -49,6 +49,8 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
+from probe_journal import ProbeJournal
+
 BASE = "http://127.0.0.1:5273"
 API = "http://127.0.0.1:8011/api/extensions/network.operations"
 TOPO = "topo_894e4566e217"
@@ -140,11 +142,11 @@ WATCH_TAP = """
 }
 """
 
-NODE_POSITIONS = """
-() => window.__cy.nodes()
-  .filter(n => !n.id().startsWith('group-') && !n.id().startsWith('canvas-'))
-  .map(n => ({ node_id: n.id(), x: n.position().x, y: n.position().y }))
-"""
+# The probe drags a device for real, so it persists. Recording the positions
+# before the drag and repairing on the way *in* is what makes the restore
+# survive a killed run — see probe_journal.py for why the way out is not
+# enough.
+journal = ProbeJournal("marquee_hit_probe")
 
 
 def read_topology():
@@ -167,7 +169,12 @@ def main() -> int:
     args = ap.parse_args()
 
     rows = []
-    arrival = []
+
+    # Undo whatever a previous run left behind, before touching anything. A
+    # killed run dies between the drag and its own restore, and only a check on
+    # the way in can catch that.
+    for name, now, back in journal.repair(read_topology, write_topology, TOPO):
+        print(f"  !!!!  上次运行被中断，先复原 {name}: {now} → {back}")
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -208,7 +215,7 @@ def main() -> int:
         #    device. Without this a "no marquee" result could just mean the
         #    press landed somewhere harmless.
         fresh()
-        arrival = page.evaluate(NODE_POSITIONS)
+        journal.record(read_topology(), TOPO)
         target = page.evaluate(ON_DEVICE)
         page.evaluate(WATCH_TAP)
         page.mouse.click(target["point"]["x"], target["point"]["y"])
@@ -256,18 +263,10 @@ def main() -> int:
 
         browser.close()
 
-    # Put back anything the fixed behaviour legitimately dragged.
-    current = read_topology()
-    by_id = {n["node_id"]: n for n in arrival}
-    moved = []
-    for node in current["nodes"]:
-        was = by_id.get(node["node_id"])
-        if was and (node.get("x") != was["x"] or node.get("y") != was["y"]):
-            moved.append((node.get("display_name"),
-                          (node.get("x"), node.get("y")), (was["x"], was["y"])))
-            node["x"], node["y"] = was["x"], was["y"]
+    # Put back anything the fixed behaviour legitimately dragged. `repair`
+    # clears the journal, so a normal run leaves nothing for the next to undo.
+    moved = journal.repair(read_topology, write_topology, TOPO)
     if moved:
-        write_topology(current)
         for name, now, back in moved:
             print(f"  ----  复原 {name}: {now} → {back}")
     else:
