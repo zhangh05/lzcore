@@ -98,10 +98,11 @@
 [data-theme="dark"] .topology-studio .topology-canvas-area { background: #0f1519; }
 [data-theme="dark"] .topology-studio .canvas-legend { background: #1a2129ee; border-color: #2c353e; color: #a9bac7; }
 .topology-studio .netops-cytoscape { position: absolute; inset: 0; width: 100%; height: 100%; outline: 0; }
-/* The marquee overlay exists only while Shift is held. Everything else is
-   handled by Cytoscape's own hit testing, which is why this layer must not
-   sit on top of the canvas by default. */
-.topology-studio .netops-selection-gesture-layer { position: absolute; inset: 0; z-index: 6; cursor: crosshair; }
+/* The marquee is driven from a capture-phase press on the document, which
+   hit-tests the point before deciding whether to consume it. There is
+   deliberately no overlay element: an overlay covers devices as well as empty
+   canvas, and swallowing a press on a device is what used to make Shift + click
+   clear the selection instead of adding to it. */
 .topology-studio .netops-canvas-wrap.marquee-armed .netops-cytoscape { cursor: crosshair; }
 .topology-studio .netops-canvas-wrap.marquee-armed::after { content: "按住 Shift 拖框多选"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 9px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-size: 10px; pointer-events: none; }
 .topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid var(--accent); background: rgb(22 131 123 / 14%); }
@@ -118,7 +119,7 @@
 .topology-studio .netops-viewport-controls button.is-active { background: var(--accent-soft); color: var(--accent); }
 .topology-studio .netops-viewport-controls button:last-child { font-size: 11px; }
 .topology-studio .netops-canvas-accessibility { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
-.studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: var(--text-3); pointer-events: none; }
+.studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: var(--text-3); pointer-events: none; }
 .studio-canvas-caption strong { color: var(--text); font-weight: 650; }
 .canvas-mode-hint { margin-left: 8px; color: var(--text-3); }
 .topology-canvas-viewport.mode-select .canvas-mode-hint { color: var(--accent); font-weight: 600; }

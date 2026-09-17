@@ -95,6 +95,7 @@ type CyCollection<T> = {
   map: <R>(callback: (element: T) => R) => R[];
   filter: (callback: (element: T) => boolean) => CyCollection<T>;
   forEach: (callback: (element: T) => void) => void;
+  some: (callback: (element: T) => boolean) => boolean;
   remove: () => void;
   unselect: () => void;
   select: () => void;
@@ -143,7 +144,7 @@ type CyElement = {
   group: () => string;
   length: number;
 };
-type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean; grabbed: () => boolean };
+type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean; grabbed: () => boolean; width: () => number; height: () => number };
 type CyStyleChain = { selector: (selector: string) => { style: (style: Record<string, unknown>) => CyStyleChain }; update: () => void };
 type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void }; originalEvent?: MouseEvent };
 
@@ -152,6 +153,35 @@ declare global {
     cytoscape?: (options: Record<string, unknown>) => Cy;
     __lzcoreNetOpsCytoscapeLoad?: Promise<void>;
   }
+}
+
+/**
+ * Is there a device or drawing item under this press?
+ *
+ * The marquee has to be able to tell "the user pressed on empty canvas" from
+ * "the user pressed on a device", because the two want opposite things. Node
+ * position is the centre of the body in model units, so the rendered body is
+ * `size * zoom` around the rendered centre; the pointer is converted the same
+ * way. A few screen pixels of slack are added so that pressing on the border of
+ * a device counts as pressing on the device.
+ *
+ * Labels are deliberately excluded. A device's caption sits below its icon, and
+ * counting it would make the visibly empty strip just under a device
+ * un-marqueeable — which is exactly where a box tends to be started.
+ */
+function nodeUnderPointer(cy: Cy, host: HTMLElement, event: MouseEvent): boolean {
+  const rect = host.getBoundingClientRect();
+  const pan = cy.pan();
+  const zoom = cy.zoom();
+  return cy.$("node").some((node) => {
+    if (node.id().startsWith("group-")) return false;
+    const position = node.position();
+    const cx = rect.left + pan.x + position.x * zoom;
+    const cyY = rect.top + pan.y + position.y * zoom;
+    const halfWidth = (node.width() * zoom) / 2 + 4;
+    const halfHeight = (node.height() * zoom) / 2 + 4;
+    return Math.abs(event.clientX - cx) <= halfWidth && Math.abs(event.clientY - cyY) <= halfHeight;
+  });
 }
 
 function loadNetOpsCytoscape(): Promise<void> {
@@ -263,6 +293,17 @@ export default function NetOpsCanvas(props: Props) {
   const connectingFromRef = useRef<string | null>(null);
   const ignoreBoxSelectionTapRef = useRef(false);
   const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * The selection as it was *before* the click that is currently being handled.
+   *
+   * Ctrl/⌘ + click has to be able to *remove* an object from the selection, and
+   * that needs the pre-click set. It cannot be read off `cy` inside the tap
+   * handler, because Cytoscape has already applied its own selection change by
+   * the time `tap` fires — the same set would be read back and nothing would
+   * ever toggle off. Captured on `mousedown` in the capture phase, which is the
+   * only point that is reliably earlier.
+   */
+  const clickIntentRef = useRef<{ ids: string[]; additive: boolean }>({ ids: [], additive: false });
   /** Shift enables marquee selection; see the gesture overlay below. */
   const [shiftHeld, setShiftHeld] = useState(false);
   const initialTopologyIdRef = useRef<string | null>(null);
@@ -354,6 +395,28 @@ export default function NetOpsCanvas(props: Props) {
       setRendererReady(true);
       const syncViewport = () => setViewport({ ...cy.pan(), zoom: cy.zoom() });
       cy.on("zoom pan", syncViewport);
+      /**
+       * What a click on `id` should leave selected.
+       *
+       * Ctrl/⌘ (and Shift) turn the click into a toggle: the object joins the
+       * selection, or drops out of it if it was already in. Without a modifier
+       * it stays a plain single selection, which is what `selectionType`
+       * `"additive"` would otherwise override — and that has to stay on, because
+       * it is what keeps everything a marquee encloses.
+       *
+       * The pre-click set comes from `clickIntentRef`; see its declaration for
+       * why it cannot be read from `cy` here.
+       */
+      const nextSelectionFor = (id: string): string[] => {
+        const { ids, additive } = clickIntentRef.current;
+        if (!additive) return [id];
+        return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
+      };
+      const applySelection = (ids: string[]) => {
+        cy.elements().unselect();
+        ids.forEach((entry) => cy.getElementById(entry).select());
+        propsRef.current.onSelectionChange(ids);
+      };
       cy.on("tap", (event) => {
         const current = propsRef.current;
         if (event.target.isNode?.()) {
@@ -362,12 +425,11 @@ export default function NetOpsCanvas(props: Props) {
           if (id.startsWith("group-")) return;
           if (id.startsWith("canvas-")) {
             if (current.mode !== "connect") {
-              window.setTimeout(() => {
-                cy.elements().unselect();
-                cy.getElementById(id).select();
-                current.onSelectionChange([id]);
-              }, 0);
-              current.onSelectCanvasItem(id.slice("canvas-".length));
+              const next = nextSelectionFor(id);
+              window.setTimeout(() => applySelection(next), 0);
+              // A multi-selection is not about any one object, so it must not
+              // pull the inspector onto whichever one happened to be clicked.
+              if (!clickIntentRef.current.additive) current.onSelectCanvasItem(id.slice("canvas-".length));
             }
             return;
           }
@@ -384,13 +446,17 @@ export default function NetOpsCanvas(props: Props) {
             return;
           }
           // Cytoscape must use additive selection for a marquee to retain all
-          // enclosed objects.  Restore familiar single-click semantics here.
-          window.setTimeout(() => {
-            cy.elements().unselect();
-            cy.getElementById(id).select();
-            current.onSelectionChange([id]);
-          }, 0);
-          current.onSelectNode(id);
+          // enclosed objects.  Restore familiar single-click semantics here —
+          // and let Ctrl/⌘/Shift grow or shrink the selection instead.
+          const next = nextSelectionFor(id);
+          const additive = clickIntentRef.current.additive;
+          window.setTimeout(() => applySelection(next), 0);
+          // Keep the single-object inspector honest when a toggle happens to
+          // leave exactly one object selected. Above that the multi-selection
+          // panel takes over and does not care what was clicked last.
+          if (!additive) current.onSelectNode(id);
+          else if (next.length === 1) current.onSelectNode(next[0]);
+          else if (next.length === 0) current.onClearSelection();
           return;
         }
         if (event.target.isEdge?.()) {
@@ -537,11 +603,16 @@ export default function NetOpsCanvas(props: Props) {
     // network map does. Marquee selection moved to Shift + drag.
     cy.panningEnabled(true);
     cy.userPanningEnabled(true);
-    // Do not let Cytoscape draw its own selection rectangle on mouse-down.
-    // The React marquee below starts only while Shift is held.
-    cy.boxSelectionEnabled(false);
-    // Additive remains necessary for programmatic multi-selection; ordinary
-    // taps are explicitly normalized to one selected object above.
+    // Box selection is left to Cytoscape, which arms it on Ctrl/⌘ + drag and
+    // leaves a plain drag to panning. That is the gesture eNSP and HCL both
+    // use, and it costs nothing to inherit. It used to be switched off in
+    // favour of the hand-rolled Shift marquee below, which left Ctrl/⌘ + drag
+    // silently panning the sheet — a gesture users reach for by reflex and
+    // that then did the opposite of what was wanted.
+    cy.boxSelectionEnabled(true);
+    // Additive is what keeps everything a marquee encloses, and what makes the
+    // native Ctrl/⌘ box grow the selection instead of replacing it. Ordinary
+    // taps are still normalized to a single object in the tap handler above.
     cy.selectionType("additive");
     cy.autoungrabify(!layoutEditing);
     // Existing nodes can retain the previous ungrabbable state when toggling
@@ -784,6 +855,33 @@ export default function NetOpsCanvas(props: Props) {
     connectingFromRef.current = null;
   }, [props.mode]);
 
+  /**
+   * Capture the selection *before* the click that is about to be handled.
+   *
+   * Ctrl/⌘ + click toggles, and a toggle needs to know whether the object was
+   * already in the selection. By the time Cytoscape emits `tap` it has already
+   * applied its own selection change, so the answer read at that point is
+   * always "yes" and the object could never be removed. A capture-phase
+   * listener on `document` is the only place that is reliably earlier than the
+   * renderer's own handlers — it runs before the event reaches the container
+   * Cytoscape listens on.
+   *
+   * The modifier is read from the same event, so a Ctrl+click that is released
+   * before the mouse-up still counts as a toggle.
+   */
+  useEffect(() => {
+    const snapshot = (event: MouseEvent) => {
+      const cy = cyRef.current;
+      if (!cy || event.button !== 0) return;
+      clickIntentRef.current = {
+        ids: cy.$("node:selected").map((node) => node.id()).filter((id) => !id.startsWith("group-")),
+        additive: event.ctrlKey || event.metaKey || event.shiftKey,
+      };
+    };
+    document.addEventListener("mousedown", snapshot, true);
+    return () => document.removeEventListener("mousedown", snapshot, true);
+  }, []);
+
   // Shift arms the marquee. Tracked globally so the overlay is mounted before
   // the drag starts, and released defensively when the window loses focus.
   useEffect(() => {
@@ -966,7 +1064,6 @@ export default function NetOpsCanvas(props: Props) {
   // Grid paper is a stable visual reference, independent of fit/zoom actions.
   const gridSize = 32;
 
-  type CanvasPointerEvent = ReactMouseEvent<HTMLDivElement>;
   const clientPoint = (event: { clientX: number; clientY: number }) => {
     const rect = hostRef.current?.getBoundingClientRect();
     return rect ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null;
@@ -997,17 +1094,36 @@ export default function NetOpsCanvas(props: Props) {
     props.onSelectionChange(ids);
     window.setTimeout(() => { ignoreBoxSelectionTapRef.current = false; }, 0);
   };
-  // Marquee selection is opt-in with Shift. A plain drag pans the sheet and
-  // the wheel zooms, and because the overlay only exists while Shift is held,
-  // every ordinary gesture goes back to Cytoscape's own hit testing instead
-  // of a hand-rolled duplicate of it.
-  const handlePointerDown = (event: CanvasPointerEvent) => {
-    if (event.button !== 0) return;
-    const point = clientPoint(event);
-    if (!point) return;
-    marqueeStartRef.current = point;
-    setMarqueeDrag(true);
-  };
+  // Marquee selection is opt-in with Shift. A plain drag pans the sheet and the
+  // wheel zooms. Ctrl/⌘ + drag is Cytoscape's own box selection, armed above.
+  //
+  // The press is caught in the capture phase on `document` rather than by an
+  // overlay element. An overlay cannot tell a press on empty canvas from a
+  // press on a device — it swallows both — and that made Shift + click on a
+  // device clear the selection instead of adding to it, and made a device
+  // impossible to drag while Shift was held. Here the point is hit-tested
+  // first, and only an empty-canvas press is taken away from the renderer.
+  const marqueeArmed = props.mode === "select" && shiftHeld;
+  useEffect(() => {
+    if (!marqueeArmed) return;
+    const onDown = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      const host = hostRef.current;
+      const cy = cyRef.current;
+      if (!host || !cy) return;
+      if (!(event.target instanceof Node) || !host.contains(event.target)) return;
+      // A press on a device belongs to Cytoscape: it selects, toggles or drags.
+      if (nodeUnderPointer(cy, host, event)) return;
+      event.stopPropagation();
+      event.preventDefault();
+      const point = clientPoint(event);
+      if (!point) return;
+      marqueeStartRef.current = point;
+      setMarqueeDrag(true);
+    };
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [marqueeArmed]);
 
   // The drag is tracked on window so that releasing the button over a floating
   // control (zoom cluster, minimap) still finishes the selection instead of
@@ -1046,11 +1162,8 @@ export default function NetOpsCanvas(props: Props) {
     };
   }, [marqueeDrag]);
 
-  const marqueeArmed = props.mode === "select" && shiftHeld;
-
   return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: "0 0" } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
-    {marqueeArmed && <div className="netops-selection-gesture-layer" onMouseDown={handlePointerDown} />}
     {marquee && <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
     {linkPreview && (
       <svg className="netops-link-preview" aria-hidden="true">

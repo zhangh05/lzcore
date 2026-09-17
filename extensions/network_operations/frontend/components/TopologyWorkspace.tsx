@@ -2278,7 +2278,7 @@ export default function TopologyWorkspace({
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
         <div className={`topology-canvas-viewport mode-${canvasMode}`}>
           <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}
-            {filterActive && <span className="canvas-selection-count canvas-filter-count">过滤中 · {dimmedNodeIds.length} 个对象已淡化<button type="button" aria-label="清除画布过滤" onClick={() => setCanvasFilter({ vendors: [], statuses: [], groups: [] })}><IconClose size={11} /></button></span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : "单击选择对象，拖动对象移动位置，拖动空白平移画布；Shift + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
+            {filterActive && <span className="canvas-selection-count canvas-filter-count">过滤中 · {dimmedNodeIds.length} 个对象已淡化<button type="button" aria-label="清除画布过滤" onClick={() => setCanvasFilter({ vendors: [], statuses: [], groups: [] })}><IconClose size={11} /></button></span>}<span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : "单击选择，Ctrl/⌘ + 单击加选，拖空白平移；Shift 或 Ctrl/⌘ + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -2381,7 +2381,11 @@ export default function TopologyWorkspace({
             <header><strong>画布快捷键</strong><button type="button" onClick={() => setShowShortcutHelp(false)} aria-label="关闭"><IconClose size={13} /></button></header>
             <dl>
               <div><dt>V / C</dt><dd>选择 / 连线</dd></div>
-              <div><dt>Shift + 拖动</dt><dd>框选多个对象</dd></div>
+              <div><dt>Ctrl/⌘ + 单击</dt><dd>加选设备；再点一次移出选区</dd></div>
+              <div><dt>Shift + 单击</dt><dd>加选设备</dd></div>
+              <div><dt>Shift + 拖动</dt><dd>框选（替换当前选区）</dd></div>
+              <div><dt>Ctrl/⌘ + 拖动</dt><dd>框选（追加到选区）</dd></div>
+              <div><dt>拖动已选对象</dt><dd>整组一起移动</dd></div>
               <div><dt>Delete</dt><dd>删除选中对象</dd></div>
               <div><dt>Ctrl/⌘ + A</dt><dd>全选</dd></div>
               <div><dt>方向键</dt><dd>微移选中对象（Shift 加速）</dd></div>
