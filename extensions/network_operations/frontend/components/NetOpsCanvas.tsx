@@ -314,13 +314,20 @@ export default function NetOpsCanvas(props: Props) {
           { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "contain", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
           { selector: "edge", style: { width: "data(edgeWidth)", opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": "14px", "target-text-margin-y": "14px" } },
-          { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
-                    // A text box with no border and no fill is an invisible hit area: the
+          { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-margin-y": 0, "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
+          // A text box with no border and no fill is an invisible hit area: the
           // user sees blank canvas, right-clicks it, and gets item actions they
           // cannot explain — or aims at the glyphs and misses the box. A faint
           // dashed outline makes the box look like a text box and makes its
           // bounds honest, without the weight of a filled plate.
-          { selector: ".canvas-item-text", style: { "background-opacity": 0, "border-width": 1, "border-style": "dashed", "border-opacity": 0.45, "text-valign": "center", "text-halign": "left", "font-size": 14, "font-weight": 500, "text-max-width": "data(textMaxWidth)" } },
+          //
+          // `text-halign` names the side of the node the label hangs off, not the
+          // alignment of the text within it. `left` therefore put the whole label
+          // outside the box, flush against its left edge — a dashed rectangle with
+          // its caption floating beside it. A canvas item *is* its own bound, so
+          // the label belongs inside; `text-justification` is the property that
+          // left-aligns a wrapped multi-line note within its block.
+          { selector: ".canvas-item-text", style: { "background-opacity": 0, "border-width": 1, "border-style": "dashed", "border-opacity": 0.45, "text-valign": "center", "text-halign": "center", "text-justification": "left", "font-size": 14, "font-weight": 500, "text-max-width": "data(textMaxWidth)" } },
           // Selection adds a halo instead of repainting the border: the border
           // carries operational state, and a selected node must still show
           // whether it is reachable.
