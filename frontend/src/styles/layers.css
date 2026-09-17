@@ -1,34 +1,35 @@
 /**
  * Cascade layer order — the single place that decides which stylesheet wins.
  *
- * Before this file existed, the winner was decided by the order the bundler
- * happened to evaluate `import` statements. That produced a recorded P1
- * regression (the workbench grid collapsed after a production build) and it
- * made every stylesheet's correctness depend on files it does not own.
+ * `product` used to be one layer covering every shared sheet, because a split
+ * changes outcomes: a layer beats specificity, and the previous cascade
+ * resolved conflicts by specificity first and fell back to load order. The
+ * split was therefore earned one conflict at a time, each verified against the
+ * layout probe, until it stopped moving a box.
  *
- * The order below reproduces the previously *effective* order exactly, so this
- * is a behaviour-preserving change; from now on the order is declared rather
- * than discovered.
+ * The order below is the order the bundler was already producing, declared.
+ * It reads oddly — `runtime` first, `typography` after the component layers —
+ * because the import order it replaces was accidental. Preserving it is the
+ * whole point: a declared order that disagrees with the document order is a
+ * behaviour change, not a refactor. Reordering these deliberately is a
+ * separate change, and one the layout probe can measure.
  *
- *   1. product    the product's own stylesheets (global, shell, console,
- *                 typography, workbench, shared component styles)
- *   2. extension  extension pages
- *   3. responsive narrow-width adaptations, which must outrank the
- *                 unconditional rules they refine — see responsive.css for why
- *                 they cannot simply live in the sheet that owns the concern
- *
- * Why `product` is still one layer rather than one layer per stylesheet:
- * a layer beats specificity, but the previous cascade resolved conflicts by
- * specificity first and only fell back to load order. Splitting the shared
- * sheets into separate layers therefore *changes* outcomes — measured, not
- * assumed: it moved 156 boxes across the ten routes, because rules like
- * `.btn.sm { font-size: 12px }` in console-system.css were beating
- * `.btn { font-size: 13px }` in typography.css on specificity.
- *
- * So the split has to be earned: fix the underlying conflicts one at a time,
- * each verified against the layout probe, and only then separate the layers.
- * Until then a single `product` layer preserves the old behaviour exactly while
- * still giving extensions a declared boundary.
+ *   1. runtime      runtime event timeline — imported first, so weakest
+ *   2. base         foundation: tokens, resets, element defaults
+ *   3. shell        the application shell
+ *   4. console      Design System 3.0 primitives and page compositions
+ *   5. workbench    the agent workbench
+ *   6. typography   element-level type scale. It has to beat the component
+ *                   layers, because `.page-header h1` here is the one that
+ *                   wins over console-system.css's copy.
+ *   7. pages        page-specific refinements. A page refines the design
+ *                   system, and it used to do that by *selector weight* — so
+ *                   `.kl-stats .stat-card` out-weighed the design system's
+ *                   `.stat-card`. A layer beats specificity, so that weight
+ *                   only still works if the refinement sits in a later layer.
+ *                   Without this the split moves 135 declarations.
+ *   8. extension    extension pages
+ *   9. responsive   narrow-width adaptations, which must outrank everything
  *
  * Rules for future work:
  *   - Never resolve a conflict by reordering imports; put the rule in the layer
@@ -37,4 +38,4 @@
  *     a layer silently wins over all of these. Keep every sheet layered.
  *   - Extension styles must stay scoped to the extension's own root class.
  */
-@layer product, extension, responsive;
+@layer runtime, base, shell, console, workbench, typography, pages, extension, responsive;

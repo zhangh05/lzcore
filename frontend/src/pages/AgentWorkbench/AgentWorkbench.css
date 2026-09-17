@@ -1,4 +1,4 @@
-@layer product {
+@layer workbench {
 .wb-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--w-progress);

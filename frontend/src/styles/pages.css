@@ -1,0 +1,240 @@
+/* Page-specific refinements — the layer that lets a page outrank the design system.
+
+   The shared sheets describe the design system: tokens, resets, element
+   defaults, primitives, page compositions. A page then refines them, and before
+   cascade layers existed that refinement won on *selector weight*. That is why
+   the rules below carry selectors like `.kl-stats .stat-card` or
+   `.data-center > .ui-filter-bar.data-center-tabs`, while the design system's
+   own rule for the same box is a bare `.stat-card` / `.data-center-tabs`.
+
+   `global.css` sits in the *first* layer. So once the shared sheets are split,
+   every rule here would silently lose: a layer beats specificity, and the
+   weight that used to carry these declarations stops mattering. Measured, not
+   assumed — the conflict enumerator found 21 rule pairs flipping, and all 21
+   were a `base` rule losing to a later sheet. Declaring `pages` *after* the
+   design system is what makes the split possible without moving a pixel.
+
+   Only rules a shared sheet also sets live here. A rule nothing competes with
+   stays next to the rest of its page's styles in `global.css`. */
+
+@layer pages {
+/* The shell gives `.page-body` a 24px inset; a page that renders its own
+   full-bleed surface opts out. */
+.page-body.no-pad {
+  padding: 0;
+}
+
+/* ── 统一 tab 条 ───────────────────────────────────────────────────────────
+   数据管理用 .data-center-tabs / .dc-tab，运行监控用 .tabs / .tab，
+   网络运维用 .network-tabs / .net-tab。
+
+   ★ 为什么整组都在 pages 层：console-system.css 对同一个盒子有
+   `.data-center .data-center-tabs button` 和
+   `.operations-page .operations-tabs button`（都是 (0,2,1)），还有
+   `.data-center .data-center-tabs`（(0,2,0)）—— 只有页面前缀 (0,3,0) 压得住
+   它们，而权重只在同一层里说话。 */
+
+/* 网络运维的 tab 条左右内边距跟 .network-toolbar 的 24px 对齐 */
+.tabs,
+.network-admin .network-tabs,
+.data-center > .ui-filter-bar.data-center-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.network-admin .network-tabs {
+  padding: 0 24px;
+}
+
+@media (max-width: 760px) {
+  .network-admin .network-tabs {
+    padding: 0 var(--space-3);
+  }
+}
+
+.data-center > .ui-filter-bar.data-center-tabs {
+  padding: 0 8px;
+}
+
+.operations-page .operations-tabs .tab,
+.network-admin .network-tabs .net-tab,
+.data-center .data-center-tabs .dc-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  color: var(--text-3);
+  font-size: var(--fs-13);
+  font-weight: var(--weight-minor);
+  white-space: nowrap;
+  border-radius: var(--r-4) var(--r-4) 0 0;
+  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+
+/* duotone 的背景层用 currentColor 渲染：激活态切 duotone 会连背景一起变实 */
+.operations-page .operations-tabs .tab > svg,
+.network-admin .network-tabs .net-tab > svg,
+.data-center .data-center-tabs .dc-tab > svg {
+  flex-shrink: 0;
+  opacity: 0.82;
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.operations-page .operations-tabs .tab:hover,
+.network-admin .network-tabs .net-tab:hover,
+.data-center .data-center-tabs .dc-tab:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.operations-page .operations-tabs .tab:hover > svg,
+.data-center .data-center-tabs .dc-tab:hover > svg,
+.operations-page .operations-tabs .tab.active > svg,
+.network-admin .network-tabs .net-tab.active > svg,
+.data-center .data-center-tabs .dc-tab.active > svg {
+  opacity: 1;
+}
+
+.operations-page .operations-tabs .tab:focus-visible,
+.network-admin .network-tabs .net-tab:focus-visible,
+.data-center .data-center-tabs .dc-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.operations-page .operations-tabs .tab.active,
+.network-admin .network-tabs .net-tab.active,
+.data-center .data-center-tabs .dc-tab.active {
+  color: var(--text);
+  font-weight: var(--weight-subhead);
+}
+
+/* 下划线贴在 tab 底边内侧 —— 容器开了 overflow-x:auto，如果用 bottom:-1px
+   去压容器的 border-bottom，会被 overflow 裁掉。 */
+.operations-page .operations-tabs .tab::after,
+.network-admin .network-tabs .net-tab::after,
+.data-center .data-center-tabs .dc-tab::after {
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 2px;
+  background: transparent;
+  border-radius: 2px 2px 0 0;
+  transition: background var(--dur-2) var(--ease);
+  content: "";
+}
+
+.operations-page .operations-tabs .tab.active::after,
+.network-admin .network-tabs .net-tab.active::after,
+.data-center .data-center-tabs .dc-tab.active::after {
+  background: var(--accent);
+  transform-origin: center;
+  animation: tab-line-in var(--dur-3) var(--ease-out) both;
+}
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  color: var(--text-3);
+  font-size: var(--fs-10);
+  font-weight: var(--weight-subhead);
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-3);
+  border-radius: var(--r-pill);
+}
+
+.operations-page .operations-tabs .tab:hover .tab-count,
+.network-admin .network-tabs .net-tab:hover .tab-count,
+.data-center .data-center-tabs .dc-tab:hover .tab-count {
+  color: var(--text-2);
+}
+
+.operations-page .operations-tabs .tab.active .tab-count,
+.network-admin .network-tabs .net-tab.active .tab-count,
+.data-center .data-center-tabs .dc-tab.active .tab-count {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface));
+}
+
+/* ── Markdown content inside assistant chat bubbles ────────────────────────
+   The wrapper's own inset and corner. `typography.css` owns the vertical
+   rhythm of a code block (`.markdown-body .code-block-wrap { margin }`) and
+   wins it on load order, so the margin is deliberately not repeated here. */
+.markdown-body .code-block-wrap {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+.markdown-body .code-block-wrap pre { margin: 0; overflow-x: auto; }
+
+/* ── Settings page ──────────────────────────────────────────────────────── */
+.settings-form-title {
+  font-size: var(--fs-18);
+  font-weight: 740;
+  color: var(--text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* ── Diagnostics page helpers ───────────────────────────────────────────── */
+.diag-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── CapabilityCenter ───────────────────────────────────────────────────── */
+.cc-search-input .ui-search-input { height: 30px; font-size: var(--fs-12); }
+.cap-title-h4 { font-size: var(--fs-15); font-weight: 740; margin: 0; }
+
+/* ── Knowledge Library (.kl-*) ──────────────────────────────────────────────
+   状态条：数字给足体量和色彩，非 0 的状态自动上底色。五个等权灰数字是
+   "看不出重点"的典型 —— 这里让异常状态自己跳出来。 */
+.kl-stats .stat-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 68px;
+  padding: var(--flow-base) var(--flow-loose);
+}
+.kl-stats .stat-value {
+  font-size: var(--fs-24);
+  font-weight: var(--weight-display);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.kl-stats .stat-label {
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  font-weight: var(--weight-minor);
+}
+.kl-stat--ok { background: color-mix(in srgb, var(--ok-soft) 45%, var(--surface)); }
+.kl-stat--ok .stat-value { color: var(--ok); }
+.kl-stat--warn { background: color-mix(in srgb, var(--warn-soft) 45%, var(--surface)); }
+.kl-stat--warn .stat-value { color: var(--warn); }
+.kl-stat--accent { background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.kl-stat--accent .stat-value { color: var(--accent); }
+.kl-stat--danger { background: color-mix(in srgb, var(--danger-soft) 45%, var(--surface)); }
+.kl-stat--danger .stat-value { color: var(--danger); }
+
+/* ── Data center ────────────────────────────────────────────────────────────
+   The panel headings are a step below the element defaults on purpose: a data
+   panel is a dense surface, not a document. */
+.data-summary-title h2 { font-size: var(--fs-16); }
+.data-panel-head h3 { font-size: var(--fs-14); }
+}

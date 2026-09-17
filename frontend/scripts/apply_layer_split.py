@@ -51,10 +51,20 @@ LAYERS = [
     ("styles/console-system.css", "console"),
     ("pages/AgentWorkbench/AgentWorkbench.css", "workbench"),
     ("components/RuntimeEventTimeline.css", "runtime"),
+    ("styles/pages.css", "pages"),
 ]
 
 LAYERS_CSS = "styles/layers.css"
-ORDER = "base, typography, shell, console, workbench, runtime, extension, responsive"
+# This is the order the bundler already produced, now written down instead of
+# left to the import statements. It is *not* the order the sheets are listed in
+# `main.tsx` reads as "sensible": `typography.css` is imported after
+# `console-system.css`, and `RuntimeEventTimeline.css` before `global.css`. A
+# declared order that disagrees with the document order is not a no-op — it is
+# a behaviour change, and it is exactly the kind that looks clean: measured,
+# declaring `typography` second instead of sixth moved the page-header's h1
+# from 700/8px back to 600/2px on five routes.
+ORDER = ("runtime, base, shell, console, workbench, typography, pages, "
+         "extension, responsive")
 
 ORDER_HEADER = """/**
  * Cascade layer order — the single place that decides which stylesheet wins.
@@ -65,16 +75,29 @@ ORDER_HEADER = """/**
  * split was therefore earned one conflict at a time, each verified against the
  * layout probe, until it stopped moving a box.
  *
- *   1. base         foundation: tokens, resets, element defaults
- *   2. typography   element-level type scale — must sit *before* the component
- *                   layers, because a bare `h3` has to lose to
- *                   `.task-phase-summary h3`
+ * The order below is the order the bundler was already producing, declared.
+ * It reads oddly — `runtime` first, `typography` after the component layers —
+ * because the import order it replaces was accidental. Preserving it is the
+ * whole point: a declared order that disagrees with the document order is a
+ * behaviour change, not a refactor. Reordering these deliberately is a
+ * separate change, and one the layout probe can measure.
+ *
+ *   1. runtime      runtime event timeline — imported first, so weakest
+ *   2. base         foundation: tokens, resets, element defaults
  *   3. shell        the application shell
  *   4. console      Design System 3.0 primitives and page compositions
  *   5. workbench    the agent workbench
- *   6. runtime      runtime event timeline
- *   7. extension    extension pages
- *   8. responsive   narrow-width adaptations, which must outrank everything
+ *   6. typography   element-level type scale. It has to beat the component
+ *                   layers, because `.page-header h1` here is the one that
+ *                   wins over console-system.css's copy.
+ *   7. pages        page-specific refinements. A page refines the design
+ *                   system, and it used to do that by *selector weight* — so
+ *                   `.kl-stats .stat-card` out-weighed the design system's
+ *                   `.stat-card`. A layer beats specificity, so that weight
+ *                   only still works if the refinement sits in a later layer.
+ *                   Without this the split moves 135 declarations.
+ *   8. extension    extension pages
+ *   9. responsive   narrow-width adaptations, which must outrank everything
  *
  * Rules for future work:
  *   - Never resolve a conflict by reordering imports; put the rule in the layer
@@ -113,6 +136,32 @@ def apply_split() -> int:
     return 0
 
 
+def unapply_split() -> int:
+    """Rename the layers back to `product`, keeping any other edits.
+
+    `--revert` throws the whole directory back to the committed state, which is
+    right when the only change is the split. It is wrong in the middle of a fix:
+    the fix under test is uncommitted, so checking out would delete it along
+    with the split it was meant to be measured against. This renames the layers
+    back and touches nothing else.
+    """
+    for rel, layer in LAYERS:
+        path = SRC / rel
+        src = path.read_text(encoding="utf-8")
+        new, n = re.subn(rf"@layer\s+{layer}\s*\{{", "@layer product {", src, count=1)
+        if n != 1:
+            print(f"  !! {rel}：找不到 `@layer {layer} {{`，跳过")
+            continue
+        path.write_text(new, encoding="utf-8")
+        print(f"  {rel}: @layer {layer} -> @layer product")
+    # layers.css is only ever the declaration, so restoring it from git cannot
+    # lose anything.
+    git("checkout", "--", f"frontend/src/{LAYERS_CSS}")
+    print(f"  {LAYERS_CSS}: 恢复为已提交的单层声明")
+    print("\n已取消拆层（保留了其他改动）。")
+    return 0
+
+
 def revert_split() -> int:
     # Only ever throw away the split itself. Anything else is someone's work.
     allowed = {rel for rel, _ in LAYERS} | {LAYERS_CSS}
@@ -132,9 +181,15 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     group = ap.add_mutually_exclusive_group(required=True)
     group.add_argument("--apply", action="store_true")
+    group.add_argument("--unapply", action="store_true",
+                       help="只把层名改回 product，保留其他改动")
     group.add_argument("--revert", action="store_true")
     args = ap.parse_args()
-    return apply_split() if args.apply else revert_split()
+    if args.apply:
+        return apply_split()
+    if args.unapply:
+        return unapply_split()
+    return revert_split()
 
 
 if __name__ == "__main__":

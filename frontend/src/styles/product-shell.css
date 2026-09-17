@@ -1,6 +1,6 @@
 /* Application shell. All visual values come from global Design System 3.0. */
 
-@layer product {
+@layer shell {
 .app-header {
   min-height: 48px;
   gap: 18px;

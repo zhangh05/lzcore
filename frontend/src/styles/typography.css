@@ -30,7 +30,7 @@
    Must be imported AFTER global.css / product-shell.css / console-system.css /
    AgentWorkbench.css. See src/main.tsx. */
 
-@layer product {
+@layer typography {
 :root {
   /* ── Vertical rhythm ───────────────────────────────────────────────────
      One 4px-based scale replaces the off-grid spacing scattered across the
@@ -71,69 +71,16 @@
 }
 
 /* ── Element level: headings ──────────────────────────────────────────────
-   global.css defines h1-h4 but stops there, so h5/h6 fell back to body size
-   and rendered at 14px — identical to h5 and identical to body copy. The scale
-   below is complete and strictly monotonic: 20 / 18 / 16 / 14 / 13 / 12. */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  color: var(--text);
-  font-family: var(--font-display);
-  letter-spacing: var(--tracking-cjk);
-}
-
-h1 {
-  font-size: var(--fs-20);
-  font-weight: var(--weight-display);
-  line-height: var(--lh-display);
-}
-
-h2 {
-  font-size: var(--fs-18);
-  font-weight: var(--weight-display);
-  line-height: var(--lh-display);
-}
-
-h3 {
-  font-size: var(--fs-16);
-  font-weight: var(--weight-subhead);
-  line-height: var(--lh-heading);
-}
-
-h4 {
-  font-size: var(--fs-14);
-  font-weight: var(--weight-subhead);
-  line-height: var(--lh-heading);
-}
-
-/* h5/h6 bottom out at or below body size. They stay distinguishable by weight
-   and colour rather than by size — the standard move once a scale bottoms out. */
-h5 {
-  font-size: var(--fs-13);
-  font-weight: var(--weight-subhead);
-  line-height: var(--lh-heading);
-  color: var(--text-2);
-}
-
-h6 {
-  font-size: var(--fs-12);
-  font-weight: var(--weight-subhead);
-  line-height: var(--lh-heading);
-  color: var(--text-3);
-}
+   Moved to global.css. A bare element selector is the weakest thing in the
+   cascade, and a layer beats specificity — so `h1`…`h6` have to live in the
+   *first* layer or they out-rank every component heading that refines them
+   (`.task-phase-summary h3`, `.empty-text`, `.wb-header h1`, …). */
 
 /* ── Content surface: assistant output and any markdown render ──────────── */
 
-.markdown-body,
-.streaming-plain-text {
-  font-size: var(--fs-14);
-  line-height: var(--lh-body);
-  color: var(--text-2);
-  text-wrap: pretty;
-}
+/* The `.markdown-body` / `.streaming-plain-text` type base also moved to
+   global.css, for the same reason in the other direction: it is the base that
+   `.chat-bubble.assistant` refines, so it has to sit below the components. */
 
 /* Paragraphs */
 .markdown-body p {
@@ -347,10 +294,11 @@ h6 {
 
 /* ── Page level: header and body share one gutter and one rhythm ────────── */
 
-.page-header {
-  gap: var(--flow-loose);
-  padding: var(--flow-loose) var(--page-gutter) var(--flow-base);
-}
+/* `.page-header { gap, padding }` moved to console-system.css — it has to share
+   a layer with `.page-header, .page-header.ui-page-header`, because the two
+   split by specificity: the `.ui-page-header` variant (0,2,0) wins on the pages
+   that use `components/ui/PageHeader`, and the bare one takes it on load order
+   on the pages that do not. */
 
 .page-header h1 {
   /* 4px 太贴，标题和副标题几乎黏在一起。8px 才看得出是两个层级。 */
@@ -368,9 +316,10 @@ h6 {
   line-height: var(--lh-compact);
 }
 
-.page-body {
-  padding: var(--flow-loose) var(--page-gutter) var(--flow-block);
-}
+/* `.page-body { padding }` moved to console-system.css, for the same reason as
+   `.page-header` above: `.capability-center .page-body { padding-top }` (0,2,0)
+   refines it, and the two have to be in one layer for that refinement to keep
+   working once the sheets are layered. */
 
 /* ── Tables (app chrome) ────────────────────────────────────────────────── */
 

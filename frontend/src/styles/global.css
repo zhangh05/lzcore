@@ -1,7 +1,7 @@
 /* LZCore UI System
    A single, coherent product UI layer for the Flask + React app. */
 
-@layer product {
+@layer base {
 *,
 *::before,
 *::after {
@@ -307,6 +307,65 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* ── Element level: headings ──────────────────────────────────────────────
+   The heading scale belongs to the *weakest* layer, not to a late one. An
+   element selector is the lowest-weight thing in the cascade, and a layer beats
+   specificity — so a bare `h3` sitting in a later layer out-ranks
+   `.task-phase-summary h3`, `.empty-text` and `.wb-header h1` and resets every
+   component heading to the document scale. Measured: it moved 22 declarations
+   across five routes, including the workbench phase headings (13px -> 16px).
+   The scale is complete and strictly monotonic: 20 / 18 / 16 / 14 / 13 / 12. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--text);
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-cjk);
+}
+
+h1 {
+  font-size: var(--fs-20);
+  font-weight: var(--weight-display);
+  line-height: var(--lh-display);
+}
+
+h2 {
+  font-size: var(--fs-18);
+  font-weight: var(--weight-display);
+  line-height: var(--lh-display);
+}
+
+h3 {
+  font-size: var(--fs-16);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+}
+
+h4 {
+  font-size: var(--fs-14);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+}
+
+/* h5/h6 bottom out at or below body size. They stay distinguishable by weight
+   and colour rather than by size — the standard move once a scale bottoms out. */
+h5 {
+  font-size: var(--fs-13);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+  color: var(--text-2);
+}
+
+h6 {
+  font-size: var(--fs-12);
+  font-weight: var(--weight-subhead);
+  line-height: var(--lh-heading);
+  color: var(--text-3);
+}
+
 .auth-loading {
   min-height: 100%;
   display: grid;
@@ -315,7 +374,6 @@ body {
   opacity: 0;
   transition: opacity var(--dur-2) var(--ease);
 }
-
 .auth-loading.visible {
   opacity: 1;
 }
@@ -1800,38 +1858,18 @@ pre code {
   border-color: transparent;
 }
 
-/* .btn.danger-ghost 之前只设了 color，没有 transparent 背景，所以渲染出来跟
-   .btn.danger 完全一样——是个"带边框的实心按钮"，跟 ghost 的语义不符。
-   8+ 处使用（删除/批量删除/取消等）都被这个 bug 拖累成"红边按钮"。 */
-.btn.danger,
-.btn.danger-ghost {
-  color: var(--danger);
-}
-.btn.danger-ghost {
-  background: transparent;
-  border-color: transparent;
-}
+/* .btn.danger / .btn.danger-ghost 已并入 console-system.css：它们是按钮族的
+   修饰类，和 `.btn.sm` / `.btn.icon-only` 同理 —— 留在 base 层会被设计系统的
+   `.btn` 基座盖掉，删除按钮会退回中性色。
 
-.btn.danger:hover:not(:disabled),
-.btn.danger-ghost:hover:not(:disabled) {
-  background: var(--danger-soft);
-  border-color: rgba(189, 48, 64, 0.24);
-}
+   原注释（保留在下面，因为它是那次修复的理由）：.btn.danger-ghost 之前只设了
+   color，没有 transparent 背景，所以渲染出来跟 .btn.danger 完全一样 —— 是个
+   "带边框的实心按钮"，跟 ghost 的语义不符。8+ 处使用（删除/批量删除/取消等）
+   都被这个 bug 拖累成"红边按钮"。 */
 
-.btn.sm {
-  height: 26px;
-  padding: 0 9px;
-  font-size: var(--fs-12);
-}
-
-.btn.icon-only {
-  width: 32px;
-  padding: 0;
-}
-
-.btn.icon-only.sm {
-  width: 26px;
-}
+/* `.btn.sm` / `.btn.icon-only` 已并入 console-system.css —— 它们压的是设计系统
+   的 `.btn` 基座（0,1,0），而基座在更晚的层里；留在 base 层会整条失效，按钮
+   会退回 13px 字号和 0 12px 内边距。修饰类跟基座必须同层。 */
 
 .btn:disabled {
   opacity: 0.48;
@@ -2324,143 +2362,15 @@ select.input {
    此前是两套各写一遍的实现：高度 34 / 36、激活色 --accent-2 / --text、
    字重 640 / 620、计数徽章一个是裸 span（opacity-60）一个是胶囊 ——
    看起来像两套产品。现在结构收敛到 components/ui/TabButton，
-   视觉由下面这一组规则统一给出，页面只保留容器类名差异。
+   视觉由这一组规则统一给出，页面只保留容器类名差异。
 
-   ★ 特异性：console-system.css 有 `.data-center .data-center-tabs button`
-   和 `.operations-page .operations-tabs button`（都是 (0,2,1)），
-   裸 `.tab` / `.dc-tab` (0,1,0) 会被静默盖掉，所以这里必须带页面前缀 (0,3,0)。 */
-.tabs,
-.network-admin .network-tabs,
-.data-center > .ui-filter-bar.data-center-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 2px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--line);
-}
+   ★ 整组在 pages.css：console-system.css 有
+   `.data-center .data-center-tabs button` 和
+   `.operations-page .operations-tabs button`（都是 (0,2,1)），
+   裸 `.tab` / `.dc-tab` (0,1,0) 会被静默盖掉，所以这里必须带页面前缀
+   (0,3,0) —— 而权重只在同一层里说话。 */
 
-.data-center > .ui-filter-bar.data-center-tabs {
-  padding: 0 8px;
-}
-
-/* 网络运维的 tab 条左右内边距跟 .network-toolbar 的 24px 对齐 */
-.network-admin .network-tabs {
-  padding: 0 24px;
-}
-
-@media (max-width: 760px) {
-  .network-admin .network-tabs {
-    padding: 0 var(--space-3);
-  }
-}
-
-.operations-page .operations-tabs .tab,
-.network-admin .network-tabs .net-tab,
-.data-center .data-center-tabs .dc-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 12px;
-  color: var(--text-3);
-  font-size: var(--fs-13);
-  font-weight: var(--weight-minor);
-  white-space: nowrap;
-  border-radius: var(--r-4) var(--r-4) 0 0;
-  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
-}
-
-/* duotone 的背景层用 currentColor 渲染：激活态切 duotone 会连背景一起变实 */
-.operations-page .operations-tabs .tab > svg,
-.network-admin .network-tabs .net-tab > svg,
-.data-center .data-center-tabs .dc-tab > svg {
-  flex-shrink: 0;
-  opacity: 0.82;
-  transition: opacity var(--dur-2) var(--ease);
-}
-
-.operations-page .operations-tabs .tab:hover,
-.network-admin .network-tabs .net-tab:hover,
-.data-center .data-center-tabs .dc-tab:hover {
-  color: var(--text);
-  background: var(--surface-2);
-}
-
-.operations-page .operations-tabs .tab:hover > svg,
-.data-center .data-center-tabs .dc-tab:hover > svg,
-.operations-page .operations-tabs .tab.active > svg,
-.network-admin .network-tabs .net-tab.active > svg,
-.data-center .data-center-tabs .dc-tab.active > svg {
-  opacity: 1;
-}
-
-.operations-page .operations-tabs .tab:focus-visible,
-.network-admin .network-tabs .net-tab:focus-visible,
-.data-center .data-center-tabs .dc-tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.operations-page .operations-tabs .tab.active,
-.network-admin .network-tabs .net-tab.active,
-.data-center .data-center-tabs .dc-tab.active {
-  color: var(--text);
-  font-weight: var(--weight-subhead);
-}
-
-/* 下划线贴在 tab 底边内侧 —— 容器开了 overflow-x:auto，如果用 bottom:-1px
-   去压容器的 border-bottom，会被 overflow 裁掉。 */
-.operations-page .operations-tabs .tab::after,
-.network-admin .network-tabs .net-tab::after,
-.data-center .data-center-tabs .dc-tab::after {
-  position: absolute;
-  right: 10px;
-  bottom: 0;
-  left: 10px;
-  height: 2px;
-  background: transparent;
-  border-radius: 2px 2px 0 0;
-  transition: background var(--dur-2) var(--ease);
-  content: "";
-}
-
-.operations-page .operations-tabs .tab.active::after,
-.network-admin .network-tabs .net-tab.active::after,
-.data-center .data-center-tabs .dc-tab.active::after {
-  background: var(--accent);
-  transform-origin: center;
-  animation: tab-line-in var(--dur-3) var(--ease-out) both;
-}
-
-.tab-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 16px;
-  padding: 0 5px;
-  color: var(--text-3);
-  font-size: var(--fs-10);
-  font-weight: var(--weight-subhead);
-  font-variant-numeric: tabular-nums;
-  background: var(--surface-3);
-  border-radius: var(--r-pill);
-}
-
-.operations-page .operations-tabs .tab:hover .tab-count,
-.network-admin .network-tabs .net-tab:hover .tab-count,
-.data-center .data-center-tabs .dc-tab:hover .tab-count {
-  color: var(--text-2);
-}
-
-.operations-page .operations-tabs .tab.active .tab-count,
-.network-admin .network-tabs .net-tab.active .tab-count,
-.data-center .data-center-tabs .dc-tab.active .tab-count {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface));
-}
-
+/* 下划线动画的关键帧不是层敏感的东西，留在原地。 */
 @keyframes tab-line-in {
   from { opacity: 0; transform: scaleX(0.55); }
   to { opacity: 1; transform: scaleX(1); }
@@ -3105,7 +3015,8 @@ details.collapse[open] summary::before {
   overflow-wrap: anywhere;
   color: var(--text-2);
   font-size: var(--fs-14);
-  line-height: 1.72;
+  line-height: var(--lh-body);
+  text-wrap: pretty;
 }
 
 .markdown-body p {
@@ -5833,12 +5744,7 @@ summary:focus-visible,
   margin-bottom: 12px;
 }
 
-.diag-section-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-}
+/* .diag-section-title 已移到 pages.css：它压的是 typography.css 的裸 `h3`。 */
 
 .diag-dim {
   font-size: 12px;
@@ -6225,7 +6131,8 @@ summary:focus-visible,
    flex container now and the toolbar sizes it slightly differently. Measured at
    1440/1200/1024, with no overflow at any of them. */
 .cc-search-input { flex: 0 1 240px; max-width: 240px; }
-.cc-search-input .ui-search-input { height: 30px; font-size: var(--fs-12); }
+/* 输入框高度已移到 pages.css：console-system.css 的 `.input` 是设计系统值，
+   这里要压过它而不是和它比权重。 */
 .cc-segmented { flex-wrap: wrap; margin-bottom: 12px; }
 .capability-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; }
 .cc-category-name { font-weight: 720; }
@@ -6328,35 +6235,10 @@ summary:focus-visible,
   margin-bottom: var(--flow-loose);
 }
 
-/* 状态条：数字给足体量和色彩，非 0 的状态自动上底色。五个等权灰数字是
-   "看不出重点"的典型 —— 这里让异常状态自己跳出来。 */
-.kl-stats .stat-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  min-height: 68px;
-  padding: var(--flow-base) var(--flow-loose);
-}
-.kl-stats .stat-value {
-  font-size: var(--fs-24);
-  font-weight: var(--weight-display);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.15;
-}
-.kl-stats .stat-label {
-  color: var(--text-3);
-  font-size: var(--fs-11);
-  font-weight: var(--weight-minor);
-}
-.kl-stat--ok { background: color-mix(in srgb, var(--ok-soft) 45%, var(--surface)); }
-.kl-stat--ok .stat-value { color: var(--ok); }
-.kl-stat--warn { background: color-mix(in srgb, var(--warn-soft) 45%, var(--surface)); }
-.kl-stat--warn .stat-value { color: var(--warn); }
-.kl-stat--accent { background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
-.kl-stat--accent .stat-value { color: var(--accent); }
-.kl-stat--danger { background: color-mix(in srgb, var(--danger-soft) 45%, var(--surface)); }
-.kl-stat--danger .stat-value { color: var(--danger); }
+/* 状态条的整个 `.kl-stats` / `.kl-stat--*` 组已移到 pages.css：console-system.css
+   对 `.stat-card` / `.stat-value` 有设计系统值，这一组是要压过它们。
+   （状态条的含义：数字给足体量和色彩，非 0 的状态自动上底色。五个等权灰数字是
+   "看不出重点"的典型 —— 这里让异常状态自己跳出来。） */
 
 /* 来源：artifact 用主题色，本地上传保持中性 */
 .kl-source {
@@ -7062,7 +6944,6 @@ summary:focus-visible,
   color: var(--text);
 }
 
-.data-summary-title h2 { font-size: var(--fs-16); }
 .data-summary-title > span,
 .data-panel-head p {
   margin: 0;

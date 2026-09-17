@@ -1,6 +1,6 @@
 /* Design System 3.0: shared primitives and page compositions. */
 
-@layer product {
+@layer console {
 .page {
   width: 100%;
   max-width: none;
@@ -24,10 +24,28 @@
   font-weight: var(--weight-heading);
   letter-spacing: -0.018em;
 }
+/* The older page rhythm, for the pages that have not moved to
+   `components/ui/PageHeader` yet. It has to share a layer with the rule above,
+   because the two split by *specificity*: `.page-header.ui-page-header` (0,2,0)
+   must keep beating it on the pages that do use PageHeader, while a bare
+   `.page-header` (0,1,0) takes this one on load order. Layering them apart
+   decides every page the same way and moves the header 4px on five routes.
+   Moved here from typography.css, unchanged. */
+.page-header {
+  gap: var(--flow-loose);
+  padding: var(--flow-loose) var(--page-gutter) var(--flow-base);
+}
 .page-header h1 span,
 .page-header .subtitle { color: var(--console-muted-ink) !important; }
 .page-header .subtitle { font-size: var(--fs-13); line-height: 1.5; }
 .page-body { padding: var(--space-6); }
+/* The older page rhythm, moved here from typography.css unchanged. It has to
+   share a layer with `.capability-center .page-body { padding-top }` (0,2,0),
+   which refines it — and a layer beats specificity, so a later layer would let
+   the shorthand win and add 4px above the capability directory. Sharing the
+   layer also keeps it winning over the bare `.page-body` above on load order,
+   which is what it did before. */
+.page-body { padding: var(--flow-loose) var(--page-gutter) var(--flow-block); }
 
 .btn {
   height: var(--h-control);
@@ -68,7 +86,30 @@
   background: transparent;
   box-shadow: none;
 }
-.btn.sm { height: var(--h-control-compact); border-radius: var(--r-4); }
+/* The size and colour modifiers belong with the base they modify. They used to
+   live in global.css, which works only while the whole product is one layer: a
+   layer beats specificity, so once the shared sheets are split a `.btn.sm` in an
+   earlier layer loses to this very `.btn` on `font-size` and `padding` and the
+   compact buttons quietly grow back to full size. Declarations are copied from
+   global.css unchanged; where both sheets set a property the later one already
+   won (`height`, `border-radius`), so it is not repeated.
+
+   `.btn.danger` / `.btn.danger-ghost` are here for the same reason, and were
+   the one that showed up as a colour regression: the destructive button in the
+   runs list went from `--danger` back to the neutral `.btn` colour.
+   `.btn.danger-ghost` deliberately restates `background: transparent` — without
+   it the ghost variant rendered identically to the solid one. */
+.btn.sm { height: var(--h-control-compact); border-radius: var(--r-4); padding: 0 9px; font-size: var(--fs-12); }
+.btn.icon-only { width: 32px; padding: 0; }
+.btn.icon-only.sm { width: 26px; }
+.btn.danger,
+.btn.danger-ghost { color: var(--danger); }
+.btn.danger-ghost { background: transparent; border-color: transparent; }
+.btn.danger:hover:not(:disabled),
+.btn.danger-ghost:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: rgba(189, 48, 64, 0.24);
+}
 
 .input,
 textarea.input,
