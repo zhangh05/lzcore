@@ -35,13 +35,40 @@
 .topology-studio .topology-save-indicator.status-conflict button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--warn); border-radius: 5px; background: var(--warn-soft); color: var(--warn); font-size: 11px; cursor: pointer; }
 .topology-studio .topology-save-indicator.status-conflict button:hover { background: var(--warn-soft); }
 .conflict-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--text-2); font-size: 11.5px; }
-.topology-studio .topology-editbar { position: relative; z-index: 20; flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+/* The bar holds two groups: canvas tools on the left, actions on the right. They
+   must never be drawn on top of each other, and the only way they can be is if
+   one of them shrinks below its own content. `.studio-edit-tools` carries
+   `min-width: 0`, so flexbox will happily squeeze it to a few pixels, and its
+   `overflow: visible` then lets the `white-space: nowrap` buttons paint straight
+   over `.toolbar-right` — which is `flex: 0 0 auto` and so never moves out of
+   the way. Opening a side panel is enough to trigger it, because the panel is
+   what takes the width away.
+
+   Wrapping is the answer, and it is the answer at every width. This used to be
+   declared only inside `@media (max-width: 1180px)`, which made the bar safe
+   exactly where it was least likely to be squeezed and broken across the whole
+   band above it. Let the action group drop to its own row whenever the two do
+   not both fit. */
+.topology-studio .topology-editbar { position: relative; z-index: 20; flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+/* The action group also has to be able to give up width, or the row it wraps
+   onto cannot hold it. `flex: 0 0 auto` with `flex-wrap: nowrap` makes it a
+   fixed 868px that never bends, so a narrower row simply pushes its tail off the
+   bar and over the canvas caption below. `flex-shrink: 1` lets the row compress
+   it down to the row's own width, and `flex-wrap: wrap` then breaks its buttons
+   onto further rows instead of spilling. It still does not grow, so where both
+   groups do fit on one line `space-between` keeps it flush right, as before.
+   Scoped to the edit bar: the canvas toolbar above is a fixed 54px row, and
+   wrapping inside it would spill vertically instead. */
+.topology-studio .topology-editbar > .toolbar-right { flex: 0 1 auto; flex-wrap: wrap; }
 .topology-studio .topology-editbar .btn { border-color: var(--line); background: var(--surface); padding: 5px 8px; height: 30px; white-space: nowrap; box-shadow: none; }
 .topology-studio .topology-editbar .btn:hover { background: var(--accent-soft); border-color: var(--accent); }
 .studio-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); cursor: pointer; }
 .studio-icon-button:hover, .studio-icon-button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .studio-edit-tools { display: flex; align-items: center; gap: 3px; min-width: 0; }
-.studio-edit-tools { overflow: visible; padding-right: 8px; }
+/* Belt and braces for a bar narrower than the tool group itself: wrap the tools
+   rather than let them escape the group's box. `min-width: 0` is what allows the
+   group to be squeezed, so it is also what allows it to wrap instead. */
+.studio-edit-tools { flex-wrap: wrap; overflow: visible; padding-right: 8px; }
 .studio-mode-button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-align-menu > summary::-webkit-details-marker, .studio-insert-menu > summary::-webkit-details-marker { display: none; }
 .studio-mode-button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: var(--accent-soft); color: var(--text); }
@@ -237,7 +264,9 @@
 @media (max-width: 1180px) {
   .network-admin .topology-studio.library-open.inspector-open { grid-template-columns: 220px minmax(0, 1fr) 292px; }
   .network-admin .topology-studio.library-open.agent-open { grid-template-columns: 220px minmax(0, 1fr) 360px; }
-  .topology-studio .topology-editbar { flex-wrap: wrap; padding: 5px 12px; }
+  /* The wrap itself now lives on the base rule; only the tighter padding is
+     specific to this width. */
+  .topology-studio .topology-editbar { padding: 5px 12px; }
 }
 @media (max-width: 900px) {
   .network-admin .topology-studio.agent-open, .network-admin .topology-studio.library-open.agent-open, .network-admin .topology-studio.library-open, .network-admin .topology-studio.inspector-open, .network-admin .topology-studio.library-open.inspector-open { grid-template-columns: minmax(0, 1fr); }
