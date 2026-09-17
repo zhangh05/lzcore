@@ -3,17 +3,22 @@
 
    Why this layer exists
    ---------------------
-   1. `.markdown-body` typography used to be defined in three places at once:
-        global.css:3168  (hardcoded px)
-        AgentWorkbench.css:305  (hardcoded px, negative letter-spacing)
-        AgentWorkbench.css:1225 (token based)
-      The three disagreed — h2 was written both as `1.16em` and `18px`, heading
-      margins were both `20px/8px` and `26px/10px`. The resolved value depended
-      on import order, not on intent. This file now owns those properties.
+   1. `.markdown-body` typography used to be defined in three places at once —
+      global.css and two separate spots in AgentWorkbench.css. The three
+      disagreed: h2 was written both as `1.16em` and `18px`, heading margins
+      were both `20px/8px` and `26px/10px`. The resolved value depended on
+      import order, not on intent, so this file was created to own those
+      properties in one place.
 
-   2. The `--space-*` scale was defined but barely used: 112 references across
-      11,452 lines of CSS against well over a thousand hardcoded px values,
-      including off-grid steps (3/5/6/7/9/18/22px). There was no vertical rhythm.
+      An earlier version of this header cited the line numbers. They have moved
+      several times since and now point at unrelated rules; grep the class
+      instead of trusting them. The `.markdown-body` *base* (font-size,
+      line-height, colour) now lives in global.css again — see the note on
+      element defaults below.
+
+   2. The `--space-*` scale was defined but barely used: a hundred-odd
+      references against well over a thousand hardcoded px values, including
+      off-grid steps (3/5/6/7/9/18/22px). There was no vertical rhythm.
 
    3. `--lh-tight/base/loose` were referenced 3 times in total while 15 distinct
       hardcoded line-heights were in use. Paragraphs rendered at 1.78, list items
@@ -25,10 +30,19 @@
    spacing, list markers, text alignment. Colour, radius, shadow and motion stay
    where they are. Every value below sits on the 4px grid.
 
-   Load order
-   ----------
-   Must be imported AFTER global.css / product-shell.css / console-system.css /
-   AgentWorkbench.css. See src/main.tsx. */
+   Layer, not load order
+   ---------------------
+   This sheet is in the `typography` layer, declared after the component layers
+   in styles/layers.css. That ordering is load-bearing and looks wrong at first
+   glance: a bare `h3` here outranks every component class in an earlier layer
+   that tries to refine it, because a layer beats specificity.
+
+   Which is exactly why element defaults do *not* belong here. `h1`-`h6` and the
+   `.markdown-body` type base moved to global.css's `base` layer: from a later
+   layer they were resetting 22 declarations across five routes
+   (`.task-phase-summary h3`, `.empty-text`, `.wb-header h1`). Change the order
+   in layers.css only with the layout probe running — it reads as a refactor and
+   behaves like a redesign. */
 
 @layer typography {
 :root {

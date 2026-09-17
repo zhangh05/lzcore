@@ -25,7 +25,9 @@ Output: a clustered report on stdout, and the raw rows in
 `/tmp/conflicts_all.json` for further analysis.
 
 Requires the split to be applied first (otherwise every rule is in one layer
-and there is nothing to compare). Use `apply_layer_split.py --apply`.
+and there is nothing to compare). The split *is* the committed state, so this
+normally just runs; if you have collapsed the sheets for a control measurement,
+`layer_state.py --split` puts it back.
 """
 
 import json
@@ -34,14 +36,14 @@ import sys
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
-from apply_layer_split import LAYERS
+from layer_state import LAYERS
 
 BASE = "http://127.0.0.1:5273"
 
-# The layers this tool exists to evaluate. Taken from the script that applies the
-# split rather than written out again here, so the two cannot drift apart — and
-# so "the split is not applied" is detectable instead of silently reading as
-# "no conflicts".
+# The layers this tool exists to evaluate. Taken from the script that switches
+# layer state rather than written out again here, so the two cannot drift apart
+# — and so "the split is not applied" is detectable instead of silently reading
+# as "no conflicts".
 EXPECTED_LAYERS = sorted({layer for _, layer in LAYERS})
 
 JS = r"""
@@ -97,7 +99,7 @@ JS = r"""
   if (missing.length) {
     throw new Error("共享样式表还没拆层：缺少 " + missing.join(", ") +
                     "（当前只有 " + Object.keys(LAYER_RANK).join(", ") +
-                    "）。先跑 apply_layer_split.py --apply。");
+                    "）。先跑 layer_state.py --split。");
   }
   // Split a selector list on its *top-level* commas. `:is(pre, table)` holds a
   // comma that is not a list separator, so a plain `split(",")` invents two

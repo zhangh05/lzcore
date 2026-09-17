@@ -38,13 +38,15 @@
 .page-header h1 span,
 .page-header .subtitle { color: var(--console-muted-ink) !important; }
 .page-header .subtitle { font-size: var(--fs-13); line-height: 1.5; }
-.page-body { padding: var(--space-6); }
 /* The older page rhythm, moved here from typography.css unchanged. It has to
    share a layer with `.capability-center .page-body { padding-top }` (0,2,0),
    which refines it — and a layer beats specificity, so a later layer would let
-   the shorthand win and add 4px above the capability directory. Sharing the
-   layer also keeps it winning over the bare `.page-body` above on load order,
-   which is what it did before. */
+   the shorthand win and add 4px above the capability directory.
+
+   A second bare `.page-body { padding: var(--space-6) }` used to sit directly
+   above this one. It was dead on arrival: same layer, same specificity, and
+   this rule comes later, so it never applied to anything. Deleted rather than
+   left to be read as the page's actual gutter. */
 .page-body { padding: var(--flow-loose) var(--page-gutter) var(--flow-block); }
 
 .btn {
@@ -70,6 +72,25 @@
   border-color: var(--text-4);
   transform: none;
 }
+/* `:focus-visible` and `:disabled` are here for the same reason as `.btn.sm`
+   below — a layer beats specificity, so from `base` they lose to this very
+   `.btn` on every property both set. That is not a hypothetical: under the
+   split a focused `.btn` measured `box-shadow: none`, while `.collapse-btn`,
+   which shares the same rule in global.css, kept its
+   `rgba(15,119,120,.18) 0 0 0 2px` ring.
+
+   Only `box-shadow` came across. The `outline: none` that shipped with it
+   stayed in global.css on purpose: the keyboard ring users actually see is
+   drawn by `:root :is(button, a, ...):focus-visible` over there — (0,2,1) but
+   in the `base` layer — and an `outline: none` in this layer would outrank it
+   and take the ring away altogether.
+
+   Kept above `.btn.primary` / `.btn.ghost` deliberately. Both are (0,2,0),
+   both set `box-shadow: none`, and both won on load order before the split.
+   Later still wins inside a layer, so this preserves what the single-layer
+   state measured. */
+.btn:focus-visible { box-shadow: var(--shadow-focus); }
+.btn:disabled { opacity: 0.48; }
 .btn.primary {
   color: var(--accent-text);
   background: var(--console-action);

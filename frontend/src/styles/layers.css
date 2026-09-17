@@ -37,5 +37,8 @@
  *   - Unlayered rules beat every layer, so a stylesheet that forgets to declare
  *     a layer silently wins over all of these. Keep every sheet layered.
  *   - Extension styles must stay scoped to the extension's own root class.
+ *   - A modifier belongs in the same layer as the base it modifies. `.btn.sm`
+ *     in `base` loses to `.btn` in `console` on every property both set, and
+ *     loses silently — the compact buttons just quietly grow back.
  */
 @layer runtime, base, shell, console, workbench, typography, pages, extension, responsive;

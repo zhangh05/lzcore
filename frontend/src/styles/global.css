@@ -1172,11 +1172,8 @@ pre code {
   text-align: left;
 }
 
-.btn[data-compact="true"] {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-}
+/* `.btn[data-compact="true"]` 删掉了：整个 src 里没有任何组件渲染
+   `data-compact` 属性，这条规则从来没有匹配过元素。 */
 
 .muted-row {
   cursor: default;
@@ -1858,24 +1855,21 @@ pre code {
   border-color: transparent;
 }
 
-/* .btn.danger / .btn.danger-ghost 已并入 console-system.css：它们是按钮族的
-   修饰类，和 `.btn.sm` / `.btn.icon-only` 同理 —— 留在 base 层会被设计系统的
-   `.btn` 基座盖掉，删除按钮会退回中性色。
+/* 按钮族的修饰类已经全部并进 console-system.css，跟 `.btn` 基座同层：
+   `.btn.sm` / `.btn.icon-only` / `.btn.icon-only.sm` / `.btn.danger` /
+   `.btn.danger-ghost`，以及这里的 `:disabled` 和 `:focus-visible`。
 
-   原注释（保留在下面，因为它是那次修复的理由）：.btn.danger-ghost 之前只设了
-   color，没有 transparent 背景，所以渲染出来跟 .btn.danger 完全一样 —— 是个
-   "带边框的实心按钮"，跟 ghost 的语义不符。8+ 处使用（删除/批量删除/取消等）
-   都被这个 bug 拖累成"红边按钮"。 */
+   为什么必须同层：层先于权重。`.btn:focus-visible` 是 (0,2,0)，`.btn` 是
+   (0,1,0)，按权重前者该赢；但 `.btn` 在 console 层、`:focus-visible` 在 base
+   层时，权重根本不参与比较，焦点的 box-shadow 会被 `box-shadow: none` 吃掉
+   —— 实测确认：拆层后 `.btn` 聚焦的 box-shadow 从
+   `rgba(15,119,120,.18) 0 0 0 2px` 变成 `none`，而同样在这条规则里的
+   `.collapse-btn` 不受影响。搬过去就恢复了。
 
-/* `.btn.sm` / `.btn.icon-only` 已并入 console-system.css —— 它们压的是设计系统
-   的 `.btn` 基座（0,1,0），而基座在更晚的层里；留在 base 层会整条失效，按钮
-   会退回 13px 字号和 0 12px 内边距。修饰类跟基座必须同层。 */
+   `:focus-visible` 的 `outline: none` 没有一起搬。键盘焦点环由本文件末尾的
+   `:root :is(button, a, ...):focus-visible`（(0,2,1)，base 层）提供；把
+   `outline: none` 放进 console 层会反过来压掉它，主焦点指示就没了。 */
 
-.btn:disabled {
-  opacity: 0.48;
-}
-
-.btn:focus-visible,
 .input:focus-visible,
 textarea.input:focus-visible,
 select.input:focus-visible,
