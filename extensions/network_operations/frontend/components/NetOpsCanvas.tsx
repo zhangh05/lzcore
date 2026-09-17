@@ -143,7 +143,7 @@ type CyElement = {
   group: () => string;
   length: number;
 };
-type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean };
+type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean; grabbed: () => boolean };
 type CyStyleChain = { selector: (selector: string) => { style: (style: Record<string, unknown>) => CyStyleChain }; update: () => void };
 type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void }; originalEvent?: MouseEvent };
 
@@ -235,7 +235,13 @@ function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: stri
         existing.data("_cls", effective);
         existing.classes(effective);
       }
-      if (syncPositions && existing.isNode() && next.position) {
+      // Never reposition a node the user is holding. A save round-trip replaces
+      // the whole topology — the debounced PUT's reply, and then the list reload
+      // that follows it — and neither knows a drag is in progress. Forcing the
+      // position back mid-gesture springs the node to wherever the last save put
+      // it, and the drag the user is in the middle of is then thrown away. The
+      // pointer owns the node until it lets go.
+      if (syncPositions && existing.isNode() && next.position && !(existing as CyNode).grabbed()) {
         const current = (existing as CyNode).position();
         if (Math.abs(current.x - next.position.x) > 0.5 || Math.abs(current.y - next.position.y) > 0.5) {
           (existing as CyNode).position(next.position);
