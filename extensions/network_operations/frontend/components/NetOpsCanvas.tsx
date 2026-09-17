@@ -678,7 +678,7 @@ export default function NetOpsCanvas(props: Props) {
         const status: NodeRuntimeStatus = props.nodeStatus?.[node.node_id] || "unknown";
         const statusColor = statusPalette[status];
         const vendorTint = !node.linked_device_id ? "#fbfcfd" : device?.vendor?.toLowerCase().includes("huawei") ? "#f2f7ff" : "#f4fbfa";
-        return { group: "nodes", classes: dimClass(node.node_id, node.linked_device_id ? "managed-node" : "manual-node"), data: { id: node.node_id, label: node.display_name || device?.name || "未命名设备", status, statusColor, statusWidth: status === "error" ? 3 : 2, vendorTint, labelOpacity: 1, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
+        return { group: "nodes", classes: dimClass(node.node_id, node.linked_device_id ? "managed-node" : "manual-node"), data: { id: node.node_id, label: node.display_name || device?.name || "未命名设备", status, statusColor, statusWidth: status === "error" ? 3 : 2, vendorTint, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
       }),
       ...(props.topology.canvas_items || []).map((item) => {
         const style = { ...canvasItemDefaults[item.kind], ...item.style };
@@ -688,6 +688,15 @@ export default function NetOpsCanvas(props: Props) {
       // Do not let stale/imported links with a missing endpoint reach the
       // renderer. Cytoscape rejects those elements and can otherwise leave a
       // blank canvas even though the surviving drawing is valid.
+      //
+      // `label`, `srcPort` and `tgtPort` are deliberately absent: they are owned
+      // by the interface-label effect below, which is the only thing that knows
+      // the zoom and the 接口标签 switch. Listing them here made reconciliation
+      // write them back as empty strings, and that effect only re-runs when
+      // `props.topology.links` changes identity — so any reconciliation that
+      // left `links` alone silently blanked every interface label until the
+      // next zoom. Measured: idling on the page, the labels vanished on their
+      // own after 6.4s and never returned.
       ...props.topology.links
         .filter((link) => props.topology.nodes.some((node) => node.node_id === link.source_node_id) && props.topology.nodes.some((node) => node.node_id === link.target_node_id))
         .map((link) => ({
@@ -695,7 +704,7 @@ export default function NetOpsCanvas(props: Props) {
           // A link is only as visible as its endpoints; dimming one end and
           // leaving the edge bright would draw attention to nothing.
           classes: dimmed.has(link.source_node_id) || dimmed.has(link.target_node_id) ? "filtered-out" : "",
-          data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, label: "", srcPort: "", tgtPort: "", visible: 1, edgeColor: link.status === "down" ? linkColors.danger : link.status === "up" ? linkColors.ok : linkColors.unknown,
+          data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, visible: 1, edgeColor: link.status === "down" ? linkColors.danger : link.status === "up" ? linkColors.ok : linkColors.unknown,
           // The state is carried by shape and weight as well as colour, so a
           // down link is still identifiable when the red is not — colour-blind
           // readers, greyscale prints, and screenshots pasted into a report.
@@ -751,6 +760,12 @@ export default function NetOpsCanvas(props: Props) {
 
   // Level of detail: past a zoom-out threshold, labels stop being readable
   // and start being the reason the diagram looks like a mess.
+  //
+  // `props.topology` is a dependency on purpose. `labelOpacity` is owned here
+  // rather than in the element spec, so this effect has to re-assert it after
+  // every reconciliation — otherwise a reconcile that happens to run while the
+  // view is zoomed out puts the labels straight back on. It is declared after
+  // the elements effect, so within one commit it has the last word.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || !rendererReady) return;
@@ -760,7 +775,7 @@ export default function NetOpsCanvas(props: Props) {
         if (node.data("labelOpacity") !== opacity) node.data("labelOpacity", opacity);
       });
     });
-  }, [rendererReady, viewport.zoom]);
+  }, [rendererReady, viewport.zoom, props.topology]);
 
   useEffect(() => {
     if (props.mode === "connect") return;

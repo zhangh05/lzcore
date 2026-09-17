@@ -175,6 +175,19 @@ export type TopologyCompareResult = {
 
 const base = "/extensions/network.operations";
 
+/**
+ * Shared empty result for "nothing is dimmed".
+ *
+ * The canvas reconciles whenever `dimmedNodeIds` changes *identity*, and the
+ * memo that produces it lists `nodeStatus` as a dependency — so it recomputes
+ * on every 10s status poll. Returning a fresh `[]` each time therefore forced a
+ * full reconciliation of the whole diagram four times a minute, which is both
+ * wasted work and a correctness hazard: reconciliation re-asserts every value
+ * the element spec claims to own. One shared array keeps the identity stable
+ * when there is nothing to say.
+ */
+const NO_DIM: string[] = [];
+
 /** A neighbour seen on the wire that is not on the drawing yet. */
 type DiscoveryCandidate = {
   source_node_id: string;
@@ -372,6 +385,19 @@ export default function TopologyWorkspace({
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (saveStatusRef.current !== "saved") return;
+    if (currentTopology) {
+      // A reload can resolve *after* a later save has already been adopted. The
+      // list it carries is older than what is on screen, and adopting it drags
+      // every object back to where it was one edit ago — then the next reload
+      // drags it forward again. Two jumps an edit apart is what the user
+      // reports as a flash, and the guard above does not cover it: it only asks
+      // whether a save is in flight, not whether this list is newer than what
+      // we already have. `serverVersionsRef` holds exactly the number needed to
+      // tell the two apart. Measured before this check: a list reply released
+      // one edit late moved a node 74px back to its previous resting place.
+      const known = serverVersionsRef.current.get(currentTopology.topology_id);
+      if (known !== undefined && currentTopology.version < known) return;
+    }
     setActiveTopology(currentTopology);
     if (currentTopology) {
       serverVersionsRef.current.set(currentTopology.topology_id, currentTopology.version);
@@ -580,7 +606,7 @@ export default function TopologyWorkspace({
   const filterActive = Boolean(canvasFilter.vendors.length || canvasFilter.statuses.length || canvasFilter.groups.length);
 
   const dimmedNodeIds = useMemo(() => {
-    if (!activeTopology || !filterActive) return [];
+    if (!activeTopology || !filterActive) return NO_DIM;
     const matches = (node: Topology["nodes"][number]) => {
       const vendor = String(byDevice.get(node.linked_device_id || "")?.vendor || "");
       if (canvasFilter.vendors.length && !canvasFilter.vendors.includes(vendor)) return false;
