@@ -271,6 +271,14 @@ export default function NetOpsCanvas(props: Props) {
   const [miniOpen, setMiniOpen] = useState(false);
   const [alignGuides, setAlignGuides] = useState<AlignGuide[]>([]);
   const guideSignatureRef = useRef("");
+  // How far the last alignment snap moved the node away from where the pointer
+  // had put it. Cytoscape drags a node incrementally — new position = current
+  // position + pointer delta — so a snap silently swallows that much of the
+  // pointer's travel. Left uncorrected, a step smaller than the snap window is
+  // cancelled every frame and the node sticks to the guide line instead of
+  // following the pointer. Carrying the offset lets the next frame subtract it
+  // and recover the position the pointer actually asked for.
+  const snapResidualRef = useRef({ x: 0, y: 0 });
   const [linkPreview, setLinkPreview] = useState<AlignGuide | null>(null);
   const connectStartRef = useRef<string | null>(null);
   const [theme, setTheme] = useState(() => (typeof document === "undefined" ? "light" : document.documentElement.getAttribute("data-theme") || "light"));
@@ -411,40 +419,61 @@ export default function NetOpsCanvas(props: Props) {
         if (!node || node.id().startsWith("group-")) return;
         const selectedIds = new Set(cy.$("node:selected").map((item) => item.id()));
         const others = propsRef.current.topology.nodes.filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id));
-        if (!others.length) return;
         const position = node.position();
-        const snapAxis = (candidates: number[], targets: number[]): { diff: number; value: number } | null => {
-          let best: { diff: number; value: number } | null = null;
+        // A guide pairs one of this node's three lines (near edge, centre, far
+        // edge) with one of a neighbour's. What a pairing gives you is the
+        // distance to travel — target - candidate — never a new centre.
+        // Assigning the target straight to the centre meant that lining a
+        // node's edge up with a neighbour's centre teleported the node by half
+        // its own height, which is what made a dragged node float away from
+        // the pointer. `line` is where the guide is drawn: the neighbour's
+        // line, not the node's centre.
+        const snapAxis = (candidates: number[], targets: number[]): { diff: number; shift: number; line: number } | null => {
+          let best: { diff: number; shift: number; line: number } | null = null;
           candidates.forEach((candidate) => {
             targets.forEach((target) => {
               const diff = Math.abs(target - candidate);
-              if (diff <= SNAP && (!best || diff < best.diff)) best = { diff, value: target };
+              if (diff <= SNAP && (!best || diff < best.diff)) {
+                best = { diff, shift: target - candidate, line: target };
+              }
             });
           });
           return best;
         };
-        const targetsX = others.flatMap((other) => [other.x - NODE_HALF_W, other.x, other.x + NODE_HALF_W]);
-        const targetsY = others.flatMap((other) => [other.y - NODE_HALF_H, other.y, other.y + NODE_HALF_H]);
-        let x = position.x;
-        let y = position.y;
-        const snappedX = snapAxis([x - NODE_HALF_W, x, x + NODE_HALF_W], targetsX);
-        if (snappedX) x = snappedX.value;
-        const snappedY = snapAxis([y - NODE_HALF_H, y, y + NODE_HALF_H], targetsY);
-        if (snappedY) y = snappedY.value;
-        if (x !== position.x || y !== position.y) node.position({ x, y });
+        // Snap the position the pointer asked for, not the one the last snap
+        // left behind. Undoing the previous correction first is what stops the
+        // snap from compounding: without it a step smaller than SNAP is
+        // cancelled every frame and the node welds itself to the guide.
+        const residual = snapResidualRef.current;
+        const rawX = position.x - residual.x;
+        const rawY = position.y - residual.y;
+        let nextX = rawX;
+        let nextY = rawY;
+        let snappedX: ReturnType<typeof snapAxis> = null;
+        let snappedY: ReturnType<typeof snapAxis> = null;
+        if (others.length) {
+          const targetsX = others.flatMap((other) => [other.x - NODE_HALF_W, other.x, other.x + NODE_HALF_W]);
+          const targetsY = others.flatMap((other) => [other.y - NODE_HALF_H, other.y, other.y + NODE_HALF_H]);
+          snappedX = snapAxis([rawX - NODE_HALF_W, rawX, rawX + NODE_HALF_W], targetsX);
+          snappedY = snapAxis([rawY - NODE_HALF_H, rawY, rawY + NODE_HALF_H], targetsY);
+          nextX = rawX + (snappedX?.shift ?? 0);
+          nextY = rawY + (snappedY?.shift ?? 0);
+        }
+        snapResidualRef.current = { x: nextX - rawX, y: nextY - rawY };
+        if (nextX !== position.x || nextY !== position.y) node.position({ x: nextX, y: nextY });
 
         const lines: AlignGuide[] = [];
         if (snappedX) {
-          const near = others.filter((other) => Math.abs(other.x - x) <= NODE_HALF_W * 2 + 60);
-          const top = Math.min(y, ...near.map((other) => other.y)) - NODE_HALF_H - 12;
-          const bottom = Math.max(y, ...near.map((other) => other.y)) + NODE_HALF_H + 12;
-          lines.push({ x1: x, y1: top, x2: x, y2: bottom });
+          const near = others.filter((other) => Math.abs(other.x - nextX) <= NODE_HALF_W * 2 + 60);
+          const top = Math.min(nextY, ...near.map((other) => other.y)) - NODE_HALF_H - 12;
+          const bottom = Math.max(nextY, ...near.map((other) => other.y)) + NODE_HALF_H + 12;
+          lines.push({ x1: snappedX.line, y1: top, x2: snappedX.line, y2: bottom });
         }
         if (snappedY) {
-          const near = others.filter((other) => Math.abs(other.y - y) <= NODE_HALF_H * 2 + 60);
-          const leftEdge = Math.min(x, ...near.map((other) => other.x)) - NODE_HALF_W - 12;
-          const rightEdge = Math.max(x, ...near.map((other) => other.x)) + NODE_HALF_W + 12;
-          lines.push({ x1: leftEdge, y1: y, x2: rightEdge, y2: y });
+          const near = others.filter((other) => Math.abs(other.y - nextY) <= NODE_HALF_H * 2 + 60);
+          const leftEdge = Math.min(nextX, ...near.map((other) => other.x)) - NODE_HALF_W - 12;
+          const rightEdge = Math.max(nextX, ...near.map((other) => other.x)) + NODE_HALF_W + 12;
+          lines.push({ x1: leftEdge, y1: snappedY.line, x2: rightEdge, y2: snappedY.line });
         }
         const signature = lines.map((line) => `${Math.round(line.x1)}:${Math.round(line.y1)}:${Math.round(line.x2)}:${Math.round(line.y2)}`).join("|");
         if (signature !== guideSignatureRef.current) {
@@ -453,6 +482,9 @@ export default function NetOpsCanvas(props: Props) {
         }
       });
       cy.on("free dragfree", "node", () => {
+        // The correction only describes an in-progress drag; the next grab
+        // starts from a position the pointer agrees with.
+        snapResidualRef.current = { x: 0, y: 0 };
         if (!guideSignatureRef.current) return;
         guideSignatureRef.current = "";
         setAlignGuides([]);
