@@ -1151,3 +1151,68 @@ eNSP 和 HCL 都是反过来的：左栏一列**型号**，选型号 → 点画�
 
 
 
+
+## 十九、细拆层：把清单重新测了一遍，并修掉两处（进行中）
+
+第七、八两节的冲突清单是**过期**的：§八 的 22 类里约 14 类是标题冲突，
+而 `823c37a` 已经把 global.css 的裸标题规则删掉了。所以这一轮先**实测**，
+不沿用旧数。
+
+### 先把「测量」这件事本身修对
+
+要测量拆层，必须**先应用拆层**（`cascade_conflicts.py` 从 CSS 里读每条规则所属的层，
+单层状态下无从比较）。而应用/还原这个动作每轮都要做一次，于是做成脚本
+`frontend/scripts/apply_layer_split.py --apply | --revert`。
+
+**期间发现枚举器本身有两个「报 0」的坑，都会把「没测到」伪装成「没问题」：**
+
+1. **层序是硬编码的。** 工具里写着 `{typography: 4}`（typography 最晚），
+   而本轮声明的顺序把 typography 放在**最前**。于是它量的根本是另一个级联 ——
+   报出的冲突里有些看起来「不可能发生」，那正是唯一的症状。
+   改为**从实际加载的 CSS 读层序**（按各层块首次出现排序；
+   `@layer a, b, c;` 声明语句更直接，但打包器会把它拆散 —— 实测只剩 `@layer extension;`）。
+2. **单层状态下报 0。** 所有规则同层时，两种算法必然给出同一个胜出者，于是 0 翻转，
+   读起来跟「干净」一模一样。**数层数抓不到它** —— `product` / `extension` / `responsive`
+   一直都在。现在工具从 `apply_layer_split.py` 取期望层集合，缺任何一层就**拒绝测量**（退出码 2）。
+
+未知层名也从「静默按 -1 处理」改成**报错**。
+
+### 实测数据
+
+| 状态 | 翻转 | 规则对 |
+|---|---|---|
+| 拆层刚应用（本轮起点） | 253 | 37 |
+| 修掉节奏段 + 头像之后 | 208 | 28 |
+
+**已修并验证（单层下差异 0）：**
+
+- `25772ad` **节奏段并回 console-system.css**。它归一化的是 console 和 global 里
+  硬编码的 padding/margin，只有靠 typography.css 最后加载才成立。并回源头之后，
+  特异性重新在那一层内部裁决。
+- `7ac56e8` **`.message-avatar` 的颜色归 AgentWorkbench**。`.user` 和暗色变体在 global 里
+  靠 (0-2-0) 压过组件的 (0-1-0)；而该头像**只被 MessageRow.tsx 使用**。
+  global 里的 `.agent` **没有搬** —— 它一直在输给组件里那条，搬过去会改变渲染。
+
+### 剩余工作单（28 个规则对，按影响面）
+
+| # | 规则对 | 翻转 | 性质 |
+|---|---|---|---|
+| 1 | `base(.btn.sm)` / `base(.btn.icon-only)` vs `console(.btn)` | 70 | 变体与基类分处两层 |
+| 2 | `base(.kl-stats .stat-card / .stat-value)` vs `console(.stat-card / .stat-value)` | 30 | 同上 |
+| 3 | `base(.operations-tabs .tab…)` vs `console(.data-center-tabs button)` | 20 | §八 已知倒置 ① |
+| 4 | `base(.markdown-body …)` vs `typography` / `workbench` | 22 | 内容排版跨三处 |
+| 5 | `base(.diag-section-title)` vs `typography(h1-h6)` | 14 | 裸元素标题 |
+| 6 | `workbench(.task-phase-summary h3)` vs `typography(h3)` | 8 | 同上 |
+| 7 | `console(.page-body)` / `base(.page-body.no-pad)` vs `typography(.page-body)` | 2 | §八 已知倒置 ③ |
+| 8 | 其余零散（`.hero-title`、`.settings-form-title`、`.cc-search-input` 等） | ~20 | 逐个看 |
+
+**修法的共同形状**：**把规则挪到拥有该关注点的层**，而不是去改值。
+这类搬迁在单层状态下**天然 diff 为 0**（单层靠特异性裁决，与文件顺序无关），
+所以可以安全地一条条做、每条都用探针验证。
+
+**一处必须小心的陷阱**：不能整块搬。例如 global 的 `.btn.sm { height: 26px }`
+其实是**死声明** —— console 的 `.btn.sm { height: var(--h-control-compact) }`（=32px）
+同特异性且后加载，早已胜出。整块搬过去它会反超，那就不是等价变换了。
+**搬之前要先确定哪些声明是「有效」的。**
+
+（另外：`--r-4 / --r-6 / --r-8` 三个令牌**都是 8px**，所以涉及圆角的差异全是无效果的。）
