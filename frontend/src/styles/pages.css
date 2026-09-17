@@ -237,4 +237,20 @@
    panel is a dense surface, not a document. */
 .data-summary-title h2 { font-size: var(--fs-16); }
 .data-panel-head h3 { font-size: var(--fs-14); }
+
+/* ── Diagnostics ────────────────────────────────────────────────────────────
+   All three declarations here are also set by console-system.css's `.btn`, so
+   all three need a layer that comes after it. From `base` the run button lost
+   its 100px floor (rendering 86px) and its 680 weight (rendering 650).
+
+   Worth noting the weight was already wrong before this move, and the layout
+   probe never caught it: it compares geometry, not type. The enumerator missed
+   it too — it reported 17 flips, none of them this one. What finally surfaced
+   it was dumping every button's full computed style in both states and diffing
+   the two, which is the blunt instrument and the one that works. */
+.diag-run-btn {
+  min-width: 100px;
+  justify-content: center;
+  font-weight: 680;
+}
 }

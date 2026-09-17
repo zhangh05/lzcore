@@ -1796,64 +1796,24 @@ pre code {
   margin-left: auto;
 }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
-  height: 32px;
-  padding: 0 12px;
-  color: var(--text-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-6);
-  font-size: var(--fs-13);
-  font-weight: 640;
-  line-height: 1;
-  white-space: nowrap;
-  transition:
-    background var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    opacity var(--dur-2) var(--ease),
-    box-shadow var(--dur-2) var(--ease),
-    transform var(--dur-2) var(--ease);
-}
+/* 按钮族的本体已经全部并进 console-system.css，跟 `.btn` 基座同层。这里一条
+   `.btn` 规则都不留。
 
-.btn:hover:not(:disabled) {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line-3);
-  /* 全 app 是 flat 设计，按钮 hover 不应跳出阴影和位移，否则跟整套语言不搭。
-     之前 translate3d(-1px) + box-shadow 让按钮在紧贴列表项时抖一下。 */
-}
+   为什么不留：留在 base 层的话，凡是 console 的 `.btn` 也设了的属性
+   （height / padding / color / background / border / border-radius / font-size /
+   font-weight / transition）全部失效，只有 console 没设的那几条还活着 ——
+   一条规则半死半活。实测的后果是读代码会以为 `height: 32px` 是真的，实际渲染
+   是 36px；`.btn:hover` / `.btn.primary` / `.btn.ghost` 三条则是整条失效。
 
-.btn:active:not(:disabled) {
-  background: var(--surface-3);
-}
+   并过去的活声明：`.btn` 的 display / align-items / justify-content / gap /
+   min-width / line-height / white-space（console 一直没设，靠这里生效）、
+   `.btn:active`、`.btn.primary:hover` 的 color、`.btn.ghost:hover`。
 
-.btn.primary {
-  color: var(--accent-text);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.btn.primary:hover:not(:disabled) {
-  color: var(--accent-text);
-  background: var(--accent-2);
-  border-color: var(--accent-2);
-}
-
-.btn.ghost {
-  background: transparent;
-  border-color: transparent;
-}
-
-.btn.ghost:hover:not(:disabled) {
-  background: var(--surface-3);
-  border-color: transparent;
-}
+   顺带修了一条从来没生效过的：`.btn:active:not(:disabled)` 是 (0,3,0)，
+   `.btn:hover:not(:disabled)` 也是 (0,3,0) 但在更晚的 console 层，而按下时
+   hover 同时成立，所以按下的背景一直被 hover 盖掉。单层状态下也一样，不是拆层
+   引入的。搬到 console 层、放在 hover 之后才真正生效。主色和 ghost 按钮不受
+   影响：`.btn.primary:hover` / `.btn.ghost:hover` 是 (0,4,0)，压得住它。 */
 
 /* 按钮族的修饰类已经全部并进 console-system.css，跟 `.btn` 基座同层：
    `.btn.sm` / `.btn.icon-only` / `.btn.icon-only.sm` / `.btn.danger` /
@@ -4926,8 +4886,9 @@ details.collapse[open] summary::before {
 .cursor-pointer { cursor: pointer; }
 .text-danger { color: var(--danger); }
 .input-xs { height: 22px; font-size: var(--fs-12); width: 100%; }
-.btn-xs { height: 22px; padding: 0 6px; font-size: var(--fs-10); }
-.btn-xs-compact { height: 22px; padding: 0 4px; font-size: var(--fs-10); }
+/* `.btn-xs` / `.btn-xs-compact` / `.btn-info` / `.btn-info-soft` moved to
+   console-system.css: they are `.btn` modifiers, so they belong in the same
+   layer as the `.btn` they modify. See the note over there. */
 .row-flex-xs { display: flex; gap: 2px; padding: 4px 2px; }
 
 /* ── Smoothness & UX polish (2026-07-08) ── */
@@ -6274,20 +6235,6 @@ summary:focus-visible,
 
 /* 导入专用蓝实底：和"上传文档"的绿形成色相对比，两个都是实底高对比，
    但用色区分主次，不会有"一个描边一个实底"的视觉冲突。 */
-.btn-info,
-.btn-info.btn {
-  color: var(--info-text);
-  background: var(--info);
-  border-color: var(--info);
-}
-.btn-info:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--info) 86%, #000);
-  border-color: color-mix(in srgb, var(--info) 86%, #000);
-}
-.btn-info:active:not(:disabled) {
-  background: color-mix(in srgb, var(--info) 76%, #000);
-  border-color: color-mix(in srgb, var(--info) 76%, #000);
-}
 
 /* 文档名下方的常驻 meta（片段数 · 体积）。用 tabular-nums 让数字纵向对齐，
    列表扫读时不会因为字宽跳动而错位。 */
@@ -6648,19 +6595,13 @@ summary:focus-visible,
 .quick-stat-value-danger { color: var(--danger); }
 
 
-.btn-info-soft {
-  background: var(--info-soft);
-  color: var(--info);
-  border: 1px solid var(--info-soft);
-}
 
 /* Diagnostics */
 
-.diag-run-btn {
-  min-width: 100px;
-  justify-content: center;
-  font-weight: 680;
-}
+/* `.diag-run-btn` moved to pages.css: it sets `min-width`, `justify-content`
+   and `font-weight`, and console-system.css's `.btn` sets all three. From
+   `base` it loses every one of them to the later layer — the run button
+   measured 86px wide instead of 100px, and its 680 weight rendered as 650. */
 
 .diag-section-badge {
   font-size: 12px;

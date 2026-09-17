@@ -49,16 +49,32 @@
    left to be read as the page's actual gutter. */
 .page-body { padding: var(--flow-loose) var(--page-gutter) var(--flow-block); }
 
+/* Everything the button is now lives here, in one layer, in one place. The
+   `.btn` body used to be split across two sheets: this rule had the Design
+   System 3.0 values, global.css had an older complete body. In one layer the
+   later sheet simply won each property, so the older body was left half-dead —
+   nine of its declarations never applied (height, padding, colour, background,
+   border, radius, font-size, weight, transition) and seven still did (display,
+   alignment, gap, min-width, line-height, white-space). Reading it, you would
+   believe `height: 32px` while the button rendered at 36px. The seven live ones
+   are merged in below and the dead nine are gone. */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
   height: var(--h-control);
   padding: 0 12px;
   color: var(--text-2);
   background: var(--console-surface);
-  border-color: var(--console-border);
+  border: 1px solid var(--console-border);
   border-radius: var(--r-8);
   box-shadow: none;
   font-size: var(--fs-13);
   font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
   transition:
     color 140ms ease,
     background 140ms ease,
@@ -70,8 +86,20 @@
   color: var(--console-ink);
   background: var(--console-muted);
   border-color: var(--text-4);
+  /* 全 app 是 flat 设计，按钮 hover 不应跳出阴影和位移，否则跟整套语言不搭。
+     之前 translate3d(-1px) + box-shadow 让按钮在紧贴列表项时抖一下。 */
   transform: none;
 }
+/* Must sit *after* :hover. Pressing a button also hovers it, and both selectors
+   are (0,3,0), so order decides. This rule already sat after :hover in
+   global.css and still never took effect, because a later layer wins before
+   order is ever consulted — the press feedback has been missing since the
+   Design System 3.0 sheet was added, split or no split.
+
+   Only the plain `.btn` gets it: `.btn.primary:hover` and `.btn.ghost:hover`
+   are (0,4,0) and outrank this, so the primary and ghost buttons keep their own
+   pressed colour instead of turning grey. */
+.btn:active:not(:disabled) { background: var(--surface-3); }
 /* `:focus-visible` and `:disabled` are here for the same reason as `.btn.sm`
    below — a layer beats specificity, so from `base` they lose to this very
    `.btn` on every property both set. That is not a hypothetical: under the
@@ -98,6 +126,11 @@
   box-shadow: none;
 }
 .btn.primary:hover:not(:disabled) {
+  /* The only declaration that survived out of global.css's copy of this rule:
+     console's version never set `color`, so the old one was still winning it.
+     Same value as `.btn.primary` above, so the primary button's label does not
+     shift colour on hover — kept explicitly rather than left to inheritance. */
+  color: var(--accent-text);
   background: var(--console-action-strong);
   border-color: var(--console-action-strong);
   transform: none;
@@ -106,6 +139,50 @@
   border-color: transparent;
   background: transparent;
   box-shadow: none;
+}
+/* Also from global.css, and also still live: nothing here touches
+   `.btn.ghost:hover`, so it kept applying across the split. Moved because a
+   hover state belongs next to the button it is a state of, not in a sheet that
+   is only accidentally earlier in the cascade. */
+.btn.ghost:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: transparent;
+}
+/* The rest of the `.btn` modifiers, out of global.css for the same reason:
+   from an earlier layer they lose to this sheet's `.btn` on everything both
+   set, and specificity never gets consulted.
+
+   `.btn-info` was measurably broken by this. On /knowledge it rendered as a
+   plain button — white, `rgb(255,255,255)` — instead of info-blue, because
+   `.btn-info.btn` is (0,2,0) and `.btn` is (0,1,0), and a layer is compared
+   before specificity is. The single-layer state rendered it correctly.
+
+   They go after `.btn:hover` / `.btn:active` so their own hover and press
+   states still outrank those, which is what load order gave them before.
+
+   `.btn-xs` and `.btn-info-soft` currently match nothing on any measured
+   route. They moved anyway — leaving a modifier in `base` means whoever first
+   uses one gets a class that silently does nothing. */
+.btn-xs { height: 22px; padding: 0 6px; font-size: var(--fs-10); }
+.btn-xs-compact { height: 22px; padding: 0 4px; font-size: var(--fs-10); }
+.btn-info,
+.btn-info.btn {
+  color: var(--info-text);
+  background: var(--info);
+  border-color: var(--info);
+}
+.btn-info:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--info) 86%, #000);
+  border-color: color-mix(in srgb, var(--info) 86%, #000);
+}
+.btn-info:active:not(:disabled) {
+  background: color-mix(in srgb, var(--info) 76%, #000);
+  border-color: color-mix(in srgb, var(--info) 76%, #000);
+}
+.btn-info-soft {
+  background: var(--info-soft);
+  color: var(--info);
+  border: 1px solid var(--info-soft);
 }
 /* The size and colour modifiers belong with the base they modify. They used to
    live in global.css, which works only while the whole product is one layer: a
