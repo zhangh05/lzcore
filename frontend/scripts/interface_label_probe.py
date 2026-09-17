@@ -113,9 +113,11 @@ SETUP = """
 
 WHERE = """
 () => {
-  const r = window.__host.getBoundingClientRect();
+  const h = window.__host, r = h.getBoundingClientRect();
+  // Layout px -> visual px: the sheet sits under `zoom: 0.95` on <body>.
+  const sx = r.width / h.clientWidth, sy = r.height / h.clientHeight;
   const rp = window.__target.renderedPosition();
-  return { x: r.x + rp.x, y: r.y + rp.y };
+  return { x: r.x + rp.x * sx, y: r.y + rp.y * sy };
 }
 """
 

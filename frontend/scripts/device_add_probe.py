@@ -85,25 +85,33 @@ ARMED = """
 # A point over the canvas that is not over any node: a click there is a click
 # on empty sheet. Node bodies are `size * zoom` around their rendered centre,
 # and labels are excluded exactly as the canvas's own hit test excludes them.
+#
+# Everything here stays in the container's LAYOUT pixels. The sheet sits under
+# `zoom: 0.95` on <body>, so `getBoundingClientRect()` is in visual pixels while
+# `renderedPosition()` is in layout pixels; comparing the two without the ratio
+# puts every point ~rp * 0.05 away from where it was meant to be (measured 38px
+# near the bottom of the sheet). Only the final conversion to a client point
+# multiplies by the scale.
 EMPTY_POINT = """
 () => {
   const host = window.__host, cy = window.__cy;
   const r = host.getBoundingClientRect();
+  const scale = { x: r.width / host.clientWidth, y: r.height / host.clientHeight };
   const pan = cy.pan(), zoom = cy.zoom();
   const boxes = cy.$('node').filter(n => !n.id().startsWith('group-')).map(n => {
     const p = n.position();
     return {
-      cx: r.left + pan.x + p.x * zoom, cy: r.top + pan.y + p.y * zoom,
+      cx: pan.x + p.x * zoom, cy: pan.y + p.y * zoom,
       hw: (n.width() * zoom) / 2 + 26, hh: (n.height() * zoom) / 2 + 26,
     };
   });
-  for (let fx = 0.16; fx <= 0.85; fx += 0.07) {
-    for (let fy = 0.16; fy <= 0.85; fy += 0.07) {
-      const c = { x: r.left + r.width * fx, y: r.top + r.height * fy };
-      if (c.x < r.left + 4 || c.x > r.right - 4 || c.y < r.top + 4 || c.y > r.bottom - 4) continue;
+  for (let ly = 90; ly < host.clientHeight - 120; ly += 40) {
+    for (let lx = 90; lx < host.clientWidth - 260; lx += 40) {
+      if (boxes.some(b => Math.abs(lx - b.cx) <= b.hw && Math.abs(ly - b.cy) <= b.hh)) continue;
+      const c = { x: r.left + lx * scale.x, y: r.top + ly * scale.y };
       const el = document.elementFromPoint(c.x, c.y);
       if (!el || !host.contains(el)) continue;
-      if (boxes.every(b => Math.abs(c.x - b.cx) > b.hw || Math.abs(c.y - b.cy) > b.hh)) return c;
+      return c;
     }
   }
   return null;
@@ -126,10 +134,12 @@ FIRST_NODE_POINT = """
 () => {
   const host = window.__host, cy = window.__cy;
   const r = host.getBoundingClientRect();
+  // `renderedPosition()` is layout px, the rect is visual px - see EMPTY_POINT.
+  const scale = { x: r.width / host.clientWidth, y: r.height / host.clientHeight };
   const n = cy.nodes().filter(x =>
     !x.id().startsWith('group-') && !x.id().startsWith('canvas-'))[0];
   const q = n.renderedPosition();
-  return { x: r.x + q.x, y: r.y + q.y, id: n.id() };
+  return { x: r.x + q.x * scale.x, y: r.y + q.y * scale.y, id: n.id() };
 }
 """
 

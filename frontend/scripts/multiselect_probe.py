@@ -100,21 +100,28 @@ STATE = """
 }
 """
 
+# `renderedPosition()` is in the container's LAYOUT pixels, while
+# `getBoundingClientRect()` is in VISUAL pixels - the sheet sits under
+# `zoom: 0.95` on <body>, so the two differ by that ratio. Skipping it puts the
+# computed point ~rp * 0.05 below the device (measured 38px near the bottom of
+# the sheet), which is enough to click past a device entirely.
 CENTER = """
 (id) => {
-  const r = window.__host.getBoundingClientRect();
+  const h = window.__host, r = h.getBoundingClientRect();
+  const sx = r.width / h.clientWidth, sy = r.height / h.clientHeight;
   const n = window.__cy.getElementById(id);
   const rp = n.renderedPosition();
-  return { x: r.x + rp.x, y: r.y + rp.y };
+  return { x: r.x + rp.x * sx, y: r.y + rp.y * sy };
 }
 """
 
 BOX = """
 (ids) => {
-  const r = window.__host.getBoundingClientRect();
+  const h = window.__host, r = h.getBoundingClientRect();
+  const sx = r.width / h.clientWidth, sy = r.height / h.clientHeight;
   const pts = ids.map(id => {
     const rp = window.__cy.getElementById(id).renderedPosition();
-    return { x: r.x + rp.x, y: r.y + rp.y };
+    return { x: r.x + rp.x * sx, y: r.y + rp.y * sy };
   });
   const pad = 45;
   return {

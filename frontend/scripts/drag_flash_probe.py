@@ -141,9 +141,12 @@ RESET = """
 
 WHERE = """
 () => {
-  const r = window.__host.getBoundingClientRect();
+  const h = window.__host, r = h.getBoundingClientRect();
+  // Layout px -> visual px: the sheet sits under `zoom: 0.95` on <body>, so
+  // `renderedPosition()` and the rect are not in the same space.
+  const sx = r.width / h.clientWidth, sy = r.height / h.clientHeight;
   const rp = window.__target.renderedPosition();
-  return { screen: { x: r.x + rp.x, y: r.y + rp.y } };
+  return { screen: { x: r.x + rp.x * sx, y: r.y + rp.y * sy } };
 }
 """
 
