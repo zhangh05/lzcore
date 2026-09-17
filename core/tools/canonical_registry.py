@@ -59,16 +59,24 @@ def _unsupported(inv: ToolInvocation, actions: str) -> dict:
 
 def _local_glob(inv: ToolInvocation) -> dict:
     from core.tools.general_tools.shared import _caller_workspace, _workspace_path
+    from core.tools.path_security import _contains_traversal, _is_contained
+    from storage.paths import workspace_root
 
     args = inv.arguments or {}
     pattern = str(args.get("pattern") or "*")
     subdir = str(args.get("subdir") or "")
     limit = int(args.get("limit") or 200)
-    root = _workspace_path(_caller_workspace(inv), subdir)
+    if _contains_traversal(pattern) or pattern.startswith(("/", "\\")):
+        return {"ok": False, "error": "glob pattern must stay inside the workspace"}
+    workspace_id = _caller_workspace(inv)
+    root = _workspace_path(workspace_id, subdir)
+    scoped = Path(workspace_root(workspace_id)).resolve()
     matches = []
     for path in root.glob(pattern):
         if len(matches) >= limit:
             break
+        if not _is_contained(path, scoped):
+            continue
         relative = path.relative_to(root)
         matches.append({
             "path": str(relative),

@@ -54,6 +54,50 @@ function stable(value: unknown): string {
 
 const same = (a: unknown, b: unknown) => stable(a) === stable(b);
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergePlainObject(
+  original: unknown,
+  mine: unknown,
+  theirs: unknown,
+  collection: string,
+  id: string,
+  prefix: string,
+): { value: unknown; conflicts: MergeConflict[]; autoMerged: number } {
+  const originalRecord = isPlainObject(original) ? original : {};
+  const mineRecord = isPlainObject(mine) ? mine : {};
+  const theirsRecord = isPlainObject(theirs) ? theirs : {};
+  const merged: Record<string, unknown> = { ...theirsRecord };
+  const conflicts: MergeConflict[] = [];
+  let autoMerged = 0;
+  for (const key of new Set([...Object.keys(mineRecord), ...Object.keys(theirsRecord)])) {
+    const field = prefix ? `${prefix}.${key}` : key;
+    const mineValue = mineRecord[key];
+    const theirsValue = theirsRecord[key];
+    const originalValue = originalRecord[key];
+    if (isPlainObject(mineValue) || isPlainObject(theirsValue) || isPlainObject(originalValue)) {
+      const nested = mergePlainObject(originalValue, mineValue, theirsValue, collection, id, field);
+      merged[key] = nested.value;
+      conflicts.push(...nested.conflicts);
+      autoMerged += nested.autoMerged;
+    } else if (same(mineValue, theirsValue)) {
+      merged[key] = mineValue;
+    } else if (same(originalValue, mineValue)) {
+      merged[key] = theirsValue;
+      autoMerged += 1;
+    } else if (same(originalValue, theirsValue)) {
+      merged[key] = mineValue;
+      autoMerged += 1;
+    } else {
+      merged[key] = theirsValue;
+      conflicts.push({ collection, id, field, mine: mineValue, theirs: theirsValue });
+    }
+  }
+  return { value: merged, conflicts, autoMerged };
+}
+
 function indexById(items: MergeEntity[], key: string): Map<string, MergeEntity> {
   const map = new Map<string, MergeEntity>();
   items.forEach((item) => {
@@ -132,7 +176,12 @@ function mergeCollection(
     for (const field of new Set([...Object.keys(localRecord), ...Object.keys(remoteRecord)])) {
       const mineValue = localRecord[field];
       const theirsValue = remoteRecord[field];
-      if (same(mineValue, theirsValue)) {
+      if (isPlainObject(mineValue) || isPlainObject(theirsValue) || isPlainObject(original[field])) {
+        const nested = mergePlainObject(original[field], mineValue, theirsValue, label, id, field);
+        merged[field] = nested.value;
+        conflicts.push(...nested.conflicts);
+        autoMerged += nested.autoMerged;
+      } else if (same(mineValue, theirsValue)) {
         merged[field] = mineValue;
       } else if (same(original[field], mineValue)) {
         merged[field] = theirsValue;
@@ -141,8 +190,6 @@ function mergeCollection(
         merged[field] = mineValue;
         autoMerged += 1;
       } else {
-        // Both sides changed the same field. Keep the server's value so the
-        // shared drawing stays authoritative, and report the clash.
         merged[field] = theirsValue;
         conflicts.push({ collection: label, id, field, mine: mineValue, theirs: theirsValue });
       }

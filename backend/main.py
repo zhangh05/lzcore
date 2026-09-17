@@ -75,6 +75,8 @@ def _startup_reconciliation_result_key(principal: str, workspace_id: str) -> str
 
 
 def create_app():
+    from backend.core.auth import validate_network_listener
+    validate_network_listener(os.environ.get("LZCORE_LISTEN_HOST") or "127.0.0.1")
     app = Flask(__name__, static_folder=None)
     app.config["PORT"] = UNIFIED_PORT
     from backend.core.identity import ensure_identity_storage_ids, identity_enabled

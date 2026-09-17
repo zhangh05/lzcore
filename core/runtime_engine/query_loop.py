@@ -1489,7 +1489,7 @@ class QueryLoop:
                     status = str(operation.get("status") or "")
                     execution = operation.get("execution") if isinstance(operation.get("execution"), dict) else {}
                     raw = execution.get("result") if isinstance(execution.get("result"), dict) else {}
-                    if status == "executed":
+                    if status in {"executed", "unknown"}:
                         resolved_round.append(StreamingToolResult(
                             tool_name=item.tool_name,
                             call_id=item.call_id,
@@ -2159,9 +2159,11 @@ class QueryLoop:
                             "operation_ids": checkpoint["operation_ids"],
                         }
                     except Exception:
-                        # The operation records remain safely pending.  Do not
-                        # execute an uncheckpointed call, and expose the
-                        # persistence failure as a structured runtime fact.
+                        from extensions.approval.service import invalidate_uncheckpointed_operations
+                        invalidate_uncheckpointed_operations(
+                            ctx.workspace_id,
+                            [str(item.get("interruption_id") or "") for item in pending_interruptions],
+                        )
                         return finish(
                             final_response="审批操作的恢复检查点未能保存，操作没有执行。",
                             tool_results=all_results,

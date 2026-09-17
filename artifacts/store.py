@@ -553,12 +553,18 @@ def delete_artifact(workspace_id: str, artifact_id: str, hard: bool = False) -> 
                 or reference.get("owner_id") != artifact_id
                 for reference in list_references_for_file(workspace_id, rec.file_id)
             )
+        from storage.reference_index import list_references_for_file, list_references_for_owner, remove_reference
+        _remove_artifact_from_run_indexes(workspace_id, artifact_id)
+        for reference in list_references_for_owner(workspace_id, "artifact", artifact_id):
+            remove_reference(workspace_id, reference.get("ref_id", ""))
+        _remove_artifact_record_permanently(workspace_id, artifact_id)
         if rec.file_id and not file_is_shared:
             from storage.file_store import delete_file_permanently
-            delete_file_permanently(workspace_id, rec.file_id)
-            from storage.reference_index import list_references_for_file, remove_reference
-            for reference in list_references_for_file(workspace_id, rec.file_id):
-                remove_reference(workspace_id, reference.get("ref_id", ""))
+            if not delete_file_permanently(workspace_id, rec.file_id):
+                _LOG.warning("artifact payload cleanup failed: %s", rec.file_id)
+            else:
+                for reference in list_references_for_file(workspace_id, rec.file_id):
+                    remove_reference(workspace_id, reference.get("ref_id", ""))
         elif not rec.file_id:
             relative_path = str(rec.relative_path or "")
             if relative_path and not any(
@@ -574,11 +580,6 @@ def delete_artifact(workspace_id: str, artifact_id: str, hard: bool = False) -> 
                     candidate.unlink(missing_ok=True)
                 except (OSError, ValueError):
                     _LOG.warning("artifact payload cleanup failed: %s", candidate, exc_info=True)
-        from storage.reference_index import list_references_for_owner, remove_reference
-        for reference in list_references_for_owner(workspace_id, "artifact", artifact_id):
-            remove_reference(workspace_id, reference.get("ref_id", ""))
-        _remove_artifact_from_run_indexes(workspace_id, artifact_id)
-        _remove_artifact_record_permanently(workspace_id, artifact_id)
     else:
         rec.lifecycle = "deleted"
         rec.updated_at = now_iso()

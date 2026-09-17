@@ -52,7 +52,8 @@ from probe_journal import ProbeJournal
 
 BASE = "http://127.0.0.1:5273"
 API = "http://127.0.0.1:8011/api/extensions/network.operations"
-TOPO = "topo_894e4566e217"
+from probe_target import require_topology_target  # --topology-id is required
+TOPO, WORKSPACE = require_topology_target()
 
 # The drag below is a *real* drag, so it commits and persists. Putting the node
 # back only on the way out is not enough: a killed run never gets there, and
@@ -62,7 +63,7 @@ TOPO = "topo_894e4566e217"
 journal = ProbeJournal("interface_label_probe")
 def read_topology():
     return json.load(urllib.request.urlopen(
-        f"{API}/topologies/{TOPO}?workspace_id=default", timeout=5))["topology"]
+        f"{API}/topologies/{TOPO}?workspace_id={WORKSPACE}", timeout=5))["topology"]
 
 
 def write_topology(t):
@@ -73,7 +74,7 @@ def write_topology(t):
     is the same PUT the canvas itself issues, including the optimistic-lock
     `version` field.
     """
-    body = {"workspace_id": "default", "name": t["name"], "description": t.get("description", ""),
+    body = {"workspace_id": WORKSPACE, "name": t["name"], "description": t.get("description", ""),
             "version": t["version"], "nodes": t["nodes"], "links": t["links"],
             "groups": t.get("groups", []), "canvas_items": t.get("canvas_items", [])}
     req = urllib.request.Request(f"{API}/topologies/{TOPO}", data=json.dumps(body).encode(),

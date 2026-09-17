@@ -132,6 +132,26 @@ def test_approval_reject_never_claims_or_executes(monkeypatch, tmp_path):
         approval.claim_execution("default", record["operation_id"])
 
 
+def test_claim_execution_refuses_operations_without_a_continuation(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    record = approval.prepare_network_operation(_request("default", skill, connection))
+    approval.decide_operation("default", record["operation_id"], "approve")
+    claimed = approval.claim_execution("default", record["operation_id"])
+    assert claimed["status"] == "invalidated"
+    assert claimed["invalidated_reason"] == "approval_checkpoint_missing"
+
+
+def test_checkpoint_persist_failure_invalidates_pending_operations(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    record = approval.prepare_network_operation(_request("default", skill, connection))
+    approval.invalidate_uncheckpointed_operations("default", [record["operation_id"]])
+    stored = approval.get_operation("default", record["operation_id"])
+    assert stored["status"] == "invalidated"
+    assert stored["invalidated_reason"] == "approval_checkpoint_persist_failed"
+
+
 def test_continuation_waits_for_every_operation_and_preserves_full_checkpoint(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     _, connection, skill = _connection_and_skill("default", approval_enabled=True)

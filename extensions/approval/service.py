@@ -177,6 +177,22 @@ def decide_operation(workspace_id: str, operation_id: str, decision: str, *, dec
         return record
 
 
+def invalidate_uncheckpointed_operations(workspace_id: str, operation_ids: list[str]) -> None:
+    """Invalidate pending ops when the QueryLoop checkpoint cannot be stored."""
+    for operation_id in operation_ids:
+        value = str(operation_id or "").strip()
+        if not value:
+            continue
+        with _record_lock(workspace_id, value):
+            record = get_operation(workspace_id, value)
+            if not record or record.get("status") != "pending":
+                continue
+            record["status"] = "invalidated"
+            record["invalidated_reason"] = "approval_checkpoint_persist_failed"
+            record["updated_at"] = _now()
+            _store(workspace_id).save("operations", value, record)
+
+
 def claim_execution(workspace_id: str, operation_id: str) -> dict[str, Any]:
     """Atomically claim an approved record after server-owned scope recheck."""
     with _record_lock(workspace_id, operation_id):
@@ -213,6 +229,13 @@ def claim_execution(workspace_id: str, operation_id: str) -> dict[str, Any]:
             record["status"] = "invalidated"
             record["updated_at"] = _now()
             record["invalidated_reason"] = "server_scope_or_connection_changed"
+            _store(workspace_id).save("operations", operation_id, record)
+            return record
+        continuation = record.get("continuation") if isinstance(record.get("continuation"), dict) else {}
+        if not str(continuation.get("checkpoint_id") or "").strip():
+            record["status"] = "invalidated"
+            record["invalidated_reason"] = "approval_checkpoint_missing"
+            record["updated_at"] = _now()
             _store(workspace_id).save("operations", operation_id, record)
             return record
         record["status"] = "executing"

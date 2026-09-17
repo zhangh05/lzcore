@@ -437,6 +437,8 @@ export default function TopologyWorkspace({
     conflicts: MergeConflict[]; stats: MergeStats;
   } | null>(null);
   const [showConflict, setShowConflict] = useState(false);
+  const conflictRef = useRef(conflict);
+  conflictRef.current = conflict;
   const saveTimerRef = useRef<number | null>(null);
   useEffect(() => { setHistory([]); setFuture([]); setSelectedElement(null); }, [selectedTopologyId]);
 
@@ -763,6 +765,7 @@ export default function TopologyWorkspace({
       setHistory((prev) => [...prev.slice(-20), activeTopology]);
       setFuture([]);
       revisionRef.current += 1;
+      activeTopologyRef.current = next;
       setActiveTopology(next);
       if (conflictPending) {
         // The user may choose “稍后处理” and keep editing. Recompute against
@@ -846,6 +849,11 @@ export default function TopologyWorkspace({
   saveOnUnmountRef.current = executeSave;
   useEffect(() => () => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    if (saveStatusRef.current === "conflict" && conflictRef.current) {
+      saveStatusRef.current = "unsaved";
+      void saveOnUnmountRef.current({ ...conflictRef.current.merged, version: conflictRef.current.theirs.version });
+      return;
+    }
     if (saveStatusRef.current === "unsaved" && activeTopologyRef.current) void saveOnUnmountRef.current(activeTopologyRef.current);
   }, []);
 
@@ -1131,16 +1139,17 @@ export default function TopologyWorkspace({
   }, [devices, handleAddDeviceToCanvas]);
 
   const handleNetOpsMove = useCallback((positions: Array<{ element_id: string; x: number; y: number }>) => {
-    if (!activeTopology || !positions.length) return;
+    const current = activeTopologyRef.current;
+    if (!current || !positions.length) return;
     const byId = new Map(positions.map((position) => [position.element_id, position]));
-    pushState({ ...activeTopology, nodes: activeTopology.nodes.map((node) => {
+    pushState({ ...current, nodes: current.nodes.map((node) => {
       const position = byId.get(node.node_id);
       return position ? { ...node, x: Math.round(position.x), y: Math.round(position.y) } : node;
-    }), canvas_items: (activeTopology.canvas_items || []).map((item) => {
+    }), canvas_items: (current.canvas_items || []).map((item) => {
       const position = byId.get(`canvas-${item.item_id}`);
       return position ? { ...item, x: Math.round(position.x), y: Math.round(position.y) } : item;
     }) });
-  }, [activeTopology, pushState]);
+  }, [pushState]);
 
   const handleAlignSelectedNodes = useCallback((direction: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
     if (!activeTopology) return;
@@ -1384,10 +1393,15 @@ export default function TopologyWorkspace({
   }, []);
 
   const nudgeSelected = useCallback((dx: number, dy: number) => {
-    if (!activeTopology || !canvasSelectedElementIds.length) return;
+    const current = activeTopologyRef.current;
+    if (!current || !canvasSelectedElementIds.length) return;
     const ids = new Set(canvasSelectedElementIds);
-    pushState({ ...activeTopology, nodes: activeTopology.nodes.map((node) => (ids.has(node.node_id) ? { ...node, x: node.x + dx, y: node.y + dy } : node)) });
-  }, [activeTopology, canvasSelectedElementIds, pushState]);
+    pushState({
+      ...current,
+      nodes: current.nodes.map((node) => (ids.has(node.node_id) ? { ...node, x: node.x + dx, y: node.y + dy } : node)),
+      canvas_items: (current.canvas_items || []).map((item) => (ids.has(`canvas-${item.item_id}`) ? { ...item, x: item.x + dx, y: item.y + dy } : item)),
+    });
+  }, [canvasSelectedElementIds, pushState]);
 
   // Batch editing: selecting ten devices and being able to do nothing with
   // them is the point where people go back to Visio.
@@ -1480,7 +1494,7 @@ export default function TopologyWorkspace({
       // A modal owns keyboard input, including when its focused control is a
       // button. Otherwise Delete can replace a confirmation and arrows can
       // change the drawing behind the dialog.
-      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"], dialog[open]')) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable=true]")) return;
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.key.toLowerCase() === "z") {
@@ -1775,8 +1789,8 @@ export default function TopologyWorkspace({
         params: { workspace_id: workspaceId },
       });
       const remote = res.topology;
-      if (!remote || remote.version === activeTopology.version) return;
-      if (saveStatus !== "saved") {
+      if (!remote || remote.version === activeTopologyRef.current?.version) return;
+      if (saveStatusRef.current !== "saved") {
         setNotice("Agent 已更新服务端图纸；本地还有未保存改动，保存后即可看到结论", false);
         return;
       }
@@ -1787,7 +1801,7 @@ export default function TopologyWorkspace({
     } catch {
       // A failed reconciliation must not disturb the canvas the user is on.
     }
-  }, [activeTopology, workspaceId, saveStatus, adoptServerTopology, setNotice, refreshFacts]);
+  }, [activeTopology, workspaceId, adoptServerTopology, setNotice, refreshFacts]);
 
   const handleRestoreRevision = useCallback(async (revisionId: string) => {
     if (!activeTopology) return;
@@ -1910,7 +1924,7 @@ export default function TopologyWorkspace({
         </div>
 
         {topologyModalMode === "create" && (
-          <dialog open className="network-dialog-modal">
+          <dialog open role="dialog" aria-modal="true" className="network-dialog-modal">
             <form onSubmit={handleSaveTopologyMeta} className="network-panel modal-panel">
               <div className="modal-header">
                 <h3>新建网络拓扑</h3>
@@ -3148,7 +3162,7 @@ export default function TopologyWorkspace({
 
       {/* MODAL 1: Create / Edit Topology */}
       {topologyModalMode && (
-        <dialog open className="network-dialog-modal">
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal">
           <form onSubmit={handleSaveTopologyMeta} className="network-panel modal-panel">
             <div className="modal-header">
               <h3>{topologyModalMode === "create" ? "新建网络拓扑" : "编辑拓扑信息"}</h3>
@@ -3189,7 +3203,7 @@ export default function TopologyWorkspace({
 
       {/* MODAL 2: Create Link on Connect */}
       {pendingConnection && (
-        <dialog open className="network-dialog-modal">
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal">
           <form onSubmit={handleSaveLink} className="network-panel modal-panel">
             <div className="modal-header">
               <h3>新建拓扑链路</h3>
@@ -3323,7 +3337,7 @@ export default function TopologyWorkspace({
 
       {/* MODAL: Diagram-only node */}
       {showManualNodeModal && (
-        <dialog open className="network-dialog-modal" aria-label="新建图纸设备">
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal" aria-label="新建图纸设备">
           <form onSubmit={handleAddManualNode} className="network-panel modal-panel">
             <div className="modal-header"><div><h3>新建图纸设备</h3><p>先按图纸需要创建；可随后在节点详情关联登记设备，关联前不会被 Agent 操作。</p></div><Button size="sm" type="button" onClick={() => setShowManualNodeModal(false)}><IconClose size={14} /></Button></div>
             <div className="form-grid">
@@ -3337,7 +3351,7 @@ export default function TopologyWorkspace({
 
       {/* MODAL 3: Create Group */}
       {showGroupModal && (
-        <dialog open className="network-dialog-modal">
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal">
           <form onSubmit={handleCreateGroup} className="network-panel modal-panel">
             <div className="modal-header">
               <h3>新建拓扑分组</h3>
@@ -3384,7 +3398,7 @@ export default function TopologyWorkspace({
       )}
 
       {showDiscovery && discovery && (
-        <dialog open className="network-dialog-modal compare-modal" aria-label="邻居发现候选">
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal compare-modal" aria-label="邻居发现候选">
           <div className="network-panel modal-panel compare-panel">
             <div className="modal-header"><div><h3>邻居发现 · {discovery.candidates.length} 条候选</h3><p>来自已采集证据中的 LLDP / CDP 邻居表；不连接设备</p></div><Button aria-label="关闭邻居发现" onClick={() => setShowDiscovery(false)}><IconClose size={14} /></Button></div>
             <div className="compare-notice-banner">只列出两端都能对应到画布设备的邻居。采纳后链路标记为「发现来源」并带上证据引用，接口待现场核实。</div>
@@ -3409,12 +3423,12 @@ export default function TopologyWorkspace({
       )}
 
       {showConflict && conflict && (
-        <dialog open className="network-dialog-modal compare-modal" aria-label="编辑冲突">
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal compare-modal" aria-label="编辑冲突">
           <div className="network-panel modal-panel compare-panel">
             <div className="modal-header">
               <div>
                 <h3>这张图纸被其他人修改过</h3>
-                <p>你编辑的是版本 {serverVersionsRef.current.get(conflict.mine.topology_id) ?? conflict.mine.version} 之前的图纸，服务端已是版本 {conflict.theirs.version}</p>
+                <p>你编辑的是版本 {conflict.base.version} 的图纸，服务端已是版本 {conflict.theirs.version}</p>
               </div>
               <Button aria-label="关闭冲突处理" onClick={() => setShowConflict(false)}><IconClose size={14} /></Button>
             </div>
@@ -3453,7 +3467,7 @@ export default function TopologyWorkspace({
       )}
 
       {showRevisions && (
-        <dialog open className="network-dialog-modal compare-modal" aria-label="版本历史">
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal compare-modal" aria-label="版本历史">
           <div className="network-panel modal-panel compare-panel">
             <div className="modal-header"><div><h3>版本历史 · {revisions.length} 个结构版本</h3><p>只记录结构变化；拖动位置、缩放不产生版本</p></div><Button aria-label="关闭版本历史" onClick={() => setShowRevisions(false)}><IconClose size={14} /></Button></div>
             <div className="compare-notice-banner">恢复会把旧结构写成新版本，不会抹掉当前历史；节点位置沿用现在的布局。</div>
@@ -3506,7 +3520,7 @@ export default function TopologyWorkspace({
       )}
 
       {showCompareModal && compareResult && (
-        <dialog open className="network-dialog-modal compare-modal" aria-label="拓扑比对报告">
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal compare-modal" aria-label="拓扑比对报告">
           <div className="network-panel modal-panel compare-panel">
             <div className="modal-header"><div><h3>拓扑比对 · {compareResult.topology_name}</h3><p>图纸定义与已有观察证据</p></div><Button aria-label="关闭比对报告" onClick={() => setShowCompareModal(false)}><IconClose size={14} /></Button></div>
             <div className="compare-notice-banner">无两端接口邻接证据的链路显示未知；手工标注不会变成运行结论。</div>

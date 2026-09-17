@@ -90,6 +90,35 @@ def test_soft_deleted_artifact_does_not_soft_delete_its_filestore_payload(monkey
     assert record.lifecycle == "deleted"
 
 
+def test_hard_delete_detaches_refs_before_payload_bytes(monkeypatch):
+    import artifacts.store as artifact_store
+    from artifacts.schemas import ArtifactRecord
+    from storage import file_store
+    from storage import reference_index
+
+    record = ArtifactRecord(
+        artifact_id="art_payload", workspace_id="test_ws", file_id="file_only",
+        lifecycle="active",
+    )
+    order = []
+    monkeypatch.setattr(artifact_store, "get_artifact", lambda *_args: record)
+    monkeypatch.setattr(artifact_store, "_records_in_index_order", lambda *_args: [record])
+    monkeypatch.setattr(artifact_store, "_remove_from_knowledge_index", lambda *_args: None)
+    monkeypatch.setattr(reference_index, "list_references_for_file", lambda *_args: [
+        {"ref_id": "ref_artifact", "owner_type": "artifact", "owner_id": "art_payload"},
+    ])
+    monkeypatch.setattr(reference_index, "list_references_for_owner", lambda *_args: [
+        {"ref_id": "ref_artifact", "owner_type": "artifact", "owner_id": "art_payload"},
+    ])
+    monkeypatch.setattr(reference_index, "remove_reference", lambda *_args: True)
+    monkeypatch.setattr(artifact_store, "_remove_artifact_from_run_indexes", lambda *_args: order.append("refs") or None)
+    monkeypatch.setattr(artifact_store, "_remove_artifact_record_permanently", lambda *_args: order.append("metadata") or None)
+    monkeypatch.setattr(file_store, "delete_file_permanently", lambda *_args: order.append("payload") or True)
+
+    assert artifact_store.delete_artifact("test_ws", "art_payload", hard=True) is True
+    assert order == ["refs", "metadata", "payload"]
+
+
 def test_hard_delete_preserves_payload_referenced_by_non_artifact_owner(monkeypatch):
     """Hard delete must keep a payload still owned by a message or knowledge source."""
     import artifacts.store as artifact_store

@@ -314,7 +314,8 @@ function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: stri
       // position back mid-gesture springs the node to wherever the last save put
       // it, and the drag the user is in the middle of is then thrown away. The
       // pointer owns the node until it lets go.
-      if (syncPositions && existing.isNode() && next.position && !(existing as CyNode).grabbed()) {
+      const dragActive = cy.$("node:grabbed").length > 0;
+      if (syncPositions && existing.isNode() && next.position && !(existing as CyNode).grabbed() && !(dragActive && (existing as CyNode).selected())) {
         const current = (existing as CyNode).position();
         if (Math.abs(current.x - next.position.x) > 0.5 || Math.abs(current.y - next.position.y) > 0.5) {
           (existing as CyNode).position(next.position);
@@ -568,7 +569,12 @@ export default function NetOpsCanvas(props: Props) {
         // back on release is worse than no drag at all.
         if (!node || node.id().startsWith("group-")) return;
         const selectedIds = new Set(cy.$("node:selected").map((item) => item.id()));
-        const others = propsRef.current.topology.nodes.filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id));
+        const halfW = Math.max(8, ((node as CyNode).width?.() || 94) / 2);
+        const halfH = Math.max(8, ((node as CyNode).height?.() || 76) / 2);
+        const others = [
+          ...propsRef.current.topology.nodes.filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id)).map((item) => ({ x: item.x, y: item.y, halfW: NODE_HALF_W, halfH: NODE_HALF_H })),
+          ...(propsRef.current.topology.canvas_items || []).filter((item) => !selectedIds.has(`canvas-${item.item_id}`)).map((item) => ({ x: item.x, y: item.y, halfW: item.width / 2, halfH: item.height / 2 })),
+        ];
         const position = node.position();
         // A guide pairs one of this node's three lines (near edge, centre, far
         // edge) with one of a neighbour's. What a pairing gives you is the
@@ -602,10 +608,10 @@ export default function NetOpsCanvas(props: Props) {
         let snappedX: ReturnType<typeof snapAxis> = null;
         let snappedY: ReturnType<typeof snapAxis> = null;
         if (others.length) {
-          const targetsX = others.flatMap((other) => [other.x - NODE_HALF_W, other.x, other.x + NODE_HALF_W]);
-          const targetsY = others.flatMap((other) => [other.y - NODE_HALF_H, other.y, other.y + NODE_HALF_H]);
-          snappedX = snapAxis([rawX - NODE_HALF_W, rawX, rawX + NODE_HALF_W], targetsX);
-          snappedY = snapAxis([rawY - NODE_HALF_H, rawY, rawY + NODE_HALF_H], targetsY);
+          const targetsX = others.flatMap((other) => [other.x - other.halfW, other.x, other.x + other.halfW]);
+          const targetsY = others.flatMap((other) => [other.y - other.halfH, other.y, other.y + other.halfH]);
+          snappedX = snapAxis([rawX - halfW, rawX, rawX + halfW], targetsX);
+          snappedY = snapAxis([rawY - halfH, rawY, rawY + halfH], targetsY);
           nextX = rawX + (snappedX?.shift ?? 0);
           nextY = rawY + (snappedY?.shift ?? 0);
         }
@@ -1256,7 +1262,7 @@ export default function NetOpsCanvas(props: Props) {
   // only things telling the user the canvas is in that state, so they are not
   // optional decoration.
   const placing = props.mode === "select" && !!props.armedNodeType;
-  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize}px ${gridSize}px`, backgroundPosition: "0 0" } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
+  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize * viewport.zoom}px ${gridSize * viewport.zoom}px`, backgroundPosition: `${viewport.x}px ${viewport.y}px` } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
     {placing && <div className="netops-placing-hint" aria-live="polite">在空白处单击放置设备 · Esc 取消</div>}
     {marquee && <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}

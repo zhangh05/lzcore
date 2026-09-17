@@ -276,7 +276,15 @@ def is_read_only_call(
         return True
     if normalized in ALWAYS_READ_ONLY_TOOLS:
         return True
-    action = str((arguments or {}).get("action") or "").lower().strip()
+    args = arguments or {}
+    if normalized == "network.operations.device.manage":
+        action = str(args.get("action") or "").lower().strip()
+        commands = args.get("commands")
+        if action in {"read", "configure"} and isinstance(commands, list) and commands:
+            from extensions.network_operations.command_semantics import is_raw_observation
+            if not all(is_raw_observation(command) for command in commands):
+                return False
+    action = str(args.get("action") or "").lower().strip()
     from core.tools.action_requirements import action_execution_contract
     action_contract = action_execution_contract(normalized, action)
     if action_contract:

@@ -48,6 +48,17 @@ test("Delete uses a lone canvas item rather than an earlier node inspector", asy
   })), { timeout: 3000 });
 });
 
+test("studio dialogs are modal so canvas shortcuts do not fire behind them", async () => {
+  setup();
+  fireEvent.click(screen.getByText("框选两个节点"));
+  fireEvent.click(screen.getByRole("button", { name: "版本历史" }));
+  const dialog = await screen.findByRole("dialog", { name: "版本历史" });
+  expect(dialog).toHaveAttribute("aria-modal", "true");
+  fireEvent.keyDown(window, { key: "Delete" });
+  expect(screen.getByRole("dialog", { name: "版本历史" })).toBe(dialog);
+  expect(screen.queryByRole("button", { name: "移除" })).not.toBeInTheDocument();
+});
+
 test("modal keyboard events do not move the selected drawing or replace its confirmation", () => {
   setup();
   fireEvent.click(screen.getByText("框选两个节点"));

@@ -22,6 +22,23 @@ def test_mutating_handler_is_not_called_when_dry_run_is_not_declared():
     assert called == []
 
 
+def test_declared_dry_run_does_not_invoke_the_mutating_handler():
+    called = []
+    registry = ToolRegistry()
+    registry.register_tool(
+        ToolSpec(tool_id="test.preview", category="workspace", dry_run_supported=True),
+        lambda _inv: called.append(True) or {"ok": True, "wrote": True},
+    )
+
+    result = ToolExecutor(registry).execute(ToolInvocation(
+        tool_id="test.preview", workspace_id="default", dry_run=True,
+    ))
+
+    assert result.status == "dry_run"
+    assert called == []
+    assert result.output.get("executed") is False
+
+
 def test_canonical_tools_fail_closed_for_invocation_dry_run():
     from core.tools.canonical_registry import to_tool_specs
 

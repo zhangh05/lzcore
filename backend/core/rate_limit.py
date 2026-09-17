@@ -111,6 +111,10 @@ def _get_limiter(endpoint: str, client_ip: str) -> _WindowCounter:
         return _limiters[key][0]
 
 
+def get_client_ip() -> str:
+    return _get_client_ip()
+
+
 def _get_client_ip() -> str:
     """Extract client IP from request.
 

@@ -385,15 +385,31 @@ def is_allowed_browser_origin(origin: str | None, request_host: str) -> bool:
         origin_url = urlparse(origin)
         origin_root = f"{origin_url.scheme}://{origin_url.netloc}".rstrip("/")
         host = request_host.split("@")[-1]
-        # Same host (any port) = same machine = allow
+        # Same origin (host + port) or a configured workbench port on a private host.
         origin_hostname = origin_url.hostname or ""
-        request_hostname = host.split(":")[0]
-        if origin_hostname == request_hostname:
-            return True
+        if host.startswith("[") and "]" in host:
+            request_hostname = host[1:host.index("]")]
+            request_port_s = host.split("]:")[-1] if "]:" in host else ""
+            request_port = int(request_port_s) if request_port_s.isdigit() else (443 if origin_url.scheme == "https" else 80)
+        elif ":" in host:
+            request_hostname, _, request_port_s = host.rpartition(":")
+            request_port = int(request_port_s) if request_port_s.isdigit() else 80
+        else:
+            request_hostname = host
+            request_port = 80
         origin_port = origin_url.port or (443 if origin_url.scheme == "https" else 80)
+        if origin_hostname == request_hostname and origin_port == request_port:
+            return True
+        allowed_ports = _configured_workbench_ports()
+        try:
+            from backend.core.settings import UNIFIED_PORT
+            allowed_ports = set(allowed_ports)
+            allowed_ports.add(int(UNIFIED_PORT))
+        except Exception:
+            allowed_ports = set(allowed_ports)
         if (
             origin_url.scheme in {"http", "https"}
-            and origin_port in _configured_workbench_ports()
+            and origin_port in allowed_ports
             and _is_local_or_private_host(origin_hostname)
             and _is_local_or_private_host(request_hostname)
         ):

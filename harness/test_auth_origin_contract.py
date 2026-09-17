@@ -15,3 +15,17 @@ def test_unknown_public_workbench_origin_is_denied():
         "http://evil.example.com:5274",
         "127.0.0.1:8011",
     ) is False
+
+
+def test_same_host_non_workbench_port_is_denied():
+    assert is_allowed_browser_origin(
+        "http://127.0.0.1:9999",
+        "127.0.0.1:8011",
+    ) is False
+
+
+def test_same_origin_including_port_is_allowed():
+    assert is_allowed_browser_origin(
+        "http://127.0.0.1:8011",
+        "127.0.0.1:8011",
+    ) is True

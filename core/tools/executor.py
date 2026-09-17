@@ -88,38 +88,22 @@ class ToolExecutor:
             )
         # ── 5. Handle dry_run ──
         if invocation.dry_run and spec.dry_run_supported:
-            # Tools that support dry_run should implement their own handler logic.
-            # If the handler returns a dict with "dry_run" key, the executor
-            # treats it as dry-run output.
-            handler = self.registry.get_handler(invocation.tool_id)
-            if handler is None:
-                return _failed_result(
-                    invocation.invocation_id, invocation.tool_id,
-                    "Handler not found for dry_run",
-                    int((time.time() - start_time) * 1000),
-                )
-            try:
-                raw = handler(invocation)
-                # Redact output
-                raw_safe = redact_tool_output(raw) if isinstance(raw, dict) else redact_tool_output({"output": str(raw)})
-                duration = int((time.time() - start_time) * 1000)
-                result = ToolResult(
-                    invocation_id=invocation.invocation_id,
-                    tool_id=invocation.tool_id,
-                    status="dry_run",
-                    output=raw_safe,
-                    summary=raw_safe.get("summary", f"dry_run completed for {invocation.tool_id}"),
-                    duration_ms=duration,
-                    redacted=True,
-                    policy_decision=decision,
-                )
-                return result
-            except Exception as exc:
-                return _failed_result(
-                    invocation.invocation_id, invocation.tool_id,
-                    f"dry_run failed: {str(exc)[:200]}",
-                    int((time.time() - start_time) * 1000),
-                )
+            duration = int((time.time() - start_time) * 1000)
+            output = {
+                "dry_run": True,
+                "executed": False,
+                "summary": f"dry_run completed for {invocation.tool_id}",
+            }
+            return ToolResult(
+                invocation_id=invocation.invocation_id,
+                tool_id=invocation.tool_id,
+                status="dry_run",
+                output=output,
+                summary=output["summary"],
+                duration_ms=duration,
+                redacted=True,
+                policy_decision=decision,
+            )
 
         # ── 6. Execute handler ──
         handler = self.registry.get_handler(invocation.tool_id)

@@ -69,6 +69,12 @@ def test_powershell_respects_cwd_timeout_env_and_exit_code(monkeypatch, tmp_path
         captured.update(kwargs)
         return SimpleNamespace(returncode=7, stdout="", stderr="bad command")
 
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("LZCORE_RUNTIME_BIND_HOST", "127.0.0.1")
+    from storage.paths import ensure_workspace_storage_dirs, workspace_root
+    ensure_workspace_storage_dirs("default")
+    cwd = str(workspace_root("default"))
+
     monkeypatch.setattr("platform.system", lambda: "Windows")
     monkeypatch.setattr("shutil.which", lambda name: r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
     monkeypatch.setattr("subprocess.run", fake_run)
@@ -76,7 +82,7 @@ def test_powershell_respects_cwd_timeout_env_and_exit_code(monkeypatch, tmp_path
         _inv(
             "exec.run",
             command="Get-Item missing",
-            working_dir=str(tmp_path),
+            working_dir=".",
             timeout=45,
             env_vars={"LZCORE_TEST": "ok", "OPENAI_API_KEY": "blocked"},
         )
@@ -85,7 +91,7 @@ def test_powershell_respects_cwd_timeout_env_and_exit_code(monkeypatch, tmp_path
     assert result["ok"] is False
     assert result["exit_code"] == 7
     assert result["error"] == "bad command"
-    assert captured["cwd"] == str(tmp_path)
+    assert captured["cwd"] == cwd
     assert captured["timeout"] == 45
     assert captured["env"]["LZCORE_TEST"] == "ok"
     assert "OPENAI_API_KEY" not in captured["env"]

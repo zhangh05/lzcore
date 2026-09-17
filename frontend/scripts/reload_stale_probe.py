@@ -49,7 +49,8 @@ from playwright.sync_api import sync_playwright
 
 BASE = "http://127.0.0.1:5273"
 API = "http://127.0.0.1:8011/api/extensions/network.operations"
-TOPO = "topo_894e4566e217"
+from probe_target import require_topology_target  # --topology-id is required
+TOPO, WORKSPACE = require_topology_target()
 
 SETUP = """
 () => {
@@ -75,11 +76,11 @@ READ = "() => { const p = window.__target.position(); return { x: p.x, y: p.y };
 
 
 def read_topology():
-    return json.load(urllib.request.urlopen(f"{API}/topologies/{TOPO}?workspace_id=default", timeout=5))["topology"]
+    return json.load(urllib.request.urlopen(f"{API}/topologies/{TOPO}?workspace_id={WORKSPACE}", timeout=5))["topology"]
 
 
 def write_topology(t):
-    body = {"workspace_id": "default", "name": t["name"], "description": t.get("description", ""),
+    body = {"workspace_id": WORKSPACE, "name": t["name"], "description": t.get("description", ""),
             "version": t["version"], "nodes": t["nodes"], "links": t["links"],
             "groups": t.get("groups", []), "canvas_items": t.get("canvas_items", [])}
     req = urllib.request.Request(f"{API}/topologies/{TOPO}", data=json.dumps(body).encode(),

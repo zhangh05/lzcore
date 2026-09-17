@@ -132,7 +132,8 @@ def _build_provider_config(provider_id: str, data: Optional[dict] = None) -> dic
 def _write_json(provider_id: str, data: dict):
     data["updated_at"] = now_iso()
     persisted = dict(data)
-    if persisted.get("api_key") and os.environ.get("LZCORE_MASTER_KEY"):
+    master_key_present = bool(os.environ.get("LZCORE_MASTER_KEY", "").strip() or os.environ.get("LZCORE_MASTER_KEY_FILE", "").strip())
+    if persisted.get("api_key") and master_key_present:
         from storage.secret_store import set_secret
         persisted["secret_ref"] = set_secret(f"llm/{provider_id}", persisted["api_key"])
         persisted["api_key"] = ""

@@ -104,6 +104,23 @@ def test_direct_backend_listener_uses_the_same_fail_closed_policy(monkeypatch):
         validate_network_listener("0.0.0.0")
 
 
+def test_create_app_rejects_unauthenticated_advertised_listen(monkeypatch):
+    for key in (
+        "LZCORE_AUTH_ENABLED",
+        "LZCORE_API_TOKEN",
+        "LZCORE_LOGIN_ENABLED",
+        "LZCORE_LOGIN_USERNAME",
+        "LZCORE_LOGIN_PASSWORD",
+        "LZCORE_IDENTITY_ENABLED",
+        "LZCORE_ALLOW_UNAUTHENTICATED_NETWORK",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    from backend.main import create_app
+    monkeypatch.setenv("LZCORE_LISTEN_HOST", "0.0.0.0")
+    with pytest.raises(RuntimeError, match="Refusing non-loopback backend listener"):
+        create_app()
+
+
 def test_dangerous_explicit_override_warns_and_allows_network_listener():
     result = _run_policy(
         "0.0.0.0",

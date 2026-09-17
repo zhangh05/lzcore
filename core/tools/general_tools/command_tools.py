@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from core.tools.schemas import ToolInvocation
 from storage.ids import validate_workspace_id
 
@@ -73,6 +74,24 @@ def _build_safe_shell_env() -> dict:
         _PS_SAFE_ENV_ALLOWLIST if os.name == "nt" else _LINUX_SAFE_ENV_ALLOWLIST
     )
 
+_DESTRUCTIVE_SHELL = (
+    re.compile(r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f\b", re.IGNORECASE),
+    re.compile(r"\brm\s+-[a-zA-Z]*f[a-zA-Z]*r\b", re.IGNORECASE),
+    re.compile(r"\bmkfs(\.|$|\s)", re.IGNORECASE),
+    re.compile(r"\bdd\b.*\bof=", re.IGNORECASE),
+    re.compile(r"\b(shutdown|reboot|halt|poweroff)\b", re.IGNORECASE),
+    re.compile(r":\(\)\s*\{"),
+    re.compile(r"\bchmod\s+-R\s+777\s+/", re.IGNORECASE),
+    re.compile(r"\b(diskpart|format)\b", re.IGNORECASE),
+)
+
+
+def _reject_unsafe_local_exec(inv: ToolInvocation, command: str) -> dict | None:
+    if any(pattern.search(command) for pattern in _DESTRUCTIVE_SHELL):
+        return _error_inv(inv, "destructive shell action is blocked")
+    return None
+
+
 def handle_command_exec(inv: ToolInvocation) -> dict:
     """Run a local shell command through the native platform shell.
 
@@ -113,6 +132,10 @@ def handle_command_exec(inv: ToolInvocation) -> dict:
     if timeout is not None:
         timeout = int(timeout)
 
+    blocked = _reject_unsafe_local_exec(inv, command)
+    if blocked is not None:
+        return blocked
+
     # Keep process setup deterministic. This protects the host runtime; it
     # does not inspect, rewrite, or authorize the model's command payload.
     if isinstance(env_vars, dict):
@@ -151,6 +174,9 @@ def handle_powershell_script(inv: ToolInvocation) -> dict:
     command = (inv.arguments.get("command") or "").strip()
     if not command:
         return _unavailable(inv, "command is required")
+    blocked = _reject_unsafe_local_exec(inv, command)
+    if blocked is not None:
+        return blocked
 
     import shutil
     import subprocess
@@ -165,7 +191,15 @@ def handle_powershell_script(inv: ToolInvocation) -> dict:
                 and not _is_sensitive_env_key(str(key))
             })
         timeout = max(1, min(int(inv.arguments.get("timeout", 120) or 120), 600))
-        cwd = str(inv.arguments.get("working_dir") or "").strip() or None
+        requested_cwd = str(inv.arguments.get("working_dir") or "").strip()
+        workspace_id = _caller_workspace(inv)
+        from core.tools.general_tools.shared import _workspace_path
+        try:
+            cwd = str(_workspace_path(workspace_id, requested_cwd)) if requested_cwd else str(_workspace_path(workspace_id, ""))
+        except ValueError as exc:
+            return _error_inv(inv, str(exc))
+        if not os.path.isdir(cwd):
+            return _error_inv(inv, "working_dir does not exist in this workspace")
         executable = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
         if not executable:
             return _error_inv(inv, "PowerShell executable not found")

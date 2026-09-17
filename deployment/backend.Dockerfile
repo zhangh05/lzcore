@@ -10,6 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     LZCORE_RUNTIME_BIND_HOST=0.0.0.0 \
+    LZCORE_LISTEN_HOST=0.0.0.0 \
     LZCORE_WORKSPACE_ROOT=/var/lib/lzcore/workspaces
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker

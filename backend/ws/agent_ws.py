@@ -234,7 +234,8 @@ def register_ws_routes(app):
             ws.send(json.dumps({"type": "error", "message": "csrf_origin_denied"}))
             return
 
-        client_ip = str(request.headers.get("X-Forwarded-For", "")).split(",", 1)[0].strip() or str(request.remote_addr or "")
+        from backend.core.rate_limit import get_client_ip
+        client_ip = get_client_ip()
         if not _acquire_ws_slot(client_ip):
             ws.send(json.dumps({"type": "error", "message": "connection_limit_exceeded"}))
             return

@@ -51,6 +51,26 @@ describe("topology three-way merge", () => {
     expect(stats.autoMerged).toBeGreaterThan(0);
   });
 
+  it("merges independent nested metadata keys instead of dropping one object", () => {
+    const base = drawing({
+      links: [{ link_id: "l1", source_node_id: "n1", target_node_id: "n2", status: "unknown", metadata: { speed: "1G" } } as Link & { metadata: Record<string, string> }],
+    });
+    const mine = drawing({
+      links: [{ ...base.links[0], metadata: { speed: "1G", vlan: "10" } } as Link & { metadata: Record<string, string> }],
+    });
+    const theirs = drawing({
+      version: 4,
+      links: [{ ...base.links[0], metadata: { speed: "10G" } } as Link & { metadata: Record<string, string> }],
+    });
+
+    const { topology, conflicts } = mergeTopologies(base, mine, theirs);
+    expect((topology.links[0] as Link & { metadata: Record<string, string> }).metadata).toEqual({
+      speed: "10G",
+      vlan: "10",
+    });
+    expect(conflicts.some((item) => item.field === "metadata")).toBe(false);
+  });
+
   it("reports a field both sides changed instead of dropping either silently", () => {
     const base = drawing();
     const mine = drawing({ name: "生产网-A" });

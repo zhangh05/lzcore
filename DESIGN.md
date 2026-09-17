@@ -35,7 +35,9 @@ tool id -> manifest -> caller gate -> policy / authorization
 
 `handler_id` 是内部实现，不向模型、前端或 API 暴露。工具 schema 通过 provider 的 function calling `tools` 字段提供，不能通过 prompt 文本伪造工具接口。
 
-调用级 `dry_run` 默认关闭并拒绝执行。只有显式声明并实现无副作用 preview handler 的工具才能启用；普通 handler 不能把 `dry_run=True` 当作可信保护。公开 `/api/tools/dry-run` 只生成策略与调用元数据，不进入工具 handler。
+调用级 `dry_run` 默认关闭并拒绝执行。即使工具声明 `dry_run_supported`，执行器也不调用会写的 handler，只返回 `executed=False` 的预览。公开 `/api/tools/dry-run` 只生成策略与调用元数据，不进入工具 handler。
+
+`network.operations.device.manage` 的只读、并行与重试判定以原始命令的 `command_semantics` 分类为准，不信任模型填写的 `action`。`workspace.file` glob 不得用 `..` 或绝对路径离开工作区。`exec.run` 的 shell / PowerShell 在主机上执行，但拦截破坏性命令。Python 仍按 `requires_strong_isolation()` 选择 Docker 或 fail-closed。
 
 ## 目标驱动恢复
 
