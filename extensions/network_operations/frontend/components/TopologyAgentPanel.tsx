@@ -182,7 +182,22 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
           </label>
           <small>{`上下文：${selection.label}`}</small>
         </div>
-        {running ? <button type="button" onClick={() => void cancel()}><IconStop size={14} />停止</button> : <button type="submit" disabled={!input.trim() || preparing || (!!sessionId && !loaded)}><IconSend size={14} />{preparing ? "连接中" : "发送"}</button>}
+        {running ? (
+          <button type="button" className="topology-agent-stop-btn" onClick={() => void cancel()} title="停止当前生成任务">
+            <IconStop size={14} />
+            <span>停止</span>
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className="topology-agent-send-btn"
+            disabled={!input.trim() || preparing || (!!sessionId && !loaded)}
+            title={!input.trim() ? "输入内容后可发送" : preparing ? "正在建立连接..." : "发送指令 (Enter)"}
+          >
+            <IconSend size={14} />
+            <span>{preparing ? "连接中" : "发送"}</span>
+          </button>
+        )}
       </footer>
     </form>
   </section>;
