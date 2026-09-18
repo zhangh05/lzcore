@@ -89,7 +89,23 @@
 .topology-studio .topology-canvas-viewport.mode-select .netops-cytoscape { cursor: default; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape { cursor: grab; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape:active { cursor: grabbing; }
-.topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--bg); }
+/* The canvas is a raster surface: sitting under `zoom: var(--ui-scale)` on <body>
+   causes fractional layout pixel coordinates (e.g. 167.1875px) and non-integer
+   raster scaling, which triggers GPU bilinear filtering blur on every pixel.
+   Neutralizing zoom locally aligns the canvas 1:1 with physical device pixels. */
+.topology-studio .netops-canvas-wrap {
+  zoom: calc(1 / var(--ui-scale, 0.95));
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.topology-studio .netops-cytoscape canvas {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
 /* Grid paper is intentionally fixed; editing changes object coordinates, not
    the viewport or its reference grid. */
 .topology-studio .netops-canvas-wrap.grid-on { background-color: var(--bg); background-image: linear-gradient(#dbe5ec 1px, transparent 1px), linear-gradient(90deg, #dbe5ec 1px, transparent 1px); }
