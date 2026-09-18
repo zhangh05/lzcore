@@ -258,6 +258,37 @@ async function pngToRgbImage(dataUrl: string): Promise<RgbImage> {
 }
 
 /** Show a merged field value the way a person reads it, not as raw JSON. */
+/** 一台设备上已经被链路占用了的接口名（无论它在链路的哪一端）。 */
+export function occupiedInterfaces(links: TopologyLink[], nodeId?: string): Set<string> {
+  const used = new Set<string>();
+  if (!nodeId) return used;
+  for (const link of links) {
+    if (link.source_node_id === nodeId && link.source_interface) used.add(link.source_interface.trim());
+    if (link.target_node_id === nodeId && link.target_interface) used.add(link.target_interface.trim());
+  }
+  return used;
+}
+
+/**
+ * 这台设备上下一个还没被占用的 `GE0/N`。
+ *
+ * 链路表单的接口默认值以前是写死的 `GE0/1` / `GE0/0`，从来不看这台设备上哪些
+ * 口已经用了。所以同一对设备之间加第二条链路时，两端又拿到同样的默认口，图上
+ * 就出现一台设备挂着两个 `GE0/1` —— 看着像渲染错了或者谁填错了，其实是默认值
+ * 从头到尾没参与过分配。
+ *
+ * `startAt` 让源端从 1、对端从 0 起算，保住原来第一条链路的默认值 `GE0/1`
+ * 和 `GE0/0`；之后每次都往后找空位。
+ */
+export function nextFreeInterface(links: TopologyLink[], nodeId?: string, startAt = 1): string {
+  const used = occupiedInterfaces(links, nodeId);
+  for (let index = startAt; index < startAt + 256; index += 1) {
+    const name = `GE0/${index}`;
+    if (!used.has(name)) return name;
+  }
+  return `GE0/${startAt}`;
+}
+
 function describeMergeValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "空";
   if (typeof value === "string") return value;
@@ -565,20 +596,24 @@ export default function TopologyWorkspace({
     subnet: "",
   });
 
-  const resetLinkForm = useCallback(() => {
-    setLinkForm({
-      source_interface: "GE0/1",
-      target_interface: "GE0/0",
-      kind: "physical",
-      label: "",
-      show_description: false,
-      status: "unknown",
-      speed: "",
-      vlan: "",
-      medium: "",
-      subnet: "",
-    });
-  }, []);
+  const resetLinkForm = useCallback(
+    (sourceId?: string, targetId?: string) => {
+      const links = activeTopology?.links || [];
+      setLinkForm({
+        source_interface: nextFreeInterface(links, sourceId),
+        target_interface: nextFreeInterface(links, targetId, 0),
+        kind: "physical",
+        label: "",
+        show_description: false,
+        status: "unknown",
+        speed: "",
+        vlan: "",
+        medium: "",
+        subnet: "",
+      });
+    },
+    [activeTopology?.links]
+  );
 
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareResult, setCompareResult] = useState<TopologyCompareResult | null>(null);
@@ -872,7 +907,7 @@ export default function TopologyWorkspace({
           : availableIds.find((id) => id !== source) || "";
       if (!target) return;
       setPendingConnection({ source, target });
-      resetLinkForm();
+      resetLinkForm(source, target);
     },
     [activeTopology, resetLinkForm, setNotice]
   );
@@ -882,12 +917,29 @@ export default function TopologyWorkspace({
     e.preventDefault();
     if (!activeTopology || !pendingConnection) return;
 
+    // 留空时也不能退回写死的默认口 —— 那样第二条链路又会拿到同一个口。
+    const sourceInterface =
+      linkForm.source_interface.trim() ||
+      nextFreeInterface(activeTopology.links, pendingConnection.source);
+    const targetInterface =
+      linkForm.target_interface.trim() ||
+      nextFreeInterface(activeTopology.links, pendingConnection.target, 0);
+    // 自动分配只能管住默认值，管不住手填。一台设备同一个口挂两条链路，物理上
+    // 说不通，而且正是图上那两个一模一样的标签的来源 —— 提示，但不拦。
+    const clashes: string[] = [];
+    if (occupiedInterfaces(activeTopology.links, pendingConnection.source).has(sourceInterface)) {
+      clashes.push(`${nodeLabelById.get(pendingConnection.source) || "源端"} 的 ${sourceInterface}`);
+    }
+    if (occupiedInterfaces(activeTopology.links, pendingConnection.target).has(targetInterface)) {
+      clashes.push(`${nodeLabelById.get(pendingConnection.target) || "对端"} 的 ${targetInterface}`);
+    }
+
     const newLink: TopologyLink = {
       link_id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       source_node_id: pendingConnection.source,
-      source_interface: linkForm.source_interface.trim() || "GE0/1",
+      source_interface: sourceInterface,
       target_node_id: pendingConnection.target,
-      target_interface: linkForm.target_interface.trim() || "GE0/0",
+      target_interface: targetInterface,
       kind: linkForm.kind,
       label: linkForm.label.trim() || undefined,
       metadata: {
@@ -906,7 +958,12 @@ export default function TopologyWorkspace({
       links: [...activeTopology.links, newLink],
     });
     setPendingConnection(null);
-    setNotice("拓扑链路已创建");
+    setNotice(
+      clashes.length
+        ? `拓扑链路已创建，但 ${clashes.join("、")} 已经被其他链路占用，请确认接口是否填重了`
+        : "拓扑链路已创建",
+      clashes.length === 0
+    );
   };
 
   // Delete node from topology
@@ -3223,7 +3280,15 @@ export default function TopologyWorkspace({
                       pendingConnection.target === source
                         ? (activeTopology?.nodes || []).find((node) => node.node_id !== source)?.node_id || ""
                         : pendingConnection.target;
-                    if (target) setPendingConnection({ source, target });
+                    if (!target) return;
+                    setPendingConnection({ source, target });
+                    // 换了设备就要重新挑口：沿用上一台的口名会撞上这一台已占用的。
+                    const links = activeTopology?.links || [];
+                    setLinkForm((prev) => ({
+                      ...prev,
+                      source_interface: nextFreeInterface(links, source),
+                      target_interface: nextFreeInterface(links, target, 0),
+                    }));
                   }}
                 >
                   {(activeTopology?.nodes || []).map((node) => (
@@ -3247,9 +3312,14 @@ export default function TopologyWorkspace({
                 <select
                   aria-label="对端设备"
                   value={pendingConnection.target}
-                  onChange={(event) =>
-                    setPendingConnection({ ...pendingConnection, target: event.target.value })
-                  }
+                  onChange={(event) => {
+                    const target = event.target.value;
+                    setPendingConnection({ ...pendingConnection, target });
+                    setLinkForm((prev) => ({
+                      ...prev,
+                      target_interface: nextFreeInterface(activeTopology?.links || [], target, 0),
+                    }));
+                  }}
                 >
                   {(activeTopology?.nodes || [])
                     .filter((node) => node.node_id !== pendingConnection.source)
