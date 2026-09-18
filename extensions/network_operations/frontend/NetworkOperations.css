@@ -136,8 +136,6 @@
 .network-dialog-modal .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 14px; }
 .network-editor .form-grid label,
 .network-dialog-modal .form-grid label { display: grid; gap: 7px; font-size: var(--fs-13); font-weight: var(--weight-label); }
-.network-editor .field-help,
-.network-dialog-modal .field-help { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--weight-regular); line-height: 1.55; }
 .network-editor .full-field, .network-dialog-modal .full-field { grid-column: 1/-1; }
 .network-editor input:not([type="checkbox"]), .network-editor select, .network-editor textarea,
 .network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select, .network-dialog-modal textarea,
@@ -204,7 +202,6 @@
   .network-filters input, .network-filters select { min-height: var(--h-touch); }
 }
 
-
 /* Network Topology Workspace */
 .network-topology-workspace {
   /* 画布上方被 PageHeader 和 tab 条占掉的高度。之前这里直接写死
@@ -268,47 +265,6 @@
   color: var(--text);
   font-size: var(--fs-12);
   padding: 0 var(--space-2);
-}
-
-.palette-search-row {
-  display: flex;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
-.palette-search-input-wrap {
-  position: relative;
-  flex: 1;
-  display: flex;
-  align-items: center;
-}
-
-.palette-search-input-wrap .search-icon {
-  position: absolute;
-  left: 8px;
-  color: var(--text-3);
-  pointer-events: none;
-}
-
-.palette-search-input-wrap input {
-  width: 100%;
-  min-height: 28px;
-  padding-left: 26px;
-  font-size: var(--fs-12);
-  border: 1px solid var(--line-3);
-  border-radius: var(--r-6);
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.palette-region-select {
-  min-height: 28px;
-  font-size: var(--fs-12);
-  border: 1px solid var(--line-3);
-  border-radius: var(--r-6);
-  background: var(--surface-2);
-  color: var(--text);
-  padding: 0 var(--space-1);
 }
 
 /* Drawing-device palette.
@@ -382,14 +338,6 @@
   text-decoration: underline;
 }
 
-.palette-device-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  max-height: 300px;
-  overflow-y: auto;
-}
-
 .palette-device-item {
   display: flex;
   align-items: center;
@@ -405,64 +353,7 @@
   background: var(--surface-hover);
 }
 
-.palette-device-item.is-placed {
-  opacity: 0.75;
-}
-
-.palette-dev-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface);
-  color: var(--accent);
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-}
-
-.palette-dev-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.palette-dev-name-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  justify-content: space-between;
-}
-
-.palette-dev-name-row strong {
-  font-size: var(--fs-12);
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.palette-dev-info small {
-  font-size: var(--fs-10);
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.palette-badge-placed {
-  font-size: var(--fs-10);
-  color: var(--ok);
-  background: var(--ok-soft);
-  padding: 2px 6px;
-  border-radius: var(--r-4);
-  white-space: nowrap;
-}
-
-.palette-empty, .palette-empty-groups {
+.palette-empty-groups {
   padding: var(--space-3);
   text-align: center;
   color: var(--text-3);
@@ -559,15 +450,6 @@
   white-space: nowrap;
 }
 
-.topology-version-badge {
-  font-size: var(--fs-11);
-  padding: 2px 6px;
-  border-radius: var(--r-4);
-  background: var(--surface-2);
-  color: var(--text-3);
-  border: 1px solid var(--line);
-}
-
 .topology-save-indicator {
   display: flex;
   align-items: center;
@@ -643,11 +525,6 @@
   line-height: 1.55;
 }
 
-.topology-canvas-onboarding-card .ui-button {
-  grid-column: 2;
-  justify-self: start;
-}
-
 /* MiniMap 默认 200×150 且是方角，压到画布右下角并跟全站圆角/描边对齐。
    （className 之前传了但没写规则，等于没生效。） */
 .topology-minimap-custom {
@@ -677,66 +554,6 @@
   cursor: grabbing;
 }
 
-.topology-device-node.is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
-}
-
-.device-node-body {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.device-node-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--r-6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-2);
-  color: var(--accent);
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-}
-
-.device-node-icon.type-router {
-  color: var(--accent);
-}
-
-.device-node-icon.type-firewall {
-  color: var(--danger);
-}
-
-.device-node-icon.type-server {
-  color: var(--ok);
-}
-
-.device-node-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.device-node-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-1);
-}
-
-.device-node-name {
-  font-size: var(--fs-13);
-  font-weight: var(--weight-heading);
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .device-node-meta {
   display: flex;
   align-items: center;
@@ -745,18 +562,6 @@
   min-width: 0;
   font-size: var(--fs-10);
   color: var(--text-3);
-}
-
-/* 节点宽度上限 230px，主机名长就把类型标签挤掉位置，所以让主机名单向截断。 */
-.device-node-host {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.device-node-type {
-  flex-shrink: 0;
 }
 
 .vendor-badge {
@@ -772,33 +577,6 @@
   white-space: nowrap;
 }
 
-.device-node-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: var(--space-1);
-  padding-top: var(--space-1);
-  border-top: 1px solid var(--line);
-}
-
-.device-node-group-chip {
-  font-size: var(--fs-10);
-  padding: 1px 5px;
-  border-radius: var(--r-4);
-  background: var(--accent-soft);
-  color: var(--accent);
-  white-space: nowrap;
-}
-
-.device-node-label-chip {
-  font-size: var(--fs-10);
-  padding: 1px 5px;
-  border-radius: var(--r-4);
-  background: var(--surface-2);
-  color: var(--text-3);
-  white-space: nowrap;
-}
-
 /* Group Node */
 .topology-group-node {
   border: 2px dashed var(--line-3);
@@ -807,10 +585,6 @@
   position: relative;
   pointer-events: all;
   box-sizing: border-box;
-}
-
-.topology-group-node.is-selected {
-  border-color: var(--accent);
 }
 
 .group-node-header {
@@ -831,31 +605,6 @@
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
-}
-
-/* Edge badges */
-.edge-if-badge {
-  font-size: var(--fs-10);
-  font-family: var(--font-mono, monospace);
-  font-weight: 600;
-  padding: 1px 5px;
-  border-radius: var(--r-4);
-  background: var(--surface);
-  color: var(--text-2);
-  border: 1px solid var(--line-3);
-  box-shadow: var(--shadow-card);
-  white-space: nowrap;
-}
-
-.edge-center-badge {
-  font-size: var(--fs-10);
-  padding: 2px 6px;
-  border-radius: var(--r-4);
-  background: var(--surface);
-  color: var(--text-3);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-card);
-  white-space: nowrap;
 }
 
 /* Inspector */
@@ -954,32 +703,9 @@
 
 .inspector-check input { accent-color: var(--accent); }
 
-.inspector-entity-card {
-  padding: var(--space-3);
-  border-radius: var(--r-8);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.entity-card-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .entity-card-meta {
   font-size: var(--fs-11);
   color: var(--text-3);
-}
-
-.entity-card-note {
-  font-size: var(--fs-10);
-  color: var(--text-3);
-  margin-top: 4px;
-  line-height: 1.4;
 }
 
 .inspector-endpoints-card {
@@ -1098,20 +824,6 @@
 .stat-lbl {
   font-size: var(--fs-10);
   color: var(--text-3);
-}
-
-.inspector-skill-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-.skill-ref-badge {
-  font-size: var(--fs-11);
-  padding: 3px 8px;
-  border-radius: var(--r-6);
-  background: var(--accent-soft);
-  color: var(--accent);
 }
 
 .no-skill-ref {
@@ -1234,18 +946,6 @@
   gap: var(--space-3);
 }
 
-.compare-section h5 {
-  margin: 0 0 var(--space-1);
-  font-size: var(--fs-12);
-  color: var(--text-2);
-}
-
-.compare-item-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 .compare-item {
   display: flex;
   align-items: center;
@@ -1260,17 +960,6 @@
   color: var(--text-3);
   font-size: var(--fs-10);
   margin-left: auto;
-}
-
-/* 比对条目按结论着色，扫一眼就知道哪一类需要处理。 */
-.compare-item.missing-device, .compare-item.missing-link {
-  box-shadow: inset 2px 0 0 var(--warn);
-}
-.compare-item.unexpected-link {
-  box-shadow: inset 2px 0 0 var(--danger);
-}
-.compare-item.matched-link {
-  box-shadow: inset 2px 0 0 var(--ok);
 }
 
 .compare-status-tag {
@@ -1437,9 +1126,6 @@
   }
   .topology-canvas-onboarding-card {
     grid-template-columns: 1fr;
-  }
-  .topology-canvas-onboarding-card .ui-button {
-    grid-column: 1;
   }
 }
 

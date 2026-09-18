@@ -136,14 +136,6 @@
 /* Legend: colour only means something if the reader is told what. */
 .canvas-legend { position: absolute; left: 16px; bottom: 16px; z-index: 7; min-width: 132px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); backdrop-filter: blur(3px); box-shadow: 0 6px 18px #10253614; font-size: 10.5px; color: var(--text-2); }
 .canvas-legend.is-collapsed { padding: 3px 4px; }
-.canvas-legend .legend-title { padding: 0; border: 0; background: none; color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
-.canvas-legend .legend-body { display: grid; gap: 3px; margin-top: 5px; }
-.canvas-legend .legend-body > span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.canvas-legend .legend-ring { width: 10px; height: 10px; flex: 0 0 auto; border: 2px solid var(--text-4); border-radius: 3px; }
-.canvas-legend .legend-line { width: 16px; height: 0; flex: 0 0 auto; border-top: 2px solid var(--line); }
-.canvas-legend .legend-line.dashed { border-top-style: dashed; }
-.canvas-legend .legend-swatch { width: 10px; height: 10px; flex: 0 0 auto; border: 1px solid #dbe5ec; border-radius: 3px; background: linear-gradient(90deg, #f2f7ff 50%, #f4fbfa 50%); }
-.canvas-legend .legend-body small { margin-top: 3px; color: var(--text-3); font-size: 9.5px; line-height: 1.5; white-space: normal; }
 .canvas-selection-count { padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 650; white-space: nowrap; }
 /* In-canvas search: on a large diagram, finding one device by eye is the
    slowest operation there is. */
@@ -211,19 +203,6 @@
 .studio-layout-menu > div button:hover { background: var(--accent-soft); }
 .studio-layout-menu > div strong { font-size: 12px; color: var(--text); }
 .studio-layout-menu > div small { font-size: 10px; color: var(--text-3); }
-/* 过滤菜单：与布局菜单同壳，行是复选项而不是命令。 */
-.studio-filter-menu { position: relative; }
-.studio-filter-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
-.studio-filter-menu > summary::-webkit-details-marker { display: none; }
-.studio-filter-menu > summary:hover { background: var(--accent-soft); border-color: var(--accent); }
-.studio-filter-menu > div { position: absolute; right: 0; top: 31px; z-index: 30; display: grid; gap: 2px; width: 214px; max-height: 60vh; overflow: auto; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: 0 12px 26px #1e344426; }
-.studio-filter-menu > div > small { padding: 6px 8px 2px; color: var(--text-3); font-size: 10px; letter-spacing: .3px; }
-.studio-filter-menu > div > small:first-child { padding-top: 2px; }
-.studio-filter-menu > div > label { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 5px; color: var(--text-2); font-size: 12px; cursor: pointer; }
-.studio-filter-menu > div > label:hover { background: var(--accent-soft); }
-.studio-filter-menu > div > label > i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
-.studio-filter-menu > div > label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.studio-filter-menu > div > button { margin-top: 4px; }
 .canvas-filter-count { display: inline-flex; align-items: center; gap: 5px; }
 .canvas-filter-count > button { display: inline-flex; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .studio-device-status > div { padding: 10px 0; display: grid; gap: 4px; border-bottom: 1px solid var(--line); font-size: 12px; }
@@ -265,7 +244,7 @@
 .topology-agent-composer footer small { color: var(--text-3); font-size: 10px; }
 .topology-agent-composer button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border: 0; border-radius: 5px; background: var(--accent); color: var(--accent-text); font-size: 11px; cursor: pointer; }
 .topology-agent-composer button:disabled { opacity: .4; cursor: not-allowed; }
-.topology-agent-error, .topology-agent-hint { padding: 10px 16px; font-size: 11px; color: var(--text-3); }
+.topology-agent-error { padding: 10px 16px; font-size: 11px; color: var(--text-3); }
 .topology-agent-error { color: var(--danger); }
 .topology-agent-error button { padding: 3px; margin-left: 6px; background: transparent; border: 0; color: inherit; text-decoration: underline; }
 @media (max-width: 1180px) {
@@ -280,7 +259,7 @@
   .topology-studio.library-open .topology-sidebar { position: absolute; top: 52px; bottom: 30px; left: 0; width: 224px; z-index: 9; max-height: none; box-shadow: 10px 0 24px #0001; }
   .topology-studio.inspector-open .topology-inspector { position: absolute; top: 52px; right: 0; bottom: 30px; width: min(320px, 92%); grid-column: auto; z-index: 11; border-left: 1px solid var(--line); box-shadow: -12px 0 30px #0001; }
   .agent-open .studio-agent-dock { position: absolute; top: 53px; right: 0; bottom: 0; width: min(380px, 92%); box-shadow: -12px 0 30px #0001; }
-  .topology-studio .topology-save-indicator, .topology-studio .topology-version-badge { display: none; }
+  .topology-studio .topology-save-indicator { display: none; }
   .studio-statusbar > span:nth-child(2) { display: none; }
 }
 @media (max-width: 600px) {

@@ -264,7 +264,6 @@
   line-height: 1.78;
 }
 
-
 .chat-bubble.user {
   padding: 13px 16px;
   color: var(--text);
@@ -308,7 +307,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 
 /* `.markdown-body` typography (font-size, line-height, heading scale, heading
    margins, letter-spacing) lives in src/styles/typography.css. It used to be
@@ -723,18 +721,7 @@
 
 /* .task-phase-status-tag 之前只挂类名但没规则，落到 .task-phase-title-row > span
    的兜底里变成 10px 灰文字。统一成工作台摘要条的胶囊语言。 */
-.task-phase-status-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 8px;
-  border-radius: 9px;
-  font-size: var(--fs-11);
-  font-weight: var(--weight-minor);
-  line-height: 1;
-  white-space: nowrap;
-}
-.task-phase-status-tag.done {
+.task-phase-status-tag .task-phase-status-tag.done {
   color: var(--ok);
   background: color-mix(in srgb, var(--ok-soft) 62%, var(--surface));
 }
@@ -749,17 +736,6 @@
 .task-phase-status-tag.pending {
   color: var(--text-3);
   background: var(--surface-2);
-}
-
-.task-phase.active .task-phase-title-row > span { color: var(--accent); }
-.task-phase.done .task-phase-title-row > span { color: var(--ok); }
-.task-phase.failed .task-phase-title-row > span { color: var(--danger); }
-
-.task-phase-content > p {
-  margin-top: 6px;
-  color: var(--text-3);
-  font-size: var(--fs-12);
-  line-height: 1.6;
 }
 
 .task-evidence-list {
@@ -1324,10 +1300,6 @@
 .task-progress-panel.is-collapsed .task-progress-header { display: flex; }
 .task-phase { grid-template-columns: var(--space-6) minmax(0, 1fr); }
 .task-phase-index { width: var(--space-6); height: var(--space-6); }
-.task-phase-title-row { flex-wrap: wrap; gap: var(--space-1); }
-.task-phase-title-row h3 { font-size: var(--fs-13); }
-.task-phase-title-row > span { font-size: var(--fs-11); }
-.task-evidence-list { background: transparent; border: 0; border-radius: 0; }
 .task-evidence { grid-template-columns: minmax(0, 1fr) var(--space-4); gap: var(--space-1); padding: var(--space-2) 0; }
 .task-evidence-icon { display: none; }
 .task-evidence :is(span, small) { font-size: var(--fs-11); }

@@ -179,11 +179,6 @@
   background: color-mix(in srgb, var(--info) 76%, #000);
   border-color: color-mix(in srgb, var(--info) 76%, #000);
 }
-.btn-info-soft {
-  background: var(--info-soft);
-  color: var(--info);
-  border: 1px solid var(--info-soft);
-}
 /* The size and colour modifiers belong with the base they modify. They used to
    live in global.css, which works only while the whole product is one layer: a
    layer beats specificity, so once the shared sheets are split a `.btn.sm` in an
@@ -450,14 +445,6 @@ select.input:focus-visible {
   box-shadow: none;
 }
 .user-access-summary > *:last-child{ border-right: 0; }
-
-/* Catalog pages remain directories, not marketing card walls. */
-.capability-card, .extension-card{
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-6);
-  box-shadow: none;
-}
-.capability-card:hover, .extension-card:hover{ border-color: var(--console-border); box-shadow: none; }
 
 /* Per-page directory refinements: use operational hierarchy rather than generic cards. */
 .data-center .data-center-tabs {
@@ -733,43 +720,13 @@ select.input:focus-visible {
 .capability-center .cc-controls { padding: 10px 0; border-bottom: 1px solid var(--console-border-soft); }
 .capability-center .tool-row { border-color: var(--console-border-soft); border-radius: 0; box-shadow: none; }
 .capability-center .tool-row:hover { background: var(--console-action-soft); }
-.capability-center .tool-detail-card,
-.capability-center .capability-grid > .card { border-color: var(--console-border-soft); box-shadow: none; }
+.capability-center .tool-detail-card { border-color: var(--console-border-soft); box-shadow: none; }
 .capability-center .tool-detail-card { border-radius: var(--r-4); }
 .capability-center .tool-info-grid,
 .capability-center .cap-info-grid { gap: 0; }
 .capability-center .tool-info-item,
 .capability-center .cap-sr-row { border-color: var(--console-border-soft); border-radius: 0; background: transparent; }
 .capability-center .tool-restriction { border-color: var(--console-border-soft); border-radius: var(--r-4); }
-
-.extension-center .extension-center-error,
-.extension-center .extension-repository,
-.extension-center .extension-card {
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-6);
-  box-shadow: none;
-}
-.extension-center .extension-card { background: var(--console-surface); }
-.extension-center .extension-card:hover { border-color: var(--console-border); }
-.extension-center .extension-card-head,
-.extension-center .extension-section-head {
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--console-border-soft);
-}
-.extension-center .extension-contract {
-  gap: 0;
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-4);
-  overflow: hidden;
-}
-.extension-center .extension-contract > div {
-  padding: 9px 10px;
-  border-color: var(--console-border-soft);
-  background: transparent;
-}
-.extension-center .extension-package-list { border-color: var(--console-border-soft); border-radius: var(--r-4); overflow: hidden; }
-.extension-center .extension-package-row { min-height: 46px; padding: 9px 12px; border-color: var(--console-border-soft); background: var(--console-surface); }
-.extension-center .extension-repository-empty { border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-muted); }
 
 @media (max-width: 920px) {
   .knowledge-library .knowledge-meta-grid > * + *,
@@ -959,10 +916,6 @@ select.input:focus-visible {
 @media (max-width: 920px) {
   .settings-page .provider-sidebar { border-right: 0; border-bottom: 1px solid var(--console-border-soft); }
 }
-@media (max-width: 920px) { }
-@media (max-width: 560px) { }
-@media (max-width:800px) { }
-@media (max-width:800px) { }
 
 /* ── Selected direction compositions ───────────────────────────────────── */
 .operations-page .operations-split {
@@ -1172,7 +1125,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 .diagnostics-page .diag-health-ok { border-left: 0; }
 .diagnostics-page .diag-health-warning { border-left-color: var(--warn); }
 .diagnostics-page .diag-health-error { border-left-color: var(--danger); }
-.diagnostics-page .diag-comp-detail { color: var(--text-3); font-size: var(--fs-12); overflow-wrap: anywhere; }
 .settings-page .settings-form-header { padding: 0 0 var(--space-4); background: transparent; }
 .settings-page .settings-row { padding: var(--space-3) 0; }
 .settings-page .provider-card-hint { overflow-wrap: anywhere; }
@@ -1200,7 +1152,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 
 /* Static reading surfaces do not need entrance animation. */
 .page .card, .page .hero { animation: none; }
-
 
 /* ── Enterprise layout rhythm: containers ─────────────────────────────────
    Moved here from typography.css. Those rules normalise hardcoded padding and
@@ -1269,10 +1220,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 
 .stat-label {
   margin-top: var(--flow-hair);
-}
-
-.stat-sub {
-  margin-top: 2px;
 }
 
 /* stat-card-box 的 10px 14px 两个方向都不在网格上 */
