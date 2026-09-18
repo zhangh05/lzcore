@@ -26,8 +26,6 @@ const TOPOLOGY = {
 /** Serve a fixed drawing and record every save the UI attempts. */
 async function stubTopology(page: import("@playwright/test").Page) {
   const saves: Array<Record<string, unknown>> = [];
-  await page.route("**/api/extensions/network.operations/devices?**", route => route.fulfill({ json: { devices: [] } }));
-  await page.route("**/api/extensions/network.operations/regions?**", route => route.fulfill({ json: { regions: [] } }));
   await page.route("**/api/extensions/network.operations/topologies**", async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -35,9 +33,6 @@ async function stubTopology(page: import("@playwright/test").Page) {
       const body = JSON.parse(request.postData() || "{}");
       saves.push(body);
       return route.fulfill({ json: { ok: true, topology: { ...TOPOLOGY, ...body, version: (body.version || 1) + 1 } } });
-    }
-    if (url.pathname.endsWith("/state")) {
-      return route.fulfill({ json: { state: { topology_id: TOPOLOGY.topology_id, version: 1, refreshed_at: "2026-09-16T00:00:00Z", nodes: [], connections: [] } } });
     }
     if (url.pathname.endsWith("/revisions")) return route.fulfill({ json: { revisions: [] } });
     if (url.pathname.endsWith(`/${TOPOLOGY.topology_id}`)) return route.fulfill({ json: { topology: TOPOLOGY } });

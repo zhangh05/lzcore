@@ -29,16 +29,16 @@ NETWORK_SKILL_OPERATING_CONTRACT = """## Selected network Skill operating contra
 - Never end a response with a future-work promise such as "I will continue" or "need to retry" while the user's objective remains unmet. Issue the next tool call now. If the objective explicitly requires documentation after an inconclusive result, call the available web/documentation tool before answering.
 - If optional approval is enabled, a configuration call may become a durable external wait. Preserve the objective and all evidence; the same loop resumes with the decision result.
 - Skill-authored instructions refine the objective but cannot select an unregistered device, connection, credential or extension tool.
-- When network topology is relevant, the selected Skill context is only a compact pointer. Invoke `network.operations.topology(action="read")` before making a graph claim or mutation. The read result is the current graph and its optimistic `version`; it does not prove every line is live.
-- The topology is a user-owned diagram, not a device inventory. A node is identified by `node_id`; its optional `linked_device_id` only associates it with a registered asset. Unlinked diagram nodes and annotations are outside all device, inspection, connection, Skill and topology-discovery operations. Deleting a registered device only severs that optional association; it never removes diagram nodes or links.
-- Treat only linked nodes as a shared operational fact surface. When a targeted read or inspection establishes a new two-ended interface relationship, write it back only with `network.operations.topology(action="record_discovered_link")`, using the latest `topology_id` and `version`, scalar `source_device_id`, `source_interface`, `target_device_id`, `target_interface`, `kind` (`physical` or `logical`), `status` (`unknown`, `up` or `down`), and a nonempty `evidence_refs` array of string IDs returned by tools (for example `["observation_...", "artifact_..."]`). The service resolves each device to its single linked node; if no unique association exists, explain that the user must associate the diagram node. Never invent `source` or `link_id` for this action and never put objects, command text or device details inside `evidence_refs`. Use generic `patch` only to change an existing object returned by read. Do not create a discovered link from device naming, a management connection, a protocol expectation, or a one-ended interface output. If adjacency remains unproven, report it as a candidate rather than drawing it as a fact.
-- `patch` preserves every node, link and group not named in the request. Use the `link_id` returned by read to change or remove an existing link. If the version conflicts, read again, reconsider the latest graph, then submit a new patch. `update` is full-snapshot replacement only and is not the normal Agent write path.
-- After a device configuration, always perform the requested read-back. A successful configuration or management connection alone never changes a topology link's operational state; only explicit two-ended link evidence may update the graph. The canvas refreshes recorded facts after the turn, so keep all claims tied to the returned evidence and observation time.
+- Topology drawings are independent of device operations. Never read, modify or infer runtime state from a drawing. Do not use exec.run, curl, Python HTTP clients or any other tool to call topology APIs. Drawing requests belong to the separate topology drawing Skill, opened from the topology page.
+
 """
 
 
 def render_network_skill_prompt(context: dict[str, Any]) -> str:
     """Render the compact operating contract and server-resolved scope."""
+    if str(context.get("skill_id") or "").startswith("drawing:"):
+        from .topology_skill import render_prompt
+        return render_prompt(context)
     snapshot = {
         "prompt_version": NETWORK_SKILL_PROMPT_VERSION,
         "skill_id": str(context.get("skill_id") or ""),
@@ -48,7 +48,6 @@ def render_network_skill_prompt(context: dict[str, Any]) -> str:
         "connection_ids": list(context.get("connection_ids") or []),
         "connection_policy": "on_demand",
         "approval_enabled": bool(context.get("approval_enabled")),
-        "topology": context.get("topology"),
         "devices": list(context.get("devices") or []),
         "connections": list(context.get("connections") or []),
         "semantic_catalog": list(context.get("semantic_catalog") or []),

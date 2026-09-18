@@ -2,7 +2,7 @@
 // window 监听必须拿到 DOM MouseEvent（带 clientX/clientY 且可用于
 // addEventListener），React 回调才用合成事件类型。
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
-import type { Device, Topology, TopologyCanvasItem, TopologyLink } from "./TopologyWorkspace";
+import type { Topology, TopologyCanvasItem, TopologyLink } from "./TopologyWorkspace";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import { portLabelOffsets } from "./topologyPortLabels";
 
@@ -67,7 +67,6 @@ export const CANVAS_GROUP = {
 
 type Props = {
   topology: Topology;
-  devices: Device[];
   mode: CanvasMode;
   gridEnabled: boolean;
   showInterfaces: boolean;
@@ -78,7 +77,6 @@ type Props = {
   onSelectionChange: (elementIds: string[]) => void;
   onMoveElements: (positions: Position[]) => void;
   onConnect: (sourceId: string, targetId: string) => void;
-  onDropDevice: (deviceId: string, position: { x: number; y: number }) => void;
   /**
    * A drawing-device type picked in the palette and not yet placed. While it is
    * set the canvas is waiting for a click on empty sheet, the way eNSP and HCL
@@ -92,7 +90,6 @@ type Props = {
   onReady?: (api: CanvasApi | null) => void;
   onContextMenu?: (target: CanvasContextTarget) => void;
   /** node_id -> operational state, derived from the last collection pass. */
-  nodeStatus?: Record<string, NodeRuntimeStatus>;
   /**
    * node_ids the active filter excludes. They stay on the canvas at low
    * opacity rather than disappearing: a filtered diagram still has to answer
@@ -843,7 +840,6 @@ export default function NetOpsCanvas(props: Props) {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    const byDevice = new Map(props.devices.map((device) => [device.device_id, device]));
     const statusPalette = nodeStatusColors(theme === "dark");
     const linkColors = { ok: statusPalette.ok, danger: statusPalette.error, unknown: statusPalette.unknown };
     const dimmed = new Set(props.dimmedNodeIds || []);
@@ -851,15 +847,14 @@ export default function NetOpsCanvas(props: Props) {
     const elements: CanvasElementSpec[] = [
       ...props.topology.groups.map((group) => ({ group: "nodes", classes: "lz-group", data: { id: `group-${group.group_id}`, label: group.name, width: group.width, height: group.height }, position: { x: group.x + group.width / 2, y: group.y + group.height / 2 }, locked: true })),
       ...props.topology.nodes.map((node) => {
-        const device = byDevice.get(node.linked_device_id || "");
-        const type = node.device_type || device?.device_type || "switch";
+        const type = node.device_type || "switch";
         // The border carries operational state because that is what an
         // operator scans for; vendor stays as a background tint so neither
         // signal is lost.
-        const status: NodeRuntimeStatus = props.nodeStatus?.[node.node_id] || "unknown";
+        const status: NodeRuntimeStatus = "unknown";
         const statusColor = statusPalette[status];
-        const vendorTint = !node.linked_device_id ? "#fbfcfd" : device?.vendor?.toLowerCase().includes("huawei") ? "#f2f7ff" : "#f4fbfa";
-        return { group: "nodes", classes: dimClass(node.node_id, node.linked_device_id ? "managed-node" : "manual-node"), data: { id: node.node_id, label: node.display_name || device?.name || "未命名设备", status, statusColor, statusWidth: status === "error" ? 3 : 2, vendorTint, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
+        const vendorTint = "#fbfcfd";
+        return { group: "nodes", classes: dimClass(node.node_id, "drawing-node"), data: { id: node.node_id, label: node.display_name || "未命名设备", status, statusColor, statusWidth: 2, vendorTint, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
       }),
       ...(props.topology.canvas_items || []).map((item) => {
         const style = { ...canvasItemDefaults[item.kind], ...item.style };
@@ -899,24 +894,9 @@ export default function NetOpsCanvas(props: Props) {
       initialTopologyIdRef.current = props.topology.topology_id;
       window.setTimeout(() => { cy.resize(); cy.fit(undefined, 48); setViewport({ ...cy.pan(), zoom: cy.zoom() }); }, 0);
     }
-  }, [rendererReady, props.topology, props.devices, props.dimmedNodeIds, theme]);
+  }, [rendererReady, props.topology, props.dimmedNodeIds, theme]);
 
-  // Probe results can change without a diagram edit. Update only status data:
-  // reconciling positions here could undo a drag while its save is in flight.
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || !rendererReady) return;
-    const palette = nodeStatusColors(theme === "dark");
-    cy.batch(() => {
-      for (const node of props.topology.nodes) {
-        const status = props.nodeStatus?.[node.node_id] || "unknown";
-        const rendered = cy.getElementById(node.node_id);
-        rendered.data("status", status);
-        rendered.data("statusColor", palette[status]);
-        rendered.data("statusWidth", status === "error" ? 3 : 2);
-      }
-    });
-  }, [rendererReady, props.topology, props.nodeStatus, theme]);
+
 
   // Interface labels are display-only controls. Updating edge data in place
   // keeps positions, selection, and the fixed sheet intact.
@@ -1009,32 +989,14 @@ export default function NetOpsCanvas(props: Props) {
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    // Two payloads arrive here. A registered device is an existing asset and
-    // becomes a node linked to it; a palette type is a shape to create. They
-    // are told apart by MIME type rather than by value, because a device may
-    // legitimately be named after its type.
     const nodeType = event.dataTransfer.getData("application/x-lzcore-node-type");
-    const deviceId = event.dataTransfer.getData("application/x-lzcore-device-id")
-      || (nodeType ? "" : event.dataTransfer.getData("text/plain"));
     const cy = cyRef.current;
     const host = hostRef.current;
-    if ((!deviceId && !nodeType) || !cy || !host) return;
+    if (!nodeType || !cy || !host) return;
     const local = toHostPoint(host, event.clientX, event.clientY);
     const pan = cy.pan();
     const zoom = cy.zoom();
-    const x = (local.x - pan.x) / zoom;
-    const y = (local.y - pan.y) / zoom;
-    const snap = (value: number) => props.gridEnabled ? Math.round(value / 32) * 32 : Math.round(value);
-    if (nodeType) {
-      // No snapping here: the grid is a property of the drawing, so it belongs
-      // to the placement itself rather than to one of the two ways of asking
-      // for it. Snapping only on the drop path meant a dragged type landed on
-      // the grid while a clicked one did not — measured, (-416,352) against
-      // (-184,-8) for the same action on the same sheet.
-      props.onPlaceNodeType(nodeType, { x, y });
-      return;
-    }
-    props.onDropDevice(deviceId, { x: snap(x), y: snap(y) });
+    props.onPlaceNodeType(nodeType, { x: (local.x - pan.x) / zoom, y: (local.y - pan.y) / zoom });
   };
 
   /**

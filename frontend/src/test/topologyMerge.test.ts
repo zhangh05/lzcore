@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { mergeTopologies } from "../../../extensions/network_operations/frontend/components/topologyMerge";
 
-type Node = { node_id: string; display_name?: string; x?: number; y?: number; linked_device_id?: string | null };
+type Node = { node_id: string; display_name?: string; x?: number; y?: number };
 type Link = { link_id: string; source_node_id: string; target_node_id: string; status?: string };
 type Drawing = {
   topology_id: string;

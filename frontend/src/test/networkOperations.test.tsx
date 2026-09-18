@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, vi } from "vitest";
 import NetworkOperations from "../../../extensions/network_operations/frontend/NetworkOperations";
+import TopologyPage from "../../../extensions/network_operations/frontend/TopologyPage";
 import { apiRequest } from "../api/client";
 import { ConfirmHost } from "../components/ConfirmDialog";
 
@@ -12,7 +13,7 @@ const sampleTopology = {
   name: "数据中心拓扑",
   description: "生产核心网",
   version: 1,
-  nodes: [{ node_id: "node-d1", linked_device_id: "d1", x: 100, y: 100, display_name: "核心交换机-1" }],
+  nodes: [{ node_id: "node-d1", x: 100, y: 100, display_name: "核心交换机-1" }],
   links: [],
   groups: [{ group_id: "g1", name: "生产DC", kind: "datacenter", x: 50, y: 50, width: 400, height: 300 }],
   canvas_items: [
@@ -30,14 +31,6 @@ beforeEach(() => {
     if (request.url?.endsWith("/devices")) return { devices: [{ device_id: "d1", name: "CE_1", host: "127.0.0.1", vendor: "h3c", device_type: "switch", region_id: "r1" }] } as never;
     if (request.url?.endsWith("/connections")) return { connections: [{ connection_id: "c1", device_id: "d1", protocol: "telnet", port: 30001, credential_configured: true, status: "untested", verified: false }] } as never;
     if (request.url?.endsWith("/topologies")) return { topologies: [sampleTopology] } as never;
-    if (request.url?.includes("/compare")) return {
-        topology_id: "t1",
-        topology_name: "数据中心拓扑",
-        topology_devices_not_in_scope: [],
-        devices_in_scope_not_in_topology: [],
-        link_comparisons: [{ link_id: "l1", source_device_id: "d1", target_device_id: "d2", source_interface: "GE0/0", target_interface: "GE0/1", comparison_status: "unknown", note: "无两端接口邻接证据，保持未知状态" }],
-        summary: { total_nodes: 2, total_links: 1, matched_links: 0, mismatched_links: 0, unknown_evidence_links: 1, available_devices_missing_from_topology: 0 },
-    } as never;
     if (request.url?.endsWith("/context")) return {
       observations: [{ observation_id: "o1", source_id: "inspection-1", observed_at: "2026-09-06T00:00:00Z", completeness: "complete", target_ids: ["c1"] }],
       references: [{ reference_id: "ref1", name: "巡检候选参考", state: "candidate", authority: "observed", current: false, completeness: "complete", target_ids: ["c1"], updated_at: "2026-09-06T00:00:00Z" }],
@@ -200,26 +193,17 @@ test("context loading failure does not hide device and Skill management", async 
   expect(screen.queryByText("数据加载失败，请检查服务。")).not.toBeInTheDocument();
 });
 
-test("dedicated topology route keeps the canvas primary and exposes the device palette", async () => {
-  render(<NetworkOperations topologyOnly />);
+test("dedicated topology route is a drawing workspace without the device catalog", async () => {
+  render(<TopologyPage />);
   const matches = await screen.findAllByText(/数据中心拓扑/);
   expect(matches.length).toBeGreaterThan(0);
-  expect(screen.queryByText("v1")).not.toBeInTheDocument();
-  expect(screen.getByText("已全部加入")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "查看详情" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "添加设备" })).toBeInTheDocument();
-  expect(screen.getByTestId("palette-dev-d1")).toBeInTheDocument();
-  expect(within(screen.getByTestId("palette-dev-d1")).getByText("已在画布 · 可再添加")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText("单击选择，Ctrl/⌘ + 单击加选，拖空白平移；Shift 或 Ctrl/⌘ + 拖框多选")).toBeInTheDocument();
-  // There is no separate layout mode: objects are draggable in select mode, so a
-  // second mode that behaved identically would only be a redundant control.
-  expect(screen.queryByRole("button", { name: "移动布局" })).not.toBeInTheDocument();
+  expect(screen.getByText(/独立图纸/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "添加设备" })).not.toBeInTheDocument();
+  expect(screen.queryByTestId("palette-dev-d1")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText("插入")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "连线" }));
   expect(screen.getByRole("button", { name: "连线" })).toHaveAttribute("aria-pressed", "true");
-  // 网格与接口标签是画布下方的常驻开关，不是模式按钮。
   expect(screen.getByRole("checkbox", { name: "网格" })).toBeChecked();
   expect(screen.getByRole("checkbox", { name: "接口标签" })).toBeInTheDocument();
 });
@@ -241,7 +225,7 @@ test("a concurrent edit is offered as a merge instead of a dead-end error", asyn
     return passthrough(request);
   });
 
-  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  render(<><TopologyPage /><ConfirmHost /></>);
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(await screen.findByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
@@ -272,7 +256,7 @@ test("edits made while a conflict is deferred are included in its eventual merge
     return passthrough(request);
   });
 
-  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  render(<><TopologyPage /><ConfirmHost /></>);
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(await screen.findByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
@@ -311,7 +295,7 @@ test("edits made while the conflict snapshot loads survive resolution", async ()
     if (request.url?.endsWith("/topologies/t1")) return await snapshot as never;
     return passthrough(request);
   });
-  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  render(<><TopologyPage /><ConfirmHost /></>);
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(screen.getByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
@@ -343,7 +327,7 @@ test("a field both sides changed is listed for review, not decided silently", as
     return passthrough(request);
   });
 
-  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  render(<><TopologyPage /><ConfirmHost /></>);
   await screen.findByTestId("topo-node-node-d1");
   fireEvent.click(screen.getByText("更多"));
   fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
@@ -381,7 +365,7 @@ test("restoring a revision does not immediately conflict with itself", async () 
     return passthrough(request);
   });
 
-  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
+  render(<><TopologyPage /><ConfirmHost /></>);
   await screen.findByTestId("topo-node-node-d1");
   fireEvent.click(screen.getByRole("button", { name: "版本历史" }));
   fireEvent.click(await screen.findByRole("button", { name: "恢复到此版本" }));
@@ -394,25 +378,10 @@ test("restoring a revision does not immediately conflict with itself", async () 
   expect(screen.getByText("已保存")).toBeInTheDocument();
 });
 
-test("canvas filter dims non-matching objects and can be cleared", async () => {
-  render(<NetworkOperations topologyOnly />);
-  await screen.findByTestId("topo-node-node-d1");
 
-  // Nothing is dimmed until a filter is chosen.
-  expect(screen.queryByText(/过滤中/)).not.toBeInTheDocument();
-
-  fireEvent.click(screen.getByText(/^过滤/));
-  // The only canvas device has no collected state, so demanding "正常"
-  // must exclude it — the count is what proves the filter reached the canvas.
-  fireEvent.click(screen.getByRole("checkbox", { name: "正常" }));
-  expect(await screen.findByText(/过滤中 · 1 个对象已淡化/)).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole("button", { name: "清除过滤" }));
-  expect(screen.queryByText(/过滤中/)).not.toBeInTheDocument();
-});
 
 test("text and ellipse diagram items share the editable, deletable inspector", async () => {
-  render(<NetworkOperations topologyOnly />);
+  render(<TopologyPage />);
   await screen.findByTestId("topo-item-text-note");
 
   fireEvent.click(screen.getByTestId("topo-item-text-note"));
@@ -432,65 +401,9 @@ test("topology endpoint failure is shown as a loading error instead of an empty 
     if (request.url?.endsWith("/topologies")) throw new Error("topology endpoint unavailable");
     return original?.(request) as never;
   });
-  render(<NetworkOperations topologyOnly />);
-  expect(await screen.findByRole("alert")).toHaveTextContent("拓扑数据加载失败");
-  expect(screen.queryByText("尚未创建网络拓扑")).not.toBeInTheDocument();
+  render(<TopologyPage />);
+  expect(await screen.findByRole("alert")).toHaveTextContent(/图纸加载失败/);
+  expect(screen.queryByText("尚未创建图纸")).not.toBeInTheDocument();
 });
 
-test("associates topology with Skill and displays it in Skill card", async () => {
-  render(<NetworkOperations />);
-  await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("tab", { name: /Skill 配置/ }));
-  fireEvent.click(screen.getByRole("button", { name: "编辑 Skill" }));
-  const dialog = screen.getByRole("dialog", { name: "Skill 编辑面板" });
-  fireEvent.change(within(dialog).getByRole("combobox", { name: /关联网络拓扑/ }), { target: { value: "t1" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "保存 Skill" }));
-  await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({
-    method: "PUT",
-    data: expect.objectContaining({ topology_id: "t1" }),
-  })));
-});
 
-test("topology compare modal opens and emphasizes evidence-based unknown status", async () => {
-  render(<NetworkOperations topologyOnly />);
-  const matches = await screen.findAllByText(/数据中心拓扑/);
-  expect(matches.length).toBeGreaterThan(0);
-  fireEvent.click(screen.getByRole("button", { name: "拓扑比对" }));
-  expect(await screen.findByRole("dialog", { name: "拓扑比对报告" })).toBeInTheDocument();
-  expect(screen.getByText(/无两端接口邻接证据，保持未知状态/)).toBeInTheDocument();
-  expect(screen.getByText("暂无证据链路")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "关闭报告" }));
-  await waitFor(() => expect(screen.queryByText(/拓扑比对报告/)).not.toBeInTheDocument());
-});
-
-test("removing a node from topology preserves the workspace device entity", async () => {
-  render(<><NetworkOperations topologyOnly /><ConfirmHost /></>);
-  const matches = await screen.findAllByText(/数据中心拓扑/);
-  expect(matches.length).toBeGreaterThan(0);
-
-  // Click on node in canvas
-  const nodeEl = await screen.findByTestId("topo-node-node-d1");
-  fireEvent.click(nodeEl);
-
-  // Inspector should show node properties and remove button
-  const removeBtn = await screen.findByRole("button", { name: "从拓扑中移除节点" });
-  fireEvent.click(removeBtn);
-
-  // Confirm dialog should state device entity will be preserved
-  expect(screen.getByText(/工作区的“核心交换机-1”设备实体及管理连接将被完整保留/)).toBeInTheDocument();
-  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
-
-  // Node is removed from topology, but device still exists in workspace
-  await waitFor(() => {
-    expect(within(screen.getByTestId("palette-dev-d1")).getByRole("button", { name: "加入" })).toBeInTheDocument();
-  });
-});
-
-test("topology nodes expose an optional inventory association instead of inheriting device identity", async () => {
-  render(<NetworkOperations topologyOnly />);
-  await screen.findByTestId("topo-node-node-d1");
-  fireEvent.click(screen.getByTestId("topo-node-node-d1"));
-  const association = await screen.findByRole("combobox", { name: "关联登记设备" });
-  expect(association).toHaveValue("d1");
-  expect(screen.getByText(/图纸名称、图标、位置和接口仍独立维护/)).toBeInTheDocument();
-});

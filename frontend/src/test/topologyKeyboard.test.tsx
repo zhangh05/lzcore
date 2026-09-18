@@ -25,14 +25,13 @@ const topology: Topology = {
 beforeEach(() => {
   vi.mocked(apiRequest).mockImplementation(async (request) => {
     if (request.method === "PUT") return { topology: { ...topology, ...request.data, version: 2 } } as never;
-    if (request.url?.endsWith("/state")) return { state: { nodes: [], connections: [], refreshed_at: "" } } as never;
     return { skills: [] } as never;
   });
 });
 
 function setup() {
-  render(<><TopologyWorkspace workspaceId="default" devices={[]} connections={[]} regions={[]} skills={[]}
-    topologies={[topology]} loadError="" onReload={async () => {}} onCreateDevice={() => {}} setNotice={() => {}} busy={false} /><ConfirmHost /></>);
+  render(<><TopologyWorkspace workspaceId="default"
+    topologies={[topology]} loadError="" onReload={async () => {}} setNotice={() => {}} busy={false} /><ConfirmHost /></>);
 }
 
 test("Delete uses a lone canvas item rather than an earlier node inspector", async () => {

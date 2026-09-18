@@ -441,11 +441,13 @@ def apply_workbench_tool_boundary(
     registry: dict[str, dict[str, Any]],
     context: dict[str, Any] | None,
 ) -> dict[str, dict[str, Any]]:
-    """Hide unselected tools owned by the selected Skill's extension.
+    """Apply the selected Skill's tool visibility.
 
-    A Skill narrows only its owning extension. General platform tools remain
-    available so the model can still combine files, knowledge, Python and
-    other capabilities when they help complete the user's goal.
+    Default: hide unselected tools owned by that Skill's extension. General
+    platform tools stay available.
+
+    ``tool_scope=exclusive``: expose only ``allowed_tool_ids``. Drawing Skills
+    use this so the model cannot reach device, shell or other platform tools.
     """
     if not isinstance(context, dict):
         return registry
@@ -465,7 +467,7 @@ def apply_workbench_tool_boundary(
     return {
         tool_id: definition
         for tool_id, definition in registry.items()
-        if tool_id not in owned or tool_id in allowed
+        if (tool_id in allowed if context.get("tool_scope") == "exclusive" else tool_id not in owned or tool_id in allowed)
     }
 
 
