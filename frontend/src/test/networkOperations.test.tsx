@@ -203,6 +203,9 @@ test("dedicated topology route is a drawing workspace without the device catalog
   expect(screen.queryByRole("button", { name: "发现邻居" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "拓扑比对" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "添加图纸设备" })).not.toBeInTheDocument();
+  // 工具栏不重复，但入口不能没：左侧面板里点选类型 + 起名弹窗都得在。
+  expect(screen.getByTestId("palette-type-switch")).toBeInTheDocument();
+  expect(screen.getByText(/新建图纸设备/)).toBeInTheDocument();
   expect(screen.queryByTestId("palette-dev-d1")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText("插入")).toBeInTheDocument();
