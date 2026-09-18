@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import type { Device, Topology, TopologyCanvasItem, TopologyLink } from "./TopologyWorkspace";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
+import { portLabelOffsets } from "./topologyPortLabels";
 
 /** Selecting information must never mutate the drawing by accident. */
 type CanvasMode = "select" | "connect";
@@ -119,6 +120,7 @@ type Cy = {
   fit: (elements?: unknown, padding?: number) => void;
   getElementById: (id: string) => CyElement;
   nodes: (selector?: string) => CyCollection<CyNode>;
+  edges: () => CyCollection<CyEdge>;
   on: (events: string, selectorOrCallback: string | ((event: CyEvent) => void), callback?: (event: CyEvent) => void) => void;
   pan: (position?: { x: number; y: number }) => { x: number; y: number };
   panningEnabled: (enabled?: boolean) => boolean;
@@ -154,6 +156,12 @@ type CyElement = {
   length: number;
 };
 type CyNode = CyElement & { position: (position?: { x: number; y: number }) => { x: number; y: number }; selected: () => boolean; grabbed: () => boolean; width: () => number; height: () => number };
+type CyEdge = CyElement & {
+  sourceEndpoint: () => { x: number; y: number };
+  targetEndpoint: () => { x: number; y: number };
+  controlPoints: () => { x: number; y: number }[] | undefined;
+  style: (values: Record<string, number>) => void;
+};
 type CyStyleChain = { selector: (selector: string) => { style: (style: Record<string, unknown>) => CyStyleChain }; update: () => void };
 type CyEvent = { target: { id?: () => string; isNode?: () => boolean; isEdge?: () => boolean; addClass?: (className: string) => void; removeClass?: (className: string) => void; select?: () => void }; originalEvent?: MouseEvent; position?: { x: number; y: number }; renderedPosition?: { x: number; y: number } };
 
@@ -404,7 +412,7 @@ export default function NetOpsCanvas(props: Props) {
           // image mappings only to asset nodes so Cytoscape stays warning-free.
           { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "contain", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
-          { selector: "edge", style: { width: "data(edgeWidth)", opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": "14px", "target-text-margin-y": "14px" } },
+          { selector: "edge", style: { width: "data(edgeWidth)", opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", "control-point-step-size": 144, label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": 0, "target-text-margin-y": 0 } },
           { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-margin-y": 0, "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
           // A text box with no border and no fill is an invisible hit area: the
           // user sees blank canvas, right-clicks it, and gets item actions they
@@ -436,6 +444,31 @@ export default function NetOpsCanvas(props: Props) {
         ],
       });
       cyRef.current = cy;
+      // Use renderer geometry, including the clipped node boundary and the
+      // direction of each edge. A reverse-direction link still labels its own
+      // source/target. Native labels remain available to image export/hit tests.
+      // Render runs after bundle recalculation (add/remove/drag/layout); cache
+      // geometry so pan, zoom and the follow-up style render do no extra work.
+      const portGeometry = new Map<CyEdge, string>();
+      cy.on("render", () => {
+        const live = new Set<CyEdge>();
+        cy.edges().forEach((edge) => {
+          live.add(edge);
+          const start = edge.sourceEndpoint();
+          const end = edge.targetEndpoint();
+          const controls = edge.controlPoints();
+          // Self-loops have two quadratics, not the single parallel-link arc.
+          if (!start || !end || (controls && controls.length > 1)) return;
+          const coordinates = [start.x, start.y, end.x, end.y, ...(controls || []).flatMap(p => [p.x, p.y])];
+          if (!coordinates.every(Number.isFinite)) return;
+          const key = coordinates.join(",");
+          if (portGeometry.get(edge) === key) return;
+          portGeometry.set(edge, key);
+          const offsets = portLabelOffsets(start, end, controls?.[0]);
+          edge.style({ "source-text-offset": offsets.source, "target-text-offset": offsets.target });
+        });
+        for (const edge of portGeometry.keys()) if (!live.has(edge)) portGeometry.delete(edge);
+      });
       setRendererReady(true);
       const syncViewport = () => setViewport({ ...cy.pan(), zoom: cy.zoom() });
       cy.on("zoom pan", syncViewport);
