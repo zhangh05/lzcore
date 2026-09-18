@@ -713,13 +713,47 @@ export const useWorkbenchStore = create<WorkbenchState>()(
             seenKeys.add(messageKey(localMsg));
           }
 
-          // Preserve chronology for legacy records where a user provisional
-          // message and its assistant result share the same timestamp. UUID
-          // lexical order is unrelated to conversational causality.
+          // Build lookup of user prompt timestamps by turn key (client_request_id or run_id)
+          // so an assistant response with client/server clock skew is never sorted ahead
+          // of its own user prompt.
+          const userPromptTimeByKey = new Map<string, string>();
+          for (const m of combined) {
+            if (m.role === "user" && m.created_at) {
+              if (m.client_request_id) userPromptTimeByKey.set(`req:${m.client_request_id}`, m.created_at);
+              if (m.run_id) userPromptTimeByKey.set(`run:${m.run_id}`, m.created_at);
+            }
+          }
+
+          const effectiveSortTime = (message: ChatMsg): string => {
+            const raw = message.created_at || "";
+            if (message.role === "assistant") {
+              const reqTime = message.client_request_id ? userPromptTimeByKey.get(`req:${message.client_request_id}`) : undefined;
+              const runTime = message.run_id ? userPromptTimeByKey.get(`run:${message.run_id}`) : undefined;
+              const anchor = reqTime || runTime;
+              if (anchor && anchor > raw) {
+                return anchor;
+              }
+            }
+            return raw;
+          };
+
+          const rank = (message: ChatMsg) => (message.role === "user" ? 0 : message.role === "assistant" ? 1 : 2);
+
           combined.sort((a, b) => {
-            const timestampOrder = (a.created_at || "").localeCompare(b.created_at || "");
+            // If they belong to the same turn, user always comes before assistant.
+            if (
+              (a.client_request_id && b.client_request_id && a.client_request_id === b.client_request_id) ||
+              (a.run_id && b.run_id && a.run_id === b.run_id)
+            ) {
+              const rDiff = rank(a) - rank(b);
+              if (rDiff !== 0) return rDiff;
+            }
+
+            const timeA = effectiveSortTime(a);
+            const timeB = effectiveSortTime(b);
+            const timestampOrder = timeA.localeCompare(timeB);
             if (timestampOrder !== 0) return timestampOrder;
-            const rank = (message: ChatMsg) => message.role === "user" ? 0 : message.role === "assistant" ? 1 : 2;
+
             return rank(a) - rank(b);
           });
           const cleaned = dedupeMessages(combined);

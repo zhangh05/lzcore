@@ -320,4 +320,45 @@ describe("workbench backend message merge", () => {
     });
   });
 
+  it("keeps user message before streaming assistant even when backend user timestamp is ahead of client assistant timestamp", () => {
+    const store = useWorkbenchStore.getState();
+    store.switchSession("sess-skew");
+    const userId = store.appendUser("在当前图纸中添加两台交换机", "sess-skew", undefined, "req-skew-123");
+    expect(userId).toBeTruthy();
+    const asstId = store.appendAssistantStreaming("sess-skew", "req-skew-123");
+
+    // Manually simulate client timestamp created slightly earlier
+    useWorkbenchStore.setState((state) => ({
+      bySession: {
+        ...state.bySession,
+        "sess-skew": state.bySession["sess-skew"].map((m) =>
+          m.id === asstId
+            ? { ...m, created_at: "2026-09-18T16:19:38.105Z" }
+            : m,
+        ),
+      },
+    }));
+
+    // Server responds with user message stamped 1.2s later
+    store.mergeFromBackend("sess-skew", [
+      {
+        message_id: "request_667d:user",
+        session_id: "sess-skew",
+        role: "user",
+        content: "在当前图纸中添加两台交换机",
+        created_at: "2026-09-18T16:19:39.370024+00:00",
+        run_id: "request_667d",
+        metadata: { client_request_id: "req-skew-123" },
+      },
+    ]);
+
+    const messages = useWorkbenchStore.getState().bySession["sess-skew"];
+    expect(messages).toHaveLength(2);
+    // User message MUST be at index 0, assistant streaming message MUST be at index 1
+    expect(messages[0].role).toBe("user");
+    expect(messages[0].text).toBe("在当前图纸中添加两台交换机");
+    expect(messages[1].role).toBe("assistant");
+    expect(messages[1].status).toBe("streaming");
+  });
+
 });

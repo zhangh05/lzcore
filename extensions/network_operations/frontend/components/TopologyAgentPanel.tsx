@@ -70,13 +70,15 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     if (!sessionId) {
       if (stored && stored !== sessionId) setSessionId(stored);
     } else if (stored === sessionId) {
-      void refreshHistory().catch(() => setError("会话记录读取失败；已有会话保留，请重试加载。"));
+      if (!sending) {
+        void refreshHistory().catch(() => setError("会话记录读取失败；已有会话保留，请重试加载。"));
+      }
     } else {
       useWorkbenchStore.getState().clear(sessionId);
       setSessionId(null);
       setError("");
     }
-  }, [sessionListVersion, sessionId, storageKey, refreshHistory]);
+  }, [sessionListVersion, sessionId, storageKey, refreshHistory, sending]);
   useEffect(() => {
     if (!loaded || sending || !sessionId) return;
     if (job?.status !== "running") return;
