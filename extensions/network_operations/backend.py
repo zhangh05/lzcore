@@ -635,7 +635,8 @@ def topology_tool(invocation):
         return {"ok": False, "error": "drawing_skill_required"}
     is_ro = skill.endswith(":ro")
     topology_id = skill.removeprefix("drawing:").removesuffix(":ro")
-    if args.get("topology_id", topology_id) != topology_id:
+    target_topology_id = str(args.get("topology_id") or topology_id).removesuffix(":ro")
+    if target_topology_id != topology_id:
         return {"ok": False, "error": "topology_outside_selected_skill"}
     topology = drawings.get_topology(invocation.workspace_id, topology_id)
     if not topology:

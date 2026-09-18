@@ -260,3 +260,142 @@ def test_drawing_selection_in_agent_app_binds_drawing_skill_to_topology_tool(wor
     assert "network.operations.topology" in captured_engine["engine"].tool_runtime._handlers
     # Verify exclusive boundary was applied (e.g. exec.run should NOT be in registered handlers)
     assert "exec.run" not in captured_engine["engine"].tool_runtime._handlers
+
+
+def test_multiturn_drawing_permission_toggle_between_ro_and_rw(workspace, monkeypatch):
+    """Verify that multiple consecutive turns on the same session cleanly transition permissions."""
+    from agent.app.service import get_default_agent_app
+    import agent.runtime.ssot_runtime as runtime
+    from types import SimpleNamespace
+    from core.runtime_engine.models import ToolResult
+
+    topo = _drawing(workspace)
+    session_id = "s-multiturn-topo-test"
+    captured_actions = []
+
+    real_build_engine = runtime._build_engine
+
+    def fake_build_engine(**kwargs):
+        engine = real_build_engine(**kwargs)
+
+        async def fake_run(**run_kwargs):
+            handler = engine.tool_runtime._handlers["network.operations.topology"]
+            current_action = captured_actions[-1] if captured_actions else {}
+
+            if current_action.get("should_patch"):
+                res = await handler({
+                    "action": "patch",
+                    "topology_id": topo["topology_id"],
+                    "version": current_action.get("version", 1),
+                    "node_updates": [{"node_id": "pc1", "display_name": "PC1", "x": 500, "y": 500}],
+                })
+            else:
+                res = await handler({
+                    "action": "read",
+                    "topology_id": topo["topology_id"],
+                })
+
+            tool_res = ToolResult(
+                node_id="1",
+                tool="network.operations.topology",
+                success=res.get("ok", False),
+                data=res,
+            )
+            return SimpleNamespace(
+                success=res.get("ok", False),
+                final_response=f"执行结果 ok={res.get('ok')} err={res.get('error')}",
+                node_results={"1": tool_res},
+                errors=[] if res.get("ok") else [res.get("error", "error")],
+                metadata={"execution_outcome": "complete", "cognitive": {"outcome": "stop_completed"}},
+            )
+
+        engine.run = fake_run
+        return engine
+
+    monkeypatch.setattr(runtime, "_build_engine", fake_build_engine)
+    monkeypatch.setattr(runtime, "persist_run_record", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runtime, "_record_experience_and_maybe_reflect", lambda **_kwargs: None)
+
+    app = get_default_agent_app()
+
+    # --- Turn 1: Read-only mode, agent attempts patch -> BLOCKED ---
+    captured_actions.append({"should_patch": True, "version": 1})
+    res_t1 = app.submit_user_message(
+        user_input="请帮我修改图纸",
+        session_id=session_id,
+        workspace_id=workspace,
+        metadata={
+            "workbench_selection": {
+                "extension_id": "network.operations",
+                "skill_id": f"drawing:{topo['topology_id']}:ro",
+                "resource_ids": [topo["topology_id"]],
+                "allow_edit": False,
+            }
+        },
+    )
+    assert res_t1.ok is False
+    assert "topology_edit_not_permitted" in res_t1.errors
+    # Topology version on disk remains 1
+    assert drawings.get_topology(workspace, topo["topology_id"])["version"] == 1
+
+    # --- Turn 2: User switches to edit mode -> PATCH SUCCEEDS ---
+    captured_actions.append({"should_patch": True, "version": 1})
+    res_t2 = app.submit_user_message(
+        user_input="我已勾选允许修改，请添加 PC1",
+        session_id=session_id,
+        workspace_id=workspace,
+        metadata={
+            "workbench_selection": {
+                "extension_id": "network.operations",
+                "skill_id": f"drawing:{topo['topology_id']}",
+                "resource_ids": [topo["topology_id"]],
+                "allow_edit": True,
+            }
+        },
+    )
+    assert res_t2.ok is True
+    updated_topo = drawings.get_topology(workspace, topo["topology_id"])
+    assert updated_topo["version"] == 2
+    assert any(n["node_id"] == "pc1" for n in updated_topo["nodes"])
+
+    # --- Turn 3: User switches back to read-only mode -> READ SUCCEEDS, PATCH BLOCKED ---
+    captured_actions.append({"should_patch": False})
+    res_t3 = app.submit_user_message(
+        user_input="请分析当前图纸（已包含PC1）",
+        session_id=session_id,
+        workspace_id=workspace,
+        metadata={
+            "workbench_selection": {
+                "extension_id": "network.operations",
+                "skill_id": f"drawing:{topo['topology_id']}:ro",
+                "resource_ids": [topo["topology_id"]],
+                "allow_edit": False,
+            }
+        },
+    )
+    assert res_t3.ok is True
+    assert drawings.get_topology(workspace, topo["topology_id"])["version"] == 2
+
+
+def test_drawing_selection_normalization_and_defense(workspace):
+    """Verify normalization of :ro in resource_ids and target_topology_id."""
+    from types import SimpleNamespace
+
+    topo = _drawing(workspace)
+
+    # 1. resource_ids containing :ro is normalized
+    context = service.resolve_workbench_selection(workspace, {
+        "skill_id": f"drawing:{topo['topology_id']}:ro",
+        "resource_ids": [f"{topo['topology_id']}:ro"],
+    })
+    assert context["skill_id"] == f"drawing:{topo['topology_id']}:ro"
+    assert context["allow_edit"] is False
+
+    # 2. target_topology_id in tool arguments containing :ro is accepted
+    res = backend.topology_tool(SimpleNamespace(
+        arguments={"action": "read", "topology_id": f"{topo['topology_id']}:ro"},
+        workspace_id=workspace,
+        skill=f"drawing:{topo['topology_id']}:ro",
+    ))
+    assert res["ok"] is True
+    assert res["topology"]["topology_id"] == topo["topology_id"]

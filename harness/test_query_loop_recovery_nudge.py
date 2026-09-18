@@ -48,6 +48,16 @@ def test_network_retry_final_gate_ignores_drawing_skill():
     })
     assert QueryLoop._network_retry_final_gate(ctx, "绘图已完成", []) == ""
 
+    ctx_ro = SimpleNamespace(extras={
+        "workbench_context": {
+            "extension_id": "network.operations",
+            "skill_id": "drawing:topo_123:ro",
+            "tool_scope": "exclusive",
+        },
+        "__raw_user_input": "再试试分析",
+    })
+    assert QueryLoop._network_retry_final_gate(ctx_ro, "只读分析已完成", []) == ""
+
 
 def test_network_configuration_gate_requires_generic_post_write_readback():
     ctx = SimpleNamespace(extras={

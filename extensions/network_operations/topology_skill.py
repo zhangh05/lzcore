@@ -22,7 +22,8 @@ def resolve_selection(workspace_id, selection):
     topology_id = clean_skill_id.removeprefix("drawing:")
     if not clean_skill_id.startswith("drawing:") or not topology_id:
         raise ValueError("drawing_skill_required")
-    if selection.get("resource_ids", [topology_id]) != [topology_id]:
+    resource_ids = [str(r).removesuffix(":ro") for r in selection.get("resource_ids", [topology_id])]
+    if resource_ids != [topology_id]:
         raise ValueError("topology_outside_selected_skill")
     topology = drawings.get_topology(workspace_id, topology_id)
     if not topology:
