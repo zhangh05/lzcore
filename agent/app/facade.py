@@ -97,6 +97,15 @@ class AgentApp:
                 from extensions.runtime import resolve_workbench_context
                 metadata["workbench_context"] = resolve_workbench_context(workspace_id, selection)
 
+            workbench_ctx = dict(metadata.get("workbench_context") or {})
+            if workbench_ctx:
+                from core.runtime_engine.models import MainAgentRuntimeControl
+                if runtime_control is None:
+                    runtime_control = MainAgentRuntimeControl(workbench_context=workbench_ctx)
+                elif isinstance(runtime_control, MainAgentRuntimeControl) and not runtime_control.workbench_context:
+                    from dataclasses import replace
+                    runtime_control = replace(runtime_control, workbench_context=workbench_ctx)
+
             op = AgentOp.user_message(
                 user_input=user_input,
                 session_id=sid,

@@ -55,13 +55,20 @@ def _sanitize_caller_runtime_metadata(metadata: Any) -> dict[str, Any]:
     """Keep caller metadata data-only before it enters the SSOT control plane."""
     if not isinstance(metadata, dict):
         return {}
-    return {
+    sanitized = {
         str(key): value
         for key, value in metadata.items()
         if isinstance(key, str)
         and not key.startswith("__")
         and key not in _CALLER_RESERVED_RUNTIME_METADATA_KEYS
     }
+    raw_wb = metadata.get("workbench_context")
+    if (
+        isinstance(raw_wb, dict)
+        and raw_wb.get("source") == "server_validated_extension_context"
+    ):
+        sanitized["workbench_context"] = dict(raw_wb)
+    return sanitized
 
 
 def _apply_runtime_control(metadata: dict[str, Any], runtime_control: Any) -> None:
@@ -70,6 +77,8 @@ def _apply_runtime_control(metadata: dict[str, Any], runtime_control: Any) -> No
     if isinstance(runtime_control, MainAgentRuntimeControl):
         if callable(runtime_control.cancel_check):
             metadata["cancel_check"] = runtime_control.cancel_check
+        if isinstance(runtime_control.workbench_context, dict) and runtime_control.workbench_context:
+            metadata["workbench_context"] = dict(runtime_control.workbench_context)
         return
     if isinstance(runtime_control, ApprovalContinuationRuntimeControl):
         metadata["approval_continuation_resume"] = dict(runtime_control.checkpoint or {})

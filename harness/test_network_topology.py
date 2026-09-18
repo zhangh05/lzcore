@@ -120,6 +120,20 @@ def test_topology_tool_requires_drawing_skill(workspace):
     assert allowed["ok"] is True
     assert allowed["topology"]["topology_id"] == topo["topology_id"]
 
+    ro_read = backend.topology_tool(SimpleNamespace(
+        arguments={"action": "read", "topology_id": topo["topology_id"]},
+        workspace_id=workspace, skill=f"drawing:{topo['topology_id']}:ro",
+    ))
+    assert ro_read["ok"] is True
+    assert ro_read["topology"]["topology_id"] == topo["topology_id"]
+
+    ro_patch = backend.topology_tool(SimpleNamespace(
+        arguments={"action": "patch", "topology_id": topo["topology_id"], "version": topo["version"], "name": "forbidden"},
+        workspace_id=workspace, skill=f"drawing:{topo['topology_id']}:ro",
+    ))
+    assert ro_patch["ok"] is False
+    assert ro_patch["error"] == "topology_edit_not_permitted"
+
 
 def test_drawing_skill_is_exclusive_and_has_own_prompt(workspace):
     topo = _drawing(workspace)
@@ -129,8 +143,21 @@ def test_drawing_skill_is_exclusive_and_has_own_prompt(workspace):
     })
     assert context["tool_scope"] == "exclusive"
     assert context["allowed_tool_ids"] == ["network.operations.topology"]
+    assert context["allow_edit"] is True
     prompt = render_network_skill_prompt(context)
     assert "Only edit the selected drawing" in prompt
+
+    ro_context = service.resolve_workbench_selection(workspace, {
+        "skill_id": f"drawing:{topo['topology_id']}",
+        "resource_ids": [topo["topology_id"]],
+        "allow_edit": False,
+    })
+    assert ro_context["skill_id"] == f"drawing:{topo['topology_id']}:ro"
+    assert ro_context["allow_edit"] is False
+    ro_prompt = render_network_skill_prompt(ro_context)
+    assert "READ-ONLY mode" in ro_prompt
+    assert "Do not attempt to modify, patch" in ro_prompt
+
     bounded = apply_workbench_tool_boundary(
         {
             "network.operations.topology": {"tool_id": "network.operations.topology"},
@@ -171,3 +198,65 @@ def test_network_skill_cannot_carry_topology_tool(workspace):
     assert "network.operations.topology" not in context["allowed_tool_ids"]
     prompt = render_network_skill_prompt(context)
     assert "Do not use exec.run, curl, Python HTTP clients" in prompt
+
+
+def test_drawing_selection_in_agent_app_binds_drawing_skill_to_topology_tool(workspace, monkeypatch, tmp_path):
+    from agent.app.service import get_default_agent_app
+    import agent.runtime.ssot_runtime as runtime
+    from types import SimpleNamespace
+
+    topo = _drawing(workspace)
+    selection = {
+        "extension_id": "network.operations",
+        "skill_id": f"drawing:{topo['topology_id']}",
+        "resource_ids": [topo["topology_id"]],
+    }
+
+    real_build_engine = runtime._build_engine
+    captured_engine = {}
+
+    def fake_build_engine(**kwargs):
+        engine = real_build_engine(**kwargs)
+        captured_engine["engine"] = engine
+
+        async def fake_run(**run_kwargs):
+            # Simulate the model executing the topology tool
+            handler = engine.tool_runtime._handlers["network.operations.topology"]
+            res = await handler({
+                "action": "read",
+                "topology_id": topo["topology_id"],
+            })
+            from core.runtime_engine.models import ToolResult
+            tool_res = ToolResult(
+                node_id="1",
+                tool="network.operations.topology",
+                success=res.get("ok", False),
+                data=res,
+            )
+            return SimpleNamespace(
+                success=True,
+                final_response=f"读取成功 version={res.get('version')}",
+                node_results={"1": tool_res},
+                errors=[],
+                metadata={"execution_outcome": "complete", "cognitive": {"outcome": "stop_completed"}},
+            )
+
+        engine.run = fake_run
+        return engine
+
+    monkeypatch.setattr(runtime, "_build_engine", fake_build_engine)
+    monkeypatch.setattr(runtime, "persist_run_record", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runtime, "_record_experience_and_maybe_reflect", lambda **_kwargs: None)
+
+    app = get_default_agent_app()
+    result = app.submit_user_message(
+        user_input="请读取当前图纸。",
+        workspace_id=workspace,
+        metadata={"workbench_selection": selection},
+    )
+
+    assert result.ok is True
+    assert "读取成功" in result.final_response
+    assert "network.operations.topology" in captured_engine["engine"].tool_runtime._handlers
+    # Verify exclusive boundary was applied (e.g. exec.run should NOT be in registered handlers)
+    assert "exec.run" not in captured_engine["engine"].tool_runtime._handlers

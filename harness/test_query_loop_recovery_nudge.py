@@ -37,6 +37,18 @@ def test_network_retry_final_gate_rejects_claims_without_current_command_evidenc
     assert "no `configure` execution result" in nudge
 
 
+def test_network_retry_final_gate_ignores_drawing_skill():
+    ctx = SimpleNamespace(extras={
+        "workbench_context": {
+            "extension_id": "network.operations",
+            "skill_id": "drawing:topo_123",
+            "tool_scope": "exclusive",
+        },
+        "__raw_user_input": "再试试",
+    })
+    assert QueryLoop._network_retry_final_gate(ctx, "绘图已完成", []) == ""
+
+
 def test_network_configuration_gate_requires_generic_post_write_readback():
     ctx = SimpleNamespace(extras={
         "workbench_context": {"extension_id": "network.operations"},

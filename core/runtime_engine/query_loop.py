@@ -3557,7 +3557,12 @@ class QueryLoop:
         post-write observation.
         """
         workbench = ctx.extras.get("workbench_context") if isinstance(ctx.extras, dict) else None
-        if not isinstance(workbench, dict) or workbench.get("extension_id") != "network.operations":
+        if (
+            not isinstance(workbench, dict)
+            or workbench.get("extension_id") != "network.operations"
+            or str(workbench.get("skill_id") or "").startswith("drawing:")
+            or workbench.get("tool_scope") == "exclusive"
+        ):
             return ""
         text = final_text.lower()
         network_results = [

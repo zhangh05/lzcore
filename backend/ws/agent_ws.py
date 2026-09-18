@@ -677,10 +677,14 @@ def _run_agent_thread(
         app = get_default_agent_app()
 
         runtime_metadata = dict(metadata or {})
+        workbench_ctx = dict(runtime_metadata.get("workbench_context") or {})
         runtime_control = None
-        if cancel_event is not None:
+        if cancel_event is not None or workbench_ctx:
             from core.runtime_engine.models import MainAgentRuntimeControl
-            runtime_control = MainAgentRuntimeControl(cancel_check=cancel_event.is_set)
+            runtime_control = MainAgentRuntimeControl(
+                cancel_check=cancel_event.is_set if cancel_event is not None else None,
+                workbench_context=workbench_ctx,
+            )
         result = app.submit_user_message(
             user_input=user_input,
             session_id=session_id,

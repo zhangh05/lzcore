@@ -98,6 +98,7 @@ class MainAgentRuntimeControl:
     for cooperative cancellation.
     """
     cancel_check: Any = None
+    workbench_context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

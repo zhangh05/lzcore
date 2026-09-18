@@ -14,8 +14,11 @@ import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
 const EMPTY: ChatMsg[] = [];
 export type { CanvasSelection } from "./canvasSelection";
 
-export function buildTopologyRequest(topology: Topology, selection: CanvasSelection, request: string) {
-  return `${request}\n\n当前图纸上下文：\n${JSON.stringify({ topology_id: topology.topology_id, version: topology.version, selection })}\n请先读取当前图纸，再按要求绘图。只修改用户要求的对象，不查询或操作真实设备。`;
+export function buildTopologyRequest(topology: Topology, selection: CanvasSelection, request: string, allowEdit = true) {
+  const modeInstruction = allowEdit
+    ? "已明确授权绘图。请先读取当前图纸，再按要求绘图。只修改用户要求的对象，不查询或操作真实设备。"
+    : "【当前为只读咨询模式，未授权修改图纸】请通过 read 操作读取当前图纸结构并进行分析解答，严禁调用 patch 或修改任何图纸内容。不查询或操作真实设备。";
+  return `${request}\n\n当前图纸上下文：\n${JSON.stringify({ topology_id: topology.topology_id, version: topology.version, selection })}\n${modeInstruction}`;
 }
 
 export function TopologyAgentPanel({ workspaceId, topology, selection, onCompleted }: {
@@ -28,6 +31,7 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
+  const [allowEdit, setAllowEdit] = useState(true);
   const messages = useWorkbenchStore((state) => state.bySession[sessionId || ""] || EMPTY);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -74,8 +78,9 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
         if (response.jobs.some((item) => item.status === "running" && String(item.payload?.session_id || item.metadata?.active_turn?.session_id || "") === id)) { setError("此拓扑的任务仍在运行，可以继续查看进度。"); return; }
       }
       setInput(""); pinnedRef.current = true;
-      await send({ text: buildTopologyRequest(topology, selection, request.trim()), attachments: [], effectiveSessionId: id,
-        turnMetadata: { workbench_selection: { extension_id: "network.operations", skill_id: `drawing:${topology.topology_id}`, resource_ids: [topology.topology_id] } },
+      const skillId = allowEdit ? `drawing:${topology.topology_id}` : `drawing:${topology.topology_id}:ro`;
+      await send({ text: buildTopologyRequest(topology, selection, request.trim(), allowEdit), attachments: [], effectiveSessionId: id,
+        turnMetadata: { workbench_selection: { extension_id: "network.operations", skill_id: skillId, resource_ids: [topology.topology_id], allow_edit: allowEdit } },
       });
       await refresh();
     } catch { setError("发送失败，请检查服务连接后重试。"); }
@@ -87,7 +92,13 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
   };
   return <section className="topology-agent" aria-label="拓扑协作">
     <header><IconSparkle size={18} /><div><strong>绘图对话</strong><small>围绕这张网络图持续对话</small></div><span className={running ? "agent-pulse" : ""}>{running ? "执行中" : "就绪"}</span></header>
-    <div className="topology-agent-scope"><strong>拓扑绘图 Skill</strong><div className="topology-context-chip">{selection.label}<small>仅操作当前图纸</small></div></div>
+    <div className="topology-agent-scope">
+      <strong>{allowEdit ? "拓扑绘图 Skill" : "拓扑只读分析"}</strong>
+      <div className="topology-context-chip">
+        {selection.label}
+        <small>{allowEdit ? "可修改当前图纸" : "只读模式，不可修改"}</small>
+      </div>
+    </div>
     <div className="topology-agent-messages" ref={scrollRef} onScroll={(event) => { const el = event.currentTarget; pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50; }}>
       {!messages.length && <div className="topology-agent-intro"><IconSparkle size={28} /><h3>把想法画出来</h3><p>描述设备、连线与布局，或选中图纸对象让 Skill 修改。不连接真实设备。</p>{[
         ["绘制结构", "在当前图纸中添加两台交换机与一台路由器，分别命名并连线，排列整齐。"],
@@ -99,11 +110,22 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     </div>
     {error && <div className="topology-agent-error" role="alert">{error}<button onClick={() => { void refreshHistory().then(() => setError("")).catch(() => {}); }}>重试加载</button></div>}
     <form className="topology-agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <textarea aria-label="拓扑协作指令" placeholder="描述你想画的设备、连线、分组或文字…" value={input} onChange={(event) => setInput(event.target.value)} rows={3} />
-      {/* The footer must agree with the scope chip above. Counting devices said
-    "whole topology" for a selection of unlinked nodes, contradicting the
-    "2 nodes selected" right above it. */}
-            <footer><small>{`上下文：${selection.label}`}</small>{running ? <button type="button" onClick={() => void cancel()}><IconStop size={14} />停止</button> : <button type="submit" disabled={!input.trim() || preparing || (!!sessionId && !loaded)}><IconSend size={14} />{preparing ? "连接中" : "发送"}</button>}</footer>
+      <textarea aria-label="拓扑协作指令" placeholder={allowEdit ? "描述你想画的设备、连线、分组或文字…" : "向 Agent 咨询拓扑结构、单点故障或连线分析（只读模式）…"} value={input} onChange={(event) => setInput(event.target.value)} rows={3} />
+      <footer>
+        <div className="topology-agent-composer-meta">
+          <label className="topology-agent-allow-edit" title={allowEdit ? "已允许 Agent 修改图纸" : "已锁定为只读分析模式"}>
+            <input
+              type="checkbox"
+              checked={allowEdit}
+              onChange={(event) => setAllowEdit(event.target.checked)}
+              disabled={running}
+            />
+            <span>允许修改拓扑</span>
+          </label>
+          <small>{`上下文：${selection.label}`}</small>
+        </div>
+        {running ? <button type="button" onClick={() => void cancel()}><IconStop size={14} />停止</button> : <button type="submit" disabled={!input.trim() || preparing || (!!sessionId && !loaded)}><IconSend size={14} />{preparing ? "连接中" : "发送"}</button>}
+      </footer>
     </form>
   </section>;
 }

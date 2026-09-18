@@ -17,24 +17,42 @@ def skill_catalog(workspace_id):
 
 def resolve_selection(workspace_id, selection):
     skill_id = str(selection.get("skill_id") or "")
-    topology_id = skill_id.removeprefix("drawing:")
-    if not skill_id.startswith("drawing:") or not topology_id:
+    is_ro = skill_id.endswith(":ro") or bool(selection.get("read_only", False)) or (selection.get("allow_edit") is False)
+    clean_skill_id = skill_id.removesuffix(":ro")
+    topology_id = clean_skill_id.removeprefix("drawing:")
+    if not clean_skill_id.startswith("drawing:") or not topology_id:
         raise ValueError("drawing_skill_required")
     if selection.get("resource_ids", [topology_id]) != [topology_id]:
         raise ValueError("topology_outside_selected_skill")
     topology = drawings.get_topology(workspace_id, topology_id)
     if not topology:
         raise ValueError("topology_not_found")
+    effective_skill_id = f"drawing:{topology_id}:ro" if is_ro else f"drawing:{topology_id}"
     return {
         "extension_id": "network.operations",
-        "skill_id": skill_id, "skill_name": "拓扑绘图", "allowed_tool_ids": [TOOL_ID],
-        "tool_scope": "exclusive", "resource_ids": [topology_id],
+        "skill_id": effective_skill_id,
+        "skill_name": "拓扑分析 (只读)" if is_ro else "拓扑绘图",
+        "allowed_tool_ids": [TOOL_ID],
+        "tool_scope": "exclusive",
+        "resource_ids": [topology_id],
+        "allow_edit": not is_ro,
         "topology": {"topology_id": topology_id, "name": topology["name"], "version": topology["version"]},
         "source": "server_validated_extension_context",
     }
 
 
 def render_prompt(context):
+    allow_edit = bool(context.get("allow_edit", True))
+    if not allow_edit:
+        return """You are the topology analysis Skill in READ-ONLY mode.
+Only inspect and analyze the selected drawing. Do not attempt to modify, patch, add, or delete any drawing objects.
+Do not inspect, connect to, discover, configure or make operational claims about real devices.
+Drawing nodes are symbols, not registered assets. Do not link them to device IDs.
+Use network.operations.topology read to examine the drawing structure, nodes, links, and layout.
+Answer user questions clearly based on current drawing evidence.
+If the user asks to modify the drawing, explain that editing permission is currently disabled and describe what changes would be needed without modifying the drawing.
+Current drawing: """ + json.dumps(context.get("topology"), ensure_ascii=False)
+
     return """You are the topology drawing Skill. Only edit the selected drawing.
 Do not inspect, connect to, discover, configure or make operational claims about real devices.
 Drawing nodes are symbols, not registered assets. Do not link them to device IDs.

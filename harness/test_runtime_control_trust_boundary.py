@@ -160,6 +160,34 @@ def test_typed_main_runtime_control_projects_only_cancellation_callback():
     assert metadata == {"cancel_check": callback}
 
 
+def test_typed_main_runtime_control_projects_workbench_context():
+    context = {
+        "extension_id": "network.operations",
+        "skill_id": "drawing:topo_1",
+        "source": "server_validated_extension_context",
+    }
+    metadata = _sanitize_caller_runtime_metadata({})
+    _apply_runtime_control(metadata, MainAgentRuntimeControl(workbench_context=context))
+    assert metadata["workbench_context"] == context
+
+
+def test_caller_metadata_with_untrusted_workbench_context_is_stripped():
+    metadata = _sanitize_caller_runtime_metadata({
+        "workbench_context": {"extension_id": "network.operations", "connection_ids": ["forged"]},
+    })
+    assert "workbench_context" not in metadata
+
+
+def test_caller_metadata_with_server_validated_workbench_context_is_preserved():
+    valid = {
+        "extension_id": "network.operations",
+        "skill_id": "drawing:topo_1",
+        "source": "server_validated_extension_context",
+    }
+    metadata = _sanitize_caller_runtime_metadata({"workbench_context": valid})
+    assert metadata["workbench_context"] == valid
+
+
 def test_run_ssot_turn_projects_typed_main_cancel_control(monkeypatch, tmp_path):
     from agent.core.session import AgentSession
     from agent.core.turn import AgentTurn
@@ -191,6 +219,43 @@ def test_run_ssot_turn_projects_typed_main_cancel_control(monkeypatch, tmp_path)
 
     assert result.ok is True
     assert captured["extras"]["cancel_check"] is callback
+
+
+def test_run_ssot_turn_projects_typed_main_workbench_context(monkeypatch, tmp_path):
+    from agent.core.session import AgentSession
+    from agent.core.turn import AgentTurn
+    from agent.protocol.op import AgentOp
+    from agent.runtime.ssot_runtime import run_ssot_turn
+    import agent.runtime.ssot_runtime as runtime
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    captured = {}
+
+    class FakeEngine:
+        async def run(self, **kwargs):
+            captured.update(kwargs)
+            return _fake_runtime_result()
+
+    context = {
+        "extension_id": "network.operations",
+        "skill_id": "drawing:topo_1",
+        "allowed_tool_ids": ["network.operations.topology"],
+        "source": "server_validated_extension_context",
+    }
+    monkeypatch.setattr(runtime, "_build_engine", lambda **_kwargs: FakeEngine())
+    monkeypatch.setattr(runtime, "persist_run_record", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runtime, "_record_experience_and_maybe_reflect", lambda **_kwargs: None)
+
+    session = AgentSession(session_id="s-main-wb", workspace_id="ws-main-wb")
+    result = run_ssot_turn(session, AgentTurn.from_op(AgentOp(
+        user_input="请分析当前图纸。",
+        session_id=session.session_id,
+        workspace_id=session.workspace_id,
+        runtime_control=MainAgentRuntimeControl(workbench_context=context),
+    )))
+
+    assert result.ok is True
+    assert captured["extras"]["workbench_context"] == context
 
 
 def test_run_ssot_turn_preserves_completed_work_when_run_persistence_fails(monkeypatch, tmp_path):

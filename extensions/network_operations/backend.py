@@ -633,13 +633,16 @@ def topology_tool(invocation):
     skill = str(getattr(invocation, "skill", "") or "")
     if not skill.startswith("drawing:"):
         return {"ok": False, "error": "drawing_skill_required"}
-    topology_id = skill.removeprefix("drawing:")
+    is_ro = skill.endswith(":ro")
+    topology_id = skill.removeprefix("drawing:").removesuffix(":ro")
     if args.get("topology_id", topology_id) != topology_id:
         return {"ok": False, "error": "topology_outside_selected_skill"}
     topology = drawings.get_topology(invocation.workspace_id, topology_id)
     if not topology:
         return {"ok": False, "error": "topology_not_found"}
     action = str(args.get("action") or "read")
+    if is_ro and action == "patch":
+        return {"ok": False, "error": "topology_edit_not_permitted", "message": "当前为只读分析模式，未授权修改图纸。"}
     try:
         if action == "read":
             return {"ok": True, "topology": topology, "version": topology["version"]}
