@@ -202,9 +202,7 @@ test("dedicated topology route is a drawing workspace without the device catalog
   expect(screen.queryByRole("button", { name: "新建链路" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "发现邻居" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "拓扑比对" })).not.toBeInTheDocument();
-  // 加设备只能走「图纸设备」这条：工具栏按钮和左侧面板都得在，删了就没法建设备。
-  expect(screen.getAllByRole("button", { name: "添加图纸设备" }).length).toBeGreaterThan(0);
-  expect(screen.getByTestId("palette-type-switch")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "添加图纸设备" })).not.toBeInTheDocument();
   expect(screen.queryByTestId("palette-dev-d1")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText("插入")).toBeInTheDocument();
