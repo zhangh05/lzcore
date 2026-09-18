@@ -263,12 +263,30 @@ export function Sidebar() {
     if (!confirm(`永久删除会话「${sess.title || sess.session_id}」？\n\n此操作不可撤销，消息和记录将被彻底清除。`)) return;
     try {
       await sessionsApi.delete(sess.session_id, currentWorkspaceId);
+      useWorkbenchStore.getState().clear(sess.session_id);
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.includes("drawing_session_v2") && localStorage.getItem(k) === sess.session_id) {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch { /* ignore storage error */ }
       if (currentSessionId === sess.session_id) { setCurrentSession(null); switchWbSession(null); }
       useSessionStore.getState().bumpSessionList();
       toast({ kind: "success", title: "已永久删除", body: sess.session_id });
     } catch (e: unknown) {
       // 404 = already deleted on disk → just reload the list
       if (isApiError(e) && e.status === 404) {
+        useWorkbenchStore.getState().clear(sess.session_id);
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.includes("drawing_session_v2") && localStorage.getItem(k) === sess.session_id) {
+              localStorage.removeItem(k);
+            }
+          }
+        } catch { /* ignore storage error */ }
         if (currentSessionId === sess.session_id) { setCurrentSession(null); switchWbSession(null); }
         useSessionStore.getState().bumpSessionList();
         return;

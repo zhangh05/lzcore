@@ -5,8 +5,9 @@ import { useActiveTurn } from "../../../../frontend/src/hooks/useActiveTurn";
 import { useWorkbenchStore, type ChatMsg } from "../../../../frontend/src/stores/workbench";
 import { useSessionStore } from "../../../../frontend/src/stores/session";
 import { scopedLocalStorageKey } from "../../../../frontend/src/utils/userScope";
+import { isApiError } from "../../../../frontend/src/types";
 import { MessageRow } from "../../../../frontend/src/pages/AgentWorkbench/components/MessageRow";
-import { IconSparkle, IconSend, IconStop } from "../../../../frontend/src/components/Icon";
+import { IconSparkle, IconSend, IconStop, IconPlus } from "../../../../frontend/src/components/Icon";
 import type { Topology} from "./TopologyWorkspace";
 import type { CanvasSelection } from "./canvasSelection";
 import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
@@ -32,15 +33,29 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [allowEdit, setAllowEdit] = useState(true);
+  const sessionListVersion = useSessionStore((state) => state.sessionListVersion);
   const messages = useWorkbenchStore((state) => state.bySession[sessionId || ""] || EMPTY);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
   const submittingRef = useRef(false);
   const refreshHistory = useCallback(async () => {
     if (!sessionId) return;
-    const response = await sessionsApi.messages(sessionId, workspaceId);
-    useWorkbenchStore.getState().mergeFromBackend(sessionId, response.messages);
-  }, [sessionId, workspaceId]);
+    try {
+      const response = await sessionsApi.messages(sessionId, workspaceId);
+      useWorkbenchStore.getState().mergeFromBackend(sessionId, response.messages);
+    } catch (err: unknown) {
+      const isNotFound = (isApiError(err) && err.status === 404) ||
+        (typeof err === "object" && err !== null && (err as { status?: number }).status === 404);
+      if (isNotFound) {
+        useWorkbenchStore.getState().clear(sessionId);
+        try { localStorage.removeItem(storageKey); } catch {}
+        setSessionId(null);
+        setError("");
+        return;
+      }
+      throw err;
+    }
+  }, [sessionId, workspaceId, storageKey]);
   const { send, stop, sending } = useChatStream({ workspaceId, sessionId, llmHealth: {} }, {
     onSessionResolved: setSessionId,
     onResult: () => { onCompleted(); },
@@ -49,17 +64,43 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
   const { job, loaded, refresh } = useActiveTurn(workspaceId, sessionId, sending);
   const running = sending || job?.status === "running";
 
-  useEffect(() => { void refreshHistory().catch(() => setError("会话记录读取失败；已有会话保留，请重试加载。")); }, [refreshHistory]);
   useEffect(() => {
-    if (!loaded || sending) return;
-    void refreshHistory().catch(() => setError("会话记录同步失败。"));
+    let stored: string | null = null;
+    try { stored = localStorage.getItem(storageKey); } catch {}
+    if (!sessionId) {
+      if (stored && stored !== sessionId) setSessionId(stored);
+    } else if (stored === sessionId) {
+      void refreshHistory().catch(() => setError("会话记录读取失败；已有会话保留，请重试加载。"));
+    } else {
+      useWorkbenchStore.getState().clear(sessionId);
+      setSessionId(null);
+      setError("");
+    }
+  }, [sessionListVersion, sessionId, storageKey, refreshHistory]);
+  useEffect(() => {
+    if (!loaded || sending || !sessionId) return;
     if (job?.status !== "running") return;
     const timer = window.setInterval(() => { void refreshHistory().catch(() => {}); }, 2500);
     return () => window.clearInterval(timer);
-  }, [job?.status, loaded, sending, refreshHistory]);
+  }, [job?.status, loaded, sending, sessionId, refreshHistory]);
   useEffect(() => {
     if (pinnedRef.current && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  const handleResetSession = async () => {
+    if (running || !sessionId) return;
+    if (!confirm("确定要为当前图纸开启新会话吗？既有对话将被清空并重新开始。")) return;
+    const oldId = sessionId;
+    try {
+      await sessionsApi.delete(oldId, workspaceId).catch(() => {});
+    } finally {
+      useWorkbenchStore.getState().clear(oldId);
+      try { localStorage.removeItem(storageKey); } catch {}
+      setSessionId(null);
+      setError("");
+      useSessionStore.getState().bumpSessionList();
+    }
+  };
 
   const submit = async (request = input) => {
     if (!request.trim() || running || preparing || submittingRef.current || !loaded && sessionId) return;
@@ -91,7 +132,24 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     else if (job?.job_id) { await jobsApi.cancel(job.job_id, workspaceId); await refresh(); }
   };
   return <section className="topology-agent" aria-label="拓扑协作">
-    <header><IconSparkle size={18} /><div><strong>绘图对话</strong><small>围绕这张网络图持续对话</small></div><span className={running ? "agent-pulse" : ""}>{running ? "执行中" : "就绪"}</span></header>
+    <header>
+      <IconSparkle size={18} />
+      <div><strong>绘图对话</strong><small>围绕这张网络图持续对话</small></div>
+      <div className="topology-agent-header-actions">
+        {sessionId && messages.length > 0 && !running && (
+          <button
+            type="button"
+            className="topology-agent-new-chat-btn"
+            title="清空当前图纸对话，开启新会话"
+            onClick={() => void handleResetSession()}
+          >
+            <IconPlus size={13} />
+            <span>新对话</span>
+          </button>
+        )}
+        <span className={running ? "agent-pulse" : ""}>{running ? "执行中" : "就绪"}</span>
+      </div>
+    </header>
     <div className="topology-agent-scope">
       <strong>{allowEdit ? "拓扑绘图 Skill" : "拓扑只读分析"}</strong>
       <div className="topology-context-chip">

@@ -110,5 +110,93 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
       expect(screen.getByText("拓扑绘图 Skill")).toBeInTheDocument();
       expect(screen.getByText("可修改当前图纸")).toBeInTheDocument();
     });
+
+    it("auto-heals and clears state when backend returns 404 for a deleted session", async () => {
+      const { sessionsApi } = await import("../api");
+      const { useWorkbenchStore } = await import("../stores/workbench");
+      const { scopedLocalStorageKey } = await import("../utils/userScope");
+      const storageKey = scopedLocalStorageKey(`drawing_session_v2:default:${mockTopology.topology_id}`);
+      localStorage.setItem(storageKey, "s-deleted-404");
+
+      // Populate workbench store with old ghost messages
+      useWorkbenchStore.setState({
+        bySession: {
+          "s-deleted-404": [
+            { id: "m1", role: "assistant", text: "任务受阻：模型连续提出重复调用", status: "ready" } as never,
+          ],
+        },
+      });
+
+      // Mock sessionsApi.messages to throw 404 ApiError
+      vi.mocked(sessionsApi.messages).mockRejectedValueOnce({
+        ok: false,
+        code: "not_found",
+        status: 404,
+        message: "session_not_found",
+      });
+
+      render(
+        <TopologyAgentPanel
+          workspaceId="default"
+          topology={mockTopology as never}
+          selection={mockSelection}
+          onCompleted={() => {}}
+        />
+      );
+
+      // Wait for auto-healing
+      await vi.waitFor(() => {
+        // localStorage must be cleaned
+        expect(localStorage.getItem(storageKey)).toBeNull();
+        // workbenchStore must be cleared of the dead session
+        expect(useWorkbenchStore.getState().bySession["s-deleted-404"]?.length || 0).toBe(0);
+        // Clean intro state should be shown
+        expect(screen.getByText("把想法画出来")).toBeInTheDocument();
+        expect(screen.queryByText("任务受阻：模型连续提出重复调用")).not.toBeInTheDocument();
+      });
+    });
+
+    it("renders '新对话' button when session has messages, and resetting clears session", async () => {
+      const { sessionsApi } = await import("../api");
+      const { useWorkbenchStore } = await import("../stores/workbench");
+      const { scopedLocalStorageKey } = await import("../utils/userScope");
+      const storageKey = scopedLocalStorageKey(`drawing_session_v2:default:${mockTopology.topology_id}`);
+      localStorage.setItem(storageKey, "s-active-123");
+
+      useWorkbenchStore.setState({
+        bySession: {
+          "s-active-123": [
+            { id: "m1", role: "user", text: "画个交换机", status: "ready" } as never,
+          ],
+        },
+      });
+
+      window.confirm = vi.fn().mockReturnValue(true);
+      const deleteSpy = vi.fn().mockResolvedValue({ ok: true });
+      (sessionsApi as unknown as { delete: typeof deleteSpy }).delete = deleteSpy;
+
+      render(
+        <TopologyAgentPanel
+          workspaceId="default"
+          topology={mockTopology as never}
+          selection={mockSelection}
+          onCompleted={() => {}}
+        />
+      );
+
+      // Verify messages exist in store
+      expect(useWorkbenchStore.getState().bySession["s-active-123"]?.length).toBe(1);
+      const newChatBtn = screen.getByTitle("清空当前图纸对话，开启新会话");
+      expect(newChatBtn).toBeInTheDocument();
+
+      fireEvent.click(newChatBtn);
+
+      await vi.waitFor(() => {
+        expect(deleteSpy).toHaveBeenCalledWith("s-active-123", "default");
+        expect(localStorage.getItem(storageKey)).toBeNull();
+        expect(useWorkbenchStore.getState().bySession["s-active-123"]?.length || 0).toBe(0);
+        expect(screen.getByText("把想法画出来")).toBeInTheDocument();
+      });
+    });
   });
 });

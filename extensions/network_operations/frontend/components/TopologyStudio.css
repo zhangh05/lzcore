@@ -216,6 +216,10 @@
 .topology-agent > header strong { font-size: 14px; }
 .topology-agent > header small { color: var(--text-3); font-size: 10px; }
 .topology-agent > header > span { margin-left: auto; color: var(--text-3); font-size: 10px; }
+.topology-agent-header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.topology-agent-new-chat-btn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text-2); font-size: 11px; cursor: pointer; transition: all .15s ease; }
+.topology-agent-new-chat-btn:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.topology-agent-header-actions span { color: var(--text-3); font-size: 10px; }
 .topology-agent > header .agent-pulse { color: var(--accent); }
 .topology-agent-scope { padding: 12px 16px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
 .topology-agent-scope label { display: flex; justify-content: space-between; gap: 14px; align-items: center; color: var(--text-3); }

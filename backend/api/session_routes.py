@@ -347,6 +347,10 @@ def handle_session_messages(session_id):
     if err:
         return err
 
+    session = get_session(session_id, ws_id)
+    if not session:
+        return jsonify({"ok": False, "error": "session_not_found"}), 404
+
     messages = get_session_messages(session_id, ws_id)
     return jsonify({"ok": True, "messages": messages, "count": len(messages)})
 
