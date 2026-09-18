@@ -199,6 +199,10 @@ test("dedicated topology route is a drawing workspace without the device catalog
   expect(matches.length).toBeGreaterThan(0);
   expect(screen.getByText(/独立图纸/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "添加设备" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "新建链路" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "发现邻居" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "拓扑比对" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "添加图纸设备" })).not.toBeInTheDocument();
   expect(screen.queryByTestId("palette-dev-d1")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText("插入")).toBeInTheDocument();

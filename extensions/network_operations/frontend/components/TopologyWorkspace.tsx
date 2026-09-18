@@ -1896,21 +1896,6 @@ export default function TopologyWorkspace({
             >
               重做
             </Button>
-            <Button
-              size="sm"
-              icon={<IconBranch size={13} />}
-              onClick={() => openLinkComposer()}
-              disabled={(activeTopology?.nodes?.length || 0) < 2}
-            >
-              新建链路
-            </Button>
-            <Button
-              size="sm"
-              icon={<IconPlus size={13} />}
-              onClick={() => { setManualNodeName(""); setManualNodeType("switch"); setShowManualNodeModal(true); }}
-            >
-              添加图纸设备
-            </Button>
             <details className="studio-layout-menu">
               <summary className={layoutBusy || (activeTopology?.nodes?.length || 0) < 2 ? "is-disabled" : ""}><IconGrid size={13} />{layoutBusy ? "排布中" : "自动排布"}</summary>
               <div>
@@ -1999,10 +1984,10 @@ export default function TopologyWorkspace({
               <div className="topology-canvas-onboarding-card">
                 <IconBranch size={24} />
                 <div>
-                  <strong>从设备开始建图</strong>
-                  <p>从图形库放入设备图标，再连线并填写接口编号。</p>
+                  <strong>从符号开始建图</strong>
+                  <p>从左侧图形库放入节点，再用连线工具把它们接上。</p>
                 </div>
-                <Button size="sm" variant="primary" onClick={() => setShowManualNodeModal(true)}>添加图纸设备</Button>
+                <Button size="sm" variant="primary" onClick={() => setShowManualNodeModal(true)}>放入节点</Button>
               </div>
             </div>
           )}
