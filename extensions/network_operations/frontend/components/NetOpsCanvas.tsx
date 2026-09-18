@@ -112,6 +112,7 @@ type CyCollection<T> = {
 type Cy = {
   add: (elements: unknown[]) => void;
   batch: (work: () => void) => void;
+  center: (elements?: unknown) => void;
   destroy: () => void;
   elements: () => CyCollection<CyElement>;
   fit: (elements?: unknown, padding?: number) => void;
@@ -744,6 +745,10 @@ export default function NetOpsCanvas(props: Props) {
       exportSVG: (options) => cy.svg({ full: true, ...options }),
       fit: () => {
         cy.fit(undefined, 48);
+        if (cy.zoom() > 1.0) {
+          cy.zoom(1.0);
+          cy.center();
+        }
         setViewport({ ...cy.pan(), zoom: cy.zoom() });
       },
       zoomBy: (delta) => {
@@ -892,7 +897,15 @@ export default function NetOpsCanvas(props: Props) {
     reconciledTopologyRef.current = props.topology;
     if (initialTopologyIdRef.current !== props.topology.topology_id) {
       initialTopologyIdRef.current = props.topology.topology_id;
-      window.setTimeout(() => { cy.resize(); cy.fit(undefined, 48); setViewport({ ...cy.pan(), zoom: cy.zoom() }); }, 0);
+      window.setTimeout(() => {
+        cy.resize();
+        cy.fit(undefined, 48);
+        if (cy.zoom() > 1.0) {
+          cy.zoom(1.0);
+          cy.center();
+        }
+        setViewport({ ...cy.pan(), zoom: cy.zoom() });
+      }, 0);
     }
   }, [rendererReady, props.topology, props.dimmedNodeIds, theme]);
 

@@ -380,7 +380,7 @@ export function Diagnostics() {
       ) : (
         <div className="page-body page-body-flex">
           {/* ═══ 概览摘要卡（用户3秒看懂系统状态） ═══ */}
-          {summaryStats && (
+          {summaryStats ? (
             <div className="diag-summary">
               <div className="diag-summary-icon" data-healthy={String(allOk)}>
                 {allOk ? <IconCheck size={20} aria-hidden="true" /> : <IconAlert size={20} aria-hidden="true" />}
@@ -401,6 +401,25 @@ export function Diagnostics() {
                   自检发现 {summaryStats.issueCount} 个问题
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="diag-summary diag-summary-standby">
+              <div className="diag-summary-icon diag-icon-idle">
+                <IconRefresh size={18} aria-hidden="true" />
+              </div>
+              <div className="diag-summary-text">
+                <h2>系统就绪待检</h2>
+                <p>暂未执行系统全面诊断。点击右侧开始扫描 16 项核心子系统健康度、模型用量与写操作账本。</p>
+              </div>
+              <button
+                className="btn primary sm"
+                onClick={runDetection}
+                disabled={detecting}
+                style={{ marginLeft: "auto" }}
+                type="button"
+              >
+                立即开始全面检测
+              </button>
             </div>
           )}
 
@@ -435,7 +454,20 @@ export function Diagnostics() {
                     );
                   })}
                 </div>
-              ) : <Dim>点击上方「开始检测」获取运行时健康数据</Dim>}
+              ) : (
+                <div className="diag-health-grid diag-health-standby">
+                  {Object.entries(COMP_LABELS).slice(0, 16).map(([name, label]) => (
+                    <div key={name} className="diag-health-card diag-health-idle">
+                      <div className="diag-health-head">
+                        <span className="diag-status-dot diag-status-idle" />
+                        <span className="diag-comp-name">{label}</span>
+                        <Badge kind="muted">就绪待检</Badge>
+                      </div>
+                      <div className="diag-comp-desc">{COMP_DESC[name] || "核心服务模块就绪"}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Section>
           </div>
 

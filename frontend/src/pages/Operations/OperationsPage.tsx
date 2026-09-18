@@ -7,7 +7,7 @@
  *          运行记录中点击某 run → 内联展开 trace / 事件时间线 / 失败原因
  */
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useSearchParams } from "../../router";
+import { Link, useSearchParams } from "../../router";
 import { jobsApi, workspacesApi, sessionExtApi, runtimeAuditApi } from "../../api";
 import { useSessionStore } from "../../stores/session";
 import { APP_EVENTS } from "../../utils/appEvents";
@@ -525,6 +525,11 @@ export function OperationsPage() {
             icon={<IconDocument size={18} aria-hidden="true" />}
             text="暂无任务记录"
             hint="当前没有可选择的终态任务。发起任务后，可在此勾选并批量永久删除。"
+            action={
+              <Link to="/workbench" className="btn primary sm">
+                前往工作台发起任务
+              </Link>
+            }
           />
         </div>
       </div>

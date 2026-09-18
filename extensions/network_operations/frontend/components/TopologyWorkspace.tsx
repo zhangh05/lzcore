@@ -1867,6 +1867,7 @@ export default function TopologyWorkspace({
           <div className="studio-edit-tools" role="group" aria-label="画布工具">
             <button className="studio-mode-button" aria-pressed={canvasMode === "select"} onClick={() => setCanvasMode("select")}><IconMenu size={13} />选择</button>
             <button className="studio-mode-button" aria-pressed={canvasMode === "connect"} onClick={() => setCanvasMode("connect")}><IconLink size={13} />连线</button>
+            <button className="studio-mode-button" type="button" onClick={() => canvasApiRef.current?.fit()} title="适配视图到画布中央 (快捷键 F)"><IconExpand size={13} />适配</button>
             <details className="studio-insert-menu"><summary><IconBox size={13} />插入</summary><div>
               <button type="button" onClick={() => handleAddCanvasItem("rectangle")}>矩形区域</button>
               <button type="button" onClick={() => handleAddCanvasItem("ellipse")}>椭圆标注</button>

@@ -134,11 +134,11 @@ body,
   --space-12: 48px;
   --space-16: 64px;
 
-  --r-2: 8px;
-  --r-4: 8px;
-  --r-6: 8px;
+  --r-2: 2px;
+  --r-4: 4px;
+  --r-6: 6px;
   --r-8: 8px;
-  --r-10: 12px;
+  --r-10: 10px;
   --r-12: 12px;
   --r-16: 16px;
   --r-pill: 999px;
@@ -155,8 +155,8 @@ body,
   --w-progress: 192px;
   --w-page-max: 1440px;
   --w-reading: 1120px;
-  --h-control: 36px;
-  --h-control-compact: 32px;
+  --h-control: 34px;
+  --h-control-compact: 28px;
   --h-touch: calc(44px / var(--ui-scale));
   --weight-heading: 600;
   --weight-label: 600;
@@ -193,11 +193,11 @@ body,
   --st-accepted: var(--ok);
   --st-ignored: var(--text-3);
   --st-modified: var(--info);
-  --r-xs: var(--r-8);
-  --r-sm: var(--r-8);
+  --r-xs: var(--r-4);
+  --r-sm: var(--r-6);
   --r: var(--r-8);
-  --r-lg: var(--r-12);
-  --r-xl: var(--r-16);
+  --r-lg: var(--r-10);
+  --r-xl: var(--r-12);
   --fs-xs: var(--fs-11);
   --fs-sm: var(--fs-12);
   --fs-base: var(--fs-14);
@@ -239,13 +239,13 @@ body,
   --surface-2: #101821;
   --surface-3: #0b1118;
   --overlay: rgba(0, 0, 0, 0.62);
-  --text: #edf3f8;
-  --text-2: #c5d0dc;
-  --text-3: #8d9bad;
-  --text-4: #95a3b3;
-  --line: #263442;
-  --line-2: #1d2935;
-  --line-3: #38485a;
+  --text: #f0f4f8;
+  --text-2: #c8d4e0;
+  --text-3: #8fa0b5;
+  --text-4: #6d7e93;
+  --line: #24303d;
+  --line-2: #1b2530;
+  --line-3: #324254;
   --accent: #72c3ba;
   --accent-2: #9ad9d1;
   --accent-soft: #173633;
@@ -262,8 +262,8 @@ body,
   --info: #80badc;
   --info-soft: #183044;
   --info-text: #09111a;
-  --surface-hover: #19242a;
-  --surface-selected: #183538;
+  --surface-hover: #18222b;
+  --surface-selected: #173238;
   --field: #111a20;
   --focus-ring: #8dd1cf;
   --focus-ring-shadow: rgba(141, 209, 207, 0.22);
@@ -441,7 +441,7 @@ h6 {
   gap: 7px;
   color: var(--text-2);
   font-size: var(--fs-12);
-  font-weight: 680;
+  font-weight: 550;
 }
 
 .login-form input {
@@ -473,7 +473,7 @@ h6 {
   border-radius: var(--r-6);
   color: var(--accent-text);
   background: var(--accent);
-  font-weight: 760;
+  font-weight: 600;
 }
 
 .login-submit:hover:not(:disabled) {
@@ -1854,7 +1854,7 @@ select.input {
   border: 1px solid var(--line-2);
   border-radius: var(--r-pill);
   font-size: var(--fs-11);
-  font-weight: 680;
+  font-weight: 550;
   line-height: 1;
   white-space: nowrap;
   transition:

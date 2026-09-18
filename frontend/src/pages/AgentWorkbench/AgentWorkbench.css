@@ -1287,10 +1287,10 @@
 .wb-skill-picker select { min-width: 0; max-width: 100%; height: var(--h-control); font-size: var(--fs-12); }
 .wb-skill-devices { flex-basis: 100%; }
 .wb-skill-devices button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; min-height: var(--h-control-compact); }
-.wb-send, .wb-stop, .wb-attach-btn { width: var(--h-control); height: var(--h-control); border-radius: var(--r-8); }
+.wb-send, .wb-stop, .wb-attach-btn { width: var(--h-control); height: var(--h-control); border-radius: var(--r-6); }
 .wb-send:disabled { opacity: 1; }
 .wb-header-actions { flex-shrink: 0; }
-.wb-header-collapse { position: static; width: var(--h-control-compact); height: var(--h-control-compact); border: 0; border-radius: var(--r-8); box-shadow: none; transform: none; }
+.wb-header-collapse { position: static; width: var(--h-control-compact); height: var(--h-control-compact); border: 0; border-radius: var(--r-6); box-shadow: none; transform: none; }
 .task-progress-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
 .task-progress-header > .task-progress-summary { grid-row: 2; grid-column: 1 / -1; justify-content: flex-start; max-width: none; text-align: left; padding: 0; }
 .task-progress-header > .task-progress-collapse { grid-row: 1; grid-column: 2; }
@@ -1304,7 +1304,7 @@
 .task-evidence-icon { display: none; }
 .task-evidence :is(span, small) { font-size: var(--fs-11); }
 .task-progress-summary.running .status-dot { animation: none; }
-.wb-restored-run { width: calc(100% - 44px); border-radius: var(--r-8); }
+.wb-restored-run { width: calc(100% - 44px); border-radius: var(--r-6); }
 @media (max-width: 760px) {
   .wb-header { padding-inline: var(--space-3); min-height: var(--h-touch); }
   .wb-header-context { flex: 1; }

@@ -69,10 +69,10 @@
   color: var(--text-2);
   background: var(--console-surface);
   border: 1px solid var(--console-border);
-  border-radius: var(--r-8);
+  border-radius: var(--r-6);
   box-shadow: none;
   font-size: var(--fs-13);
-  font-weight: 650;
+  font-weight: 550;
   line-height: 1;
   white-space: nowrap;
   transition:
@@ -210,8 +210,8 @@ select.input {
   height: var(--h-control);
   color: var(--console-ink);
   background: var(--console-surface);
-  border-color: var(--console-border);
-  border-radius: var(--r-8);
+  border: 1px solid var(--console-border);
+  border-radius: var(--r-6);
   box-shadow: none;
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
@@ -222,7 +222,8 @@ select.input:hover { border-color: var(--text-4); }
 textarea.input:focus-visible,
 select.input:focus-visible {
   border-color: var(--lz-primary, var(--focus-ring));
-  box-shadow: 0 0 0 3px var(--lz-primary-glow, var(--focus-ring-shadow));
+  box-shadow: 0 0 0 2px var(--lz-primary-glow, var(--focus-ring-shadow));
+  outline: none;
 }
 
 .ui-filter-bar {
@@ -230,13 +231,13 @@ select.input:focus-visible {
   padding: 8px 10px;
   margin-bottom: 12px;
   background: var(--console-muted);
-  border-color: var(--console-border-soft);
+  border: 1px solid var(--console-border-soft);
   border-radius: var(--r-8);
 }
 .data-table-scroll {
   background: var(--console-surface);
   border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-12);
+  border-radius: var(--r-8);
   box-shadow: none;
 }
 .tbl { background: var(--console-surface); }
@@ -245,14 +246,15 @@ select.input:focus-visible {
   color: var(--console-muted-ink);
   background: var(--console-muted);
   border-bottom-color: var(--console-border-soft);
-  font-size: var(--fs-12);
-  font-weight: 680;
-  letter-spacing: 0.025em;
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 .tbl td {
   height: 42px;
   color: var(--console-ink);
   border-bottom-color: var(--console-border-soft);
+  font-size: var(--fs-13);
 }
 .tbl tbody tr:hover { background: var(--surface-hover); }
 
@@ -264,26 +266,31 @@ select.input:focus-visible {
 .ui-detail-panel-subtitle { color: var(--console-muted-ink); }
 
 .status-pill {
-  height: 24px;
+  height: 22px;
   padding: 0 8px;
   color: var(--console-muted-ink);
   background: transparent;
   border-color: var(--console-border-soft);
   border-radius: var(--r-pill);
   font-size: var(--fs-11);
+  font-weight: 500;
 }
-.empty { min-height: 150px; padding: 28px 18px; }
+.empty { min-height: 160px; padding: 32px 20px; }
 .empty-icon {
-  width: 34px;
-  height: var(--h-control);
-  margin-bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 12px;
   color: var(--console-muted-ink);
-  background: transparent;
-  border-color: var(--console-border-soft);
+  background: var(--console-muted);
+  border: 1px solid var(--console-border-soft);
   border-radius: var(--r-6);
 }
-.empty-text { color: var(--console-ink); font-size: 13px; }
-.empty-hint { color: var(--console-muted-ink); }
+.empty-text { color: var(--console-ink); font-size: var(--fs-13); font-weight: 550; }
+.empty-hint { color: var(--console-muted-ink); font-size: var(--fs-12); max-width: 400px; }
+.empty-action { margin-top: 14px; }
 
 @media (max-width: 900px) {
   .page-header,
@@ -816,6 +823,55 @@ select.input:focus-visible {
 .diagnostics-page .diag-issue-item { border-color: var(--console-border-soft); border-radius: 0; box-shadow: none; }
 .diagnostics-page .diag-policy-block { border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-muted); }
 .diagnostics-page .diag-continuation-alert { border-color: var(--console-border-soft); border-radius: var(--r-4); box-shadow: none; }
+.diagnostics-page .diag-summary-standby {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--console-muted);
+  border: 1px solid var(--console-border-soft);
+  border-radius: var(--r-8);
+  margin-bottom: 16px;
+}
+.diagnostics-page .diag-summary-standby .diag-summary-text h2 {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--console-ink);
+  margin-bottom: 2px;
+}
+.diagnostics-page .diag-summary-standby .diag-summary-text p {
+  font-size: var(--fs-12);
+  color: var(--console-muted-ink);
+  margin: 0;
+}
+.diagnostics-page .diag-icon-idle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-6);
+  background: var(--surface-3);
+  color: var(--console-muted-ink);
+  flex-shrink: 0;
+}
+.diagnostics-page .diag-status-idle {
+  background: var(--text-4);
+  opacity: 0.55;
+}
+.diagnostics-page .diag-health-standby {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.diagnostics-page .diag-health-standby .diag-health-card {
+  border: 1px solid var(--console-border-soft);
+  border-radius: var(--r-6);
+  background: var(--console-surface);
+}
 
 @media (max-width: 920px) {
   .operations-page .operations-stat-bar > * { border-right: 0; border-bottom: 1px solid var(--console-border-soft); }

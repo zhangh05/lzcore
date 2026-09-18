@@ -74,7 +74,7 @@
   padding: 0 12px;
   color: var(--text-3);
   font-size: 13px;
-  font-weight: 620;
+  font-weight: 550;
   line-height: 1.5;
 }
 
@@ -89,12 +89,12 @@
 .app-nav-group.active > .app-nav-item::after {
   position: absolute;
   right: 8px;
-  bottom: -1px;
+  bottom: 0;
   left: 8px;
-  height: 3px;
+  height: 2px;
   content: "";
-  background: var(--accent-2);
-  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
 }
 
 .app-nav-menu {
@@ -129,7 +129,7 @@
   width: 32px;
   height: 32px;
   color: var(--text-3);
-  border-radius: var(--r-8);
+  border-radius: var(--r-6);
 }
 
 .collapse-btn:hover,
@@ -146,9 +146,9 @@
   color: var(--text-3);
   background: var(--surface);
   border: 1px solid var(--line-2);
-  border-radius: var(--r-8);
+  border-radius: var(--r-6);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 550;
 }
 
 .app-sidebar {
@@ -183,15 +183,15 @@
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 42px;
+  min-height: 40px;
   padding: 0 12px;
   color: var(--text-2);
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: var(--r-8);
-  font-size: 14px;
-  font-weight: 650;
+  border-radius: var(--r-6);
+  font-size: 13px;
+  font-weight: 550;
 }
 
 .sidebar-shortcut:hover,
@@ -207,7 +207,8 @@
 
 .sidebar-new-session,
 .sidebar-new-session:hover {
-  min-height: 44px;
+  min-height: 42px;
+  border-radius: var(--r-6);
   color: var(--accent-text);
   background: var(--accent);
 }
@@ -268,7 +269,7 @@
 .sidebar-content .list-item {
   min-height: 38px;
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: var(--r-6);
 }
 
 .sidebar-content .list-item.active {
