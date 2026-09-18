@@ -133,11 +133,6 @@ export const authApi = {
     apiRequest<{ ok: boolean }>({ method: "POST", url: "/auth/logout" }),
 };
 
-export interface WorkflowNode {
-  node_id: string; name: string; tool_id: string; arguments: Record<string, unknown>;
-  depends_on: string[]; when?: unknown;
-}
-
 export interface OrganizationRecord { organization_id: string; name: string; workspace_ids: string[] }
 export interface IdentityUser { username: string; role: string; organization_id: string; workspace_ids: string[]; home_workspace_id?: string; enabled?: boolean }
 export interface MembershipRecord { username: string; role: string; organization_id: string; workspace_ids: string[] }

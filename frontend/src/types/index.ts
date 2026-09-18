@@ -550,10 +550,6 @@ export interface ArchivedDataItem {
   archived_at: string;
 }
 
-/* ──────────────────────────── Reviews ──────────────────────────── */
-
-export type ReviewStatus = "pending" | "accepted" | "ignored" | "modified";
-
 /* ──────────────────────────── Sessions / Workspaces ──────────────────────────── */
 
 export interface Session {

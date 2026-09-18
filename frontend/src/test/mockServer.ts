@@ -30,10 +30,6 @@ export function enqueueAsync(url: string, resp: Promise<MockResp>): void {
   responseQueue.set(key, arr);
 }
 
-export function setDefault(resp: MockResp): void {
-  defaultResp = resp;
-}
-
 export function resetMocks(): void {
   responseQueue.clear();
   requests.length = 0;
