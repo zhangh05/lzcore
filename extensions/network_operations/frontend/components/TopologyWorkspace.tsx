@@ -1903,9 +1903,9 @@ export default function TopologyWorkspace({
               icon={<IconRedo size={13} />}
               disabled={!future.length || saveStatus === "conflict"}
               onClick={handleRedo}
-              title="重做 (Ctrl+Y / Cmd+Shift+Z)"
+              title="恢复已撤销的操作 (Ctrl+Y / Cmd+Shift+Z)"
             >
-              重做
+              恢复
             </Button>
             <details className="studio-layout-menu">
               <summary className={layoutBusy || (activeTopology?.nodes?.length || 0) < 2 ? "is-disabled" : ""}><IconGrid size={13} />{layoutBusy ? "排布中" : "自动排布"}</summary>
@@ -2091,7 +2091,7 @@ export default function TopologyWorkspace({
               <div><dt>/</dt><dd>搜索设备并定位</dd></div>
               <div><dt>I</dt><dd>切换接口标签</dd></div>
               <div><dt>Shift + G</dt><dd>切换网格</dd></div>
-              <div><dt>Ctrl/⌘ + Z / Y</dt><dd>撤销 / 重做</dd></div>
+              <div><dt>Ctrl/⌘ + Z / Y</dt><dd>撤销 / 恢复</dd></div>
               <div><dt>Ctrl/⌘ + S</dt><dd>立即保存</dd></div>
               <div><dt>滚轮</dt><dd>缩放视图</dd></div>
               <div><dt>Esc</dt><dd>关闭面板 / 退出专注模式</dd></div>
