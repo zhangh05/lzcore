@@ -387,10 +387,6 @@ export default function NetOpsCanvas(props: Props) {
       if (disposed || !hostRef.current || !window.cytoscape) return;
       const cy = window.cytoscape({
         container: hostRef.current,
-        // Enforce minimum 2x supersampling buffer so text and bezier curves are
-        // razor-sharp across all screen densities (including standard 1080p 1x).
-        // Cytoscape uses forcedPixelRatio internally — this is the canonical API.
-        pixelRatio: Math.max(window.devicePixelRatio || 1, 2),
         layout: { name: "preset" },
         // The sheet itself is fixed. Editing changes object coordinates only.
         panningEnabled: true,
