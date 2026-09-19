@@ -61,7 +61,8 @@ Use network.operations.topology read first, then patch with the latest version.
 Patch preserves unnamed objects. On a version conflict, read again and reconsider the edit.
 All positions and sizes are drawing coordinates. Make readable layouts with room for port labels.
 node_updates: objects with node_id (choose a new unique ID to add), display_name,
-device_type (router/switch/firewall/server/cloud/wireless), x, y, optional group_id/labels.
+device_type (router/router_core/switch/switch_core/switch_access/firewall/server/pc/cloud/wireless/wan/database/camera/phone/printer), x, y, optional group_id/labels.
+
 link_updates: link_id for existing links; omit it for a new link; source_node_id,
 target_node_id, source_interface, target_interface, kind (physical/logical), optional label/metadata.
 group_updates: group_id, name, kind (custom/region/datacenter/as/tenant), x, y, width, height.
