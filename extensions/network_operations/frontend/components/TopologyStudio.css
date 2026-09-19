@@ -35,6 +35,10 @@
 .topology-studio .topology-save-indicator.status-conflict button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--warn); border-radius: 5px; background: var(--warn-soft); color: var(--warn); font-size: 11px; cursor: pointer; }
 .topology-studio .topology-save-indicator.status-conflict button:hover { background: var(--warn-soft); }
 .conflict-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--text-2); font-size: 11.5px; }
+.studio-mini-mode-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm, 6px); background: var(--bg); margin-left: 8px; }
+.studio-mini-mode-switch button { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 11.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background var(--t-fast, 140ms), color var(--t-fast, 140ms); }
+.studio-mini-mode-switch button:hover { background: var(--surface); color: var(--text); }
+.studio-mini-mode-switch button.is-active, .studio-mini-mode-switch button[aria-pressed=true] { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
 /* The bar holds two groups: canvas tools on the left, actions on the right. They
    must never be drawn on top of each other, and the only way they can be is if
    one of them shrinks below its own content. `.studio-edit-tools` carries

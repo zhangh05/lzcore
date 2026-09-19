@@ -15,6 +15,7 @@ export type CanvasApi = {
   exportPNG: (options?: { full?: boolean; scale?: number; background?: string }) => string;
   exportSVG: (options?: { full?: boolean }) => string;
   fit: () => void;
+  resize: () => void;
   zoomBy: (delta: number) => void;
   focusIds: (ids: string[], zoom?: number) => void;
   selectAll: () => string[];
@@ -750,6 +751,10 @@ export default function NetOpsCanvas(props: Props) {
           cy.zoom(1.0);
           cy.center();
         }
+        setViewport({ ...cy.pan(), zoom: cy.zoom() });
+      },
+      resize: () => {
+        cy.resize();
         setViewport({ ...cy.pan(), zoom: cy.zoom() });
       },
       zoomBy: (delta) => {

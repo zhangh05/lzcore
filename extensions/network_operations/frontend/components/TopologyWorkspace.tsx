@@ -37,6 +37,8 @@ import {
   IconWifi,
   IconSparkle,
   IconExpand,
+  IconChevronUp,
+  IconWrench,
 } from "../../../../frontend/src/components/Icon";
 import { apiRequest } from "../../../../frontend/src/api/client";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
@@ -413,7 +415,27 @@ export default function TopologyWorkspace({
   // canvas width for every user.
   const [showLibrary, setShowLibrary] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [showEditbar, setShowEditbar] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("lzcore_topology_show_editbar");
+      return saved !== null ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
   const [canvasMode, setCanvasMode] = useState<"select" | "connect">("select");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("lzcore_topology_show_editbar", String(showEditbar));
+    } catch {
+      // ignore
+    }
+    const timer = window.setTimeout(() => {
+      canvasApiRef.current?.resize();
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [showEditbar]);
   const [gridEnabled, setGridEnabled] = useState(true);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);
@@ -1341,6 +1363,10 @@ export default function TopologyWorkspace({
       switch (e.key.toLowerCase()) {
         case "v": setCanvasMode("select"); break;
         case "c": setCanvasMode("connect"); break;
+        case "t":
+          e.preventDefault();
+          setShowEditbar((value) => !value);
+          break;
         case "g": if (e.shiftKey) setGridEnabled((value) => !value); break;
         case "i": setShowInterfaces((value) => !value); break;
         case "f":
@@ -1832,6 +1858,38 @@ export default function TopologyWorkspace({
                 </>
               )}
             </div>
+            {!showEditbar && (
+              <div className="studio-mini-mode-switch" role="group" aria-label="快捷绘图模式">
+                <button
+                  type="button"
+                  className={canvasMode === "select" ? "is-active" : ""}
+                  aria-pressed={canvasMode === "select"}
+                  onClick={() => setCanvasMode("select")}
+                  title="选择模式 (快捷键 V)"
+                >
+                  <IconMenu size={12} />
+                  <span>选择</span>
+                </button>
+                <button
+                  type="button"
+                  className={canvasMode === "connect" ? "is-active" : ""}
+                  aria-pressed={canvasMode === "connect"}
+                  onClick={() => setCanvasMode("connect")}
+                  title="连线模式 (快捷键 C)"
+                >
+                  <IconLink size={12} />
+                  <span>连线</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => canvasApiRef.current?.fit()}
+                  title="适配视图到画布中央 (快捷键 F)"
+                >
+                  <IconExpand size={12} />
+                  <span>适配</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="toolbar-right">
@@ -1869,11 +1927,22 @@ export default function TopologyWorkspace({
                 ))}
               </div>
             </details>
+            <Button
+              size="sm"
+              icon={showEditbar ? <IconChevronUp size={13} /> : <IconWrench size={13} />}
+              variant={showEditbar ? "default" : "ghost"}
+              onClick={() => setShowEditbar((v) => !v)}
+              title={showEditbar ? "收起编辑工具条 (快捷键 T)" : "展开编辑工具条 (快捷键 T)"}
+              aria-expanded={showEditbar}
+            >
+              {showEditbar ? "收起工具" : "展开工具"}
+            </Button>
             <button className="studio-icon-button" aria-label={focusMode ? "退出专注画布" : "专注画布"} title="专注画布" onClick={() => setFocusMode((value) => !value)}><IconExpand size={18} /></button>
             <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>绘图对话</Button>
           </div>
         </div>
-        <div className="topology-editbar">
+        {showEditbar && (
+          <div className="topology-editbar">
           <div className="studio-edit-tools" role="group" aria-label="画布工具">
             <button className="studio-mode-button" aria-pressed={canvasMode === "select"} onClick={() => setCanvasMode("select")}><IconMenu size={13} />选择</button>
             <button className="studio-mode-button" aria-pressed={canvasMode === "connect"} onClick={() => setCanvasMode("connect")}><IconLink size={13} />连线</button>
@@ -1985,6 +2054,7 @@ export default function TopologyWorkspace({
             </div></details>
           </div>
         </div>
+        )}
 
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
         <div className={`topology-canvas-viewport mode-${canvasMode}`}>
@@ -2090,6 +2160,7 @@ export default function TopologyWorkspace({
               <div><dt>Shift + F</dt><dd>缩放至选中对象</dd></div>
               <div><dt>/</dt><dd>搜索设备并定位</dd></div>
               <div><dt>I</dt><dd>切换接口标签</dd></div>
+              <div><dt>T</dt><dd>展开 / 收起编辑工具条</dd></div>
               <div><dt>Shift + G</dt><dd>切换网格</dd></div>
               <div><dt>Ctrl/⌘ + Z / Y</dt><dd>撤销 / 恢复</dd></div>
               <div><dt>Ctrl/⌘ + S</dt><dd>立即保存</dd></div>
