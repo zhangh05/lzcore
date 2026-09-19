@@ -105,7 +105,7 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
   };
 
   const submit = async (request = input) => {
-    if (!request.trim() || running || preparing || submittingRef.current || !loaded && sessionId) return;
+    if (!request.trim() || running || preparing || submittingRef.current) return;
     submittingRef.current = true;
     setPreparing(true); setError("");
     try {
@@ -117,8 +117,15 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
         try { localStorage.setItem(storageKey, id); } catch { /* session remains available via task history */ }
         useSessionStore.getState().bumpSessionList();
       } else {
-        const response = await jobsApi.list(workspaceId);
-        if (response.jobs.some((item) => item.status === "running" && String(item.payload?.session_id || item.metadata?.active_turn?.session_id || "") === id)) { setError("此拓扑的任务仍在运行，可以继续查看进度。"); return; }
+        try {
+          const response = await jobsApi.list(workspaceId);
+          if (response.jobs?.some((item) => item.status === "running" && String(item.payload?.session_id || item.metadata?.active_turn?.session_id || "") === id)) {
+            setError("此拓扑的任务仍在运行，可以继续查看进度。");
+            return;
+          }
+        } catch {
+          // If pre-flight jobs check encounters a network blip, proceed to send via websocket
+        }
       }
       setInput(""); pinnedRef.current = true;
       const skillId = allowEdit ? `drawing:${topology.topology_id}` : `drawing:${topology.topology_id}:ro`;
@@ -170,7 +177,21 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     </div>
     {error && <div className="topology-agent-error" role="alert">{error}<button onClick={() => { void refreshHistory().then(() => setError("")).catch(() => {}); }}>重试加载</button></div>}
     <form className="topology-agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <textarea aria-label="拓扑协作指令" placeholder={allowEdit ? "描述你想画的设备、连线、分组或文字…" : "向 Agent 咨询拓扑结构、单点故障或连线分析（只读模式）…"} value={input} onChange={(event) => setInput(event.target.value)} rows={3} />
+      <textarea
+        aria-label="拓扑协作指令"
+        placeholder={allowEdit ? "描述你想画的设备、连线、分组或文字…" : "向 Agent 咨询拓扑结构、单点故障或连线分析（只读模式）…"}
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            if (input.trim() && !running && !preparing) {
+              void submit();
+            }
+          }
+        }}
+        rows={3}
+      />
       <footer>
         <div className="topology-agent-composer-meta">
           <label className="topology-agent-allow-edit" title={allowEdit ? "已允许 Agent 修改图纸" : "已锁定为只读分析模式"}>
@@ -193,7 +214,7 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
           <button
             type="submit"
             className="topology-agent-send-btn"
-            disabled={!input.trim() || preparing || (!!sessionId && !loaded)}
+            disabled={!input.trim() || preparing}
             title={!input.trim() ? "输入内容后可发送" : preparing ? "正在建立连接..." : "发送指令 (Enter)"}
           >
             <IconSend size={14} />

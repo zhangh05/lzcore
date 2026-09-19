@@ -16,20 +16,23 @@ vi.mock("../api", () => ({
   },
 }));
 
+const mockSend = vi.fn();
+const mockActiveTurnState = {
+  job: null as any,
+  loaded: true,
+  refresh: vi.fn(),
+};
+
 vi.mock("../hooks/useChatStream", () => ({
   useChatStream: () => ({
-    send: vi.fn(),
+    send: mockSend,
     stop: vi.fn(),
     sending: false,
   }),
 }));
 
 vi.mock("../hooks/useActiveTurn", () => ({
-  useActiveTurn: () => ({
-    job: null,
-    loaded: true,
-    refresh: vi.fn(),
-  }),
+  useActiveTurn: () => mockActiveTurnState,
 }));
 
 const mockTopology = {
@@ -197,6 +200,41 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
         expect(useWorkbenchStore.getState().bySession["s-active-123"]?.length || 0).toBe(0);
         expect(screen.getByText("把想法画出来")).toBeInTheDocument();
       });
+    });
+
+    it("enables the send button when user types text, even if active turn job loaded is false", async () => {
+      mockActiveTurnState.loaded = false;
+      const { scopedLocalStorageKey } = await import("../utils/userScope");
+      const storageKey = scopedLocalStorageKey(`drawing_session_v2:default:${mockTopology.topology_id}`);
+      localStorage.setItem(storageKey, "s-existing-turn");
+
+      render(
+        <TopologyAgentPanel
+          workspaceId="default"
+          topology={mockTopology as never}
+          selection={mockSelection}
+          onCompleted={() => {}}
+        />
+      );
+
+      const sendBtn = screen.getByRole("button", { name: /发送/ });
+      const textarea = screen.getByLabelText("拓扑协作指令") as HTMLTextAreaElement;
+
+      // Initially empty -> disabled
+      expect(sendBtn).toBeDisabled();
+
+      // Type text -> enabled immediately (not blocked by loaded=false)
+      fireEvent.change(textarea, { target: { value: "写的是啥" } });
+      expect(sendBtn).not.toBeDisabled();
+
+      // Press Enter -> submits via mockSend
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      await vi.waitFor(() => {
+        expect(mockSend).toHaveBeenCalled();
+      });
+
+      // Cleanup mock state
+      mockActiveTurnState.loaded = true;
     });
   });
 });
