@@ -1,8 +1,17 @@
 import { renderMarkdown } from './markdown';
 import { formatDate } from './format';
 
+export function sanitizeUserText(text: string): string {
+  if (!text) return "";
+  const cleaned = text
+    .replace(/[\r\n]*\s*当前图纸上下文\s*[：:][\s\S]*$/gi, "")
+    .trim();
+  return cleaned || text;
+}
+
 export function sanitizeAssistantText(text: string): string {
   const raw = text ?? "";
+
   // Strip tool-call JSON blocks that accidentally leak into display text.
   const cleaned = raw
     .replace(/^\s*(exec|knowledge|workspace|web|memory|agent|browser|system|data|text|report|skill)\.\w+\s*:\s*\{.*\}\s*$/gm, "")

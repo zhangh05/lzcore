@@ -1,7 +1,8 @@
 import { memo, useCallback } from "react";
 import type { InlineToolCall } from "../../../types";
 import type { ChatMsg } from "../../../stores/workbench";
-import { renderAssistantHtml, sanitizeAssistantText, toolLabel } from "../../../utils/displayText";
+import { renderAssistantHtml, sanitizeAssistantText, sanitizeUserText, toolLabel } from "../../../utils/displayText";
+
 import { humanFailure } from "../../../utils/humanizeError";
 import { formatStreamElapsedSeconds } from "../../../utils/streamElapsed";
 import { InlineToolCallCard } from "./InlineToolCallCard";
@@ -96,11 +97,13 @@ export const MessageRow = memo(function MessageRow({ m, idx: _idx, total: _total
   }, [lastUserInput, onRetryOriginal]);
 
   if (m.role === "user") {
+    const userText = sanitizeUserText(m.text);
     return (
       <div className="message-row user" data-testid="chat-user">
         <div className="message-stack"><div className="chat-bubble user">
           {m.skill ? <div className="user-message-skill" aria-label={`使用 Skill：${m.skill.name}`}><span>Skill</span><strong>{m.skill.name}</strong></div> : null}
-          {m.text && <div className="user-message-text">{m.text}</div>}
+          {userText && <div className="user-message-text">{userText}</div>}
+
           {m.attachments?.length ? <div className="chat-attachments">
             {m.attachments.map((attachment) => attachment.kind === "image" ? (
               <a className="chat-image-attachment" key={attachment.file_id} href={attachment.previewUrl || `/api/storage/files/${encodeURIComponent(attachment.file_id)}/preview?workspace_id=${encodeURIComponent(workspaceId || "")}`} target="_blank" rel="noreferrer" title="点击查看原图">

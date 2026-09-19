@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 import { StreamingContent } from "../pages/AgentWorkbench/components/StreamingContent";
-import { renderAssistantHtml, sanitizeAssistantText } from "../utils/displayText";
+import { renderAssistantHtml, sanitizeAssistantText, sanitizeUserText } from "../utils/displayText";
+
 
 describe("assistant markdown rendering", () => {
   it("preserves model-authored identity and greeting text", () => {
@@ -100,12 +101,20 @@ describe("assistant markdown rendering", () => {
     expect(html).toContain("<h3>无空格三级标题</h3>");
     expect(html).toContain("正文仍然可见");
   });
-});
-
-
   it("allows only web and mail schemes while blocking unsafe link protocols", () => {
     const html = renderAssistantHtml("[web](https://example.com) [mail](mailto:ops@example.com) [tel](tel:+100) [file](file:///tmp/x) [data](data:text/html,x) [protocol](//evil.example) [normalized](java\tscript:alert(1))");
     expect(html).toContain("href=\"https://example.com\"");
     expect(html).toContain("href=\"mailto:ops@example.com\"");
     expect(html.match(/href=\"#blocked\"/g)).toHaveLength(5);
   });
+
+  it("sanitizes user text by stripping injected drawing context blocks", () => {
+    const raw = `在当前图纸中添加两台交换机与一台路由器，分别命名并连线，排列整齐。\n\n当前图纸上下文：\n{"topology_id":"topo_df6f77838bc1","version":12,"selection":{"node_ids":[],"link_ids":[],"canvas_item_ids":[],"group_ids":[],"label":"整张图纸"}}\n已明确授权绘图。请先读取当前图纸，再按要求绘图。只修改用户要求的对象，不查询或操作真实设备。`;
+    expect(sanitizeUserText(raw)).toBe("在当前图纸中添加两台交换机与一台路由器，分别命名并连线，排列整齐。");
+
+    // Pure user message untouched
+    expect(sanitizeUserText("普通用户消息")).toBe("普通用户消息");
+    expect(sanitizeUserText("")).toBe("");
+  });
+});
+
