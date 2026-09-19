@@ -61,9 +61,10 @@ export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, strin
 export const CANVAS_ACCENT = { light: "#0f7773", dark: "#72c3ba" };
 /** Group containers are structure, not signal: accent-soft fill, hairline border. */
 export const CANVAS_GROUP = {
-  light: { fill: "#e5f1ee", border: "#d7e1de", text: "#6c7c7e" },
-  dark: { fill: "#173633", border: "#263442", text: "#95a3b3" },
+  light: { fill: "#f8fafc", border: "#cbd5e1", text: "#475569" },
+  dark: { fill: "#17202a", border: "#263442", text: "#95a3b3" },
 };
+
 
 type Props = {
   topology: Topology;

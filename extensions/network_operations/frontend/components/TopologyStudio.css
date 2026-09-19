@@ -84,15 +84,16 @@
 .studio-more { position: relative; font-size: 12px; }
 .studio-more > summary { padding: 7px 8px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
 .studio-more > div { position: absolute; right: 0; top: 34px; display: grid; gap: 4px; padding: 8px; width: 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #0002; z-index: 20; }
-.topology-studio .topology-canvas-viewport { height: auto; min-height: 0; flex: 1 1 0; background: var(--bg); }
+.topology-studio .topology-canvas-viewport { height: auto; min-height: 0; flex: 1 1 0; background: #ffffff; }
 .topology-studio .topology-canvas-viewport.mode-connect { cursor: crosshair; }
 .topology-studio .topology-canvas-viewport.mode-select .netops-cytoscape { cursor: default; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape { cursor: grab; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape:active { cursor: grabbing; }
-.topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--bg); }
+.topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: #ffffff; }
 /* Grid paper is intentionally fixed; editing changes object coordinates, not
    the viewport or its reference grid. */
-.topology-studio .netops-canvas-wrap.grid-on { background-color: var(--bg); background-image: linear-gradient(#dbe5ec 1px, transparent 1px), linear-gradient(90deg, #dbe5ec 1px, transparent 1px); }
+.topology-studio .netops-canvas-wrap.grid-on { background-color: #ffffff; background-image: linear-gradient(#e8edf2 1px, transparent 1px), linear-gradient(90deg, #e8edf2 1px, transparent 1px); }
+
 [data-theme="dark"] .topology-studio .netops-canvas-wrap { background-color: #0f1519; }
 [data-theme="dark"] .topology-studio .netops-canvas-wrap.grid-on { background-color: #0f1519; background-image: linear-gradient(#22303b 1px, transparent 1px), linear-gradient(90deg, #22303b 1px, transparent 1px); }
 [data-theme="dark"] .topology-studio .topology-canvas-area { background: #0f1519; }
