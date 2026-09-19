@@ -39,9 +39,14 @@ const baseToolId = "network.operations.device.manage";
 const allowedToolIds = [baseToolId, ...toolOptions.map((item) => item.id)];
 const emptyDevice: DeviceForm = { name: "", host: "", vendor: "h3c", device_type: "switch", region_id: "" };
 const deviceRoleOptions = [
-  ["router", "路由器"], ["switch", "二层交换机"], ["l3_switch", "三层交换机"],
-  ["firewall", "防火墙"], ["server", "服务器"], ["wireless", "无线设备"], ["cloud", "云 / Internet"],
+  ["router", "路由器"], ["router_core", "核心路由器"],
+  ["switch", "二层交换机"], ["switch_core", "核心交换机"], ["switch_access", "接入交换机"],
+  ["firewall", "防火墙"], ["server", "服务器"], ["pc", "终端 PC"],
+  ["wireless", "无线设备"], ["cloud", "云网络"], ["wan", "广域网 WAN"],
+  ["database", "数据库"], ["camera", "监控设备"],
+  ["phone", "IP 电话"], ["printer", "打印设备"],
 ] as const;
+
 const deviceModelSuggestions: Record<string, string[]> = {
   h3c: ["S5130S-28S-EI", "S5560X-30C-EI", "S6520X-54QC-EI", "S12500X-AF", "SR6608", "SecPath F1000"],
   huawei: ["S5735-L24T4S-QA", "S6730-H48X6C", "NE40E-X8A", "USG6600E"],

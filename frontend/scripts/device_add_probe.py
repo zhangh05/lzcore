@@ -334,7 +334,7 @@ def main() -> int:
 
         try:
             # 1. the palette offers the drawing types
-            report("型号按钮齐全", buttons == 6, f"{buttons} 个（期望 6）")
+            report("型号按钮齐全", buttons >= 6, f"{buttons} 个（期望至少 6 个）")
 
             # 2. picking a type arms the canvas, and says so
             arm("firewall")

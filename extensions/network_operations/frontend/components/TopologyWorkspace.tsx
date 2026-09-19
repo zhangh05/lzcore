@@ -142,12 +142,22 @@ const base = "/extensions/network.operations";
  */
 const DRAWING_DEVICE_TYPES = [
   { value: "router", label: "路由器" },
+  { value: "router_core", label: "核心路由器" },
   { value: "switch", label: "交换机" },
+  { value: "switch_core", label: "核心交换机" },
+  { value: "switch_access", label: "接入交换机" },
   { value: "firewall", label: "防火墙" },
   { value: "server", label: "服务器" },
-  { value: "cloud", label: "云 / Internet" },
+  { value: "pc", label: "终端 PC" },
+  { value: "cloud", label: "云网络" },
   { value: "wireless", label: "无线 AP" },
+  { value: "wan", label: "广域网 WAN" },
+  { value: "database", label: "数据库" },
+  { value: "camera", label: "监控设备" },
+  { value: "phone", label: "IP 电话" },
+  { value: "printer", label: "打印设备" },
 ] as const;
+
 
 
 
@@ -2161,8 +2171,11 @@ export default function TopologyWorkspace({
                     pushState({ ...activeTopology, nodes: updated });
                   }}
                 >
-                  <option value="router">路由器</option><option value="switch">二层交换机</option><option value="l3_switch">三层交换机</option><option value="firewall">防火墙</option><option value="server">服务器</option><option value="wireless">无线设备</option><option value="cloud">云 / Internet</option>
+                  {DRAWING_DEVICE_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
                 </select>
+
                 <small className="inspector-desc">仅改变当前图纸的图标，不会修改设备实体、连接或 Agent 操作范围。</small>
               </label>
 
@@ -2832,7 +2845,8 @@ export default function TopologyWorkspace({
             <div className="modal-header"><div><h3>新建图纸设备</h3><p>创建独立图纸设备，不关联登记资产。</p></div><Button size="sm" type="button" onClick={() => setShowManualNodeModal(false)}><IconClose size={14} /></Button></div>
             <div className="form-grid">
               <label className="full-field">显示名称<input required autoFocus placeholder="如：Internet、核心交换机、第三方系统" value={manualNodeName} onChange={(event) => setManualNodeName(event.target.value)} /></label>
-              <label className="full-field">图标类型<select value={manualNodeType} onChange={(event) => setManualNodeType(event.target.value)}><option value="router">路由器</option><option value="switch">交换机</option><option value="firewall">防火墙</option><option value="server">服务器</option><option value="cloud">云 / Internet</option><option value="wireless">无线 AP</option></select></label>
+              <label className="full-field">图标类型<select value={manualNodeType} onChange={(event) => setManualNodeType(event.target.value)}>{DRAWING_DEVICE_TYPES.map((t) => (<option key={t.value} value={t.value}>{t.label}</option>))}</select></label>
+
             </div>
             <div className="modal-actions"><Button type="button" onClick={() => setShowManualNodeModal(false)}>取消</Button><Button variant="primary" type="submit">放入画布</Button></div>
           </form>
