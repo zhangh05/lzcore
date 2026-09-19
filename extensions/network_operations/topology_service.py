@@ -304,7 +304,21 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         label = str(raw.get("label") or "").strip()
         metadata = dict(raw.get("metadata") or {}) if isinstance(raw.get("metadata"), dict) else {}
         evidence_refs = [str(item).strip() for item in (raw.get("evidence_refs") or []) if str(item).strip()]
-        normalized_links.append({
+        style = dict(raw.get("style") or {}) if isinstance(raw.get("style"), dict) else {}
+        cleaned_style: dict[str, Any] = {}
+        if "color" in style and isinstance(style["color"], str) and style["color"].strip():
+            cleaned_style["color"] = style["color"].strip()[:32]
+        if "width" in style:
+            try:
+                cleaned_style["width"] = round(max(0.5, min(20.0, float(style["width"]))), 1)
+            except (TypeError, ValueError):
+                pass
+        if "line_style" in style and str(style["line_style"]).strip() in {"solid", "dashed", "dotted"}:
+            cleaned_style["line_style"] = str(style["line_style"]).strip()
+        if "curve_style" in style and str(style["curve_style"]).strip() in {"bezier", "straight", "taxi"}:
+            cleaned_style["curve_style"] = str(style["curve_style"]).strip()
+
+        link_entry: dict[str, Any] = {
             "link_id": link_id,
             "source_node_id": src,
             "source_interface": src_iface,
@@ -316,7 +330,10 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             "source": source,
             "evidence_refs": evidence_refs,
             "status": status,
-        })
+        }
+        if cleaned_style:
+            link_entry["style"] = cleaned_style
+        normalized_links.append(link_entry)
 
     record = {
         "schema_version": 2,
@@ -685,6 +702,7 @@ def _link_facts(link: dict[str, Any]) -> dict[str, Any]:
         "source": str(link.get("source") or ""),
         "status": str(link.get("status") or ""),
         "label": str(link.get("label") or ""),
+        "style": dict(link.get("style") or {}),
     }
 
 

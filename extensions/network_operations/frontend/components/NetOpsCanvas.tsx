@@ -413,6 +413,9 @@ export default function NetOpsCanvas(props: Props) {
           { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "cover", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
           { selector: "edge", style: { width: "data(edgeWidth)", opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", "control-point-step-size": 144, label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": 0, "target-text-margin-y": 0 } },
+          { selector: "edge[curveStyle = 'straight']", style: { "curve-style": "straight" } },
+          { selector: "edge[curveStyle = 'taxi']", style: { "curve-style": "taxi", "taxi-direction": "auto", "taxi-turn": 20 } },
+          { selector: "edge[curveStyle = 'bezier']", style: { "curve-style": "bezier", "control-point-step-size": 144 } },
           { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-margin-y": 0, "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
           // A text box with no border and no fill is an invisible hit area: the
           // user sees blank canvas, right-clicks it, and gets item actions they
@@ -439,7 +442,7 @@ export default function NetOpsCanvas(props: Props) {
           { selector: ".filtered-out", style: { opacity: 0.16, "text-opacity": 0.16 } },
           // Selection is a wider stroke plus the accent colour, not a glow: the
           // link stays the same object, it just comes forward.
-          { selector: "edge:selected", style: { width: 4, "line-color": CANVAS_ACCENT.light, "z-index": 20 } },
+          { selector: "edge:selected", style: { width: "data(selectedEdgeWidth)", "line-color": CANVAS_ACCENT.light, "z-index": 20 } },
           { selector: ".lz-group", style: { shape: "roundrectangle", label: "data(label)", "text-valign": "top", "text-halign": "left", "text-margin-x": 12, "text-margin-y": 10, color: CANVAS_GROUP.light.text, "font-size": 12, "font-weight": 600, width: "data(width)", height: "data(height)", "background-color": CANVAS_GROUP.light.fill, "background-opacity": 0.5, "border-color": CANVAS_GROUP.light.border, "border-style": "dashed", "border-width": 1, "background-image": "none", "events": "no" } },
         ],
       });
@@ -827,6 +830,7 @@ export default function NetOpsCanvas(props: Props) {
     const dark = theme === "dark";
     cy.style().selector("node:selected").style({ "underlay-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
     cy.style().selector(".node-connecting").style({ "border-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
+    cy.style().selector("edge:selected").style({ "line-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
     cy.style()
       .selector("node")
       .style({
@@ -886,18 +890,32 @@ export default function NetOpsCanvas(props: Props) {
       // own after 6.4s and never returned.
       ...props.topology.links
         .filter((link) => props.topology.nodes.some((node) => node.node_id === link.source_node_id) && props.topology.nodes.some((node) => node.node_id === link.target_node_id))
-        .map((link) => ({
-          group: "edges",
-          // A link is only as visible as its endpoints; dimming one end and
-          // leaving the edge bright would draw attention to nothing.
-          classes: dimmed.has(link.source_node_id) || dimmed.has(link.target_node_id) ? "filtered-out" : "",
-          data: { id: link.link_id, source: link.source_node_id, target: link.target_node_id, visible: 1, edgeColor: link.status === "down" ? linkColors.danger : link.status === "up" ? linkColors.ok : linkColors.unknown,
-          // The state is carried by shape and weight as well as colour, so a
-          // down link is still identifiable when the red is not — colour-blind
-          // readers, greyscale prints, and screenshots pasted into a report.
-          edgeStyle: link.status === "down" ? "dotted" : link.kind === "logical" ? "dashed" : "solid",
-          edgeWidth: link.status === "down" ? 3 : 2.5 },
-        })),
+        .map((link) => {
+          const defaultEdgeColor = link.status === "down" ? linkColors.danger : link.status === "up" ? linkColors.ok : linkColors.unknown;
+          const defaultEdgeStyle = link.status === "down" ? "dotted" : link.kind === "logical" ? "dashed" : "solid";
+          const defaultEdgeWidth = link.status === "down" ? 3 : 2.5;
+          const edgeWidth = typeof link.style?.width === "number" && !Number.isNaN(link.style.width) ? link.style.width : defaultEdgeWidth;
+          return {
+            group: "edges",
+            // A link is only as visible as its endpoints; dimming one end and
+            // leaving the edge bright would draw attention to nothing.
+            classes: dimmed.has(link.source_node_id) || dimmed.has(link.target_node_id) ? "filtered-out" : "",
+            data: {
+              id: link.link_id,
+              source: link.source_node_id,
+              target: link.target_node_id,
+              visible: 1,
+              edgeColor: link.style?.color || defaultEdgeColor,
+              // The state is carried by shape and weight as well as colour, so a
+              // down link is still identifiable when the red is not — colour-blind
+              // readers, greyscale prints, and screenshots pasted into a report.
+              edgeStyle: link.style?.line_style || defaultEdgeStyle,
+              edgeWidth,
+              curveStyle: link.style?.curve_style || "bezier",
+              selectedEdgeWidth: Math.max(4, edgeWidth + 1.5),
+            },
+          };
+        }),
     ];
     applyElements(cy, elements, connectingFromRef.current, reconciledTopologyRef.current !== props.topology);
     reconciledTopologyRef.current = props.topology;

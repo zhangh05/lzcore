@@ -64,6 +64,13 @@ export type TopologyNode = {
   group_id?: string;
 };
 
+export type TopologyLinkStyle = {
+  color?: string;
+  width?: number;
+  line_style?: "solid" | "dashed" | "dotted";
+  curve_style?: "bezier" | "straight" | "taxi";
+};
+
 export type TopologyLink = {
   link_id: string;
   source_node_id: string;
@@ -85,6 +92,7 @@ export type TopologyLink = {
   source: "manual";
   evidence_refs?: string[];
   status: "unknown" | "up" | "down";
+  style?: TopologyLinkStyle;
 };
 
 /** User-authored visual context.  It is deliberately separate from devices. */
@@ -2438,6 +2446,191 @@ export default function TopologyWorkspace({
                   <option value="down">图纸标注：DOWN（非运行结论）</option>
                 </select>
               </label>
+
+              <div className="inspector-label" style={{ marginTop: "4px" }}>连线外观与形态</div>
+
+              <label className="inspector-field">
+                走线形态
+                <select
+                  value={selectedLink.style?.curve_style || "bezier"}
+                  onChange={(e) => {
+                    if (!activeTopology) return;
+                    const val = e.target.value as "bezier" | "straight" | "taxi";
+                    const updated = activeTopology.links.map((l) =>
+                      l.link_id === selectedLink.link_id
+                        ? { ...l, style: { ...l.style, curve_style: val === "bezier" ? undefined : val } }
+                        : l
+                    );
+                    pushState({ ...activeTopology, links: updated });
+                  }}
+                >
+                  <option value="bezier">平滑曲线 (多链路自动避让)</option>
+                  <option value="straight">直线 (两点直达)</option>
+                  <option value="taxi">直角折线 (正交曼哈顿走线)</option>
+                </select>
+              </label>
+
+              <label className="inspector-field">
+                线型
+                <select
+                  value={selectedLink.style?.line_style || "default"}
+                  onChange={(e) => {
+                    if (!activeTopology) return;
+                    const val = e.target.value;
+                    const updated = activeTopology.links.map((l) =>
+                      l.link_id === selectedLink.link_id
+                        ? { ...l, style: { ...l.style, line_style: val === "default" ? undefined : (val as "solid" | "dashed" | "dotted") } }
+                        : l
+                    );
+                    pushState({ ...activeTopology, links: updated });
+                  }}
+                >
+                  <option value="default">默认 (按链路类型: 物理为实线 / 逻辑为虚线)</option>
+                  <option value="solid">实线 ────</option>
+                  <option value="dashed">虚线 ╌╌╌╌</option>
+                  <option value="dotted">点线 •••••</option>
+                </select>
+              </label>
+
+              <div className="inspector-field">
+                <span>线宽粗细 ({selectedLink.style?.width ? `${selectedLink.style.width}px` : "标准 2.5px"})</span>
+                <div className="link-width-chips">
+                  {[
+                    { label: "细 1.5", value: 1.5 },
+                    { label: "标准 2.5", value: 2.5 },
+                    { label: "粗 4", value: 4 },
+                    { label: "特粗 6", value: 6 },
+                  ].map((preset) => {
+                    const currentWidth = selectedLink.style?.width ?? 2.5;
+                    const isActive = currentWidth === preset.value;
+                    return (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        className={`link-width-chip ${isActive ? "active" : ""}`}
+                        onClick={() => {
+                          if (!activeTopology) return;
+                          const updated = activeTopology.links.map((l) =>
+                            l.link_id === selectedLink.link_id
+                              ? { ...l, style: { ...l.style, width: preset.value } }
+                              : l
+                          );
+                          pushState({ ...activeTopology, links: updated });
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="inspector-field">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>连线颜色</span>
+                  {selectedLink.style?.color && (
+                    <button
+                      type="button"
+                      className="link-style-reset-btn"
+                      onClick={() => {
+                        if (!activeTopology) return;
+                        const updated = activeTopology.links.map((l) => {
+                          if (l.link_id !== selectedLink.link_id) return l;
+                          const nextStyle = { ...l.style };
+                          delete nextStyle.color;
+                          return { ...l, style: Object.keys(nextStyle).length ? nextStyle : undefined };
+                        });
+                        pushState({ ...activeTopology, links: updated });
+                      }}
+                    >
+                      恢复状态色
+                    </button>
+                  )}
+                </div>
+                <div className="link-color-grid">
+                  {[
+                    { label: "Cisco蓝", color: "#1262aa" },
+                    { label: "科技蓝", color: "#2563eb" },
+                    { label: "运行绿", color: "#10b981" },
+                    { label: "告警橙", color: "#f59e0b" },
+                    { label: "故障红", color: "#ef4444" },
+                    { label: "深石灰", color: "#64748b" },
+                    { label: "关键紫", color: "#8b5cf6" },
+                    { label: "专网青", color: "#06b6d4" },
+                  ].map((preset) => {
+                    const isSelected = selectedLink.style?.color?.toLowerCase() === preset.color.toLowerCase();
+                    return (
+                      <button
+                        key={preset.color}
+                        type="button"
+                        className={`link-color-swatch ${isSelected ? "active" : ""}`}
+                        style={{ backgroundColor: preset.color }}
+                        title={`${preset.label} (${preset.color})`}
+                        aria-label={preset.label}
+                        onClick={() => {
+                          if (!activeTopology) return;
+                          const updated = activeTopology.links.map((l) =>
+                            l.link_id === selectedLink.link_id
+                              ? { ...l, style: { ...l.style, color: preset.color } }
+                              : l
+                          );
+                          pushState({ ...activeTopology, links: updated });
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="link-custom-color-row">
+                  <input
+                    type="color"
+                    className="link-color-picker"
+                    value={selectedLink.style?.color || "#1262aa"}
+                    aria-label="自定义拾色器"
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const val = e.target.value;
+                      const updated = activeTopology.links.map((l) =>
+                        l.link_id === selectedLink.link_id
+                          ? { ...l, style: { ...l.style, color: val } }
+                          : l
+                      );
+                      pushState({ ...activeTopology, links: updated });
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="link-color-text"
+                    placeholder="Hex 颜色如 #2563eb"
+                    value={selectedLink.style?.color || ""}
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const val = e.target.value.trim();
+                      const updated = activeTopology.links.map((l) =>
+                        l.link_id === selectedLink.link_id
+                          ? { ...l, style: { ...l.style, color: val || undefined } }
+                          : l
+                      );
+                      pushState({ ...activeTopology, links: updated });
+                    }}
+                  />
+                </div>
+              </div>
+
+              {(selectedLink.style?.color || selectedLink.style?.width || selectedLink.style?.line_style || selectedLink.style?.curve_style) && (
+                <button
+                  type="button"
+                  className="link-full-reset-btn"
+                  onClick={() => {
+                    if (!activeTopology) return;
+                    const updated = activeTopology.links.map((l) =>
+                      l.link_id === selectedLink.link_id ? { ...l, style: undefined } : l
+                    );
+                    pushState({ ...activeTopology, links: updated });
+                  }}
+                >
+                  ↺ 恢复系统默认样式与走线
+                </button>
+              )}
 
               <label className="inspector-field">
                 链路描述（可选）

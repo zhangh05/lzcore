@@ -1129,4 +1129,135 @@
   }
 }
 
+/* Link Visual Appearance Controls */
+.link-width-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.link-width-chip {
+  padding: 4px 0;
+  font-size: var(--fs-11);
+  font-weight: 500;
+  border-radius: var(--r-4, 4px);
+  border: 1px solid var(--line-3);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.link-width-chip:hover {
+  background: var(--surface-3, rgba(0, 0, 0, 0.05));
+  color: var(--text);
+}
+
+.link-width-chip.active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.link-color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.link-color-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  position: relative;
+}
+
+.link-color-swatch:hover {
+  transform: scale(1.18);
+}
+
+.link-color-swatch.active {
+  box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+  transform: scale(1.1);
+}
+
+.link-custom-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.link-color-picker {
+  -webkit-appearance: none;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-4, 4px);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
+
+.link-color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.link-color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.link-color-text {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--fs-11);
+  padding: 4px 8px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-6);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.link-style-reset-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-11);
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-style-reset-btn:hover {
+  opacity: 0.8;
+}
+
+.link-full-reset-btn {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border: 1px dashed var(--line-3);
+  border-radius: var(--r-6);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  cursor: pointer;
+  text-align: center;
+  width: 100%;
+  transition: all 0.15s ease;
+}
+
+.link-full-reset-btn:hover {
+  border-color: var(--line-2, #94a3b8);
+  color: var(--text);
+  background: var(--surface-3, rgba(0, 0, 0, 0.05));
 }
