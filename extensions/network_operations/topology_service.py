@@ -315,7 +315,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
                 pass
         if "line_style" in style and str(style["line_style"]).strip() in {"solid", "dashed", "dotted"}:
             cleaned_style["line_style"] = str(style["line_style"]).strip()
-        if "curve_style" in style and str(style["curve_style"]).strip() in {"bezier", "straight", "taxi"}:
+        if "curve_style" in style and str(style["curve_style"]).strip() in {"auto", "bezier", "straight", "taxi", "unbundled-bezier"}:
             cleaned_style["curve_style"] = str(style["curve_style"]).strip()
 
         link_entry: dict[str, Any] = {

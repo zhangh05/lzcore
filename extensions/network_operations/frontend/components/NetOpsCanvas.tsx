@@ -415,7 +415,8 @@ export default function NetOpsCanvas(props: Props) {
           { selector: "edge", style: { width: "data(edgeWidth)", opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", "control-point-step-size": 144, label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": 0, "target-text-margin-y": 0 } },
           { selector: "edge[curveStyle = 'straight']", style: { "curve-style": "straight" } },
           { selector: "edge[curveStyle = 'taxi']", style: { "curve-style": "taxi", "taxi-direction": "auto", "taxi-turn": 20 } },
-          { selector: "edge[curveStyle = 'bezier']", style: { "curve-style": "bezier", "control-point-step-size": 144 } },
+          { selector: "edge[curveStyle = 'bezier']", style: { "curve-style": "unbundled-bezier", "control-point-distances": 40, "control-point-weights": 0.5 } },
+          { selector: "edge[curveStyle = 'unbundled-bezier']", style: { "curve-style": "unbundled-bezier", "control-point-distances": 40, "control-point-weights": 0.5 } },
           { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-margin-y": 0, "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
           // A text box with no border and no fill is an invisible hit area: the
           // user sees blank canvas, right-clicks it, and gets item actions they
@@ -911,7 +912,7 @@ export default function NetOpsCanvas(props: Props) {
               // readers, greyscale prints, and screenshots pasted into a report.
               edgeStyle: link.style?.line_style || defaultEdgeStyle,
               edgeWidth,
-              curveStyle: link.style?.curve_style || "bezier",
+              curveStyle: link.style?.curve_style || "auto",
               selectedEdgeWidth: Math.max(4, edgeWidth + 1.5),
             },
           };

@@ -45,7 +45,7 @@ function resolveLinkVisuals(
     edgeColor: link.style?.color || defaultEdgeColor,
     edgeStyle: link.style?.line_style || defaultEdgeStyle,
     edgeWidth,
-    curveStyle: link.style?.curve_style || "bezier",
+    curveStyle: link.style?.curve_style || "auto",
     selectedEdgeWidth: Math.max(4, edgeWidth + 1.5),
   };
 }
@@ -57,7 +57,7 @@ describe("TopologyLink styling and routing resolution", () => {
     expect(visualsUp.edgeColor).toBe("#147a55");
     expect(visualsUp.edgeStyle).toBe("solid");
     expect(visualsUp.edgeWidth).toBe(2.5);
-    expect(visualsUp.curveStyle).toBe("bezier");
+    expect(visualsUp.curveStyle).toBe("auto");
     expect(visualsUp.selectedEdgeWidth).toBe(4);
 
     const logicalLink = createLink({ status: "up", kind: "logical" });
@@ -117,6 +117,6 @@ describe("TopologyLink styling and routing resolution", () => {
     expect(visuals.edgeColor).toBe("#8b5cf6");
     expect(visuals.edgeStyle).toBe("solid");
     expect(visuals.edgeWidth).toBe(2.5);
-    expect(visuals.curveStyle).toBe("bezier");
+    expect(visuals.curveStyle).toBe("auto");
   });
 });

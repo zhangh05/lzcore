@@ -2411,24 +2411,6 @@ export default function TopologyWorkspace({
 
             <div className="inspector-section">
               <label className="inspector-field">
-                链路类型
-                <select
-                  value={selectedLink.kind}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const val = e.target.value as "physical" | "logical";
-                    const updated = activeTopology.links.map((l) =>
-                      l.link_id === selectedLink.link_id ? { ...l, kind: val } : l
-                    );
-                    pushState({ ...activeTopology, links: updated });
-                  }}
-                >
-                  <option value="physical">物理链路 (实线)</option>
-                  <option value="logical">逻辑链路 (虚线)</option>
-                </select>
-              </label>
-
-              <label className="inspector-field">
                 链路状态
                 <select
                   value={selectedLink.status}
@@ -2452,19 +2434,20 @@ export default function TopologyWorkspace({
               <label className="inspector-field">
                 走线形态
                 <select
-                  value={selectedLink.style?.curve_style || "bezier"}
+                  value={selectedLink.style?.curve_style || "auto"}
                   onChange={(e) => {
                     if (!activeTopology) return;
-                    const val = e.target.value as "bezier" | "straight" | "taxi";
+                    const val = e.target.value as "auto" | "bezier" | "straight" | "taxi";
                     const updated = activeTopology.links.map((l) =>
                       l.link_id === selectedLink.link_id
-                        ? { ...l, style: { ...l.style, curve_style: val === "bezier" ? undefined : val } }
+                        ? { ...l, style: { ...l.style, curve_style: val === "auto" ? undefined : val } }
                         : l
                     );
                     pushState({ ...activeTopology, links: updated });
                   }}
                 >
-                  <option value="bezier">平滑曲线 (多链路自动避让)</option>
+                  <option value="auto">默认 (多链路自动避让)</option>
+                  <option value="bezier">平滑曲线 (圆弧走线)</option>
                   <option value="straight">直线 (两点直达)</option>
                   <option value="taxi">直角折线 (正交曼哈顿走线)</option>
                 </select>
@@ -2473,19 +2456,22 @@ export default function TopologyWorkspace({
               <label className="inspector-field">
                 线型
                 <select
-                  value={selectedLink.style?.line_style || "default"}
+                  value={selectedLink.style?.line_style || (selectedLink.kind === "logical" ? "dashed" : "solid")}
                   onChange={(e) => {
                     if (!activeTopology) return;
-                    const val = e.target.value;
+                    const val = e.target.value as "solid" | "dashed" | "dotted";
                     const updated = activeTopology.links.map((l) =>
                       l.link_id === selectedLink.link_id
-                        ? { ...l, style: { ...l.style, line_style: val === "default" ? undefined : (val as "solid" | "dashed" | "dotted") } }
+                        ? {
+                            ...l,
+                            kind: (val === "dashed" ? "logical" : "physical") as "physical" | "logical",
+                            style: { ...l.style, line_style: val },
+                          }
                         : l
                     );
                     pushState({ ...activeTopology, links: updated });
                   }}
                 >
-                  <option value="default">默认 (按链路类型: 物理为实线 / 逻辑为虚线)</option>
                   <option value="solid">实线 ────</option>
                   <option value="dashed">虚线 ╌╌╌╌</option>
                   <option value="dotted">点线 •••••</option>
