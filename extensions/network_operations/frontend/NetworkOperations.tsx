@@ -6,6 +6,7 @@ import { IconBolt, IconChecklist, IconEdit, IconEye, IconPlugs, IconPlus, IconRe
 import { Button, PageHeader, TabButton } from "../../../frontend/src/components/ui";
 import { useSessionStore } from "../../../frontend/src/stores/session";
 import { DeviceTypeIcon } from "./components/TopologyWorkspace";
+import { NetworkNotice, useNotice } from "./components/NetworkNotice";
 import "./NetworkOperations.css";
 
 /** 空状态：此前是纯文字一行，跟拓扑画布那个带图标的空状态卡片不是一套语言。 */
@@ -72,14 +73,6 @@ const sourceKindLabels: Record<string, string> = {
 };
 const displayTime = (value: string) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "时间未知";
 
-/**
- * 提示条带结果语义。此前 notice 只有一个字符串，样式恒为警告黄，
- * 于是"设备已登记""Skill 已发布"这类成功提示也显示得像出错。
- * ok = true 走成功绿，false 走警告黄。
- */
-type Notice = { text: string; ok: boolean };
-const emptyNotice: Notice = { text: "", ok: true };
-
 type NetworkView = "devices" | "skills" | "context";
 
 /**
@@ -140,9 +133,7 @@ export default function NetworkOperations() {
   const [editingRegionId, setEditingRegionId] = useState("");
   const [regionName, setRegionName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notice, setNoticeState] = useState<Notice>(emptyNotice);
-  // 传 ok=false 表示失败。TopologyWorkspace 也走这个签名（见它的 props）。
-  const setNotice = useCallback((text: string, ok = true) => setNoticeState({ text, ok }), []);
+  const { notice, setNotice, clearNotice } = useNotice(5000);
 
   const load = useCallback(async () => {
     const params = { workspace_id: workspaceId };
@@ -175,11 +166,6 @@ export default function NetworkOperations() {
     const available = new Set(operationalContext.command_experience.map((experience) => experience.experience_id));
     setSelectedExperienceIds((previous) => new Set([...previous].filter((experienceId) => available.has(experienceId))));
   }, [operationalContext.command_experience]);
-  useEffect(() => {
-    if (!notice.text) return;
-    const timer = window.setTimeout(() => setNotice(""), 4500);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
   const filteredDevices = devices.filter((item) => (!regionFilter || item.region_id === regionFilter) && `${item.name} ${item.host}`.toLowerCase().includes(query.toLowerCase()));
   const filteredSkills = skills.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
   const byDevice = useMemo(() => new Map(devices.map((item) => [item.device_id, item])), [devices]);
@@ -442,7 +428,7 @@ export default function NetworkOperations() {
       <PageHeader title="网络设备与 Skill" subtitle="集中管理设备连接，按 Skill 授权读取、巡检与配置能力。"><Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。", false))} disabled={busy}>刷新</Button></PageHeader>
       <div className="network-tabs" role="tablist">{VIEWS.map(([key, label, ViewIcon]) => <TabButton key={key} className="net-tab" testId={`network-tab-${key}`} icon={ViewIcon} label={label} count={viewCounts[key]} active={view === key} onClick={() => { setView(key); setQuery(""); }} />)}</div>
     </>
-    {notice.text ? <div role="status" className={`network-notice${notice.ok ? " kind-ok" : ""}`}>{notice.text}</div> : null}
+    <NetworkNotice notice={notice} onClose={clearNotice} />
     {view !== "context" ? <div className="network-toolbar">
       <div className="network-filters"><input aria-label={view === "devices" ? "搜索设备" : "搜索 Skill"} placeholder={view === "devices" ? "搜索设备名称、管理地址" : "搜索 Skill 名称、说明"} value={query} onChange={(event) => setQuery(event.target.value)} />
       {view === "devices" && <select aria-label="筛选区域" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}><option value="">全部区域</option>{regions.map((region) => <option key={region.region_id} value={region.region_id}>{region.name}</option>)}</select>}</div>
@@ -450,7 +436,7 @@ export default function NetworkOperations() {
     </div> : null}
     {editor && <dialog ref={editorRef} className="network-editor" aria-label={editor === "skill" ? "Skill 编辑面板" : editor === "device" ? "设备编辑面板" : "连接编辑面板"} onCancel={(event) => { if (busy) event.preventDefault(); else setEditor(null); }}>
       <div className="network-editor-top"><span>{editor === "skill" ? "配置工作台能力" : editor === "device" ? "维护设备与区域" : "配置设备访问方式"}</span><Button disabled={busy} onClick={() => setEditor(null)}>关闭</Button></div>
-      {notice.text ? <div role="alert" className={`network-notice${notice.ok ? " kind-ok" : ""}`}>{notice.text}</div> : null}
+      <NetworkNotice notice={notice} onClose={clearNotice} role="alert" />
       {editor === "device" ? (<section className="network-panel">
         <h2>{deviceForm.device_id ? "编辑设备" : "登记设备"}</h2><p>设备只保存身份与区域，凭据由独立连接安全管理。</p>
         <form onSubmit={saveRegion} className="inline-form"><input value={regionName} onChange={(event) => setRegionName(event.target.value)} placeholder={editingRegionId ? "修改区域名称" : "新建设备区域"} /><Button variant="primary" type="submit">{editingRegionId ? "保存" : "添加区域"}</Button>{editingRegionId ? <Button type="button" onClick={() => { setEditingRegionId(""); setRegionName(""); }}>取消</Button> : null}</form>

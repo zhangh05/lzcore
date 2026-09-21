@@ -4,7 +4,7 @@
 .network-admin.is-topology > .ui-page-header { flex: 0 0 auto; padding-top: 12px; padding-bottom: 10px; }
 .network-admin.is-topology > .network-tabs { flex: 0 0 42px; }
 .network-admin.topology-route { background: var(--bg); }
-.network-admin.is-topology > .network-notice { position: absolute; bottom: 46px; left: 20px; z-index: 40; max-width: min(520px, 80vw); box-shadow: var(--shadow-md); }
+.network-admin.is-topology > .network-notice { position: absolute; bottom: 46px; left: 20px; z-index: 40; max-width: min(520px, 80vw); margin: 0; box-shadow: var(--shadow-md); backdrop-filter: blur(8px); }
 .network-admin .network-topology-workspace.topology-studio {
   --topology-link: #778ba0;
   display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
