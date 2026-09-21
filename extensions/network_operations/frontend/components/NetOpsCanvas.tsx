@@ -402,8 +402,32 @@ export default function NetOpsCanvas(props: Props) {
         minZoom: 0.15,
         maxZoom: 4,
         boxSelectionEnabled: false,
+        pixelRatio: typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 3) : 1,
         style: [
-          { selector: "node", style: { label: "data(label)", "text-valign": "bottom", "text-halign": "center", "text-margin-y": "8px", "font-size": 12, "font-weight": 600, color: "#26384a", "text-wrap": "ellipsis", "text-max-width": 132, "text-background-color": "#ffffff", "text-background-opacity": 0.88, "text-background-padding": "2px", width: 94, height: 76, shape: "roundrectangle", "border-width": "data(statusWidth)", "border-color": "data(statusColor)", "text-opacity": "data(labelOpacity)", "z-index": 10 } },
+          {
+            selector: "node",
+            style: {
+              label: "data(label)",
+              "text-valign": "bottom",
+              "text-halign": "center",
+              "text-margin-y": "8px",
+              "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+              "font-size": 12,
+              "font-weight": 650,
+              color: "#0f172a",
+              "text-wrap": "ellipsis",
+              "text-max-width": 132,
+              "text-background-opacity": 0,
+              "text-border-width": 0,
+              width: 94,
+              height: 76,
+              shape: "roundrectangle",
+              "border-width": "data(statusWidth)",
+              "border-color": "data(statusColor)",
+              "text-opacity": "data(labelOpacity)",
+              "z-index": 10,
+            },
+          },
           // Drawing items deliberately have no vendor field. Keeping this data
           // mapping on asset nodes prevents Cytoscape from warning on every
           // canvas refresh when it encounters a text box or an ellipse.
@@ -412,12 +436,64 @@ export default function NetOpsCanvas(props: Props) {
           // image mappings only to asset nodes so Cytoscape stays warning-free.
           { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "cover", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
-          { selector: "edge", style: { width: "data(edgeWidth)", opacity: "data(visible)", "line-color": "data(edgeColor)", "line-style": "data(edgeStyle)", "curve-style": "bezier", "control-point-step-size": 144, label: "data(label)", "font-size": 10, "min-zoomed-font-size": 8, color: "#334155", "text-background-color": "#ffffff", "text-background-opacity": 0.98, "text-background-padding": "3px", "text-margin-y": "-14px", "source-label": "data(srcPort)", "target-label": "data(tgtPort)", "source-text-offset": 42, "target-text-offset": 42, "source-text-margin-y": 0, "target-text-margin-y": 0 } },
+          {
+            selector: "edge",
+            style: {
+              width: "data(edgeWidth)",
+              opacity: "data(visible)",
+              "line-color": "data(edgeColor)",
+              "line-style": "data(edgeStyle)",
+              "line-cap": "round",
+              "line-opacity": 1,
+              "curve-style": "bezier",
+              "control-point-step-size": 144,
+              label: "data(label)",
+              "font-family": 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace',
+              "font-size": 11,
+              "font-weight": 600,
+              "min-zoomed-font-size": 0,
+              color: "#0f172a",
+              "text-background-color": "#ffffff",
+              "text-background-opacity": 0.85,
+              "text-background-padding": "1px 3px",
+              "text-border-width": 0,
+              "text-margin-y": "-14px",
+              "source-label": "data(srcPort)",
+              "target-label": "data(tgtPort)",
+              "source-text-offset": 42,
+              "target-text-offset": 42,
+              "source-text-margin-y": 0,
+              "target-text-margin-y": 0,
+            },
+          },
           { selector: "edge[curveStyle = 'straight']", style: { "curve-style": "straight" } },
           { selector: "edge[curveStyle = 'taxi']", style: { "curve-style": "taxi", "taxi-direction": "auto", "taxi-turn": 20 } },
           { selector: "edge[curveStyle = 'bezier']", style: { "curve-style": "unbundled-bezier", "control-point-distances": 40, "control-point-weights": 0.5 } },
           { selector: "edge[curveStyle = 'unbundled-bezier']", style: { "curve-style": "unbundled-bezier", "control-point-distances": 40, "control-point-weights": 0.5 } },
-          { selector: ".canvas-item", style: { label: "data(label)", shape: "data(shape)", width: "data(width)", height: "data(height)", "background-color": "data(fill)", "background-opacity": "data(fillOpacity)", "border-color": "data(border)", "border-width": "data(borderWidth)", color: "data(textColor)", "font-size": "data(fontSize)", "font-weight": 600, "text-wrap": "wrap", "text-max-width": "data(textMaxWidth)", "text-margin-y": 0, "text-valign": "center", "text-halign": "center", "text-opacity": "data(labelOpacity)", "z-index": 2 } },
+          {
+            selector: ".canvas-item",
+            style: {
+              label: "data(label)",
+              shape: "data(shape)",
+              width: "data(width)",
+              height: "data(height)",
+              "background-color": "data(fill)",
+              "background-opacity": "data(fillOpacity)",
+              "border-color": "data(border)",
+              "border-width": "data(borderWidth)",
+              color: "data(textColor)",
+              "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+              "font-size": "data(fontSize)",
+              "font-weight": 600,
+              "text-wrap": "wrap",
+              "text-max-width": "data(textMaxWidth)",
+              "text-margin-y": 0,
+              "text-valign": "center",
+              "text-halign": "center",
+              "text-opacity": "data(labelOpacity)",
+              "z-index": 2,
+            },
+          },
           // A text box with no border and no fill is an invisible hit area: the
           // user sees blank canvas, right-clicks it, and gets item actions they
           // cannot explain — or aims at the glyphs and misses the box. A faint
@@ -430,7 +506,22 @@ export default function NetOpsCanvas(props: Props) {
           // its caption floating beside it. A canvas item *is* its own bound, so
           // the label belongs inside; `text-justification` is the property that
           // left-aligns a wrapped multi-line note within its block.
-          { selector: ".canvas-item-text", style: { "background-opacity": 0, "border-width": 1, "border-style": "dashed", "border-opacity": 0.45, "text-valign": "center", "text-halign": "center", "text-justification": "left", "font-size": 14, "font-weight": 500, "text-max-width": "data(textMaxWidth)" } },
+          {
+            selector: ".canvas-item-text",
+            style: {
+              "background-opacity": 0,
+              "border-width": 1,
+              "border-style": "dashed",
+              "border-opacity": 0.45,
+              "text-valign": "center",
+              "text-halign": "center",
+              "text-justification": "left",
+              "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+              "font-size": 14,
+              "font-weight": 500,
+              "text-max-width": "data(textMaxWidth)",
+            },
+          },
           // Selection adds a halo instead of repainting the border: the border
           // carries operational state, and a selected node must still show
           // whether it is reachable.
@@ -444,10 +535,48 @@ export default function NetOpsCanvas(props: Props) {
           // Selection is a wider stroke plus the accent colour, not a glow: the
           // link stays the same object, it just comes forward.
           { selector: "edge:selected", style: { width: "data(selectedEdgeWidth)", "line-color": CANVAS_ACCENT.light, "z-index": 20 } },
-          { selector: ".lz-group", style: { shape: "roundrectangle", label: "data(label)", "text-valign": "top", "text-halign": "left", "text-margin-x": 12, "text-margin-y": 10, color: CANVAS_GROUP.light.text, "font-size": 12, "font-weight": 600, width: "data(width)", height: "data(height)", "background-color": CANVAS_GROUP.light.fill, "background-opacity": 0.5, "border-color": CANVAS_GROUP.light.border, "border-style": "dashed", "border-width": 1, "background-image": "none", "events": "no" } },
+          {
+            selector: ".lz-group",
+            style: {
+              shape: "roundrectangle",
+              label: "data(label)",
+              "text-valign": "top",
+              "text-halign": "left",
+              "text-margin-x": 12,
+              "text-margin-y": 10,
+              color: CANVAS_GROUP.light.text,
+              "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+              "font-size": 12,
+              "font-weight": 650,
+              width: "data(width)",
+              height: "data(height)",
+              "background-color": CANVAS_GROUP.light.fill,
+              "background-opacity": 0.5,
+              "border-color": CANVAS_GROUP.light.border,
+              "border-style": "dashed",
+              "border-width": 1,
+              "background-image": "none",
+              events: "no",
+            },
+          },
         ],
       });
       cyRef.current = cy;
+      // Prevent low-resolution texture caching for text and interface labels:
+      // Cytoscape by default rasterizes labels into fixed power-of-two offscreen
+      // textures and scales them up with drawImage(), causing blurry text on zoom.
+      // Returning null from getElement forces Cytoscape to render vector font glyphs
+      // directly via canvas 2D fillText() at the native screen pixel density.
+      try {
+        const r = (cy as any).renderer?.();
+        if (r && r.data) {
+          if (r.data.lblTxrCache) r.data.lblTxrCache.getElement = () => null;
+          if (r.data.slbTxrCache) r.data.slbTxrCache.getElement = () => null;
+          if (r.data.tlbTxrCache) r.data.tlbTxrCache.getElement = () => null;
+        }
+      } catch {
+        // Fallback safely if renderer internals vary
+      }
       // Use renderer geometry, including the clipped node boundary and the
       // direction of each edge. A reverse-direction link still labels its own
       // source/target. Native labels remain available to image export/hit tests.
@@ -835,13 +964,19 @@ export default function NetOpsCanvas(props: Props) {
     cy.style()
       .selector("node")
       .style({
-        color: dark ? "#dce7ef" : "#26384a",
-        "text-background-color": dark ? "#111820" : "#ffffff",
+        color: dark ? "#f1f5f9" : "#0f172a",
+        "text-background-opacity": 0,
+        "text-border-width": 0,
       })
       .selector("node[vendorTint]")
       .style({ "background-color": dark ? "#1c242c" : "data(vendorTint)" })
       .selector("edge")
-      .style({ color: dark ? "#c8d5df" : "#334155", "text-background-color": dark ? "#111820" : "#ffffff" })
+      .style({
+        color: dark ? "#f8fafc" : "#0f172a",
+        "text-background-color": dark ? "#0f1519" : "#ffffff",
+        "text-background-opacity": 0.85,
+        "text-border-width": 0,
+      })
       .selector(".canvas-item")
       .style({ "text-background-color": dark ? "#111820" : "#ffffff" })
       .selector(".lz-group")
@@ -851,6 +986,16 @@ export default function NetOpsCanvas(props: Props) {
         color: dark ? CANVAS_GROUP.dark.text : CANVAS_GROUP.light.text,
       })
       .update();
+    try {
+      const r = (cy as any).renderer?.();
+      if (r && r.data) {
+        if (r.data.lblTxrCache) r.data.lblTxrCache.getElement = () => null;
+        if (r.data.slbTxrCache) r.data.slbTxrCache.getElement = () => null;
+        if (r.data.tlbTxrCache) r.data.tlbTxrCache.getElement = () => null;
+      }
+    } catch {
+      // Fallback safely
+    }
   }, [rendererReady, theme]);
 
   useEffect(() => {
