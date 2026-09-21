@@ -150,6 +150,28 @@ def _unauthorized_response(message: str = "Missing or invalid API token") -> fla
     }), 401
 
 
+def deny_remote_admin_write() -> flask.Response | None:
+    """Defense in depth for privileged mutating routes.
+
+    The global middleware is a pass-through when no auth is configured, so
+    admin and extension lifecycle writes would otherwise serve any remote
+    caller that can reach the listener. Return None when the caller presents
+    a valid API token/session or arrives on loopback; otherwise a 403 that
+    route handlers return immediately.
+    """
+    if _request_has_valid_api_token() or is_current_session_authenticated():
+        return None
+    remote = str(flask.request.remote_addr or "").strip().strip("[]").lower()
+    if remote == "localhost" or remote == "::1" or remote.startswith("127."):
+        return None
+    return flask.jsonify({
+        "ok": False,
+        "error": "remote_admin_write_denied",
+        "message": "Privileged writes require loopback or an authenticated caller.",
+        "status": 403,
+    }), 403
+
+
 def _login_disabled_response() -> flask.Response:
     return flask.jsonify({
         "ok": False,

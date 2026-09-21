@@ -133,7 +133,7 @@ return conflict; cancel and wait for a terminal state first.
 | `POST` | `/api/tools/dry-run` | Side-effect-free policy and invocation metadata preview; it does not call the handler. |
 | `GET` | `/api/capabilities`, `/api/workbench/skills` | Capability catalog and server-projected workbench Skills. |
 | `GET` | `/api/extensions`, `/api/extensions/repository` | Installed extension and repository catalog. |
-| `POST` | `/api/extensions/<extension_id>/enable`, `/disable`, `/migrate`, `/uninstall` | Extension lifecycle. |
+| `POST` | `/api/extensions/<extension_id>/enable`, `/disable`, `/migrate`, `/uninstall` | Extension lifecycle. Mutating calls require loopback or an authenticated caller (`remote_admin_write_denied` otherwise). |
 | `GET` | `/api/extensions/<extension_id>/quota` | Extension quota projection. |
 | `POST` | `/api/extensions/repository/publish`, `/repository/<extension_id>/<version>/install` | Package publishing/install. |
 
@@ -172,7 +172,7 @@ Reference. Only a complete candidate can be explicitly confirmed.
 | `GET/POST` | `/api/identity/users`, `/api/identity/organizations`, `/api/identity/organizations/<organization_id>/memberships` | Identity lifecycle. |
 | `PUT/DELETE` | `/api/identity/users/<username>` | User update/delete. |
 | `GET` | `/api/admin/production`, `/api/admin/backups`, `/api/admin/operation-ledger` | Administrator projections. |
-| `POST` | `/api/admin/backups`, `/api/admin/backups/prune`, `/api/admin/backups/<backup_id>/restore`, `/api/admin/operation-ledger/<operation_id>/resolve` | Verified administration actions. |
+| `POST` | `/api/admin/backups`, `/api/admin/backups/prune`, `/api/admin/backups/<backup_id>/restore`, `/api/admin/operation-ledger/<operation_id>/resolve` | Verified administration actions. Mutating calls require loopback or an authenticated caller (`remote_admin_write_denied` otherwise). |
 
 The operation ledger uses `planned`, `running`, and `unknown` only for records
 that still have a live reconciliation path. On backend restart, an unresolved

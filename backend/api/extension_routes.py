@@ -27,6 +27,10 @@ def register_extensions(app) -> None:
 
     @app.route("/api/extensions/<extension_id>/enable", methods=["POST"])
     def enable_extension(extension_id):
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from extensions.registry import ExtensionRegistry
         from extensions.runtime import reset_extension_cache_for_tests
         from extensions.state import set_extension_enabled
@@ -39,6 +43,10 @@ def register_extensions(app) -> None:
 
     @app.route("/api/extensions/<extension_id>/disable", methods=["POST"])
     def disable_extension(extension_id):
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from extensions.registry import ExtensionRegistry
         from extensions.runtime import reset_extension_cache_for_tests
         from extensions.state import set_extension_enabled
@@ -51,6 +59,10 @@ def register_extensions(app) -> None:
 
     @app.route("/api/extensions/<extension_id>/migrate", methods=["POST"])
     def migrate_extension(extension_id):
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from extensions.runtime import load_extensions
         from extensions.sdk import run_migrations
         workspace_id = str((request.get_json(silent=True) or {}).get("workspace_id") or "").strip()
@@ -82,6 +94,10 @@ def register_extensions(app) -> None:
 
     @app.route("/api/extensions/repository/publish", methods=["POST"])
     def publish_extension_package():
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from extensions.package import ExtensionPackageError, MAX_PACKAGE_BYTES
         from extensions.repository import publish_package
         if request.content_length and request.content_length > MAX_PACKAGE_BYTES + 1_048_576:
@@ -101,6 +117,10 @@ def register_extensions(app) -> None:
 
     @app.route("/api/extensions/repository/<extension_id>/<version>/install", methods=["POST"])
     def install_repository_extension(extension_id, version):
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from extensions.package import ExtensionPackageError, install_package
         from extensions.repository import get_package
         record = get_package(extension_id, version)
@@ -114,6 +134,10 @@ def register_extensions(app) -> None:
 
     @app.route("/api/extensions/<extension_id>/uninstall", methods=["POST"])
     def uninstall_plugin_extension(extension_id):
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from extensions.package import ExtensionPackageError, uninstall_extension
         try:
             result = uninstall_extension(extension_id)

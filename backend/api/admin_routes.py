@@ -16,6 +16,10 @@ def register_admin_routes(app) -> None:
 
     @app.route("/api/admin/backups", methods=["POST"])
     def backups_create():
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from core.runtime.backup import BackupError, create_backup
         try:
             result = create_backup()
@@ -26,6 +30,10 @@ def register_admin_routes(app) -> None:
 
     @app.route("/api/admin/backups/prune", methods=["POST"])
     def backups_prune():
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from core.runtime.backup import prune_backups
         try:
             keep = int((request.get_json(silent=True) or {}).get("keep") or 10)
@@ -35,6 +43,10 @@ def register_admin_routes(app) -> None:
 
     @app.route("/api/admin/backups/<backup_id>/restore", methods=["POST"])
     def backups_restore(backup_id):
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from core.runtime.backup import BackupError, backup_path, restore_backup
         confirmation = str((request.get_json(silent=True) or {}).get("confirmation") or "")
         try:
@@ -82,6 +94,10 @@ def register_admin_routes(app) -> None:
     @app.route("/api/admin/operation-ledger/<operation_id>/resolve", methods=["POST"])
     def operation_ledger_resolve(operation_id):
         """Resolve an uncertain operation from explicit human verification."""
+        from backend.core.auth import deny_remote_admin_write
+        denied = deny_remote_admin_write()
+        if denied:
+            return denied
         from core.runtime_engine.operation_ledger import resolve_operation_manually
         from storage.ids import validate_workspace_id
 
