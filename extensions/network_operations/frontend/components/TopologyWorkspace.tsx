@@ -18,8 +18,10 @@ import {
   IconClock,
   IconClose,
   IconCloud,
+  IconCopy,
   IconEdit,
   IconEye,
+  IconFolder,
   IconGrid,
   IconLayers,
   IconLink,
@@ -168,6 +170,15 @@ const DRAWING_DEVICE_TYPES = [
   { value: "printer", label: "打印设备" },
 ] as const;
 
+export const QUICK_PALETTE_DEVICES = [
+  { value: "router", label: "路由器", icon: "/netops-canvas/icons/router.png" },
+  { value: "switch", label: "交换机", icon: "/netops-canvas/icons/switch.png" },
+  { value: "firewall", label: "防火墙", icon: "/netops-canvas/icons/icon_firewall_custom.png" },
+  { value: "server", label: "服务器", icon: "/netops-canvas/icons/server.png" },
+  { value: "pc", label: "终端", icon: "/netops-canvas/icons/pc.png" },
+  { value: "cloud", label: "云/WAN", icon: "/netops-canvas/icons/cloud.png" },
+] as const;
+
 
 
 
@@ -276,6 +287,10 @@ const batchTypeOptions: Array<[string, string]> = [
   ["router", "路由器"], ["switch", "二层交换机"], ["l3_switch", "三层交换机"],
   ["firewall", "防火墙"], ["server", "服务器"], ["wireless", "无线设备"], ["cloud", "云 / Internet"],
 ];
+const deviceTypeMap = new Map<string, string>([
+  ...DRAWING_DEVICE_TYPES.map((d) => [d.value, d.label] as [string, string]),
+  ...batchTypeOptions,
+]);
 
 const canvasItemStylePresets = {
   teal: { label: "青绿标注", style: { fill: "#dff5f0", border: "#58a99b", color: "#0f5149" } },
@@ -418,6 +433,164 @@ export default function TopologyWorkspace({
   // Inspector & selection
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const inspectorRef = useRef<HTMLElement>(null);
+  const [popoverPlacement, setPopoverPlacement] = useState<"left" | "right" | "corner">("right");
+  const [popoverCoords, setPopoverCoords] = useState<{ left?: number; right?: number; top?: number }>({ right: 16, top: 16 });
+  const [arrowY, setArrowY] = useState<number>(36);
+  const [isDragged, setIsDragged] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ startX: number; startY: number; initialLeft: number; initialTop: number } | null>(null);
+
+  // Reset drag position when switching to a different element
+  useEffect(() => {
+    setIsDragged(false);
+  }, [selectedElement]);
+
+  const updatePopoverAnchor = useCallback(() => {
+    if (!isInspectorOpen || isDragged) return;
+    const viewportEl = viewportRef.current;
+    if (!viewportEl) return;
+
+    const vw = viewportEl.clientWidth || 800;
+    const vh = viewportEl.clientHeight || 600;
+    const bubbleWidth = Math.min(220, vw - 16);
+
+    if (!selectedElement) {
+      setPopoverPlacement("corner");
+      setPopoverCoords({ right: 12, top: 12 });
+      return;
+    }
+
+    const api = canvasApiRef.current;
+    let pos: { x: number; y: number } | null = null;
+    if (api?.getElementPosition) {
+      if (selectedElement.type === "node") {
+        pos = api.getElementPosition(selectedElement.nodeId, "node");
+      } else if (selectedElement.type === "link") {
+        pos = api.getElementPosition(selectedElement.linkId, "link");
+      } else if (selectedElement.type === "canvas_item") {
+        pos = api.getElementPosition(selectedElement.itemId, "canvas_item");
+      }
+    }
+
+    if (!pos) {
+      setPopoverPlacement("corner");
+      setPopoverCoords({ right: 12, top: 12 });
+      return;
+    }
+
+    const rightLeft = pos.x + 24;
+    const canFitRight = rightLeft + bubbleWidth + 12 <= vw;
+    const leftLeft = pos.x - 24 - bubbleWidth;
+    const canFitLeft = leftLeft >= 12;
+
+    if (canFitRight) {
+      const top = Math.max(12, Math.min(pos.y - 70, Math.max(12, vh - 290)));
+      const arrowPos = Math.max(20, Math.min(pos.y - top, 230));
+      setPopoverPlacement("right");
+      setPopoverCoords({ left: rightLeft, top });
+      setArrowY(arrowPos);
+    } else if (canFitLeft) {
+      const top = Math.max(12, Math.min(pos.y - 70, Math.max(12, vh - 290)));
+      const arrowPos = Math.max(20, Math.min(pos.y - top, 230));
+      setPopoverPlacement("left");
+      setPopoverCoords({ left: leftLeft, top });
+      setArrowY(arrowPos);
+    } else {
+      const left = Math.max(10, Math.min(pos.x - bubbleWidth / 2, vw - bubbleWidth - 10));
+      const top = Math.max(12, Math.min(pos.y - 70, Math.max(12, vh - 250)));
+      setPopoverPlacement("corner");
+      setPopoverCoords({ left, top });
+    }
+  }, [isInspectorOpen, isDragged, selectedElement]);
+
+  const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("button") || target.closest("input") || target.closest("select") || target.closest("a") || target.closest("textarea")) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+
+    const inspectorEl = inspectorRef.current;
+    const viewportEl = viewportRef.current;
+    if (!inspectorEl || !viewportEl) return;
+
+    const viewportRect = viewportEl.getBoundingClientRect();
+    const inspectorRect = inspectorEl.getBoundingClientRect();
+
+    const initialLeft = inspectorRect.left - viewportRect.left;
+    const initialTop = inspectorRect.top - viewportRect.top;
+
+    dragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialLeft,
+      initialTop,
+    };
+    setIsDragging(true);
+    setIsDragged(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragStartRef.current || !viewportRef.current || !inspectorRef.current) return;
+      const { startX, startY, initialLeft, initialTop } = dragStartRef.current;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      const viewportEl = viewportRef.current;
+      const inspectorEl = inspectorRef.current;
+      const vw = viewportEl.clientWidth;
+      const vh = viewportEl.clientHeight;
+      const cardWidth = inspectorEl.offsetWidth;
+      const cardHeight = inspectorEl.offsetHeight;
+
+      const rawLeft = initialLeft + dx;
+      const rawTop = initialTop + dy;
+
+      const clampedLeft = Math.max(8, Math.min(rawLeft, Math.max(8, vw - cardWidth - 8)));
+      const clampedTop = Math.max(8, Math.min(rawTop, Math.max(8, vh - cardHeight - 8)));
+
+      setPopoverCoords({ left: clampedLeft, top: clampedTop });
+    };
+
+    const onMouseUp = () => {
+      setIsDragging(false);
+      dragStartRef.current = null;
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [isDragging]);
+
+  useEffect(() => {
+    if (isInspectorOpen && !isDragged) {
+      const id = requestAnimationFrame(() => {
+        updatePopoverAnchor();
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [isInspectorOpen, isDragged, selectedElement, updatePopoverAnchor]);
+
+  useEffect(() => {
+    window.addEventListener("resize", updatePopoverAnchor);
+    return () => window.removeEventListener("resize", updatePopoverAnchor);
+  }, [updatePopoverAnchor]);
+
+  const popoverStyle: React.CSSProperties = {
+    ...(popoverCoords.left !== undefined ? { left: `${popoverCoords.left}px` } : {}),
+    ...(popoverCoords.right !== undefined && popoverCoords.left === undefined ? { right: `${popoverCoords.right}px` } : {}),
+    ...(popoverCoords.top !== undefined ? { top: `${popoverCoords.top}px` } : {}),
+    ...(arrowY ? { ["--arrow-y" as any]: `${arrowY}px` } : {}),
+  };
   const [showAgent, setShowAgent] = useState(false);
   // The board is primary. The tray opens intentionally instead of consuming
   // canvas width for every user.
@@ -955,10 +1128,66 @@ export default function TopologyWorkspace({
     };
     pushState({ ...activeTopology, nodes: [...activeTopology.nodes, node] });
     setSelectedElement({ type: "node", nodeId: node.node_id });
-    setIsInspectorOpen(true);
-    setArmedNodeType(null);
-    setNotice(`已放入“${node.display_name}”。右侧可编辑名称和图标。`);
+    setNotice(`已放入“${node.display_name}”。可继续点击画布连续放置，按 Esc 或右键退出。`);
   }, [activeTopology, gridEnabled, pushState, setNotice]);
+
+  const handleCloneNode = useCallback((nodeId: string) => {
+    if (!activeTopology) return;
+    const sourceNode = activeTopology.nodes.find((n) => n.node_id === nodeId);
+    if (!sourceNode) return;
+    const label = DRAWING_DEVICE_TYPES.find((t) => t.value === sourceNode.device_type)?.label || "设备";
+    const taken = new Set(
+      activeTopology.nodes
+        .map((node) => node.display_name || "")
+        .filter((name) => name.startsWith(label))
+        .map((name) => Number.parseInt(name.slice(label.length), 10))
+        .filter((index) => Number.isFinite(index)),
+    );
+    let index = 1;
+    while (taken.has(index)) index += 1;
+
+    const snap = (v: number) => gridEnabled ? Math.round(v / 32) * 32 : Math.round(v);
+    const newNode: TopologyNode = {
+      node_id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      device_type: sourceNode.device_type,
+      display_name: `${label}${index}`,
+      x: snap(sourceNode.x + 64),
+      y: snap(sourceNode.y + 64),
+    };
+    pushState({ ...activeTopology, nodes: [...activeTopology.nodes, newNode] });
+    setSelectedElement({ type: "node", nodeId: newNode.node_id });
+    setNotice(`已克隆生成“${newNode.display_name}”`);
+  }, [activeTopology, gridEnabled, pushState, setNotice]);
+
+  const handleFastConnect = useCallback(
+    (source: string, target: string) => {
+      if (!activeTopology) return;
+      if (source === target) return;
+      const links = activeTopology.links || [];
+      const sourceInterface = nextFreeInterface(links, source);
+      const targetInterface = nextFreeInterface(links, target, 0);
+
+      const newLink: TopologyLink = {
+        link_id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        source_node_id: source,
+        source_interface: sourceInterface,
+        target_node_id: target,
+        target_interface: targetInterface,
+        kind: "physical",
+        source: "manual",
+        status: "unknown",
+      };
+
+      const nextLinks = [...links, newLink];
+      pushState({ ...activeTopology, links: nextLinks });
+      setSelectedElement({ type: "link", linkId: newLink.link_id });
+
+      const sLabel = nodeLabelById.get(source) || source;
+      const tLabel = nodeLabelById.get(target) || target;
+      setNotice(`已连接 ${sLabel}(${sourceInterface}) ↔ ${tLabel}(${targetInterface})。连线笔保持激活，可继续点击设备连线，按 Esc 退出。`);
+    },
+    [activeTopology, nextFreeInterface, nodeLabelById, pushState, setNotice]
+  );
 
   const disarmNodeType = useCallback(() => setArmedNodeType(null), []);
 
@@ -1005,7 +1234,8 @@ export default function TopologyWorkspace({
       const position = byId.get(`canvas-${item.item_id}`);
       return position ? { ...item, x: Math.round(position.x), y: Math.round(position.y) } : item;
     }) });
-  }, [pushState]);
+    requestAnimationFrame(() => updatePopoverAnchor());
+  }, [pushState, updatePopoverAnchor]);
 
   const handleAlignSelectedNodes = useCallback((direction: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
     if (!activeTopology) return;
@@ -1291,6 +1521,69 @@ export default function TopologyWorkspace({
   }, [selectedElement, handleRemoveNode, handleRemoveLink, handleRemoveCanvasItem]);
 
   /**
+   * Auto-close dropdown menus (.studio-*-menu) on:
+   * 1. Clicking outside the menu (anywhere on canvas, toolbar, etc.)
+   * 2. Clicking an action button inside the menu (e.g. 矩形区域, 左对齐, 导出 PNG)
+   * 3. Opening another menu (mutual exclusion so menus never stack/overlap)
+   */
+  useEffect(() => {
+    const selector =
+      ".topology-studio .studio-views-menu[open], .topology-studio .studio-insert-menu[open], .topology-studio .studio-align-menu[open], .topology-studio .studio-layout-menu[open], .topology-studio .studio-more[open]";
+
+    const onPointerDown = (event: PointerEvent | MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      const openMenus = document.querySelectorAll<HTMLDetailsElement>(selector);
+      if (!openMenus.length) return;
+
+      openMenus.forEach((menu) => {
+        // If clicking inside this menu, don't close on pointerdown so clicks on buttons can fire
+        if (menu.contains(target)) return;
+        menu.removeAttribute("open");
+      });
+    };
+
+    const onClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      const openMenus = document.querySelectorAll<HTMLDetailsElement>(selector);
+      if (!openMenus.length) return;
+
+      openMenus.forEach((menu) => {
+        const content = menu.querySelector("div");
+        if (content && content.contains(target)) {
+          if (!target.closest(".view-remove")) {
+            window.setTimeout(() => menu.removeAttribute("open"), 0);
+          }
+        }
+      });
+    };
+
+    const onToggle = (event: Event) => {
+      const target = event.target as HTMLDetailsElement;
+      if (!target || target.tagName !== "DETAILS" || !target.open) return;
+      if (!target.matches?.(selector)) return;
+
+      const openMenus = document.querySelectorAll<HTMLDetailsElement>(selector);
+      openMenus.forEach((other) => {
+        if (other !== target) other.removeAttribute("open");
+      });
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("toggle", onToggle, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("toggle", onToggle, true);
+    };
+  }, []);
+
+  /**
    * Keyboard shortcuts. Every diagram tool people already know (draw.io,
    * Figma, Visio) is keyboard driven, and the canvas is where an operator
    * spends their time, so the common gestures get single keys.
@@ -1318,6 +1611,12 @@ export default function TopologyWorkspace({
         canvasApiRef.current?.selectAll();
         return;
       }
+      if (meta && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        const selectedNodeId = selectedElement?.type === "node" ? selectedElement.nodeId : canvasSelectedElementIds[0];
+        if (selectedNodeId) handleCloneNode(selectedNodeId);
+        return;
+      }
       if (meta && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (activeTopologyRef.current) void executeSave(activeTopologyRef.current);
@@ -1329,9 +1628,17 @@ export default function TopologyWorkspace({
           setContextMenu(null);
           setShowShortcutHelp(false);
           setFocusMode(false);
-          // Escape is also how a user abandons a palette placement without
-          // putting anything down.
+          setIsInspectorOpen(false);
+          setSelectedElement(null);
+          canvasApiRef.current?.clearSelection();
+          // Escape cancels palette placement and cancels connect mode
           setArmedNodeType(null);
+          setCanvasMode("select");
+          document
+            .querySelectorAll<HTMLDetailsElement>(
+              ".topology-studio .studio-views-menu[open], .topology-studio .studio-insert-menu[open], .topology-studio .studio-align-menu[open], .topology-studio .studio-layout-menu[open], .topology-studio .studio-more[open]"
+            )
+            .forEach((d) => d.removeAttribute("open"));
           return;
         case "Delete":
         case "Backspace": {
@@ -1386,7 +1693,7 @@ export default function TopologyWorkspace({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleUndo, handleRedo, executeSave, deleteSelection, removeSelectedObjects, nudgeSelected, canvasSelectedElementIds]);
+  }, [handleUndo, handleRedo, executeSave, deleteSelection, removeSelectedObjects, nudgeSelected, canvasSelectedElementIds, handleCloneNode, selectedElement]);
 
 
 
@@ -1952,8 +2259,33 @@ export default function TopologyWorkspace({
         {showEditbar && (
           <div className="topology-editbar">
           <div className="studio-edit-tools" role="group" aria-label="画布工具">
-            <button className="studio-mode-button" aria-pressed={canvasMode === "select"} onClick={() => setCanvasMode("select")}><IconMenu size={13} />选择</button>
-            <button className="studio-mode-button" aria-pressed={canvasMode === "connect"} onClick={() => setCanvasMode("connect")}><IconLink size={13} />连线</button>
+            <button className="studio-mode-button" aria-label="选择" aria-pressed={canvasMode === "select" && !armedNodeType} onClick={() => { setCanvasMode("select"); setArmedNodeType(null); }} title="选择模式 (快捷键 V)"><IconMenu size={13} />选择</button>
+            <button className="studio-mode-button" aria-label="连线" aria-pressed={canvasMode === "connect"} onClick={() => { setCanvasMode("connect"); setArmedNodeType(null); }} title="极速连线模式 (快捷键 C)"><IconLink size={13} />连线</button>
+            <div className="studio-device-ribbon" role="toolbar" aria-label="常用设备快速放置">
+              <span className="ribbon-label">设备:</span>
+              {QUICK_PALETTE_DEVICES.map((dev) => {
+                const isActive = armedNodeType === dev.value;
+                return (
+                  <button
+                    key={dev.value}
+                    type="button"
+                    className={`studio-device-chip ${isActive ? "is-active" : ""}`}
+                    title={`连续放置 ${dev.label}（点击后在画布连续点击，Esc或右键退出）`}
+                    onClick={() => {
+                      if (isActive) {
+                        setArmedNodeType(null);
+                      } else {
+                        setCanvasMode("select");
+                        setArmedNodeType(dev.value);
+                      }
+                    }}
+                  >
+                    <img src={dev.icon} alt="" className="device-chip-img" />
+                    <span>{dev.label}</span>
+                  </button>
+                );
+              })}
+            </div>
             <button className="studio-mode-button" type="button" onClick={() => canvasApiRef.current?.fit()} title="适配视图到画布中央 (快捷键 F)"><IconExpand size={13} />适配</button>
             <details className="studio-insert-menu"><summary><IconBox size={13} />插入</summary><div>
               <button type="button" onClick={() => handleAddCanvasItem("rectangle")}>矩形区域</button>
@@ -2065,9 +2397,15 @@ export default function TopologyWorkspace({
         )}
 
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
-        <div className={`topology-canvas-viewport mode-${canvasMode}`}>
+        <div className={`topology-canvas-viewport mode-${canvasMode}`} ref={viewportRef}>
           <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}
-            <span className="canvas-mode-hint">{canvasMode === "connect" ? "依次选择两个节点以连线" : "单击选择，Ctrl/⌘ + 单击加选，拖空白平移；Shift 或 Ctrl/⌘ + 拖框多选"}</span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
+            <span className="canvas-mode-hint">
+              {canvasMode === "connect"
+                ? "连线模式：点击或拖拽连接两台设备 (自动配对接口，Esc 退出)"
+                : armedNodeType
+                  ? "点击空白处连续放置设备 (Esc 或右键退出)"
+                  : "空白处左键拖拽直接框选 · 空格+拖拽/中键平移 · C 连线 · ⌘D 克隆"}
+            </span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -2085,9 +2423,9 @@ export default function TopologyWorkspace({
             mode={canvasMode}
             gridEnabled={gridEnabled}
             showInterfaces={showInterfaces}
-            onSelectNode={(nodeId) => setSelectedElement({ type: "node", nodeId })}
-            onSelectCanvasItem={(itemId) => setSelectedElement({ type: "canvas_item", itemId })}
-            onSelectLink={(linkId) => setSelectedElement({ type: "link", linkId })}
+            onSelectNode={(nodeId) => { setSelectedElement({ type: "node", nodeId }); setIsInspectorOpen(true); }}
+            onSelectCanvasItem={(itemId) => { setSelectedElement({ type: "canvas_item", itemId }); setIsInspectorOpen(true); }}
+            onSelectLink={(linkId) => { setSelectedElement({ type: "link", linkId }); setIsInspectorOpen(true); }}
             onClearSelection={() => { setSelectedElement(null); setIsInspectorOpen(false); }}
             onSelectionChange={(ids) => {
               setCanvasSelectedElementIds(ids);
@@ -2095,281 +2433,273 @@ export default function TopologyWorkspace({
                 const id = ids[0];
                 if (id.startsWith("canvas-")) setSelectedElement({ type: "canvas_item", itemId: id.slice(7) });
                 else setSelectedElement({ type: "node", nodeId: id });
-              } else if (!ids.length) setSelectedElement(null);
+                setIsInspectorOpen(true);
+              } else if (!ids.length) {
+                setSelectedElement((prev) => (prev?.type === "link" ? prev : null));
+              }
             }}
             onMoveElements={handleNetOpsMove}
-            onConnect={(source, target) => { openLinkComposer(source, target); setCanvasMode("select"); }}
+            onConnect={handleFastConnect}
             armedNodeType={armedNodeType}
             onPlaceNodeType={placeDrawingNode}
             onDisarmNodeType={disarmNodeType}
             onReady={(api) => { canvasApiRef.current = api; }}
             onContextMenu={setContextMenu}
+            onViewportChange={updatePopoverAnchor}
           />
-        </div>
-        <footer className="studio-statusbar"><span>独立图纸 · 不关联登记设备</span><span>拖动放置 · 连线 · 标注</span></footer>
-      </main>
 
-      {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} selection={canvasSelection} onCompleted={() => { void handleAgentCompleted(); }} /></aside>}
-
-      {contextMenu && (
-        <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(event) => event.stopPropagation()}>
-          {contextMenu.kind === "node" && (
-            <>
-              <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>打开设备详情</button>
-              <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setShowAgent(true); setIsInspectorOpen(false); setContextMenu(null); }}>围绕此设备对话</button>
-              <button type="button" className="danger" onClick={() => { void handleRemoveNode(contextMenu.id); setContextMenu(null); }}>从拓扑移除</button>
-            </>
-          )}
-          {contextMenu.kind === "link" && (
-            <>
-              <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑链路</button>
-              <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setShowAgent(true); setIsInspectorOpen(false); setContextMenu(null); }}>围绕此链路对话</button>
-              <button type="button" className="danger" onClick={() => { void handleRemoveLink(contextMenu.id); setContextMenu(null); }}>删除链路</button>
-            </>
-          )}
-          {contextMenu.kind === "canvas_item" && (
-            <>
-              <button type="button" onClick={() => { setSelectedElement({ type: "canvas_item", itemId: contextMenu.id.replace(/^canvas-/, "") }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑图元</button>
-              <button type="button" className="danger" onClick={() => { void handleRemoveCanvasItem(contextMenu.id.replace(/^canvas-/, "")); setContextMenu(null); }}>删除图元</button>
-            </>
-          )}
-          {contextMenu.kind === "canvas" && (
-            <>
-              <button type="button" onClick={() => { canvasApiRef.current?.selectAll(); setContextMenu(null); }}>全选对象</button>
-              <button type="button" onClick={() => { canvasApiRef.current?.fit(); setContextMenu(null); }}>适配视图</button>
-              <button type="button" onClick={() => { void handleAutoLayout(); setContextMenu(null); }}>自动排布</button>
-              <hr />
-              <button type="button" onClick={() => { handleAddCanvasItem("rectangle"); setContextMenu(null); }}>插入矩形区域</button>
-              {/* All three shapes were reachable from the inspector's type
-                  selector, but only two could be created here — an ellipse had
-                  to be drawn as a rectangle first and then retyped. */}
-              <button type="button" onClick={() => { handleAddCanvasItem("ellipse"); setContextMenu(null); }}>插入椭圆标注</button>
-              <button type="button" onClick={() => { handleAddCanvasItem("text"); setContextMenu(null); }}>插入文本框</button>
-            </>
-          )}
-        </div>
-      )}
-
-      {showShortcutHelp && (
-        <div className="shortcut-help-backdrop" onClick={() => setShowShortcutHelp(false)}>
-          <div className="shortcut-help" onClick={(event) => event.stopPropagation()}>
-            <header><strong>画布快捷键</strong><button type="button" onClick={() => setShowShortcutHelp(false)} aria-label="关闭"><IconClose size={13} /></button></header>
-            <dl>
-              <div><dt>V / C</dt><dd>选择 / 连线</dd></div>
-              <div><dt>Ctrl/⌘ + 单击</dt><dd>加选设备；再点一次移出选区</dd></div>
-              <div><dt>Shift + 单击</dt><dd>加选设备</dd></div>
-              <div><dt>Shift + 拖动</dt><dd>框选（替换当前选区）</dd></div>
-              <div><dt>Ctrl/⌘ + 拖动</dt><dd>框选（追加到选区）</dd></div>
-              <div><dt>拖动已选对象</dt><dd>整组一起移动</dd></div>
-              <div><dt>Delete</dt><dd>删除选中对象</dd></div>
-              <div><dt>Ctrl/⌘ + A</dt><dd>全选</dd></div>
-              <div><dt>方向键</dt><dd>微移选中对象（Shift 加速）</dd></div>
-              <div><dt>F</dt><dd>适配全部对象</dd></div>
-              <div><dt>Shift + F</dt><dd>缩放至选中对象</dd></div>
-              <div><dt>/</dt><dd>搜索设备并定位</dd></div>
-              <div><dt>I</dt><dd>切换接口标签</dd></div>
-              <div><dt>T</dt><dd>展开 / 收起编辑工具条</dd></div>
-              <div><dt>Shift + G</dt><dd>切换网格</dd></div>
-              <div><dt>Ctrl/⌘ + Z / Y</dt><dd>撤销 / 恢复</dd></div>
-              <div><dt>Ctrl/⌘ + S</dt><dd>立即保存</dd></div>
-              <div><dt>滚轮</dt><dd>缩放视图</dd></div>
-              <div><dt>Esc</dt><dd>关闭面板 / 退出专注模式</dd></div>
-              <div><dt>?</dt><dd>显示本帮助</dd></div>
-            </dl>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Right: Inspector */}
-      <aside className={`topology-inspector ${isInspectorOpen ? "is-open" : ""}`} aria-label="拓扑详情">
+          {/* Floating Bubble Popover Inspector */}
+          {/* 3. Right: Inspector */}
+      <aside
+        ref={inspectorRef}
+        className={`topology-inspector ${isInspectorOpen ? "is-open" : ""} ${isDragged ? "is-dragged" : (popoverPlacement ? `placement-${popoverPlacement}` : "")} ${isDragging ? "is-dragging" : ""}`}
+        style={popoverStyle}
+        aria-label="拓扑详情"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         {hasMultiSelection ? (
           <div className="inspector-panel">
-            <div className="inspector-header">
-              <h4>已选 {selectedNodes.length + selectedCanvasItems.length} 个对象</h4>
-              <Button size="sm" onClick={() => canvasApiRef.current?.clearSelection()} aria-label="取消选择"><IconClose size={13} /></Button>
+            <div className="inspector-header" onMouseDown={handleHeaderMouseDown}>
+              <div className="inspector-header-left">
+                <span className="inspector-drag-grip" title="按住拖拽移动弹窗">⋮⋮</span>
+                <div className="inspector-icon-wrap">
+                  <IconBox size={16} style={{ color: "var(--accent)" }} />
+                </div>
+                <div className="inspector-header-titles">
+                  <h4>已选 {selectedNodes.length + selectedCanvasItems.length} 个对象</h4>
+                  <span className="inspector-badge">{selectedNodes.length} 台设备 · {selectedCanvasItems.length} 个图元</span>
+                </div>
+              </div>
+              <div className="inspector-header-actions">
+                <Button size="sm" onClick={() => canvasApiRef.current?.clearSelection()} aria-label="取消选择"><IconClose size={13} /></Button>
+              </div>
             </div>
-            <div className="inspector-section">
-              <p className="inspector-desc">{selectedNodes.length} 台设备 · {selectedCanvasItems.length} 个图元。批量操作一次作用于全部选中对象，可用 Ctrl+Z 撤销。</p>
-              <span className="inspector-label">对齐</span>
-              <div className="batch-grid">
-                {([["left", "左对齐"], ["center", "水平居中"], ["right", "右对齐"], ["top", "顶对齐"], ["middle", "垂直居中"], ["bottom", "底对齐"]] as const).map(([value, label]) => (
-                  <Button key={value} size="sm" onClick={() => handleAlignSelectedNodes(value)}>{label}</Button>
-                ))}
+            <div className="inspector-body">
+              <div className="inspector-section">
+                <span className="inspector-label">对齐</span>
+                <div className="batch-grid">
+                  {([["left", "左对齐"], ["center", "水平居中"], ["right", "右对齐"], ["top", "顶对齐"], ["middle", "垂直居中"], ["bottom", "底对齐"]] as const).map(([value, label]) => (
+                    <Button key={value} size="sm" onClick={() => handleAlignSelectedNodes(value)}>{label}</Button>
+                  ))}
+                </div>
+                <span className="inspector-label">分布</span>
+                <div className="batch-grid">
+                  <Button size="sm" onClick={() => distributeSelected("horizontal")}>水平等距</Button>
+                  <Button size="sm" onClick={() => distributeSelected("vertical")}>垂直等距</Button>
+                </div>
+                <span className="inspector-label">批量设置设备类型</span>
+                <select aria-label="批量设置设备类型" defaultValue="" onChange={(event) => { if (event.target.value) applyDeviceTypeToSelection(event.target.value); event.target.value = ""; }}>
+                  <option value="">选择类型…</option>
+                  {batchTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <span className="inspector-label">危险操作</span>
+                <Button size="sm" variant="danger" icon={<IconTrash size={13} />} onClick={() => void removeSelectedObjects()}>移除选中的对象</Button>
               </div>
-              <span className="inspector-label">分布</span>
-              <div className="batch-grid">
-                <Button size="sm" onClick={() => distributeSelected("horizontal")}>水平等距</Button>
-                <Button size="sm" onClick={() => distributeSelected("vertical")}>垂直等距</Button>
-              </div>
-              <span className="inspector-label">批量设置设备类型</span>
-              <select aria-label="批量设置设备类型" defaultValue="" onChange={(event) => { if (event.target.value) applyDeviceTypeToSelection(event.target.value); event.target.value = ""; }}>
-                <option value="">选择类型…</option>
-                {batchTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-              <span className="inspector-label">微移</span>
-              <p className="inspector-desc">方向键移动 8px，按住 Shift 移动 32px。</p>
-              <span className="inspector-label">危险操作</span>
-              <Button size="sm" variant="danger" icon={<IconTrash size={13} />} onClick={() => void removeSelectedObjects()}>移除选中的对象</Button>
             </div>
           </div>
         ) : selectedElement?.type === "node" && selectedNode ? (
           <div className="inspector-panel">
-            <div className="inspector-header">
-              <h4>{selectedNode.display_name || "图纸设备"}</h4>
-              <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起节点详情">
-                <IconClose size={13} />
-              </Button>
-            </div>
-
-            {/* The most frequent thing an operator does with a node is ask about
-                it, so the action sits above the configuration. It used to live
-                inside the management-status block, which only renders once the
-                node is linked to a device — so on an unlinked node the action
-                was missing entirely, even though the Agent can discuss a
-                drawing node perfectly well. */}
-            <div className="inspector-section inspector-quick-actions">
-              <Button variant="primary" icon={<IconSparkle size={14} />} onClick={() => { setShowAgent(true); setIsInspectorOpen(false); }}>
-                围绕此设备对话
-              </Button>
-            </div>
-
-
-
-            <div className="inspector-section">
-              <label className="inspector-field">
-                图纸图标
-                <select
-                  aria-label="图纸图标"
-                  value={selectedNode.device_type || "switch"}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const type = e.target.value;
-                    const updated = activeTopology.nodes.map((n) =>
-                      n.node_id === selectedNode.node_id ? { ...n, device_type: type } : n
-                    );
-                    pushState({ ...activeTopology, nodes: updated });
-                  }}
+            <div className="inspector-header" onMouseDown={handleHeaderMouseDown}>
+              <div className="inspector-header-left">
+                <span className="inspector-drag-grip" title="按住拖拽移动弹窗">⋮⋮</span>
+                <div className="inspector-icon-wrap">
+                  <img
+                    src={netOpsIconForDeviceType(selectedNode.device_type || "switch")}
+                    alt=""
+                    className="inspector-header-icon"
+                  />
+                </div>
+                <div className="inspector-header-titles">
+                  <h4>{selectedNode.display_name || "图纸设备"}</h4>
+                  <div className="inspector-header-meta">
+                    <span className="inspector-type-pill">
+                      {deviceTypeMap.get(selectedNode.device_type || "") || selectedNode.device_type || "设备"}
+                    </span>
+                    {selectedNode.labels?.length ? (
+                      <span className="inspector-label-tag">{selectedNode.labels.join(", ")}</span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+              <div className="inspector-header-actions">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="克隆设备 (⌘D)"
+                  aria-label="克隆设备"
+                  onClick={() => handleCloneNode(selectedNode.node_id)}
                 >
-                  {DRAWING_DEVICE_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-
-                <small className="inspector-desc">仅改变当前图纸的图标，不会修改设备实体、连接或 Agent 操作范围。</small>
-              </label>
-
-              <label className="inspector-field">
-                拓扑显示名称（可选）
-                <input
-                  value={selectedNode.display_name || ""}
-                  placeholder={"设备名称"}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const val = e.target.value;
-                    const updated = activeTopology.nodes.map((n) =>
-                      n.node_id === selectedNode.node_id ? { ...n, display_name: val || undefined } : n
-                    );
-                    pushState({ ...activeTopology, nodes: updated });
+                  <IconCopy size={13} />
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSelectedElement(null);
+                    setIsInspectorOpen(false);
                   }}
-                />
-              </label>
-
-              <label className="inspector-field">
-                业务标签（逗号分隔）
-                <input
-                  value={(selectedNode.labels || []).join(", ")}
-                  placeholder="如：core, bgp, spine"
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const raw = e.target.value;
-                    const labels = raw
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter(Boolean);
-                    const updated = activeTopology.nodes.map((n) =>
-                      n.node_id === selectedNode.node_id ? { ...n, labels: labels.length ? labels : undefined } : n
-                    );
-                    pushState({ ...activeTopology, nodes: updated });
-                  }}
-                />
-              </label>
-
-              <label className="inspector-field">
-                所属分组
-                <select
-                  value={selectedNode.group_id || ""}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const val = e.target.value || undefined;
-                    const updated = activeTopology.nodes.map((n) =>
-                      n.node_id === selectedNode.node_id ? { ...n, group_id: val } : n
-                    );
-                    pushState({ ...activeTopology, nodes: updated });
-                  }}
+                  aria-label="收起节点详情"
                 >
-                  <option value="">未指定分组</option>
-                  {(activeTopology?.groups || []).map((g) => (
-                    <option key={g.group_id} value={g.group_id}>
-                      {g.name} ({g.kind})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="inspector-section">
-              <span className="inspector-label">关联拓扑链路</span>
-              <div className="inspector-link-list">
-                {activeTopology?.links
-                  ?.filter(
-                    (l) =>
-                      l.source_node_id === selectedNode.node_id ||
-                      l.target_node_id === selectedNode.node_id
-                  )
-                  .map((l) => {
-                    const otherId =
-                      l.source_node_id === selectedNode.node_id
-                        ? l.target_node_id
-                        : l.source_node_id;
-                    const otherName = nodeLabelById.get(otherId) || otherId;
-                    const isSrc = l.source_node_id === selectedNode.node_id;
-                    return (
-                      <div
-                        key={l.link_id}
-                        className="inspector-link-item"
-                        onClick={() => setSelectedElement({ type: "link", linkId: l.link_id })}
-                      >
-                        <span className={`link-kind-dot ${l.kind}`} />
-                        <span>
-                          {isSrc ? l.source_interface : l.target_interface} ↔ {otherName} (
-                          {isSrc ? l.target_interface : l.source_interface})
-                        </span>
-                      </div>
-                    );
-                  }) || null}
+                  <IconClose size={13} />
+                </Button>
               </div>
             </div>
 
-            <div className="inspector-actions">
-              <Button
-                variant="danger"
-                icon={<IconTrash size={13} />}
-                onClick={() => handleRemoveNode(selectedNode.node_id)}
-              >
-                从拓扑中移除节点
-              </Button>
+            <div className="inspector-body">
+              <div className="inspector-section">
+                <label className="inspector-field">
+                  图纸图标
+                  <select
+                    aria-label="图纸图标"
+                    value={selectedNode.device_type || "switch"}
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const type = e.target.value;
+                      const updated = activeTopology.nodes.map((n) =>
+                        n.node_id === selectedNode.node_id ? { ...n, device_type: type } : n
+                      );
+                      pushState({ ...activeTopology, nodes: updated });
+                    }}
+                  >
+                    {DRAWING_DEVICE_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="inspector-field">
+                  拓扑显示名称（可选）
+                  <input
+                    value={selectedNode.display_name || ""}
+                    placeholder={"设备名称"}
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const val = e.target.value;
+                      const updated = activeTopology.nodes.map((n) =>
+                        n.node_id === selectedNode.node_id ? { ...n, display_name: val || undefined } : n
+                      );
+                      pushState({ ...activeTopology, nodes: updated });
+                    }}
+                  />
+                </label>
+
+                <label className="inspector-field">
+                  业务标签（逗号分隔）
+                  <input
+                    value={(selectedNode.labels || []).join(", ")}
+                    placeholder="如：core, bgp, spine"
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const raw = e.target.value;
+                      const labels = raw
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                      const updated = activeTopology.nodes.map((n) =>
+                        n.node_id === selectedNode.node_id ? { ...n, labels: labels.length ? labels : undefined } : n
+                      );
+                      pushState({ ...activeTopology, nodes: updated });
+                    }}
+                  />
+                </label>
+
+                <label className="inspector-field">
+                  所属分组
+                  <select
+                    value={selectedNode.group_id || ""}
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const val = e.target.value || undefined;
+                      const updated = activeTopology.nodes.map((n) =>
+                        n.node_id === selectedNode.node_id ? { ...n, group_id: val } : n
+                      );
+                      pushState({ ...activeTopology, nodes: updated });
+                    }}
+                  >
+                    <option value="">未指定分组</option>
+                    {(activeTopology?.groups || []).map((g) => (
+                      <option key={g.group_id} value={g.group_id}>
+                        {g.name} ({g.kind})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="inspector-section">
+                <span className="inspector-label">关联拓扑链路</span>
+                <div className="inspector-link-list">
+                  {activeTopology?.links
+                    ?.filter(
+                      (l) =>
+                        l.source_node_id === selectedNode.node_id ||
+                        l.target_node_id === selectedNode.node_id
+                    )
+                    .map((l) => {
+                      const otherId =
+                        l.source_node_id === selectedNode.node_id
+                          ? l.target_node_id
+                          : l.source_node_id;
+                      const otherName = nodeLabelById.get(otherId) || otherId;
+                      const isSrc = l.source_node_id === selectedNode.node_id;
+                      return (
+                        <div
+                          key={l.link_id}
+                          className="inspector-link-item"
+                          onClick={() => setSelectedElement({ type: "link", linkId: l.link_id })}
+                        >
+                          <span className={`link-kind-dot ${l.kind}`} />
+                          <span>
+                            {isSrc ? l.source_interface : l.target_interface} ↔ {otherName} (
+                            {isSrc ? l.target_interface : l.source_interface})
+                          </span>
+                        </div>
+                      );
+                    }) || null}
+                </div>
+              </div>
+
+              <div className="inspector-actions">
+                <Button
+                  variant="danger"
+                  icon={<IconTrash size={13} />}
+                  onClick={() => handleRemoveNode(selectedNode.node_id)}
+                >
+                  从拓扑中移除节点
+                </Button>
+              </div>
             </div>
           </div>
         ) : selectedElement?.type === "link" && selectedLink ? (
           <div className="inspector-panel">
-            <div className="inspector-header">
-              <h4>链路属性</h4>
-              <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起链路详情">
-                <IconClose size={13} />
-              </Button>
+            <div className="inspector-header" onMouseDown={handleHeaderMouseDown}>
+              <div className="inspector-header-left">
+                <span className="inspector-drag-grip" title="按住拖拽移动弹窗">⋮⋮</span>
+                <div className="inspector-icon-wrap">
+                  <IconBranch size={16} style={{ color: "var(--accent)" }} />
+                </div>
+                <div className="inspector-header-titles">
+                  <h4>链路属性</h4>
+                  <span className="inspector-badge">
+                    {nodeLabelById.get(selectedLink.source_node_id) || selectedLink.source_node_id} ↔ {nodeLabelById.get(selectedLink.target_node_id) || selectedLink.target_node_id}
+                  </span>
+                </div>
+              </div>
+              <div className="inspector-header-actions">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSelectedElement(null);
+                    setIsInspectorOpen(false);
+                  }}
+                  aria-label="收起链路详情"
+                >
+                  <IconClose size={13} />
+                </Button>
+              </div>
             </div>
 
-            <div className="inspector-section">
+            <div className="inspector-body">
+              <div className="inspector-section">
               <div className="inspector-endpoints-card">
                 <div className="endpoint-col">
                   <small>源端</small>
@@ -2698,208 +3028,351 @@ export default function TopologyWorkspace({
                 删除此链路
               </Button>
             </div>
+            </div>
           </div>
         ) : selectedElement?.type === "canvas_item" && selectedCanvasItem ? (
           <div className="inspector-panel">
-            <div className="inspector-header">
-              <h4>图纸图元 · {selectedCanvasItem.text || "未命名图元"}</h4>
-              <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起图元详情">
-                <IconClose size={13} />
-              </Button>
-            </div>
-
-            <div className="inspector-section">
-              <p className="inspector-desc">图元只属于当前图纸：用于业务域、注释和边界说明。可编辑类型、文字、样式和尺寸；删除只移除这个图元，不会影响设备或链路。</p>
-              <label className="inspector-field">
-                图元类型
-                <select
-                  value={selectedCanvasItem.kind}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const kind = e.target.value as TopologyCanvasItem["kind"];
-                    pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, kind } : item) });
+            <div className="inspector-header" onMouseDown={handleHeaderMouseDown}>
+              <div className="inspector-header-left">
+                <span className="inspector-drag-grip" title="按住拖拽移动弹窗">⋮⋮</span>
+                <div className="inspector-icon-wrap">
+                  <IconBox size={16} style={{ color: "var(--accent)" }} />
+                </div>
+                <div className="inspector-header-titles">
+                  <h4>图纸图元 · {selectedCanvasItem.text || "未命名图元"}</h4>
+                  <span className="inspector-badge">
+                    {selectedCanvasItem.kind === "text" ? "文本标签" : selectedCanvasItem.kind === "ellipse" ? "椭圆区域" : "矩形区域"}
+                  </span>
+                </div>
+              </div>
+              <div className="inspector-header-actions">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSelectedElement(null);
+                    setIsInspectorOpen(false);
                   }}
+                  aria-label="收起图元详情"
                 >
-                  <option value="rectangle">矩形区域</option>
-                  <option value="ellipse">椭圆标注</option>
-                  <option value="text">文本框</option>
-                </select>
-              </label>
-              <label className="inspector-field">
-                文本内容
-                <textarea
-                  value={selectedCanvasItem.text}
-                  rows={3}
-                  maxLength={240}
-                  placeholder={selectedCanvasItem.kind === "text" ? "输入说明文字" : "如：核心业务区"}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const text = e.target.value;
-                    pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, text } : item) });
-                  }}
-                />
-              </label>
-              <label className="inspector-field">
-                图元样式
-                <select
-                  value={canvasItemStylePreset(selectedCanvasItem.style)}
-                  onChange={(e) => {
-                    if (!activeTopology || e.target.value === "custom") return;
-                    const preset = canvasItemStylePresets[e.target.value as keyof typeof canvasItemStylePresets];
-                    pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, style: { ...preset.style } } : item) });
-                  }}
-                >
-                  <option value="custom">自定义（保留当前）</option>
-                  {Object.entries(canvasItemStylePresets).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
-                </select>
-              </label>
-              <div className="inspector-dimension-grid">
-                <label className="inspector-field">宽度
-                  <input type="number" min="40" max="1600" value={Math.round(selectedCanvasItem.width)} onChange={(e) => {
-                    if (!activeTopology) return;
-                    const width = Math.min(1600, Math.max(40, Number(e.target.value) || 40));
-                    pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, width } : item) });
-                  }} />
-                </label>
-                <label className="inspector-field">高度
-                  <input type="number" min="24" max="1200" value={Math.round(selectedCanvasItem.height)} onChange={(e) => {
-                    if (!activeTopology) return;
-                    const height = Math.min(1200, Math.max(24, Number(e.target.value) || 24));
-                    pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, height } : item) });
-                  }} />
-                </label>
+                  <IconClose size={13} />
+                </Button>
               </div>
             </div>
 
-            <div className="inspector-actions">
-              <Button variant="danger" icon={<IconTrash size={13} />} onClick={() => void handleRemoveCanvasItem(selectedCanvasItem.item_id)}>
-                删除图纸图元
-              </Button>
+            <div className="inspector-body">
+              <div className="inspector-section">
+                <label className="inspector-field">
+                  图元类型
+                  <select
+                    value={selectedCanvasItem.kind}
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const kind = e.target.value as TopologyCanvasItem["kind"];
+                      pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, kind } : item) });
+                    }}
+                  >
+                    <option value="rectangle">矩形区域</option>
+                    <option value="ellipse">椭圆标注</option>
+                    <option value="text">文本框</option>
+                  </select>
+                </label>
+                <label className="inspector-field">
+                  文本内容
+                  <textarea
+                    value={selectedCanvasItem.text}
+                    rows={3}
+                    maxLength={240}
+                    placeholder={selectedCanvasItem.kind === "text" ? "输入说明文字" : "如：核心业务区"}
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const text = e.target.value;
+                      pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, text } : item) });
+                    }}
+                  />
+                </label>
+                <label className="inspector-field">
+                  图元样式
+                  <select
+                    value={canvasItemStylePreset(selectedCanvasItem.style)}
+                    onChange={(e) => {
+                      if (!activeTopology || e.target.value === "custom") return;
+                      const preset = canvasItemStylePresets[e.target.value as keyof typeof canvasItemStylePresets];
+                      pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, style: { ...preset.style } } : item) });
+                    }}
+                  >
+                    <option value="custom">自定义（保留当前）</option>
+                    {Object.entries(canvasItemStylePresets).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
+                  </select>
+                </label>
+                <div className="inspector-dimension-grid">
+                  <label className="inspector-field">宽度
+                    <input type="number" min="40" max="1600" value={Math.round(selectedCanvasItem.width)} onChange={(e) => {
+                      if (!activeTopology) return;
+                      const width = Math.min(1600, Math.max(40, Number(e.target.value) || 40));
+                      pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, width } : item) });
+                    }} />
+                  </label>
+                  <label className="inspector-field">高度
+                    <input type="number" min="24" max="1200" value={Math.round(selectedCanvasItem.height)} onChange={(e) => {
+                      if (!activeTopology) return;
+                      const height = Math.min(1200, Math.max(24, Number(e.target.value) || 24));
+                      pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, height } : item) });
+                    }} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="inspector-actions">
+                <Button variant="danger" icon={<IconTrash size={13} />} onClick={() => void handleRemoveCanvasItem(selectedCanvasItem.item_id)}>
+                  删除图纸图元
+                </Button>
+              </div>
             </div>
           </div>
         ) : selectedElement?.type === "group" && selectedGroup ? (
           <div className="inspector-panel">
-            <div className="inspector-header">
-              <h4>分组属性</h4>
-              <Button size="sm" onClick={() => { setSelectedElement(null); setIsInspectorOpen(false); }} aria-label="收起分组详情">
-                <IconClose size={13} />
-              </Button>
-            </div>
-
-            <div className="inspector-section">
-              <label className="inspector-field">
-                分组名称
-                <input
-                  value={selectedGroup.name}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const val = e.target.value;
-                    const updated = activeTopology.groups.map((g) =>
-                      g.group_id === selectedGroup.group_id ? { ...g, name: val } : g
-                    );
-                    pushState({ ...activeTopology, groups: updated });
+            <div className="inspector-header" onMouseDown={handleHeaderMouseDown}>
+              <div className="inspector-header-left">
+                <span className="inspector-drag-grip" title="按住拖拽移动弹窗">⋮⋮</span>
+                <div className="inspector-icon-wrap">
+                  <IconFolder size={16} style={{ color: "var(--accent)" }} />
+                </div>
+                <div className="inspector-header-titles">
+                  <h4>分组属性</h4>
+                  <span className="inspector-badge">{selectedGroup.name}</span>
+                </div>
+              </div>
+              <div className="inspector-header-actions">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSelectedElement(null);
+                    setIsInspectorOpen(false);
                   }}
-                />
-              </label>
-
-              <label className="inspector-field">
-                分组类型
-                <select
-                  value={selectedGroup.kind}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const val = e.target.value as "as" | "region" | "datacenter" | "tenant" | "custom";
-                    const updated = activeTopology.groups.map((g) =>
-                      g.group_id === selectedGroup.group_id ? { ...g, kind: val } : g
-                    );
-                    pushState({ ...activeTopology, groups: updated });
-                  }}
+                  aria-label="收起分组详情"
                 >
-                  <option value="as">自治系统 (AS)</option>
-                  <option value="region">地理区域 (Region)</option>
-                  <option value="datacenter">数据中心 (Datacenter)</option>
-                  <option value="tenant">业务租户 (Tenant)</option>
-                  <option value="custom">自定义分组</option>
-                </select>
-              </label>
-            </div>
-
-            <div className="inspector-section">
-              <span className="inspector-label">属于此分组的节点</span>
-              <div className="inspector-group-members">
-                {activeTopology?.nodes
-                  ?.filter((n) => n.group_id === selectedGroup.group_id)
-                  .map((n) => (
-                    <div key={n.node_id} className="group-member-item">
-                      {n.display_name || n.node_id}
-                    </div>
-                  )) || null}
+                  <IconClose size={13} />
+                </Button>
               </div>
             </div>
 
-            <div className="inspector-actions">
-              <Button
-                variant="danger"
-                icon={<IconTrash size={13} />}
-                onClick={() => handleRemoveGroup(selectedGroup.group_id)}
-              >
-                删除此分组
-              </Button>
+            <div className="inspector-body">
+              <div className="inspector-section">
+                <label className="inspector-field">
+                  分组名称
+                  <input
+                    value={selectedGroup.name}
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const val = e.target.value;
+                      const updated = activeTopology.groups.map((g) =>
+                        g.group_id === selectedGroup.group_id ? { ...g, name: val } : g
+                      );
+                      pushState({ ...activeTopology, groups: updated });
+                    }}
+                  />
+                </label>
+
+                <label className="inspector-field">
+                  分组类型
+                  <select
+                    value={selectedGroup.kind}
+                    onChange={(e) => {
+                      if (!activeTopology) return;
+                      const val = e.target.value as "as" | "region" | "datacenter" | "tenant" | "custom";
+                      const updated = activeTopology.groups.map((g) =>
+                        g.group_id === selectedGroup.group_id ? { ...g, kind: val } : g
+                      );
+                      pushState({ ...activeTopology, groups: updated });
+                    }}
+                  >
+                    <option value="as">自治系统 (AS)</option>
+                    <option value="region">地理区域 (Region)</option>
+                    <option value="datacenter">数据中心 (Datacenter)</option>
+                    <option value="tenant">业务租户 (Tenant)</option>
+                    <option value="custom">自定义分组</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="inspector-section">
+                <span className="inspector-label">属于此分组的节点</span>
+                <div className="inspector-group-members">
+                  {activeTopology?.nodes
+                    ?.filter((n) => n.group_id === selectedGroup.group_id)
+                    .map((n) => (
+                      <div key={n.node_id} className="group-member-item">
+                        {n.display_name || n.node_id}
+                      </div>
+                    )) || null}
+                </div>
+              </div>
+
+              <div className="inspector-actions">
+                <Button
+                  variant="danger"
+                  icon={<IconTrash size={13} />}
+                  onClick={() => handleRemoveGroup(selectedGroup.group_id)}
+                >
+                  删除此分组
+                </Button>
+              </div>
             </div>
           </div>
         ) : (
           <div className="inspector-panel">
-            <div className="inspector-header">
-              <h4>拓扑概览</h4>
-              <Button size="sm" onClick={() => setIsInspectorOpen(false)} aria-label="收起拓扑详情">
-                <IconClose size={13} />
-              </Button>
-            </div>
-
-            <div className="inspector-section">
-              <strong>{activeTopology?.name}</strong>
-              <p className="inspector-desc">{activeTopology?.description || "未提供拓扑说明"}</p>
-            </div>
-
-            <div className="inspector-section stats-grid">
-              <div className="stat-card">
-                <span className="stat-num">{activeTopology?.nodes?.length || 0}</span>
-                <span className="stat-lbl">拓扑节点</span>
+            <div className="inspector-header" onMouseDown={handleHeaderMouseDown}>
+              <div className="inspector-header-left">
+                <span className="inspector-drag-grip" title="按住拖拽移动弹窗">⋮⋮</span>
+                <div className="inspector-icon-wrap">
+                  <IconEye size={16} style={{ color: "var(--accent)" }} />
+                </div>
+                <div className="inspector-header-titles">
+                  <h4>拓扑概览</h4>
+                  <span className="inspector-badge">{activeTopology?.name || "未命名拓扑"}</span>
+                </div>
               </div>
-              <div className="stat-card">
-                <span className="stat-num">{activeTopology?.links?.length || 0}</span>
-                <span className="stat-lbl">拓扑链路</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-num">{activeTopology?.groups?.length || 0}</span>
-                <span className="stat-lbl">拓扑分组</span>
-              </div>
-            </div>
-
-
-
-            <div className="inspector-section">
-              <span className="inspector-label">快捷操作</span>
-              <div className="quick-actions-col">
-                <Button
-                  size="sm"
-                  icon={<IconEdit size={13} />}
-                  onClick={() => {
-                    if (activeTopology) {
-                      setTopologyModalMode("edit");
-                      setTopologyNameInput(activeTopology.name);
-                      setTopologyDescInput(activeTopology.description);
-                    }
-                  }}
-                >
-                  修改拓扑基本信息
+              <div className="inspector-header-actions">
+                <Button size="sm" onClick={() => setIsInspectorOpen(false)} aria-label="收起拓扑详情">
+                  <IconClose size={13} />
                 </Button>
+              </div>
+            </div>
+
+            <div className="inspector-body">
+              <div className="inspector-section">
+                <strong>{activeTopology?.name}</strong>
+                <p className="inspector-desc">{activeTopology?.description || "未提供拓扑说明"}</p>
+              </div>
+
+              <div className="inspector-section stats-grid">
+                <div className="stat-card">
+                  <span className="stat-num">{activeTopology?.nodes?.length || 0}</span>
+                  <span className="stat-lbl">拓扑节点</span>
+                </div>
+                <div className="stat-card">
+                  <span className="stat-num">{activeTopology?.links?.length || 0}</span>
+                  <span className="stat-lbl">拓扑链路</span>
+                </div>
+                <div className="stat-card">
+                  <span className="stat-num">{activeTopology?.groups?.length || 0}</span>
+                  <span className="stat-lbl">拓扑分组</span>
+                </div>
+              </div>
+
+              <div className="inspector-section">
+                <span className="inspector-label">快捷操作</span>
+                <div className="quick-actions-col">
+                  <Button
+                    size="sm"
+                    icon={<IconEdit size={13} />}
+                    onClick={() => {
+                      if (activeTopology) {
+                        setTopologyModalMode("edit");
+                        setTopologyNameInput(activeTopology.name);
+                        setTopologyDescInput(activeTopology.description);
+                      }
+                    }}
+                  >
+                    修改拓扑基本信息
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
         )}
       </aside>
+        </div>
+        <footer className="studio-statusbar"><span>独立图纸 · eNSP/HCL 专业操作模式</span><span>空白拖拽框选 · 空格/中键平移 · 连续点放 · C 极速连线 · ⌘D 克隆</span></footer>
+      </main>
 
+      {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} selection={canvasSelection} onCompleted={() => { void handleAgentCompleted(); }} /></aside>}
+
+      {contextMenu && (
+        <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(event) => event.stopPropagation()}>
+          {contextMenu.kind === "node" && (
+            <>
+              <button type="button" onClick={() => {
+                setCanvasMode("connect");
+                canvasApiRef.current?.startConnectFrom?.(contextMenu.id);
+                setContextMenu(null);
+                const sLabel = nodeLabelById.get(contextMenu.id) || contextMenu.id;
+                setNotice(`已选择起点设备“${sLabel}”，请点击目标设备完成连线 (Esc 取消)`);
+              }}>从此处连线 (C)</button>
+              <button type="button" onClick={() => {
+                openLinkComposer(contextMenu.id);
+                setContextMenu(null);
+              }}>高级连线 (指定端口)...</button>
+              <button type="button" onClick={() => {
+                handleCloneNode(contextMenu.id);
+                setContextMenu(null);
+              }}>克隆设备 (⌘D)</button>
+              <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>打开设备详情</button>
+              <button type="button" className="danger" onClick={() => { void handleRemoveNode(contextMenu.id); setContextMenu(null); }}>从拓扑移除</button>
+            </>
+          )}
+          {contextMenu.kind === "link" && (
+            <>
+              <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑链路</button>
+              <button type="button" className="danger" onClick={() => { void handleRemoveLink(contextMenu.id); setContextMenu(null); }}>删除链路</button>
+            </>
+          )}
+          {contextMenu.kind === "canvas_item" && (
+            <>
+              <button type="button" onClick={() => { setSelectedElement({ type: "canvas_item", itemId: contextMenu.id.replace(/^canvas-/, "") }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑图元</button>
+              <button type="button" className="danger" onClick={() => { void handleRemoveCanvasItem(contextMenu.id.replace(/^canvas-/, "")); setContextMenu(null); }}>删除图元</button>
+            </>
+          )}
+          {contextMenu.kind === "canvas" && (
+            <>
+              <button type="button" onClick={() => { canvasApiRef.current?.selectAll(); setContextMenu(null); }}>全选对象</button>
+              <button type="button" onClick={() => { canvasApiRef.current?.fit(); setContextMenu(null); }}>适配视图</button>
+              <button type="button" onClick={() => { void handleAutoLayout(); setContextMenu(null); }}>自动排布</button>
+              <hr />
+              <button type="button" onClick={() => { handleAddCanvasItem("rectangle"); setContextMenu(null); }}>插入矩形区域</button>
+              {/* All three shapes were reachable from the inspector's type
+                  selector, but only two could be created here — an ellipse had
+                  to be drawn as a rectangle first and then retyped. */}
+              <button type="button" onClick={() => { handleAddCanvasItem("ellipse"); setContextMenu(null); }}>插入椭圆标注</button>
+              <button type="button" onClick={() => { handleAddCanvasItem("text"); setContextMenu(null); }}>插入文本框</button>
+            </>
+          )}
+        </div>
+      )}
+
+      {showShortcutHelp && (
+        <div className="shortcut-help-backdrop" onClick={() => setShowShortcutHelp(false)}>
+          <div className="shortcut-help" onClick={(event) => event.stopPropagation()}>
+            <header><strong>画布快捷键</strong><button type="button" onClick={() => setShowShortcutHelp(false)} aria-label="关闭"><IconClose size={13} /></button></header>
+            <dl>
+              <div><dt>V / C</dt><dd>选择 / 连线笔模式</dd></div>
+              <div><dt>连线模式 (C)</dt><dd>极速直连两台设备，自动配对接口</dd></div>
+              <div><dt>空白处左键拖拽</dt><dd>直接拉框多选设备与链路</dd></div>
+              <div><dt>空格 + 拖拽 / 中键拖拽</dt><dd>平移画布（随时随地抓手拖动）</dd></div>
+              <div><dt>Ctrl/⌘ + D</dt><dd>克隆复制选中设备</dd></div>
+              <div><dt>设备快捷栏</dt><dd>点击设备后在画布连续点击批量放置</dd></div>
+              <div><dt>Ctrl/⌘ + 单击</dt><dd>加选设备；再点一次移出选区</dd></div>
+              <div><dt>Shift + 单击</dt><dd>加选设备</dd></div>
+              <div><dt>拖动已选对象</dt><dd>整组一起移动并磁吸对齐网格</dd></div>
+              <div><dt>Delete / Backspace</dt><dd>删除选中对象</dd></div>
+              <div><dt>Ctrl/⌘ + A</dt><dd>全选</dd></div>
+              <div><dt>方向键</dt><dd>微移选中对象（Shift 加速）</dd></div>
+              <div><dt>F / Shift + F</dt><dd>适配全部 / 缩放至选中对象</dd></div>
+              <div><dt>/</dt><dd>搜索设备并定位</dd></div>
+              <div><dt>I</dt><dd>切换接口标签</dd></div>
+              <div><dt>T</dt><dd>展开 / 收起编辑工具条</dd></div>
+              <div><dt>Shift + G</dt><dd>切换网格吸附</dd></div>
+              <div><dt>Ctrl/⌘ + Z / Y</dt><dd>撤销 / 恢复</dd></div>
+              <div><dt>Ctrl/⌘ + S</dt><dd>立即保存</dd></div>
+              <div><dt>滚轮</dt><dd>缩放视图</dd></div>
+              <div><dt>Esc / 右键</dt><dd>退出放置/退出连线/关闭面板</dd></div>
+              <div><dt>?</dt><dd>显示本帮助</dd></div>
+            </dl>
+          </div>
+        </div>
+      )}
+
+      
       {/* MODAL 1: Create / Edit Topology */}
       {topologyModalMode && (
         <dialog open role="dialog" aria-modal="true" className="network-dialog-modal">
