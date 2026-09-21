@@ -423,6 +423,296 @@ function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: stri
   });
 }
 
+function renderWorldGrid(
+  canvas: HTMLCanvasElement,
+  viewport: { x: number; y: number; zoom: number },
+  isDark: boolean,
+  enabled: boolean
+): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (w <= 0 || h <= 0) return;
+  const targetW = Math.round(w * dpr);
+  const targetH = Math.round(h * dpr);
+  if (canvas.width !== targetW || canvas.height !== targetH) {
+    canvas.width = targetW;
+    canvas.height = targetH;
+  }
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  if (!enabled) {
+    ctx.restore();
+    return;
+  }
+
+  const { x: panX, y: panY, zoom } = viewport;
+  let step = 20;
+  if (zoom < 0.42) step = 100;
+  else if (zoom < 0.78) step = 40;
+  else step = 20;
+
+  const screenStep = step * zoom;
+  if (screenStep < 7) {
+    ctx.restore();
+    return;
+  }
+
+  const startX = ((panX % screenStep) + screenStep) % screenStep;
+  const startY = ((panY % screenStep) + screenStep) % screenStep;
+  const lineColor = isDark ? "rgba(255, 255, 255, 0.055)" : "rgba(15, 23, 42, 0.055)";
+  const majorColor = isDark ? "rgba(255, 255, 255, 0.13)" : "rgba(15, 23, 42, 0.12)";
+
+  ctx.lineWidth = 1;
+  // Vertical grid lines
+  for (let x = startX; x <= w; x += screenStep) {
+    const worldX = Math.round((x - panX) / zoom);
+    const isMajor = Math.abs(worldX) % (step * 5) < 0.5;
+    ctx.strokeStyle = isMajor ? majorColor : lineColor;
+    ctx.beginPath();
+    ctx.moveTo(Math.floor(x) + 0.5, 0);
+    ctx.lineTo(Math.floor(x) + 0.5, h);
+    ctx.stroke();
+  }
+  // Horizontal grid lines
+  for (let y = startY; y <= h; y += screenStep) {
+    const worldY = Math.round((y - panY) / zoom);
+    const isMajor = Math.abs(worldY) % (step * 5) < 0.5;
+    ctx.strokeStyle = isMajor ? majorColor : lineColor;
+    ctx.beginPath();
+    ctx.moveTo(0, Math.floor(y) + 0.5);
+    ctx.lineTo(w, Math.floor(y) + 0.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function renderMotionOverlay(
+  canvas: HTMLCanvasElement,
+  viewport: { x: number; y: number; zoom: number },
+  topology: Topology,
+  alignGuides: AlignGuide[],
+  selectedIds: string[],
+  isDark: boolean,
+  timeMs: number
+): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (w <= 0 || h <= 0) return;
+  const targetW = Math.round(w * dpr);
+  const targetH = Math.round(h * dpr);
+  if (canvas.width !== targetW || canvas.height !== targetH) {
+    canvas.width = targetW;
+    canvas.height = targetH;
+  }
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const { x: panX, y: panY, zoom } = viewport;
+  const nodeMap = new Map(topology.nodes.map((n) => [n.node_id, n]));
+
+  // 1. Item 4: Alert Pulsing Halos around abnormal nodes or selected nodes
+  for (const node of topology.nodes) {
+    const isSelected = selectedIds.includes(node.node_id);
+    const isAlert = (node as any).status === "down" || (node as any).status === "failed";
+    if (!isSelected && !isAlert) continue;
+
+    const cx = node.x * zoom + panX;
+    const cy = node.y * zoom + panY;
+    if (cx < -100 || cy < -100 || cx > w + 100 || cy > h + 100) continue;
+
+    const baseR = 48 * zoom;
+    if (isAlert) {
+      const wave = (timeMs / 1000) % 1;
+      const waveR = baseR + wave * 22 * zoom;
+      ctx.beginPath();
+      ctx.arc(cx, cy, waveR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(239, 68, 68, ${0.45 * (1 - wave)})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const pulse = (Math.sin(timeMs / 250) + 1) / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, baseR + pulse * 6, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(239, 68, 68, ${0.6 + pulse * 0.3})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else if (isSelected) {
+      const breath = (Math.sin(timeMs / 400) + 1) / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, baseR + breath * 4, 0, Math.PI * 2);
+      ctx.strokeStyle = isDark ? `rgba(114, 195, 186, ${0.3 + breath * 0.25})` : `rgba(15, 119, 115, ${0.25 + breath * 0.2})`;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+  }
+
+  // 2. Item 3 & 8: Packet Flow Streamers and Latency Quality Pills
+  for (const link of topology.links) {
+    const n1 = nodeMap.get(link.source_node_id);
+    const n2 = nodeMap.get(link.target_node_id);
+    if (!n1 || !n2) continue;
+
+    const sx = n1.x * zoom + panX;
+    const sy = n1.y * zoom + panY;
+    const tx = n2.x * zoom + panX;
+    const ty = n2.y * zoom + panY;
+
+    // Packet flow animation (only if link is up / unknown, not down)
+    if (link.status !== "down") {
+      const curveStyle = link.style?.curve_style || "bezier";
+      const particleColor = isDark ? "#38bdf8" : "#0284c7";
+      const count = 3;
+      const speed = 2000;
+
+      for (let i = 0; i < count; i++) {
+        const offset = i / count;
+        const progress = ((timeMs / speed) + offset) % 1;
+        let px = 0;
+        let py = 0;
+
+        if (curveStyle === "taxi") {
+          const midX = (sx + tx) / 2;
+          if (progress < 0.333) {
+            const segP = progress / 0.333;
+            px = sx + (midX - sx) * segP;
+            py = sy;
+          } else if (progress < 0.666) {
+            const segP = (progress - 0.333) / 0.333;
+            px = midX;
+            py = sy + (ty - sy) * segP;
+          } else {
+            const segP = (progress - 0.666) / 0.334;
+            px = midX + (tx - midX) * segP;
+            py = ty;
+          }
+        } else if (curveStyle === "straight") {
+          px = sx + (tx - sx) * progress;
+          py = sy + (ty - sy) * progress;
+        } else {
+          const midX = (sx + tx) / 2;
+          const midY = (sy + ty) / 2;
+          const dx = tx - sx;
+          const dy = ty - sy;
+          const dist = Math.hypot(dx, dy);
+          const curvature = (link.style as any)?.curvature ?? 0.2;
+          const cx = midX - (dy / (dist || 1)) * dist * curvature;
+          const cy = midY + (dx / (dist || 1)) * dist * curvature;
+
+          const u = 1 - progress;
+          px = u * u * sx + 2 * u * progress * cx + progress * progress * tx;
+          py = u * u * sy + 2 * u * progress * cy + progress * progress * ty;
+        }
+
+        ctx.save();
+        ctx.shadowColor = particleColor;
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = particleColor;
+        ctx.beginPath();
+        const r = Math.max(2.2, Math.min(3.8, 2.5 * Math.sqrt(zoom)));
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Item 8: Latency & Quality Pill at link midpoint (when zoom >= 0.6)
+    if (zoom >= 0.6) {
+      const midX = (sx + tx) / 2;
+      const midY = (sy + ty) / 2;
+      const pillX = midX;
+      const pillY = midY - 14 * zoom;
+
+      const latencyText = (link.metadata?.latency as string) || "1.2ms";
+      const lossText = (link.metadata?.loss as string) || "0%";
+      const label = `⚡ ${latencyText} · ${lossText}`;
+
+      ctx.save();
+      ctx.font = `600 ${Math.max(9, Math.round(10 * Math.min(zoom, 1.2)))}px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif`;
+      const textMetrics = ctx.measureText(label);
+      const textW = textMetrics.width;
+      const pillW = textW + 12;
+      const pillH = 16 * Math.min(zoom, 1.2);
+
+      const rx = pillX - pillW / 2;
+      const ry = pillY - pillH / 2;
+
+      ctx.fillStyle = isDark ? "rgba(15, 23, 42, 0.88)" : "rgba(255, 255, 255, 0.92)";
+      ctx.strokeStyle = link.status === "down" ? "#ef4444" : isDark ? "#334155" : "#cbd5e1";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if ((ctx as any).roundRect) (ctx as any).roundRect(rx, ry, pillW, pillH, pillH / 2);
+      else ctx.rect(rx, ry, pillW, pillH);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = link.status === "down" ? "#ef4444" : isDark ? "#94a3b8" : "#475569";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, pillX, pillY);
+      ctx.restore();
+    }
+  }
+
+  // 3. Item 6: CAD-grade Smart Magnetic Alignment Guides
+  if (alignGuides.length > 0) {
+    ctx.save();
+    for (const guide of alignGuides) {
+      const gx1 = guide.x1 * zoom + panX;
+      const gy1 = guide.y1 * zoom + panY;
+      const gx2 = guide.x2 * zoom + panX;
+      const gy2 = guide.y2 * zoom + panY;
+
+      ctx.strokeStyle = "#f59e0b";
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.moveTo(gx1, gy1);
+      ctx.lineTo(gx2, gy2);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1.5;
+      const crossSize = 4;
+      ctx.beginPath();
+      ctx.moveTo(gx1 - crossSize, gy1); ctx.lineTo(gx1 + crossSize, gy1);
+      ctx.moveTo(gx1, gy1 - crossSize); ctx.lineTo(gx1, gy1 + crossSize);
+      ctx.moveTo(gx2 - crossSize, gy2); ctx.lineTo(gx2 + crossSize, gy2);
+      ctx.moveTo(gx2, gy2 - crossSize); ctx.lineTo(gx2, gy2 + crossSize);
+      ctx.stroke();
+
+      const dist = Math.round(Math.hypot(guide.x2 - guide.x1, guide.y2 - guide.y1));
+      if (dist > 40) {
+        const mx = (gx1 + gx2) / 2;
+        const my = (gy1 + gy2) / 2;
+        const tagText = `${dist}px`;
+        ctx.font = '600 10px ui-monospace, SFMono-Regular, monospace';
+        const tagW = ctx.measureText(tagText).width + 8;
+        const tagH = 14;
+        ctx.fillStyle = "rgba(245, 158, 11, 0.92)";
+        ctx.beginPath();
+        if ((ctx as any).roundRect) (ctx as any).roundRect(mx - tagW / 2, my - tagH / 2, tagW, tagH, 3);
+        else ctx.rect(mx - tagW / 2, my - tagH / 2, tagW, tagH);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(tagText, mx, my);
+      }
+    }
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 export default function NetOpsCanvas(props: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Cy | null>(null);
@@ -453,9 +743,59 @@ export default function NetOpsCanvas(props: Props) {
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [marqueeDrag, setMarqueeDrag] = useState(false);
   const miniRef = useRef<HTMLCanvasElement | null>(null);
+  const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [miniOpen, setMiniOpen] = useState(false);
   const [alignGuides, setAlignGuides] = useState<AlignGuide[]>([]);
   const guideSignatureRef = useRef("");
+  const [theme, setTheme] = useState(() => (typeof document === "undefined" ? "light" : document.documentElement.getAttribute("data-theme") || "light"));
+
+  // Sync adaptive world grid with viewport, theme and gridEnabled switch
+  useEffect(() => {
+    if (gridCanvasRef.current) {
+      renderWorldGrid(gridCanvasRef.current, viewport, theme === "dark", props.gridEnabled);
+    }
+  }, [viewport, theme, props.gridEnabled]);
+
+  // Window resize handler for world grid
+  useEffect(() => {
+    const handleResize = () => {
+      if (gridCanvasRef.current) {
+        renderWorldGrid(gridCanvasRef.current, viewport, theme === "dark", props.gridEnabled);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [viewport, theme, props.gridEnabled]);
+
+  // 60fps motion overlay for packet flow streamers, alert halos and smart guides
+  useEffect(() => {
+    let animId: number;
+    let disposed = false;
+
+    const tick = (now: number) => {
+      if (disposed) return;
+      if (overlayCanvasRef.current) {
+        const selected = cyRef.current ? cyRef.current.$(":selected").map((el) => el.id()) : [];
+        renderMotionOverlay(
+          overlayCanvasRef.current,
+          viewport,
+          props.topology,
+          alignGuides,
+          selected,
+          theme === "dark",
+          now
+        );
+      }
+      animId = requestAnimationFrame(tick);
+    };
+
+    animId = requestAnimationFrame(tick);
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(animId);
+    };
+  }, [viewport, props.topology, alignGuides, theme]);
   // How far the last alignment snap moved the node away from where the pointer
   // had put it. Cytoscape drags a node incrementally — new position = current
   // position + pointer delta — so a snap silently swallows that much of the
@@ -466,7 +806,6 @@ export default function NetOpsCanvas(props: Props) {
   const snapResidualRef = useRef({ x: 0, y: 0 });
   const [linkPreview, setLinkPreview] = useState<AlignGuide | null>(null);
   const connectStartRef = useRef<string | null>(null);
-  const [theme, setTheme] = useState(() => (typeof document === "undefined" ? "light" : document.documentElement.getAttribute("data-theme") || "light"));
   propsRef.current = props;
 
   useEffect(() => {
@@ -539,10 +878,13 @@ export default function NetOpsCanvas(props: Props) {
               "font-weight": 600,
               "min-zoomed-font-size": 0,
               color: "#0f172a",
+              "text-background-shape": "roundrectangle",
               "text-background-color": "#ffffff",
-              "text-background-opacity": 0.85,
-              "text-background-padding": "1px 3px",
-              "text-border-width": 0,
+              "text-background-opacity": 0.95,
+              "text-border-width": 1,
+              "text-border-color": "#cbd5e1",
+              "text-border-opacity": 0.9,
+              "text-background-padding": "2px 6px",
               "text-margin-y": "-14px",
               "source-label": "data(srcPort)",
               "target-label": "data(tgtPort)",
@@ -683,8 +1025,8 @@ export default function NetOpsCanvas(props: Props) {
               label: "data(label)",
               "text-valign": "top",
               "text-halign": "left",
-              "text-margin-x": 12,
-              "text-margin-y": 10,
+              "text-margin-x": 14,
+              "text-margin-y": 12,
               color: CANVAS_GROUP.light.text,
               "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
               "font-size": 12,
@@ -692,10 +1034,11 @@ export default function NetOpsCanvas(props: Props) {
               width: "data(width)",
               height: "data(height)",
               "background-color": CANVAS_GROUP.light.fill,
-              "background-opacity": 0.5,
+              "background-opacity": 0.55,
               "border-color": CANVAS_GROUP.light.border,
               "border-style": "dashed",
-              "border-width": 1,
+              "border-dash-pattern": [6, 4],
+              "border-width": 1.5,
               "background-image": "none",
               events: "no",
             },
@@ -1235,9 +1578,13 @@ export default function NetOpsCanvas(props: Props) {
       .selector("edge")
       .style({
         color: dark ? "#f8fafc" : "#0f172a",
-        "text-background-color": dark ? "#0f1519" : "#ffffff",
-        "text-background-opacity": 0.85,
-        "text-border-width": 0,
+        "text-background-shape": "roundrectangle",
+        "text-background-color": dark ? "#1e293b" : "#ffffff",
+        "text-background-opacity": 0.95,
+        "text-border-width": 1,
+        "text-border-color": dark ? "#334155" : "#cbd5e1",
+        "text-border-opacity": 0.9,
+        "text-background-padding": "2px 6px",
       })
       .selector(".canvas-item")
       .style({ "text-background-color": dark ? "#111820" : "#ffffff" })
@@ -1379,8 +1726,10 @@ export default function NetOpsCanvas(props: Props) {
         const link = linksById.get(edge.id());
         if (!link) return;
         edge.data("label", canvasLinkDescription(link));
-        edge.data("srcPort", showPorts ? compactInterfaceLabel(link.source_interface) : "");
-        edge.data("tgtPort", showPorts ? compactInterfaceLabel(link.target_interface) : "");
+        const srcPrefix = link.status === "up" ? "● " : link.status === "down" ? "○ " : "";
+        const tgtPrefix = link.status === "up" ? "● " : link.status === "down" ? "○ " : "";
+        edge.data("srcPort", showPorts && link.source_interface ? `${srcPrefix}${compactInterfaceLabel(link.source_interface)}` : "");
+        edge.data("tgtPort", showPorts && link.target_interface ? `${tgtPrefix}${compactInterfaceLabel(link.target_interface)}` : "");
         edge.data("visible", 1);
       });
     });
@@ -1770,8 +2119,6 @@ export default function NetOpsCanvas(props: Props) {
     cy.fit(undefined, 48);
     setViewport({ ...cy.pan(), zoom: cy.zoom() });
   };
-  // Grid paper is a stable visual reference, independent of fit/zoom actions.
-  const gridSize = 32;
 
   const clientPoint = (event: { clientX: number; clientY: number }) => {
     const host = hostRef.current;
@@ -1870,10 +2217,18 @@ export default function NetOpsCanvas(props: Props) {
   // only things telling the user the canvas is in that state, so they are not
   // optional decoration.
   const placing = props.mode === "select" && !!props.armedNodeType;
-  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""} ${spaceHeld ? (isPanning ? "space-panning is-panning" : "space-panning") : ""}`} style={props.gridEnabled ? { backgroundSize: `${gridSize * viewport.zoom}px ${gridSize * viewport.zoom}px`, backgroundPosition: `${viewport.x}px ${viewport.y}px` } : undefined} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
+  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""} ${spaceHeld ? (isPanning ? "space-panning is-panning" : "space-panning") : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
+    <canvas ref={gridCanvasRef} className="netops-world-grid" aria-hidden="true" />
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
+    <canvas ref={overlayCanvasRef} className="netops-motion-overlay" aria-hidden="true" />
     {placing && <div className="netops-placing-hint" aria-live="polite">在空白处单击放置设备 · Esc 取消</div>}
-    {marquee && <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
+    {marquee && (
+      <div className="netops-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} aria-hidden="true">
+        <span className="netops-marquee-hud">
+          {Math.round(marquee.width)} × {Math.round(marquee.height)} px
+        </span>
+      </div>
+    )}
     {linkPreview && (
       <svg className="netops-link-preview" aria-hidden="true">
         <line x1={linkPreview.x1} y1={linkPreview.y1} x2={linkPreview.x2} y2={linkPreview.y2} />

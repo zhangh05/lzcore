@@ -97,15 +97,15 @@
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape { cursor: grab; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape:active { cursor: grabbing; }
 .topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: #ffffff; }
-/* Grid paper is intentionally fixed; editing changes object coordinates, not
-   the viewport or its reference grid. */
-.topology-studio .netops-canvas-wrap.grid-on { background-color: #ffffff; background-image: linear-gradient(#e8edf2 1px, transparent 1px), linear-gradient(90deg, #e8edf2 1px, transparent 1px); }
+.topology-studio .netops-canvas-wrap.grid-on { background-color: #ffffff; }
 
 [data-theme="dark"] .topology-studio .netops-canvas-wrap { background-color: #0f1519; }
-[data-theme="dark"] .topology-studio .netops-canvas-wrap.grid-on { background-color: #0f1519; background-image: linear-gradient(#22303b 1px, transparent 1px), linear-gradient(90deg, #22303b 1px, transparent 1px); }
+[data-theme="dark"] .topology-studio .netops-canvas-wrap.grid-on { background-color: #0f1519; }
 [data-theme="dark"] .topology-studio .topology-canvas-area { background: #0f1519; }
 [data-theme="dark"] .topology-studio .canvas-legend { background: #1a2129ee; border-color: #2c353e; color: #a9bac7; }
-.topology-studio .netops-cytoscape { position: absolute; inset: 0; width: 100%; height: 100%; outline: 0; }
+.topology-studio .netops-world-grid { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.topology-studio .netops-cytoscape { position: absolute; inset: 0; width: 100%; height: 100%; outline: 0; z-index: 1; }
+.topology-studio .netops-motion-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 12; }
 /* The marquee is driven from a capture-phase press on the document, which
    hit-tests the point before deciding whether to consume it. There is
    deliberately no overlay element: an overlay covers devices as well as empty
@@ -117,7 +117,8 @@
 /* A picked palette type leaves the canvas waiting for a click. */
 .topology-studio .netops-canvas-wrap.placing-armed .netops-cytoscape { cursor: copy; }
 .topology-studio .netops-placing-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 10px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-size: 11px; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-.topology-studio .netops-selection-marquee { position: absolute; z-index: 12; pointer-events: none; border: 1px solid var(--accent); background: rgb(22 131 123 / 14%); }
+.topology-studio .netops-selection-marquee { position: absolute; z-index: 13; pointer-events: none; border: 1.5px dashed var(--accent); background: rgba(15, 119, 115, 0.08); }
+.topology-studio .netops-marquee-hud { position: absolute; right: 0; bottom: -24px; padding: 1px 7px; border-radius: 4px; background: #0f172a; color: #ffffff; font-size: 10px; font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
 .topology-studio .netops-link-preview { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
 .topology-studio .netops-link-preview line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 .topology-studio .netops-link-preview circle { fill: var(--accent); }
@@ -1033,4 +1034,59 @@
   color: var(--accent);
   background: var(--accent-soft);
 }
+
+.topology-studio .batch-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
 }
+
+.topology-studio .batch-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, rgba(0, 0, 0, 0.02));
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+  text-align: left;
+}
+
+.topology-studio .batch-type-chip:hover {
+  background: var(--surface-3, rgba(0, 0, 0, 0.06));
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.topology-studio .batch-type-chip:active {
+  transform: translateY(0);
+}
+
+.topology-studio .batch-type-chip-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.topology-studio .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+}
+

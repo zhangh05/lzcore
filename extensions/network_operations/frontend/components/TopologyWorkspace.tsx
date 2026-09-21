@@ -2520,7 +2520,27 @@ export default function TopologyWorkspace({
                   <Button size="sm" onClick={() => distributeSelected("vertical")}>垂直等距</Button>
                 </div>
                 <span className="inspector-label">批量设置设备类型</span>
-                <select aria-label="批量设置设备类型" defaultValue="" onChange={(event) => { if (event.target.value) applyDeviceTypeToSelection(event.target.value); event.target.value = ""; }}>
+                <div className="batch-type-grid" role="group" aria-label="批量设置设备类型选项">
+                  {batchTypeOptions.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className="batch-type-chip"
+                      onClick={() => applyDeviceTypeToSelection(value)}
+                      title={`将选中设备批量设置为 ${label}`}
+                    >
+                      <img src={netOpsIconForDeviceType(value)} alt="" className="batch-type-chip-icon" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+                <select
+                  aria-label="批量设置设备类型"
+                  className="visually-hidden"
+                  defaultValue=""
+                  tabIndex={-1}
+                  onChange={(event) => { if (event.target.value) applyDeviceTypeToSelection(event.target.value); event.target.value = ""; }}
+                >
                   <option value="">选择类型…</option>
                   {batchTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
