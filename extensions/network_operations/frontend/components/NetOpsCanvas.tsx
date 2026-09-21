@@ -93,6 +93,7 @@ type Props = {
   /** Handed to the workspace once the renderer exists, null when it is gone. */
   onReady?: (api: CanvasApi | null) => void;
   onContextMenu?: (target: CanvasContextTarget) => void;
+  onOpenInspector?: () => void;
   onViewportChange?: (viewport: { x: number; y: number; zoom: number }) => void;
   /** node_id -> operational state, derived from the last collection pass. */
   /**
@@ -265,23 +266,50 @@ function edgeUnderPointer(cy: Cy, host: HTMLElement, event: MouseEvent): CyEleme
   const modelY = (point.y - pan.y) / zoom;
   const renderer = cy.renderer?.();
   if (renderer?.findNearestElements) {
-    const nearest = renderer.findNearestElements(modelX, modelY, false, true);
-    const edge = nearest?.find((ele: CyElement) => ele.isEdge?.());
-    if (edge) return edge;
+    try {
+      const nearest = renderer.findNearestElements(modelX, modelY, false, true);
+      const edge = nearest?.find((ele: CyElement) => ele.isEdge?.());
+      if (edge) return edge;
+    } catch {
+      // Fallback safely if renderer internals differ
+    }
   }
-  // Fallback geometric distance check (e.g. in unit tests or headless)
-  const maxDist = 20 / zoom;
+  // Comprehensive distance check: check midpoint, control points, and endpoints segment
+  const maxDist = 24 / zoom;
   let foundEdge: CyElement | null = null;
+  let bestDist = Infinity;
   if (cy.edges) {
     cy.edges().forEach((edge) => {
-      if (foundEdge) return;
+      // Check midpoint
+      const mid = edge.midpoint ? edge.midpoint() : null;
+      if (mid) {
+        const d = Math.hypot(modelX - mid.x, modelY - mid.y);
+        if (d <= maxDist && d < bestDist) {
+          bestDist = d;
+          foundEdge = edge;
+        }
+      }
+      // Check control points if curved
+      const controls = edge.controlPoints ? edge.controlPoints() : null;
+      if (controls && Array.isArray(controls)) {
+        controls.forEach((cp: { x: number; y: number }) => {
+          const d = Math.hypot(modelX - cp.x, modelY - cp.y);
+          if (d <= maxDist && d < bestDist) {
+            bestDist = d;
+            foundEdge = edge;
+          }
+        });
+      }
       const s = edge.source ? edge.source() : null;
       const t = edge.target ? edge.target() : null;
       const sPos = s && "position" in s ? (s as CyNode).position() : null;
       const tPos = t && "position" in t ? (t as CyNode).position() : null;
       if (sPos && tPos) {
         const dist = pointToSegmentDistance(modelX, modelY, sPos.x, sPos.y, tPos.x, tPos.y);
-        if (dist <= maxDist) foundEdge = edge;
+        if (dist <= maxDist && dist < bestDist) {
+          bestDist = dist;
+          foundEdge = edge;
+        }
       }
     });
   }
@@ -524,10 +552,55 @@ export default function NetOpsCanvas(props: Props) {
               "target-text-margin-y": 0,
             },
           },
+          {
+            selector: "edge[edgeStyle = 'dotted']",
+            style: {
+              "line-style": "dashed",
+              "line-dash-pattern": [0.1, 7],
+              "line-cap": "round",
+            },
+          },
+          {
+            selector: "edge[edgeStyle = 'dashed']",
+            style: {
+              "line-style": "dashed",
+              "line-dash-pattern": [8, 5],
+              "line-cap": "butt",
+            },
+          },
+          {
+            selector: "edge[edgeStyle = 'solid']",
+            style: {
+              "line-style": "solid",
+              "line-cap": "round",
+            },
+          },
           { selector: "edge[curveStyle = 'straight']", style: { "curve-style": "straight" } },
-          { selector: "edge[curveStyle = 'taxi']", style: { "curve-style": "taxi", "taxi-direction": "auto", "taxi-turn": 20 } },
-          { selector: "edge[curveStyle = 'bezier']", style: { "curve-style": "unbundled-bezier", "control-point-distances": 40, "control-point-weights": 0.5 } },
-          { selector: "edge[curveStyle = 'unbundled-bezier']", style: { "curve-style": "unbundled-bezier", "control-point-distances": 40, "control-point-weights": 0.5 } },
+          {
+            selector: "edge[curveStyle = 'taxi']",
+            style: {
+              "curve-style": "taxi",
+              "taxi-direction": "auto",
+              "taxi-turn": "50%",
+              "taxi-turn-min-distance": 10,
+            },
+          },
+          {
+            selector: "edge[curveStyle = 'bezier']",
+            style: {
+              "curve-style": "unbundled-bezier",
+              "control-point-distances": "data(bezierDist)",
+              "control-point-weights": 0.5,
+            },
+          },
+          {
+            selector: "edge[curveStyle = 'unbundled-bezier']",
+            style: {
+              "curve-style": "unbundled-bezier",
+              "control-point-distances": "data(bezierDist)",
+              "control-point-weights": 0.5,
+            },
+          },
           {
             selector: ".canvas-item",
             style: {
@@ -540,7 +613,7 @@ export default function NetOpsCanvas(props: Props) {
               "border-color": "data(border)",
               "border-width": "data(borderWidth)",
               color: "data(textColor)",
-              "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+              "font-family": '-apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
               "font-size": "data(fontSize)",
               "font-weight": 600,
               "text-wrap": "wrap",
@@ -568,16 +641,26 @@ export default function NetOpsCanvas(props: Props) {
             selector: ".canvas-item-text",
             style: {
               "background-opacity": 0,
-              "border-width": 1,
+              "border-width": 1.5,
               "border-style": "dashed",
-              "border-opacity": 0.45,
+              "border-color": "#94a3b8",
+              "border-opacity": 0.65,
               "text-valign": "center",
               "text-halign": "center",
               "text-justification": "left",
-              "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+              "font-family": '-apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
               "font-size": 14,
-              "font-weight": 500,
+              "font-weight": 600,
               "text-max-width": "data(textMaxWidth)",
+            },
+          },
+          {
+            selector: ".canvas-item-text:selected",
+            style: {
+              "border-style": "solid",
+              "border-width": 2,
+              "border-color": CANVAS_ACCENT.light,
+              "border-opacity": 1,
             },
           },
           // Selection adds a halo instead of repainting the border: the border
@@ -628,6 +711,8 @@ export default function NetOpsCanvas(props: Props) {
       try {
         const r = (cy as any).renderer?.();
         if (r && r.data) {
+          if (r.data.eleTxrCache) r.data.eleTxrCache.getElement = () => null;
+          if (r.data.lyrTxrCache) r.data.lyrTxrCache.getLayers = () => null;
           if (r.data.lblTxrCache) r.data.lblTxrCache.getElement = () => null;
           if (r.data.slbTxrCache) r.data.slbTxrCache.getElement = () => null;
           if (r.data.tlbTxrCache) r.data.tlbTxrCache.getElement = () => null;
@@ -779,6 +864,29 @@ export default function NetOpsCanvas(props: Props) {
         }
         cy.elements().unselect();
         current.onClearSelection();
+      });
+      cy.on("dbltap", (event) => {
+        const current = propsRef.current;
+        if (event.target.isNode?.()) {
+          const id = event.target.id?.() || "";
+          if (!id || id.startsWith("group-")) return;
+          if (id.startsWith("canvas-")) {
+            current.onSelectCanvasItem(id.slice("canvas-".length));
+            current.onOpenInspector?.();
+            return;
+          }
+          current.onSelectNode(id);
+          current.onOpenInspector?.();
+          return;
+        }
+        if (event.target.isEdge?.()) {
+          const id = event.target.id?.();
+          if (id) {
+            current.onSelectLink(id);
+            current.onOpenInspector?.();
+          }
+          return;
+        }
       });
       cy.on("mouseover", "node, edge", () => {
         if (propsRef.current.mode === "select") {
@@ -1143,6 +1251,8 @@ export default function NetOpsCanvas(props: Props) {
     try {
       const r = (cy as any).renderer?.();
       if (r && r.data) {
+        if (r.data.eleTxrCache) r.data.eleTxrCache.getElement = () => null;
+        if (r.data.lyrTxrCache) r.data.lyrTxrCache.getLayers = () => null;
         if (r.data.lblTxrCache) r.data.lblTxrCache.getElement = () => null;
         if (r.data.slbTxrCache) r.data.slbTxrCache.getElement = () => null;
         if (r.data.tlbTxrCache) r.data.tlbTxrCache.getElement = () => null;
@@ -1174,7 +1284,26 @@ export default function NetOpsCanvas(props: Props) {
       ...(props.topology.canvas_items || []).map((item) => {
         const style = { ...canvasItemDefaults[item.kind], ...item.style };
         const isText = item.kind === "text";
-        return { group: "nodes", classes: dimClass(`canvas-${item.item_id}`, `canvas-item canvas-item-${item.kind}`), data: { id: `canvas-${item.item_id}`, label: item.text, shape: item.kind === "ellipse" ? "ellipse" : "roundrectangle", width: item.width, height: item.height, fill: style.fill, border: style.border, textColor: style.color, fillOpacity: isText ? 0 : 0.24, borderWidth: isText ? 0 : 1.5, fontSize: isText ? 14 : 12, labelOpacity: 1, textMaxWidth: Math.max(24, item.width - 16) }, position: { x: item.x, y: item.y } };
+        return {
+          group: "nodes",
+          classes: dimClass(`canvas-${item.item_id}`, `canvas-item canvas-item-${item.kind}`),
+          data: {
+            id: `canvas-${item.item_id}`,
+            label: item.text,
+            shape: item.kind === "ellipse" ? "ellipse" : "roundrectangle",
+            width: item.width,
+            height: item.height,
+            fill: isText ? "transparent" : style.fill,
+            border: isText ? (theme === "dark" ? "#64748b" : "#94a3b8") : style.border,
+            textColor: isText ? (theme === "dark" ? "#f1f5f9" : "#0f172a") : style.color,
+            fillOpacity: isText ? 0 : 0.28,
+            borderWidth: isText ? 1.5 : Math.max(2, (style as any).borderWidth || 2),
+            fontSize: isText ? 14 : 13,
+            labelOpacity: 1,
+            textMaxWidth: Math.max(24, item.width - 16),
+          },
+          position: { x: item.x, y: item.y },
+        };
       }),
       // Do not let stale/imported links with a missing endpoint reach the
       // renderer. Cytoscape rejects those elements and can otherwise leave a
@@ -1212,6 +1341,7 @@ export default function NetOpsCanvas(props: Props) {
               edgeStyle: link.style?.line_style || defaultEdgeStyle,
               edgeWidth,
               curveStyle: link.style?.curve_style || "auto",
+              bezierDist: link.style?.curve_reverse ? -45 : 45,
               selectedEdgeWidth: Math.max(4, edgeWidth + 1.5),
             },
           };
@@ -1429,15 +1559,29 @@ export default function NetOpsCanvas(props: Props) {
     if (!canvas || !cy || !host || !miniOpen) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const width = 160;
-    const height = 110;
-    const dpr = window.devicePixelRatio || 1;
+    const width = 178;
+    const height = 118;
+    const dpr = typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 2) : 2;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
+
+    // Canvas background
+    const isDark = theme === "dark";
+    ctx.fillStyle = isDark ? "#0f172a" : "#f8fafc";
+    ctx.fillRect(0, 0, width, height);
+
+    // Subtle grid dots in minimap
+    ctx.fillStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+    for (let gx = 8; gx < width; gx += 14) {
+      for (let gy = 8; gy < height; gy += 14) {
+        ctx.fillRect(gx, gy, 1, 1);
+      }
+    }
+
     const points: Array<{ x: number; y: number }> = [];
     props.topology.nodes.forEach((node) => points.push({ x: node.x - 47, y: node.y - 38 }, { x: node.x + 47, y: node.y + 38 }));
     (props.topology.canvas_items || []).forEach((item) => points.push({ x: item.x - item.width / 2, y: item.y - item.height / 2 }, { x: item.x + item.width / 2, y: item.y + item.height / 2 }));
@@ -1452,8 +1596,23 @@ export default function NetOpsCanvas(props: Props) {
     miniTransformRef.current = { minX, minY, scale, offX, offY };
     const tx = (x: number) => offX + (x - minX) * scale;
     const ty = (y: number) => offY + (y - minY) * scale;
-    ctx.strokeStyle = "#c3d2db";
-    ctx.lineWidth = 0.8;
+
+    // Draw canvas items/zones faintly
+    (props.topology.canvas_items || []).forEach((item) => {
+      ctx.fillStyle = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)";
+      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.08)";
+      ctx.lineWidth = 0.8;
+      const x = tx(item.x - item.width / 2);
+      const y = ty(item.y - item.height / 2);
+      const w = item.width * scale;
+      const h = item.height * scale;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+    });
+
+    // Draw links
+    ctx.strokeStyle = isDark ? "#475569" : "#cbd5e1";
+    ctx.lineWidth = 1;
     const byId = new Map(props.topology.nodes.map((node) => [node.node_id, node]));
     props.topology.links.forEach((link) => {
       const source = byId.get(link.source_node_id);
@@ -1464,35 +1623,78 @@ export default function NetOpsCanvas(props: Props) {
       ctx.lineTo(tx(target.x), ty(target.y));
       ctx.stroke();
     });
-    ctx.fillStyle = "#0f9d8c";
-    props.topology.nodes.forEach((node) => ctx.fillRect(tx(node.x) - 2.5, ty(node.y) - 2, 5, 4));
+
+    // Draw nodes
+    props.topology.nodes.forEach((node) => {
+      const nx = tx(node.x);
+      const ny = ty(node.y);
+      ctx.fillStyle = isDark ? "#2dd4bf" : "#0f766e";
+      ctx.beginPath();
+      if ((ctx as any).roundRect) {
+        (ctx as any).roundRect(nx - 4, ny - 3, 8, 6, 2);
+      } else {
+        ctx.rect(nx - 4, ny - 3, 8, 6);
+      }
+      ctx.fill();
+    });
+
+    // Draw active viewport rectangle
     const pan = cy.pan();
     const zoom = cy.zoom();
     const viewX = tx(-pan.x / zoom);
     const viewY = ty(-pan.y / zoom);
     const viewW = (host.clientWidth / zoom) * scale;
     const viewH = (host.clientHeight / zoom) * scale;
-    ctx.fillStyle = "rgba(12,138,122,0.09)";
-    ctx.fillRect(viewX, viewY, viewW, viewH);
-    ctx.strokeStyle = "#0c8a7a";
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(viewX, viewY, viewW, viewH);
-  }, [rendererReady, props.topology, viewport, miniOpen]);
 
-  const jumpFromMinimap = (event: ReactMouseEvent<HTMLCanvasElement>) => {
+    ctx.fillStyle = isDark ? "rgba(45, 212, 191, 0.16)" : "rgba(15, 118, 110, 0.12)";
+    ctx.beginPath();
+    if ((ctx as any).roundRect) {
+      (ctx as any).roundRect(viewX, viewY, viewW, viewH, 3);
+    } else {
+      ctx.rect(viewX, viewY, viewW, viewH);
+    }
+    ctx.fill();
+
+    ctx.strokeStyle = isDark ? "#2dd4bf" : "#0f766e";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if ((ctx as any).roundRect) {
+      (ctx as any).roundRect(viewX, viewY, viewW, viewH, 3);
+    } else {
+      ctx.rect(viewX, viewY, viewW, viewH);
+    }
+    ctx.stroke();
+  }, [rendererReady, props.topology, viewport, miniOpen, theme]);
+
+  const handleMinimapCanvasDown = (event: ReactMouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     const canvas = miniRef.current;
     const cy = cyRef.current;
     const host = hostRef.current;
     const transform = miniTransformRef.current;
     if (!canvas || !cy || !host || !transform) return;
-    // The minimap canvas is a fixed 160x110 layout px, and `transform` is built
-    // from those numbers — so the click has to be converted into the same space.
-    const local = toHostPoint(canvas, event.clientX, event.clientY);
-    const modelX = (local.x - transform.offX) / transform.scale + transform.minX;
-    const modelY = (local.y - transform.offY) / transform.scale + transform.minY;
-    const zoom = cy.zoom();
-    cy.pan({ x: host.clientWidth / 2 - modelX * zoom, y: host.clientHeight / 2 - modelY * zoom });
-    setViewport({ ...cy.pan(), zoom });
+
+    const panToPoint = (clientX: number, clientY: number) => {
+      const local = toHostPoint(canvas, clientX, clientY);
+      const modelX = (local.x - transform.offX) / transform.scale + transform.minX;
+      const modelY = (local.y - transform.offY) / transform.scale + transform.minY;
+      const zoom = cy.zoom();
+      cy.pan({ x: host.clientWidth / 2 - modelX * zoom, y: host.clientHeight / 2 - modelY * zoom });
+      setViewport({ ...cy.pan(), zoom });
+    };
+
+    panToPoint(event.clientX, event.clientY);
+
+    const onMove = (e: MouseEvent) => {
+      panToPoint(e.clientX, e.clientY);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   };
 
   /**
@@ -1685,13 +1887,43 @@ export default function NetOpsCanvas(props: Props) {
         ))}
       </svg>
     )}
-    {miniOpen && <canvas ref={miniRef} className="topology-minimap-custom" aria-label="画布鹰眼视图" title="点击跳转视口" onMouseDown={jumpFromMinimap} />}
+    {miniOpen && (
+      <div className="topology-minimap-panel">
+        <div className="topology-minimap-header">
+          <div className="topology-minimap-title-wrap">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="8" cy="8" r="6" />
+              <path d="M8 2v3M8 11v3M2 8h3M11 8h3" />
+            </svg>
+            <span>全景导航</span>
+          </div>
+          <button
+            type="button"
+            className="topology-minimap-close"
+            onClick={() => setMiniOpen(false)}
+            title="关闭全景导航"
+            aria-label="关闭全景导航"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="topology-minimap-body">
+          <canvas
+            ref={miniRef}
+            className="topology-minimap-custom"
+            aria-label="画布全景导航图"
+            title="点击或拖动跳转视口"
+            onMouseDown={handleMinimapCanvasDown}
+          />
+        </div>
+      </div>
+    )}
     <div className="netops-viewport-controls" aria-label="画布视图控制">
       <button type="button" onClick={() => updateZoom(0.15)} aria-label="放大画布">+</button>
       <button type="button" onClick={() => updateZoom(-0.15)} aria-label="缩小画布">−</button>
       <button type="button" className="netops-zoom-readout" onClick={fitCanvas} title="适配全部节点">{Math.round(viewport.zoom * 100)}%</button>
       <button type="button" onClick={fitCanvas} aria-label="适配画布">适配</button>
-      <button type="button" className={miniOpen ? "is-active" : ""} aria-pressed={miniOpen} onClick={() => setMiniOpen((value) => !value)} title="鹰眼视图">鹰眼</button>
+      <button type="button" className={miniOpen ? "is-active" : ""} aria-pressed={miniOpen} onClick={() => setMiniOpen((value) => !value)} title="全景导航视图">全景导航</button>
     </div>
     <div className="netops-canvas-accessibility" aria-label="画布设备快捷选择">
       {props.topology.nodes.map((node) => <button key={node.node_id} type="button" data-testid={`topo-node-${node.node_id}`} onClick={() => props.onSelectNode(node.node_id)}>{node.display_name || node.node_id}</button>)}

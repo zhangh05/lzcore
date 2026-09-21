@@ -71,6 +71,7 @@ export type TopologyLinkStyle = {
   width?: number;
   line_style?: "solid" | "dashed" | "dotted";
   curve_style?: "bezier" | "straight" | "taxi";
+  curve_reverse?: boolean;
 };
 
 export type TopologyLink = {
@@ -2213,12 +2214,37 @@ export default function TopologyWorkspace({
               <input
                 ref={searchInputRef}
                 value={canvasQuery}
-                placeholder="搜索设备 / IP  /"
+                placeholder="搜索设备"
                 aria-label="在画布中搜索设备"
                 onChange={(event) => setCanvasQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setCanvasQuery("");
+                    searchInputRef.current?.blur();
+                  } else if (event.key === "Enter" && canvasMatches.length > 0) {
+                    focusCanvasObject(canvasMatches[0].id, canvasMatches[0].kind);
+                    setCanvasQuery("");
+                    searchInputRef.current?.blur();
+                  }
+                }}
                 onBlur={() => window.setTimeout(() => setCanvasQuery(""), 180)}
               />
-              {canvasMatches.length > 0 && (
+              {canvasQuery && (
+                <button
+                  type="button"
+                  className="canvas-search-clear"
+                  aria-label="清空搜索"
+                  title="清空搜索"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setCanvasQuery("");
+                    searchInputRef.current?.focus();
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+              {canvasQuery && canvasMatches.length > 0 && (
                 <div className="canvas-search-results">
                   {canvasMatches.map((match) => (
                     <button key={match.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => focusCanvasObject(match.id, match.kind)}>
@@ -2226,6 +2252,11 @@ export default function TopologyWorkspace({
                       <small>{match.detail}</small>
                     </button>
                   ))}
+                </div>
+              )}
+              {canvasQuery && canvasMatches.length === 0 && (
+                <div className="canvas-search-results">
+                  <div className="canvas-search-empty">未找到匹配设备</div>
                 </div>
               )}
             </div>
@@ -2445,6 +2476,7 @@ export default function TopologyWorkspace({
             onDisarmNodeType={disarmNodeType}
             onReady={(api) => { canvasApiRef.current = api; }}
             onContextMenu={setContextMenu}
+            onOpenInspector={() => setIsInspectorOpen(true)}
             onViewportChange={updatePopoverAnchor}
           />
 
@@ -2761,52 +2793,162 @@ export default function TopologyWorkspace({
 
               <div className="inspector-label" style={{ marginTop: "4px" }}>连线外观与形态</div>
 
-              <label className="inspector-field">
-                走线形态
-                <select
-                  value={selectedLink.style?.curve_style || "auto"}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const val = e.target.value as "auto" | "bezier" | "straight" | "taxi";
-                    const updated = activeTopology.links.map((l) =>
-                      l.link_id === selectedLink.link_id
-                        ? { ...l, style: { ...l.style, curve_style: val === "auto" ? undefined : val } }
-                        : l
+              <div className="inspector-field">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span>走线形态</span>
+                  {selectedLink.style?.curve_style === "bezier" && (
+                    <button
+                      type="button"
+                      className="curve-reverse-btn"
+                      onClick={() => {
+                        if (!activeTopology) return;
+                        const isRev = !selectedLink.style?.curve_reverse;
+                        const updated = activeTopology.links.map((l) =>
+                          l.link_id === selectedLink.link_id
+                            ? { ...l, style: { ...l.style, curve_reverse: isRev } }
+                            : l
+                        );
+                        pushState({ ...activeTopology, links: updated });
+                      }}
+                      title="翻转圆弧弯曲朝向"
+                    >
+                      {selectedLink.style?.curve_reverse ? "⤹ 弧向(下)" : "⤥ 弧向(上)"}
+                    </button>
+                  )}
+                </div>
+                <div className="curve-style-chips">
+                  {[
+                    {
+                      id: "auto",
+                      name: "自动避让",
+                      tip: "默认：智能避让·并行链路自动分流",
+                      icon: (
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <path d="M2 11C6 11 10 5 14 5" />
+                          <path d="M2 14C7 14 9 8 14 8" strokeDasharray="2 2" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      id: "taxi",
+                      name: "正交折线",
+                      tip: "正交折线·机柜机房规范布线",
+                      icon: (
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <path d="M2 13H8V4H14" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      id: "bezier",
+                      name: "圆弧曲线",
+                      tip: "平滑弧线·跨区域美观弧线",
+                      icon: (
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <path d="M2 13C6 4 10 4 14 13" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      id: "straight",
+                      name: "直线直达",
+                      tip: "最短直达·两点直接相连",
+                      icon: (
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <line x1="2" y1="13" x2="14" y2="3" />
+                        </svg>
+                      ),
+                    },
+                  ].map((option) => {
+                    const currentStyle = selectedLink.style?.curve_style || "auto";
+                    const isActive = currentStyle === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`curve-chip ${isActive ? "is-active" : ""}`}
+                        onClick={() => {
+                          if (!activeTopology) return;
+                          const val = option.id as "auto" | "bezier" | "straight" | "taxi";
+                          const updated = activeTopology.links.map((l) =>
+                            l.link_id === selectedLink.link_id
+                              ? { ...l, style: { ...l.style, curve_style: val === "auto" ? undefined : val } }
+                              : l
+                          );
+                          pushState({ ...activeTopology, links: updated });
+                        }}
+                        title={option.tip}
+                      >
+                        {option.icon}
+                        <span>{option.name}</span>
+                      </button>
                     );
-                    pushState({ ...activeTopology, links: updated });
-                  }}
-                >
-                  <option value="auto">默认 (多链路自动避让)</option>
-                  <option value="bezier">平滑曲线 (圆弧走线)</option>
-                  <option value="straight">直线 (两点直达)</option>
-                  <option value="taxi">直角折线 (正交曼哈顿走线)</option>
-                </select>
-              </label>
+                  })}
+                </div>
+              </div>
 
-              <label className="inspector-field">
-                线型
-                <select
-                  value={selectedLink.style?.line_style || (selectedLink.kind === "logical" ? "dashed" : "solid")}
-                  onChange={(e) => {
-                    if (!activeTopology) return;
-                    const val = e.target.value as "solid" | "dashed" | "dotted";
-                    const updated = activeTopology.links.map((l) =>
-                      l.link_id === selectedLink.link_id
-                        ? {
-                            ...l,
-                            kind: (val === "dashed" ? "logical" : "physical") as "physical" | "logical",
-                            style: { ...l.style, line_style: val },
-                          }
-                        : l
+              <div className="inspector-field">
+                <span>线型风格</span>
+                <div className="line-style-chips">
+                  {[
+                    {
+                      id: "solid",
+                      name: "实线",
+                      icon: (
+                        <svg width="28" height="6" viewBox="0 0 28 6" fill="none">
+                          <line x1="0" y1="3" x2="28" y2="3" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      id: "dashed",
+                      name: "虚线",
+                      icon: (
+                        <svg width="28" height="6" viewBox="0 0 28 6" fill="none">
+                          <line x1="0" y1="3" x2="28" y2="3" stroke="currentColor" strokeWidth="2.5" strokeDasharray="5 3" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      id: "dotted",
+                      name: "点线",
+                      icon: (
+                        <svg width="28" height="6" viewBox="0 0 28 6" fill="none">
+                          <line x1="1" y1="3" x2="27" y2="3" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="0.1 4" />
+                        </svg>
+                      ),
+                    },
+                  ].map((preset) => {
+                    const currentLineStyle = selectedLink.style?.line_style || (selectedLink.kind === "logical" ? "dashed" : "solid");
+                    const isActive = currentLineStyle === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={`line-chip ${isActive ? "is-active" : ""}`}
+                        onClick={() => {
+                          if (!activeTopology) return;
+                          const val = preset.id as "solid" | "dashed" | "dotted";
+                          const updated = activeTopology.links.map((l) =>
+                            l.link_id === selectedLink.link_id
+                              ? {
+                                  ...l,
+                                  kind: (val === "dashed" ? "logical" : "physical") as "physical" | "logical",
+                                  style: { ...l.style, line_style: val },
+                                }
+                              : l
+                          );
+                          pushState({ ...activeTopology, links: updated });
+                        }}
+                        title={`${preset.name}样式`}
+                      >
+                        {preset.icon}
+                        <span>{preset.name}</span>
+                      </button>
                     );
-                    pushState({ ...activeTopology, links: updated });
-                  }}
-                >
-                  <option value="solid">实线 ────</option>
-                  <option value="dashed">虚线 ╌╌╌╌</option>
-                  <option value="dotted">点线 •••••</option>
-                </select>
-              </label>
+                  })}
+                </div>
+              </div>
 
               <div className="inspector-field">
                 <span>线宽粗细 ({selectedLink.style?.width ? `${selectedLink.style.width}px` : "标准 2.5px"})</span>
@@ -3064,11 +3206,17 @@ export default function TopologyWorkspace({
                 <label className="inspector-field">
                   图元类型
                   <select
+                    aria-label="图元类型"
                     value={selectedCanvasItem.kind}
                     onChange={(e) => {
                       if (!activeTopology) return;
                       const kind = e.target.value as TopologyCanvasItem["kind"];
-                      pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, kind } : item) });
+                      pushState({
+                        ...activeTopology,
+                        canvas_items: (activeTopology.canvas_items || []).map((item) =>
+                          item.item_id === selectedCanvasItem.item_id ? { ...item, kind } : item
+                        ),
+                      });
                     }}
                   >
                     <option value="rectangle">矩形区域</option>
@@ -3076,11 +3224,12 @@ export default function TopologyWorkspace({
                     <option value="text">文本框</option>
                   </select>
                 </label>
+
                 <label className="inspector-field">
                   文本内容
                   <textarea
                     value={selectedCanvasItem.text}
-                    rows={3}
+                    rows={2}
                     maxLength={240}
                     placeholder={selectedCanvasItem.kind === "text" ? "输入说明文字" : "如：核心业务区"}
                     onChange={(e) => {
@@ -3090,6 +3239,7 @@ export default function TopologyWorkspace({
                     }}
                   />
                 </label>
+
                 <label className="inspector-field">
                   图元样式
                   <select
@@ -3104,21 +3254,56 @@ export default function TopologyWorkspace({
                     {Object.entries(canvasItemStylePresets).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
                   </select>
                 </label>
-                <div className="inspector-dimension-grid">
-                  <label className="inspector-field">宽度
-                    <input type="number" min="40" max="1600" value={Math.round(selectedCanvasItem.width)} onChange={(e) => {
-                      if (!activeTopology) return;
-                      const width = Math.min(1600, Math.max(40, Number(e.target.value) || 40));
-                      pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, width } : item) });
-                    }} />
-                  </label>
-                  <label className="inspector-field">高度
-                    <input type="number" min="24" max="1200" value={Math.round(selectedCanvasItem.height)} onChange={(e) => {
-                      if (!activeTopology) return;
-                      const height = Math.min(1200, Math.max(24, Number(e.target.value) || 24));
-                      pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, height } : item) });
-                    }} />
-                  </label>
+
+                <div className="inspector-dimension-section">
+                  <div className="inspector-dimension-grid">
+                    <label className="inspector-field">宽度
+                      <input type="number" min="40" max="1600" value={Math.round(selectedCanvasItem.width)} onChange={(e) => {
+                        if (!activeTopology) return;
+                        const width = Math.min(1600, Math.max(40, Number(e.target.value) || 40));
+                        pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, width } : item) });
+                      }} />
+                    </label>
+                    <label className="inspector-field">高度
+                      <input type="number" min="24" max="1200" value={Math.round(selectedCanvasItem.height)} onChange={(e) => {
+                        if (!activeTopology) return;
+                        const height = Math.min(1200, Math.max(24, Number(e.target.value) || 24));
+                        pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, height } : item) });
+                      }} />
+                    </label>
+                  </div>
+                  <div className="dimension-presets">
+                    {(selectedCanvasItem.kind === "text"
+                      ? [
+                          { label: "单行", w: 180, h: 36 },
+                          { label: "双行", w: 220, h: 56 },
+                          { label: "段落", w: 280, h: 90 },
+                        ]
+                      : [
+                          { label: "紧凑", w: 180, h: 90 },
+                          { label: "标准", w: 260, h: 140 },
+                          { label: "广域", w: 380, h: 220 },
+                        ]
+                    ).map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className="dimension-chip"
+                        onClick={() => {
+                          if (!activeTopology) return;
+                          pushState({
+                            ...activeTopology,
+                            canvas_items: (activeTopology.canvas_items || []).map((item) =>
+                              item.item_id === selectedCanvasItem.item_id ? { ...item, width: preset.w, height: preset.h } : item
+                            ),
+                          });
+                        }}
+                        title={`快捷设置为 ${preset.w} × ${preset.h} 像素`}
+                      >
+                        {preset.label} ({preset.w}×{preset.h})
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -3283,7 +3468,7 @@ export default function TopologyWorkspace({
         )}
       </aside>
         </div>
-        <footer className="studio-statusbar"><span>独立图纸 · eNSP/HCL 专业操作模式</span><span>空白拖拽框选 · 空格/中键平移 · 连续点放 · C 极速连线 · ⌘D 克隆</span></footer>
+        <footer className="studio-statusbar"><span>独立图纸</span><span>空白拖拽框选 · 空格/中键平移 · 连续点放 · C 极速连线 · ⌘D 克隆</span></footer>
       </main>
 
       {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} selection={canvasSelection} onCompleted={() => { void handleAgentCompleted(); }} /></aside>}
