@@ -176,12 +176,12 @@ const DRAWING_DEVICE_TYPES = [
 ] as const;
 
 export const QUICK_PALETTE_DEVICES = [
-  { value: "router", label: "路由器", icon: "/netops-canvas/icons/router.png" },
-  { value: "switch", label: "交换机", icon: "/netops-canvas/icons/switch.png" },
-  { value: "firewall", label: "防火墙", icon: "/netops-canvas/icons/icon_firewall_custom.png" },
-  { value: "server", label: "服务器", icon: "/netops-canvas/icons/server.png" },
-  { value: "pc", label: "终端", icon: "/netops-canvas/icons/pc.png" },
-  { value: "cloud", label: "云/WAN", icon: "/netops-canvas/icons/cloud.png" },
+  { value: "router", label: "路由器", icon: "/netops-canvas/icons/router.svg" },
+  { value: "switch", label: "交换机", icon: "/netops-canvas/icons/switch.svg" },
+  { value: "firewall", label: "防火墙", icon: "/netops-canvas/icons/icon_firewall_custom.svg" },
+  { value: "server", label: "服务器", icon: "/netops-canvas/icons/server.svg" },
+  { value: "pc", label: "终端", icon: "/netops-canvas/icons/pc.svg" },
+  { value: "cloud", label: "云/WAN", icon: "/netops-canvas/icons/cloud.svg" },
 ] as const;
 
 
