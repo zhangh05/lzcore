@@ -757,14 +757,14 @@ export default function NetOpsCanvas(props: Props) {
               "line-opacity": 1,
               "curve-style": "bezier",
               "control-point-step-size": 144,
-              // Port connection terminal socket points (RJ45 / optical interface pins)
-              "source-arrow-shape": "circle",
-              "target-arrow-shape": "circle",
+              // Port connection terminal socket points (RJ45 modular socket block)
+              "source-arrow-shape": "square",
+              "target-arrow-shape": "square",
               "source-arrow-color": "data(edgeColor)",
               "target-arrow-color": "data(edgeColor)",
               "source-arrow-fill": "filled",
               "target-arrow-fill": "filled",
-              "arrow-scale": 0.85,
+              "arrow-scale": 0.65,
               label: "data(label)",
               "font-family": 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace',
               "font-size": 10,
@@ -781,8 +781,8 @@ export default function NetOpsCanvas(props: Props) {
               "text-margin-y": "-14px",
               "source-label": "data(srcPort)",
               "target-label": "data(tgtPort)",
-              "source-text-offset": 24,
-              "target-text-offset": 24,
+              "source-text-offset": 22,
+              "target-text-offset": 22,
               "source-text-margin-y": 0,
               "target-text-margin-y": 0,
             },
@@ -986,7 +986,7 @@ export default function NetOpsCanvas(props: Props) {
           if (portGeometry.get(edge) === key) return;
           portGeometry.set(edge, key);
           const offsets = portLabelOffsets(start, end, controls?.[0]);
-          const maxOffset = 26;
+          const maxOffset = 22;
           const srcOffset = Math.min(offsets.source, maxOffset);
           const tgtOffset = Math.min(offsets.target, maxOffset);
           edge.style({ "source-text-offset": srcOffset, "target-text-offset": tgtOffset });
@@ -1635,10 +1635,8 @@ export default function NetOpsCanvas(props: Props) {
         const link = linksById.get(edge.id());
         if (!link) return;
         edge.data("label", canvasLinkDescription(link));
-        const srcPrefix = link.status === "up" ? "● " : link.status === "down" ? "○ " : "";
-        const tgtPrefix = link.status === "up" ? "● " : link.status === "down" ? "○ " : "";
-        edge.data("srcPort", showPorts && link.source_interface ? `${srcPrefix}${compactInterfaceLabel(link.source_interface)}` : "");
-        edge.data("tgtPort", showPorts && link.target_interface ? `${tgtPrefix}${compactInterfaceLabel(link.target_interface)}` : "");
+        edge.data("srcPort", showPorts && link.source_interface ? compactInterfaceLabel(link.source_interface) : "");
+        edge.data("tgtPort", showPorts && link.target_interface ? compactInterfaceLabel(link.target_interface) : "");
         edge.data("visible", 1);
       });
     });
