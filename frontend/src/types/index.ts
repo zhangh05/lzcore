@@ -560,6 +560,7 @@ export interface Session {
   created_at: string;
   updated_at: string;
   message_count: number;
+  metadata?: Record<string, unknown>;
 }
 
 /* ────────────────────────── SessionMessage ──────────────────────────

@@ -62,3 +62,25 @@ def test_workbench_selection_is_public_but_resolved_context_cannot_be_forged(mon
     resolved = resolve_workbench_metadata(metadata, "workspace_1")
     assert "workbench_selection" not in resolved
     assert resolved["workbench_context"]["connection_ids"] == ["verified:workspace_1"]
+
+
+def test_topology_session_defaults_drawing_skill_when_selection_omitted(monkeypatch):
+    monkeypatch.setattr(
+        "storage.session_store.get_session",
+        lambda session_id, ws_id: {
+            "session_id": session_id,
+            "title": "拓扑 · 大型网络",
+            "metadata": {"topology_id": "topo_123", "allow_edit": True},
+        },
+    )
+    captured = {}
+    def mock_resolve_ctx(workspace_id, value):
+        captured.update(value)
+        return {"extension_id": value["extension_id"], "skill_id": value["skill_id"], "bound": True}
+
+    monkeypatch.setattr("extensions.runtime.resolve_workbench_context", mock_resolve_ctx)
+    resolved = resolve_workbench_metadata({}, "workspace_1", session_id="sess_topo_1")
+    assert resolved["workbench_context"]["skill_id"] == "drawing:topo_123"
+    assert captured["resource_ids"] == ["topo_123"]
+    assert captured["allow_edit"] is True
+

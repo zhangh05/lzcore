@@ -70,6 +70,15 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     if (!sessionId) {
       if (stored && stored !== sessionId) setSessionId(stored);
     } else if (stored === sessionId) {
+      try {
+        localStorage.setItem(
+          scopedLocalStorageKey(`workbench_skill:${sessionId}`),
+          JSON.stringify({
+            skill_key: `network.operations:drawing:${topology.topology_id}`,
+            resource_ids: [topology.topology_id],
+          }),
+        );
+      } catch {}
       if (!sending) {
         void refreshHistory().catch(() => setError("会话记录读取失败；已有会话保留，请重试加载。"));
       }
@@ -78,7 +87,7 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
       setSessionId(null);
       setError("");
     }
-  }, [sessionListVersion, sessionId, storageKey, refreshHistory, sending]);
+  }, [sessionListVersion, sessionId, storageKey, refreshHistory, sending, topology.topology_id]);
   useEffect(() => {
     if (!loaded || sending || !sessionId) return;
     if (job?.status !== "running") return;
@@ -97,7 +106,10 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
       await sessionsApi.delete(oldId, workspaceId).catch(() => {});
     } finally {
       useWorkbenchStore.getState().clear(oldId);
-      try { localStorage.removeItem(storageKey); } catch {}
+      try {
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem(scopedLocalStorageKey(`workbench_skill:${oldId}`));
+      } catch {}
       setSessionId(null);
       setError("");
       useSessionStore.getState().bumpSessionList();
@@ -111,10 +123,30 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     try {
       let id = sessionId;
       if (!id) {
-        const created = await sessionsApi.create(workspaceId, `拓扑 · ${topology.name}`);
+        const created = await sessionsApi.create(workspaceId, `拓扑 · ${topology.name}`, {
+          topology_id: topology.topology_id,
+          topology_name: topology.name,
+          allow_edit: allowEdit,
+          workbench_selection: {
+            extension_id: "network.operations",
+            skill_id: allowEdit ? `drawing:${topology.topology_id}` : `drawing:${topology.topology_id}:ro`,
+            skill_name: allowEdit ? `拓扑绘图 · ${topology.name}` : `拓扑只读分析 · ${topology.name}`,
+            resource_ids: [topology.topology_id],
+            allow_edit: allowEdit,
+          },
+        });
         id = created.session.session_id;
         setSessionId(id);
-        try { localStorage.setItem(storageKey, id); } catch { /* session remains available via task history */ }
+        try {
+          localStorage.setItem(storageKey, id);
+          localStorage.setItem(
+            scopedLocalStorageKey(`workbench_skill:${id}`),
+            JSON.stringify({
+              skill_key: `network.operations:drawing:${topology.topology_id}`,
+              resource_ids: [topology.topology_id],
+            }),
+          );
+        } catch { /* session remains available via task history */ }
         useSessionStore.getState().bumpSessionList();
       } else {
         try {

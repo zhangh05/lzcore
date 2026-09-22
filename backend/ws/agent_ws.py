@@ -374,7 +374,7 @@ def register_ws_routes(app):
                     from backend.core.agent_contract import resolve_workbench_metadata
                     from storage.principal import storage_principal
                     with storage_principal(authenticated_username):
-                        metadata = resolve_workbench_metadata(metadata, workspace_id)
+                        metadata = resolve_workbench_metadata(metadata, workspace_id, session_id=session_id)
                 except ValueError as exc:
                     ws.send(json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=True))
                     continue

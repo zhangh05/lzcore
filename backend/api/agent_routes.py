@@ -113,7 +113,7 @@ def agent_message():
     metadata = normalize_metadata(metadata, transport="http", stream_mode=stream_mode)
     try:
         from backend.core.agent_contract import resolve_workbench_metadata
-        metadata = resolve_workbench_metadata(metadata, ws_id)
+        metadata = resolve_workbench_metadata(metadata, ws_id, session_id=session_id)
     except ValueError as exc:
         return _json_error("INVALID_WORKBENCH_SELECTION", str(exc), 400)
 

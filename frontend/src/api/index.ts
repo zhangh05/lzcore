@@ -214,13 +214,14 @@ export const sessionsApi = {
   create: (
     workspace_id: string,
     title?: string,
+    metadata?: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<{ ok: boolean; session: Session }> =>
     apiRequest<{ ok: boolean; session: Session }>(
       {
         method: "POST",
         url: "/sessions",
-        data: { workspace_id, title: title || "" },
+        data: { workspace_id, title: title || "", metadata: metadata || {} },
       },
       signal,
     ),

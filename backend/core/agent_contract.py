@@ -77,10 +77,61 @@ def normalize_metadata(metadata: dict | None, *, transport: str, stream_mode: st
     return normalized
 
 
-def resolve_workbench_metadata(metadata: dict, workspace_id: str) -> dict:
-    """Turn an allowed but untrusted UI selection into server-owned context."""
+def resolve_workbench_metadata(metadata: dict, workspace_id: str, session_id: str | None = None) -> dict:
+    """Turn an allowed but untrusted UI selection into server-owned context.
+
+    If the client does not provide an explicit workbench_selection, but the
+    current session is bound to a topology (e.g. created from the topology canvas
+    or carrying topology metadata/title), automatically supply the topology
+    drawing skill so canvas tools are active by default.
+    """
     normalized = dict(metadata or {})
     selection = normalized.pop("workbench_selection", None)
+    if not selection and session_id:
+        try:
+            from storage.session_store import get_session, update_session
+            sess = get_session(session_id, workspace_id)
+            if sess:
+                sess_meta = dict(sess.get("metadata") or {})
+                topo_id = sess_meta.get("topology_id")
+                allow_edit = bool(sess_meta.get("allow_edit", True))
+                if not topo_id and (sess.get("title") or "").startswith("拓扑 · "):
+                    topo_name = sess["title"].split("拓扑 · ", 1)[1].strip()
+                    try:
+                        from extensions.network_operations.topology_service import list_topologies
+                        topos = list_topologies(workspace_id)
+                        for t in topos:
+                            if t.get("name") == topo_name or t.get("topology_id") == topo_name:
+                                topo_id = t["topology_id"]
+                                break
+                        if not topo_id:
+                            import re
+                            from storage.session_store import get_session_messages
+                            msgs = get_session_messages(session_id, workspace_id)
+                            for m in reversed(msgs[-10:]):
+                                content = str(m.get("content") or "")
+                                match = re.search(r'["\']topology_id["\']\s*:\s*["\'](topo_[a-f0-9]+)["\']', content)
+                                if match:
+                                    candidate = match.group(1)
+                                    if any(t.get("topology_id") == candidate for t in topos):
+                                        topo_id = candidate
+                                        break
+                    except Exception:
+                        pass
+                if topo_id:
+                    selection = {
+                        "extension_id": "network.operations",
+                        "skill_id": f"drawing:{topo_id}" if allow_edit else f"drawing:{topo_id}:ro",
+                        "resource_ids": [topo_id],
+                        "allow_edit": allow_edit,
+                    }
+                    if not sess_meta.get("topology_id"):
+                        sess_meta["topology_id"] = topo_id
+                        sess_meta["workbench_selection"] = selection
+                        update_session(session_id, workspace_id, metadata=sess_meta)
+        except Exception:
+            pass
+
     if selection:
         from extensions.runtime import resolve_workbench_context
         normalized["workbench_context"] = resolve_workbench_context(workspace_id, selection)

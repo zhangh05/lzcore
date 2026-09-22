@@ -78,8 +78,26 @@ export function TaskWorkbench() {
     if (!currentWorkspaceId) return;
     const params = { workspace_id: currentWorkspaceId, enabled: "1" };
     setSkillCatalogLoaded(false);
-    apiRequest<{ skills: WorkbenchSkill[] }>({ method: "GET", url: "/workbench/skills", params })
-      .then((response) => setWorkbenchSkills(response.skills || []))
+    Promise.all([
+      apiRequest<{ skills: WorkbenchSkill[] }>({ method: "GET", url: "/workbench/skills", params }),
+      apiRequest<{ topologies: Array<{ topology_id: string; name: string }> }>({
+        method: "GET",
+        url: "/extensions/network.operations/topologies",
+        params: { workspace_id: currentWorkspaceId },
+      }).catch(() => ({ topologies: [] })),
+    ])
+      .then(([skillsRes, topoRes]) => {
+        const drawingSkills: WorkbenchSkill[] = (topoRes.topologies || []).map((t) => ({
+          extension_id: "network.operations",
+          skill_id: `drawing:${t.topology_id}`,
+          name: `拓扑绘图 · ${t.name}`,
+          description: `围绕网络拓扑「${t.name}」进行实时读图与绘图修改。`,
+          resources: [{ resource_id: t.topology_id, name: t.name, description: `拓扑图纸 · ${t.name}`, kind: "drawing" }],
+          default_resource_ids: [t.topology_id],
+          selection_mode: "single",
+        }));
+        setWorkbenchSkills([...(skillsRes.skills || []), ...drawingSkills]);
+      })
       .catch(() => setWorkbenchSkills([]))
       .finally(() => setSkillCatalogLoaded(true));
   }, [currentWorkspaceId]);
@@ -89,11 +107,49 @@ export function TaskWorkbench() {
     const key = scopedLocalStorageKey(`workbench_skill:${currentSessionId}`);
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "{}") as { skill_key?: string; resource_ids?: string[] };
-      setSelectedSkillKey(saved.skill_key || "");
-      setSelectedResourceIds(Array.isArray(saved.resource_ids) ? saved.resource_ids : []);
-      setSelectionSessionId(currentSessionId);
-    } catch { setSelectedSkillKey(""); setSelectedResourceIds([]); setSelectionSessionId(currentSessionId); }
-  }, [currentSessionId]);
+      if (saved.skill_key) {
+        setSelectedSkillKey(saved.skill_key);
+        setSelectedResourceIds(Array.isArray(saved.resource_ids) ? saved.resource_ids : []);
+        setSelectionSessionId(currentSessionId);
+        return;
+      }
+    } catch { /* noop */ }
+
+    // Fallback: check session metadata or title
+    sessionsApi.get(currentSessionId, currentWorkspaceId)
+      .then((res) => {
+        const sess = res?.session;
+        if (!sess) return;
+        const meta = (sess.metadata || {}) as Record<string, unknown>;
+        let topoId = typeof meta.topology_id === "string" ? meta.topology_id : "";
+        if (!topoId && typeof sess.title === "string" && sess.title.startsWith("拓扑 · ")) {
+          const topoName = sess.title.replace(/^拓扑 · /, "").trim();
+          const matched = workbenchSkills.find(
+            (s) => s.skill_id.startsWith("drawing:") && (s.name.includes(topoName) || s.resources.some((r) => r.name === topoName || r.resource_id === topoName)),
+          );
+          if (matched) {
+            topoId = matched.resources[0]?.resource_id || "";
+          }
+        }
+        if (topoId) {
+          const skillKey = `network.operations:drawing:${topoId}`;
+          setSelectedSkillKey(skillKey);
+          setSelectedResourceIds([topoId]);
+          try {
+            localStorage.setItem(key, JSON.stringify({ skill_key: skillKey, resource_ids: [topoId] }));
+          } catch { /* noop */ }
+        } else {
+          setSelectedSkillKey("");
+          setSelectedResourceIds([]);
+        }
+        setSelectionSessionId(currentSessionId);
+      })
+      .catch(() => {
+        setSelectedSkillKey("");
+        setSelectedResourceIds([]);
+        setSelectionSessionId(currentSessionId);
+      });
+  }, [currentSessionId, currentWorkspaceId, workbenchSkills]);
 
   useEffect(() => {
     if (!currentSessionId || selectionSessionId !== currentSessionId) return;
@@ -288,6 +344,7 @@ export function TaskWorkbench() {
       skill_id: selectedSkill.skill_id,
       skill_name: selectedSkill.name,
       resource_ids: selectedResourceIds,
+      allow_edit: true,
     } : undefined;
     return sendPrepared(text, { ...(metadata || {}), ...(workbenchSelection ? { workbench_selection: workbenchSelection } : {}) });
   }, [selectedResourceIds, selectedSkill, sendPrepared, toast]);

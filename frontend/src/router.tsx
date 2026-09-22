@@ -80,7 +80,15 @@ export function useLocation(): AppLocation {
 
 export function useNavigate() {
   const router = useContext(RouterContext);
-  if (!router) throw new Error("Router context is required");
+  if (!router) {
+    return (raw: string, options?: { replace?: boolean }) => {
+      if (typeof window !== "undefined") {
+        const target = safeTarget(raw);
+        window.history[options?.replace ? "replaceState" : "pushState"]({}, "", target);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
+    };
+  }
   return router.navigate;
 }
 
