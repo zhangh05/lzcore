@@ -2543,7 +2543,7 @@ export default function TopologyWorkspace({
                 {canvasSelectedElementIds.length > 0 && (
                   <button
                     type="button"
-                    className="canvas-selection-chip"
+                    className="canvas-selection-chip canvas-selection-count"
                     onClick={() => setIsInspectorOpen(true)}
                     title="点击查看选中对象操作面板"
                   >
@@ -2611,7 +2611,7 @@ export default function TopologyWorkspace({
                 setSelectedElement((prev) => (prev?.type === "link" ? prev : null));
               } else {
                 setSelectedElement(null);
-                setIsInspectorOpen(false);
+                setIsInspectorOpen(true);
               }
             }}
             onMoveElements={handleNetOpsMove}
