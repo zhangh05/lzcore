@@ -495,8 +495,6 @@ function renderMotionOverlay(
   viewport: { x: number; y: number; zoom: number },
   topology: Topology,
   alignGuides: AlignGuide[],
-  selectedIds: string[],
-  isDark: boolean,
   timeMs: number
 ): void {
   const ctx = canvas.getContext("2d");
@@ -516,149 +514,31 @@ function renderMotionOverlay(
   ctx.clearRect(0, 0, w, h);
 
   const { x: panX, y: panY, zoom } = viewport;
-  const nodeMap = new Map(topology.nodes.map((n) => [n.node_id, n]));
 
-  // 1. Item 4: Alert Pulsing Halos around abnormal nodes or selected nodes
+  // 1. Alert Pulsing Halos only for abnormal nodes (when actual hardware/link error is flagged)
   for (const node of topology.nodes) {
-    const isSelected = selectedIds.includes(node.node_id);
     const isAlert = (node as any).status === "down" || (node as any).status === "failed";
-    if (!isSelected && !isAlert) continue;
+    if (!isAlert) continue;
 
     const cx = node.x * zoom + panX;
     const cy = node.y * zoom + panY;
     if (cx < -100 || cy < -100 || cx > w + 100 || cy > h + 100) continue;
 
     const baseR = 48 * zoom;
-    if (isAlert) {
-      const wave = (timeMs / 1000) % 1;
-      const waveR = baseR + wave * 22 * zoom;
-      ctx.beginPath();
-      ctx.arc(cx, cy, waveR, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(239, 68, 68, ${0.45 * (1 - wave)})`;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+    const wave = (timeMs / 1000) % 1;
+    const waveR = baseR + wave * 22 * zoom;
+    ctx.beginPath();
+    ctx.arc(cx, cy, waveR, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(239, 68, 68, ${0.45 * (1 - wave)})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
-      const pulse = (Math.sin(timeMs / 250) + 1) / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, baseR + pulse * 6, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(239, 68, 68, ${0.6 + pulse * 0.3})`;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    } else if (isSelected) {
-      const breath = (Math.sin(timeMs / 400) + 1) / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, baseR + breath * 4, 0, Math.PI * 2);
-      ctx.strokeStyle = isDark ? `rgba(114, 195, 186, ${0.3 + breath * 0.25})` : `rgba(15, 119, 115, ${0.25 + breath * 0.2})`;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-    }
-  }
-
-  // 2. Item 3 & 8: Packet Flow Streamers and Latency Quality Pills
-  for (const link of topology.links) {
-    const n1 = nodeMap.get(link.source_node_id);
-    const n2 = nodeMap.get(link.target_node_id);
-    if (!n1 || !n2) continue;
-
-    const sx = n1.x * zoom + panX;
-    const sy = n1.y * zoom + panY;
-    const tx = n2.x * zoom + panX;
-    const ty = n2.y * zoom + panY;
-
-    // Packet flow animation (only if link is up / unknown, not down)
-    if (link.status !== "down") {
-      const curveStyle = link.style?.curve_style || "bezier";
-      const particleColor = isDark ? "#38bdf8" : "#0284c7";
-      const count = 3;
-      const speed = 2000;
-
-      for (let i = 0; i < count; i++) {
-        const offset = i / count;
-        const progress = ((timeMs / speed) + offset) % 1;
-        let px = 0;
-        let py = 0;
-
-        if (curveStyle === "taxi") {
-          const midX = (sx + tx) / 2;
-          if (progress < 0.333) {
-            const segP = progress / 0.333;
-            px = sx + (midX - sx) * segP;
-            py = sy;
-          } else if (progress < 0.666) {
-            const segP = (progress - 0.333) / 0.333;
-            px = midX;
-            py = sy + (ty - sy) * segP;
-          } else {
-            const segP = (progress - 0.666) / 0.334;
-            px = midX + (tx - midX) * segP;
-            py = ty;
-          }
-        } else if (curveStyle === "straight") {
-          px = sx + (tx - sx) * progress;
-          py = sy + (ty - sy) * progress;
-        } else {
-          const midX = (sx + tx) / 2;
-          const midY = (sy + ty) / 2;
-          const dx = tx - sx;
-          const dy = ty - sy;
-          const dist = Math.hypot(dx, dy);
-          const curvature = (link.style as any)?.curvature ?? 0.2;
-          const cx = midX - (dy / (dist || 1)) * dist * curvature;
-          const cy = midY + (dx / (dist || 1)) * dist * curvature;
-
-          const u = 1 - progress;
-          px = u * u * sx + 2 * u * progress * cx + progress * progress * tx;
-          py = u * u * sy + 2 * u * progress * cy + progress * progress * ty;
-        }
-
-        ctx.save();
-        ctx.shadowColor = particleColor;
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = particleColor;
-        ctx.beginPath();
-        const r = Math.max(2.2, Math.min(3.8, 2.5 * Math.sqrt(zoom)));
-        ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-    }
-
-    // Item 8: Latency & Quality Pill at link midpoint (when zoom >= 0.6)
-    if (zoom >= 0.6) {
-      const midX = (sx + tx) / 2;
-      const midY = (sy + ty) / 2;
-      const pillX = midX;
-      const pillY = midY - 14 * zoom;
-
-      const latencyText = (link.metadata?.latency as string) || "1.2ms";
-      const lossText = (link.metadata?.loss as string) || "0%";
-      const label = `⚡ ${latencyText} · ${lossText}`;
-
-      ctx.save();
-      ctx.font = `600 ${Math.max(9, Math.round(10 * Math.min(zoom, 1.2)))}px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif`;
-      const textMetrics = ctx.measureText(label);
-      const textW = textMetrics.width;
-      const pillW = textW + 12;
-      const pillH = 16 * Math.min(zoom, 1.2);
-
-      const rx = pillX - pillW / 2;
-      const ry = pillY - pillH / 2;
-
-      ctx.fillStyle = isDark ? "rgba(15, 23, 42, 0.88)" : "rgba(255, 255, 255, 0.92)";
-      ctx.strokeStyle = link.status === "down" ? "#ef4444" : isDark ? "#334155" : "#cbd5e1";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      if ((ctx as any).roundRect) (ctx as any).roundRect(rx, ry, pillW, pillH, pillH / 2);
-      else ctx.rect(rx, ry, pillW, pillH);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = link.status === "down" ? "#ef4444" : isDark ? "#94a3b8" : "#475569";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, pillX, pillY);
-      ctx.restore();
-    }
+    const pulse = (Math.sin(timeMs / 250) + 1) / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, baseR + pulse * 6, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(239, 68, 68, ${0.6 + pulse * 0.3})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
   // 3. Item 6: CAD-grade Smart Magnetic Alignment Guides
@@ -768,32 +648,37 @@ export default function NetOpsCanvas(props: Props) {
     return () => window.removeEventListener("resize", handleResize);
   }, [viewport, theme, props.gridEnabled]);
 
-  // 60fps motion overlay for packet flow streamers, alert halos and smart guides
+  // Motion/vector overlay for alert halos and smart guides (runs loop only when active alerts exist)
   useEffect(() => {
     let animId: number;
     let disposed = false;
+    const hasAlert = props.topology.nodes.some((n: any) => n.status === "down" || n.status === "failed");
 
-    const tick = (now: number) => {
-      if (disposed) return;
-      if (overlayCanvasRef.current) {
-        const selected = cyRef.current ? cyRef.current.$(":selected").map((el) => el.id()) : [];
-        renderMotionOverlay(
-          overlayCanvasRef.current,
-          viewport,
-          props.topology,
-          alignGuides,
-          selected,
-          theme === "dark",
-          now
-        );
-      }
-      animId = requestAnimationFrame(tick);
+    const renderOnce = (now: number) => {
+      if (disposed || !overlayCanvasRef.current) return;
+      renderMotionOverlay(
+        overlayCanvasRef.current,
+        viewport,
+        props.topology,
+        alignGuides,
+        now
+      );
     };
 
-    animId = requestAnimationFrame(tick);
+    if (hasAlert) {
+      const tick = (now: number) => {
+        if (disposed) return;
+        renderOnce(now);
+        animId = requestAnimationFrame(tick);
+      };
+      animId = requestAnimationFrame(tick);
+    } else {
+      renderOnce(performance.now());
+    }
+
     return () => {
       disposed = true;
-      cancelAnimationFrame(animId);
+      if (animId) cancelAnimationFrame(animId);
     };
   }, [viewport, props.topology, alignGuides, theme]);
   // How far the last alignment snap moved the node away from where the pointer
@@ -872,9 +757,17 @@ export default function NetOpsCanvas(props: Props) {
               "line-opacity": 1,
               "curve-style": "bezier",
               "control-point-step-size": 144,
+              // Port connection terminal socket points (RJ45 / optical interface pins)
+              "source-arrow-shape": "circle",
+              "target-arrow-shape": "circle",
+              "source-arrow-color": "data(edgeColor)",
+              "target-arrow-color": "data(edgeColor)",
+              "source-arrow-fill": "filled",
+              "target-arrow-fill": "filled",
+              "arrow-scale": 0.85,
               label: "data(label)",
               "font-family": 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace',
-              "font-size": 11,
+              "font-size": 10,
               "font-weight": 600,
               "min-zoomed-font-size": 0,
               color: "#0f172a",
@@ -884,12 +777,12 @@ export default function NetOpsCanvas(props: Props) {
               "text-border-width": 1,
               "text-border-color": "#cbd5e1",
               "text-border-opacity": 0.9,
-              "text-background-padding": "2px 6px",
+              "text-background-padding": "2px 5px",
               "text-margin-y": "-14px",
               "source-label": "data(srcPort)",
               "target-label": "data(tgtPort)",
-              "source-text-offset": 42,
-              "target-text-offset": 42,
+              "source-text-offset": 24,
+              "target-text-offset": 24,
               "source-text-margin-y": 0,
               "target-text-margin-y": 0,
             },
@@ -1017,7 +910,16 @@ export default function NetOpsCanvas(props: Props) {
           { selector: ".filtered-out", style: { opacity: 0.16, "text-opacity": 0.16 } },
           // Selection is a wider stroke plus the accent colour, not a glow: the
           // link stays the same object, it just comes forward.
-          { selector: "edge:selected", style: { width: "data(selectedEdgeWidth)", "line-color": CANVAS_ACCENT.light, "z-index": 20 } },
+          {
+            selector: "edge:selected",
+            style: {
+              width: "data(selectedEdgeWidth)",
+              "line-color": CANVAS_ACCENT.light,
+              "source-arrow-color": CANVAS_ACCENT.light,
+              "target-arrow-color": CANVAS_ACCENT.light,
+              "z-index": 20,
+            },
+          },
           {
             selector: ".lz-group",
             style: {
@@ -1084,7 +986,10 @@ export default function NetOpsCanvas(props: Props) {
           if (portGeometry.get(edge) === key) return;
           portGeometry.set(edge, key);
           const offsets = portLabelOffsets(start, end, controls?.[0]);
-          edge.style({ "source-text-offset": offsets.source, "target-text-offset": offsets.target });
+          const maxOffset = 26;
+          const srcOffset = Math.min(offsets.source, maxOffset);
+          const tgtOffset = Math.min(offsets.target, maxOffset);
+          edge.style({ "source-text-offset": srcOffset, "target-text-offset": tgtOffset });
         });
         for (const edge of portGeometry.keys()) if (!live.has(edge)) portGeometry.delete(edge);
       });
@@ -1565,7 +1470,11 @@ export default function NetOpsCanvas(props: Props) {
     const dark = theme === "dark";
     cy.style().selector("node:selected").style({ "underlay-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
     cy.style().selector(".node-connecting").style({ "border-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
-    cy.style().selector("edge:selected").style({ "line-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
+    cy.style().selector("edge:selected").style({
+      "line-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light,
+      "source-arrow-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light,
+      "target-arrow-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light,
+    }).update();
     cy.style()
       .selector("node")
       .style({
