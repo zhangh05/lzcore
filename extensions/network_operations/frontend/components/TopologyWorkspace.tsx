@@ -597,6 +597,31 @@ export default function TopologyWorkspace({
   // canvas width for every user.
   const [showLibrary, setShowLibrary] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState<"view" | "edit">(() => {
+    try {
+      return (localStorage.getItem("lzcore_topology_workspace_mode") as "view" | "edit") || "edit";
+    } catch {
+      return "edit";
+    }
+  });
+
+  const handleSetWorkspaceMode = useCallback((mode: "view" | "edit") => {
+    setWorkspaceMode(mode);
+    try {
+      localStorage.setItem("lzcore_topology_workspace_mode", mode);
+    } catch {
+      // ignore
+    }
+    if (mode === "view") {
+      canvasApiRef.current?.clearSelection();
+      setSelectedElement(null);
+      setCanvasSelectedElementIds([]);
+      setIsInspectorOpen(false);
+      setArmedNodeType(null);
+      setContextMenu(null);
+    }
+  }, []);
+
   const [showEditbar, setShowEditbar] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem("lzcore_topology_show_editbar");
@@ -617,7 +642,7 @@ export default function TopologyWorkspace({
       canvasApiRef.current?.resize();
     }, 40);
     return () => window.clearTimeout(timer);
-  }, [showEditbar, focusMode, showLibrary, showAgent]);
+  }, [showEditbar, focusMode, showLibrary, showAgent, workspaceMode]);
   const [gridEnabled, setGridEnabled] = useState(true);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);
@@ -1445,13 +1470,8 @@ export default function TopologyWorkspace({
   const selectedNodes = useMemo(() => (activeTopology?.nodes || []).filter((node) => canvasSelectedElementIds.includes(node.node_id)), [activeTopology, canvasSelectedElementIds]);
   const selectedCanvasItems = useMemo(() => (activeTopology?.canvas_items || []).filter((item) => canvasSelectedElementIds.includes(`canvas-${item.item_id}`)), [activeTopology, canvasSelectedElementIds]);
   const hasMultiSelection = selectedNodes.length + selectedCanvasItems.length > 1;
-  // A marquee or Ctrl+A only changes the canvas selection, so nothing opened
-  // the inspector and the batch panel stayed rendered-but-unreachable behind
-  // `display: none`. Opening on the transition into a multi-selection keeps a
-  // deliberate gesture as the trigger, so closing the panel afterwards holds.
-  useEffect(() => {
-    if (hasMultiSelection && !showAgent) setIsInspectorOpen(true);
-  }, [hasMultiSelection, showAgent]);
+  // Batch actions (alignment, distribution, batch type) are accessible via the
+  // toolbar and the selection chip in the caption without popping up automatically over nodes.
 
   const distributeSelected = useCallback((axis: "horizontal" | "vertical") => {
     if (!activeTopology) return;
@@ -1625,6 +1645,16 @@ export default function TopologyWorkspace({
       }
       if (meta) return;
       switch (e.key) {
+        case "h":
+        case "H":
+          e.preventDefault();
+          handleSetWorkspaceMode("view");
+          return;
+        case "e":
+        case "E":
+          e.preventDefault();
+          handleSetWorkspaceMode("edit");
+          return;
         case "Escape":
           setContextMenu(null);
           setShowShortcutHelp(false);
@@ -1643,6 +1673,7 @@ export default function TopologyWorkspace({
           return;
         case "Delete":
         case "Backspace": {
+          if (workspaceMode === "view") return;
           // Delete removes what is selected, whether that is one object or
           // several. It used to act only on the single inspector selection, so
           // pressing it with a marquee or Ctrl+A selection did nothing at all
@@ -1656,7 +1687,7 @@ export default function TopologyWorkspace({
         case "ArrowRight":
         case "ArrowUp":
         case "ArrowDown": {
-          if (!canvasSelectedElementIds.length) return;
+          if (workspaceMode === "view" || !canvasSelectedElementIds.length) return;
           e.preventDefault();
           const step = e.shiftKey ? 32 : 8;
           if (e.key === "ArrowLeft") nudgeSelected(-step, 0);
@@ -1677,9 +1708,16 @@ export default function TopologyWorkspace({
           break;
       }
       switch (e.key.toLowerCase()) {
-        case "v": setCanvasMode("select"); break;
-        case "c": setCanvasMode("connect"); break;
+        case "v":
+          if (workspaceMode === "view") handleSetWorkspaceMode("edit");
+          setCanvasMode("select");
+          break;
+        case "c":
+          if (workspaceMode === "view") handleSetWorkspaceMode("edit");
+          setCanvasMode("connect");
+          break;
         case "t":
+          if (workspaceMode === "view") break;
           e.preventDefault();
           setShowEditbar((value) => !value);
           break;
@@ -2174,7 +2212,31 @@ export default function TopologyWorkspace({
                 </>
               )}
             </div>
-            {!showEditbar && (
+            <div className="studio-workspace-mode-switch" role="radiogroup" aria-label="画布模式">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={workspaceMode === "view"}
+                className={`mode-pill ${workspaceMode === "view" ? "is-active" : ""}`}
+                onClick={() => handleSetWorkspaceMode("view")}
+                title="查看模式：方便平移漫游，点击设备、多选、连线均无响应 (快捷键 H)"
+              >
+                <IconEye size={13} />
+                <span>查看模式</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={workspaceMode === "edit"}
+                className={`mode-pill ${workspaceMode === "edit" ? "is-active" : ""}`}
+                onClick={() => handleSetWorkspaceMode("edit")}
+                title="编辑模式：支持设备放置、极速连线、对齐与属性修改 (快捷键 E)"
+              >
+                <IconEdit size={13} />
+                <span>编辑模式</span>
+              </button>
+            </div>
+            {workspaceMode === "edit" && !showEditbar && (
               <div className="studio-mini-mode-switch" role="group" aria-label="快捷绘图模式">
                 <button
                   type="button"
@@ -2205,6 +2267,17 @@ export default function TopologyWorkspace({
                   <span>适配</span>
                 </button>
               </div>
+            )}
+            {workspaceMode === "view" && (
+              <button
+                type="button"
+                className="studio-mode-button"
+                onClick={() => canvasApiRef.current?.fit()}
+                title="适配视图到画布中央 (快捷键 F)"
+              >
+                <IconExpand size={13} />
+                <span>适配</span>
+              </button>
             )}
           </div>
 
@@ -2273,21 +2346,23 @@ export default function TopologyWorkspace({
                 ))}
               </div>
             </details>
-            <Button
-              size="sm"
-              icon={showEditbar ? <IconChevronUp size={13} /> : <IconWrench size={13} />}
-              variant={showEditbar ? "default" : "ghost"}
-              onClick={() => setShowEditbar((v) => !v)}
-              title={showEditbar ? "收起编辑工具条 (快捷键 T)" : "展开编辑工具条 (快捷键 T)"}
-              aria-expanded={showEditbar}
-            >
-              {showEditbar ? "收起工具" : "展开工具"}
-            </Button>
+            {workspaceMode === "edit" && (
+              <Button
+                size="sm"
+                icon={showEditbar ? <IconChevronUp size={13} /> : <IconWrench size={13} />}
+                variant={showEditbar ? "default" : "ghost"}
+                onClick={() => setShowEditbar((v) => !v)}
+                title={showEditbar ? "收起编辑工具条 (快捷键 T)" : "展开编辑工具条 (快捷键 T)"}
+                aria-expanded={showEditbar}
+              >
+                {showEditbar ? "收起工具" : "展开工具"}
+              </Button>
+            )}
             <button className="studio-icon-button" aria-label={focusMode ? "退出专注画布" : "专注画布"} title="专注画布" onClick={() => setFocusMode((value) => !value)}><IconExpand size={18} /></button>
             <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>绘图对话</Button>
           </div>
         </div>
-        {showEditbar && (
+        {workspaceMode === "edit" && showEditbar && (
           <div className="topology-editbar">
           <div className="studio-edit-tools" role="group" aria-label="画布工具">
             <button className="studio-mode-button" aria-label="选择" aria-pressed={canvasMode === "select" && !armedNodeType} onClick={() => { setCanvasMode("select"); setArmedNodeType(null); }} title="选择模式 (快捷键 V)"><IconMenu size={13} />选择</button>
@@ -2428,15 +2503,39 @@ export default function TopologyWorkspace({
         )}
 
         {/* NetOps Cytoscape canvas, with LZCore topology persistence and evidence kept outside the renderer. */}
-        <div className={`topology-canvas-viewport mode-${canvasMode}`} ref={viewportRef}>
-          <div className="studio-canvas-caption"><strong>{activeTopology?.nodes.length || 0} 个节点</strong><span>·</span><span>{activeTopology?.links.length || 0} 条连接</span>{canvasSelectedElementIds.length > 0 && <span className="canvas-selection-count">已选 {canvasSelectedElementIds.length} 个对象</span>}
-            <span className="canvas-mode-hint">
-              {canvasMode === "connect"
-                ? "连线模式：点击或拖拽连接两台设备 (自动配对接口，Esc 退出)"
-                : armedNodeType
-                  ? "点击空白处连续放置设备 (Esc 或右键退出)"
-                  : "空白处左键拖拽直接框选 · 空格+拖拽/中键平移 · C 连线 · ⌘D 克隆"}
-            </span><label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label><label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label></div>
+        <div className={`topology-canvas-viewport mode-${workspaceMode} mode-${canvasMode}`} ref={viewportRef}>
+          <div className="studio-canvas-caption">
+            <strong>{activeTopology?.nodes.length || 0} 个节点</strong>
+            <span>·</span>
+            <span>{activeTopology?.links.length || 0} 条连接</span>
+            {workspaceMode === "view" ? (
+              <span className="canvas-mode-hint is-view-mode">
+                查看模式：拖拽任意位置平移画布 · 滚轮缩放 · 点击元素无响应
+              </span>
+            ) : (
+              <>
+                {canvasSelectedElementIds.length > 0 && (
+                  <button
+                    type="button"
+                    className="canvas-selection-chip"
+                    onClick={() => setIsInspectorOpen(true)}
+                    title="点击查看选中对象操作面板"
+                  >
+                    已选 {canvasSelectedElementIds.length} 个对象 · 查看操作
+                  </button>
+                )}
+                <span className="canvas-mode-hint">
+                  {canvasMode === "connect"
+                    ? "连线模式：点击或拖拽连接两台设备 (自动配对接口，Esc 退出)"
+                    : armedNodeType
+                      ? "点击空白处连续放置设备 (Esc 或右键退出)"
+                      : "空白处左键拖拽框选 · 拖动设备移动 · 空格/中键平移 · C 连线"}
+                </span>
+                <label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label>
+                <label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label>
+              </>
+            )}
+          </div>
           {!activeTopology?.nodes?.length && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
@@ -2452,13 +2551,30 @@ export default function TopologyWorkspace({
           <NetOpsCanvas
             topology={activeTopology}
             mode={canvasMode}
+            interactionMode={workspaceMode}
             gridEnabled={gridEnabled}
             showInterfaces={showInterfaces}
-            onSelectNode={(nodeId) => { setSelectedElement({ type: "node", nodeId }); setIsInspectorOpen(true); }}
-            onSelectCanvasItem={(itemId) => { setSelectedElement({ type: "canvas_item", itemId }); setIsInspectorOpen(true); }}
-            onSelectLink={(linkId) => { setSelectedElement({ type: "link", linkId }); setIsInspectorOpen(true); }}
-            onClearSelection={() => { setSelectedElement(null); setIsInspectorOpen(false); }}
+            onSelectNode={(nodeId) => {
+              if (workspaceMode === "view") return;
+              setSelectedElement({ type: "node", nodeId });
+              setIsInspectorOpen(true);
+            }}
+            onSelectCanvasItem={(itemId) => {
+              if (workspaceMode === "view") return;
+              setSelectedElement({ type: "canvas_item", itemId });
+              setIsInspectorOpen(true);
+            }}
+            onSelectLink={(linkId) => {
+              if (workspaceMode === "view") return;
+              setSelectedElement({ type: "link", linkId });
+              setIsInspectorOpen(true);
+            }}
+            onClearSelection={() => {
+              setSelectedElement(null);
+              setIsInspectorOpen(false);
+            }}
             onSelectionChange={(ids) => {
+              if (workspaceMode === "view") return;
               setCanvasSelectedElementIds(ids);
               if (ids.length === 1) {
                 const id = ids[0];
@@ -2467,16 +2583,25 @@ export default function TopologyWorkspace({
                 setIsInspectorOpen(true);
               } else if (!ids.length) {
                 setSelectedElement((prev) => (prev?.type === "link" ? prev : null));
+              } else {
+                setSelectedElement(null);
+                setIsInspectorOpen(false);
               }
             }}
             onMoveElements={handleNetOpsMove}
             onConnect={handleFastConnect}
-            armedNodeType={armedNodeType}
+            armedNodeType={workspaceMode === "view" ? null : armedNodeType}
             onPlaceNodeType={placeDrawingNode}
             onDisarmNodeType={disarmNodeType}
             onReady={(api) => { canvasApiRef.current = api; }}
-            onContextMenu={setContextMenu}
-            onOpenInspector={() => setIsInspectorOpen(true)}
+            onContextMenu={(target) => {
+              if (workspaceMode === "view") return;
+              setContextMenu(target);
+            }}
+            onOpenInspector={() => {
+              if (workspaceMode === "view") return;
+              setIsInspectorOpen(true);
+            }}
             onViewportChange={updatePopoverAnchor}
           />
 
@@ -2484,7 +2609,7 @@ export default function TopologyWorkspace({
           {/* 3. Right: Inspector */}
       <aside
         ref={inspectorRef}
-        className={`topology-inspector ${isInspectorOpen ? "is-open" : ""} ${isDragged ? "is-dragged" : (popoverPlacement ? `placement-${popoverPlacement}` : "")} ${isDragging ? "is-dragging" : ""}`}
+        className={`topology-inspector ${isInspectorOpen && workspaceMode === "edit" ? "is-open" : ""} ${isDragged ? "is-dragged" : (popoverPlacement ? `placement-${popoverPlacement}` : "")} ${isDragging ? "is-dragging" : ""}`}
         style={popoverStyle}
         aria-label="拓扑详情"
         onMouseDown={(event) => event.stopPropagation()}
@@ -3488,7 +3613,14 @@ export default function TopologyWorkspace({
         )}
       </aside>
         </div>
-        <footer className="studio-statusbar"><span>独立图纸</span><span>空白拖拽框选 · 空格/中键平移 · 连续点放 · C 极速连线 · ⌘D 克隆</span></footer>
+        <footer className="studio-statusbar">
+          <span>{workspaceMode === "view" ? "查看漫游" : "独立图纸"}</span>
+          <span>
+            {workspaceMode === "view"
+              ? "查看模式 · 鼠标左键拖拽平移 · 滚轮缩放 · 点击与框选无响应 · 点击上方切换到编辑模式"
+              : "编辑模式 · 空白拖拽框选 · 空格/中键平移 · 连续点放 · C 极速连线 · ⌘D 克隆"}
+          </span>
+        </footer>
       </main>
 
       {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} selection={canvasSelection} onCompleted={() => { void handleAgentCompleted(); }} /></aside>}

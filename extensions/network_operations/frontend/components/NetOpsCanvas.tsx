@@ -72,6 +72,7 @@ export const CANVAS_GROUP = {
 type Props = {
   topology: Topology;
   mode: CanvasMode;
+  interactionMode?: "view" | "edit";
   gridEnabled: boolean;
   showInterfaces: boolean;
   onSelectNode: (nodeId: string) => void;
@@ -132,6 +133,7 @@ type Cy = {
   selectionType: (type?: "single" | "additive") => string;
   userPanningEnabled: (enabled?: boolean) => boolean;
   autoungrabify: (enabled?: boolean) => boolean;
+  autounselectify?: (enabled?: boolean) => boolean;
   resize: () => void;
   zoom: (level?: number | { level: number; renderedPosition?: { x: number; y: number } }) => number;
   $: (selector: string) => CyCollection<CyNode>;
@@ -1036,6 +1038,9 @@ export default function NetOpsCanvas(props: Props) {
       };
       cy.on("tap", (event) => {
         const current = propsRef.current;
+        if (current.interactionMode === "view") {
+          return;
+        }
         if (event.target.isNode?.()) {
           const id = event.target.id?.() || "";
           if (!id) return;
@@ -1168,6 +1173,9 @@ export default function NetOpsCanvas(props: Props) {
         propsRef.current.onSelectionChange(cy.$("node:selected").map((node) => node.id()).filter((id) => !id.startsWith("group-")));
       });
       cy.on("cxttap", (event) => {
+        if (propsRef.current.interactionMode === "view") {
+          return;
+        }
         if (propsRef.current.armedNodeType) {
           propsRef.current.onDisarmNodeType();
           return;
@@ -1309,37 +1317,23 @@ export default function NetOpsCanvas(props: Props) {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    // Objects are draggable whenever the canvas is being edited, not only in
-    // the layout mode. Requiring a mode switch to move a node made the default
-    // mode's drag gesture a dead one: the node moved under the pointer and then
-    // snapped back, because the position was never persisted. Connect mode is
-    // the exception — there a drag would compete with picking two endpoints.
-    const layoutEditing = props.mode !== "connect";
-    // Panning stays on in every mode: Cytoscape couples wheel zoom to
-    // userPanningEnabled, and dragging empty canvas to pan is what every
-    // network map does. Marquee selection moved to Shift + drag.
+    const isViewMode = props.interactionMode === "view";
+    const layoutEditing = !isViewMode && props.mode !== "connect";
     cy.panningEnabled(true);
     cy.userPanningEnabled(true);
-    // Box selection is left to Cytoscape, which arms it on Ctrl/⌘ + drag and
-    // leaves a plain drag to panning. That is the gesture eNSP and HCL both
-    // use, and it costs nothing to inherit. It used to be switched off in
-    // favour of the hand-rolled Shift marquee below, which left Ctrl/⌘ + drag
-    // silently panning the sheet — a gesture users reach for by reflex and
-    // that then did the opposite of what was wanted.
-    cy.boxSelectionEnabled(true);
-    // Additive is what keeps everything a marquee encloses, and what makes the
-    // native Ctrl/⌘ box grow the selection instead of replacing it. Ordinary
-    // taps are still normalized to a single object in the tap handler above.
-    cy.selectionType("additive");
+    cy.boxSelectionEnabled(!isViewMode);
+    cy.autounselectify?.(isViewMode);
     cy.autoungrabify(!layoutEditing);
-    // Existing nodes can retain the previous ungrabbable state when toggling
-    // autoungrabify.  Set each editable object explicitly for this mode.
+    if (isViewMode) {
+      cy.elements().unselect();
+    }
+    cy.selectionType("additive");
     cy.nodes().forEach((node) => {
       if (node.id().startsWith("group-")) return;
       if (layoutEditing) node.grabify();
       else node.ungrabify();
     });
-  }, [rendererReady, props.mode]);
+  }, [rendererReady, props.mode, props.interactionMode]);
 
   // Export, focus and viewport control are imperative, so the workspace asks
   // for a handle once instead of pushing every canvas affordance through props.
@@ -1755,7 +1749,8 @@ export default function NetOpsCanvas(props: Props) {
     const onMouseDown = (event: MouseEvent) => {
       const isMiddle = event.button === 1;
       const isSpaceDrag = event.button === 0 && spaceHeld;
-      if (!isMiddle && !isSpaceDrag) return;
+      const isViewModeDrag = propsRef.current.interactionMode === "view" && event.button === 0;
+      if (!isMiddle && !isSpaceDrag && !isViewModeDrag) return;
       if (!(event.target instanceof Node) || !host.contains(event.target)) return;
 
       const cy = cyRef.current;
@@ -2076,8 +2071,8 @@ export default function NetOpsCanvas(props: Props) {
     window.setTimeout(() => { ignoreBoxSelectionTapRef.current = false; }, 0);
   };
   // Direct marquee selection on empty canvas left-drag (eNSP style).
-  // Space+left-drag or middle-mouse click handles canvas panning.
-  const marqueeArmed = props.mode === "select" && !props.armedNodeType && !spaceHeld;
+  const isViewMode = props.interactionMode === "view";
+  const marqueeArmed = !isViewMode && props.mode === "select" && !props.armedNodeType && !spaceHeld;
   useEffect(() => {
     if (!marqueeArmed) return;
     const onDown = (event: MouseEvent) => {
@@ -2139,8 +2134,8 @@ export default function NetOpsCanvas(props: Props) {
   // A picked palette type waits for a click. The cursor and the banner are the
   // only things telling the user the canvas is in that state, so they are not
   // optional decoration.
-  const placing = props.mode === "select" && !!props.armedNodeType;
-  return <div className={`netops-canvas-wrap ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""} ${spaceHeld ? (isPanning ? "space-panning is-panning" : "space-panning") : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
+  const placing = !isViewMode && props.mode === "select" && !!props.armedNodeType;
+  return <div className={`netops-canvas-wrap ${isViewMode ? "interaction-view" : "interaction-edit"} ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""} ${spaceHeld || (isViewMode && isPanning) ? (isPanning ? "space-panning is-panning" : "space-panning") : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
     <canvas ref={gridCanvasRef} className="netops-world-grid" aria-hidden="true" />
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
     <canvas ref={overlayCanvasRef} className="netops-motion-overlay" aria-hidden="true" />
