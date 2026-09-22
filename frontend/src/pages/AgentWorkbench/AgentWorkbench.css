@@ -207,6 +207,9 @@
 .message-row.user .message-stack {
   width: auto;
   max-width: min(620px, calc(100% - 44px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .message-avatar {

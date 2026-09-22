@@ -890,12 +890,15 @@
 .topology-agent-intro p { font-size: 12px; line-height: 1.9; color: var(--text-3); margin: 0 0 22px; }
 .topology-agent-intro button { width: 100%; display: flex; justify-content: space-between; padding: 11px 12px; margin: 8px 0; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--text-2); text-align: left; font-size: 12px; cursor: pointer; }
 .topology-agent-intro button:hover { color: var(--accent); border-color: var(--accent); }
-.topology-agent .message-row { gap: 6px; padding: 0; margin: 0 0 18px; width: 100%; }
-.topology-agent .message-stack { min-width: 0; width: calc(100% - 28px); max-width: none; flex: 1; }
+.topology-agent .message-row { gap: 8px; padding: 0; margin: 0 0 16px; width: 100%; }
+.topology-agent .message-row.assistant .message-stack { min-width: 0; width: calc(100% - 30px); max-width: none; flex: 1; }
+.topology-agent .message-row.user { justify-content: flex-end; }
+.topology-agent .message-row.user .message-stack { min-width: 0; width: auto; max-width: calc(100% - 36px); flex: 0 1 auto; display: flex; flex-direction: column; align-items: flex-end; }
+.topology-agent .message-row.user .chat-bubble { margin-left: auto; width: fit-content; }
 .topology-agent .message-avatar { width: 22px; height: 22px; flex: 0 0 22px; font-size: 9px; }
-.topology-agent .chat-bubble { padding: 10px; max-width: 100%; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.topology-agent .chat-bubble { padding: 9px 12px; max-width: 100%; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .topology-agent .chat-bubble pre { max-width: 100%; overflow: auto; }
-.topology-agent .user-message-text { font-size: 11px; white-space: pre-wrap; }
+.topology-agent .user-message-text { font-size: 12px; white-space: pre-wrap; line-height: 1.5; }
 .topology-agent .tool-calls-inline { flex-wrap: wrap; }
 .topology-agent .tool-call-card { max-width: 100%; }
 .topology-agent-composer { margin: 0 12px 12px; padding: 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); }
