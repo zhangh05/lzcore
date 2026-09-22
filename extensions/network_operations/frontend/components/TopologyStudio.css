@@ -1104,5 +1104,285 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* ==========================================================================
+   React Flow Topology Canvas Styles
+   ========================================================================== */
+
+.react-flow-netops-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
 }
+
+.react-flow-netops-container.interaction-view {
+  cursor: grab !important;
+}
+.react-flow-netops-container.interaction-view:active {
+  cursor: grabbing !important;
+}
+
+/* Device Node */
+.network-flow-device-node {
+  width: 94px;
+  height: 76px;
+  border-radius: 12px;
+  border: 2px solid #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: box-shadow 0.15s ease, transform 0.1s ease, border-color 0.15s ease;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.network-flow-device-node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+}
+
+.network-flow-device-node.is-selected {
+  box-shadow: 0 0 0 3px rgba(15, 119, 115, 0.35), 0 3px 12px rgba(15, 119, 115, 0.2) !important;
+  border-color: var(--accent, #0f7773) !important;
+}
+
+.network-flow-device-node.is-dimmed {
+  opacity: 0.35;
+}
+
+.flow-device-icon-wrap {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flow-device-icon {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.flow-device-status-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+[data-theme="dark"] .flow-device-status-badge {
+  border-color: #1e293b;
+}
+
+.network-flow-device-node.status-error .flow-device-status-badge,
+.network-flow-device-node.status-down .flow-device-status-badge {
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  animation: flow-status-pulse 1.8s infinite;
+}
+
+@keyframes flow-status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.flow-device-label {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text, #0f172a);
+  white-space: nowrap;
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="dark"] .flow-device-label {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  color: #f1f5f9;
+}
+
+/* Connection Handles */
+.flow-port-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: var(--accent, #0f7773) !important;
+  border: 2px solid #ffffff !important;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+[data-theme="dark"] .flow-port-handle {
+  border-color: #0f172a !important;
+}
+
+.network-flow-device-node:hover .flow-port-handle,
+.mode-connect .flow-port-handle {
+  opacity: 0.85;
+}
+
+.flow-port-handle:hover {
+  opacity: 1 !important;
+  transform: scale(1.3);
+}
+
+.interaction-view .flow-port-handle {
+  display: none !important;
+}
+
+/* Option C: Modular RJ45 Sockets and Interface Tags */
+.flow-socket-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.flow-socket-block {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+}
+
+.flow-interface-tag {
+  position: absolute;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #334155;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+[data-theme="dark"] .flow-interface-tag {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: #475569;
+  color: #e2e8f0;
+}
+
+.flow-link-description-tag {
+  position: absolute;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+[data-theme="dark"] .flow-link-description-tag {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+/* Canvas Items (Notes, Shapes, Groups) */
+.flow-canvas-group-container {
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  position: relative;
+  pointer-events: all;
+  box-sizing: border-box;
+}
+
+.flow-canvas-group-container.is-selected {
+  border-color: var(--accent, #0f7773);
+  box-shadow: 0 0 0 2px rgba(15, 119, 115, 0.2);
+}
+
+.flow-canvas-group-header {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+}
+
+.flow-canvas-group-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-2, #475569);
+}
+
+[data-theme="dark"] .flow-canvas-group-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+}
+
+.flow-canvas-item {
+  border: 1.5px solid;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  user-select: none;
+}
+
+.flow-canvas-item.is-selected {
+  outline: 2px solid var(--accent, #0f7773);
+  outline-offset: 2px;
+}
+
+.flow-canvas-text {
+  border: none;
+  background: transparent;
+  justify-content: flex-start;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.flow-canvas-note {
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  position: relative;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.flow-note-pin {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
 
