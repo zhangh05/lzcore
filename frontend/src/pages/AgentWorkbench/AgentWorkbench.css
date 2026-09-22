@@ -1022,6 +1022,54 @@
   font-weight: 700;
 }
 
+.wb-skill-picker.is-locked {
+  gap: 8px;
+}
+
+.wb-skill-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.wb-skill-locked-badge .wb-skill-lock-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.wb-skill-lock-label {
+  white-space: nowrap;
+}
+
+.wb-skill-devices.is-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-skill-device-chip.is-locked {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: var(--r-8);
+  font-size: 12px;
+  font-weight: 600;
+  user-select: none;
+  cursor: default;
+  white-space: nowrap;
+}
+
 /* Component-specific workbench refinements. */
 .thinking-block {
   margin: var(--flow-tight) 0;

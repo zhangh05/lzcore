@@ -4,6 +4,7 @@ import {
   IconAttachment,
   IconClose,
   IconDocument,
+  IconLock,
   IconSend,
   IconStop,
 } from "../../../components/Icon";
@@ -39,6 +40,7 @@ export interface WorkbenchComposerProps {
   onSelectResourceIds: (updater: (prev: string[]) => string[]) => void;
   onDragOver: (event: DragEvent) => void;
   onDrop: (event: DragEvent) => void;
+  isSkillLocked?: boolean;
 }
 
 export const WorkbenchComposer = memo(function WorkbenchComposer({
@@ -62,6 +64,7 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
   onSelectResourceIds,
   onDragOver,
   onDrop,
+  isSkillLocked = false,
 }: WorkbenchComposerProps) {
   const canSend = Boolean(currentSessionId && (input.trim() || attachments.length > 0));
 
@@ -121,27 +124,52 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
            现在收成 textarea 内的底栏，空状态从 ~149px 压到 ~70-80px。 */}
         <div className="wb-composer-toolbar">
           {/* Skill 选择栏 */}
-          {currentSessionId && workbenchSkills.length > 0 ? (
-            <div className="wb-skill-picker" data-testid="workbench-skill-picker">
-              <label>
-                <span>Skill</span>
-                <select
-                  value={selectedSkillKey}
-                  onChange={(event) => onSelectSkillKey(event.target.value)}
+          {currentSessionId && (isSkillLocked || workbenchSkills.length > 0) ? (
+            <div className={`wb-skill-picker ${isSkillLocked ? "is-locked" : ""}`} data-testid="workbench-skill-picker">
+              {isSkillLocked && selectedSkill ? (
+                <div
+                  className="wb-skill-locked-badge"
+                  title="该会话已绑定拓扑图纸，绘图上下文专属固定，不可切换其他 Skill"
+                  data-testid="workbench-skill-locked-badge"
                 >
-                  <option value="">通用对话</option>
-                  {workbenchSkills.map((skill) => (
-                    <option key={`${skill.extension_id}:${skill.skill_id}`} value={`${skill.extension_id}:${skill.skill_id}`}>
-                      {skill.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <IconLock size={12} className="wb-skill-lock-icon" />
+                  <span className="wb-skill-lock-label">已绑定：{selectedSkill.name}</span>
+                </div>
+              ) : (
+                <label>
+                  <span>Skill</span>
+                  <select
+                    value={selectedSkillKey}
+                    onChange={(event) => onSelectSkillKey(event.target.value)}
+                  >
+                    <option value="">通用对话</option>
+                    {workbenchSkills.map((skill) => (
+                      <option key={`${skill.extension_id}:${skill.skill_id}`} value={`${skill.extension_id}:${skill.skill_id}`}>
+                        {skill.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               {selectedSkill ? (
-                <div className="wb-skill-devices" aria-label="选择 Skill 资源">
+                <div
+                  className={`wb-skill-devices ${isSkillLocked ? "is-locked" : ""}`}
+                  aria-label={isSkillLocked ? "已绑定图纸资源" : "选择 Skill 资源"}
+                >
                   {selectedSkill.resources.map((resource) => {
                     const active = selectedResourceIds.includes(resource.resource_id);
+                    if (isSkillLocked) {
+                      return (
+                        <span
+                          key={resource.resource_id}
+                          className="wb-skill-device-chip is-locked"
+                          title={resource.description || resource.name}
+                        >
+                          {resource.name}
+                        </span>
+                      );
+                    }
                     return (
                       <button
                         key={resource.resource_id}

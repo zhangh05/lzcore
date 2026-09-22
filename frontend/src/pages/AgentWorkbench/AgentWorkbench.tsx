@@ -62,10 +62,36 @@ export function TaskWorkbench() {
   const [selectedSkillKey, setSelectedSkillKey] = useState("");
   const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>([]);
   const [selectionSessionId, setSelectionSessionId] = useState("");
-  const selectedSkill = useMemo(
-    () => workbenchSkills.find((item) => `${item.extension_id}:${item.skill_id}` === selectedSkillKey),
-    [selectedSkillKey, workbenchSkills],
-  );
+  const [isSkillLocked, setIsSkillLocked] = useState(false);
+  const selectedSkill = useMemo(() => {
+    const found = workbenchSkills.find((item) => `${item.extension_id}:${item.skill_id}` === selectedSkillKey);
+    if (found) return found;
+    if (selectedSkillKey.startsWith("network.operations:drawing:")) {
+      const topoId = selectedSkillKey.replace("network.operations:drawing:", "");
+      return {
+        extension_id: "network.operations",
+        skill_id: `drawing:${topoId}`,
+        name: "拓扑绘图",
+        description: "围绕网络拓扑进行实时读图与绘图修改。",
+        resources: selectedResourceIds.map((id) => ({
+          resource_id: id,
+          name: "拓扑图纸",
+          description: "拓扑图纸",
+          kind: "drawing",
+        })),
+        default_resource_ids: selectedResourceIds,
+        selection_mode: "single" as const,
+      };
+    }
+    return undefined;
+  }, [selectedResourceIds, selectedSkillKey, workbenchSkills]);
+
+  const composerSkills = useMemo(() => {
+    if (isSkillLocked) {
+      return selectedSkill ? [selectedSkill] : [];
+    }
+    return workbenchSkills.filter((s) => !s.skill_id.startsWith("drawing:"));
+  }, [isSkillLocked, selectedSkill, workbenchSkills]);
   const sending = useWorkbenchStore((s) => s.sending);
   const lastUserInput = useWorkbenchStore((s) => s.lastUserInput);
   const visibleHistory = useWorkbenchStore(
@@ -103,25 +129,37 @@ export function TaskWorkbench() {
   }, [currentWorkspaceId]);
 
   useEffect(() => {
-    if (!currentSessionId) { setSelectedSkillKey(""); setSelectedResourceIds([]); setSelectionSessionId(""); return; }
+    if (!currentSessionId) {
+      setSelectedSkillKey("");
+      setSelectedResourceIds([]);
+      setSelectionSessionId("");
+      setIsSkillLocked(false);
+      return;
+    }
+
     const key = scopedLocalStorageKey(`workbench_skill:${currentSessionId}`);
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "{}") as { skill_key?: string; resource_ids?: string[] };
       if (saved.skill_key) {
+        const isDrawing = saved.skill_key.startsWith("network.operations:drawing:");
+        setIsSkillLocked(isDrawing);
         setSelectedSkillKey(saved.skill_key);
         setSelectedResourceIds(Array.isArray(saved.resource_ids) ? saved.resource_ids : []);
         setSelectionSessionId(currentSessionId);
-        return;
       }
     } catch { /* noop */ }
 
-    // Fallback: check session metadata or title
+    // Query authoritative session metadata from server
     sessionsApi.get(currentSessionId, currentWorkspaceId)
       .then((res) => {
         const sess = res?.session;
         if (!sess) return;
         const meta = (sess.metadata || {}) as Record<string, unknown>;
+        const sel = meta.workbench_selection as { skill_id?: string; resource_ids?: string[] } | undefined;
         let topoId = typeof meta.topology_id === "string" ? meta.topology_id : "";
+        if (!topoId && sel?.resource_ids?.[0] && sel.skill_id?.startsWith("drawing:")) {
+          topoId = sel.resource_ids[0];
+        }
         if (!topoId && typeof sess.title === "string" && sess.title.startsWith("拓扑 · ")) {
           const topoName = sess.title.replace(/^拓扑 · /, "").trim();
           const matched = workbenchSkills.find(
@@ -131,20 +169,38 @@ export function TaskWorkbench() {
             topoId = matched.resources[0]?.resource_id || "";
           }
         }
+
         if (topoId) {
+          // Authoritative topology session: skill is strictly locked to this topology
           const skillKey = `network.operations:drawing:${topoId}`;
           setSelectedSkillKey(skillKey);
           setSelectedResourceIds([topoId]);
+          setIsSkillLocked(true);
           try {
             localStorage.setItem(key, JSON.stringify({ skill_key: skillKey, resource_ids: [topoId] }));
           } catch { /* noop */ }
         } else {
-          setSelectedSkillKey("");
-          setSelectedResourceIds([]);
+          // Non-topology session: never locked, filter out any drawing skills
+          setIsSkillLocked(false);
+          try {
+            const saved = JSON.parse(localStorage.getItem(key) || "{}") as { skill_key?: string; resource_ids?: string[] };
+            if (saved.skill_key && !saved.skill_key.includes(":drawing:")) {
+              setSelectedSkillKey(saved.skill_key);
+              setSelectedResourceIds(Array.isArray(saved.resource_ids) ? saved.resource_ids : []);
+            } else {
+              setSelectedSkillKey("");
+              setSelectedResourceIds([]);
+              localStorage.removeItem(key);
+            }
+          } catch {
+            setSelectedSkillKey("");
+            setSelectedResourceIds([]);
+          }
         }
         setSelectionSessionId(currentSessionId);
       })
       .catch(() => {
+        setIsSkillLocked(false);
         setSelectedSkillKey("");
         setSelectedResourceIds([]);
         setSelectionSessionId(currentSessionId);
@@ -158,7 +214,7 @@ export function TaskWorkbench() {
   }, [currentSessionId, selectedResourceIds, selectedSkillKey, selectionSessionId]);
 
   useEffect(() => {
-    if (!skillCatalogLoaded || !selectedSkillKey) return;
+    if (!skillCatalogLoaded || !selectedSkillKey || isSkillLocked) return;
     if (!selectedSkill) {
       setSelectedSkillKey("");
       setSelectedResourceIds([]);
@@ -169,7 +225,7 @@ export function TaskWorkbench() {
     if (normalized.length !== selectedResourceIds.length || normalized.some((item, index) => item !== selectedResourceIds[index])) {
       setSelectedResourceIds(normalized);
     }
-  }, [selectedResourceIds, selectedSkill, selectedSkillKey, skillCatalogLoaded]);
+  }, [isSkillLocked, selectedResourceIds, selectedSkill, selectedSkillKey, skillCatalogLoaded]);
 
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [progressPanelCollapsed, setProgressPanelCollapsed] = useState(false);
@@ -638,16 +694,21 @@ export function TaskWorkbench() {
             }
           }}
           inputRef={inputRef}
-          workbenchSkills={workbenchSkills}
+          workbenchSkills={composerSkills}
           selectedSkillKey={selectedSkillKey}
           onSelectSkillKey={(key) => {
-            const skill = workbenchSkills.find((item) => `${item.extension_id}:${item.skill_id}` === key);
+            if (isSkillLocked) return;
+            const skill = composerSkills.find((item) => `${item.extension_id}:${item.skill_id}` === key);
             setSelectedSkillKey(key);
             setSelectedResourceIds(skill?.default_resource_ids || []);
           }}
           selectedSkill={selectedSkill}
           selectedResourceIds={selectedResourceIds}
-          onSelectResourceIds={setSelectedResourceIds}
+          onSelectResourceIds={(updater) => {
+            if (isSkillLocked) return;
+            setSelectedResourceIds(updater);
+          }}
+          isSkillLocked={isSkillLocked}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         />

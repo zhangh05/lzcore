@@ -9,6 +9,9 @@ vi.mock("../api", () => ({
   sessionsApi: {
     messages: vi.fn().mockResolvedValue({ messages: [] }),
     create: vi.fn().mockResolvedValue({ session: { session_id: "s-mock-123" } }),
+    get: vi.fn().mockResolvedValue({ session: { session_id: "s-mock-123", status: "active" } }),
+    list: vi.fn().mockResolvedValue({ sessions: [] }),
+    rename: vi.fn().mockResolvedValue({ session: { session_id: "s-mock-123" } }),
   },
   jobsApi: {
     list: vi.fn().mockResolvedValue({ jobs: [] }),

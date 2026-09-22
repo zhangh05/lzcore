@@ -45,13 +45,12 @@ import {
 } from "../../../../frontend/src/components/Icon";
 import { useNavigate } from "../../../../frontend/src/router";
 import { useSessionStore } from "../../../../frontend/src/stores/session";
-import { scopedLocalStorageKey } from "../../../../frontend/src/utils/userScope";
-import { sessionsApi } from "../../../../frontend/src/api";
 import { apiRequest } from "../../../../frontend/src/api/client";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
 import { LAYOUT_PRESETS, layoutTopology, type LayoutAlgorithm } from "./topologyLayout";
 import { TopologyAgentPanel } from "./TopologyAgentPanel";
+import { resolveTopologySession } from "./TopologySessionResolver";
 import NetOpsCanvas, { type CanvasApi, type CanvasContextTarget } from "./NetOpsCanvas";
 import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
 import { mergeTopologies, type MergeConflict, type MergeStats } from "./topologyMerge";
@@ -631,46 +630,11 @@ export default function TopologyWorkspace({
 
   const handleOpenWorkbenchChat = useCallback(async () => {
     if (!activeTopology) return;
-    const topoId = activeTopology.topology_id;
-    const storageKey = scopedLocalStorageKey(`drawing_session_v2:${workspaceId}:${topoId}`);
-    let targetSessionId = "";
     try {
-      targetSessionId = localStorage.getItem(storageKey) || "";
-    } catch { /* noop */ }
-
-    if (!targetSessionId) {
-      try {
-        const created = await sessionsApi.create(workspaceId, `拓扑 · ${activeTopology.name}`, {
-          topology_id: topoId,
-          topology_name: activeTopology.name,
-          allow_edit: true,
-          workbench_selection: {
-            extension_id: "network.operations",
-            skill_id: `drawing:${topoId}`,
-            skill_name: `拓扑绘图 · ${activeTopology.name}`,
-            resource_ids: [topoId],
-            allow_edit: true,
-          },
-        });
-        targetSessionId = created.session.session_id;
-        try {
-          localStorage.setItem(storageKey, targetSessionId);
-        } catch { /* noop */ }
-        useSessionStore.getState().bumpSessionList();
-      } catch (err) {
-        console.error("Failed to create session for topology", err);
-      }
-    }
-
-    if (targetSessionId) {
-      const skillKey = `network.operations:drawing:${topoId}`;
-      try {
-        localStorage.setItem(
-          scopedLocalStorageKey(`workbench_skill:${targetSessionId}`),
-          JSON.stringify({ skill_key: skillKey, resource_ids: [topoId] }),
-        );
-      } catch { /* noop */ }
+      const targetSessionId = await resolveTopologySession(workspaceId, activeTopology);
       useSessionStore.getState().setCurrentSession(targetSessionId);
+    } catch (err) {
+      console.error("Failed to resolve topology session", err);
     }
     navigate("/workbench");
   }, [activeTopology, navigate, workspaceId]);

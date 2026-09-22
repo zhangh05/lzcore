@@ -10,6 +10,7 @@ import { MessageRow } from "../../../../frontend/src/pages/AgentWorkbench/compon
 import { IconSparkle, IconSend, IconStop, IconPlus } from "../../../../frontend/src/components/Icon";
 import type { Topology} from "./TopologyWorkspace";
 import type { CanvasSelection } from "./canvasSelection";
+import { resolveTopologySession } from "./TopologySessionResolver";
 import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
 
 const EMPTY: ChatMsg[] = [];
@@ -68,7 +69,15 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     let stored: string | null = null;
     try { stored = localStorage.getItem(storageKey); } catch {}
     if (!sessionId) {
-      if (stored && stored !== sessionId) setSessionId(stored);
+      if (stored && stored !== sessionId) {
+        setSessionId(stored);
+      } else if (!stored) {
+        resolveTopologySession(workspaceId, topology, false)
+          .then((foundId) => {
+            if (foundId) setSessionId(foundId);
+          })
+          .catch(() => {});
+      }
     } else if (stored === sessionId) {
       try {
         localStorage.setItem(
@@ -82,12 +91,12 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
       if (!sending) {
         void refreshHistory().catch(() => setError("会话记录读取失败；已有会话保留，请重试加载。"));
       }
-    } else {
+    } else if (!stored) {
       useWorkbenchStore.getState().clear(sessionId);
       setSessionId(null);
       setError("");
     }
-  }, [sessionListVersion, sessionId, storageKey, refreshHistory, sending, topology.topology_id]);
+  }, [sessionListVersion, sessionId, storageKey, refreshHistory, sending, topology, workspaceId]);
   useEffect(() => {
     if (!loaded || sending || !sessionId) return;
     if (job?.status !== "running") return;
@@ -123,31 +132,9 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     try {
       let id = sessionId;
       if (!id) {
-        const created = await sessionsApi.create(workspaceId, `拓扑 · ${topology.name}`, {
-          topology_id: topology.topology_id,
-          topology_name: topology.name,
-          allow_edit: allowEdit,
-          workbench_selection: {
-            extension_id: "network.operations",
-            skill_id: allowEdit ? `drawing:${topology.topology_id}` : `drawing:${topology.topology_id}:ro`,
-            skill_name: allowEdit ? `拓扑绘图 · ${topology.name}` : `拓扑只读分析 · ${topology.name}`,
-            resource_ids: [topology.topology_id],
-            allow_edit: allowEdit,
-          },
-        });
-        id = created.session.session_id;
+        id = await resolveTopologySession(workspaceId, topology, true);
+        if (!id) return;
         setSessionId(id);
-        try {
-          localStorage.setItem(storageKey, id);
-          localStorage.setItem(
-            scopedLocalStorageKey(`workbench_skill:${id}`),
-            JSON.stringify({
-              skill_key: `network.operations:drawing:${topology.topology_id}`,
-              resource_ids: [topology.topology_id],
-            }),
-          );
-        } catch { /* session remains available via task history */ }
-        useSessionStore.getState().bumpSessionList();
       } else {
         try {
           const response = await jobsApi.list(workspaceId);

@@ -42,6 +42,7 @@ export {
   Stack as IconLayers,
   Lightning as IconBolt,
   LinkSimple as IconLink,
+  Lock as IconLock,
   List as IconMenu,
   ListChecks as IconChecklist,
   MagnifyingGlass as IconSearch,

@@ -81,4 +81,70 @@ describe("WorkbenchComposer send contract", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
   });
+
+  it("renders locked badge and non-interactive resource chips when isSkillLocked is true", () => {
+    const topoSkill = {
+      extension_id: "network.operations",
+      skill_id: "drawing:topo_123",
+      name: "拓扑绘图 · 大型企业网络拓扑",
+      description: "围绕网络拓扑进行实时读图与绘图修改",
+      resources: [{ resource_id: "topo_123", name: "大型企业网络拓扑", description: "拓扑图纸", kind: "drawing" }],
+      default_resource_ids: ["topo_123"],
+      selection_mode: "single" as const,
+    };
+
+    render(
+      <WorkbenchComposer
+        {...baseProps}
+        isSkillLocked={true}
+        selectedSkill={topoSkill}
+        selectedSkillKey="network.operations:drawing:topo_123"
+        selectedResourceIds={["topo_123"]}
+      />
+    );
+
+    // Dropdown select should NOT be present
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+
+    // Locked badge must be visible with lock label
+    const lockedBadge = screen.getByTestId("workbench-skill-locked-badge");
+    expect(lockedBadge).toBeInTheDocument();
+    expect(lockedBadge).toHaveTextContent("已绑定：拓扑绘图 · 大型企业网络拓扑");
+
+    // Resource chip should be a non-button span with is-locked class
+    const chip = screen.getByText("大型企业网络拓扑");
+    expect(chip.tagName.toLowerCase()).toBe("span");
+    expect(chip).toHaveClass("wb-skill-device-chip", "is-locked");
+  });
+
+  it("renders normal dropdown and interactive resource buttons when isSkillLocked is false", () => {
+    const deviceSkill = {
+      extension_id: "network.operations",
+      skill_id: "device_control",
+      name: "网络设备控制",
+      description: "设备控制",
+      resources: [{ resource_id: "dev_1", name: "核心交换机1", description: "设备1", kind: "device" }],
+      default_resource_ids: ["dev_1"],
+      selection_mode: "single" as const,
+    };
+
+    render(
+      <WorkbenchComposer
+        {...baseProps}
+        isSkillLocked={false}
+        workbenchSkills={[deviceSkill]}
+        selectedSkill={deviceSkill}
+        selectedSkillKey="network.operations:device_control"
+        selectedResourceIds={["dev_1"]}
+      />
+    );
+
+    // Dropdown select should be present
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    expect(screen.queryByTestId("workbench-skill-locked-badge")).not.toBeInTheDocument();
+
+    // Resource button should be clickable button
+    const btn = screen.getByRole("button", { name: "核心交换机1" });
+    expect(btn).toBeInTheDocument();
+  });
 });
