@@ -14,7 +14,7 @@
 .network-admin .topology-studio.library-open { grid-template-columns: 252px minmax(0, 1fr); }
 .network-admin .topology-studio.agent-open { grid-template-columns: minmax(0, 1fr) 380px; }
 .network-admin .topology-studio.library-open.agent-open { grid-template-columns: 252px minmax(0, 1fr) 380px; }
-.network-admin .topology-studio.focus-mode { position: fixed; inset: var(--h-header, 56px) 0 0; z-index: 1000; height: calc(100dvh - var(--h-header, 56px)); min-height: 0; }
+.network-admin .topology-studio.focus-mode { position: fixed; inset: var(--h-header, 56px) 0 0; z-index: 1000; height: auto; min-height: 0; }
 .topology-studio .topology-sidebar { display: none; min-height: 0; grid-column: 1; border-right: 1px solid var(--line); background: var(--surface); }
 .topology-studio.library-open .topology-sidebar { display: flex; }
 .topology-studio .topology-canvas-area { display: flex; flex-direction: column; min-height: 0; height: 100%; width: 100%; overflow: hidden; grid-column: 1; background: var(--bg); }

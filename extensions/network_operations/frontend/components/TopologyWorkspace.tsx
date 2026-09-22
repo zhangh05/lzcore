@@ -617,7 +617,7 @@ export default function TopologyWorkspace({
       canvasApiRef.current?.resize();
     }, 40);
     return () => window.clearTimeout(timer);
-  }, [showEditbar]);
+  }, [showEditbar, focusMode, showLibrary, showAgent]);
   const [gridEnabled, setGridEnabled] = useState(true);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);

@@ -637,15 +637,31 @@ export default function NetOpsCanvas(props: Props) {
     }
   }, [viewport, theme, props.gridEnabled]);
 
-  // Window resize handler for world grid
+  // Window and container resize handler for world grid & cytoscape
   useEffect(() => {
     const handleResize = () => {
+      if (cyRef.current) {
+        cyRef.current.resize();
+      }
       if (gridCanvasRef.current) {
         renderWorldGrid(gridCanvasRef.current, viewport, theme === "dark", props.gridEnabled);
       }
     };
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+
+    const host = hostRef.current;
+    let ro: ResizeObserver | null = null;
+    if (host && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => {
+        handleResize();
+      });
+      ro.observe(host);
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      ro?.disconnect();
+    };
   }, [viewport, theme, props.gridEnabled]);
 
   // Motion/vector overlay for alert halos and smart guides (runs loop only when active alerts exist)
