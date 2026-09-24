@@ -1159,5 +1159,300 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Full-screen presentation mode
+   ══════════════════════════════════════════════════════════════════════════════ */
+.network-admin .topology-studio.is-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  z-index: 2500 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: var(--bg-canvas, #f8fafc);
+}
+
+.network-admin .topology-studio.is-fullscreen .topology-canvas-area {
+  height: 100vh;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Topology Whiteboard Annotation Layer & Toolbar
+   ══════════════════════════════════════════════════════════════════════════════ */
+.topology-whiteboard-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 60;
+  overflow: hidden;
+  user-select: none;
+}
+
+.topology-whiteboard-overlay.tool-pen,
+.topology-whiteboard-overlay.tool-highlighter {
+  cursor: crosshair;
+}
+
+.topology-whiteboard-overlay.tool-arrow,
+.topology-whiteboard-overlay.tool-rect {
+  cursor: crosshair;
+}
+
+.topology-whiteboard-overlay.tool-note {
+  cursor: text;
+}
+
+.topology-whiteboard-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* Floating Whiteboard Control Dock */
+.topology-whiteboard-toolbar {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(12px);
+  animation: wbToolbarSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes wbToolbarSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.topology-whiteboard-toolbar .toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topology-whiteboard-toolbar .toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line, #e2e8f0);
+  margin: 0 2px;
+}
+
+/* Tool Buttons */
+.wb-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2, #64748b);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.wb-tool-btn:hover {
+  background: var(--surface-2, #f1f5f9);
+  color: var(--text, #0f172a);
+}
+
+.wb-tool-btn.is-active {
+  background: var(--accent-soft, #e0f2fe);
+  border-color: var(--accent, #0284c7);
+  color: var(--accent, #0284c7);
+}
+
+/* Color Buttons */
+.wb-color-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  outline: none;
+}
+
+.wb-color-btn:hover {
+  transform: scale(1.15);
+}
+
+.wb-color-btn.is-active {
+  transform: scale(1.25);
+  box-shadow: 0 0 0 2px var(--surface, #ffffff), 0 0 0 3.5px var(--text, #0f172a);
+}
+
+/* Size Buttons */
+.wb-size-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.wb-size-btn span {
+  background: currentColor;
+  border-radius: 50%;
+  display: block;
+}
+
+.wb-size-btn:hover {
+  background: var(--surface-2, #f1f5f9);
+}
+
+.wb-size-btn.is-active {
+  background: var(--surface-3, #e2e8f0);
+  border-color: var(--line, #cbd5e1);
+  color: var(--accent, #0284c7);
+}
+
+/* Action Buttons */
+.wb-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text-2, #64748b);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.wb-action-btn:hover:not(:disabled) {
+  background: var(--surface-2, #f1f5f9);
+  color: var(--text, #0f172a);
+}
+
+.wb-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wb-action-btn.highlight {
+  background: var(--accent, #0284c7);
+  color: #ffffff;
+  border-color: var(--accent, #0284c7);
+  padding: 5px 10px;
+  font-weight: 500;
+}
+
+.wb-action-btn.highlight:hover {
+  filter: brightness(1.08);
+}
+
+.wb-action-btn.close-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* Sticky Note on Canvas */
+.whiteboard-sticky-note {
+  position: absolute;
+  width: 190px;
+  min-height: 80px;
+  background: var(--surface, #ffffff);
+  border-left: 4px solid var(--accent, #0284c7);
+  border-top: 1px solid var(--line, #e2e8f0);
+  border-right: 1px solid var(--line, #e2e8f0);
+  border-bottom: 1px solid var(--line, #e2e8f0);
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  padding: 8px;
+  z-index: 65;
+  cursor: move;
+  user-select: none;
+}
+
+.whiteboard-sticky-note.is-editing {
+  cursor: default;
+  box-shadow: 0 0 0 2px var(--accent, #0284c7), 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.whiteboard-sticky-note .note-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.whiteboard-sticky-note .note-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.whiteboard-sticky-note .note-remove-btn {
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  color: var(--text-3, #94a3b8);
+  cursor: pointer;
+  padding: 0 3px;
+  line-height: 1;
+}
+
+.whiteboard-sticky-note .note-remove-btn:hover {
+  color: #ef4444;
+}
+
+.whiteboard-sticky-note .note-text {
+  font-size: 12px;
+  color: var(--text, #1e293b);
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: pre-wrap;
+  cursor: text;
+}
+
+.whiteboard-sticky-note textarea {
+  width: 100%;
+  min-height: 60px;
+  resize: none;
+  border: 1px solid var(--line, #cbd5e1);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text, #1e293b);
+  background: var(--surface, #ffffff);
+  outline: none;
+  box-sizing: border-box;
 }
 

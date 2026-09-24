@@ -67,4 +67,11 @@ export {
   Warning as IconAlert,
   WifiHigh as IconWifi,
   X as IconClose,
+  ArrowsIn as IconArrowsIn,
+  PencilSimpleLine as IconPencil,
+  Highlighter as IconHighlighter,
+  ArrowUpRight as IconArrowUpRight,
+  Note as IconNote,
+  Eraser as IconEraser,
+  DownloadSimple as IconDownload,
 } from "@phosphor-icons/react";

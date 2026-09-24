@@ -39,6 +39,8 @@ import {
   IconWifi,
   IconSparkle,
   IconExpand,
+  IconArrowsIn,
+  IconPencil,
   IconChevronUp,
   IconWrench,
   IconChat,
@@ -57,6 +59,7 @@ import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
 import { mergeTopologies, type MergeConflict, type MergeStats } from "./topologyMerge";
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
+import { TopologyWhiteboard } from "./TopologyWhiteboard";
 import "./TopologyStudio.css";
 
 
@@ -730,6 +733,60 @@ export default function TopologyWorkspace({
   // canvas width for every user.
   const [showLibrary, setShowLibrary] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [whiteboardActive, setWhiteboardActive] = useState(false);
+  const studioContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleToggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      try {
+        const elem = studioContainerRef.current || document.documentElement;
+        if (elem.requestFullscreen) {
+          void elem.requestFullscreen();
+        }
+      } catch {
+        // fallback to CSS fullscreen
+      }
+      setIsFullscreen(true);
+    } else {
+      try {
+        if (document.exitFullscreen) {
+          void document.exitFullscreen();
+        }
+      } catch {
+        // fallback
+      }
+      setIsFullscreen(false);
+    }
+    window.setTimeout(() => canvasApiRef.current?.fit(), 160);
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      window.setTimeout(() => canvasApiRef.current?.fit(), 160);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F11") {
+        e.preventDefault();
+        handleToggleFullscreen();
+      } else if (e.key === "Escape" && isFullscreen && !document.fullscreenElement) {
+        setIsFullscreen(false);
+        window.setTimeout(() => canvasApiRef.current?.fit(), 160);
+      }
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [handleToggleFullscreen, isFullscreen]);
+
+  const handleToggleWhiteboard = useCallback(() => {
+    setWhiteboardActive((prev) => !prev);
+  }, []);
+
   const [workspaceMode, setWorkspaceMode] = useState<"view" | "edit">(() => {
     try {
       return (localStorage.getItem("lzcore_topology_workspace_mode") as "view" | "edit") || "edit";
@@ -2275,7 +2332,10 @@ export default function TopologyWorkspace({
   );
 
   return (
-    <div className={`network-topology-workspace topology-studio ${showLibrary ? "library-open" : ""} ${showAgent ? "agent-open" : ""} ${isInspectorOpen && !showAgent ? "inspector-open" : ""} ${focusMode ? "focus-mode" : ""}`}>
+    <div
+      ref={studioContainerRef}
+      className={`network-topology-workspace topology-studio ${showLibrary ? "library-open" : ""} ${showAgent ? "agent-open" : ""} ${isInspectorOpen && !showAgent ? "inspector-open" : ""} ${focusMode ? "focus-mode" : ""} ${isFullscreen ? "is-fullscreen" : ""}`}
+    >
       {/* 1. Left Panel: Topology selector + Device Palette + Group Palette */}
       <aside className="topology-sidebar">
         <div className="topology-sidebar-section topology-select-section">
@@ -2589,7 +2649,26 @@ export default function TopologyWorkspace({
                 {showEditbar ? "收起工具" : "展开工具"}
               </Button>
             )}
-            <button className="studio-icon-button" aria-label={focusMode ? "退出专注画布" : "专注画布"} title="专注画布" onClick={() => setFocusMode((value) => !value)}><IconExpand size={18} /></button>
+            <Button
+              size="sm"
+              variant={whiteboardActive ? "primary" : "default"}
+              icon={<IconPencil size={13} />}
+              onClick={handleToggleWhiteboard}
+              title={whiteboardActive ? "关闭画板批注" : "开启画板批注：在拓扑上自由画笔、荧光笔、箭头与便签标注"}
+              aria-pressed={whiteboardActive}
+            >
+              {whiteboardActive ? "关闭画板" : "画板批注"}
+            </Button>
+            <Button
+              size="sm"
+              variant={isFullscreen ? "primary" : "default"}
+              icon={isFullscreen ? <IconArrowsIn size={13} /> : <IconExpand size={13} />}
+              onClick={handleToggleFullscreen}
+              title={isFullscreen ? "退出全屏展示 (Esc / F11)" : "全屏展示拓扑图 (快捷键 F11 / 点击体验沉浸大屏)"}
+              aria-pressed={isFullscreen}
+            >
+              {isFullscreen ? "退出全屏" : "全屏展示"}
+            </Button>
             <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>绘图对话</Button>
           </div>
         </div>
@@ -2835,6 +2914,13 @@ export default function TopologyWorkspace({
               })()}
             </aside>
           ) : null}
+
+          <TopologyWhiteboard
+            active={whiteboardActive}
+            onClose={() => setWhiteboardActive(false)}
+            onExportBackground={() => canvasApiRef.current?.exportPNG({ full: true, scale: 2, background: "#ffffff" }) || ""}
+            topologyName={activeTopology?.name}
+          />
 
           {/* Floating Bubble Popover Inspector */}
           {/* 3. Right: Inspector */}
