@@ -12,7 +12,7 @@ import { jobsApi, workspacesApi, sessionExtApi, runtimeAuditApi } from "../../ap
 import { useSessionStore } from "../../stores/session";
 import { APP_EVENTS } from "../../utils/appEvents";
 import { useToastStore } from "../../stores/toast";
-import { Badge, StatusDot, EmptyState, LoadingState, CodeBlock } from "../../components/common";
+import { Badge, StatusDot, EmptyState, LoadingState } from "../../components/common";
 import { PageHeader, DetailPanel, Button, FilterBar, Input, Select, TabButton } from "../../components/ui";
 import {
   IconRefresh,
@@ -28,7 +28,7 @@ import {
 } from "../../components/Icon";
 import { TraceDetailPanel } from "../../components/TraceDetailPanel";
 import { deriveRunTraceStats } from "../../utils/runTraceStats";
-import { formatEventTime, formatEventDetail, formatEventLabel } from "../../utils/runEvent";
+import { formatEventTime, formatEventDetail } from "../../utils/runEvent";
 import { formatDate } from "../../utils/format";
 import { formatCompactDate, sanitizeUserText } from "../../utils/displayText";
 import { isApiError } from "../../types";
@@ -59,6 +59,14 @@ const TERMINAL_DELETE_STATUSES = new Set([
 
 function canHardDelete(job: JobItem): boolean {
   return TERMINAL_DELETE_STATUSES.has(String(job.status || "").toLowerCase());
+}
+
+const ACTIVE_CANCEL_STATUSES = new Set([
+  "running", "pending", "queued", "created",
+]);
+
+function canCancel(job: JobItem): boolean {
+  return ACTIVE_CANCEL_STATUSES.has(String(job.status || "").toLowerCase());
 }
 
 /** Extract session_id from nested payload */
@@ -454,6 +462,16 @@ export function OperationsPage() {
   };
 
   // ── Cancel / Retry / Restore ──
+  const handleCancel = async (job: JobItem) => {
+    if (!canCancel(job)) return;
+    try {
+      await jobsApi.cancel(job.job_id, wsId);
+      toast({ kind: "success", title: "已终止任务" });
+      await loadJobs();
+    } catch (e: unknown) {
+      toast({ kind: "error", title: "终止任务失败", body: isApiError(e) ? e.message : String(e) });
+    }
+  };
   const handleRetry = async (job_id: string) => {
     try { await jobsApi.retry(job_id, wsId); toast({ kind: "success", title: "已重试" }); loadJobs(); }
     catch (e: unknown) { toast({ kind: "error", title: "重试失败", body: isApiError(e) ? e.message : String(e) }); }
@@ -636,6 +654,9 @@ export function OperationsPage() {
                     </div>
                   )}
                   <div className="job-card-actions">
+                    {canCancel(job) && (
+                      <Button size="sm" variant="danger-ghost" onClick={(e) => { e.stopPropagation(); void handleCancel(job); }}>终止</Button>
+                    )}
                     {(job.status === "failed" || job.status === "error") && (
                       <Button size="sm" onClick={(e) => { e.stopPropagation(); handleRetry(job.job_id); }}>重试</Button>
                     )}
@@ -655,6 +676,7 @@ export function OperationsPage() {
           {/* ══════ 右侧 详情 / run trace ══════ */}
           {selRun ? (
             <RunTraceView
+              job={selectedJob}
               run={selRun}
               trace={trace}
               tab={runTab}
@@ -672,7 +694,9 @@ export function OperationsPage() {
               duration={duration}
               onOpenRun={openRun}
               onRetry={handleRetry}
+              onCancel={handleCancel}
               onRestore={handleRestore}
+              onDelete={handleDelete}
             />
           )}
         </div>
@@ -703,7 +727,7 @@ function OperationsPageHeader({ count, onRefresh }: { count: number; onRefresh: 
 
 function JobDetail({
   job, jobTab, setJobTab, runs, runsLoading, stats, duration,
-  onOpenRun, onRetry, onRestore,
+  onOpenRun, onRetry, onCancel, onRestore, onDelete,
 }: {
   job: JobItem | null;
   jobTab: "overview" | "stats" | "summary";
@@ -714,7 +738,9 @@ function JobDetail({
   duration: string | null;
   onOpenRun: (r: RuntimeAuditTurn) => void;
   onRetry: (id: string) => void;
+  onCancel: (job: JobItem) => void;
   onRestore: (job: JobItem) => void;
+  onDelete: (job: JobItem) => void;
 }) {
   if (!job) {
     return (
@@ -729,6 +755,7 @@ function JobDetail({
 
   const meta = sMeta(job.status);
   const restoreAvailable = Boolean(getSessionId(job)) && ["succeeded", "completed", "failed", "cancelled"].includes(job.status);
+  const showActions = canCancel(job) || (job.status === "failed" || job.status === "error") || restoreAvailable || canHardDelete(job);
 
   return (
     <div className="split-detail operations-pane-scroll operations-detail-body">
@@ -739,13 +766,21 @@ function JobDetail({
         </h3>
         <Badge kind={meta.kind}>{meta.label}</Badge>
         <Badge kind="muted">{JOB_TYPE_LABELS[job.job_type] || job.job_type}</Badge>
-        {((job.status === "failed" || job.status === "error") || restoreAvailable) && (
+        {showActions && (
           <div className="operations-detail-actions">
+            {canCancel(job) && (
+              <Button size="sm" variant="danger-ghost" onClick={() => onCancel(job)}>终止任务</Button>
+            )}
             {(job.status === "failed" || job.status === "error") && (
               <Button size="sm" icon={<IconRefresh size={14} />} onClick={() => onRetry(job.job_id)}>重试</Button>
             )}
             {restoreAvailable && (
               <Button size="sm" icon={<IconUndo size={14} />} onClick={() => onRestore(job)}>恢复会话</Button>
+            )}
+            {canHardDelete(job) && (
+              <Button size="sm" variant="danger-ghost" title="永久删除任务" onClick={() => onDelete(job)}>
+                <IconTrash size={14} />删除任务
+              </Button>
             )}
           </div>
         )}
@@ -877,11 +912,23 @@ function TabStats({ job, runs, runsLoading, stats, duration }: {
       </div>
 
       <div className="section-head mb-2">时间线</div>
-      <div className="row-flex-sm timeline-meta-row">
-        <div>创建：{formatCompactDate(job.created_at) || "-"}</div>
-        <div>开始：{formatCompactDate(job.started_at) || "-"}</div>
-        <div>结束：{formatCompactDate(job.finished_at) || "-"}</div>
-        <div>更新：{formatCompactDate(job.updated_at) || "-"}</div>
+      <div className="timeline-meta-row">
+        <div className="timeline-meta-item">
+          <span className="timeline-meta-label">创建</span>
+          <span className="timeline-meta-val">{formatCompactDate(job.created_at) || "—"}</span>
+        </div>
+        <div className="timeline-meta-item">
+          <span className="timeline-meta-label">开始</span>
+          <span className="timeline-meta-val">{formatCompactDate(job.started_at) || "—"}</span>
+        </div>
+        <div className="timeline-meta-item">
+          <span className="timeline-meta-label">结束</span>
+          <span className="timeline-meta-val">{formatCompactDate(job.finished_at) || "—"}</span>
+        </div>
+        <div className="timeline-meta-item">
+          <span className="timeline-meta-label">更新</span>
+          <span className="timeline-meta-val">{formatCompactDate(job.updated_at) || "—"}</span>
+        </div>
       </div>
 
       {runList.length > 0 && (
@@ -906,37 +953,60 @@ function TabStats({ job, runs, runsLoading, stats, duration }: {
 /* ── Tab: 概要 ── */
 
 function TabSummary({ job }: { job: JobItem }) {
-  const rows: Array<[string, string]> = [
-    ["任务 ID", job.job_id],
-    ["类型", JOB_TYPE_LABELS[job.job_type] || job.job_type],
-    ["状态", sMeta(job.status).label],
-    ["会话 ID", getSessionId(job) || "—"],
-    ["工作区", job.workspace_id || "—"],
-    ["创建", formatCompactDate(job.created_at) || "—"],
-    ["开始", formatCompactDate(job.started_at) || "—"],
-    ["结束", formatCompactDate(job.finished_at) || "—"],
-    ["更新", formatCompactDate(job.updated_at) || "—"],
-  ];
-  if (job.progress) rows.push(["进度", `${job.progress.current}/${job.progress.total} (${job.progress.percent}%) · ${job.progress.message || ""}`]);
-  if (job.error) rows.push(["错误", job.error]);
-
+  const meta = sMeta(job.status);
+  const duration = calcDuration(job.started_at, job.finished_at);
   return (
     <div className="card">
-      <div className="fragment-grid">
-        {rows.map(([k, v]) => (
-          <FragmentRow key={k} label={k} value={v} danger={k === "错误"} />
-        ))}
-      </div>
-    </div>
-  );
-}
+      <div className="info-grid-4">
+        <span className="info-grid-label">任务 ID</span>
+        <span className="info-grid-value mono">{job.job_id}</span>
+        <span className="info-grid-label">类型</span>
+        <span className="info-grid-value">{JOB_TYPE_LABELS[job.job_type] || job.job_type}</span>
 
-function FragmentRow({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
-  return (
-    <>
-      <span className="fragment-row-label">{label}</span>
-      <span className={"fragment-row-value" + (danger ? " danger" : "")}>{value}</span>
-    </>
+        <span className="info-grid-label">状态</span>
+        <span className="info-grid-value"><Badge kind={meta.kind} withDot>{meta.label}</Badge></span>
+        <span className="info-grid-label">会话 ID</span>
+        <span className="info-grid-value mono">{getSessionId(job) || "—"}</span>
+
+        <span className="info-grid-label">工作区</span>
+        <span className="info-grid-value mono">{job.workspace_id || "—"}</span>
+        <span className="info-grid-label">耗时</span>
+        <span className="info-grid-value">{duration || "—"}</span>
+
+        <span className="info-grid-label">创建时间</span>
+        <span className="info-grid-value">{formatCompactDate(job.created_at) || "—"}</span>
+        <span className="info-grid-label">开始时间</span>
+        <span className="info-grid-value">{formatCompactDate(job.started_at) || "—"}</span>
+
+        <span className="info-grid-label">结束时间</span>
+        <span className="info-grid-value">{formatCompactDate(job.finished_at) || "—"}</span>
+        <span className="info-grid-label">更新时间</span>
+        <span className="info-grid-value">{formatCompactDate(job.updated_at) || "—"}</span>
+      </div>
+
+      {job.description && (
+        <div className="detail-section-divider">
+          <div className="section-head mb-1">任务描述</div>
+          <div className="text-sm">{job.description}</div>
+        </div>
+      )}
+
+      {job.progress && (
+        <div className="detail-section-divider">
+          <div className="section-head mb-1">执行进度</div>
+          <div className="text-sm font-medium">
+            {job.progress.current}/{job.progress.total} ({job.progress.percent}%) · {job.progress.message || ""}
+          </div>
+        </div>
+      )}
+
+      {job.error && (
+        <div className="card card-danger-left mt-3">
+          <div className="fail-reason-head"><IconAlert size={14} /> 错误信息</div>
+          <div className="fail-reason-body">{job.error}</div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -959,7 +1029,8 @@ function StatCard({ label, value, mono, highlight, ok, danger }: {
 
 /* ── Run trace (right pane, drilled in) ── */
 
-function RunTraceView({ run, trace, tab, setTab, onBack }: {
+function RunTraceView({ job, run, trace, tab, setTab, onBack }: {
+  job?: JobItem | null;
   run: RuntimeAuditTurn;
   trace: any[] | null;
   tab: "overview" | "events";
@@ -987,8 +1058,15 @@ function RunTraceView({ run, trace, tab, setTab, onBack }: {
 
   return (
     <div className="split-detail operations-pane-scroll operations-detail-body">
-      <Button size="sm" variant="ghost" onClick={onBack} className="mb-3">
-        ← 返回任务列表
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={<IconUndo size={14} />}
+        onClick={onBack}
+        className="mb-3"
+        title={job?.title ? `返回任务「${job.title}」` : "返回任务详情"}
+      >
+        返回任务详情
       </Button>
 
       <div className="operations-detail-header">
@@ -1009,14 +1087,25 @@ function RunTraceView({ run, trace, tab, setTab, onBack }: {
           className="tab"
           icon={IconChecklist}
           label="处理过程"
+          count={trace?.length}
           active={tab === "events"}
           onClick={() => setTab("events")}
         />
       </div>
 
       {tab === "overview" && (
-        <>
-          <div className="card">
+        <div>
+          {failInfo && (
+            <div className="card card-danger-left mb-3">
+              <div className="fail-reason-head">
+                <IconAlert size={14} /> 失败原因
+                {failInfo.timeoutSecs != null && <span className="fail-reason-timeout">· 耗时 {failInfo.timeoutSecs}s</span>}
+              </div>
+              <div className="fail-reason-body">{failInfo.error}</div>
+            </div>
+          )}
+
+          <div className="card mb-3">
             <div className="info-grid-4">
               <span className="info-grid-label">执行记录 ID</span>
               <span className="info-grid-value mono">{run.turn_id || run.run_id || "—"}</span>
@@ -1030,61 +1119,42 @@ function RunTraceView({ run, trace, tab, setTab, onBack }: {
               <span className="info-grid-value">{formatDate(selectedStats.startedAt, "compact") || "—"}</span>
               <span className="info-grid-label">结束</span>
               <span className="info-grid-value">{formatDate(selectedStats.finishedAt, "compact") || "—"}</span>
-              <span className="info-grid-label">工具调用</span>
-              <span className="info-grid-value">{selectedStats.toolCallCount || 0}</span>
+              <span className="info-grid-label">耗时</span>
+              <span className="info-grid-value">{calcDuration(selectedStats.startedAt, selectedStats.finishedAt) || "—"}</span>
               <span className="info-grid-label">状态</span>
               <span>{run.ok ? <Badge kind="ok" withDot>成功</Badge> : <Badge kind="err" withDot>失败</Badge>}</span>
             </div>
           </div>
 
-          <TraceDetailPanel traceEvents={trace} selectedRun={run} />
-
-          {(!trace || trace.length === 0) && !selectedStats.toolCallCount && (
-            <div className="operations-empty">暂无更多详情</div>
+          {(run.user_input_summary || run.intent) && (
+            <div className="card mb-3">
+              <div className="section-head mb-1">用户意图 / 提问</div>
+              <div className="text-sm">{sanitizeUserText(run.user_input_summary || run.intent || "")}</div>
+            </div>
           )}
-        </>
+
+          <div className="stat-grid-4 mb-3">
+            <StatCard label="工具调用次数" value={String(selectedStats.toolCallCount || 0)} highlight />
+            <StatCard label="调用工具种类" value={String(selectedStats.visibleTools.length)} />
+            <StatCard label="警告记录" value={String(selectedStats.warningCount || 0)} />
+            <StatCard label="错误记录" value={String(selectedStats.errorCount || 0)} danger={(selectedStats.errorCount || 0) > 0} />
+          </div>
+
+          {selectedStats.visibleTools.length > 0 && (
+            <div className="card">
+              <div className="section-head mb-2">调用的工具</div>
+              <div className="row-flex-sm flex-wrap">
+                {selectedStats.visibleTools.map((t) => (
+                  <Badge key={t} kind="muted"><span className="mono">{t}</span></Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {tab === "events" && (
-        <>
-          {!trace ? <LoadingState text="加载事件…" /> : (
-            <>
-              {failInfo && (
-                <div className="card card-danger-left">
-                  <div className="fail-reason-head">
-                    <IconAlert size={14} /> 失败原因
-                    {failInfo.timeoutSecs != null && <span className="fail-reason-timeout">· 耗时 {failInfo.timeoutSecs}s</span>}
-                  </div>
-                  <div className="fail-reason-body">{failInfo.error}</div>
-                </div>
-              )}
-              <div className="section-head">处理过程 · {trace.length} 条记录</div>
-              {trace.length === 0 ? <EmptyState text="该运行无事件记录" /> : (
-                trace.map((ev: any, i: number) => {
-                  const et = ev.event_type || ev.type || "unknown";
-                  const dt = formatEventDetail(ev);
-                  const lb = formatEventLabel(ev);
-                  const isFail = et === "turn_failed";
-                  return (
-                    <div key={ev.event_id || i} className="card event-card">
-                      <div className="event-card-head">
-                        <div className="event-card-title">
-                          <span className={"event-card-dot" + (isFail ? " danger" : " ok")} />
-                          <span className="event-card-label">{lb}</span>
-                        </div>
-                        <span className="event-card-time">{formatEventTime(ev)}</span>
-                      </div>
-                      <details className="event-card-detail">
-                        <summary>开发诊断 · {et}</summary>
-                        <CodeBlock language="json">{JSON.stringify(dt, null, 2)}</CodeBlock>
-                      </details>
-                    </div>
-                  );
-                })
-              )}
-            </>
-          )}
-        </>
+        <TraceDetailPanel traceEvents={trace} selectedRun={run} />
       )}
     </div>
   );

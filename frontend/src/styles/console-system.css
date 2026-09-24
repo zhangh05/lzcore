@@ -203,6 +203,15 @@
   background: var(--danger-soft);
   border-color: rgba(189, 48, 64, 0.24);
 }
+.btn.danger:disabled,
+.btn.danger-ghost:disabled {
+  color: var(--text-4);
+  background: transparent;
+  border-color: transparent;
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
 .input,
 textarea.input,
@@ -785,6 +794,36 @@ select.input:focus-visible {
   border-radius: var(--r-4);
   background: var(--console-surface);
   box-shadow: none;
+}
+.operations-page .timeline-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.operations-page .timeline-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--console-surface);
+  border: 1px solid var(--console-border-soft);
+  border-radius: var(--r-4);
+  font-size: var(--fs-12);
+}
+.operations-page .timeline-meta-label {
+  color: var(--text-4);
+  font-weight: 500;
+}
+.operations-page .timeline-meta-val {
+  color: var(--console-ink);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.operations-page .detail-section-divider {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--console-border-soft);
 }
 .operations-page .event-card-detail,
 .operations-page .fail-reason-body { border-top-color: var(--console-border-soft); }

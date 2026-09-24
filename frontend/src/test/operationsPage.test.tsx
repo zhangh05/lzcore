@@ -169,4 +169,92 @@ describe("OperationsPage", () => {
     });
     expect(screen.queryByLabelText("选择任务 Running")).not.toBeInTheDocument();
   });
+
+  it("cancels an active job from the detail pane", async () => {
+    enqueue("/jobs", {
+      status: 200,
+      data: {
+        jobs: [{
+          job_id: "job-active-1",
+          job_type: "network_inspection",
+          status: "running",
+          title: "Active Inspection",
+        }],
+      },
+    });
+    enqueue("/runs/recent", { status: 200, data: { runs: [] } });
+    enqueue("/jobs/job-active-1/cancel", { status: 200, data: { ok: true, status: "cancelled" } });
+    enqueue("/jobs", {
+      status: 200,
+      data: {
+        jobs: [{
+          job_id: "job-active-1",
+          job_type: "network_inspection",
+          status: "cancelled",
+          title: "Active Inspection",
+        }],
+      },
+    });
+
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Active Inspection"));
+
+    const cancelBtn = await screen.findByRole("button", { name: "终止任务" });
+    fireEvent.click(cancelBtn);
+
+    await waitFor(() => {
+      const cancelReq = getRequests().find((r) => r.url === "/jobs/job-active-1/cancel");
+      expect(cancelReq).toBeDefined();
+      expect(cancelReq?.method).toBe("POST");
+    });
+  });
+
+  it("navigates back to job detail from run trace view with clear label", async () => {
+    enqueue("/jobs", {
+      status: 200,
+      data: {
+        jobs: [{
+          job_id: "job-trace-test",
+          job_type: "agent_run",
+          status: "succeeded",
+          title: "Trace Job",
+          payload: { session_id: "sess-trace" },
+          run_ids: ["run-trace-1"],
+        }],
+      },
+    });
+    enqueue("/runs/recent", {
+      status: 200,
+      data: {
+        runs: [{
+          run_id: "run-trace-1",
+          turn_id: "run-trace-1",
+          session_id: "sess-trace",
+          status: "ok",
+          ok: true,
+          user_input_summary: "Trace test turn",
+          trace_id: "tr-123",
+        }],
+      },
+    });
+    enqueue("/runs/run-trace-1/trace", { status: 200, data: { events: [] } });
+
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("Trace Job"));
+
+    // Click the run card to open run trace
+    fireEvent.click(await screen.findByText("Trace test turn"));
+
+    // The back button should read "返回任务详情"
+    const backBtn = await screen.findByRole("button", { name: "返回任务详情" });
+    expect(backBtn).toBeInTheDocument();
+
+    // Click back
+    fireEvent.click(backBtn);
+
+    // Job detail tabs should be back in view
+    expect(await screen.findByRole("tab", { name: /执行记录/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /统计/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /概要/ })).toBeInTheDocument();
+  });
 });
