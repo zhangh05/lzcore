@@ -4,7 +4,7 @@
 .network-admin.is-topology > .ui-page-header { flex: 0 0 auto; padding-top: 12px; padding-bottom: 10px; }
 .network-admin.is-topology > .network-tabs { flex: 0 0 42px; }
 .network-admin.topology-route { background: var(--bg); }
-.network-admin.is-topology > .network-notice { position: absolute; bottom: 46px; left: 20px; z-index: 40; max-width: min(520px, 80vw); margin: 0; box-shadow: var(--shadow-md); backdrop-filter: blur(8px); }
+.network-admin.is-topology > .network-notice { position: absolute; bottom: 46px; left: 20px; z-index: 40; max-width: min(520px, 80vw); margin: 0; box-shadow: var(--shadow-menu); backdrop-filter: blur(8px); }
 .network-admin .network-topology-workspace.topology-studio {
   --topology-link: #778ba0;
   display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
@@ -96,11 +96,57 @@
 .studio-more { position: relative; font-size: 12px; }
 .studio-more > summary { padding: 7px 8px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
 .studio-more > div { position: absolute; right: 0; top: 34px; display: grid; gap: 4px; padding: 8px; width: 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #0002; z-index: 20; }
-.topology-studio .topology-canvas-viewport { position: relative; overflow: hidden; height: 100%; min-height: 0; flex: 1 1 0; background: #ffffff; }
-.topology-studio .topology-observation-card { position: absolute; top: 12px; left: 12px; z-index: 25; width: min(280px, calc(100% - 24px)); padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-md); font-size: 12px; }
-.topology-studio .topology-observation-card p { margin: 6px 0 0; color: var(--text-2); line-height: 1.45; }
-.topology-studio .topology-observation-card button { margin-top: 8px; border: 0; background: none; color: var(--text-2); cursor: pointer; padding: 0; }
-.topology-studio .topology-canvas-viewport.mode-connect { cursor: crosshair; }
+.topology-studio .topology-observation-card {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 25;
+  width: min(300px, calc(100% - 24px));
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-8);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-menu);
+  font-size: var(--fs-12);
+}
+.topology-studio .topology-observation-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: 6px;
+}
+.topology-studio .topology-observation-card strong {
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text);
+}
+.topology-studio .topology-observation-card p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  line-height: var(--lh-base);
+}
+.topology-studio .topology-observation-card .observation-hint {
+  color: var(--text-3);
+  font-size: var(--fs-11);
+  margin-top: 6px;
+}
+.topology-studio .topology-observation-card button {
+  margin-top: 8px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-4);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: var(--fs-11);
+  transition: all 0.15s ease;
+}
+.topology-studio .topology-observation-card button:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
 .topology-studio .topology-canvas-viewport.mode-select .netops-cytoscape { cursor: default; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape { cursor: grab; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape:active { cursor: grabbing; }
@@ -412,10 +458,10 @@
   z-index: 35;
   inset: auto;
   bottom: auto;
-  width: 220px;
+  width: 240px;
   height: auto;
   max-width: calc(100% - 16px);
-  max-height: min(480px, calc(100vh - 120px));
+  max-height: min(540px, calc(100vh - 140px));
   border-radius: 8px;
   background: var(--surface);
   border: 1px solid var(--line-2, rgba(0, 0, 0, 0.08));

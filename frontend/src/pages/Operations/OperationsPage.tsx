@@ -18,6 +18,7 @@ import {
   IconRefresh,
   IconDocument,
   IconHistory,
+  IconUndo,
   IconBolt,
   IconAlert,
   IconTrash,
@@ -29,7 +30,7 @@ import { TraceDetailPanel } from "../../components/TraceDetailPanel";
 import { deriveRunTraceStats } from "../../utils/runTraceStats";
 import { formatEventTime, formatEventDetail, formatEventLabel } from "../../utils/runEvent";
 import { formatDate } from "../../utils/format";
-import { formatCompactDate } from "../../utils/displayText";
+import { formatCompactDate, sanitizeUserText } from "../../utils/displayText";
 import { isApiError } from "../../types";
 import type { RuntimeAuditTurn } from "../../types";
 
@@ -738,6 +739,16 @@ function JobDetail({
         </h3>
         <Badge kind={meta.kind}>{meta.label}</Badge>
         <Badge kind="muted">{JOB_TYPE_LABELS[job.job_type] || job.job_type}</Badge>
+        {((job.status === "failed" || job.status === "error") || restoreAvailable) && (
+          <div className="operations-detail-actions">
+            {(job.status === "failed" || job.status === "error") && (
+              <Button size="sm" icon={<IconRefresh size={14} />} onClick={() => onRetry(job.job_id)}>重试</Button>
+            )}
+            {restoreAvailable && (
+              <Button size="sm" icon={<IconUndo size={14} />} onClick={() => onRestore(job)}>恢复会话</Button>
+            )}
+          </div>
+        )}
       </div>
 
       {(stats.runCount > 0 || duration || getSessionId(job)) && (
@@ -747,17 +758,6 @@ function JobDetail({
           {duration && <QuickStat label="耗时" value={duration} />}
           {stats.totalTools > 0 && <QuickStat label="工具调用" value={String(stats.totalTools)} />}
           {stats.totalErrors > 0 && <QuickStat label="错误" value={String(stats.totalErrors)} danger />}
-        </div>
-      )}
-
-      {((job.status === "failed" || job.status === "error") || restoreAvailable) && (
-        <div className="operations-detail-actions">
-          {(job.status === "failed" || job.status === "error") && (
-            <Button size="sm" onClick={() => onRetry(job.job_id)}>重试</Button>
-          )}
-          {restoreAvailable && (
-            <Button variant="ghost" size="sm" onClick={() => onRestore(job)}>恢复</Button>
-          )}
         </div>
       )}
 
@@ -825,7 +825,7 @@ function TabRuns({ job, runs, runsLoading, onOpenRun }: { job: JobItem; runs: Ru
         >
           <span className="run-card-index">{runs.length - i}</span>
           <span className="run-card-title">
-            {r.user_input_summary || r.intent || "(无摘要)"}
+            {sanitizeUserText(r.user_input_summary || r.intent || "") || "(无摘要)"}
           </span>
           <Badge kind={sBadge(effectiveStatus(r))}>{sLabel(effectiveStatus(r))}</Badge>
           {(r.tool_call_count ?? 0) > 0 && (
@@ -890,7 +890,7 @@ function TabStats({ job, runs, runsLoading, stats, duration }: {
           {runList.map((r, i) => (
             <div key={i} className="timeline-row">
               <span className="timeline-index">#{runList.length - i}</span>
-              <span className="timeline-title">{r.user_input_summary || r.intent || "(无摘要)"}</span>
+              <span className="timeline-title">{sanitizeUserText(r.user_input_summary || r.intent || "") || "(无摘要)"}</span>
               <Badge kind={sBadge(effectiveStatus(r))}>{sLabel(effectiveStatus(r))}</Badge>
               {r.tool_call_count ? <span>{r.tool_call_count} 工具</span> : null}
               <span>{r.created_at ? formatCompactDate(r.created_at) : "-"}</span>

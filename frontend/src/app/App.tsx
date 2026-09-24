@@ -428,7 +428,6 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
           <button
             type="button"
             className="feature-desc-btn"
-            data-tip="功能描述"
             data-testid="btn-feature-desc"
             aria-label="功能描述"
             onClick={() => setFeatureDescOpen(true)}

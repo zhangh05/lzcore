@@ -10,7 +10,7 @@
 .feature-drawer-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--overlay);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
@@ -22,7 +22,7 @@
   height: 100%;
   background: var(--surface);
   border-left: 1px solid var(--line-2);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.16);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.24);
   display: flex;
   flex-direction: column;
   animation: featureDrawerSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
@@ -99,12 +99,17 @@
 .cc-in-drawer {
   width: 100%;
   max-width: 100%;
-  padding: 0;
+  height: auto;
   min-height: auto;
+  overflow: visible;
+  padding: 0;
 }
 
 .cc-in-drawer .page-body {
-  padding-top: 0;
+  padding: 0;
+  height: auto;
+  min-height: auto;
+  overflow: visible;
 }
 
 .cc-drawer-metrics-row {
@@ -115,6 +120,25 @@
   margin-bottom: 16px;
   border-bottom: 1px solid var(--line-2);
   flex-wrap: wrap;
+}
+
+.cc-drawer-metrics-row .metric-chip-btn {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.cc-drawer-metrics-row .metric-chip-btn:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.cc-in-drawer .capability-directory {
+  grid-template-columns: minmax(230px, 30%) minmax(0, 1fr);
 }
 
 @keyframes featureDrawerFadeIn {

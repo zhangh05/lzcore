@@ -3,7 +3,7 @@ import type { IconProps } from "@phosphor-icons/react";
 import { apiRequest } from "../../../frontend/src/api/client";
 import { confirm } from "../../../frontend/src/components/ConfirmDialog";
 import { IconBolt, IconChecklist, IconEdit, IconEye, IconPlugs, IconPlus, IconRefresh, IconServer, IconShield, IconTrash, IconTree } from "../../../frontend/src/components/Icon";
-import { Button, PageHeader, TabButton } from "../../../frontend/src/components/ui";
+import { Button, PageHeader, TabButton, SearchInput } from "../../../frontend/src/components/ui";
 import { Link, useSearchParams } from "../../../frontend/src/router";
 import { useSessionStore } from "../../../frontend/src/stores/session";
 import { DeviceTypeIcon } from "./components/TopologyWorkspace";
@@ -475,8 +475,16 @@ export default function NetworkOperations({ initialView }: { initialView?: Netwo
     )}
     <NetworkNotice notice={notice} onClose={clearNotice} />
     {view !== "context" ? <div className="network-toolbar">
-      <div className="network-filters"><input aria-label={view === "devices" ? "搜索设备" : "搜索 Skill"} placeholder={view === "devices" ? "搜索设备名称、管理地址" : "搜索 Skill 名称、说明"} value={query} onChange={(event) => setQuery(event.target.value)} />
-      {view === "devices" && <select aria-label="筛选区域" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}><option value="">全部区域</option>{regions.map((region) => <option key={region.region_id} value={region.region_id}>{region.name}</option>)}</select>}</div>
+      <div className="network-filters">
+        <SearchInput
+          aria-label={view === "devices" ? "搜索设备" : "搜索 Skill"}
+          placeholder={view === "devices" ? "搜索设备名称、管理地址" : "搜索 Skill 名称、说明"}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onClear={() => setQuery("")}
+        />
+        {view === "devices" && <select aria-label="筛选区域" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}><option value="">全部区域</option>{regions.map((region) => <option key={region.region_id} value={region.region_id}>{region.name}</option>)}</select>}
+      </div>
       <Button icon={<IconPlus size={14} />} onClick={() => { if (view === "devices") { setDeviceForm(emptyDevice); setEditor("device"); } else { setSkillForm(emptySkill); setEditor("skill"); } }}>{view === "devices" ? "登记设备" : "创建 Skill"}</Button>
     </div> : null}
     {editor && <dialog ref={editorRef} className="network-editor" aria-label={editor === "skill" ? "Skill 编辑面板" : editor === "device" ? "设备编辑面板" : "连接编辑面板"} onCancel={(event) => { if (busy) event.preventDefault(); else setEditor(null); }}>
@@ -525,7 +533,7 @@ export default function NetworkOperations({ initialView }: { initialView?: Netwo
       <section className="network-panel network-span registered-devices">
         <div className="panel-heading">
           <div><h2>已登记设备</h2><p>在这里维护设备身份、连接和删除操作。</p></div>
-          <span className="record-count">{devices.length} 台设备</span>
+          <span className="record-count">{filteredDevices.length < devices.length ? `${filteredDevices.length} / ${devices.length} 台设备` : `${devices.length} 台设备`}</span>
         </div>
         <div className="device-list">{filteredDevices.length ? filteredDevices.map((device) => {
           const deviceConnections = connections.filter((item) => item.device_id === device.device_id);
@@ -569,12 +577,12 @@ export default function NetworkOperations({ initialView }: { initialView?: Netwo
       <section className="network-panel drawing-skills">
         <div className="panel-heading">
           <div><h2>绘图 Skill</h2><p>每张拓扑自动提供一个只读绘图 Skill，只打开那一张图，不能在这里编辑或授权设备。</p></div>
-          <span className="record-count">{drawings.length} 个</span>
+          <span className="record-count">{filteredDrawings.length < drawings.length ? `${filteredDrawings.length} / ${drawings.length} 个图纸` : `${drawings.length} 个图纸`}</span>
         </div>
         <div className="skill-list">{filteredDrawings.length ? filteredDrawings.map((sheet) => (
           <article key={sheet.topology_id} className="skill-card drawing-skill-card" data-testid={`drawing-skill-${sheet.topology_id}`}>
             <header className="skill-card-header">
-              <div className="skill-title"><IconTree size={14} /><strong>拓扑绘图 · {sheet.name}</strong><span className="skill-state enabled">内置</span></div>
+              <div className="skill-title"><IconTree size={14} /><strong>拓扑绘图 · {sheet.name}</strong><span className="skill-state builtin">内置</span></div>
               <div className="skill-actions">
                 <Link className="drawing-skill-link" to={`/topology?topology_id=${sheet.topology_id}`}>打开图纸</Link>
               </div>
@@ -590,7 +598,7 @@ export default function NetworkOperations({ initialView }: { initialView?: Netwo
       <section className="network-panel published-skills">
         <div className="panel-heading">
           <div><h2>已发布 Skill</h2><p>这些才是设备执行门。选择设备、连接和工具后发布到工作台，与绘图 Skill 分开。</p></div>
-          <span className="record-count">{skills.length} 个 Skill</span>
+          <span className="record-count">{filteredSkills.length < skills.length ? `${filteredSkills.length} / ${skills.length} 个 Skill` : `${skills.length} 个 Skill`}</span>
         </div>
         <div className="skill-list">{filteredSkills.length ? filteredSkills.map((skill) => {
           const skillDevices = skill.device_ids.map((id) => byDevice.get(id)?.name).filter(Boolean);

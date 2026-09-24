@@ -629,7 +629,9 @@ function ApiKeyField({
           className="mono flex-1"
         />
         {configured && !draft && !clearRequested && (
-          <span className="muted text-xs" data-testid="api-key-preview"><code>{preview ?? "已配置"}</code></span>
+          <span className="muted text-xs" data-testid="api-key-preview" style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
+            <code>{preview ?? "已配置"}</code>
+          </span>
         )}
         <Button type="button" onClick={onRevealToggle} data-testid="btn-toggle-key-reveal" title={revealed ? "隐藏" : "显示"}>
           {revealed ? "隐藏" : "显示"}

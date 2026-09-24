@@ -729,10 +729,10 @@ select.input:focus-visible {
 .capability-center .tool-row:hover { background: var(--console-action-soft); }
 .capability-center .tool-detail-card { border-color: var(--console-border-soft); box-shadow: none; }
 .capability-center .tool-detail-card { border-radius: var(--r-4); }
-.capability-center .tool-info-grid,
-.capability-center .cap-info-grid { gap: 0; }
+.capability-center .tool-info-grid { gap: var(--space-2); }
+.capability-center .cap-info-grid { gap: var(--space-2) var(--space-4); }
 .capability-center .tool-info-item,
-.capability-center .cap-sr-row { border-color: var(--console-border-soft); border-radius: 0; background: transparent; }
+.capability-center .cap-sr-row { border-color: var(--console-border-soft); border-radius: var(--r-4); }
 .capability-center .tool-restriction { border-color: var(--console-border-soft); border-radius: var(--r-4); }
 
 @media (max-width: 920px) {
@@ -872,6 +872,83 @@ select.input:focus-visible {
   border-radius: var(--r-6);
   background: var(--console-surface);
 }
+.diagnostics-page .diag-status-detecting {
+  background: var(--console-action);
+  animation: diagPulse 1.2s ease-in-out infinite;
+}
+@keyframes diagPulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.35); opacity: 1; }
+}
+.diagnostics-page .diag-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+  gap: 6px;
+}
+.diagnostics-page .diag-empty-card-title {
+  font-size: var(--fs-13);
+  font-weight: 500;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.diagnostics-page .diag-empty-card-title .spin {
+  color: var(--console-action);
+}
+.diagnostics-page .diag-empty-card-hint {
+  font-size: var(--fs-11);
+  color: var(--text-4);
+  max-width: 320px;
+  line-height: var(--lh-base);
+}
+.diagnostics-page .diag-check-passed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+  gap: 6px;
+}
+.diagnostics-page .diag-check-passed-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.diagnostics-page .diag-check-passed-title {
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text);
+}
+.diagnostics-page .diag-check-passed-desc {
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  max-width: 320px;
+  line-height: var(--lh-base);
+}
+.diagnostics-page .diag-ledger-clean {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  font-size: var(--fs-12);
+  color: var(--text-3);
+  background: var(--console-muted);
+  border-radius: var(--r-4);
+  border: 1px dashed var(--console-border-soft);
+}
+
 
 @media (max-width: 920px) {
   .operations-page .operations-stat-bar > * { border-right: 0; border-bottom: 1px solid var(--console-border-soft); }

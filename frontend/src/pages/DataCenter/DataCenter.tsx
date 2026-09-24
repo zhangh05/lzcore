@@ -588,7 +588,7 @@ function FilesView({ files, search, onSearch, typeFilter, typeOptions, onTypeFil
                 {file.artifacts.length > 0 && <Badge kind="info">{file.artifacts.length} 个产出</Badge>}
                 <Badge kind={file.reference_count ? "warn" : "muted"}>{file.reference_count ? `${file.reference_count} 个引用` : "独立文件"}</Badge>
               </span>
-              <Button size="sm" variant="danger-ghost" disabled={busy} title="删除这项数据" onClick={(event) => { event.stopPropagation(); onDelete(file); }}>删除</Button>
+              <Button size="sm" variant="danger-ghost" className="data-row-action" disabled={busy} title="删除这项数据" onClick={(event) => { event.stopPropagation(); onDelete(file); }}>删除</Button>
             </div>;
           })}
         </div>
@@ -642,17 +642,25 @@ function ArtifactsView({ artifacts, governance, view, onView, producerId, onClea
       <div className="spacer" />
       {governance && <><Badge kind="ok">过程结果 {governance.evidence_streams || 0}</Badge><Badge kind="muted">交付结果 {governance.deliverables || 0}</Badge></>}
     </FilterBar>
-    <div className="split-shell data-split">
-      <aside className="data-list" aria-label="任务产出列表">
-        {!artifacts.length && <EmptyState text="暂无任务产出" hint="分析、报告或智能体任务生成的结果会显示在这里" />}
-        {artifacts.map((artifact) => <button key={artifact.artifact_id} type="button" className={`data-row ${selected?.artifact_id === artifact.artifact_id ? "selected" : ""}`} onClick={() => onSelect(artifact)}>
-          <span className="data-row-main"><b>{artifact.title || artifact.artifact_id}</b><small>{artifact.artifact_type} · {sourceLabel(artifact.source)}</small></span>
-          <span className="data-row-badges"><AuthorityBadge artifact={artifact} /></span>
-          <span className="data-row-meta">{formatFileSize(artifact.size_bytes)} · {formatDate(artifact.created_at, "short")}</span>
-        </button>)}
-      </aside>
-      {detail}
-    </div>
+    {!artifacts.length ? (
+      <div className="data-empty-container">
+        <EmptyState
+          text={view || producerId ? "没有符合条件的任务产出" : "暂无任务产出"}
+          hint={view || producerId ? "尝试切换筛选条件或清除任务筛选" : "分析、报告或智能体任务生成的结果会显示在这里"}
+        />
+      </div>
+    ) : (
+      <div className="split-shell data-split">
+        <aside className="data-list" aria-label="任务产出列表">
+          {artifacts.map((artifact) => <button key={artifact.artifact_id} type="button" className={`data-row ${selected?.artifact_id === artifact.artifact_id ? "selected" : ""}`} onClick={() => onSelect(artifact)}>
+            <span className="data-row-main"><b>{artifact.title || artifact.artifact_id}</b><small>{artifact.artifact_type} · {sourceLabel(artifact.source)}</small></span>
+            <span className="data-row-badges"><AuthorityBadge artifact={artifact} /></span>
+            <span className="data-row-meta">{formatFileSize(artifact.size_bytes)} · {formatDate(artifact.created_at, "short")}</span>
+          </button>)}
+        </aside>
+        {detail}
+      </div>
+    )}
   </>;
 }
 
@@ -678,7 +686,7 @@ function RelationsView({ files, search, onSearch, onSelect }: { files: ManagedFi
     <FilterBar className="data-relation-filters"><SearchInput value={search} onChange={(event) => onSearch(event.target.value)} onClear={() => onSearch("")} placeholder="搜索关系中的文件或任务" aria-label="搜索数据关系" /><span className="metric-chip">{files.length} 个文件节点</span></FilterBar>
     <div className="data-relations-grid">
       {files.map((file) => <button type="button" className="card data-relation-card" key={file.file_id} onClick={() => onSelect(file)}>
-        <span className="data-relation-file"><b>{file.original_name || file.file_id}</b><small>{typeLabel(file.logical_type)}</small></span>
+        <span className="data-relation-file" title={file.original_name || file.file_id}><b>{file.original_name || file.file_id}</b><small>{typeLabel(file.logical_type)}</small></span>
         <span className="data-relation-flow">文件</span><span className="data-relation-arrow">→</span>
         <span className="data-relation-flow">{file.reference_count} 个引用</span><span className="data-relation-arrow">→</span>
         <span className="data-relation-flow">{file.artifacts.length} 个任务产出</span>

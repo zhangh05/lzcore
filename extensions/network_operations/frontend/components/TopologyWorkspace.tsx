@@ -494,7 +494,10 @@ export default function TopologyWorkspace({
 
     const vw = viewportEl.clientWidth || 800;
     const vh = viewportEl.clientHeight || 600;
-    const bubbleWidth = Math.min(220, vw - 16);
+    const inspectorEl = inspectorRef.current;
+    const bubbleWidth = Math.min(240, vw - 16);
+    const bubbleHeight = inspectorEl?.offsetHeight || 440;
+    const maxTop = Math.max(12, vh - bubbleHeight - 16);
 
     if (!selectedElement) {
       setPopoverPlacement("corner");
@@ -526,20 +529,20 @@ export default function TopologyWorkspace({
     const canFitLeft = leftLeft >= 12;
 
     if (canFitRight) {
-      const top = Math.max(12, Math.min(pos.y - 70, Math.max(12, vh - 290)));
-      const arrowPos = Math.max(20, Math.min(pos.y - top, 230));
+      const top = Math.max(12, Math.min(pos.y - 70, maxTop));
+      const arrowPos = Math.max(20, Math.min(pos.y - top, bubbleHeight - 24));
       setPopoverPlacement("right");
       setPopoverCoords({ left: rightLeft, top });
       setArrowY(arrowPos);
     } else if (canFitLeft) {
-      const top = Math.max(12, Math.min(pos.y - 70, Math.max(12, vh - 290)));
-      const arrowPos = Math.max(20, Math.min(pos.y - top, 230));
+      const top = Math.max(12, Math.min(pos.y - 70, maxTop));
+      const arrowPos = Math.max(20, Math.min(pos.y - top, bubbleHeight - 24));
       setPopoverPlacement("left");
       setPopoverCoords({ left: leftLeft, top });
       setArrowY(arrowPos);
     } else {
       const left = Math.max(10, Math.min(pos.x - bubbleWidth / 2, vw - bubbleWidth - 10));
-      const top = Math.max(12, Math.min(pos.y - 70, Math.max(12, vh - 250)));
+      const top = Math.max(12, Math.min(pos.y - 70, maxTop));
       setPopoverPlacement("corner");
       setPopoverCoords({ left, top });
     }
@@ -2704,9 +2707,11 @@ export default function TopologyWorkspace({
                 const node = activeTopology.nodes.find((item) => item.node_id === viewOverlayNodeId);
                 return (
                   <>
-                    <strong>{node?.display_name || "图纸符号"}</strong>
+                    <header>
+                      <strong>{node?.display_name || "图纸符号"}</strong>
+                    </header>
                     <p>{overlay ? overlayCaption(overlay) : "尚未绑定登记设备。"}</p>
-                    <p>绑定和更换在编辑模式完成，不会写入图纸，也不会进入 Skill。</p>
+                    <p className="observation-hint">绑定和更换在编辑模式完成，不会写入图纸，也不会进入 Skill。</p>
                     <button type="button" onClick={() => setViewOverlayNodeId("")}>关闭</button>
                   </>
                 );

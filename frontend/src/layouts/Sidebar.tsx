@@ -10,6 +10,7 @@ import type { Session } from "../types";
 import { IconArchive, IconBolt, IconChat, IconClose, IconEdit, IconMore, IconPlus, IconTrash, IconWorkspace } from "../components/Icon";
 import { APP_EVENTS } from "../utils/appEvents";
 import { formatDate } from "../utils/format";
+import { sanitizeUserText } from "../utils/displayText";
 
 const SESSION_PREVIEW_LIMIT = 12;
 
@@ -438,7 +439,7 @@ export function Sidebar() {
             <div className="list" data-testid="runs-list">
               {(d.runs ?? []).slice(0, 5).map((r, i) => {
                 const runId = r.run_id ?? `run-${i}`;
-                const summary = r.user_input_summary || r.intent || "";
+                const summary = sanitizeUserText(r.user_input_summary || r.intent || "");
                 const label = summary ? (summary.length > 24 ? summary.slice(0, 24) + "…" : summary) : runId;
                 return (
                   <div

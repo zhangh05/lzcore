@@ -743,7 +743,7 @@ export default function NetOpsCanvas(props: Props) {
               "text-margin-y": "8px",
               "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
               "font-size": 12,
-              "font-weight": 650,
+              "font-weight": 600,
               color: "#0f172a",
               "text-wrap": "ellipsis",
               "text-max-width": 148,
@@ -765,7 +765,7 @@ export default function NetOpsCanvas(props: Props) {
           // Canvas items and groups deliberately have no device icon. Apply
           // image mappings only to asset nodes so Cytoscape stays warning-free.
           { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "cover", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
-          { selector: "node.has-overlay", style: { "text-wrap": "wrap", "text-max-width": 148, "font-size": 11, "font-weight": 560 } },
+          { selector: "node.has-overlay", style: { "text-wrap": "wrap", "text-max-width": 148, "font-size": 11, "font-weight": 500 } },
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
           {
             selector: "edge",
@@ -953,14 +953,13 @@ export default function NetOpsCanvas(props: Props) {
               color: CANVAS_GROUP.light.text,
               "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
               "font-size": 12,
-              "font-weight": 650,
+              "font-weight": 600,
               width: "data(width)",
               height: "data(height)",
               "background-color": CANVAS_GROUP.light.fill,
               "background-opacity": 0.55,
               "border-color": CANVAS_GROUP.light.border,
               "border-style": "dashed",
-              "border-dash-pattern": [6, 4],
               "border-width": 1.5,
               "background-image": "none",
               events: "no",

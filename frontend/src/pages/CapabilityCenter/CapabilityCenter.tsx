@@ -22,7 +22,18 @@ const T_FILTERS: { id: ToolFilter; label: string }[] = [
   { id: "knowledge", label: "知识" },
 ];
 
-const CAP_TITLES: Record<string, string> = { knowledge: "知识问答", knowledge_qa: "知识问答", memory_lookup: "记忆检索", workspace_read: "工作区读取", report_drafting: "报告生成", runtime_diagnostics: "运行检查", agent_delegation: "智能体协作", browser: "浏览器操作", artifact: "任务产出管理" };
+const CAP_TITLES: Record<string, string> = {
+  knowledge: "知识问答",
+  knowledge_qa: "知识问答",
+  memory_lookup: "记忆检索",
+  workspace_read: "工作区读取",
+  report_drafting: "报告生成",
+  runtime_diagnostics: "运行检查",
+  location_resolution: "位置解析",
+  agent_delegation: "智能体协作",
+  browser: "浏览器操作",
+  artifact: "任务产出管理",
+};
 
 export function CapabilityCenter({
   title = "能力中心",
@@ -63,8 +74,22 @@ export function CapabilityCenter({
         </div>
       ) : (
         <div className="cc-drawer-metrics-row">
-          <span className="metric-chip"><span className="dot accent" />{counts.tot} 类能力</span>
-          <span className="metric-chip"><span className="dot accent" />{toolCount} 个工具</span>
+          <button
+            type="button"
+            className="metric-chip metric-chip-btn"
+            onClick={() => document.getElementById("cc-capabilities")?.scrollIntoView({ behavior: "smooth" })}
+            title="查看能力分类"
+          >
+            <span className="dot accent" />{counts.tot} 类能力
+          </button>
+          <button
+            type="button"
+            className="metric-chip metric-chip-btn"
+            onClick={() => document.getElementById("cc-tool-catalog")?.scrollIntoView({ behavior: "smooth" })}
+            title="查看底层工具目录"
+          >
+            <span className="dot accent" />{toolCount} 个工具
+          </button>
           {counts.dep > 0 && <span className="metric-chip"><IconBolt size={10} />{counts.dep} 涉及产物</span>}
         </div>
       )}
@@ -76,7 +101,7 @@ export function CapabilityCenter({
             const capabilities = d.capabilities ?? [];
             const selected = capabilities.find((cap) => cap.capability_id === selectedCapabilityId) ?? capabilities[0];
             return (
-              <section className="capability-directory cc-card-mb" data-testid="capability-list">
+              <section id="cc-capabilities" className="capability-directory cc-card-mb" data-testid="capability-list">
                 <aside className="capability-directory-list" aria-label="能力目录">
                   <div className="capability-directory-head">
                     <div><strong>能力概览</strong><span>{capabilities.length} 类</span></div>
@@ -107,7 +132,7 @@ export function CapabilityCenter({
         </AsyncView>
 
         {/* Tool Catalog */}
-        <div className="card cc-card-mb">
+        <div id="cc-tool-catalog" className="card cc-card-mb">
           <div className="card-title">
             底层工具目录
             {catalog.state.kind === "success" && <span className="count">{toolCount} 个</span>}

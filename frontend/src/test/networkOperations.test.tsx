@@ -266,7 +266,7 @@ test("a concurrent edit is offered as a merge instead of a dead-end error", asyn
     return passthrough(request);
   });
 
-  render(<><TopologyPage /><ConfirmHost /></>);
+  renderWithRouter(<><TopologyPage /><ConfirmHost /></>);
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(await screen.findByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
@@ -297,7 +297,7 @@ test("edits made while a conflict is deferred are included in its eventual merge
     return passthrough(request);
   });
 
-  render(<><TopologyPage /><ConfirmHost /></>);
+  renderWithRouter(<><TopologyPage /><ConfirmHost /></>);
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(await screen.findByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
@@ -336,7 +336,7 @@ test("edits made while the conflict snapshot loads survive resolution", async ()
     if (request.url?.endsWith("/topologies/t1")) return await snapshot as never;
     return passthrough(request);
   });
-  render(<><TopologyPage /><ConfirmHost /></>);
+  renderWithRouter(<><TopologyPage /><ConfirmHost /></>);
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(screen.getByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));

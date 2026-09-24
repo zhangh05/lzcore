@@ -93,14 +93,18 @@
   padding: var(--space-4) var(--space-6) 0;
 }
 
-.network-filters { display: flex; gap: var(--space-2); min-width: 0; }
-.network-filters input { width: 280px; }
+.network-filters { display: flex; gap: var(--space-2); min-width: 0; align-items: center; }
+.network-filters input, .network-filters .ui-search { width: 280px; }
+.network-filters .ui-search { position: relative; }
+.network-filters .ui-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 2; color: var(--text-3); pointer-events: none; }
+.network-filters .ui-search-input { width: 100%; padding-left: 32px !important; }
 
 .network-grid { width: 100%; margin: 0; padding: var(--space-4) var(--space-6) var(--space-6); min-width: 0; }
 .network-admin .skill-page { display: grid; gap: var(--space-4); }
 .network-admin .drawing-skill-card .skill-title { display: flex; align-items: center; gap: 6px; }
-.network-admin .drawing-skill-link { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-6); color: var(--text); background: var(--surface-2); font-size: 12px; text-decoration: none; }
-.network-admin .drawing-skill-link:hover { background: var(--surface-3); }
+.network-admin .drawing-skill-card .skill-title svg { color: var(--accent); flex-shrink: 0; }
+.network-admin .drawing-skill-link { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-6); color: var(--text); background: var(--surface-2); font-size: var(--fs-12); font-weight: 500; text-decoration: none; transition: all 0.15s ease; }
+.network-admin .drawing-skill-link:hover { background: var(--surface-3); border-color: var(--accent); color: var(--accent); }
 .network-context-layout { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(520px, 1.3fr); gap: var(--space-4); width: 100%; padding: var(--space-4) var(--space-6) var(--space-6); }
 .network-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-12); padding: 0; min-width: 0; overflow: hidden; }
 .network-panel h2 { margin: 0 0 var(--space-1); font-size: var(--fs-18); }
@@ -127,17 +131,18 @@
 .network-admin .connection-summary { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--fs-13); }
 .network-admin .connection-summary small { color: var(--text-3); overflow-wrap: anywhere; }
 .network-admin .connection-empty { color: var(--text-3); font-size: var(--fs-13); padding: var(--space-2) 0; }
-.network-admin .status, .network-admin .skill-state { border-radius: var(--r-8); padding: 3px 7px; font-size: var(--fs-12); white-space: nowrap; background: var(--surface-2); color: var(--text-3); }
+.network-admin .status, .network-admin .skill-state { border-radius: var(--r-pill); padding: 3px 8px; font-size: var(--fs-12); white-space: nowrap; background: var(--surface-2); color: var(--text-3); font-weight: 500; }
 .network-admin .status.connected, .network-admin .skill-state.enabled { background: var(--ok-soft); color: var(--ok); }
+.network-admin .skill-state.builtin { background: var(--surface-3); color: var(--text-2); border: 1px solid var(--line-2); }
 .network-admin .status.failed { background: var(--danger-soft); color: var(--danger); }
 /* 待确认主机指纹需要用户动作才能连上，用 warn 提示；"未测试"保持中性灰。 */
 .network-admin .status.trust_required { background: var(--warn-soft); color: var(--warn); }
 .network-admin .skill-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
 .network-admin .skill-description { padding: var(--space-3) var(--space-4) 0; margin: 0; }
 .network-admin .skill-scope { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); margin: 0; font-size: var(--fs-13); }
-.network-admin .skill-scope > div { display: grid; grid-template-columns: 44px minmax(0,1fr); gap: var(--space-2); }
-.network-admin .skill-scope dt { color: var(--text-3); }
-.network-admin .skill-scope dd { margin: 0; overflow-wrap: anywhere; }
+.network-admin .skill-scope > div { display: grid; grid-template-columns: 60px minmax(0,1fr); gap: var(--space-2); }
+.network-admin .skill-scope dt { color: var(--text-3); white-space: nowrap; }
+.network-admin .skill-scope dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .network-admin .write-enabled { color: var(--warn); }
 
 /* 空状态：图标 + 一行说明，跟拓扑画布的空状态卡片是同一套语言。 */
@@ -159,7 +164,7 @@
 .network-admin .source-row > div, .network-admin .observation-row > div, .network-admin .reference-main { display: grid; gap: var(--space-1); min-width: 0; }
 .network-admin .source-row > div, .network-admin .observation-row > div { flex: 1; }
 .network-admin .source-row strong, .network-admin .observation-row strong, .network-admin .reference-row strong { font-size: var(--fs-13); overflow-wrap: anywhere; }
-.network-admin .source-row small, .network-admin .observation-row small, .network-admin .reference-row small, .network-admin .command-row small { color: var(--text-3); font-size: var(--fs-12); overflow-wrap: anywhere; }
+.network-admin .source-row small, .network-admin .observation-row small, .network-admin .reference-row small, .network-admin .command-row small, .network-admin .record-count { color: var(--text-3); font-size: var(--fs-12); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .network-admin .source-row > b { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--weight-label); white-space: nowrap; }
 .network-admin .source-indicator { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--text-4); }
 .network-admin .source-indicator.available { background: var(--accent); }
@@ -169,7 +174,7 @@
 .network-admin .reference-select-all { color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; }
 .network-admin .reference-select-all input, .network-admin .reference-select { accent-color: var(--accent); }
 .network-admin .reference-select { flex: 0 0 auto; margin: 0; }
-.network-admin .reference-state, .network-admin .command-state { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px; border-radius: var(--r-8); background: var(--surface-2); color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; }
+.network-admin .reference-state, .network-admin .command-state { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .network-admin .reference-state.confirmed, .network-admin .reference-state.complete, .network-admin .command-state.accepted { background: var(--ok-soft); color: var(--ok); }
 .network-admin .reference-state.partial, .network-admin .reference-state.candidate { background: var(--warn-soft); color: var(--warn); }
 .network-admin .reference-actions { display: flex; gap: var(--space-2); flex: 0 0 auto; }
@@ -185,7 +190,7 @@
 }
 .network-editor::backdrop { background: var(--overlay); }
 .network-editor-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-13); color: var(--text-3); }
-.network-editor .network-panel { border: 0; border-radius: 0; padding: var(--space-6); }
+.network-editor .network-panel { border: 0; border-radius: 0; padding: var(--space-6); overflow: visible; }
 .network-editor .form-grid,
 .network-dialog-modal .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 14px; }
 .network-editor .form-grid label,
@@ -210,13 +215,13 @@
 .network-editor legend,
 .network-dialog-modal legend { padding: 0 6px; font-size: var(--fs-13); font-weight: var(--weight-heading); }
 .network-editor .form-grid .check,
-.network-dialog-modal .form-grid .check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; font-size: var(--fs-13); font-weight: var(--weight-regular); }
+.network-dialog-modal .form-grid .check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; font-size: var(--fs-13); font-weight: normal; }
 .network-editor .check input,
 .network-dialog-modal .check input { flex-shrink: 0; margin-top: 3px; accent-color: var(--accent); }
 .network-editor .capability-check span,
 .network-dialog-modal .capability-check span { display: grid; gap: var(--space-1); }
 .network-editor .capability-check small,
-.network-dialog-modal .capability-check small { font-size: var(--fs-12); font-weight: var(--weight-regular); color: var(--text-3); line-height: 1.6; }
+.network-dialog-modal .capability-check small { font-size: var(--fs-12); font-weight: normal; color: var(--text-3); line-height: 1.6; }
 .network-editor .intrinsic-capabilities,
 .network-dialog-modal .intrinsic-capabilities { margin: 0 0 var(--space-2); color: var(--text-3); font-size: var(--fs-12); }
 .network-editor .inline-form,
@@ -229,8 +234,7 @@
 .network-dialog-modal .region-list > span { display: flex; align-items: center; gap: var(--space-2); padding: 5px 8px; background: var(--surface-2); border-radius: var(--r-8); font-size: var(--fs-12); }
 .network-editor .region-list button,
 .network-dialog-modal .region-list button { background: transparent; border: 0; color: var(--accent); cursor: pointer; }
-/* 底部操作栏吸底：表单很长时不用滚到底才能提交。 */
-.network-editor .form-actions { display: flex; gap: 10px; position: sticky; bottom: 0; padding-top: 18px; padding-block: var(--space-3); border-top: 1px solid var(--line); background: var(--surface); }
+.network-editor .form-actions { grid-column: 1 / -1; display: flex; gap: 10px; position: sticky; bottom: 0; z-index: 2; margin: var(--space-4) calc(-1 * var(--space-6)) calc(-1 * var(--space-6)); padding: var(--space-4) var(--space-6); border-top: 1px solid var(--line); background: var(--surface); box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05); }
 
 /* 断点收敛到三档：1100（页面双列塌成单列） / 1024（拓扑工作区堆叠） / 760（窄屏与触摸）。
    此前 1100 / 760 / 700 三个断点散落在文件末尾，且 700 和 760 的规则互相打架。 */
@@ -251,6 +255,7 @@
   .network-editor .form-grid,
   .network-dialog-modal .form-grid { grid-template-columns: 1fr; }
   .network-editor .network-panel { padding: var(--space-4); }
+  .network-editor .form-actions { margin: var(--space-3) calc(-1 * var(--space-4)) calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); }
   .network-editor input:not([type="checkbox"]), .network-editor select,
   .network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select,
   .network-filters input, .network-filters select { min-height: var(--h-touch); }
@@ -547,7 +552,7 @@
   z-index: 3;
   display: grid;
   place-items: center;
-  padding: var(--space-5);
+  padding: var(--space-6);
   pointer-events: none;
 }
 
@@ -1240,7 +1245,7 @@
 }
 
 .link-color-swatch.active {
-  box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
   transform: scale(1.1);
 }
 

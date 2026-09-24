@@ -156,6 +156,11 @@
   white-space: nowrap;
 }
 
+.feature-desc-btn svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 .feature-desc-btn:hover {
   color: var(--text);
   background: var(--surface-3);
