@@ -26,10 +26,12 @@
 .topology-studio .toolbar-left { flex: 1 1 auto; min-width: 0; gap: 10px; }
 .topology-studio .toolbar-right { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; align-items: center; }
 .topology-studio .topology-canvas-title { max-width: none; font-size: 14px; letter-spacing: -.2px; color: var(--text); }
-.topology-studio .topology-save-indicator { white-space: nowrap; }
-/* 冲突不是错误而是待决策：给一个可点击的入口，而不是一句消失的提示。 */
-.topology-studio .topology-save-indicator.status-conflict button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--warn); border-radius: 5px; background: var(--warn-soft); color: var(--warn); font-size: 11px; cursor: pointer; }
-.topology-studio .topology-save-indicator.status-conflict button:hover { background: var(--warn-soft); }
+.topology-studio .topology-save-btn { white-space: nowrap; font-size: 12px; height: 26px; padding: 0 10px; gap: 5px; font-weight: 500; transition: all var(--t-fast, 140ms); }
+.topology-studio .topology-save-btn.status-saved { color: var(--ok); background: transparent; border-color: transparent; }
+.topology-studio .topology-save-btn.status-saved:disabled { opacity: 0.85; cursor: default; }
+.topology-studio .topology-save-btn.status-unsaved { font-weight: 600; box-shadow: 0 1px 3px rgba(15, 119, 120, 0.25); }
+.topology-studio .topology-save-btn.status-conflict { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); cursor: pointer; }
+.topology-studio .topology-save-btn.status-conflict:hover { background: var(--warn-soft); opacity: 0.9; }
 .conflict-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--text-2); font-size: 11.5px; }
 .studio-workspace-mode-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm, 6px); background: var(--bg); margin-left: 8px; }
 .studio-workspace-mode-switch .mode-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 11.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background var(--t-fast, 140ms), color var(--t-fast, 140ms); }
@@ -977,7 +979,7 @@
   .network-admin .topology-studio.agent-open, .network-admin .topology-studio.library-open.agent-open, .network-admin .topology-studio.library-open { grid-template-columns: minmax(0, 1fr); }
   .topology-studio.library-open .topology-sidebar { position: absolute; top: 52px; bottom: 30px; left: 0; width: 224px; z-index: 9; max-height: none; box-shadow: 10px 0 24px #0001; }
   .agent-open .studio-agent-dock { position: absolute; top: 53px; right: 0; bottom: 0; width: min(380px, 92%); box-shadow: -12px 0 30px #0001; }
-  .topology-studio .topology-save-indicator { display: none; }
+  .topology-studio .topology-save-btn.status-saved { display: none; }
   .studio-statusbar > span:nth-child(2) { display: none; }
 }
 @media (max-width: 600px) {

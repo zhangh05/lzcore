@@ -980,12 +980,13 @@ export default function TopologyWorkspace({
           setActiveTopology(res.topology);
           saveStatusRef.current = "saved"; setSaveStatus("saved");
           void onReload();
+          setNotice("拓扑保存成功", true);
         } else {
           setActiveTopology((current) => current?.topology_id === topo.topology_id ? { ...current, version: res.topology.version } : current);
           saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
         }
       } catch (err: unknown) {
-        const errMsg = (err as { message?: string })?.message || "自动保存拓扑失败";
+        const errMsg = (err as { message?: string })?.message || "保存拓扑失败";
         if (errMsg.includes("version_conflict") || errMsg.includes("version conflict")) {
           await resolveConflict(topo);
           return;
@@ -1000,7 +1001,7 @@ export default function TopologyWorkspace({
     [workspaceId, onReload, setNotice, resolveConflict]
   );
 
-  // Push state with debounced save
+  // Push state for undo/redo history tracking (manual save)
   const pushState = useCallback(
     (next: Topology) => {
       if (!activeTopology) return;
@@ -1026,12 +1027,10 @@ export default function TopologyWorkspace({
 
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
       }
-      saveTimerRef.current = window.setTimeout(() => {
-        void executeSave(next);
-      }, 800);
     },
-    [activeTopology, executeSave]
+    [activeTopology]
   );
 
   /**
@@ -1048,19 +1047,24 @@ export default function TopologyWorkspace({
       return;
     }
     const target = choice === "merged" ? conflict.merged : conflict.mine;
-    // `pushState` intentionally does not auto-save while a conflict is open.
-    // This choice resolves it, so mark the state writable before scheduling the
-    // new versioned save.
+    const nextTopology = { ...target, version: conflict.theirs.version };
+    if (activeTopology) {
+      setHistory((prev) => [...prev.slice(-20), activeTopology]);
+    }
+    setFuture([]);
+    revisionRef.current += 1;
+    activeTopologyRef.current = nextTopology;
+    setActiveTopology(nextTopology);
     saveStatusRef.current = "unsaved";
     setSaveStatus("unsaved");
-    pushState({ ...target, version: conflict.theirs.version });
+    void executeSave(nextTopology);
     setNotice(
       choice === "merged"
         ? `已合并双方改动并保存（自动合并 ${conflict.stats.autoMerged} 处，需人工确认 ${conflict.conflicts.length} 处）`
-        : "已用本地版本覆盖服务端改动",
+        : "已用本地版本覆盖服务端改动并保存",
       choice === "merged",
     );
-  }, [conflict, pushState, adoptServerTopology, setNotice]);
+  }, [conflict, activeTopology, adoptServerTopology, executeSave, setNotice]);
 
   const handleUndo = useCallback(() => {
     if (!history.length || !activeTopology || saveStatusRef.current === "conflict") return;
@@ -1071,9 +1075,11 @@ export default function TopologyWorkspace({
     revisionRef.current += 1;
     saveStatusRef.current = "unsaved";
     setSaveStatus("unsaved");
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => void executeSave(previous), 800);
-  }, [history, activeTopology, executeSave]);
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  }, [history, activeTopology]);
 
   const handleRedo = useCallback(() => {
     if (!future.length || !activeTopology || saveStatusRef.current === "conflict") return;
@@ -1084,20 +1090,27 @@ export default function TopologyWorkspace({
     revisionRef.current += 1;
     saveStatusRef.current = "unsaved";
     setSaveStatus("unsaved");
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => void executeSave(next), 800);
-  }, [future, activeTopology, executeSave]);
-
-  const saveOnUnmountRef = useRef(executeSave);
-  saveOnUnmountRef.current = executeSave;
-  useEffect(() => () => {
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    if (saveStatusRef.current === "conflict" && conflictRef.current) {
-      saveStatusRef.current = "unsaved";
-      void saveOnUnmountRef.current({ ...conflictRef.current.merged, version: conflictRef.current.theirs.version });
-      return;
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
     }
-    if (saveStatusRef.current === "unsaved" && activeTopologyRef.current) void saveOnUnmountRef.current(activeTopologyRef.current);
+  }, [future, activeTopology]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (saveStatusRef.current === "unsaved") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
   }, []);
 
 
@@ -2382,29 +2395,45 @@ export default function TopologyWorkspace({
           <div className="toolbar-left">
             <button className="studio-icon-button" title="设备库与拓扑列表" aria-label="设备库与拓扑列表" aria-pressed={showLibrary} onClick={() => setShowLibrary((value) => !value)}><IconLayers size={18} /></button>
             <strong className="topology-canvas-title">{activeTopology?.name}</strong>
-            <div className={`topology-save-indicator status-${saveStatus}`}>
-              {saveStatus === "saved" ? (
-                <>
-                  <IconCheck size={12} />
-                  <span>已保存</span>
-                </>
-              ) : saveStatus === "saving" ? (
-                <>
-                  <IconSave size={12} className="spin-icon" />
-                  <span>正在保存...</span>
-                </>
-              ) : saveStatus === "conflict" ? (
-                <button type="button" onClick={() => setShowConflict(true)} title="这张图纸被其他人修改过，点击选择如何处理">
-                  <IconAlert size={12} />
-                  <span>有冲突待处理</span>
-                </button>
-              ) : (
-                <>
-                  <IconSave size={12} />
-                  <span>未保存修改</span>
-                </>
-              )}
-            </div>
+            <Button
+              size="sm"
+              variant={saveStatus === "unsaved" ? "primary" : saveStatus === "conflict" ? "danger" : "default"}
+              icon={
+                saveStatus === "saving" ? (
+                  <IconRefresh size={13} className="spin-icon" />
+                ) : saveStatus === "saved" ? (
+                  <IconCheck size={13} />
+                ) : saveStatus === "conflict" ? (
+                  <IconAlert size={13} />
+                ) : (
+                  <IconSave size={13} />
+                )
+              }
+              disabled={saveStatus === "saved" || saveStatus === "saving"}
+              onClick={() => {
+                if (saveStatus === "conflict") {
+                  setShowConflict(true);
+                } else if (activeTopologyRef.current && saveStatus !== "saving") {
+                  void executeSave(activeTopologyRef.current);
+                }
+              }}
+              title={
+                saveStatus === "conflict"
+                  ? "这张图纸被其他人修改过，点击选择如何处理"
+                  : saveStatus === "unsaved"
+                  ? "保存图纸 (快捷键 Ctrl+S / Cmd+S)"
+                  : "图纸所有改动已保存"
+              }
+              className={`topology-save-btn status-${saveStatus}`}
+            >
+              {saveStatus === "saving"
+                ? "正在保存..."
+                : saveStatus === "conflict"
+                ? "有冲突待处理"
+                : saveStatus === "unsaved"
+                ? "保存"
+                : "已保存"}
+            </Button>
             <div className="studio-workspace-mode-switch" role="radiogroup" aria-label="画布模式">
               <button
                 type="button"
@@ -2569,31 +2598,6 @@ export default function TopologyWorkspace({
           <div className="studio-edit-tools" role="group" aria-label="画布工具">
             <button className="studio-mode-button" aria-label="选择" aria-pressed={canvasMode === "select" && !armedNodeType} onClick={() => { setCanvasMode("select"); setArmedNodeType(null); }} title="选择模式 (快捷键 V)"><IconMenu size={13} />选择</button>
             <button className="studio-mode-button" aria-label="连线" aria-pressed={canvasMode === "connect"} onClick={() => { setCanvasMode("connect"); setArmedNodeType(null); }} title="极速连线模式 (快捷键 C)"><IconLink size={13} />连线</button>
-            <div className="studio-device-ribbon" role="toolbar" aria-label="常用设备快速放置">
-              <span className="ribbon-label">设备:</span>
-              {QUICK_PALETTE_DEVICES.map((dev) => {
-                const isActive = armedNodeType === dev.value;
-                return (
-                  <button
-                    key={dev.value}
-                    type="button"
-                    className={`studio-device-chip ${isActive ? "is-active" : ""}`}
-                    title={`连续放置 ${dev.label}（点击后在画布连续点击，Esc或右键退出）`}
-                    onClick={() => {
-                      if (isActive) {
-                        setArmedNodeType(null);
-                      } else {
-                        setCanvasMode("select");
-                        setArmedNodeType(dev.value);
-                      }
-                    }}
-                  >
-                    <img src={dev.icon} alt="" className="device-chip-img" />
-                    <span>{dev.label}</span>
-                  </button>
-                );
-              })}
-            </div>
             <button className="studio-mode-button" type="button" onClick={() => canvasApiRef.current?.fit()} title="适配视图到画布中央 (快捷键 F)"><IconExpand size={13} />适配</button>
             <details className="studio-insert-menu"><summary><IconBox size={13} />插入</summary><div>
               <button type="button" onClick={() => handleAddCanvasItem("rectangle")}>矩形区域</button>

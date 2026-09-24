@@ -270,6 +270,7 @@ test("a concurrent edit is offered as a merge instead of a dead-end error", asyn
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(await screen.findByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
+  fireEvent.click(await screen.findByRole("button", { name: "保存" }));
 
   const dialog = await screen.findByRole("dialog", { name: "编辑冲突" }, { timeout: 4000 });
   expect(within(dialog).getByText(/服务端已是版本 7/)).toBeInTheDocument();
@@ -301,6 +302,7 @@ test("edits made while a conflict is deferred are included in its eventual merge
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(await screen.findByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
+  fireEvent.click(await screen.findByRole("button", { name: "保存" }));
 
   const firstDialog = await screen.findByRole("dialog", { name: "编辑冲突" }, { timeout: 4000 });
   fireEvent.click(within(firstDialog).getByRole("button", { name: "稍后处理" }));
@@ -340,6 +342,7 @@ test("edits made while the conflict snapshot loads survive resolution", async ()
   fireEvent.click(await screen.findByTestId("topo-node-node-d1"));
   fireEvent.click(screen.getByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
+  fireEvent.click(await screen.findByRole("button", { name: "保存" }));
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({ method: "GET", url: "/extensions/network.operations/topologies/t1" })), { timeout: 3000 });
   fireEvent.click(screen.getByText("更多"));
   fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
@@ -374,6 +377,7 @@ test("a field both sides changed is listed for review, not decided silently", as
   fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
   fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "我改的名字" } });
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "保存" }));
+  fireEvent.click(await screen.findByRole("button", { name: "保存" }));
 
   const dialog = await screen.findByRole("dialog", { name: "编辑冲突" }, { timeout: 4000 });
   expect(within(dialog).getByText("需人工确认")).toBeInTheDocument();
@@ -515,3 +519,49 @@ test("switching urlTab from devices to skills resets search query, region filter
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.getByLabelText("搜索 Skill")).toHaveValue("");
 });
+
+test("canvas does not auto-save on edit; manual save button persists changes", async () => {
+  const putPayloads: Array<Record<string, unknown>> = [];
+  const passthrough = vi.mocked(apiRequest).getMockImplementation()!;
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.method === "PUT") {
+      putPayloads.push((request.data || {}) as Record<string, unknown>);
+      return { ok: true, topology: { ...sampleTopology, ...request.data, version: 2 } } as never;
+    }
+    return passthrough(request);
+  });
+
+  renderWithRouter(<><TopologyPage /><ConfirmHost /></>);
+  await screen.findByTestId("topo-node-node-d1");
+
+  // Device ribbon should NOT be in the DOM (removed duplicate ribbon)
+  expect(screen.queryByRole("toolbar", { name: "常用设备快速放置" })).not.toBeInTheDocument();
+
+  // Initially saved
+  expect(screen.getByRole("button", { name: "已保存" })).toBeDisabled();
+
+  // Rename node via inspector
+  fireEvent.click(screen.getByTestId("topo-node-node-d1"));
+  const nameInput = screen.getByPlaceholderText("设备名称");
+  fireEvent.change(nameInput, { target: { value: "手动保存测试设备" } });
+
+  // Now status changes to unsaved, and manual save button appears active
+  const saveBtn = await screen.findByRole("button", { name: "保存" });
+  expect(saveBtn).not.toBeDisabled();
+
+  // Wait 1200ms — verify that it does NOT auto-save!
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  expect(putPayloads).toHaveLength(0);
+  expect(screen.getByRole("button", { name: "保存" })).toBeInTheDocument();
+
+  // Click manual save button
+  fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+  // PUT request should be fired and button returns to "已保存"
+  await waitFor(() => expect(putPayloads).toHaveLength(1), { timeout: 3000 });
+  expect(putPayloads[0].nodes).toEqual(
+    expect.arrayContaining([expect.objectContaining({ display_name: "手动保存测试设备" })])
+  );
+  await waitFor(() => expect(screen.getByRole("button", { name: "已保存" })).toBeInTheDocument());
+});
+

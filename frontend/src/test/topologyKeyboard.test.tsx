@@ -48,6 +48,7 @@ test("Delete uses a lone canvas item rather than an earlier node inspector", asy
   const dialog = screen.getByRole("dialog");
   expect(dialog).toHaveTextContent("0 个节点、1 个图元");
   fireEvent.click(within(dialog).getByRole("button", { name: "移除" }));
+  fireEvent.click(await screen.findByRole("button", { name: "保存" }));
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({
     method: "PUT", data: expect.objectContaining({ nodes: topology.nodes, canvas_items: [] }),
   })), { timeout: 3000 });
