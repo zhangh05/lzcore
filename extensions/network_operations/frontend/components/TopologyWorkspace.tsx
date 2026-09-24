@@ -1481,14 +1481,19 @@ export default function TopologyWorkspace({
   // The menu is transient: any gesture outside it dismisses it.
   useEffect(() => {
     if (!contextMenu) return;
-    const close = () => setContextMenu(null);
-    window.addEventListener("mousedown", close);
-    window.addEventListener("wheel", close, { passive: true });
-    window.addEventListener("blur", close);
+    const handleDown = (event: MouseEvent) => {
+      if ((event.target as HTMLElement | null)?.closest?.(".canvas-context-menu")) {
+        return;
+      }
+      setContextMenu(null);
+    };
+    window.addEventListener("mousedown", handleDown, true);
+    window.addEventListener("wheel", handleDown, { capture: true, passive: true });
+    window.addEventListener("blur", () => setContextMenu(null));
     return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("wheel", close);
-      window.removeEventListener("blur", close);
+      window.removeEventListener("mousedown", handleDown, true);
+      window.removeEventListener("wheel", handleDown, true);
+      window.removeEventListener("blur", () => setContextMenu(null));
     };
   }, [contextMenu]);
 
@@ -2263,7 +2268,7 @@ export default function TopologyWorkspace({
       </aside>
 
       {/* 2. Center: Canvas */}
-      <main className="topology-canvas-area">
+      <main className="topology-canvas-area" onContextMenu={(event) => event.preventDefault()}>
         {/* Canvas Toolbar */}
         <div className="topology-canvas-toolbar">
           <div className="toolbar-left">
@@ -3786,7 +3791,18 @@ export default function TopologyWorkspace({
       {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} selection={canvasSelection} onCompleted={() => { void handleAgentCompleted(); }} /></aside>}
 
       {contextMenu && (
-        <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(event) => event.stopPropagation()}>
+        <div
+          className="canvas-context-menu"
+          style={{
+            left: Math.max(12, Math.min(contextMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 180)),
+            top: Math.max(12, Math.min(contextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 800) - 260)),
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
           {contextMenu.kind === "node" && (
             <>
               <button type="button" onClick={() => {

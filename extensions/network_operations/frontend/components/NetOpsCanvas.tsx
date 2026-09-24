@@ -715,6 +715,12 @@ export default function NetOpsCanvas(props: Props) {
 
   useEffect(() => {
     let disposed = false;
+    const host = hostRef.current;
+    const preventContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    host?.addEventListener("contextmenu", preventContextMenu, { capture: true });
     void loadNetOpsCytoscape().then(() => {
       if (disposed || !hostRef.current || !window.cytoscape) return;
       const cy = window.cytoscape({
@@ -1182,6 +1188,11 @@ export default function NetOpsCanvas(props: Props) {
         propsRef.current.onSelectionChange(cy.$("node:selected").map((node) => node.id()).filter((id) => !id.startsWith("group-")));
       });
       cy.on("cxttap", (event) => {
+        const native = event.originalEvent;
+        if (native) {
+          native.preventDefault?.();
+          native.stopPropagation?.();
+        }
         if (propsRef.current.interactionMode === "view") {
           return;
         }
@@ -1194,9 +1205,6 @@ export default function NetOpsCanvas(props: Props) {
           connectingFromRef.current = null;
           return;
         }
-        // Cytoscape swallows the native menu only partially; the host element
-        // prevents it, and this turns the gesture into workspace actions.
-        const native = event.originalEvent;
         if (!native) return;
         const id = event.target?.id?.() || "";
         let kind: CanvasContextTarget["kind"] = "canvas";
@@ -1318,6 +1326,7 @@ export default function NetOpsCanvas(props: Props) {
     }).catch(() => undefined);
     return () => {
       disposed = true;
+      host?.removeEventListener("contextmenu", preventContextMenu, { capture: true });
       cyRef.current?.destroy();
       cyRef.current = null;
     };
@@ -2146,7 +2155,7 @@ export default function NetOpsCanvas(props: Props) {
   // only things telling the user the canvas is in that state, so they are not
   // optional decoration.
   const placing = !isViewMode && props.mode === "select" && !!props.armedNodeType;
-  return <div className={`netops-canvas-wrap ${isViewMode ? "interaction-view" : "interaction-edit"} ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""} ${spaceHeld || (isViewMode && isPanning) ? (isPanning ? "space-panning is-panning" : "space-panning") : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => event.preventDefault()}>
+  return <div className={`netops-canvas-wrap ${isViewMode ? "interaction-view" : "interaction-edit"} ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""} ${spaceHeld || (isViewMode && isPanning) ? (isPanning ? "space-panning is-panning" : "space-panning") : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}>
     <canvas ref={gridCanvasRef} className="netops-world-grid" aria-hidden="true" />
     <div className="netops-cytoscape" ref={hostRef} aria-label="NetOps 网络画布" />
     <canvas ref={overlayCanvasRef} className="netops-motion-overlay" aria-hidden="true" />
