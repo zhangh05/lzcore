@@ -11,6 +11,16 @@ type CanvasMode = "select" | "connect";
 type Position = { element_id: string; x: number; y: number };
 
 /** Imperative handles the surrounding workspace needs (export, focus, view). */
+export type ElementBoundingBox = { x1: number; y1: number; x2: number; y2: number; w: number; h: number };
+
+export type ElementPositionResult = {
+  x: number;
+  y: number;
+  bb?: ElementBoundingBox;
+  neighbors?: Array<{ id: string; pos: { x: number; y: number }; bb: ElementBoundingBox }>;
+  otherNodes?: Array<{ id: string; pos: { x: number; y: number }; bb: ElementBoundingBox }>;
+};
+
 export type CanvasApi = {
   exportPNG: (options?: { full?: boolean; scale?: number; background?: string }) => string;
   exportSVG: (options?: { full?: boolean }) => string;
@@ -23,7 +33,7 @@ export type CanvasApi = {
   getViewport: () => { x: number; y: number; zoom: number };
   setViewport: (view: { x: number; y: number; zoom: number }) => void;
   startConnectFrom?: (nodeId: string) => void;
-  getElementPosition?: (id: string, kind: "node" | "link" | "canvas_item") => { x: number; y: number } | null;
+  getElementPosition?: (id: string, kind: "node" | "link" | "canvas_item") => ElementPositionResult | null;
 };
 
 export type CanvasContextTarget = { x: number; y: number; kind: "node" | "link" | "canvas_item" | "canvas"; id: string };
@@ -112,6 +122,7 @@ type CyCollection<T> = {
   filter: (callback: (element: T) => boolean) => CyCollection<T>;
   forEach: (callback: (element: T) => void) => void;
   some: (callback: (element: T) => boolean) => boolean;
+  not?: (elements: unknown) => CyCollection<T>;
   remove: () => void;
   unselect: () => void;
   select: () => void;
@@ -166,6 +177,8 @@ type CyElement = {
   group: () => string;
   length: number;
   renderedPosition?: () => { x: number; y: number };
+  renderedBoundingBox?: () => { x1: number; y1: number; x2: number; y2: number; w: number; h: number };
+  neighborhood?: (selector?: string) => CyCollection<CyNode>;
   source?: () => CyElement;
   target?: () => CyElement;
 };
@@ -1437,31 +1450,69 @@ export default function NetOpsCanvas(props: Props) {
           targetNode.addClass("node-connecting");
         }
       },
-      getElementPosition: (id: string, kind: "node" | "link" | "canvas_item") => {
+      getElementPosition: (id: string, kind: "node" | "link" | "canvas_item"): ElementPositionResult | null => {
         if (!cy) return null;
         if (kind === "node") {
           const node = cy.getElementById(id);
           if (!node || !node.length) return null;
           const rp = node.renderedPosition ? node.renderedPosition() : null;
-          return rp ? { x: rp.x, y: rp.y } : null;
+          if (!rp) return null;
+          const rawBB = node.renderedBoundingBox ? node.renderedBoundingBox() : null;
+          const bb: ElementBoundingBox = rawBB
+            ? { x1: rawBB.x1, y1: rawBB.y1, x2: rawBB.x2, y2: rawBB.y2, w: rawBB.w, h: rawBB.h }
+            : { x1: rp.x - 47, y1: rp.y - 38, x2: rp.x + 47, y2: rp.y + 38, w: 94, h: 76 };
+          const neighborCollection = node.neighborhood ? node.neighborhood("node") : null;
+          const neighbors = (neighborCollection?.map
+            ? neighborCollection.map((n: CyNode) => {
+                const nRp = n.renderedPosition?.() || { x: 0, y: 0 };
+                const nRawBB = n.renderedBoundingBox?.();
+                const nBB: ElementBoundingBox = nRawBB
+                  ? { x1: nRawBB.x1, y1: nRawBB.y1, x2: nRawBB.x2, y2: nRawBB.y2, w: nRawBB.w, h: nRawBB.h }
+                  : { x1: nRp.x - 47, y1: nRp.y - 38, x2: nRp.x + 47, y2: nRp.y + 38, w: 94, h: 76 };
+                return { id: n.id(), pos: nRp, bb: nBB };
+              })
+            : []) as Array<{ id: string; pos: { x: number; y: number }; bb: ElementBoundingBox }>;
+          const otherNodes = cy.nodes()
+            .filter((n: CyNode) => n.id() !== id && !n.id().startsWith("group-"))
+            .map((n: CyNode) => {
+              const oRp = n.renderedPosition?.() || { x: 0, y: 0 };
+              const oRawBB = n.renderedBoundingBox?.();
+              const oBB: ElementBoundingBox = oRawBB
+                ? { x1: oRawBB.x1, y1: oRawBB.y1, x2: oRawBB.x2, y2: oRawBB.y2, w: oRawBB.w, h: oRawBB.h }
+                : { x1: oRp.x - 47, y1: oRp.y - 38, x2: oRp.x + 47, y2: oRp.y + 38, w: 94, h: 76 };
+              return { id: n.id(), pos: oRp, bb: oBB };
+            });
+          return { x: rp.x, y: rp.y, bb, neighbors, otherNodes };
         }
         if (kind === "link") {
           const edge = cy.getElementById(id) as CyEdge;
           if (!edge || !edge.length) return null;
+          let mid: { x: number; y: number } | null = null;
           if (edge.renderedMidpoint) {
-            const mid = edge.renderedMidpoint();
-            if (mid) return { x: mid.x, y: mid.y };
+            mid = edge.renderedMidpoint();
           }
-          const s = edge.source ? edge.source().renderedPosition?.() : null;
-          const t = edge.target ? edge.target().renderedPosition?.() : null;
-          if (s && t) return { x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 };
-          return null;
+          if (!mid) {
+            const s = edge.source ? edge.source().renderedPosition?.() : null;
+            const t = edge.target ? edge.target().renderedPosition?.() : null;
+            if (s && t) mid = { x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 };
+          }
+          if (!mid) return null;
+          const rawBB = edge.renderedBoundingBox ? edge.renderedBoundingBox() : null;
+          const bb: ElementBoundingBox = rawBB
+            ? { x1: rawBB.x1, y1: rawBB.y1, x2: rawBB.x2, y2: rawBB.y2, w: rawBB.w, h: rawBB.h }
+            : { x1: mid.x - 20, y1: mid.y - 20, x2: mid.x + 20, y2: mid.y + 20, w: 40, h: 40 };
+          return { x: mid.x, y: mid.y, bb };
         }
         if (kind === "canvas_item") {
           const item = cy.getElementById(`canvas-${id}`);
           if (!item || !item.length) return null;
           const rp = item.renderedPosition ? item.renderedPosition() : null;
-          return rp ? { x: rp.x, y: rp.y } : null;
+          if (!rp) return null;
+          const rawBB = item.renderedBoundingBox ? item.renderedBoundingBox() : null;
+          const bb: ElementBoundingBox = rawBB
+            ? { x1: rawBB.x1, y1: rawBB.y1, x2: rawBB.x2, y2: rawBB.y2, w: rawBB.w, h: rawBB.h }
+            : { x1: rp.x - 50, y1: rp.y - 30, x2: rp.x + 50, y2: rp.y + 30, w: 100, h: 60 };
+          return { x: rp.x, y: rp.y, bb };
         }
         return null;
       },

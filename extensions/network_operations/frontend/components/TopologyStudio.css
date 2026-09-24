@@ -499,8 +499,9 @@
   }
 }
 
-/* Arrow notch for anchored bubble (hidden once user manually drags window) */
-.topology-studio .topology-inspector.is-dragged::before {
+/* Arrow notch for anchored bubble (hidden once user manually drags window or in corner mode) */
+.topology-studio .topology-inspector.is-dragged::before,
+.topology-studio .topology-inspector.placement-corner::before {
   display: none !important;
 }
 

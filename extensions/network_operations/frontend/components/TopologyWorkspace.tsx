@@ -52,7 +52,7 @@ import { Button } from "../../../../frontend/src/components/ui";
 import { LAYOUT_PRESETS, layoutTopology, type LayoutAlgorithm } from "./topologyLayout";
 import { TopologyAgentPanel } from "./TopologyAgentPanel";
 import { resolveTopologySession } from "./TopologySessionResolver";
-import NetOpsCanvas, { type CanvasApi, type CanvasContextTarget } from "./NetOpsCanvas";
+import NetOpsCanvas, { type CanvasApi, type CanvasContextTarget, type ElementPositionResult } from "./NetOpsCanvas";
 import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
 import { mergeTopologies, type MergeConflict, type MergeStats } from "./topologyMerge";
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
@@ -480,6 +480,7 @@ export default function TopologyWorkspace({
   const [arrowY, setArrowY] = useState<number>(36);
   const [isDragged, setIsDragged] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
   const dragStartRef = useRef<{ startX: number; startY: number; initialLeft: number; initialTop: number } | null>(null);
 
   // Reset drag position when switching to a different element
@@ -492,6 +493,12 @@ export default function TopologyWorkspace({
     const viewportEl = viewportRef.current;
     if (!viewportEl) return;
 
+    if (isPinned) {
+      setPopoverPlacement("corner");
+      setPopoverCoords({ right: 16, top: 16 });
+      return;
+    }
+
     const vw = viewportEl.clientWidth || 800;
     const vh = viewportEl.clientHeight || 600;
     const inspectorEl = inspectorRef.current;
@@ -501,12 +508,12 @@ export default function TopologyWorkspace({
 
     if (!selectedElement) {
       setPopoverPlacement("corner");
-      setPopoverCoords({ right: 12, top: 12 });
+      setPopoverCoords({ right: 16, top: 16 });
       return;
     }
 
     const api = canvasApiRef.current;
-    let pos: { x: number; y: number } | null = null;
+    let pos: ElementPositionResult | null = null;
     if (api?.getElementPosition) {
       if (selectedElement.type === "node") {
         pos = api.getElementPosition(selectedElement.nodeId, "node");
@@ -519,34 +526,118 @@ export default function TopologyWorkspace({
 
     if (!pos) {
       setPopoverPlacement("corner");
-      setPopoverCoords({ right: 12, top: 12 });
+      setPopoverCoords({ right: 16, top: 16 });
       return;
     }
 
-    const rightLeft = pos.x + 24;
+    const targetBB = pos.bb || {
+      x1: pos.x - 47,
+      y1: pos.y - 38,
+      x2: pos.x + 47,
+      y2: pos.y + 38,
+      w: 94,
+      h: 76,
+    };
+
+    // A comfortable, non-overlapping margin between the node boundary and popover
+    const margin = 20;
+
+    const rightLeft = targetBB.x2 + margin;
     const canFitRight = rightLeft + bubbleWidth + 12 <= vw;
-    const leftLeft = pos.x - 24 - bubbleWidth;
+
+    const leftLeft = targetBB.x1 - margin - bubbleWidth;
     const canFitLeft = leftLeft >= 12;
 
-    if (canFitRight) {
-      const top = Math.max(12, Math.min(pos.y - 70, maxTop));
-      const arrowPos = Math.max(20, Math.min(pos.y - top, bubbleHeight - 24));
+    const top = Math.max(12, Math.min(pos.y - 70, maxTop));
+    const arrowPos = Math.max(20, Math.min(pos.y - top, bubbleHeight - 24));
+
+    const rightRect = { x1: rightLeft, y1: top, x2: rightLeft + bubbleWidth, y2: top + bubbleHeight };
+    const leftRect = { x1: leftLeft, y1: top, x2: leftLeft + bubbleWidth, y2: top + bubbleHeight };
+
+    const checkOverlap = (r1: { x1: number; y1: number; x2: number; y2: number }, r2: { x1: number; y1: number; x2: number; y2: number }) => {
+      return !(r1.x2 <= r2.x1 || r1.x1 >= r2.x2 || r1.y2 <= r2.y1 || r1.y1 >= r2.y2);
+    };
+
+    const neighbors = pos.neighbors || [];
+    const otherNodes = pos.otherNodes || [];
+
+    // Collision with connected neighbor devices
+    const rightCollidesNeighbor = neighbors.some((n) => checkOverlap(rightRect, n.bb));
+    const leftCollidesNeighbor = neighbors.some((n) => checkOverlap(leftRect, n.bb));
+
+    // Collision with any other nodes
+    const rightCollidesOther = otherNodes.some((n) => checkOverlap(rightRect, n.bb));
+    const leftCollidesOther = otherNodes.some((n) => checkOverlap(leftRect, n.bb));
+
+    let chosenSide: "right" | "left" | "corner" = "right";
+
+    if (canFitRight && canFitLeft) {
+      if (rightCollidesNeighbor && !leftCollidesNeighbor) {
+        // Connected device is on the right -> place on the left to avoid occluding it!
+        chosenSide = "left";
+      } else if (leftCollidesNeighbor && !rightCollidesNeighbor) {
+        // Connected device is on the left -> place on the right to avoid occluding it!
+        chosenSide = "right";
+      } else if (!rightCollidesNeighbor && !leftCollidesNeighbor) {
+        // Neither collides with a connected neighbor. Check collisions with other nodes.
+        if (rightCollidesOther && !leftCollidesOther) {
+          chosenSide = "left";
+        } else if (leftCollidesOther && !rightCollidesOther) {
+          chosenSide = "right";
+        } else {
+          // Both sides are clear of node collisions. Check where connected links go.
+          if (neighbors.length > 0) {
+            const avgNeighborX = neighbors.reduce((sum, n) => sum + n.pos.x, 0) / neighbors.length;
+            // If connected neighbors are primarily on the right, place on the left!
+            chosenSide = avgNeighborX > pos.x ? "left" : "right";
+          } else {
+            // Default to right side if no neighbors
+            chosenSide = "right";
+          }
+        }
+      } else {
+        // Both sides collide with connected neighbors!
+        if (rightCollidesOther && !leftCollidesOther) {
+          chosenSide = "left";
+        } else if (leftCollidesOther && !rightCollidesOther) {
+          chosenSide = "right";
+        } else {
+          // If crowded on both sides, fallback to top-right corner dock to avoid blocking canvas
+          chosenSide = "corner";
+        }
+      }
+    } else if (canFitRight) {
+      if (rightCollidesNeighbor) {
+        // Right side collides with connected device, and left side cannot fit.
+        // Fallback to corner dock so the connected device is not hidden!
+        chosenSide = "corner";
+      } else {
+        chosenSide = "right";
+      }
+    } else if (canFitLeft) {
+      if (leftCollidesNeighbor) {
+        chosenSide = "corner";
+      } else {
+        chosenSide = "left";
+      }
+    } else {
+      chosenSide = "corner";
+    }
+
+    if (chosenSide === "right") {
       setPopoverPlacement("right");
       setPopoverCoords({ left: rightLeft, top });
       setArrowY(arrowPos);
-    } else if (canFitLeft) {
-      const top = Math.max(12, Math.min(pos.y - 70, maxTop));
-      const arrowPos = Math.max(20, Math.min(pos.y - top, bubbleHeight - 24));
+    } else if (chosenSide === "left") {
       setPopoverPlacement("left");
       setPopoverCoords({ left: leftLeft, top });
       setArrowY(arrowPos);
     } else {
-      const left = Math.max(10, Math.min(pos.x - bubbleWidth / 2, vw - bubbleWidth - 10));
-      const top = Math.max(12, Math.min(pos.y - 70, maxTop));
+      // Corner dock: top-right corner of viewport with generous spacing
       setPopoverPlacement("corner");
-      setPopoverCoords({ left, top });
+      setPopoverCoords({ right: 16, top: 16 });
     }
-  }, [isInspectorOpen, isDragged, selectedElement]);
+  }, [isInspectorOpen, isDragged, isPinned, selectedElement]);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -2153,6 +2244,23 @@ export default function TopologyWorkspace({
     );
   }
 
+  const pinButton = (
+    <Button
+      size="sm"
+      variant={isPinned ? "primary" : "ghost"}
+      title={isPinned ? "已固定在右上角 (点击切换为跟随设备)" : "固定到右上角 (避免遮挡画布设备)"}
+      aria-label={isPinned ? "已固定在右上角" : "固定到右上角"}
+      onClick={() => {
+        setIsPinned((prev) => !prev);
+        setIsDragged(false);
+      }}
+    >
+      <svg width="13" height="13" viewBox="0 0 16 16" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9.8 2.2a2 2 0 0 1 2.8 2.8l-1.4 1.4L10 10l-3 3-1.5-1.5L2 15l1.5-3.5L2 10l3-3 3.6-1.4 1.2-1.4z" />
+      </svg>
+    </Button>
+  );
+
   return (
     <div className={`network-topology-workspace topology-studio ${showLibrary ? "library-open" : ""} ${showAgent ? "agent-open" : ""} ${isInspectorOpen && !showAgent ? "inspector-open" : ""} ${focusMode ? "focus-mode" : ""}`}>
       {/* 1. Left Panel: Topology selector + Device Palette + Group Palette */}
@@ -2747,6 +2855,7 @@ export default function TopologyWorkspace({
                 </div>
               </div>
               <div className="inspector-header-actions">
+                {pinButton}
                 <Button size="sm" onClick={() => canvasApiRef.current?.clearSelection()} aria-label="取消选择"><IconClose size={13} /></Button>
               </div>
             </div>
@@ -2818,6 +2927,7 @@ export default function TopologyWorkspace({
                 </div>
               </div>
               <div className="inspector-header-actions">
+                {pinButton}
                 <Button
                   size="sm"
                   variant="ghost"
@@ -3027,6 +3137,7 @@ export default function TopologyWorkspace({
                 </div>
               </div>
               <div className="inspector-header-actions">
+                {pinButton}
                 <Button
                   size="sm"
                   onClick={() => {
@@ -3498,6 +3609,7 @@ export default function TopologyWorkspace({
                 </div>
               </div>
               <div className="inspector-header-actions">
+                {pinButton}
                 <Button
                   size="sm"
                   onClick={() => {
@@ -3638,6 +3750,7 @@ export default function TopologyWorkspace({
                 </div>
               </div>
               <div className="inspector-header-actions">
+                {pinButton}
                 <Button
                   size="sm"
                   onClick={() => {
