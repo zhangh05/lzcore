@@ -43,9 +43,10 @@ import {
   IconWrench,
   IconChat,
 } from "../../../../frontend/src/components/Icon";
-import { useNavigate } from "../../../../frontend/src/router";
+import { Link, useNavigate } from "../../../../frontend/src/router";
 import { useSessionStore } from "../../../../frontend/src/stores/session";
 import { apiRequest } from "../../../../frontend/src/api/client";
+import { overlayBorderStatus, overlayCanvasLine, overlayCaption, type NodeOverlay } from "./nodeOverlay";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
 import { LAYOUT_PRESETS, layoutTopology, type LayoutAlgorithm } from "./topologyLayout";
@@ -354,21 +355,55 @@ export default function TopologyWorkspace({
   setNotice,
   busy,
 }: TopologyWorkspaceProps) {
+  const requestedTopologyId = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("topology_id") || "";
   const [selectedTopologyId, setSelectedTopologyId] = useState<string>(() => {
+    if (requestedTopologyId && topologies.some((item) => item.topology_id === requestedTopologyId)) return requestedTopologyId;
     return topologies[0]?.topology_id || "";
   });
 
   useEffect(() => {
+    if (requestedTopologyId && topologies.some((item) => item.topology_id === requestedTopologyId)) {
+      setSelectedTopologyId(requestedTopologyId);
+      return;
+    }
     if (!selectedTopologyId && topologies.length > 0) {
       setSelectedTopologyId(topologies[0].topology_id);
     } else if (selectedTopologyId && !topologies.some((t) => t.topology_id === selectedTopologyId)) {
       setSelectedTopologyId(topologies[0]?.topology_id || "");
     }
-  }, [topologies, selectedTopologyId]);
+  }, [requestedTopologyId, topologies, selectedTopologyId]);
 
   const currentTopology = useMemo(() => {
     return topologies.find((t) => t.topology_id === selectedTopologyId) || null;
   }, [topologies, selectedTopologyId]);
+  const [nodeOverlays, setNodeOverlays] = useState<NodeOverlay[]>([]);
+  const [bindableDevices, setBindableDevices] = useState<Array<{ device_id: string; name: string; host: string }>>([]);
+  const [overlayRevision, setOverlayRevision] = useState(0);
+  const [bindChoice, setBindChoice] = useState("");
+  const [binding, setBinding] = useState(false);
+  const [viewOverlayNodeId, setViewOverlayNodeId] = useState("");
+
+  useEffect(() => {
+    const topologyId = currentTopology?.topology_id;
+    if (!topologyId) {
+      setNodeOverlays([]);
+      return;
+    }
+    let cancelled = false;
+    void apiRequest<{ overlays: NodeOverlay[] }>({
+      method: "GET",
+      url: `${base}/topologies/${topologyId}/overlay`,
+      params: { workspace_id: workspaceId },
+    }).then((overlayResult) => {
+      if (cancelled) return;
+      setNodeOverlays(overlayResult.overlays || []);
+    }).catch(() => {
+      if (!cancelled) setNodeOverlays([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTopology?.topology_id, overlayRevision, workspaceId]);
 
   const [activeTopology, setActiveTopology] = useState<Topology | null>(currentTopology);
   const saveStatusRef = useRef<"saved" | "saving" | "unsaved" | "conflict">("saved");
@@ -625,6 +660,24 @@ export default function TopologyWorkspace({
       setContextMenu(null);
     }
   }, []);
+
+  useEffect(() => {
+    if (workspaceMode !== "edit" || selectedElement?.type !== "node") return;
+    let cancelled = false;
+    void apiRequest<{ devices: Array<{ device_id: string; name: string; host: string }> }>({
+      method: "GET",
+      url: `${base}/devices`,
+      params: { workspace_id: workspaceId },
+    }).then((deviceResult) => {
+      if (cancelled) return;
+      setBindableDevices(deviceResult.devices || []);
+    }).catch(() => {
+      if (!cancelled) setBindableDevices([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceMode, selectedElement?.type, workspaceId]);
 
   const navigate = useNavigate();
 
@@ -1966,6 +2019,13 @@ export default function TopologyWorkspace({
     if (selectedElement?.type !== "node" || !activeTopology) return null;
     return activeTopology.nodes.find((n) => n.node_id === selectedElement.nodeId) || null;
   }, [selectedElement, activeTopology]);
+  const selectedNodeId = selectedElement?.type === "node" ? selectedElement.nodeId : "";
+  const savedBindId = nodeOverlays.find((item) => item.node_id === selectedNodeId)?.device_state === "bound"
+    ? nodeOverlays.find((item) => item.node_id === selectedNodeId)?.device_id || ""
+    : "";
+  useEffect(() => {
+    setBindChoice(savedBindId);
+  }, [savedBindId, selectedNodeId]);
 
 
 
@@ -2576,12 +2636,18 @@ export default function TopologyWorkspace({
           )}
           <NetOpsCanvas
             topology={activeTopology}
+            nodeObservationStatus={Object.fromEntries(nodeOverlays.map((item) => [item.node_id, overlayBorderStatus(item)]))}
+            nodeOverlayLines={Object.fromEntries(nodeOverlays.map((item) => [item.node_id, overlayCanvasLine(item)]))}
             mode={canvasMode}
             interactionMode={workspaceMode}
             gridEnabled={gridEnabled}
             showInterfaces={showInterfaces}
             onSelectNode={(nodeId) => {
-              if (workspaceMode === "view") return;
+              if (workspaceMode === "view") {
+                setViewOverlayNodeId(nodeId);
+                return;
+              }
+              setViewOverlayNodeId("");
               setSelectedElement({ type: "node", nodeId });
               setIsInspectorOpen(true);
             }}
@@ -2596,6 +2662,7 @@ export default function TopologyWorkspace({
               setIsInspectorOpen(true);
             }}
             onClearSelection={() => {
+              setViewOverlayNodeId("");
               setSelectedElement(null);
               setIsInspectorOpen(false);
             }}
@@ -2630,6 +2697,22 @@ export default function TopologyWorkspace({
             }}
             onViewportChange={updatePopoverAnchor}
           />
+          {workspaceMode === "view" && viewOverlayNodeId && activeTopology ? (
+            <aside className="topology-observation-card" aria-label="最近观测">
+              {(() => {
+                const overlay = nodeOverlays.find((item) => item.node_id === viewOverlayNodeId);
+                const node = activeTopology.nodes.find((item) => item.node_id === viewOverlayNodeId);
+                return (
+                  <>
+                    <strong>{node?.display_name || "图纸符号"}</strong>
+                    <p>{overlay ? overlayCaption(overlay) : "尚未绑定登记设备。"}</p>
+                    <p>绑定和更换在编辑模式完成，不会写入图纸，也不会进入 Skill。</p>
+                    <button type="button" onClick={() => setViewOverlayNodeId("")}>关闭</button>
+                  </>
+                );
+              })()}
+            </aside>
+          ) : null}
 
           {/* Floating Bubble Popover Inspector */}
           {/* 3. Right: Inspector */}
@@ -2826,6 +2909,52 @@ export default function TopologyWorkspace({
                     ))}
                   </select>
                 </label>
+              </div>
+
+              <div className="inspector-section">
+                <span className="inspector-label">登记设备（只读观测，不写入图纸）</span>
+                {bindableDevices.length === 0 ? (
+                  <p className="inspector-label">还没有登记设备。<Link to="/extensions/network.operations/manage?tab=devices">去网络设备登记</Link></p>
+                ) : (
+                  <label className="inspector-field">
+                    已登记设备
+                    <select
+                      aria-label="绑定登记设备"
+                      value={bindChoice}
+                      onChange={(event) => setBindChoice(event.target.value)}
+                    >
+                      <option value="">不绑定</option>
+                      {bindableDevices.map((device) => (
+                        <option key={device.device_id} value={device.device_id}>{device.name} · {device.host}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {(() => {
+                  const overlay = nodeOverlays.find((item) => item.node_id === selectedNode.node_id);
+                  return overlay ? <p className="inspector-label">{overlayCaption(overlay)}</p> : <p className="inspector-label">尚未绑定。绑定后只显示最近测试和最近观测，不表示当前正常。</p>;
+                })()}
+                <div className="inspector-actions">
+                  <Button
+                    size="sm"
+                    disabled={binding || bindChoice === savedBindId || (bindableDevices.length === 0 && !savedBindId)}
+                    onClick={() => {
+                      if (!activeTopology || binding) return;
+                      const deviceId = bindChoice;
+                      const url = `${base}/topologies/${activeTopology.topology_id}/nodes/${selectedNode.node_id}/binding`;
+                      const request = deviceId
+                        ? apiRequest({ method: "PUT", url, data: { workspace_id: workspaceId, device_id: deviceId } })
+                        : apiRequest({ method: "DELETE", url, data: { workspace_id: workspaceId } });
+                      setBinding(true);
+                      void request.then(() => {
+                        setOverlayRevision((value) => value + 1);
+                        setNotice(deviceId ? "已绑定登记设备。节点第二行是最近记录，不表示当前正常。" : "已解除绑定。");
+                      }).catch(() => setNotice("绑定失败，请检查设备是否仍存在。", false)).finally(() => setBinding(false));
+                    }}
+                  >
+                    {bindChoice ? "保存绑定" : "解除绑定"}
+                  </Button>
+                </div>
               </div>
 
               <div className="inspector-section">
@@ -3643,7 +3772,7 @@ export default function TopologyWorkspace({
           <span>{workspaceMode === "view" ? "查看漫游" : "独立图纸"}</span>
           <span>
             {workspaceMode === "view"
-              ? "查看模式 · 鼠标左键拖拽平移 · 滚轮缩放 · 点击与框选无响应 · 点击上方切换到编辑模式"
+              ? "查看模式 · 点击节点查看最近记录 · 第二行不表示当前正常 · 拖拽平移 · 滚轮缩放"
               : "编辑模式 · 空白拖拽框选 · 空格/中键平移 · 连续点放 · C 极速连线 · ⌘D 克隆"}
           </span>
         </footer>

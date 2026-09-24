@@ -143,6 +143,8 @@ return conflict; cancel and wait for a terminal state first.
 | --- | --- |
 | `GET/POST` | `/api/extensions/network.operations/regions`, `/devices`, `/connections`, `/skills`, `/scripts`, `/inspections`, `/topologies` |
 | `GET/PUT/DELETE` | `/api/extensions/network.operations/regions/<region_id>`, `/devices/<device_id>`, `/connections/<connection_id>`, `/skills/<skill_id>`, `/scripts/<script_id>`, `/topologies/<topology_id>` |
+| `GET` | `/api/extensions/network.operations/topologies/<topology_id>/overlay` |
+| `PUT/DELETE` | `/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>/binding` |
 | `DELETE` | `/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>` |
 | `GET` | `/api/extensions/network.operations/topologies/<topology_id>/revisions` |
 | `GET` | `/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/diff` |

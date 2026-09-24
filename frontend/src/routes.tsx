@@ -70,6 +70,7 @@ const PRELOAD: Record<string, () => PageModule> = {
 
 /** Warm a route's chunk ahead of navigation (call on hover/focus). */
 export function preloadRoute(path: string): Promise<void> {
-  const loader = PRELOAD[path];
+  const cleanPath = path.split("?")[0];
+  const loader = PRELOAD[cleanPath];
   return loader ? loader().then(() => undefined) : Promise.resolve();
 }

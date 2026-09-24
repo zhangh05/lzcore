@@ -19,13 +19,14 @@ import {
   IconMoon,
   IconSun,
   IconMenu,
+  IconSparkle,
 } from "../components/Icon";
+import { FeatureDescriptionDrawer } from "../components/FeatureDescriptionDrawer";
 import { NAV_ITEMS, buildNavGroups } from "../config/nav";
 import type { NavGroup, NavItem } from "../config/nav";
 import { ExtensionRegistryProvider, useExtensionRegistry } from "../extensions/registry";
 import {
   TaskWorkbench,
-  CapabilityCenter,
   OperationsPage,
   Settings,
   Diagnostics,
@@ -73,8 +74,17 @@ function applyAuthenticatedSession(nextSession: Awaited<ReturnType<typeof authAp
   }
 }
 
-const NavGroupItem = memo(function NavGroupItem({ group, currentPath }: { group: NavGroup; currentPath: string }) {
-  const active = group.items.some((item) => item.to === currentPath);
+const NavGroupItem = memo(function NavGroupItem({ group, currentPath, currentSearch }: { group: NavGroup; currentPath: string; currentSearch?: string }) {
+  const active = group.items.some((item) => {
+    const [itemPath, itemQuery] = item.to.split("?");
+    if (itemPath !== currentPath) return false;
+    if (!itemQuery) return true;
+    const itemParams = new URLSearchParams(itemQuery);
+    const itemTab = itemParams.get("tab");
+    const currentParams = new URLSearchParams(currentSearch || "");
+    const currentTab = currentParams.get("tab") || "devices";
+    return itemTab === (currentTab === "skills" ? "skills" : "devices");
+  });
   const warmGroup = useCallback(() => {
     void preloadRoute(group.to);
     group.items.forEach((item) => void preloadRoute(item.to));
@@ -183,7 +193,6 @@ const SKELETON_BY_PATH: Record<string, "list" | "table"> = {
   "/data": "table",
   "/memory": "list",
   "/diagnostics": "list",
-  "/capabilities": "list",
   "/topology": "list",
 };
 
@@ -208,7 +217,7 @@ function AppRoutes({ canManageUsers }: { canManageUsers: boolean }) {
     "/knowledge": <ErrorBoundary><KnowledgeLibrary /></ErrorBoundary>,
     "/data": <ErrorBoundary><DataCenter /></ErrorBoundary>,
     "/memory": <ErrorBoundary><MemoryPage /></ErrorBoundary>,
-    "/capabilities": <ErrorBoundary><CapabilityCenter /></ErrorBoundary>,
+    "/capabilities": <Navigate to="/workbench" replace />,
     "/topology": <ErrorBoundary><NetworkTopology /></ErrorBoundary>,
     "/diagnostics": <ErrorBoundary><Diagnostics /></ErrorBoundary>,
     "/settings": <ErrorBoundary><Settings /></ErrorBoundary>,
@@ -216,11 +225,16 @@ function AppRoutes({ canManageUsers }: { canManageUsers: boolean }) {
     "/users": canManageUsers ? <ErrorBoundary><UserManagement /></ErrorBoundary> : <Navigate to="/workbench" replace />,
     "/organizations": <Navigate to={canManageUsers ? "/users" : "/workbench"} replace />,
   };
+  const searchTab = new URLSearchParams(location.search).get("tab");
+  const isSkillRoute = location.pathname.startsWith("/extensions/network.operations") && searchTab === "skills";
+  const routeKey = location.pathname.startsWith("/extensions/network.operations")
+    ? `${location.pathname}?tab=${isSkillRoute ? "skills" : "devices"}`
+    : location.pathname;
   const extensionRoute = extensionRegistry.routes.find((route) => route.path === location.pathname);
   const content = location.pathname === "/" ? (
     <Navigate to="/workbench" replace />
   ) : extensionRoute ? (
-    <ErrorBoundary><extensionRoute.Component /></ErrorBoundary>
+    <ErrorBoundary><extensionRoute.Component key={routeKey} /></ErrorBoundary>
   ) : !extensionRegistry.ready && location.pathname.startsWith("/extensions/") ? (
     <RouteFallback />
   ) : routes[location.pathname] ?? (
@@ -234,7 +248,7 @@ function AppRoutes({ canManageUsers }: { canManageUsers: boolean }) {
   );
   return (
     <Suspense fallback={<RouteFallback />}>
-      <div className="route-view" key={location.pathname} data-route={location.pathname}>
+      <div className="route-view" key={routeKey} data-route={location.pathname}>
         {content}
       </div>
     </Suspense>
@@ -341,6 +355,7 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
   const toggleMobileNav = useUIStore((s) => s.toggleMobileNav);
   const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen);
   const currentWorkspaceId = useSessionStore((s) => s.currentWorkspaceId);
+  const [featureDescOpen, setFeatureDescOpen] = useState(false);
 
   const location = useLocation();
   const extensionRegistry = useExtensionRegistry();
@@ -406,10 +421,21 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
         </Link>
 
         <nav className="app-nav" aria-label="主导航">
-          {navigationGroups.map((group) => <NavGroupItem key={group.id} group={group} currentPath={location.pathname} />)}
+          {navigationGroups.map((group) => <NavGroupItem key={group.id} group={group} currentPath={location.pathname} currentSearch={location.search} />)}
         </nav>
 
         <div className="app-actions" aria-label="页面操作">
+          <button
+            type="button"
+            className="feature-desc-btn"
+            data-tip="功能描述"
+            data-testid="btn-feature-desc"
+            aria-label="功能描述"
+            onClick={() => setFeatureDescOpen(true)}
+          >
+            <IconSparkle size={14} weight="duotone" />
+            <span>功能描述</span>
+          </button>
           <SettingsNav items={settingsNavigationItems} currentPath={location.pathname} />
           <button
             type="button"
@@ -457,6 +483,7 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
       </div>
       <ToastHost />
       <ConfirmHost />
+      <FeatureDescriptionDrawer open={featureDescOpen} onClose={() => setFeatureDescOpen(false)} />
     </div>
   );
 }

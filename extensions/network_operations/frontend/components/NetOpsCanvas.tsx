@@ -71,6 +71,8 @@ export const CANVAS_GROUP = {
 
 type Props = {
   topology: Topology;
+  nodeObservationStatus?: Record<string, NodeRuntimeStatus>;
+  nodeOverlayLines?: Record<string, string>;
   mode: CanvasMode;
   interactionMode?: "view" | "edit";
   gridEnabled: boolean;
@@ -744,7 +746,7 @@ export default function NetOpsCanvas(props: Props) {
               "font-weight": 650,
               color: "#0f172a",
               "text-wrap": "ellipsis",
-              "text-max-width": 132,
+              "text-max-width": 148,
               "text-background-opacity": 0,
               "text-border-width": 0,
               width: 94,
@@ -763,6 +765,7 @@ export default function NetOpsCanvas(props: Props) {
           // Canvas items and groups deliberately have no device icon. Apply
           // image mappings only to asset nodes so Cytoscape stays warning-free.
           { selector: "node[icon]", style: { "background-image": "data(icon)", "background-fit": "cover", "background-clip": "node", "background-position-x": "50%", "background-position-y": "50%" } },
+          { selector: "node.has-overlay", style: { "text-wrap": "wrap", "text-max-width": 148, "font-size": 11, "font-weight": 560 } },
           { selector: "node:active", style: { "overlay-opacity": 0, "underlay-opacity": 0 } },
           {
             selector: "edge",
@@ -1039,6 +1042,13 @@ export default function NetOpsCanvas(props: Props) {
       cy.on("tap", (event) => {
         const current = propsRef.current;
         if (current.interactionMode === "view") {
+          if (event.target.isNode?.()) {
+            const id = event.target.id?.() || "";
+            if (id && !id.startsWith("group-") && !id.startsWith("canvas-")) current.onSelectNode(id);
+            else current.onClearSelection();
+          } else {
+            current.onClearSelection();
+          }
           return;
         }
         if (event.target.isNode?.()) {
@@ -1542,10 +1552,12 @@ export default function NetOpsCanvas(props: Props) {
         // The border carries operational state because that is what an
         // operator scans for; vendor stays as a background tint so neither
         // signal is lost.
-        const status: NodeRuntimeStatus = "unknown";
+        const status: NodeRuntimeStatus = props.nodeObservationStatus?.[node.node_id] || "unknown";
         const statusColor = statusPalette[status];
         const vendorTint = "#fbfcfd";
-        return { group: "nodes", classes: dimClass(node.node_id, "drawing-node"), data: { id: node.node_id, label: node.display_name || "未命名设备", status, statusColor, statusWidth: 2, vendorTint, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
+        const caption = props.nodeOverlayLines?.[node.node_id] || "";
+        const name = node.display_name || "未命名设备";
+        return { group: "nodes", classes: dimClass(node.node_id, caption ? "drawing-node has-overlay" : "drawing-node"), data: { id: node.node_id, label: caption ? `${name}\n${caption}` : name, status, statusColor, statusWidth: status === "unknown" ? 1.5 : 2.5, vendorTint, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
       }),
       ...(props.topology.canvas_items || []).map((item) => {
         const style = { ...canvasItemDefaults[item.kind], ...item.style };
@@ -1627,7 +1639,7 @@ export default function NetOpsCanvas(props: Props) {
         setViewport({ ...cy.pan(), zoom: cy.zoom() });
       }, 0);
     }
-  }, [rendererReady, props.topology, props.dimmedNodeIds, theme]);
+  }, [rendererReady, props.topology, props.dimmedNodeIds, props.nodeObservationStatus, props.nodeOverlayLines, theme]);
 
 
 

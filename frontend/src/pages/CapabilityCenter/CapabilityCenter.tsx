@@ -24,7 +24,15 @@ const T_FILTERS: { id: ToolFilter; label: string }[] = [
 
 const CAP_TITLES: Record<string, string> = { knowledge: "知识问答", knowledge_qa: "知识问答", memory_lookup: "记忆检索", workspace_read: "工作区读取", report_drafting: "报告生成", runtime_diagnostics: "运行检查", agent_delegation: "智能体协作", browser: "浏览器操作", artifact: "任务产出管理" };
 
-export function CapabilityCenter() {
+export function CapabilityCenter({
+  title = "能力中心",
+  subtitle = "先看系统能做哪几类事，再按需展开底层可调用工具",
+  hidePageHeader = false,
+}: {
+  title?: string;
+  subtitle?: string;
+  hidePageHeader?: boolean;
+} = {}) {
   const [tq, setTq] = useState("");
   const [tf, setTf] = useState<ToolFilter>("all");
   const [selectedCapabilityId, setSelectedCapabilityId] = useState("");
@@ -40,18 +48,26 @@ export function CapabilityCenter() {
   const plannerVisibleCount = catalog.state.kind === "success" ? (catalog.state.data.planner_visible_count ?? 0) : 0;
 
   return (
-    <div className="page capability-center" data-testid="page-capabilities">
-      <div className="page-header cc-page-header">
-        <div>
-          <h1>能力中心</h1>
-          <p className="subtitle">先看系统能做哪几类事，再按需展开底层可调用工具</p>
+    <div className={`page capability-center${hidePageHeader ? " cc-in-drawer" : ""}`} data-testid="page-capabilities">
+      {!hidePageHeader ? (
+        <div className="page-header cc-page-header">
+          <div>
+            <h1>{title}</h1>
+            <p className="subtitle">{subtitle}</p>
+          </div>
+          <div className="cc-pill-row">
+            <span className="metric-chip"><span className="dot accent" />{counts.tot} 类能力</span>
+            <span className="metric-chip"><span className="dot accent" />{toolCount} 个工具</span>
+            {counts.dep > 0 && <span className="metric-chip"><IconBolt size={10} />{counts.dep} 涉及产物</span>}
+          </div>
         </div>
-        <div className="cc-pill-row">
+      ) : (
+        <div className="cc-drawer-metrics-row">
           <span className="metric-chip"><span className="dot accent" />{counts.tot} 类能力</span>
           <span className="metric-chip"><span className="dot accent" />{toolCount} 个工具</span>
           {counts.dep > 0 && <span className="metric-chip"><IconBolt size={10} />{counts.dep} 涉及产物</span>}
         </div>
-      </div>
+      )}
 
       <div className="page-body">
         {/* Capability directory */}

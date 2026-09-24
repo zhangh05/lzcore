@@ -1,0 +1,128 @@
+.feature-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  animation: featureDrawerFadeIn 0.2s ease-out;
+}
+
+.feature-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.feature-drawer-panel {
+  position: relative;
+  z-index: 1;
+  width: min(860px, 92vw);
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--line-2);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.16);
+  display: flex;
+  flex-direction: column;
+  animation: featureDrawerSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.feature-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-2);
+  flex-shrink: 0;
+}
+
+.feature-drawer-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.feature-drawer-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-8);
+  background: var(--surface-3);
+  color: var(--accent);
+}
+
+.feature-drawer-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.feature-drawer-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+
+.feature-drawer-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-6);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.feature-drawer-close-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--line-2);
+}
+
+.feature-drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 32px;
+}
+
+.cc-in-drawer {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  min-height: auto;
+}
+
+.cc-in-drawer .page-body {
+  padding-top: 0;
+}
+
+.cc-drawer-metrics-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line-2);
+  flex-wrap: wrap;
+}
+
+@keyframes featureDrawerFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes featureDrawerSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}

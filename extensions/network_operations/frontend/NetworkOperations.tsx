@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState, useRef, type ComponentType, 
 import type { IconProps } from "@phosphor-icons/react";
 import { apiRequest } from "../../../frontend/src/api/client";
 import { confirm } from "../../../frontend/src/components/ConfirmDialog";
-import { IconBolt, IconChecklist, IconEdit, IconEye, IconPlugs, IconPlus, IconRefresh, IconServer, IconShield, IconTrash } from "../../../frontend/src/components/Icon";
+import { IconBolt, IconChecklist, IconEdit, IconEye, IconPlugs, IconPlus, IconRefresh, IconServer, IconShield, IconTrash, IconTree } from "../../../frontend/src/components/Icon";
 import { Button, PageHeader, TabButton } from "../../../frontend/src/components/ui";
+import { Link, useSearchParams } from "../../../frontend/src/router";
 import { useSessionStore } from "../../../frontend/src/stores/session";
 import { DeviceTypeIcon } from "./components/TopologyWorkspace";
 import { NetworkNotice, useNotice } from "./components/NetworkNotice";
@@ -18,6 +19,7 @@ const EmptyState = ({ icon: EmptyIcon, children }: { icon: ComponentType<IconPro
 );
 
 type Region = { region_id: string; name: string };
+type DrawingSheet = { topology_id: string; name: string; nodes?: unknown[]; links?: unknown[] };
 type Device = { device_id: string; name: string; host: string; vendor: string; device_type: string; device_model?: string; region_id: string };
 type Connection = { connection_id: string; device_id: string; name?: string; protocol: "ssh" | "telnet"; port: number; username?: string; source_address?: string; effective_source_address?: string; auth_method?: string; status: string; verified: boolean; credential_configured?: boolean; last_error?: string; last_tested_at?: string; driver_id?: string; detected_vendor?: string; os_family?: string; semantic_facts?: string[]; profile_detected_from?: string };
 type Skill = { skill_id: string; name: string; description: string; instructions?: string; enabled: boolean; approval_enabled?: boolean; device_ids: string[]; connection_ids: string[]; allowed_tool_ids: string[] };
@@ -76,15 +78,11 @@ const displayTime = (value: string) => value ? new Date(value).toLocaleString("z
 type NetworkView = "devices" | "skills" | "context";
 
 /**
- * 能力中心内的三个管理视图。拓扑是一级导航，不再作为此处的二级标签，
- * 以避免画布被管理页标题和 tab 条挤压。
- * 计数用裸 <span>（opacity .7），与平台另外两套 tab（数据管理 / 运行监控）
- * 不是一套语言。现在收敛到 components/ui/TabButton，视觉由 global.css
- * 的「统一 tab 条」区块统一给出，这里只声明"哪个视图 + 什么图标"。
+ * 网络设备视图下的二级标签：设备与连接、环境与证据。
+ * Skill 已独立为一级顶级导航，不再与网络设备合并。
  */
-const VIEWS: Array<[NetworkView, string, ComponentType<IconProps>]> = [
+const DEVICE_VIEWS: Array<[NetworkView, string, ComponentType<IconProps>]> = [
   ["devices", "设备与连接", IconPlugs],
-  ["skills", "Skill 配置", IconBolt],
   ["context", "环境与证据", IconShield],
 ];
 
@@ -110,18 +108,34 @@ const dedupeCommandExperience = (items: CommandExperience[]): CommandExperience[
   return [...grouped.values()].sort((left, right) => right.last_observed_at.localeCompare(left.last_observed_at));
 };
 
-export default function NetworkOperations() {
+export default function NetworkOperations({ initialView }: { initialView?: NetworkView } = {}) {
   const workspaceId = useSessionStore((state) => state.currentWorkspaceId);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const resolvedTab: NetworkView = initialView || (urlTab === "skills" ? "skills" : urlTab === "context" ? "context" : "devices");
   const [editor, setEditor] = useState<"device" | "connection" | "skill" | null>(null);
   const [query, setQuery] = useState("");
   const [regionFilter, setRegionFilter] = useState("");
   const editorRef = useRef<HTMLDialogElement>(null);
   useEffect(() => { if (editor) editorRef.current?.showModal(); }, [editor]);
-  const [view, setView] = useState<NetworkView>("devices");
+  const [view, setView] = useState<NetworkView>(resolvedTab);
+
+  useEffect(() => {
+    if (initialView) {
+      setView(initialView);
+      return;
+    }
+    const nextTab = urlTab === "skills" ? "skills" : urlTab === "context" ? "context" : "devices";
+    setView(nextTab);
+    setQuery("");
+    setRegionFilter("");
+    setEditor(null);
+  }, [initialView, urlTab]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [drawings, setDrawings] = useState<DrawingSheet[]>([]);
   const [operationalContext, setOperationalContext] = useState<OperationalContext>({ observations: [], references: [], command_experience: [], sources: [] });
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<Set<string>>(() => new Set());
   const [selectedObservationIds, setSelectedObservationIds] = useState<Set<string>>(() => new Set());
@@ -137,7 +151,7 @@ export default function NetworkOperations() {
 
   const load = useCallback(async () => {
     const params = { workspace_id: workspaceId };
-    const [regionResult, deviceResult, connectionResult, skillResult, contextResult] = await Promise.all([
+    const [regionResult, deviceResult, connectionResult, skillResult, contextResult, drawingResult] = await Promise.all([
       apiRequest<{ regions: Region[] }>({ method: "GET", url: `${base}/regions`, params }),
       apiRequest<{ devices: Device[] }>({ method: "GET", url: `${base}/devices`, params }),
       apiRequest<{ connections: Connection[] }>({ method: "GET", url: `${base}/connections`, params }),
@@ -145,11 +159,13 @@ export default function NetworkOperations() {
       apiRequest<OperationalContext>({ method: "GET", url: `${base}/context`, params }).catch(() => ({
         observations: [], references: [], command_experience: [], sources: [],
       })),
+      apiRequest<{ topologies: DrawingSheet[] }>({ method: "GET", url: `${base}/topologies`, params }).catch(() => ({ topologies: [] })),
     ]);
     setRegions(regionResult.regions || []);
     setDevices(deviceResult.devices || []);
     setConnections(connectionResult.connections || []);
     setSkills(skillResult.skills || []);
+    setDrawings(drawingResult.topologies || []);
     setOperationalContext({ observations: contextResult.observations || [], references: contextResult.references || [], command_experience: dedupeCommandExperience(contextResult.command_experience || []), sources: contextResult.sources || [] });
   }, [workspaceId]);
 
@@ -168,8 +184,10 @@ export default function NetworkOperations() {
   }, [operationalContext.command_experience]);
   const filteredDevices = devices.filter((item) => (!regionFilter || item.region_id === regionFilter) && `${item.name} ${item.host}`.toLowerCase().includes(query.toLowerCase()));
   const filteredSkills = skills.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
+  const filteredDrawings = drawings.filter((item) => item.name.toLowerCase().includes(query.toLowerCase()));
   const byDevice = useMemo(() => new Map(devices.map((item) => [item.device_id, item])), [devices]);
   const byRegion = useMemo(() => new Map(regions.map((item) => [item.region_id, item.name])), [regions]);
+
   // 计数为 0 时 TabButton 不渲染徽章，避免一排 "0" 抢视线。
   const viewCounts: Record<NetworkView, number> = {
     devices: devices.length,
@@ -424,10 +442,37 @@ export default function NetworkOperations() {
   };
 
   return <div className="network-admin">
-    <>
-      <PageHeader title="网络设备与 Skill" subtitle="集中管理设备连接，按 Skill 授权读取、巡检与配置能力。"><Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。", false))} disabled={busy}>刷新</Button></PageHeader>
-      <div className="network-tabs" role="tablist">{VIEWS.map(([key, label, ViewIcon]) => <TabButton key={key} className="net-tab" testId={`network-tab-${key}`} icon={ViewIcon} label={label} count={viewCounts[key]} active={view === key} onClick={() => { setView(key); setQuery(""); }} />)}</div>
-    </>
+    {view === "skills" ? (
+      <PageHeader title="Skill 管理" subtitle="配置工作台技能、授权设备连接与工具边界，发布后可在工作台直接调用。">
+        <Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。", false))} disabled={busy}>刷新</Button>
+      </PageHeader>
+    ) : (
+      <>
+        <PageHeader title="网络设备" subtitle="维护网络设备身份、管理地址、厂商角色与连接凭据。">
+          <Button icon={<IconRefresh size={14} />} onClick={() => void load().catch(() => setNotice("刷新失败，请检查服务。", false))} disabled={busy}>刷新</Button>
+        </PageHeader>
+        <div className="network-tabs" role="tablist">
+          {DEVICE_VIEWS.map(([key, label, ViewIcon]) => (
+            <TabButton
+              key={key}
+              className="net-tab"
+              testId={`network-tab-${key}`}
+              icon={ViewIcon}
+              label={label}
+              count={viewCounts[key]}
+              active={view === key}
+              onClick={() => {
+                setView(key);
+                setQuery("");
+                setRegionFilter("");
+                setEditor(null);
+                setSearchParams({ tab: key });
+              }}
+            />
+          ))}
+        </div>
+      </>
+    )}
     <NetworkNotice notice={notice} onClose={clearNotice} />
     {view !== "context" ? <div className="network-toolbar">
       <div className="network-filters"><input aria-label={view === "devices" ? "搜索设备" : "搜索 Skill"} placeholder={view === "devices" ? "搜索设备名称、管理地址" : "搜索 Skill 名称、说明"} value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -464,7 +509,7 @@ export default function NetworkOperations() {
           {connectionForm.auth_method === "private_key" ? <><label className="full-field">SSH 私钥<textarea value={connectionForm.private_key} onChange={(event) => setConnectionForm({ ...connectionForm, private_key: event.target.value })} placeholder={connectionForm.connection_id ? "留空则保留原私钥" : "粘贴 PEM/OpenSSH 私钥"} /></label><label>私钥口令<input type="password" value={connectionForm.passphrase} onChange={(event) => setConnectionForm({ ...connectionForm, passphrase: event.target.value })} placeholder="无口令可留空" /></label></> : null}
           <div className="form-actions"><Button variant="primary" type="submit" disabled={busy}>保存并测试</Button>{connectionForm.connection_id ? <Button type="button" onClick={() => setEditor(null)}>取消</Button> : null}</div>
         </form>
-      </section>) : (<section className="network-panel"><h2>{skillForm.skill_id ? "编辑 Skill" : "创建 Skill"}</h2><p>Skill 决定工作台可选设备与可信连接，模型在此边界内自主编排工具。</p><form onSubmit={saveSkill} className="form-grid">
+      </section>) : (<section className="network-panel"><h2>{skillForm.skill_id ? "编辑 Skill" : "创建 Skill"}</h2><p>维护工作台可选 Skill 的状态、设备、连接与能力边界。</p><form onSubmit={saveSkill} className="form-grid">
         <label>名称<input required value={skillForm.name} onChange={(event) => setSkillForm({ ...skillForm, name: event.target.value })} /></label>
         <label className="check enabled-check"><input type="checkbox" checked={skillForm.enabled} onChange={(event) => setSkillForm({ ...skillForm, enabled: event.target.checked })} />工作台启用</label>
         <label className="check enabled-check"><input type="checkbox" checked={skillForm.approval_enabled} onChange={(event) => setSkillForm({ ...skillForm, approval_enabled: event.target.checked })} />执行前要求审批</label>
@@ -520,10 +565,31 @@ export default function NetworkOperations() {
           </article>;
         }) : <EmptyState icon={IconServer}>{devices.length ? "没有匹配的设备" : "尚未登记设备，点击右上角登记设备开始"}</EmptyState>}</div>
       </section>
-    </div> : view === "skills" ? <div className="network-grid">
+    </div> : view === "skills" ? <div className="network-grid skill-page">
+      <section className="network-panel drawing-skills">
+        <div className="panel-heading">
+          <div><h2>绘图 Skill</h2><p>每张拓扑自动提供一个只读绘图 Skill，只打开那一张图，不能在这里编辑或授权设备。</p></div>
+          <span className="record-count">{drawings.length} 个</span>
+        </div>
+        <div className="skill-list">{filteredDrawings.length ? filteredDrawings.map((sheet) => (
+          <article key={sheet.topology_id} className="skill-card drawing-skill-card" data-testid={`drawing-skill-${sheet.topology_id}`}>
+            <header className="skill-card-header">
+              <div className="skill-title"><IconTree size={14} /><strong>拓扑绘图 · {sheet.name}</strong><span className="skill-state enabled">内置</span></div>
+              <div className="skill-actions">
+                <Link className="drawing-skill-link" to={`/topology?topology_id=${sheet.topology_id}`}>打开图纸</Link>
+              </div>
+            </header>
+            <p className="skill-description">只绘制这张图纸，不连接或操作真实设备。节点是符号，不是登记资产。</p>
+            <dl className="skill-scope">
+              <div><dt>范围</dt><dd>仅此图纸 · {sheet.nodes?.length || 0} 个符号 · {sheet.links?.length || 0} 条连线</dd></div>
+              <div><dt>能做的事</dt><dd>只查看或修改这一张图</dd></div>
+            </dl>
+          </article>
+        )) : <EmptyState icon={IconTree}>{drawings.length ? "没有匹配的绘图 Skill" : "还没有图纸。创建拓扑后，绘图 Skill 会自动出现。"}</EmptyState>}</div>
+      </section>
       <section className="network-panel published-skills">
         <div className="panel-heading">
-          <div><h2>已发布 Skill</h2><p>维护工作台可选 Skill 的状态、设备、连接与能力边界。</p></div>
+          <div><h2>已发布 Skill</h2><p>这些才是设备执行门。选择设备、连接和工具后发布到工作台，与绘图 Skill 分开。</p></div>
           <span className="record-count">{skills.length} 个 Skill</span>
         </div>
         <div className="skill-list">{filteredSkills.length ? filteredSkills.map((skill) => {
@@ -534,10 +600,7 @@ export default function NetworkOperations() {
           });
           return <article key={skill.skill_id} className="skill-card" data-testid={`skill-card-${skill.skill_id}`}>
             <header className="skill-card-header">
-              <div className="skill-title">
-                <strong>{skill.name}</strong>
-                <span className={`skill-state ${skill.enabled ? "enabled" : "disabled"}`}>{skill.enabled ? "已启用" : "已停用"}</span>
-              </div>
+              <div className="skill-title"><strong>{skill.name}</strong><span className={`skill-state ${skill.enabled ? "enabled" : "disabled"}`}>{skill.enabled ? "已启用" : "已停用"}</span></div>
               <div className="skill-actions" aria-label={`${skill.name} Skill 管理`}>
                 <Button size="sm" icon={<IconEdit size={13} />} onClick={() => editSkill(skill)}>编辑 Skill</Button>
                 <Button size="sm" onClick={() => toggleSkill(skill)}>{skill.enabled ? "停用 Skill" : "启用 Skill"}</Button>
@@ -551,7 +614,7 @@ export default function NetworkOperations() {
               <div><dt>能力</dt><dd>{skill.allowed_tool_ids.length} 项已授权 · <b className="write-enabled">可执行设备配置</b></dd></div>
             </dl>
           </article>;
-        }) : <EmptyState icon={IconBolt}>{skills.length ? "没有匹配的 Skill" : "尚未创建 Skill，选择设备并配置能力后发布到工作台"}</EmptyState>}</div>
+        }) : <EmptyState icon={IconBolt}>{skills.length ? "没有匹配的设备 Skill" : "尚未发布设备 Skill。绘图 Skill 在上方，不能在这里代替设备授权。"}</EmptyState>}</div>
       </section>
     </div>
  : <div className="network-context-layout">

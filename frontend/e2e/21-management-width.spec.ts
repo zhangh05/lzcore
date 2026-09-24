@@ -6,11 +6,12 @@ const routes = [
   ["/data", ".data-center"],
   ["/knowledge", ".knowledge-library"],
   ["/memory", ".memory-page"],
-  ["/capabilities", ".capability-center"],
   ["/diagnostics", ".diagnostics-page"],
   ["/settings", ".settings-page"],
   ["/users", ".user-management"],
-  ["/extensions/network.operations/manage", ".network-admin"],
+  ["/topology", ".topology-route"],
+  ["/extensions/network.operations/manage?tab=devices", ".network-admin"],
+  ["/extensions/network.operations/manage?tab=skills", ".network-admin"],
 ] as const;
 
 for (const width of [1920, 1600, 1440, 1200, 1024, 900, 760, 390]) {

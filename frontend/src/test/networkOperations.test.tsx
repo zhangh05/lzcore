@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, vi } from "vitest";
 import NetworkOperations from "../../../extensions/network_operations/frontend/NetworkOperations";
 import TopologyPage from "../../../extensions/network_operations/frontend/TopologyPage";
 import { apiRequest } from "../api/client";
 import { ConfirmHost } from "../components/ConfirmDialog";
+import { MemoryRouter, useLocation, useSearchParams } from "../router";
 
 vi.mock("../api/client", () => ({ apiRequest: vi.fn() }));
 const tools = ["network.operations.device.manage"];
@@ -24,6 +25,10 @@ const sampleTopology = {
   updated_at: "2026-09-06T00:00:00Z",
 };
 
+const renderWithRouter = (ui: React.ReactElement, initialEntries = ["/extensions/network.operations/manage"]) => {
+  return render(<MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>);
+};
+
 beforeEach(() => {
   vi.mocked(apiRequest).mockImplementation(async (request) => {
     if (request.method !== "GET") return { ok: true, topology: sampleTopology } as never;
@@ -42,7 +47,7 @@ beforeEach(() => {
 });
 
 test("device inventory is first; editors are on demand and search works", async () => {
-  render(<NetworkOperations />);
+  renderWithRouter(<NetworkOperations />);
   await screen.findByTestId("device-card-d1");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("搜索设备"), { target: { value: "absent" } });
@@ -56,9 +61,8 @@ test("device inventory is first; editors are on demand and search works", async 
 });
 
 test("published Skill has device configuration capability by default", async () => {
-  render(<NetworkOperations />);
-  await screen.findByTestId("device-card-d1");
-  fireEvent.click(screen.getByRole("tab", { name: /Skill 配置/ }));
+  renderWithRouter(<NetworkOperations initialView="skills" />, ["/extensions/network.operations/manage?tab=skills"]);
+  await screen.findByTestId("skill-card-s1");
   expect(screen.getByText("可执行设备配置")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "编辑 Skill" }));
   const dialog = screen.getByRole("dialog", { name: "Skill 编辑面板" });
@@ -72,7 +76,7 @@ test("published Skill has device configuration capability by default", async () 
 });
 
 test("operational context separates observations from explicitly confirmed references", async () => {
-  render(<><NetworkOperations /><ConfirmHost /></>);
+  renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   expect(screen.getByText("巡检候选参考")).toBeInTheDocument();
@@ -97,7 +101,7 @@ test("selects and permanently deletes multiple operational references in one req
     } as never;
     return original?.(request) as never;
   });
-  render(<><NetworkOperations /><ConfirmHost /></>);
+  renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   fireEvent.click(screen.getByLabelText("选择运行参考 巡检候选参考 A"));
@@ -126,7 +130,7 @@ test("selects observations and command feedback for their own batch-delete endpo
     } as never;
     return original?.(request) as never;
   });
-  render(<><NetworkOperations /><ConfirmHost /></>);
+  renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   fireEvent.click(screen.getByLabelText("选择全部最近观察"));
@@ -158,7 +162,7 @@ test("command feedback renders one row for duplicate driver commands during a ro
     } as never;
     return original?.(request) as never;
   });
-  render(<NetworkOperations />);
+  renderWithRouter(<NetworkOperations />);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   expect(screen.getAllByText(/DISPLAY\s+CPU-USAGE/i)).toHaveLength(1);
@@ -167,7 +171,7 @@ test("command feedback renders one row for duplicate driver commands during a ro
 });
 
 test("operational context exposes confirmed hard deletes", async () => {
-  render(<><NetworkOperations /><ConfirmHost /></>);
+  renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
   fireEvent.click(screen.getByRole("button", { name: "永久删除观察 inspection-1" }));
@@ -188,13 +192,43 @@ test("context loading failure does not hide device and Skill management", async 
     if (request.url?.endsWith("/context")) throw new Error("context unavailable");
     return original?.(request) as never;
   });
-  render(<NetworkOperations />);
+  renderWithRouter(<NetworkOperations />);
   expect(await screen.findByTestId("device-card-d1")).toBeInTheDocument();
   expect(screen.queryByText("数据加载失败，请检查服务。")).not.toBeInTheDocument();
 });
 
+test("device cards and skill cards strictly decouple topology drawings and do not show fake affiliations", async () => {
+  renderWithRouter(<NetworkOperations />);
+  await screen.findByTestId("device-card-d1");
+  expect(screen.queryByText("已加入拓扑")).not.toBeInTheDocument();
+  expect(screen.queryByText("未入拓扑")).not.toBeInTheDocument();
+  expect(screen.queryByText("未入Skill")).not.toBeInTheDocument();
+  expect(screen.queryByText("受 Skill")).not.toBeInTheDocument();
+});
+
+test("skill editor dialog does not show topology dropdown, sync button, or template button", async () => {
+  renderWithRouter(<NetworkOperations initialView="skills" />, ["/extensions/network.operations/manage?tab=skills"]);
+  await screen.findByTestId("skill-card-s1");
+  fireEvent.click(screen.getByRole("button", { name: "编辑 Skill" }));
+  const dialog = screen.getByRole("dialog", { name: "Skill 编辑面板" });
+  expect(within(dialog).queryByLabelText(/关联网络拓扑/)).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole("button", { name: /同步拓扑内所有设备与连接/ })).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole("button", { name: /填入规范指引模板/ })).not.toBeInTheDocument();
+  expect(screen.queryByText("架构拓扑")).not.toBeInTheDocument();
+  expect(screen.queryByText("通用设备池")).not.toBeInTheDocument();
+});
+
+test("drawing skills are listed as built-in and are not editable device skills", async () => {
+  renderWithRouter(<NetworkOperations initialView="skills" />, ["/extensions/network.operations/manage?tab=skills"]);
+  const drawing = await screen.findByTestId("drawing-skill-t1");
+  expect(within(drawing).getByText("拓扑绘图 · 数据中心拓扑")).toBeInTheDocument();
+  expect(within(drawing).getByRole("link", { name: "打开图纸" })).toHaveAttribute("href", "/topology?topology_id=t1");
+  expect(within(drawing).queryByRole("button", { name: "编辑 Skill" })).not.toBeInTheDocument();
+  expect(within(drawing).queryByRole("button", { name: "永久删除 Skill" })).not.toBeInTheDocument();
+});
+
 test("dedicated topology route is a drawing workspace without the device catalog", async () => {
-  render(<TopologyPage />);
+  render(<MemoryRouter initialEntries={["/topology"]}><TopologyPage /></MemoryRouter>);
   const matches = await screen.findAllByText(/数据中心拓扑/);
   expect(matches.length).toBeGreaterThan(0);
   expect(screen.getByText(/独立图纸/)).toBeInTheDocument();
@@ -413,4 +447,71 @@ test("topology endpoint failure is shown as a loading error instead of an empty 
   expect(screen.queryByText("尚未创建图纸")).not.toBeInTheDocument();
 });
 
+test("initializes to context view when URL has ?tab=context", async () => {
+  renderWithRouter(<NetworkOperations />, ["/extensions/network.operations/manage?tab=context"]);
+  await screen.findByText("巡检候选参考");
+  expect(screen.getByRole("tab", { name: /环境与证据/ })).toHaveClass("active");
+  expect(screen.queryByLabelText("搜索设备")).not.toBeInTheDocument();
+});
 
+test("clicking context tab writes ?tab=context to search params and cleans search/dialog state", async () => {
+  let currentLocation: any = null;
+  function TestWrapper() {
+    const loc = useLocation();
+    currentLocation = loc;
+    return <NetworkOperations />;
+  }
+  renderWithRouter(<TestWrapper />, ["/extensions/network.operations/manage?tab=devices"]);
+  await screen.findByTestId("device-card-d1");
+
+  // Enter search query and open an editor dialog
+  fireEvent.change(screen.getByLabelText("搜索设备"), { target: { value: "CE_1" } });
+  expect(screen.getByLabelText("搜索设备")).toHaveValue("CE_1");
+  fireEvent.click(screen.getByRole("button", { name: "编辑设备" }));
+  expect(screen.getByRole("dialog", { name: "设备编辑面板" })).toBeInTheDocument();
+
+  // Click tab "环境与证据"
+  fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
+  await screen.findByText("巡检候选参考");
+
+  // Verify URL search params updated
+  expect(currentLocation?.search).toBe("?tab=context");
+  // Verify dialog closed
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  // Click back to "设备与连接"
+  fireEvent.click(screen.getByRole("tab", { name: /设备与连接/ }));
+  await screen.findByTestId("device-card-d1");
+  expect(currentLocation?.search).toBe("?tab=devices");
+  // Search query was reset
+  expect(screen.getByLabelText("搜索设备")).toHaveValue("");
+  // Dialog remains closed
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test("switching urlTab from devices to skills resets search query, region filter, and editor", async () => {
+  let navigateFn: any;
+  function TestRouterNav() {
+    const [, setSearchParams] = useSearchParams();
+    navigateFn = setSearchParams;
+    return <NetworkOperations />;
+  }
+  renderWithRouter(<TestRouterNav />, ["/extensions/network.operations/manage?tab=devices"]);
+  await screen.findByTestId("device-card-d1");
+
+  // Enter search, select region, open dialog
+  fireEvent.change(screen.getByLabelText("搜索设备"), { target: { value: "CE_1" } });
+  fireEvent.change(screen.getByLabelText("筛选区域"), { target: { value: "r1" } });
+  fireEvent.click(screen.getByRole("button", { name: "编辑设备" }));
+  expect(screen.getByRole("dialog", { name: "设备编辑面板" })).toBeInTheDocument();
+
+  // Top nav navigation simulates navigating to ?tab=skills
+  act(() => {
+    navigateFn({ tab: "skills" });
+  });
+  await screen.findByTestId("skill-card-s1");
+
+  // Dialog closed, query reset
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("搜索 Skill")).toHaveValue("");
+});

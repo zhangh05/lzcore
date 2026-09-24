@@ -10,7 +10,9 @@ test("1. backend health + frontend nav reachable", async ({ page }) => {
   await page.goto("/workbench");
   // Assert the rendered top navigation by accessible name, not stale test ids.
   await expect(page.getByRole("link", { name: "工作台", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "能力中心", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "网络设备", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Skill", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "功能描述", exact: true })).toBeVisible();
 
   // The backend health endpoint must return 2xx via the proxy.
   const resp = await page.request.get("/api/health");

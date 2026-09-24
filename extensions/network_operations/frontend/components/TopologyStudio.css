@@ -97,6 +97,9 @@
 .studio-more > summary { padding: 7px 8px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
 .studio-more > div { position: absolute; right: 0; top: 34px; display: grid; gap: 4px; padding: 8px; width: 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #0002; z-index: 20; }
 .topology-studio .topology-canvas-viewport { position: relative; overflow: hidden; height: 100%; min-height: 0; flex: 1 1 0; background: #ffffff; }
+.topology-studio .topology-observation-card { position: absolute; top: 12px; left: 12px; z-index: 25; width: min(280px, calc(100% - 24px)); padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-md); font-size: 12px; }
+.topology-studio .topology-observation-card p { margin: 6px 0 0; color: var(--text-2); line-height: 1.45; }
+.topology-studio .topology-observation-card button { margin-top: 8px; border: 0; background: none; color: var(--text-2); cursor: pointer; padding: 0; }
 .topology-studio .topology-canvas-viewport.mode-connect { cursor: crosshair; }
 .topology-studio .topology-canvas-viewport.mode-select .netops-cytoscape { cursor: default; }
 .topology-studio .topology-canvas-viewport.mode-move .netops-cytoscape { cursor: grab; }

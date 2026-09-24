@@ -353,6 +353,12 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         _record_topology_revision(workspace_id, record)
     except Exception:  # history is a convenience, never a reason to lose a save
         pass
+    from .node_bindings import prune_node_bindings
+    prune_node_bindings(
+        workspace_id,
+        topology_id,
+        {str(node.get("node_id") or "") for node in normalized_nodes},
+    )
     return _public_topology(record)
 
 
@@ -905,4 +911,6 @@ def delete_topology(workspace_id: str, topology_id: str) -> bool:
     collection = _revision_collection(topology_id)
     for revision in _topology_revisions(workspace_id, topology_id):
         store.delete(collection, str(revision.get("revision_id") or ""))
+    from .node_bindings import delete_topology_bindings
+    delete_topology_bindings(workspace_id, topology_id)
     return store.delete("topologies", topology_id)

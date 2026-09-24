@@ -5,6 +5,7 @@ import TopologyWorkspace, { type Topology } from "../../../extensions/network_op
 import type NetOpsCanvas from "../../../extensions/network_operations/frontend/components/NetOpsCanvas";
 import { apiRequest } from "../api/client";
 import { ConfirmHost } from "../components/ConfirmDialog";
+import { MemoryRouter } from "../router";
 
 vi.mock("../api/client", () => ({ apiRequest: vi.fn() }));
 vi.mock("../../../extensions/network_operations/frontend/components/NetOpsCanvas", () => ({
@@ -30,8 +31,13 @@ beforeEach(() => {
 });
 
 function setup() {
-  render(<><TopologyWorkspace workspaceId="default"
-    topologies={[topology]} loadError="" onReload={async () => {}} setNotice={() => {}} busy={false} /><ConfirmHost /></>);
+  render(
+    <MemoryRouter initialEntries={["/topology"]}>
+      <TopologyWorkspace workspaceId="default"
+        topologies={[topology]} loadError="" onReload={async () => {}} setNotice={() => {}} busy={false} />
+      <ConfirmHost />
+    </MemoryRouter>
+  );
 }
 
 test("Delete uses a lone canvas item rather than an earlier node inspector", async () => {

@@ -4,9 +4,10 @@
 import { test, expect } from "./fixtures";
 
 test("8. planned capability has no invoke button", async ({ page }) => {
-  await page.goto("/capabilities");
+  await page.goto("/workbench");
+  await page.getByRole("button", { name: "功能描述", exact: true }).click();
 
-  // The capabilities endpoint does NOT require a workspace; the page
+  // The capabilities endpoint does NOT require a workspace; the drawer
   // must render regardless of which workspace (if any) is selected.
   await expect(page.getByTestId("page-capabilities")).toBeVisible({ timeout: 8_000 });
 

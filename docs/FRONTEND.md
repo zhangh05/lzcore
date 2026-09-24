@@ -11,15 +11,17 @@
 | 工作台 | `/workbench` | 会话、Skill 与设备选择、工具过程、最终答复 | 左侧会话导航、中部对话、右侧窄进度轨 |
 | 任务 | `/runs` | 任务记录、运行事件、证据与终态删除 | 左侧任务列表、右侧详情 |
 | 资料中心 | `/data`、`/knowledge`、`/memory` | 文件、任务产出、知识源和长期记忆 | 2:1 概览或连续内容分区 |
+| 网络设备 | `/extensions/network.operations/manage?tab=devices` | 网络设备身份、管理地址、厂商角色与连接凭据；环境与证据（`?tab=context`） | 双二级视图；管理对象紧凑列表与表单 |
+| Skill | `/extensions/network.operations/manage?tab=skills` | 工作台技能配置、设备/连接授权与工具边界 | 技能卡片列表与主从编辑器 |
 | 网络拓扑 | `/topology` | 设备、链路、图元与图纸版本 | 画布工作区 |
-| 能力中心 | `/capabilities`、扩展路由 | 平台能力、工具目录、设备与 Skill 管理 | 能力目录与详情；管理对象使用紧凑列表 |
+| 功能描述 | 顶栏抽屉（设置旁） | 平台业务能力、风险边界与底层可调用工具目录 | 抽屉面板；能力卡片与工具索引 |
 | 系统管理 | `/diagnostics`、`/settings`、`/users` | 系统健康、模型服务、用户权限 | 异常优先状态列表或主从编辑器 |
 
 视觉对照见仓库根目录 `design-qa.md`。
 
 网络拓扑的接口编号使用 Cytoscape 原生端点标签，居中贴合各自线路，不再统一向下偏移。平行链路控制点间距为 144 个图纸单位；两端标签分别位于裁剪后曲线参数的 22% / 78% 处，通过弧长换算为端点偏移。设备拖动、自动布局以及增删链路后按渲染几何重新计算，缩放和平移不改变图纸中的相对位置。单线、双线及多线共用此规则；自环保留原生端点偏移。接口标签开关、缩放隐藏规则和图片导出仍使用原生标签，不引入独立 HTML 覆盖层或修改接口数据。
 
-扩展前端由扩展清单的 `frontend_routes` 注册。例如网络设备与 Skill 管理页由 `extensions/network_operations/extension.json` 声明，并由 `extensions/network_operations/frontend/NetworkOperations.tsx` 实现。其“环境与证据”视图分别呈现可用来源、时点观察、候选/已确认 Reference 和仅供参考的命令反馈；确认或失效 Reference 必须是显式操作。扩展页面必须复用平台 Token 与共享组件，不能建立独立配色或重复交互契约。
+扩展前端由扩展清单的 `frontend_routes` 注册。网络设备与 Skill 已独立为一级顶级导航，与网络拓扑处于同层级。网络设备与 Skill 在前端由 `extensions/network_operations/frontend/NetworkOperations.tsx` 实现，但在路由层（`frontend/src/app/App.tsx`）通过带有 tab 标识的 `routeKey` 隔离为两个完全独立的页面实例，确保跨导航切换时搜索词、区域筛选和编辑弹窗不互相泄漏。网络设备包含“设备与连接”（`?tab=devices`）与“环境与证据”（`?tab=context`）两个二级视图，视图切换实时同步至 URL search params，刷新与分享链接准确还原；其“环境与证据”视图分别呈现可用来源、时点观察、候选/已确认 Reference 和仅供参考的命令反馈；确认或失效 Reference 必须是显式操作。平台能力与底层工具目录统一收拢至顶栏设置旁的“功能描述”抽屉，原 `/capabilities` 路由安全重定向至工作台。扩展页面必须复用平台 Token 与共享组件，不能建立独立配色或重复交互契约。
 
 ## 数据与状态边界
 

@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import {
-  IconAtom,
+  IconBolt,
   IconBook,
   IconBrain,
   IconChecklist,
@@ -8,6 +8,7 @@ import {
   IconGauge,
   IconGrid,
   IconProbe,
+  IconServer,
   IconSettings,
   IconTree,
   IconUsers,
@@ -24,7 +25,7 @@ export interface NavItem {
 }
 
 export interface NavGroup {
-  id: "workbench" | "tasks" | "materials" | "capabilities" | "topology" | "system";
+  id: "workbench" | "tasks" | "materials" | "network_devices" | "network_skills" | "topology" | "system";
   label: string;
   description: string;
   to: string;
@@ -36,10 +37,11 @@ export interface NavGroup {
 export const NAV_ITEMS: NavItem[] = [
   { to: "/workbench", label: "工作台", testid: "nav-workbench", Icon: IconGrid },
   { to: "/runs", label: "任务记录", testid: "nav-runs", Icon: IconChecklist },
-  { to: "/capabilities", label: "内置工具", testid: "nav-capabilities", Icon: IconAtom },
   { to: "/knowledge", label: "知识库", testid: "nav-knowledge", Icon: IconBook },
   { to: "/data", label: "文件与数据", testid: "nav-data", Icon: IconFolder },
   { to: "/memory", label: "记忆", testid: "nav-memory", Icon: IconBrain },
+  { to: "/extensions/network.operations/manage?tab=devices", label: "网络设备", testid: "nav-network-devices", Icon: IconServer },
+  { to: "/extensions/network.operations/manage?tab=skills", label: "Skill", testid: "nav-network-skills", Icon: IconBolt },
   { to: "/topology", label: "网络拓扑", testid: "nav-topology", Icon: IconTree },
   { to: "/diagnostics", label: "系统状态", testid: "nav-diagnostics", Icon: IconProbe },
   { to: "/settings", label: "设置", testid: "nav-settings", Icon: IconSettings, utility: "settings" },
@@ -51,7 +53,8 @@ const GROUP_META: Omit<NavGroup, "items">[] = [
   { id: "workbench", label: "工作台", description: "开始对话、上传材料、获取结果", to: "/workbench", testid: "nav-group-workbench", Icon: IconGrid },
   { id: "tasks", label: "任务", description: "查看任务进度与处理证据", to: "/runs", testid: "nav-group-tasks", Icon: IconChecklist },
   { id: "materials", label: "资料中心", description: "管理文件、知识和记忆", to: "/data", testid: "nav-group-materials", Icon: IconFolder },
-  { id: "capabilities", label: "能力中心", description: "查看系统能力与可调用工具", to: "/capabilities", testid: "nav-group-capabilities", Icon: IconAtom },
+  { id: "network_devices", label: "网络设备", description: "维护网络设备身份、管理地址与连接凭据", to: "/extensions/network.operations/manage?tab=devices", testid: "nav-group-network-devices", Icon: IconServer },
+  { id: "network_skills", label: "Skill", description: "配置工作台技能、授权设备连接与工具边界", to: "/extensions/network.operations/manage?tab=skills", testid: "nav-group-network-skills", Icon: IconBolt },
   { id: "topology", label: "网络拓扑", description: "维护网络设备、链路与布局", to: "/topology", testid: "nav-group-topology", Icon: IconTree },
   /* 齿轮留给「设置」子项专用。系统管理的语义是"监控运行状态"，用仪表盘。 */
   { id: "system", label: "系统管理", description: "监控系统状态与运行设置", to: "/diagnostics", testid: "nav-group-system", Icon: IconGauge },
@@ -63,7 +66,10 @@ const GROUP_BY_PATH: Record<string, NavGroup["id"]> = {
   "/data": "materials",
   "/knowledge": "materials",
   "/memory": "materials",
-  "/capabilities": "capabilities",
+  "/extensions/network.operations/manage?tab=devices": "network_devices",
+  "/extensions/network.operations/manage?tab=skills": "network_skills",
+  "/extensions/network.operations/manage": "network_devices",
+  "/network": "network_devices",
   "/topology": "topology",
   "/diagnostics": "system",
   "/settings": "system",
@@ -72,14 +78,27 @@ const GROUP_BY_PATH: Record<string, NavGroup["id"]> = {
 
 function groupForItem(item: NavItem): NavGroup["id"] {
   if (item.to === "/topology") return "topology";
-  if (item.to.includes("network.operations")) return "capabilities";
-  if (item.to.startsWith("/extensions/")) return "capabilities";
-  return GROUP_BY_PATH[item.to] || "capabilities";
+  if (item.to.includes("network.operations")) {
+    if (item.to.includes("tab=skills") || item.to.includes("/skills")) return "network_skills";
+    return "network_devices";
+  }
+  return GROUP_BY_PATH[item.to] || "system";
 }
 
 export function buildNavGroups(items: NavItem[]): NavGroup[] {
-  const grouped = new Map<NavGroup["id"], NavItem[]>();
+  const hasSplitNetworkItems = items.some((item) => item.to.includes("network.operations") && item.to.includes("tab="));
+  const seenPaths = new Set<string>();
+  const uniqueItems: NavItem[] = [];
   for (const item of items) {
+    if (hasSplitNetworkItems && item.to === "/extensions/network.operations/manage") {
+      continue;
+    }
+    if (seenPaths.has(item.to)) continue;
+    seenPaths.add(item.to);
+    uniqueItems.push(item);
+  }
+  const grouped = new Map<NavGroup["id"], NavItem[]>();
+  for (const item of uniqueItems) {
     const groupId = groupForItem(item);
     grouped.set(groupId, [...(grouped.get(groupId) || []), item]);
   }

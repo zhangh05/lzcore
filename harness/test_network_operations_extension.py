@@ -47,6 +47,30 @@ def test_published_skill_has_configuration_capability_by_default(monkeypatch, tm
     assert len(calls) == 2
 
 
+def test_skill_strictly_decoupled_from_topology_drawings(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    conn = _register_connection("default", {"name": "CE", "host": "127.0.0.1", "protocol": "telnet", "vendor": "h3c"})
+    payload = {
+        "name": "test_decoupled",
+        "device_ids": [conn["device_id"]],
+        "connection_ids": [conn["connection_id"]],
+        "topology_id": "topo-attempt-1",
+    }
+    skill = service.save_skill("default", payload)
+    assert "topology_id" not in skill
+    assert "topology" not in skill
+
+    snapshot = service.resolve_workbench_selection("default", {"skill_id": skill["skill_id"]})
+    assert "topology_id" not in snapshot
+    assert "topology" not in snapshot
+
+    from extensions.network_operations.skill_prompt import render_network_skill_prompt
+    prompt = render_network_skill_prompt(snapshot)
+    assert "<associated_topology_scope>" not in prompt
+    assert "associated_topology_scope" not in prompt
+    assert "topo-attempt-1" not in prompt
+
+
 def test_configuration_scope_is_checked_once_at_the_tool_boundary(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     conn = _register_connection("default", {"name": "CE", "host": "127.0.0.1", "protocol": "telnet", "vendor": "h3c"})

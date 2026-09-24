@@ -139,6 +139,34 @@
   background: var(--surface-3);
 }
 
+.feature-desc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-6);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.feature-desc-btn:hover {
+  color: var(--text);
+  background: var(--surface-3);
+  border-color: var(--line);
+}
+
+.feature-desc-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .logout-btn {
   min-width: 56px;
   height: 32px;

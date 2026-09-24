@@ -19,7 +19,7 @@ python3 scripts/extension_cli.py validate plugins/acme_insights
 
 业务扩展不仅是工具面板，还要拥有对象模型和完整生命周期。bundled `network.operations` 管理区域、设备、加密的 SSH/Telnet 连接、已发布 Skill、时点 Observation、Reference 生命周期和命令反馈。工作台选择只传达候选 Skill；服务端每次调用重新解析 Skill 的设备、连接和允许工具范围。已发布网络 Skill 内建读取与配置能力，设备账号决定设备最终接受哪些命令。选择本身不建立网络连接，也不扩大资源范围。
 
-模型可以选择 Skill 内的一部分设备。单台连接失败必须以该设备的工具结果返回，不能阻断其他独立设备。网络图纸是独立对象：每张图有一个 `drawing:<topology_id>` Skill，只允许 `network.operations.topology` 的 `read`/`patch`，不连接、不发现、不推断真实设备。图纸节点是符号，不是登记资产。Agent 必须先 `read` 再带当前 `version` 做 `patch`；未点名的对象由服务端保留。
+模型可以选择 Skill 内的一部分设备。单台连接失败必须以该设备的工具结果返回，不能阻断其他独立设备。网络图纸是独立对象：每张图有一个 `drawing:<topology_id>` Skill，只允许 `network.operations.topology` 的 `read`/`patch`，不连接、不发现、不推断真实设备。图纸节点是符号，不是登记资产。人可以在节点上点选一台已登记设备，形成图纸之外的绑定；画布只读显示该设备最近一次连接测试和最近一条观测的时间与完整度。绑定不进入图纸保存、设备 Skill 或图纸 Skill 的提示词。Agent 必须先 `read` 再带当前 `version` 做 `patch`；未点名的对象由服务端保留。
 
 可选的 configure 审批见 [审批扩展](APPROVAL_EXTENSION.md)。
 

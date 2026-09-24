@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import jsonify, request
 
-from extensions.network_operations import service
+from extensions.network_operations import node_bindings, service
 from extensions.network_operations import topology_service as drawings
 from extensions.network_operations.skill_prompt import render_network_skill_prompt
 
@@ -317,6 +317,41 @@ def register_routes(app):
             return jsonify({"ok": True, "topology": drawings.save_topology(ws, {**_payload(), "topology_id": topology_id})})
         except ValueError as exc:
             status = 409 if str(exc) == "topology_version_conflict" else (404 if str(exc) == "topology_not_found" else 400)
+            return jsonify({"ok": False, "error": str(exc)}), status
+
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/overlay")
+    def network_topology_overlay(topology_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            return jsonify({"ok": True, "overlays": node_bindings.list_overlay(ws, topology_id)})
+        except ValueError as exc:
+            status = 404 if str(exc) == "topology_not_found" else 400
+            return jsonify({"ok": False, "error": str(exc)}), status
+
+    @app.route(
+        "/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>/binding",
+        methods=["PUT", "DELETE"],
+    )
+    def network_topology_node_binding(topology_id, node_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            if request.method == "DELETE":
+                return jsonify({"ok": True, "deleted": node_bindings.unbind_node(ws, topology_id, node_id)})
+            actor = str(getattr(request, "remote_user", "") or "")
+            binding = node_bindings.bind_node(
+                ws,
+                topology_id,
+                node_id,
+                str(_payload().get("device_id") or ""),
+                actor=actor,
+            )
+            return jsonify({"ok": True, "binding": binding})
+        except ValueError as exc:
+            status = 404 if str(exc) in {"topology_not_found", "topology_node_not_found", "device_not_found"} else 400
             return jsonify({"ok": False, "error": str(exc)}), status
 
     @app.route("/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>", methods=["DELETE"])

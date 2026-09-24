@@ -23,4 +23,8 @@ describe("application router", () => {
     expect(() => render(<MemoryRouter initialEntries={["//evil.example"]}><div /></MemoryRouter>)).toThrow();
     expect(() => render(<MemoryRouter initialEntries={["/\\evil"]}><div /></MemoryRouter>)).toThrow();
   });
+
+  it("throws when useLocation is used without RouterContext", () => {
+    expect(() => render(<LocationProbe />)).toThrow("Router context is required");
+  });
 });

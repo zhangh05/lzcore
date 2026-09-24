@@ -97,6 +97,10 @@
 .network-filters input { width: 280px; }
 
 .network-grid { width: 100%; margin: 0; padding: var(--space-4) var(--space-6) var(--space-6); min-width: 0; }
+.network-admin .skill-page { display: grid; gap: var(--space-4); }
+.network-admin .drawing-skill-card .skill-title { display: flex; align-items: center; gap: 6px; }
+.network-admin .drawing-skill-link { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-6); color: var(--text); background: var(--surface-2); font-size: 12px; text-decoration: none; }
+.network-admin .drawing-skill-link:hover { background: var(--surface-3); }
 .network-context-layout { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(520px, 1.3fr); gap: var(--space-4); width: 100%; padding: var(--space-4) var(--space-6) var(--space-6); }
 .network-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-12); padding: 0; min-width: 0; overflow: hidden; }
 .network-panel h2 { margin: 0 0 var(--space-1); font-size: var(--fs-18); }
