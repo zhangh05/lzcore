@@ -114,7 +114,7 @@ Tool ID ──> Manifest 匹配 ──> Caller Gate 验证 ──> 权限与 Ski
 - **调用级 `dry_run` 安全防护**：默认关闭并拒绝执行未授权尝试。即使工具显式标记了 `dry_run_supported`，执行器也绝不调用任何具备副作用的写入逻辑，仅生成无害的配置预览。公开端点 `/api/tools/dry-run` 仅输出参数校验与策略元数据，绝不触碰工具真实 Handler。
 - **命令语义服务端强分类**：针对网络运维工具 `network.operations.device.manage`，命令是只读（`read`）还是配置下发（`configure`）由服务端依据真实命令语法字典与 AST 进行严密判定，**绝不信任模型在参数中自行声明的 `action` 字段**，坚决堵死模型通过伪造 `action=read` 绕过审批或触发非法重试的漏洞。
 - **文件路径越界防护**：`workspace.file` 工具内部内置沙箱校验，严禁使用 `..` 相对路径、符号链接或绝对路径逃逸出当前指定的 `workspace_id` 物理目录。
-- **代码与脚本沙箱隔离**：`exec.run` 针对 Shell / PowerShell 命令实行严格的高危破坏性指令拦截；针对 Python 脚本执行，平台按照环境配置调度 Docker 沙箱容器执行，在不可用时实行安全闭环（Fail-Closed）拒绝执行。
+- **代码与脚本执行边界**：`exec.run` 针对 Shell / PowerShell 命令在宿主机上执行，但实施严格的高危破坏性指令拦截；针对 Python 脚本，单机回环开发默认以本机子进程运行（best-effort），仅在配置或检测到强隔离策略（非回环监听、身份认证启用或显式开启强隔离）时强制调度 Docker 容器，当容器环境不可用时实行安全闭环（Fail-Closed）直接拒绝执行。
 
 ---
 

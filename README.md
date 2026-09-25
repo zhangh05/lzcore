@@ -106,8 +106,8 @@
 | :--- | :--- | :--- | :--- |
 | `agent.manage` | Agent 协同 | 中 | 启动、调度和监控子 Agent 委派任务；严格继承父任务切片与上下文契约 |
 | `browser.manage` | 网页/DOM操作 | 中 | 受控自动化无头浏览器，支持网页导航、快照与结构化内容提取 |
-| `data.manage` | 数据治理 | 低 / 只读 | 多维数据集过滤、合并、聚合与转换计算，保障内存运算安全 |
-| `exec.run` | 宿主执行 | 高 / 审计拦截 | 执行受限主机 Shell、PowerShell 或沙箱化 Python 脚本，严禁破坏性指令 |
+| `data.manage` | 内存数据处理 | 低 / 内存变换与计算（无外部副作用） | 对结构化数据执行解析、过滤、聚合、合并（join）与格式化渲染 |
+| `exec.run` | 宿主执行 | 高 / 审计拦截 | 执行受限主机 Shell/PowerShell（拦截破坏性命令）；Python 默认以本机子进程执行，配置强隔离时调度 Docker 容器，不可用时 fail-closed |
 | `knowledge.manage` | 知识库管理 | 中 / 读写（按 action 区分） | 知识检索、分片读取与知识库导入/重索引（import/reindex 修改索引） |
 | `location.manage` | 通用地理位置解析 | 低 / 只读 | 通用地名、街道地址、经纬度坐标解析与批量地理编码转换 |
 | `memory.manage` | 记忆演进 | 中 / 写入门禁 | 长期经验总结、核心偏好沉淀与语义事实管理，由 MemoryWriteGate 防火墙过滤 |
@@ -137,7 +137,7 @@
 - 详见：[Windows 本地运行与打包指南](docs/WINDOWS.md)。
 
 ### 模式 B：云原生生产集群 (Cloud-Native Server)
-- **分布式高可用架构**：采用容器化部署，解耦 Web 接口层、内置任务 Worker 进程、Redis 事件总线、PostgreSQL 持久化数据库与 MinIO 兼容分布式对象存储。
+- **分布式高可用架构**：采用容器化部署，解耦 Web 接口层、内置任务 Worker 进程、Redis 队列与事件总线、PostgreSQL 持久化数据库与 MinIO 兼容分布式对象存储。
 - **生产级可观测性**：开箱即用集成 Prometheus 指标暴露、Alertmanager 告警路由与 Grafana 全维度大屏。
 - 详见：[生产部署与运行指南](docs/PRODUCTION.md) 与 [运维处置手册](docs/OPERATIONS_RUNBOOK.md)。
 
