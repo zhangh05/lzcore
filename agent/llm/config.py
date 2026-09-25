@@ -9,7 +9,8 @@ from agent.runtime.utils import now_iso
 from agent.llm.key_resolver import resolve_api_key, get_key_source, is_key_loaded
 from agent.llm.key_resolver import mask_secret as _key_mask  # use key_resolver's mask, not recursive
 
-CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config"
+_env_config_dir = os.environ.get("LZCORE_CONFIG_DIR")
+CONFIG_DIR = Path(_env_config_dir).resolve() if _env_config_dir else (Path(__file__).resolve().parent.parent.parent / "config")
 
 
 def load_llm_config() -> dict:

@@ -12,7 +12,7 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 ROOT = Path('.').resolve()
 
-# 收集所有项目代码子模块
+# 收集所有项目代码子模块与依赖项
 hidden_imports = [
     'werkzeug.serving',
     'engineio.async_drivers.threading',
@@ -21,6 +21,9 @@ hidden_imports = [
     'webview.platforms.edgechromium',
     'flask',
     'flask_sock',
+    'simple_websocket',
+    'wsproto',
+    'h11',
     'yaml',
     'lxml',
     'bs4',
@@ -28,15 +31,34 @@ hidden_imports = [
     'cryptography',
     'requests',
     'PIL',
+    'openpyxl',
+    'docx',
+    'pptx',
+    'dateparser',
+    'trafilatura',
+    'pdfplumber',
 ]
 
-for pkg in ['agent', 'backend', 'core', 'extensions', 'storage', 'workflows']:
+for pkg in [
+    'agent',
+    'artifacts',
+    'backend',
+    'core',
+    'extensions',
+    'jobs',
+    'observability',
+    'prompts',
+    'storage',
+    'workflows',
+]:
     hidden_imports.extend(collect_submodules(pkg))
 
-# 收集内置数据与前端编译资产
+# 收集内置数据与前端编译资产（不含任何用户工作区与私有拓扑数据）
 datas = [
     (str(ROOT / 'frontend' / 'dist'), 'frontend/dist'),
     (str(ROOT / 'extensions'), 'extensions'),
+    (str(ROOT / 'prompts'), 'prompts'),
+    (str(ROOT / 'config'), 'config'),
 ]
 
 if (ROOT / 'lzcore.ico').is_file():

@@ -12,8 +12,10 @@
     - 编译打包: 通过 PyInstaller 打包为 Windows lzcore.exe
 """
 
+import logging
 import multiprocessing
 import os
+import shutil
 import socket
 import sys
 import threading
@@ -38,14 +40,96 @@ else:
 if str(BUNDLE_DIR) not in sys.path:
     sys.path.insert(0, str(BUNDLE_DIR))
 
-# 3. 配置持久化数据目录（保存在 exe 同级的 workspaces 目录中，实现绿色便携版）
-if "LZCORE_WORKSPACE_ROOT" not in os.environ and "LZCORE_WORKSPACE_DIR" not in os.environ:
-    os.environ["LZCORE_WORKSPACE_ROOT"] = str(APP_DIR / "workspaces")
+# 3. 配置持久化与日志重定向（解决 Windows console=False 下 stdout 为 None 的静默闪退问题）
+LOG_FILE = APP_DIR / "lzcore_desktop.log"
 
-# 4. 配置本地环境
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(str(LOG_FILE), encoding="utf-8"),
+    ],
+)
+logger = logging.getLogger("lzcore.desktop")
+
+
+class StreamToLogger:
+    """Redirect stream writes (e.g. print, uncaught errors) to log file."""
+
+    def __init__(self, target_logger, level, original=None):
+        self.logger = target_logger
+        self.level = level
+        self.original = original
+        self.buf = ""
+
+    def write(self, msg):
+        if self.original:
+            try:
+                self.original.write(msg)
+            except Exception:
+                pass
+        if not msg:
+            return
+        self.buf += str(msg)
+        while "\n" in self.buf:
+            line, self.buf = self.buf.split("\n", 1)
+            if line.strip():
+                self.logger.log(self.level, line)
+
+    def flush(self):
+        if self.original:
+            try:
+                self.original.flush()
+            except Exception:
+                pass
+        if self.buf.strip():
+            self.logger.log(self.level, self.buf.strip())
+            self.buf = ""
+
+
+# PyInstaller console=False 模式下 sys.stdout / sys.stderr 为 None，重定向至日志
+orig_out = sys.stdout
+orig_err = sys.stderr
+sys.stdout = StreamToLogger(logger, logging.INFO, original=orig_out)
+sys.stderr = StreamToLogger(logger, logging.ERROR, original=orig_err)
+
+# 4. 配置持久化数据目录（保存在 exe 同级的 workspaces 与 config 目录中）
+WORKSPACE_ROOT = APP_DIR / "workspaces"
+if "LZCORE_WORKSPACE_ROOT" not in os.environ and "LZCORE_WORKSPACE_DIR" not in os.environ:
+    os.environ["LZCORE_WORKSPACE_ROOT"] = str(WORKSPACE_ROOT)
+
+CONFIG_DIR = APP_DIR / "config"
+if "LZCORE_CONFIG_DIR" not in os.environ:
+    os.environ["LZCORE_CONFIG_DIR"] = str(CONFIG_DIR)
+
+# 5. 配置本地环境
 os.environ["LZCORE_EMBEDDED_WORKER"] = "true"
 os.environ["LZCORE_ALLOW_UNAUTHENTICATED_NETWORK"] = "true"
 os.environ["LZCORE_RUNTIME_BIND_HOST"] = "127.0.0.1"
+
+
+def init_local_environment():
+    """初始化本地数据目录与默认工作区结构，确保开箱即用且数据完全保留在用户本地"""
+    try:
+        # 1. 复制默认配置目录
+        if not CONFIG_DIR.is_dir():
+            bundle_cfg = BUNDLE_DIR / "config"
+            if bundle_cfg.is_dir():
+                shutil.copytree(bundle_cfg, CONFIG_DIR)
+                logger.info("已初始化本地配置目录: %s", CONFIG_DIR)
+
+        # 2. 确保默认工作区基础结构与索引就绪
+        from storage.workspace_store import ensure_workspace
+        ensure_workspace("default")
+        logger.info("已初始化默认工作区: default")
+
+        # 3. 确保网络拓扑存储目录就绪（纯净环境，完全由用户本地创建与保存）
+        topo_dir = WORKSPACE_ROOT / "default" / "extensions" / "network_operations" / "topologies"
+        topo_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("网络拓扑数据存储目录已就绪: %s", topo_dir)
+
+    except Exception as exc:
+        logger.error("初始化本地环境失败: %s", exc, exc_info=True)
 
 
 def find_free_port() -> int:
@@ -81,8 +165,8 @@ class BackgroundServerThread(threading.Thread):
     def run(self):
         try:
             self.server.serve_forever()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("后台服务器异常退出: %s", exc, exc_info=True)
 
     def shutdown(self):
         try:
@@ -157,32 +241,38 @@ def main():
     except Exception:
         APP_VERSION = "3.1.0"
 
-    print(f"[*] 启动联智中枢桌面内核 v{APP_VERSION} ...")
-    print(f"[*] 数据工作区目录: {os.environ['LZCORE_WORKSPACE_ROOT']}")
+    logger.info("启动联智中枢桌面内核 v%s ...", APP_VERSION)
+    logger.info("运行时资源目录: %s", BUNDLE_DIR)
+    logger.info("数据持久化目录: %s", WORKSPACE_ROOT)
 
-    # 2. 初始化核心后端
+    # 2. 初始化本地数据环境
+    init_local_environment()
+
+    # 3. 初始化核心后端
     from backend.main import create_app
     flask_app = create_app()
 
-    # 3. 挂载前端静态单页
+    # 4. 挂载前端静态单页
     dist_dir = BUNDLE_DIR / "frontend" / "dist"
+    if not dist_dir.is_dir():
+        dist_dir = APP_DIR / "frontend" / "dist"
     mount_frontend_spa(flask_app, dist_dir)
 
-    # 4. 后台运行本地服务
+    # 5. 后台运行本地服务
     server = BackgroundServerThread(flask_app, "127.0.0.1", port)
     server.start()
 
     if not wait_for_server(port):
-        print(f"[!] 警告：端口 {port} 响应超时，正在尝试继续启动窗口...")
+        logger.warning("端口 %d 响应超时，正在尝试继续启动窗口...", port)
 
     app_url = f"http://127.0.0.1:{port}"
-    print(f"[*] 内核服务已就绪: {app_url}")
+    logger.info("内核服务已就绪: %s", app_url)
 
-    # 5. 纯 Web 模式直接打开默认浏览器
+    # 6. 纯 Web 模式直接打开默认浏览器
     if args.web_only:
         import webbrowser
         webbrowser.open(app_url)
-        print("[*] 已在浏览器中打开，按 Ctrl+C 退出程序。")
+        logger.info("已在浏览器中打开，按 Ctrl+C 退出程序。")
         try:
             while True:
                 time.sleep(1)
@@ -190,11 +280,11 @@ def main():
             server.shutdown()
             sys.exit(0)
 
-    # 6. 原生桌面窗口模式 (PyWebView)
+    # 7. 原生桌面窗口模式 (PyWebView)
     try:
         import webview
     except ImportError:
-        print("[!] 未检测到 pywebview，降级为默认浏览器打开。可在终端安装: pip install pywebview")
+        logger.warning("未检测到 pywebview，降级为默认浏览器打开。可在终端安装: pip install pywebview")
         import webbrowser
         webbrowser.open(app_url)
         try:
@@ -205,13 +295,14 @@ def main():
             sys.exit(0)
 
     window_title = f"联智中枢 v{APP_VERSION}"
-    
+
     # 查找程序图标
     icon_path = None
     for candidate in [
         BUNDLE_DIR / "lzcore.ico",
         BUNDLE_DIR / "frontend" / "public" / "favicon.ico",
         BUNDLE_DIR / "frontend" / "dist" / "favicon.ico",
+        APP_DIR / "lzcore.ico",
     ]:
         if candidate.is_file():
             icon_path = str(candidate)
@@ -234,15 +325,36 @@ def main():
     # Windows 优先调用内置的 Edge WebView2 内核
     gui_engine = "edgechromium" if sys.platform == "win32" else None
 
-    print("[*] 正在唤起桌面应用窗口...")
+    logger.info("正在唤起桌面应用窗口...")
     try:
         webview.start(gui=gui_engine, debug=False)
     finally:
-        print("[*] 桌面窗口已关闭，正在清理后台线程...")
+        logger.info("桌面窗口已关闭，正在清理后台线程...")
         server.shutdown()
-        print("[*] 应用程序安全退出。")
+        logger.info("应用程序安全退出。")
         sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        logger.critical("主程序启动崩溃: %s", exc, exc_info=True)
+        try:
+            import webview
+            webview.create_window(
+                "启动失败 - 联智中枢",
+                html=(
+                    f"<html><body style='font-family:sans-serif;padding:30px;line-height:1.6;'>"
+                    f"<h2 style='color:#dc2626;'>程序启动发生异常</h2>"
+                    f"<p>错误详情: <b>{exc}</b></p>"
+                    f"<p>日志已写入: <code>{LOG_FILE}</code></p>"
+                    f"</body></html>"
+                ),
+                width=640,
+                height=360,
+            )
+            webview.start()
+        except Exception:
+            pass
+        sys.exit(1)

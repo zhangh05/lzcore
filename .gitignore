@@ -28,6 +28,7 @@ reports/*key*
 # workspaces runtime data (all of it)
 workspaces/
 workspace/output/
+seed_data/
 
 config/providers/
 config/.providers-test.lock
