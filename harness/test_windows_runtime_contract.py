@@ -174,6 +174,12 @@ def test_persisted_text_is_read_as_utf8_and_logical_paths_are_posix():
         ROOT / "agent" / "llm" / "config.py",
         ROOT / "agent" / "llm" / "provider_store.py",
         ROOT / "agent" / "runtime" / "durable" / "store.py",
+        ROOT / "jobs" / "store.py",
+        ROOT / "core" / "runtime" / "archive.py",
+        ROOT / "core" / "runtime" / "lifecycle_base.py",
+        ROOT / "core" / "runtime" / "retention.py",
+        ROOT / "core" / "runtime_engine" / "operation_ledger.py",
+        ROOT / "prompts" / "loader.py",
     )
     for path in utf8_readers:
         text = path.read_text(encoding="utf-8")
@@ -182,3 +188,29 @@ def test_persisted_text_is_read_as_utf8_and_logical_paths_are_posix():
     file_store = (ROOT / "storage" / "file_store.py").read_text(encoding="utf-8")
     assert "str(target.relative_to(ws))" not in file_store
     assert file_store.count("target.relative_to(ws).as_posix()") == 3
+
+
+def test_job_and_turn_claim_handles_chinese_characters_without_job_unavailable(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    from storage.session_store import ensure_session
+    import jobs.lifecycle as lifecycle
+    from jobs.store import get_job
+
+    ws_id = "default"
+    session_id = "s_topo_chinese_test"
+    ensure_session(session_id, ws_id, title="拓扑 · 测试图纸")
+
+    chinese_prompt = "在当前图纸中添加两台交换机与一台路由器，分别命名并连线，排列整齐。"
+    claim = lifecycle.claim_session_turn(
+        ws_id, session_id, chinese_prompt, client_request_id="req-topo-chinese-1",
+    )
+    assert claim.should_execute is True
+    assert claim.error == ""
+    assert claim.job_id != ""
+
+    # Verify that the job is readable and contains UTF-8 Chinese characters
+    rec = get_job(ws_id, claim.job_id)
+    assert rec is not None
+    assert rec.status == "running"
+    assert "交换机" in rec.title or "测试图纸" in rec.title
+

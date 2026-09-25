@@ -167,7 +167,7 @@ def preview_retention(workspace_id: str = "default",
                 blocked.append({"path": sf.name, "reason": "path_not_in_workspace"})
                 continue
             try:
-                session_data = json.loads(sf.read_text())
+                session_data = json.loads(sf.read_text(encoding="utf-8"))
                 status = session_data.get("status", "active")
                 updated_at = session_data.get("updated_at", "")
             except Exception:
@@ -304,7 +304,7 @@ def get_audits(workspace_id: str = "default") -> list:
     for af in sorted(audit_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if af.suffix == ".json" and not af.name.startswith("archive_"):
             try:
-                audits.append(json.loads(af.read_text()))
+                audits.append(json.loads(af.read_text(encoding="utf-8")))
             except Exception:
                 pass
     return audits[:50]
@@ -315,7 +315,7 @@ def get_audit(workspace_id: str, audit_id: str) -> dict:
     audit_path = workspace_dir(workspace_id) / "sys" / "audits" / f"{audit_id}.json"
     if audit_path.is_file():
         try:
-            return json.loads(audit_path.read_text())
+            return json.loads(audit_path.read_text(encoding="utf-8"))
         except Exception:
             pass
     return {}

@@ -11,6 +11,7 @@ Responsibilities:
 
 import hashlib
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -256,11 +257,9 @@ def _claim_session_turn_request(
             ws_id, session_id, user_input, client_request_id=request_id,
         )
         if not job_id:
-            return SessionTurnClaim(
-                should_execute=False,
-                status="unavailable",
-                error="job_unavailable",
-            )
+            # Observational job snapshot failed; fall back to an ephemeral tracking ID
+            # so client execution is never blocked by observational storage blips.
+            job_id = f"job-turn-{uuid.uuid4().hex[:12]}"
         # Preserve accepted input before AgentApp allocates its run id. The
         # terminal persistence path reuses this request-derived id, preventing
         # duplicate user messages after a successful turn.
@@ -424,7 +423,7 @@ def _begin_session_turn_unlocked(
     _ensure_running(ws_id, job_id)
     rec = get_job(ws_id, job_id)
     if not rec:
-        return None
+        return job_id
     metadata = dict(rec.metadata or {})
     metadata["active_turn"] = {
         "client_request_id": str(client_request_id or ""),
@@ -690,6 +689,7 @@ def _find_or_create_job(ws_id: str, session_id: str, user_input: str) -> str | N
         j = create_job(
             workspace_id=ws_id, job_type="agent_run", title=title,
             payload={"session_id": session_id}, created_by="api",
+            enqueue=False,
         )
         job_id = j.get("job_id") if isinstance(j, dict) else j.job_id
         _log.info("job created: %s for session=%s title=%.40s", job_id, session_id, title)

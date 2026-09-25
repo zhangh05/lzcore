@@ -23,6 +23,20 @@ import time
 import urllib.request
 from pathlib import Path
 
+# 强制 Python 环境在 Windows (包括 GBK/CP936 区域) 下全链路采用 UTF-8 编码
+os.environ["PYTHONUTF8"] = "1"
+os.environ["PYTHONIOENCODING"] = "utf-8"
+if sys.platform.startswith("win"):
+    try:
+        if hasattr(sys.stdin, "reconfigure") and sys.stdin:
+            sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stdout, "reconfigure") and sys.stdout:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure") and sys.stderr:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # 1. Windows 下 PyInstaller 多进程必备保护
 multiprocessing.freeze_support()
 
@@ -238,7 +252,7 @@ def main():
     try:
         from agent import __version__ as APP_VERSION
     except Exception:
-        APP_VERSION = "3.1.1"
+        APP_VERSION = "3.1.2"
 
     logger.info("启动联智中枢桌面内核 v%s ...", APP_VERSION)
     logger.info("运行时资源目录: %s", BUNDLE_DIR)

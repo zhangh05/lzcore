@@ -10,6 +10,9 @@ echo.
 set "ROOT=%~dp0"
 cd /d "%ROOT%"
 
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
+
 :: 1. 检查 Python 环境
 where python.exe >nul 2>nul
 if %ERRORLEVEL% neq 0 (

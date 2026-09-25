@@ -74,7 +74,7 @@ def get_job(ws_id, job_id) -> Optional[JobRecord]:
     path = _job_dir(ws_id, job_id) / f"{job_id}.json"
     if not path.is_file(): return None
     try:
-        d = json.loads(path.read_text())
+        d = json.loads(path.read_text(encoding="utf-8"))
         return JobRecord(**{k: v for k, v in d.items() if k in JobRecord.__dataclass_fields__})
     except json.JSONDecodeError:
         import logging
@@ -227,7 +227,7 @@ def _session_exists(ws_id, session_id):
     # If metadata file exists, check it's not deleted
     if meta_file.is_file():
         try:
-            d = json.loads(meta_file.read_text())
+            d = json.loads(meta_file.read_text(encoding="utf-8"))
             if d.get("status", "active") == "deleted":
                 return False
         except Exception:
@@ -405,7 +405,7 @@ def _update_index(ws_id, rec):
         idx = {"job_ids": [], "updated_at": ""}
         if p.is_file():
             try:
-                idx = json.loads(p.read_text())
+                idx = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
                 _LOG.warning("jobs.store: corrupt index", exc_info=True)
         if rec.job_id not in idx.setdefault("job_ids", []):

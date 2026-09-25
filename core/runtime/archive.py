@@ -125,7 +125,7 @@ def preview_archive_candidates(workspace_id: str = "default",
                 blocked.append({"path": job_dir.name, "reason": "active_ref"})
                 continue
             try:
-                record = json.loads(jf.read_text()) if jf.suffix == ".json" else {}
+                record = json.loads(jf.read_text(encoding="utf-8")) if jf.suffix == ".json" else {}
                 job_status = record.get("status", "")
             except Exception:
                 job_status = "unknown"
@@ -244,7 +244,7 @@ def get_archive_audits(workspace_id: str = "default") -> list:
     for af in sorted(audit_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if af.name.startswith("archive_") and af.suffix == ".json":
             try:
-                audits.append(json.loads(af.read_text()))
+                audits.append(json.loads(af.read_text(encoding="utf-8")))
             except Exception:
                 pass
     return audits[:50]
@@ -255,7 +255,7 @@ def get_archive_audit(workspace_id: str, audit_id: str) -> dict:
     audit_path = workspace_dir(workspace_id) / "sys" / "audits" / f"{audit_id}.json"
     if audit_path.is_file():
         try:
-            return json.loads(audit_path.read_text())
+            return json.loads(audit_path.read_text(encoding="utf-8"))
         except Exception:
             pass
     return {}

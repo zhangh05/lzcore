@@ -42,7 +42,7 @@ def plan_operation(ctx, tool_id: str, call_id: str, arguments: dict[str, Any]) -
     path = _path(workspace_id, op_id)
     with FileLock(path.with_suffix(".lock")):
         if path.is_file():
-            return json.loads(path.read_text())
+            return json.loads(path.read_text(encoding="utf-8"))
         now = _now()
         record = {
             "schema": "lzcore.operation_ledger.v1",
@@ -67,7 +67,7 @@ def plan_operation(ctx, tool_id: str, call_id: str, arguments: dict[str, Any]) -
 def start_operation(workspace_id: str, op_id: str) -> dict[str, Any]:
     path = _path(workspace_id, op_id)
     with FileLock(path.with_suffix(".lock")):
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding="utf-8"))
         if record.get("status") != "planned":
             return record
         now = _now()
@@ -79,7 +79,7 @@ def start_operation(workspace_id: str, op_id: str) -> dict[str, Any]:
 def finish_operation(workspace_id: str, op_id: str, result) -> dict[str, Any]:
     path = _path(workspace_id, op_id)
     with FileLock(path.with_suffix(".lock")):
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding="utf-8"))
         if record.get("status") not in {"planned", "running", "unknown"}:
             return record
         may_continue = bool(getattr(result, "execution_may_continue", False))
@@ -121,7 +121,7 @@ def link_operation_resource(
     if not path.is_file():
         return None
     with FileLock(path.with_suffix(".lock")):
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding="utf-8"))
         current_kind = str(record.get("resource_kind") or "")
         current_id = str(record.get("resource_id") or "")
         if (current_kind or current_id) and (current_kind != kind or current_id != identifier):
@@ -156,7 +156,7 @@ def settle_operation(
     if not path.is_file():
         raise FileNotFoundError(op_id)
     with FileLock(path.with_suffix(".lock")):
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding="utf-8"))
         current = str(record.get("status") or "")
         if current in {"succeeded", "failed", "blocked", "reconciled", "indeterminate"}:
             if require_unresolved:

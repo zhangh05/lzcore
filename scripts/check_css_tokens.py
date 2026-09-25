@@ -18,14 +18,14 @@ refs: list[tuple[Path, int, str, bool]] = []  # file, line, token, has_fallback
 
 # Collect definitions
 for css in ROOT.rglob("*.css"):
-    for i, line in enumerate(css.read_text().splitlines(), 1):
+    for i, line in enumerate(css.read_text(encoding="utf-8").splitlines(), 1):
         for m in re.finditer(r"--([a-z][a-z0-9-]*)\s*:", line):
             defs.add(m.group(1))
 
 # Collect references
 for ext in ("*.tsx", "*.ts", "*.css"):
     for f in ROOT.rglob(ext):
-        text = f.read_text()
+        text = f.read_text(encoding="utf-8")
         for i, line in enumerate(text.splitlines(), 1):
             for m in re.finditer(r"var\(\s*--([a-z][a-z0-9-]*)\s*(?:,\s*([^)]+))?\s*\)", line):
                 token = m.group(1)

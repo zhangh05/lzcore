@@ -25,7 +25,7 @@ def _load_registry_data() -> list:
         raise FileNotFoundError(f"prompt registry not found: {REGISTRY_PATH}")
 
     import yaml
-    data = yaml.safe_load(REGISTRY_PATH.read_text()) or {}
+    data = yaml.safe_load(REGISTRY_PATH.read_text(encoding="utf-8")) or {}
     prompts = [_parse_prompt(entry) for entry in data.get("prompts", [])]
     if not prompts:
         raise RuntimeError(f"prompt registry is empty: {REGISTRY_PATH}")

@@ -27,7 +27,7 @@ def cleanup():
         if not path.is_file():
             continue
 
-        lines = path.read_text().strip().split("\n")
+        lines = path.read_text(encoding="utf-8").strip().split("\n")
         kept = []
         for line in lines:
             if not line.strip():
@@ -54,14 +54,14 @@ def cleanup():
                 kept.append(line)
 
         if len(kept) < len(lines):
-            path.write_text("\n".join(kept) + ("\n" if kept else ""))
+            path.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
 
     # ── Workspace runs cleanup ──
     runs_dir = PROJECT_ROOT / "workspaces" / "default" / "runs"
     if runs_dir.is_dir():
         for run_file in runs_dir.glob("*.json"):
             try:
-                content = run_file.read_text()
+                content = run_file.read_text(encoding="utf-8")
                 data = json.loads(content)
                 if data.get("workspace_id", "").startswith("test"):
                     run_file.unlink()

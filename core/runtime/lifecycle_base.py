@@ -53,7 +53,7 @@ def get_active_refs(ws_dir: Path) -> set:
     state_file = ws_dir / "sys" / "state.json"
     if state_file.is_file():
         try:
-            state = json.loads(state_file.read_text())
+            state = json.loads(state_file.read_text(encoding="utf-8"))
             for key in ("current_run_id", "last_run_id", "current_job_id", "last_job_id", "current_artifacts",
                         "last_input_artifacts", "last_output_artifacts",
                         "last_report_artifacts", "current_report_artifact_id",
