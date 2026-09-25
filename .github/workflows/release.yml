@@ -62,9 +62,9 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & $python -m pip check
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            & $python -c "import flask, flask_sock, yaml, bs4, lxml, pdfplumber, scapy, paramiko"
+            & $python -c "import flask, flask_sock, yaml, bs4, lxml, pdfplumber, paramiko"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            & $python -m pytest -q harness/test_windows_runtime_contract.py harness/test_session_management.py harness/test_storage_integration.py
+            & $python -m pytest -q harness/test_windows_runtime_contract.py harness/test_session_management.py harness/test_storage_filestore_foundation.py
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
@@ -114,7 +114,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $bundledPython -m pip check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $bundledPython -c "import flask, flask_sock, yaml, bs4, lxml, pdfplumber, scapy, paramiko"
+          & $bundledPython -c "import flask, flask_sock, yaml, bs4, lxml, pdfplumber, paramiko"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           & (Get-Command pwsh.exe -ErrorAction Stop).Source -NoProfile -File (Join-Path $stage "start.ps1") -NoBrowser -ValidateOnly
