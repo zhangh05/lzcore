@@ -65,9 +65,9 @@ HTTP / WebSocket 请求
   ├── extensions/            ── 领域专属扩展插件（网络运维、人工审批流等）
   ├── storage/               ── 租户存储边界、Fernet 凭据保险库与文件持久化
   ├── artifacts/             ── 巡检报告、拓扑数据与大文件结构化制品仓储
-  ├── jobs/                  ── Celery/Redis 异步离线作业调度与执行器
+  ├── jobs/                  ── 内置 Local Worker 轮询与跨平台文件锁异步作业队列
   ├── observability/         ── Prometheus 监控采集、Grafana 仪表盘与 Trace 链
-  └── frontend/              ── React 18、Tailwind、Zustand、拓扑白板与流式交互工作台
+  └── frontend/              ── React 18、原生 CSS Tokens、Zustand、拓扑白板与流式交互工作台
 ```
 
 ### 关键目录职责隔离

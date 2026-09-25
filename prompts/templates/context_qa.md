@@ -44,7 +44,7 @@ Citations:
 {{ user_input }}
 </current_user_request>
 
-Be concise, authoritative, and factual. Cite supported claims with the exact supplied citation
+Be concise, verified, and factual. Cite supported claims with the exact supplied citation
 ids, such as [K1] or [M2]. If the context cannot answer the question, say what
 specific evidence is missing. Do not suggest rerunning work that is still
 pending or running.

@@ -5,7 +5,7 @@
 [![Release](https://img.shields.io/badge/Release-v3.1.0-blue.svg)](https://github.com/zhangh05/lzcore/releases/tag/v3.1.0)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-brightgreen.svg)](https://www.python.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
-[![Frontend](https://img.shields.io/badge/Frontend-React%20%7C%20Vite%20%7C%20Tailwind%20%7C%20Zustand-61dafb.svg)](https://react.dev/)
+[![Frontend](https://img.shields.io/badge/Frontend-React%20%7C%20Vite%20%7C%20CSS%20Tokens%20%7C%20Zustand-61dafb.svg)](https://react.dev/)
 [![Architecture](https://img.shields.io/badge/Architecture-SSOT%20Runtime%20%7C%20Zero--Trust-orange.svg)](#系统端到端架构与执行链路)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#双模交付架构)
 
@@ -108,11 +108,11 @@
 | `browser.manage` | 网页/DOM操作 | 中 | 受控自动化无头浏览器，支持网页导航、快照与结构化内容提取 |
 | `data.manage` | 数据治理 | 低 / 只读 | 多维数据集过滤、合并、聚合与转换计算，保障内存运算安全 |
 | `exec.run` | 宿主执行 | 高 / 审计拦截 | 执行受限主机 Shell、PowerShell 或沙箱化 Python 脚本，严禁破坏性指令 |
-| `knowledge.manage` | 知识检索 | 低 / 只读 | 基于语义索引检索企业运维手册与架构知识切片，提供确定性出处依据 |
-| `location.manage` | 空间与机房解析 | 低 / 只读 | 网络设备坐标、机房站点、地理位置与拓扑物理归属空间映射 |
+| `knowledge.manage` | 知识库管理 | 中 / 读写（按 action 区分） | 知识检索、分片读取与知识库导入/重索引（import/reindex 修改索引） |
+| `location.manage` | 通用地理位置解析 | 低 / 只读 | 通用地名、街道地址、经纬度坐标解析与批量地理编码转换 |
 | `memory.manage` | 记忆演进 | 中 / 写入门禁 | 长期经验总结、核心偏好沉淀与语义事实管理，由 MemoryWriteGate 防火墙过滤 |
 | `report.manage` | 报告交付 | 低 / 生成写入 | 聚合巡检证据与分析结论，生成标准化 Markdown/HTML 交付物报告 |
-| `skill.manage` | 领域扩展管理 | 低 / 只读 | 查询、解析与加载已发布的业务 Skill 规范与设备拓扑切片 |
+| `skill.manage` | 技能与MCP管理 | 中 / 执行（execute） | 检索、加载与检查通用 Skill 规范，调用受信任的外部 MCP 工具 |
 | `system.manage` | 平台宿主观测 | 低 / 只读 | 获取主机系统负载、运行时生命周期、系统时间与环境真实基线事实 |
 | `text.analyze` | 结构化文本挖掘 | 低 / 无副作用 | 对日志文本、配置差分进行模式提炼、正则抽取与统计学分析 |
 | `web.manage` | 外部网络互联 | 低 / 网络只读 | 遵循合规策略的外网搜索引擎查询与网页静态事实提取，自动声明引用出处 |
@@ -132,12 +132,12 @@
 
 ### 模式 A：Windows 桌面独立版应用 (Desktop Standalone)
 - **免环境依赖**：针对无法连接外网或安装庞大开发工具链的运维现场，预制独立执行环境，单文件即可启动运行。
-- **本地回环安全**：原生绑定 `127.0.0.1` 环回接口，内建轻量化工作进程（Embedded Worker）与原生 GUI 壳体（基于 PySide6 / Webview2），开箱即用。
+- **本地回环安全**：原生绑定 `127.0.0.1` 环回接口，内建轻量化工作进程（Embedded Worker）与原生 GUI 壳体（基于 pywebview / Windows Edge WebView2），开箱即用。
 - **预制工作区骨架**：安装包已预置纯净合规的 `workspaces/` 与 `config/` 结构，个人隐私拓扑零泄露。
 - 详见：[Windows 本地运行与打包指南](docs/WINDOWS.md)。
 
 ### 模式 B：云原生生产集群 (Cloud-Native Server)
-- **分布式高可用架构**：采用容器化部署，解耦 Web 接口层、Celery/Redis 异步作业调度引擎、PostgreSQL 持久化数据库与 MinIO 兼容分布式对象存储。
+- **分布式高可用架构**：采用容器化部署，解耦 Web 接口层、内置任务 Worker 进程、Redis 事件总线、PostgreSQL 持久化数据库与 MinIO 兼容分布式对象存储。
 - **生产级可观测性**：开箱即用集成 Prometheus 指标暴露、Alertmanager 告警路由与 Grafana 全维度大屏。
 - 详见：[生产部署与运行指南](docs/PRODUCTION.md) 与 [运维处置手册](docs/OPERATIONS_RUNBOOK.md)。
 
@@ -197,7 +197,7 @@ cd frontend && npm test -- --run && npm run build
 | **认知闭环** | [目标驱动 Loop Engineering](docs/LOOP_ENGINEERING.md) | 复杂多轮推理、证据声明、断言门禁与自动恢复算法 |
 | **提示词与Skill**| [Skill 与提示词架构](docs/SKILL_PROMPT_ARCHITECTURE.md) | SSOT 提示词装配流、数据注入防护与领域扩展沙箱 |
 | **接口规范** | [RESTful & WS API 参考手册](docs/API.md) | 详尽端点契约、请求参数模型与状态码响应规范 |
-| **前端体系** | [前端工作台架构白皮书](docs/FRONTEND.md) | React 18、Tailwind CSS、Zustand、拓扑白板与流式渲染 |
+| **前端体系** | [前端工作台架构白皮书](docs/FRONTEND.md) | React 18、原生 CSS Tokens、Zustand、拓扑白板与流式渲染 |
 | **插件生态** | [业务扩展开发规范](docs/EXTENSIONS.md) | 模块化插件创建、自定义 Tool Manifest 与路由注册 |
 | **业务工作流** | [任务编排与业务工作流](docs/WORKFLOWS.md) | 声明式任务拓扑、自动化批量任务编排与作业模板 |
 | **生产发布** | [生产部署与集群编排](docs/PRODUCTION.md) | Docker Compose 编排、TLS 证书网关与集群高可用 |
