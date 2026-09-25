@@ -41,6 +41,10 @@ node_modules/
 *.tsbuildinfo
 frontend/vite.config.ts.timestamp-*.mjs
 
+# PyInstaller & packaging artifacts
+build/
+dist/
+
 reports/tool_catalog.json
 
 # macOS system files

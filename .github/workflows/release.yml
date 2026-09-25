@@ -129,10 +129,19 @@ jobs:
           $global:LASTEXITCODE = 0
           $version = "${{ github.ref_name }}"
           Compress-Archive -Path $stage -DestinationPath "release/lzcore-$version-windows-x64.zip" -Force
-          exit 0
+
+      - name: Assemble Windows desktop standalone EXE package
+        shell: pwsh
+        run: |
+          & "${{ steps.python312.outputs.python-path }}" -m pip install --quiet pywebview pyinstaller
+          & "${{ steps.python312.outputs.python-path }}" scripts/build_windows_exe.py --zip
+          $version = "${{ github.ref_name }}"
+          Get-ChildItem -Path dist\lzcore-*-windows-desktop.zip | ForEach-Object {
+            Copy-Item $_.FullName "release/lzcore-$version-windows-desktop.zip" -Force
+          }
 
       - name: Publish release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: release/lzcore-*-windows-x64.zip
+          files: release/lzcore-*.zip
           generate_release_notes: true
