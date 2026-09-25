@@ -132,7 +132,7 @@ def test_windows_release_verifies_every_supported_python_cache_offline():
     assert "Verify dependency cache offline" in workflow
     assert "--no-index --find-links wheelhouse -r requirements.txt" in workflow
     assert "import flask, flask_sock, yaml" in workflow
-    assert "test_session_management.py harness/test_storage_integration.py" in workflow
+    assert "test_session_management.py harness/test_storage_filestore_foundation.py" in workflow
     assert 'runtime/python' in workflow
     assert 'runtime/node' in workflow
     assert 'frontend/node_modules' in workflow
