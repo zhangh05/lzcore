@@ -138,6 +138,14 @@ jobs:
           & "${{ steps.python312.outputs.python-path }}" -m pip install --disable-pip-version-check --no-index --find-links wheelhouse -r requirements.txt
           & "${{ steps.python312.outputs.python-path }}" -m pip install --disable-pip-version-check --quiet pywebview pyinstaller
           & "${{ steps.python312.outputs.python-path }}" scripts/build_windows_exe.py --zip
+          if (-not (Test-Path "dist\lzcore\workspaces\default\sys\workspace.yaml")) {
+            throw "CRITICAL: dist\lzcore\workspaces was NOT generated!"
+          }
+          if (-not (Test-Path "dist\lzcore\config")) {
+            throw "CRITICAL: dist\lzcore\config was NOT generated!"
+          }
+          Write-Host "Directory contents of dist\lzcore:"
+          Get-ChildItem -Path dist\lzcore
           $version = "${{ github.ref_name }}"
           Get-ChildItem -Path dist\lzcore-*-windows-desktop.zip | ForEach-Object {
             Copy-Item $_.FullName "release/lzcore-$version-windows-desktop.zip" -Force

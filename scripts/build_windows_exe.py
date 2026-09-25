@@ -8,10 +8,12 @@
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # 确保在 Windows 控制台或 CI (cp1252/gbk) 环境下中文日志输出不报错
@@ -21,6 +23,8 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def run_cmd(cmd, cwd=ROOT):
@@ -29,6 +33,86 @@ def run_cmd(cmd, cwd=ROOT):
     if result.returncode != 0:
         print(f"[ERROR] 命令执行失败 (退出码: {result.returncode})")
         sys.exit(result.returncode)
+
+
+def prefabricate_workspace_and_config(exe_dir: Path):
+    """预置纯净默认工作区骨架与基础配置（不含任何业务数据，确保解压即有目录、前端开箱即交互）"""
+    print(f"[*] 正在为分发目录预置 workspaces 与 config 骨架: {exe_dir}")
+    ws_root = exe_dir / "workspaces"
+
+    # 1. 创建纯净默认工作区基础目录结构
+    dirs_to_create = [
+        ws_root / "catalog" / "default" / "sys",
+        ws_root / "default" / "sys",
+        ws_root / "default" / "index",
+        ws_root / "default" / "runs",
+        ws_root / "default" / "sessions",
+        ws_root / "default" / "files" / "data",
+        ws_root / "default" / "files" / "tmp",
+        ws_root / "default" / "inbox",
+        ws_root / "default" / "extensions" / "network_operations" / "topologies",
+        ws_root / "default" / "extensions" / "network_operations" / "devices",
+        ws_root / "default" / "extensions" / "network_operations" / "connections",
+        ws_root / "default" / "extensions" / "network_operations" / "regions",
+    ]
+    for d in dirs_to_create:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # 2. 写入标准系统元数据（纯净空状态，几十字节）
+    now_ts = time.time()
+    workspace_yaml_content = f"id: default\nname: default\ncreated: {now_ts}\n"
+    state_json_content = json.dumps({
+        "workspace_id": "default",
+        "organization_id": "default",
+        "name": "default",
+        "last_run_id": "",
+        "last_intent": "",
+        "last_result_summary": "",
+        "last_result_counts": {},
+        "last_manual_review_samples": [],
+        "last_unsupported_samples": [],
+        "last_audit_summary": {},
+        "current_files": [],
+        "current_artifacts": [],
+        "llm_metadata": {},
+        "runs_count": 0,
+        "memory_count": 0,
+        "artifacts_count": 0,
+        "updated_at": "",
+    }, indent=2, ensure_ascii=False)
+
+    (ws_root / "catalog" / "default" / "sys" / "workspace.yaml").write_text(workspace_yaml_content, encoding="utf-8")
+    (ws_root / "catalog" / "default" / "sys" / "state.json").write_text(state_json_content, encoding="utf-8")
+    (ws_root / "default" / "sys" / "workspace.yaml").write_text(workspace_yaml_content, encoding="utf-8")
+    (ws_root / "default" / "sys" / "state.json").write_text(state_json_content, encoding="utf-8")
+
+    # 3. 写入空索引文件
+    for index_name in ["files.jsonl", "references.jsonl", "artifacts.jsonl"]:
+        idx_file = ws_root / "default" / "index" / index_name
+        if not idx_file.exists():
+            idx_file.write_text("", encoding="utf-8")
+
+    # 4. 复制基础配置目录
+    dist_config_dir = exe_dir / "config"
+    src_config_dir = ROOT / "config"
+    if src_config_dir.is_dir():
+        if dist_config_dir.is_dir():
+            shutil.rmtree(dist_config_dir)
+        shutil.copytree(src_config_dir, dist_config_dir)
+        for lock in dist_config_dir.glob("*.lock"):
+            lock.unlink(missing_ok=True)
+
+    # 5. 校验：确保目录绝对真实存在于 exe_dir 中，若不满足则直接报错中断，绝不打出残缺包！
+    expected_yaml = ws_root / "default" / "sys" / "workspace.yaml"
+    expected_topos = ws_root / "default" / "extensions" / "network_operations" / "topologies"
+    if not expected_yaml.is_file():
+        raise RuntimeError(f"预置工作区失败：未找到 {expected_yaml}")
+    if not expected_topos.is_dir():
+        raise RuntimeError(f"预置工作区失败：未找到 {expected_topos}")
+    if not dist_config_dir.is_dir():
+        raise RuntimeError(f"预置配置目录失败：未找到 {dist_config_dir}")
+
+    print(f"[SUCCESS] 纯净工作区与配置文件预置成功！已就绪于: {ws_root}")
 
 
 def main():
@@ -75,32 +159,10 @@ def main():
     run_cmd([sys.executable, "-m", "PyInstaller", str(spec_path), "--clean", "-y"])
 
     exe_dir = ROOT / "dist" / "lzcore"
-    print(f"\n[SUCCESS] 构建完成！产物目录: {exe_dir}")
+    print(f"\n[SUCCESS] PyInstaller 构建完成！产物目录: {exe_dir}")
 
     # 4. 预置纯净默认工作区骨架与基础配置（不含任何私有业务数据，确保解压即有目录、前端开箱即交互）
-    try:
-        ws_root = exe_dir / "workspaces"
-        os.environ["LZCORE_WORKSPACE_ROOT"] = str(ws_root)
-        from storage.workspace_store import ensure_workspace
-        ensure_workspace("default")
-
-        # 确保网络运维扩展所需的目录就绪
-        netops_dir = ws_root / "default" / "extensions" / "network_operations"
-        for sub in ["topologies", "devices", "connections", "regions"]:
-            (netops_dir / sub).mkdir(parents=True, exist_ok=True)
-
-        # 清理初始化锁文件
-        for lock in ws_root.rglob("*.lock"):
-            lock.unlink(missing_ok=True)
-
-        print(f"[*] 已预置纯净默认工作区骨架: {ws_root}")
-
-        dist_config_dir = exe_dir / "config"
-        if not dist_config_dir.is_dir() and (ROOT / "config").is_dir():
-            shutil.copytree(ROOT / "config", dist_config_dir)
-            print(f"[*] 已预置基础配置文件目录: {dist_config_dir}")
-    except Exception as exc:
-        print(f"[!] 预置初始工作区警告 (非致命): {exc}")
+    prefabricate_workspace_and_config(exe_dir)
 
     # 5. 可选打包 zip
     if args.zip:
