@@ -1541,7 +1541,7 @@ details[open] .task-phase-caret {
   padding: 2px 8px;
   color: var(--text-3);
   border: 1px solid var(--line-2);
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-sm);
   background: var(--surface);
   font-size: 11px;
   font-weight: 500;
@@ -1552,7 +1552,7 @@ details[open] .task-phase-caret {
 .task-progress-collapse:focus-visible {
   color: var(--text-1);
   background: var(--surface-hover);
-  border-color: var(--line-1);
+  border-color: var(--line);
   outline: none;
 }
 .task-progress-collapse .task-progress-summary {
@@ -1580,7 +1580,7 @@ details[open] .task-phase-caret {
   gap: 8px;
   background: var(--surface);
   border: 1px solid var(--line-2);
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-sm);
   cursor: pointer;
   color: var(--text-2);
   transition: all 120ms ease;
