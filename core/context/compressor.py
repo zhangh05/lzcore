@@ -1,20 +1,9 @@
 # context/compressor.py
-"""Context compressor — limits, strips content, enforces budget, deduplicates.
-
-v3.1.0 refactoring:
-  - Schema-driven stripping via schema_registry (replaces blacklist).
-  - Dynamic budget: adjusts max_chars based on LLM model's context window.
-  - Semantic dedup: merges items with similar summaries to reduce redundancy.
-"""
+"""Context compressor — redacts sensitive fields and accounts for budget usage."""
 
 import json
-from difflib import SequenceMatcher
 from core.context.schemas import ContextBudget, resolve_budget_for_model
 from core.context.schema_registry import strip_by_schema, is_metadata_key_blocked
-
-
-# Dedup similarity threshold (0-1): items with summary similarity above this are merged
-DEDUP_SIMILARITY_THRESHOLD = 0.75
 
 
 def compress_context_items(items: list, budget: ContextBudget = None,
@@ -54,13 +43,6 @@ def compress_context_items(items: list, budget: ContextBudget = None,
     return compressed, budget, warnings
 
 
-def _limit_for(item_type: str, budget: ContextBudget) -> int:
-    m = {"memory_hit": budget.max_memory_hits, "artifact_summary": budget.max_artifact_refs,
-         "job_summary": budget.max_job_events, "report_summary": budget.max_report_sections,
-         "knowledge_chunk": budget.max_knowledge_chunks}
-    return m.get(item_type, 50)
-
-
 def _strip_sensitive(obj, item_type: str = ""):
     """Strip sensitive keys from a nested dict/list using schema_registry.
 
@@ -91,47 +73,3 @@ def _strip_sensitive(obj, item_type: str = ""):
     return obj
 
 
-def _dedup_items(items: list) -> tuple:
-    """Remove items with highly similar summaries.
-
-    For each pair of items with the same item_type, if their summaries
-    have similarity above DEDUP_SIMILARITY_THRESHOLD, keep only the one
-    with higher priority.
-
-    Complexity: O(n²) — capped at 30 items by budget.max_items.
-
-    Returns:
-        (deduped_items, removed_count)
-    """
-    if len(items) <= 1:
-        return items, 0
-
-    kept = []
-    removed = 0
-
-    for item in items:
-        is_dup = False
-        for existing in kept:
-            # Only dedup within same item_type
-            if existing.item_type != item.item_type:
-                continue
-            # Check summary similarity
-            if existing.summary and item.summary:
-                ratio = SequenceMatcher(
-                    None, existing.summary.lower(), item.summary.lower()
-                ).ratio()
-                if ratio > DEDUP_SIMILARITY_THRESHOLD:
-                    # Lower numeric priority means higher business priority
-                    # (P0 request, P1 explicit ref, ...).  Keep the more
-                    # authoritative item instead of letting a later low-value
-                    # duplicate crowd it out.
-                    if item.priority < existing.priority:
-                        kept.remove(existing)
-                        kept.append(item)
-                    is_dup = True
-                    removed += 1
-                    break
-        if not is_dup:
-            kept.append(item)
-
-    return kept, removed

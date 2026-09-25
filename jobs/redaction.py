@@ -53,24 +53,8 @@ def sanitize_job_event_for_storage(d: dict) -> dict:
     return _deep_sanitize(d, for_api=False)
 
 
-def sanitize_job_event_for_api(d: dict) -> dict:
-    return _deep_sanitize(d, for_api=True)
-
-
 def sanitize_job_log_for_storage(d: dict) -> dict:
     return _deep_sanitize(d, for_api=False)
-
-
-def sanitize_job_log_for_api(d: dict) -> dict:
-    return _deep_sanitize(d, for_api=True)
-
-
-def contains_job_secret(data) -> bool:
-    s = str(data).lower()
-    for pat in SECRET_PATTERNS:
-        if re.search(pat, s, re.IGNORECASE):
-            return True
-    return False
 
 
 def _deep_sanitize(obj, for_api=False):

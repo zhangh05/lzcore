@@ -93,45 +93,6 @@ def write_run_record(state: SimpleNamespace, workspace_id: str = "default") -> s
     return run_id
 
 
-def write_sub_agent_run(
-    *,
-    ws_id: str,
-    subtask_id: str,
-    parent_run_id: str,
-    child_run_id: str,
-    instruction: str,
-    ok: bool,
-    final_response: str = "",
-    tool_calls_count: int = 0,
-    steps: int = 0,
-    visible_tool_ids: list[str] | None = None,
-) -> str:
-    """Persist a child-agent run record through the current run repository."""
-    run_id = validate_run_id(child_run_id)
-    record = {
-        "run_id": run_id,
-        "workspace_id": ws_id,
-        "session_id": str(subtask_id or ""),
-        "subtask_id": str(subtask_id or ""),
-        "parent_run_id": validate_run_id(parent_run_id),
-        "child_run_id": run_id,
-        "is_sub_agent": True,
-        "created_at": _now_iso(),
-        "started_at": _now_iso(),
-        "finished_at": _now_iso(),
-        "status": "ok" if ok else "error",
-        "user_input_summary": redact_text(str(instruction or ""))[:120],
-        "final_response_summary": redact_text(str(final_response or ""))[:300],
-        "tool_calls_count": max(0, int(tool_calls_count or 0)),
-        "steps": max(0, int(steps or 0)),
-        "visible_tool_ids": [str(item) for item in (visible_tool_ids or [])[:50]],
-        "sensitivity": "internal",
-        "redaction_applied": True,
-    }
-    atomic_save_json(ws_id, ("runs", f"{run_id}.json"), redact_value(record))
-    return run_id
-
-
 def save_trace_record(workspace_id: str, run_id: str, record: dict[str, Any]) -> None:
     rid = validate_run_id(run_id)
     atomic_save_json(workspace_id, ("runs", f"{rid}.trace.json"), redact_value(record))
@@ -237,15 +198,6 @@ def _safe_artifact_refs_from_context(state: SimpleNamespace) -> list:
     return refs
 
 
-def get_run_session_id(workspace_id: str, run_id: str) -> str:
-    for suffix in (".json", ".trace.json"):
-        data = read_run_sidecar(workspace_id, run_id, suffix)
-        session_id = str(data.get("session_id") or "")
-        if session_id:
-            return session_id
-    return ""
-
-
 def get_run(run_id: str, workspace_id: str = "default") -> dict[str, Any]:
     rid = validate_run_id(run_id)
     return read_run_sidecar(workspace_id, rid, ".json")
@@ -272,11 +224,6 @@ def list_runs(workspace_id: str = "default", limit: int = 50, **kwargs) -> list[
     if session_id:
         rows = [row for row in rows if row.get("session_id") == session_id]
     return sorted(rows, key=run_sort_key, reverse=True)[:limit]
-
-
-def get_last_run(workspace_id: str = "default") -> dict[str, Any] | None:
-    runs = list_runs(workspace_id, limit=1)
-    return runs[0] if runs else None
 
 
 def run_sort_key(record: dict[str, Any]) -> tuple:

@@ -51,6 +51,16 @@ def _drawing(workspace, **overrides):
     return drawings.save_topology(workspace, payload)
 
 
+def test_link_arc_direction_survives_save(workspace):
+    topo = _drawing(workspace)
+    topo["links"][0]["style"] = {"curve_style": "bezier", "curve_reverse": True, "color": "#336699"}
+    saved = drawings.save_topology(workspace, topo)
+    assert saved["links"][0]["style"]["curve_reverse"] is True
+    assert saved["links"][0]["style"]["curve_style"] == "bezier"
+    again = drawings.get_topology(workspace, saved["topology_id"])
+    assert again["links"][0]["style"]["curve_reverse"] is True
+
+
 def test_topology_lifecycle_without_assets(workspace):
     topo = _drawing(workspace)
     assert topo["version"] == 1

@@ -74,4 +74,5 @@ export {
   Note as IconNote,
   Eraser as IconEraser,
   DownloadSimple as IconDownload,
+  SidebarSimple as IconSidebarSimple,
 } from "@phosphor-icons/react";

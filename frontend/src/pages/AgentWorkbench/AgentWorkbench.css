@@ -94,6 +94,10 @@
   font-weight: 650;
 }
 
+.wb-mode-btn svg.is-right {
+  transform: scaleX(-1);
+}
+
 .wb-mode-btn:hover,
 .wb-mode-btn.active,
 .wb-export-btn:hover {
@@ -583,53 +587,192 @@
   min-height: 0;
   overflow: hidden;
   background: var(--surface-2);
+  border-left: 1px solid var(--line-2);
 }
 
 .task-progress-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: var(--flow-tight) var(--space-4);
-  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--line-2);
+  background: var(--surface-2);
 }
 
-/* The turn's identity and cost, in the same metadata language the rest of the
-   product uses for identifiers. Wraps rather than truncates: a run id that
-   cannot be read is not an identifier. */
-.task-rail-facts {
-  grid-column: 1 / -1;
+.task-progress-header-top {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--flow-tight) var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.task-progress-header-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .task-progress-kicker {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 2px;
   color: var(--accent);
-  font-size: var(--fs-11);
-  font-weight: var(--weight-heading);
+  font-size: 10px;
+  font-weight: 700;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .task-progress-header h2 {
   color: var(--text);
-  font-size: var(--fs-16);
-  font-weight: var(--weight-heading);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.task-status-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+}
+
+.task-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.3;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.task-status-badge.running {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 80%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.task-status-badge.succeeded {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok-soft) 80%, var(--surface));
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+.task-status-badge.failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 80%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.task-status-badge.idle {
+  color: var(--text-3);
+  background: var(--surface);
+  border-color: var(--line-2);
+}
+
+.pulse-radar {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: radar-pulse 1.4s ease-out infinite;
+}
+
+@keyframes radar-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.task-status-desc {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.task-rail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono, monospace);
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 120ms ease;
+}
+
+.meta-pill .meta-label {
+  color: var(--text-4);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.meta-pill .meta {
+  color: var(--text-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.meta-pill-run {
+  cursor: pointer;
+}
+
+.meta-pill-run:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.meta-pill-run.is-copied {
+  background: color-mix(in srgb, var(--ok-soft) 60%, var(--surface));
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.meta-pill-run.is-copied .meta {
+  color: var(--ok);
 }
 
 .task-progress-summary {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding-top: 6px;
   color: var(--text-3);
   font-size: var(--fs-12);
   font-weight: 650;
-  justify-content: flex-end;
-  max-width: 145px;
-  text-align: right;
 }
 
 .task-progress-summary .status-dot { background: var(--text-4); }
@@ -637,31 +780,170 @@
 .task-progress-summary.succeeded .status-dot { background: var(--ok); }
 .task-progress-summary.failed .status-dot { background: var(--danger); }
 
-.task-phase-list {
+/* ── 滚动主区 ────────────────────────────────────────── */
+.task-progress-body {
   min-height: 0;
-  padding: var(--space-4);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
 }
 
-/* A stage is a continuous row, not a card: separators and spacing carry the
-   structure. Its summary states title, observed duration and state; prose and
-   evidence appear only when the row is opened. */
+/* 运行态实时看板 */
+.task-in-flight-card {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.task-in-flight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.in-flight-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.in-flight-phase {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.task-in-flight-tool {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.in-flight-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-soft) 80%, var(--surface));
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.in-flight-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  min-width: 0;
+}
+
+.in-flight-info strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.in-flight-info span {
+  color: var(--text-4);
+}
+
+.in-flight-info small {
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.task-in-flight-note {
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.live-scan-track {
+  height: 2px;
+  background: var(--line-2);
+  border-radius: 2px;
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+  margin-top: 2px;
+}
+
+.live-scan-bar {
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: live-scan-slide 1.5s ease-in-out infinite;
+}
+
+@keyframes live-scan-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+/* 垂直 Stepper 时间轴 */
+.task-phase-list {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.task-stepper-item {
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.task-stepper-item.is-last {
+  padding-bottom: 0;
+}
+
+.stepper-spine {
+  position: absolute;
+  left: 15px;
+  top: 28px;
+  bottom: 0;
+  width: 2px;
+  background: var(--line-2);
+  z-index: 1;
+  transition: background-color 200ms ease;
+}
+
+.stepper-spine.is-done {
+  background: var(--ok);
+}
+
+.stepper-spine.is-active {
+  background: linear-gradient(to bottom, var(--accent), var(--line-2));
+}
+
 .task-phase {
-  border-bottom: 1px solid var(--line-2);
-}
-
-.task-phase:last-child {
-  border-bottom: 0;
+  border-radius: 6px;
+  transition: background-color 140ms ease;
 }
 
 .task-phase-summary {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto auto;
+  display: flex;
   align-items: center;
-  gap: var(--flow-tight);
-  padding: 9px 0;
+  gap: 8px;
+  padding: 5px 4px;
   cursor: pointer;
   list-style: none;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .task-phase-summary::-webkit-details-marker {
@@ -675,21 +957,22 @@
 
 .task-phase-index {
   display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   place-items: center;
   color: var(--text-3);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1.5px solid var(--line);
   border-radius: 50%;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 720;
+  transition: all 180ms ease;
 }
 
 .task-phase.done .task-phase-index {
   background: var(--surface);
-  border-color: var(--line);
+  border-color: var(--ok);
   color: var(--ok);
 }
 
@@ -697,53 +980,94 @@
   color: var(--accent-text);
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 80%, transparent);
 }
 
 .task-phase.failed .task-phase-index {
-  color: var(--accent-text);
+  color: #fff;
   background: var(--danger);
   border-color: var(--danger);
 }
 
-.task-phase-content {
+.task-phase-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
   min-width: 0;
-  padding: 0 0 var(--flow-base) 34px;
 }
 
-.task-phase-summary h3 {
+.task-phase-title-wrap h3 {
+  margin: 0;
   color: var(--text-2);
   font-size: 13px;
-  font-weight: var(--weight-subhead);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.task-phase.active .task-phase-summary h3,
-.task-phase.failed .task-phase-summary h3 {
+.task-phase.active .task-phase-title-wrap h3,
+.task-phase.failed .task-phase-title-wrap h3 {
   color: var(--text);
+  font-weight: 700;
 }
 
-/* .task-phase-status-tag 之前只挂类名但没规则，落到 .task-phase-title-row > span
-   的兜底里变成 10px 灰文字。统一成工作台摘要条的胶囊语言。 */
-.task-phase-status-tag .task-phase-status-tag.done {
+.task-phase-caret {
+  color: var(--text-4);
+  flex-shrink: 0;
+  transition: transform 150ms ease;
+}
+
+details[open] .task-phase-caret {
+  transform: rotate(180deg);
+}
+
+.task-phase-status-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  line-height: 1.3;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.task-phase-status-tag.done {
   color: var(--ok);
   background: color-mix(in srgb, var(--ok-soft) 62%, var(--surface));
 }
+
 .task-phase-status-tag.active {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface));
 }
+
 .task-phase-status-tag.failed {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger-soft) 62%, var(--surface));
 }
+
+.task-phase-status-tag.idle,
 .task-phase-status-tag.pending {
   color: var(--text-3);
   background: var(--surface-2);
 }
 
+.task-phase-content {
+  min-width: 0;
+  padding: 4px 4px 10px 38px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.task-phase-content > p {
+  margin: 0 0 8px;
+}
+
 .task-evidence-list {
   display: grid;
-  margin-top: 14px;
+  margin-top: 8px;
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -752,33 +1076,39 @@
 
 .task-evidence {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 20px;
+  grid-template-columns: 30px minmax(0, 1fr) 20px;
   gap: 10px;
   align-items: center;
-  min-height: 58px;
-  padding: 9px 10px;
+  min-height: 52px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line-2);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.task-evidence:hover {
+  background: var(--surface-hover);
 }
 
 .task-evidence:last-child { border-bottom: 0; }
 
 .task-evidence-icon {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   color: var(--accent);
   background: var(--surface-hover);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
-.task-evidence > div {
+.task-evidence-meta {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 2px;
 }
 
-.task-evidence strong {
+.task-evidence-meta strong {
   overflow: hidden;
   color: var(--text-2);
   font-size: 12px;
@@ -787,8 +1117,8 @@
   white-space: nowrap;
 }
 
-.task-evidence span,
-.task-evidence small {
+.task-evidence-meta span,
+.task-evidence-meta small {
   overflow: hidden;
   color: var(--text-4);
   font-size: 10px;
@@ -800,32 +1130,373 @@
 .task-evidence-status {
   color: var(--text-4) !important;
   text-align: center;
+  font-size: 11px;
 }
 
 .task-evidence.done .task-evidence-status { color: var(--ok) !important; }
 .task-evidence.running .task-evidence-status { color: var(--accent) !important; }
 .task-evidence.failed .task-evidence-status { color: var(--danger) !important; }
 
-.task-progress-footer {
+/* ── Mini Gantt 阶段实测耗时占比条 ──────────────────── */
+.task-gantt-section {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.task-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.task-section-meta {
+  color: var(--text-4);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.task-gantt-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-2);
+  gap: 2px;
+}
+
+.task-gantt-segment {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 200ms ease;
+}
+
+.task-gantt-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.gantt-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-name {
+  color: var(--text-2);
+  flex: 1;
+  white-space: nowrap;
+}
+
+.legend-val {
+  color: var(--text-4);
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ── 本轮执行成果与工具足迹 ─────────────────────────── */
+.task-footprint-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footprint-badge {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-weight: 700;
+}
+
+.footprint-tip {
+  font-size: 10px;
+  color: var(--text-4);
+  font-weight: 400;
+}
+
+.task-footprint-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-footprint-card {
   display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   gap: 10px;
-  padding: 14px 18px 16px;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.task-footprint-card:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 25%, var(--surface));
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.task-footprint-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.footprint-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.footprint-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.footprint-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.footprint-card-seq {
+  color: var(--text-4);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+}
+
+.footprint-card-title-row strong {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footprint-card-source {
+  font-size: 10px;
+  color: var(--text-4);
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.footprint-card-summary {
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footprint-card-hint {
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+.footprint-card-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footprint-status-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+
+.footprint-status-tag.done {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok-soft) 60%, var(--surface));
+}
+
+.footprint-status-tag.running {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface));
+}
+
+.footprint-status-tag.failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 60%, var(--surface));
+}
+
+.footprint-status-tag.unknown {
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+.footprint-jump-icon {
+  color: var(--text-4);
+  opacity: 0.6;
+  transition: all 120ms ease;
+}
+
+.task-footprint-card:hover .footprint-jump-icon {
+  color: var(--accent);
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
+.task-footprint-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.task-footprint-empty.is-waiting {
+  padding: 10px 12px;
+  border-style: solid;
+  border-color: var(--line-2);
+}
+
+.footprint-empty-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.footprint-empty-text strong {
+  display: block;
+  color: var(--text-2);
+  margin-bottom: 2px;
+}
+
+.footprint-empty-text p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-4);
+  line-height: 1.4;
+}
+
+/* ── 底部操作区 ─────────────────────────────────────── */
+.task-progress-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
   color: var(--text-4);
   border-top: 1px solid var(--line-2);
   font-size: var(--fs-11);
+  background: var(--surface-2);
 }
 
-.task-progress-footer span {
+.task-footer-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.task-action-btn,
+.task-progress-timeline-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: all 120ms ease;
+  width: 100%;
+}
+
+.task-action-btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+}
+
+.task-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.task-action-btn.is-copied {
+  background: color-mix(in srgb, var(--ok-soft) 70%, var(--surface));
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.task-progress-timeline-btn {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 30%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent-soft) 55%, transparent);
+}
+
+.task-progress-timeline-btn:hover {
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  border-color: var(--accent);
+}
+
+.task-progress-audit-note {
   display: flex;
   align-items: center;
-  gap: 7px;
-}
-
-.task-progress-footer button {
-  width: fit-content;
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
+  gap: 6px;
+  color: var(--text-4);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 1180px) {
@@ -864,20 +1535,24 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   flex: 0 0 auto;
-  min-height: 28px;
-  padding: 0 7px;
+  min-height: 24px;
+  padding: 2px 8px;
   color: var(--text-3);
   border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
   background: var(--surface);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
 }
 .task-progress-collapse:hover,
 .task-progress-collapse:focus-visible {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--text-1);
+  background: var(--surface-hover);
+  border-color: var(--line-1);
   outline: none;
 }
 .task-progress-collapse .task-progress-summary {
@@ -885,31 +1560,42 @@
   padding: 0;
 }
 .task-progress-panel.is-collapsed {
-  grid-template-rows: 1fr;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12px 0;
   background: var(--surface-2);
-}
-.task-progress-panel.is-collapsed .task-progress-header {
-  align-items: flex-start;
-  justify-content: center;
-  min-height: 0;
-  padding: 10px 0;
-  border-bottom: 0;
-}
-.task-progress-panel.is-collapsed .task-progress-header > div,
-.task-progress-panel.is-collapsed .task-progress-header > .task-progress-summary,
-.task-progress-panel.is-collapsed .task-phase-list,
-.task-progress-panel.is-collapsed .task-progress-footer {
-  display: none;
+  border-left: 1px solid var(--line-2);
+  min-width: 40px;
 }
 .task-progress-panel.is-collapsed .task-progress-collapse {
+  display: flex;
   flex-direction: column;
-  width: 34px;
-  min-height: 76px;
-  padding: 8px 3px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-height: 84px;
+  padding: 10px 4px;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-2);
+  transition: all 120ms ease;
+}
+.task-progress-panel.is-collapsed .task-progress-collapse:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface-hover);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .task-progress-panel.is-collapsed .task-progress-collapse > span:last-child {
   writing-mode: vertical-rl;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 550;
 }
 @media (max-width: 900px) {
   .wb-shell.is-progress-collapsed { grid-template-columns: minmax(0, 1fr); }
@@ -1195,6 +1881,29 @@
   border-color: var(--line);
 }
 
+@keyframes tool-card-flash {
+  0% {
+    outline: 2px solid var(--accent);
+    box-shadow: 0 0 16px var(--accent-soft);
+    background: color-mix(in srgb, var(--accent-soft) 25%, var(--surface));
+  }
+  40% {
+    outline: 2px solid var(--accent);
+    box-shadow: 0 0 24px var(--accent-soft);
+    background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+  }
+  100% {
+    outline: 2px solid transparent;
+    box-shadow: none;
+    background: var(--surface);
+  }
+}
+
+.tool-call-card.highlight-flash,
+.live-tool-chip.highlight-flash {
+  animation: tool-card-flash 1.8s ease-out;
+}
+
 .tool-call-card-header {
   display: flex;
   align-items: center;
@@ -1342,19 +2051,6 @@
 .wb-send:disabled { opacity: 1; }
 .wb-header-actions { flex-shrink: 0; }
 .wb-header-collapse { position: static; width: var(--h-control-compact); height: var(--h-control-compact); border: 0; border-radius: var(--r-6); box-shadow: none; transform: none; }
-.task-progress-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
-.task-progress-header > .task-progress-summary { grid-row: 2; grid-column: 1 / -1; justify-content: flex-start; max-width: none; text-align: left; padding: 0; }
-.task-progress-header > .task-progress-collapse { grid-row: 1; grid-column: 2; }
-.task-progress-header h2 { font-size: var(--fs-14); white-space: nowrap; }
-.task-progress-kicker { color: var(--text-3); letter-spacing: 0; }
-.task-progress-collapse > span:last-child { display: none; }
-.task-progress-panel.is-collapsed .task-progress-header { display: flex; }
-.task-phase { grid-template-columns: var(--space-6) minmax(0, 1fr); }
-.task-phase-index { width: var(--space-6); height: var(--space-6); }
-.task-evidence { grid-template-columns: minmax(0, 1fr) var(--space-4); gap: var(--space-1); padding: var(--space-2) 0; }
-.task-evidence-icon { display: none; }
-.task-evidence :is(span, small) { font-size: var(--fs-11); }
-.task-progress-summary.running .status-dot { animation: none; }
 .wb-restored-run { width: calc(100% - 44px); border-radius: var(--r-6); }
 @media (max-width: 760px) {
   .wb-header { padding-inline: var(--space-3); min-height: var(--h-touch); }

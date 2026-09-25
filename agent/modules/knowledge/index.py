@@ -57,11 +57,17 @@ def replace_chunks(
     }
 
 
-def load_all_chunks(workspace_id: str) -> List[KnowledgeChunk]:
-    """Load all enabled chunks as KnowledgeChunk objects."""
+def child_counts_by_source(workspace_id: str) -> dict[str, int]:
+    """Count searchable child chunks per source, not a truncated page."""
     store = get_context_store(workspace_id)
-    items = store.list_items(item_type="knowledge_chunk", limit=99999)
-    return [_item_to_chunk(it) for it in items if it.get("disabled") is not True]
+    items = store.list_items(item_type="knowledge_chunk", limit=1_000_000)
+    counts: dict[str, int] = {}
+    for item in items:
+        if item.get("chunk_type") == "parent" or item.get("disabled") is True:
+            continue
+        source_id = str(item.get("source_id") or "")
+        counts[source_id] = counts.get(source_id, 0) + 1
+    return counts
 
 
 def list_chunks(

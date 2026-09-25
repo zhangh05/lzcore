@@ -60,16 +60,6 @@ def contains_secret(content: str) -> bool:
     return False
 
 
-def detect_secret_types(content: str) -> list:
-    if not content:
-        return []
-    found = []
-    for pat in SECRET_PATTERNS:
-        if re.search(pat, content, re.IGNORECASE):
-            found.append(pat[:30])
-    return found
-
-
 def redact_metadata(metadata: dict) -> dict:
     if not metadata:
         return metadata

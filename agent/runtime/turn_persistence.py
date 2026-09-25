@@ -132,9 +132,11 @@ def persist_run_record(session, turn, result, context) -> bool:
                         "user", user_input, references=user_attachments,
                     ),
                 })
-            if final_response:
+            failed = bool(result and result.ok is False)
+            assistant_text = final_response or (str(state.error or "").strip() if failed else "")
+            if assistant_text:
                 history_tools = _history_tool_context(result)
-                store.write_message(run_id, "assistant", final_response, metadata={
+                message_metadata = {
                     "created_at": now_iso(),
                     "intent": state.intent,
                     "trace_id": result.trace_id if result else "",
@@ -145,11 +147,15 @@ def persist_run_record(session, turn, result, context) -> bool:
                     "stage_outputs": list(result_metadata.get("stage_outputs") or []),
                     "history_state": build_history_state_record(
                         "assistant",
-                        final_response,
+                        assistant_text,
                         tool_context=history_tools,
                         references=artifact_refs,
                     ),
-                })
+                }
+                if failed:
+                    message_metadata["status"] = "error"
+                    message_metadata["error"] = str(state.error or assistant_text)[:500]
+                store.write_message(run_id, "assistant", assistant_text, metadata=message_metadata)
 
         # v1.0.3.2: persist trace events to disk. Some provider paths do not
         # emit detailed events, but run/trace APIs still need a stable trace.

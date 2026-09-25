@@ -1,7 +1,7 @@
 {
   "extension_id": "approval",
   "name": "操作审批",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "api_version": "1",
   "min_platform_version": "1.1.0",
   "description": "可选的外部决定扩展；关闭时不介入任何工具执行。",

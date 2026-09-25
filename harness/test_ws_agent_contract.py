@@ -1,6 +1,27 @@
 import queue
 
 
+def test_ws_auth_stays_open_for_personal_use_and_closes_when_enabled():
+    from backend.ws.agent_ws import ws_unauthenticated_frame_allowed
+
+    assert ws_unauthenticated_frame_allowed(
+        login_enabled=False, identity_enabled=False, auth_enabled=False,
+        api_token="", frame_token="",
+    ) is True
+    assert ws_unauthenticated_frame_allowed(
+        login_enabled=False, identity_enabled=False, auth_enabled=True,
+        api_token="", frame_token="",
+    ) is False
+    assert ws_unauthenticated_frame_allowed(
+        login_enabled=False, identity_enabled=False, auth_enabled=True,
+        api_token="secret-token", frame_token="secret-token",
+    ) is True
+    assert ws_unauthenticated_frame_allowed(
+        login_enabled=True, identity_enabled=False, auth_enabled=False,
+        api_token="secret-token", frame_token="wrong-length",
+    ) is False
+
+
 def test_ws_heartbeat_payload_reports_monotonic_elapsed_time():
     from backend.ws.agent_ws import _heartbeat_payload
 

@@ -356,41 +356,6 @@ def _extract_title(html: str) -> str:
     return _html.unescape(m.group(1).strip())[:200]
 
 
-# ── Smart Truncation ──────────────────────────────────────────────────
-
-def _smart_truncate(text: str, max_length: int) -> tuple[str, bool, int]:
-    """Truncate at paragraph/sentence boundary, never mid-sentence.
-
-    Returns (truncated_text, was_truncated, truncated_at_position).
-    """
-    if len(text) <= max_length:
-        return text, False, len(text)
-
-    # Try paragraph boundary
-    truncated = text[:max_length]
-    para_break = truncated.rfind("\n\n")
-    if para_break > max_length * 0.8:
-        return text[:para_break].strip(), True, para_break
-
-    # Try sentence boundary
-    sent_break = max(
-        truncated.rfind(". "),
-        truncated.rfind("。"),
-        truncated.rfind("！"),
-        truncated.rfind("？"),
-        truncated.rfind("\n"),
-    )
-    if sent_break > max_length * 0.8:
-        return text[:sent_break + 1].strip(), True, sent_break + 1
-
-    # Last resort: hard truncate at space
-    space = truncated.rfind(" ")
-    if space > max_length * 0.8:
-        return text[:space].strip(), True, space
-
-    return truncated.strip(), True, max_length
-
-
 # ── Main Entry Point ──────────────────────────────────────────────────
 
 _EXTRACTORS = {

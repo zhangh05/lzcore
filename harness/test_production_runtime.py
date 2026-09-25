@@ -30,7 +30,24 @@ class FakeRedis:
     def hdel(self, name, key): self.hashes.setdefault(name, {}).pop(key, None)
     def hgetall(self, name): return dict(self.hashes.get(name, {}))
     def hexists(self, name, key): return key in self.hashes.get(name, {})
+    def hget(self, name, key): return self.hashes.get(name, {}).get(key)
     def ping(self): return True
+
+    def eval(self, script, _nkeys, *args):
+        keys_count = int(_nkeys)
+        keys, argv = args[:keys_count], args[keys_count:]
+        if "RPOPLPUSH" in script:
+            payload = self.rpoplpush(keys[0], keys[1])
+            if not payload:
+                return False
+            self.hset(keys[2], payload, argv[0])
+            return payload
+        if self.hget(keys[0], argv[0]) != argv[1]:
+            return 0
+        self.hdel(keys[0], argv[0])
+        self.lrem(keys[1], 1, argv[0])
+        self.lpush(keys[2], argv[2])
+        return 1
 
 
 def test_redis_queue_renews_and_reclaims_stale_leases():

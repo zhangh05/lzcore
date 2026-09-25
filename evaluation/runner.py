@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Any
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,3 @@ def evaluate_case(case: GoldenCase, result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_cases(cases: list[GoldenCase], invoke: Callable[[GoldenCase], dict[str, Any]]) -> dict[str, Any]:
-    results = [evaluate_case(case, invoke(case)) for case in cases]
-    passed = sum(1 for result in results if result["passed"])
-    return {"total": len(results), "passed": passed, "failed": len(results) - passed, "pass_rate": passed / len(results) if results else 1.0, "results": results}

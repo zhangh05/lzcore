@@ -99,13 +99,25 @@ class RedisJobQueue:
     def claim(self, worker_id: str) -> QueueReceipt | None:
         import json
         import time
-        payload = self.client.rpoplpush(self.QUEUED, self.PROCESSING)
+        payload = self.client.eval(
+            """
+            local payload = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
+            if not payload then
+              return false
+            end
+            redis.call('HSET', KEYS[3], payload, ARGV[1])
+            return payload
+            """,
+            3,
+            self.QUEUED,
+            self.PROCESSING,
+            self.LEASES,
+            json.dumps({"worker_id": worker_id, "heartbeat_at": time.time()}),
+        )
         if not payload:
             return None
         data = json.loads(payload)
-        receipt = QueueReceipt(data["workspace_id"], data["job_id"], payload, int(data.get("attempt", 1)), str(data.get("principal") or ""))
-        self.client.hset(self.LEASES, payload, json.dumps({"worker_id": worker_id, "heartbeat_at": time.time()}))
-        return receipt
+        return QueueReceipt(data["workspace_id"], data["job_id"], payload, int(data.get("attempt", 1)), str(data.get("principal") or ""))
 
     def ack(self, receipt: QueueReceipt) -> None:
         self.client.lrem(self.PROCESSING, 1, receipt.lease_id)
@@ -138,10 +150,29 @@ class RedisJobQueue:
                 data = {}
             if not stale:
                 continue
-            self.client.lrem(self.PROCESSING, 1, payload)
-            self.client.hdel(self.LEASES, payload)
-            if data.get("workspace_id") and data.get("job_id"):
-                self.client.lpush(self.QUEUED, self._payload(data["workspace_id"], data["job_id"], int(data.get("attempt", 1)) + 1, str(data.get("principal") or "")))
+            if not data.get("workspace_id") or not data.get("job_id"):
+                self.client.hdel(self.LEASES, payload)
+                self.client.lrem(self.PROCESSING, 1, payload)
+                continue
+            moved = self.client.eval(
+                """
+                if redis.call('HGET', KEYS[1], ARGV[1]) ~= ARGV[2] then
+                  return 0
+                end
+                redis.call('HDEL', KEYS[1], ARGV[1])
+                redis.call('LREM', KEYS[2], 1, ARGV[1])
+                redis.call('LPUSH', KEYS[3], ARGV[3])
+                return 1
+                """,
+                3,
+                self.LEASES,
+                self.PROCESSING,
+                self.QUEUED,
+                payload,
+                raw,
+                self._payload(data["workspace_id"], data["job_id"], int(data.get("attempt", 1)) + 1, str(data.get("principal") or "")),
+            )
+            if int(moved or 0):
                 reclaimed += 1
         return reclaimed
 

@@ -495,6 +495,18 @@ def reindex_source(workspace_id: str, source_id: str) -> dict:
     src = rec
     full_markdown = rec.get("content", "") or ""
     meta = src.get("metadata", {}) or {}
+    warnings = [str(item) for item in (rec.get("warnings") or [])]
+    expected_length = int(meta.get("content_length") or 0)
+    if "normalized_content_unavailable" in warnings or (
+        expected_length > 0 and len(full_markdown) < expected_length
+    ):
+        return {
+            "ok": False,
+            "summary": "normalized source text is unavailable; existing chunks were left unchanged",
+            "source_id": source_id,
+            "errors": ["normalized_content_unavailable"],
+            "warnings": warnings or ["normalized_content_unavailable"],
+        }
     doc = NormalizedDocument(
         source_id=source_id,
         title=src.get("title", ""),

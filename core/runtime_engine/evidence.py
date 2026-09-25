@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections.abc import Iterable
 from typing import Any
 
@@ -199,46 +198,6 @@ def _tool_result_summary(result: object, output: dict[str, Any]) -> str:
     fact_names = ", ".join(str(key) for key in list(facts)[:8])
     base = str(subject or getattr(result, "tool_name", "tool"))
     return (f"{base}: collected {fact_names}" if fact_names else f"{base}: succeeded")[:500]
-
-
-def _bounded_projection(
-    value: Any,
-    *,
-    max_chars: int | None = None,
-    query: str = "",
-) -> Any:
-    """Compatibility helper: evidence is retained verbatim for the LLM."""
-    return value
-
-
-def _relevant_text_excerpts(text: str, *, query: str, max_chars: int) -> str:
-    """Select query-relevant line windows while retaining document boundaries."""
-    lines = str(text or "").splitlines()
-    if not lines:
-        return text[:max_chars]
-    terms = {
-        token.lower()
-        for token in re.findall(r"[A-Za-z][A-Za-z0-9_.:/-]{1,31}|[\u4e00-\u9fff]{2,8}", str(query or ""))
-        if token.strip()
-    }
-    selected: set[int] = set(range(min(8, len(lines))))
-    selected.update(range(max(0, len(lines) - 4), len(lines)))
-    if terms:
-        for index, line in enumerate(lines):
-            lowered = line.lower()
-            if any(term in lowered for term in terms):
-                selected.update(range(max(0, index - 2), min(len(lines), index + 3)))
-    ordered = sorted(selected)
-    chunks: list[str] = []
-    previous = -2
-    for index in ordered:
-        if index != previous + 1 and chunks:
-            chunks.append("... [omitted] ...")
-        chunks.append(lines[index])
-        previous = index
-        if len("\n".join(chunks)) >= max_chars:
-            break
-    return "\n".join(chunks)[:max_chars]
 
 
 def register_evidence_parts(

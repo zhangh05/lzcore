@@ -34,6 +34,10 @@ NETWORK_SKILL_OPERATING_CONTRACT = """## Selected network Skill operating contra
 """
 
 
+def _authored_instructions_block(text: str) -> str:
+    return "<skill_authored_instructions>\n" + text + "\n</skill_authored_instructions>"
+
+
 def render_network_skill_prompt(context: dict[str, Any]) -> str:
     """Render the compact operating contract and server-resolved scope."""
     if str(context.get("skill_id") or "").startswith("drawing:"):
@@ -66,9 +70,14 @@ def render_network_skill_prompt(context: dict[str, Any]) -> str:
         + "\n</selected_skill_context>",
     ]
     if owner_instructions:
-        parts.append(
-            "<skill_authored_instructions>\n"
-            + owner_instructions
-            + "\n</skill_authored_instructions>"
-        )
-    return "\n\n".join(parts)
+        parts.append(_authored_instructions_block(owner_instructions))
+    rendered = "\n\n".join(parts)
+    if len(rendered) <= 40_000 or not owner_instructions:
+        return rendered
+    overhead = len(rendered) - len(owner_instructions)
+    note = "\n[工作台提示已截断过长的自有说明；已保存的 Skill 原文未改。]"
+    room = 40_000 - overhead - len(note)
+    if room <= 0:
+        return rendered
+    trimmed = _authored_instructions_block(owner_instructions[:room] + note)
+    return "\n\n".join([*parts[:-1], trimmed])

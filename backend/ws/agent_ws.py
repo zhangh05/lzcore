@@ -267,15 +267,17 @@ def register_ws_routes(app):
                 # frame regardless of whether it is a ping or an agent turn.
                 if not _auth_checked:
                     from backend.core.auth import _is_auth_enabled, _is_identity_enabled, _is_login_enabled, _get_api_token, is_current_session_authenticated
-                    import hmac as _hmac
                     if not is_current_session_authenticated():
                         api_token = _get_api_token()
                         frame_token = str(msg.get("auth_token", ""))
-                        has_valid_token = bool(api_token and _hmac.compare_digest(frame_token, api_token))
-                        if (_is_login_enabled() or _is_identity_enabled()) and not has_valid_token:
-                            ws.send(json.dumps({"type": "error", "message": "unauthorized"}))
-                            return
-                        if _is_auth_enabled() and api_token and not has_valid_token:
+                        has_valid_token = _api_token_matches(api_token, frame_token)
+                        if not ws_unauthenticated_frame_allowed(
+                            login_enabled=_is_login_enabled(),
+                            identity_enabled=_is_identity_enabled(),
+                            auth_enabled=_is_auth_enabled(),
+                            api_token=api_token,
+                            frame_token=frame_token,
+                        ):
                             ws.send(json.dumps({"type": "error", "message": "unauthorized"}))
                             return
                         if has_valid_token:
@@ -470,6 +472,35 @@ def register_ws_routes(app):
 def _same_origin_ws_request() -> bool:
     origin = request.headers.get("Origin")
     return is_allowed_browser_origin(origin, request.host)
+
+
+def _api_token_matches(api_token: str, frame_token: str) -> bool:
+    import hmac
+    token = str(api_token or "")
+    presented = str(frame_token or "")
+    if not token or not presented or len(token) != len(presented):
+        return False
+    return hmac.compare_digest(presented, token)
+
+
+def ws_unauthenticated_frame_allowed(
+    *,
+    login_enabled: bool,
+    identity_enabled: bool,
+    auth_enabled: bool,
+    api_token: str,
+    frame_token: str,
+) -> bool:
+    """Allow a socket only when no auth mode is on, or the frame token matches.
+
+    Local personal use with auth, login, and identity all off stays open.
+    Turning any of those on requires a valid token, including the case where
+    auth is enabled but the server token is missing.
+    """
+    has_valid_token = _api_token_matches(api_token, frame_token)
+    if login_enabled or identity_enabled or auth_enabled:
+        return has_valid_token
+    return True
 
 
 def _ws_workspace_allowed(username: str, role: str, allowed: list[str], workspace_id: str, *, write: bool) -> bool:
@@ -805,7 +836,11 @@ def _run_agent_thread(
                 )
             except Exception:
                 _log.exception("unable to persist failed live turn job=%s", job_id)
-        put_terminal({"type": "error", "message": "agent_runtime_error"})
+        put_terminal({
+            "type": "error",
+            "message": safe_error,
+            "error_code": "agent_runtime_error",
+        })
     finally:
         if job_id:
             with _active_turns_lock:

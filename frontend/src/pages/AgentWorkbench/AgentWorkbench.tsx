@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { jobsApi, sessionsApi, settingsApi } from "../../api";
 import { apiRequest } from "../../api/client";
-import { useSessionStore } from "../../stores/session";
+import { useSessionStore, useUIStore } from "../../stores/session";
 import { useWorkbenchStore, type ChatMsg } from "../../stores/workbench";
 import { useToastStore } from "../../stores/toast";
 import { humanFailure } from "../../utils/humanizeError";
@@ -228,7 +228,9 @@ export function TaskWorkbench() {
   }, [isSkillLocked, selectedResourceIds, selectedSkill, selectedSkillKey, skillCatalogLoaded]);
 
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
-  const [progressPanelCollapsed, setProgressPanelCollapsed] = useState(false);
+  const taskProgressOpen = useUIStore((s) => s.taskProgressOpen);
+  const toggleTaskProgress = useUIStore((s) => s.toggleTaskProgress);
+  const progressPanelCollapsed = !taskProgressOpen;
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
@@ -451,9 +453,7 @@ export function TaskWorkbench() {
   ]);
 
   const handleShowTimeline = useCallback(() => setViewMode("timeline"), []);
-  const handleToggleProgressPanel = useCallback(() => {
-    setProgressPanelCollapsed((value) => !value);
-  }, []);
+  const handleToggleProgressPanel = toggleTaskProgress;
 
   const latestUser = [...visibleHistory].reverse().find((message) => message.role === "user");
   const sessionTitle = latestUser?.text.trim().split("\n")[0].slice(0, 32) || "新会话";
@@ -620,6 +620,8 @@ export function TaskWorkbench() {
           llmHealth={llmHealth}
           currentSessionId={currentSessionId}
           visibleHistory={visibleHistory}
+          taskProgressOpen={taskProgressOpen}
+          onToggleTaskProgress={toggleTaskProgress}
         />
 
         <div className="wb-chat" data-testid="chat-stream">

@@ -152,7 +152,7 @@ body,
   --h-context: 44px;
   --w-sidebar: 176px;
   --w-sidebar-collapsed: 0px;
-  --w-progress: 192px;
+  --w-progress: 280px;
   --w-page-max: 1440px;
   --w-reading: 1120px;
   --h-control: 34px;
@@ -880,6 +880,63 @@ pre code {
   background: var(--surface-2);
   border-color: var(--line);
   transform: translate3d(0, -1px, 0);
+}
+
+/* Top-left brand zone with integrated sidebar toggle */
+.brand-zone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
+  min-width: calc(var(--w-sidebar) - var(--space-12));
+  max-width: var(--w-sidebar);
+}
+
+.brand-zone::after {
+  position: absolute;
+  right: -9px;
+  top: 50%;
+  width: 1px;
+  height: 16px;
+  background: var(--line-2);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.sidebar-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-6);
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease);
+}
+
+.sidebar-toggle-btn:hover {
+  color: var(--text-1);
+  background: var(--surface-hover);
+  border-color: var(--line-2);
+}
+
+.sidebar-toggle-btn.is-active {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+
+.sidebar-toggle-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
 }
 
 .logout-btn {

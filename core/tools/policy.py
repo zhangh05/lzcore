@@ -197,12 +197,3 @@ class ToolPolicy:
             blocked_rules=[],
         )
 
-def validate_tool_id(tool_id: str) -> bool:
-    """Validate tool_id naming convention: category.name"""
-    if not tool_id or "." not in tool_id:
-        return False
-    parts = tool_id.split(".", 1)
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        return False
-    import re
-    return bool(re.match(r'^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$', tool_id))

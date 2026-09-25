@@ -27,6 +27,23 @@ def _setup(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_MASTER_KEY", "test-extension-master-key")
 
 
+def test_skill_save_keeps_full_instructions_and_description(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    conn = _register_connection("default", {"name": "CE", "host": "127.0.0.1", "protocol": "telnet", "vendor": "h3c"})
+    instructions = "先看接口，再看路由。" * 400
+    description = "这是一段超过五百字的说明。" * 40
+    skill = service.save_skill("default", {
+        "name": "long-skill",
+        "description": description,
+        "instructions": instructions,
+        "device_ids": [conn["device_id"]],
+        "connection_ids": [conn["connection_id"]],
+    })
+    assert skill["instructions"] == instructions
+    assert skill["description"] == description
+    assert len(skill["instructions"]) > 2000
+
+
 def test_published_skill_has_configuration_capability_by_default(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     conn = _register_connection("default", {"name": "CE", "host": "127.0.0.1", "protocol": "telnet", "vendor": "h3c"})

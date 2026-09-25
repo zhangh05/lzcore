@@ -14,12 +14,12 @@ import { isApiError } from "../types";
 import { ACTIVE_USER_KEY, scopedLocalStorageKey, setActiveUserScope, setActiveWorkspaceScope } from "../utils/userScope";
 import {
   IconChevronLeft,
-  IconChevronRight,
   IconSettings,
   IconMoon,
   IconSun,
   IconMenu,
   IconSparkle,
+  IconSidebarSimple,
 } from "../components/Icon";
 import { FeatureDescriptionDrawer } from "../components/FeatureDescriptionDrawer";
 import { NAV_ITEMS, buildNavGroups } from "../config/nav";
@@ -413,12 +413,25 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
           {mobileNavOpen ? <IconChevronLeft size={16} /> : <IconMenu size={16} />}
         </button>
 
-        <Link className="brand" to="/workbench" aria-label="联智中枢" viewTransition>
-          <span className="brand-text">
-            <span>联智中枢</span>
-            <small>{version ? formatVersion(version) : ""}</small>
-          </span>
-        </Link>
+        <div className="brand-zone">
+          <Link className="brand" to="/workbench" aria-label="联智中枢" viewTransition>
+            <span className="brand-text">
+              <span>联智中枢</span>
+              <small>{version ? formatVersion(version) : ""}</small>
+            </span>
+          </Link>
+          <button
+            type="button"
+            className={`sidebar-toggle-btn ${sidebarOpen ? "is-active" : ""}`}
+            data-tip={sidebarOpen ? "收起侧栏" : "展开侧栏"}
+            data-testid="btn-toggle-sidebar"
+            aria-label={sidebarOpen ? "收起侧栏" : "展开侧栏"}
+            aria-expanded={sidebarOpen}
+            onClick={toggleSidebar}
+          >
+            <IconSidebarSimple size={16} />
+          </button>
+        </div>
 
         <nav className="app-nav" aria-label="主导航">
           {navigationGroups.map((group) => <NavGroupItem key={group.id} group={group} currentPath={location.pathname} currentSearch={location.search} />)}
@@ -436,17 +449,6 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
             <span>功能描述</span>
           </button>
           <SettingsNav items={settingsNavigationItems} currentPath={location.pathname} />
-          <button
-            type="button"
-            className="collapse-btn"
-            data-tip="切换侧栏"
-            data-testid="btn-toggle-sidebar"
-            aria-label="切换侧栏"
-            aria-expanded={sidebarOpen}
-            onClick={toggleSidebar}
-          >
-            {sidebarOpen ? <IconChevronLeft size={14} /> : <IconChevronRight size={14} />}
-          </button>
 
           <button
             type="button"

@@ -1,6 +1,7 @@
 import type { ActiveTurnSnapshot, RuntimeEvent } from "../types";
 import type { ChatMsg } from "../stores/workbench";
 import { deriveInlineCardState } from "../components/toolCallState";
+import { formatStreamElapsedSeconds } from "./streamElapsed";
 
 export type TaskPhaseState = "idle" | "active" | "done" | "failed";
 
@@ -23,6 +24,8 @@ export type TaskEvidence = {
   source: string;
   status: "running" | "done" | "failed" | "unknown";
   summary?: string;
+  toolId?: string;
+  toolName?: string;
 };
 
 /**
@@ -145,6 +148,9 @@ export function buildTaskProgress(
   runId?: string;
   elapsedMs?: number;
   toolCount: number;
+  completedToolCount: number;
+  activeTool?: TaskEvidence;
+  totalPhaseDurationMs?: number;
 } {
   const result = message?.result;
   const events = (snapshot?.events?.length ? snapshot.events : message?.runtimeEvents?.length
@@ -213,14 +219,22 @@ export function buildTaskProgress(
     }, result);
     const status: TaskEvidence["status"] = cardState === "pending" ? "running"
       : cardState === "ok" ? "done" : cardState === "unknown" ? "unknown" : "failed";
+    const toolName = "tool_name" in tool && tool.tool_name ? String(tool.tool_name) : displayToolName(toolId);
     return {
       id: String(("call_id" in tool && tool.call_id) || `${toolId}-${index}`),
       title: displayToolName(toolId),
+      toolName,
       source: toolSource(toolId),
       status,
       summary: String(tool.summary || "").trim() || undefined,
+      toolId,
     };
   });
+
+  const completedToolCount = evidence.filter((item) => item.status === "done").length;
+  const activeTool = isStreaming ? evidence.find((item) => item.status === "running") : undefined;
+  const phaseDurations = phases.map((p) => p.durationMs).filter((d): d is number => typeof d === "number" && d > 0);
+  const totalPhaseDurationMs = phaseDurations.length > 0 ? phaseDurations.reduce((acc, d) => acc + d, 0) : undefined;
 
   return {
     phases,
@@ -230,5 +244,41 @@ export function buildTaskProgress(
     runId,
     elapsedMs,
     toolCount: evidence.length,
+    completedToolCount,
+    activeTool,
+    totalPhaseDurationMs,
   };
 }
+
+export function formatRunSummaryMarkdown(progress: ReturnType<typeof buildTaskProgress>): string {
+  const lines: string[] = [];
+  lines.push("### 任务执行报告");
+  if (progress.runId) lines.push(`- **运行编号 (Run ID)**: \`${progress.runId}\``);
+  lines.push(`- **执行状态**: ${progress.status === "succeeded" ? "成功完成" : progress.status === "failed" ? "执行异常" : progress.status === "running" ? "处理中" : "就绪"}`);
+  if (progress.elapsedMs !== undefined) {
+    lines.push(`- **实测总耗时**: ${formatStreamElapsedSeconds(progress.elapsedMs)}`);
+  }
+  lines.push(`- **工具调用数**: ${progress.toolCount} 次`);
+
+  const measuredPhases = progress.phases.filter((p) => p.durationMs !== undefined && p.durationMs >= 1000);
+  if (measuredPhases.length > 0) {
+    lines.push("\n#### 阶段实测跨度");
+    progress.phases.forEach((p, idx) => {
+      const dur = p.durationMs && p.durationMs >= 1000 ? ` (${formatStreamElapsedSeconds(p.durationMs)})` : "";
+      const stateLabel = p.state === "done" ? "已完成" : p.state === "active" ? "进行中" : p.state === "failed" ? "异常" : "等待";
+      lines.push(`${idx + 1}. **${p.title}**${dur} - ${stateLabel}`);
+    });
+  }
+
+  if (progress.evidence.length > 0) {
+    lines.push("\n#### 工具调用与证据足迹");
+    progress.evidence.forEach((ev, idx) => {
+      const stateLabel = ev.status === "done" ? "成功" : ev.status === "running" ? "进行中" : ev.status === "unknown" ? "未知" : "异常";
+      const summaryText = ev.summary ? `：${ev.summary}` : "";
+      lines.push(`${idx + 1}. [${ev.source}] **${ev.title}** (${stateLabel})${summaryText}`);
+    });
+  }
+
+  return lines.join("\n");
+}
+

@@ -128,13 +128,21 @@ export const MessageRow = memo(function MessageRow({ m, idx: _idx, total: _total
         {/* Live tool call chips during streaming */}
         {m.status === "streaming" && m.toolCalls && m.toolCalls.length > 0 && (
           <div className="tool-calls-inline">
-            {m.toolCalls.map((tc: InlineToolCall, tci: number) => (
-              <span key={tc.call_id || `${tc.tool_id}-${tci}`} className={`live-tool-chip ${tc.status || "running"}`}>
-                <span className={`live-tool-dot ${tc.status || "running"}`} />
-                {tc.tool_name || toolLabel(tc.tool_id)}
-                {tc.summary && <span className="live-tool-summary">{tc.summary}</span>}
-              </span>
-            ))}
+            {m.toolCalls.map((tc: InlineToolCall, tci: number) => {
+              const chipId = tc.call_id ? `tool-call-${tc.call_id}` : `tool-call-${tc.tool_id}-${tci}`;
+              return (
+                <span
+                  key={tc.call_id || `${tc.tool_id}-${tci}`}
+                  id={chipId}
+                  data-call-id={tc.call_id}
+                  className={`live-tool-chip ${tc.status || "running"}`}
+                >
+                  <span className={`live-tool-dot ${tc.status || "running"}`} />
+                  {tc.tool_name || toolLabel(tc.tool_id)}
+                  {tc.summary && <span className="live-tool-summary">{tc.summary}</span>}
+                </span>
+              );
+            })}
           </div>
         )}
         {/* Completed tool call cards */}

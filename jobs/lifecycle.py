@@ -313,8 +313,6 @@ def claim_session_turn(
     return _claim_session_turn_request(ws_id, session_id, user_input, client_request_id)
 
 
-
-
 def finish_claimed_session_turn(
     ws_id: str,
     session_id: str,
@@ -457,23 +455,6 @@ def _begin_session_turn_unlocked(
     return job_id
 
 
-
-
-def begin_session_turn(
-    ws_id: str,
-    session_id: str,
-    user_input: str,
-    *,
-    client_request_id: str = "",
-) -> str | None:
-    """Compatibility wrapper returning only the claimed session job id.
-
-    Execution paths must use :func:`claim_session_turn` and honour its
-    ``should_execute`` result before entering ``AgentApp``.
-    """
-    return claim_session_turn(
-        ws_id, session_id, user_input, client_request_id=client_request_id,
-    ).job_id or None
 def update_session_turn_stage(
     ws_id: str,
     job_id: str,

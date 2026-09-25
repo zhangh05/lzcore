@@ -52,6 +52,24 @@ describe("workbench backend message merge", () => {
     ]);
   });
 
+  it("restores a failed assistant turn as an error instead of a normal reply", () => {
+    const store = useWorkbenchStore.getState();
+    store.switchSession("sess-failed");
+    store.mergeFromBackend("sess-failed", [{
+      message_id: "run-failed:assistant",
+      session_id: "sess-failed",
+      role: "assistant",
+      content: "连接设备超时",
+      created_at: "2026-09-25T10:00:00Z",
+      run_id: "run-failed",
+      metadata: { status: "error", error: "连接设备超时" },
+    }]);
+
+    const message = useWorkbenchStore.getState().bySession["sess-failed"][0];
+    expect(message.status).toBe("error");
+    expect(message.error).toBe("连接设备超时");
+  });
+
   it("restores the immutable Skill label on a persisted user message", () => {
     const store = useWorkbenchStore.getState();
     store.switchSession("sess-skill");

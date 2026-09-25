@@ -38,6 +38,29 @@ from .runtime_contracts import (
 ToolHandler = Callable[[dict[str, Any]], Any | Awaitable[Any]]
 
 
+class _TimeoutCancelGate:
+    """Shared cancel flag. A runtime timeout asks the handler to stop.
+
+    The returned outcome stays uncertain: stopping the process tree does not
+    prove that an external side effect never happened, and must not authorize
+    an automatic replay.
+    """
+
+    def __init__(self, user_check: Callable[[], bool] | None):
+        self._user_check = user_check
+        self.timed_out = False
+
+    def __call__(self) -> bool:
+        if self.timed_out:
+            return True
+        if self._user_check is None:
+            return False
+        try:
+            return bool(self._user_check())
+        except Exception:
+            return False
+
+
 # ── v4.2: use typed ErrorCode enum ──────────────────────────────────
 
 # Handlers that explicitly report ok=False but provide no code.
@@ -290,10 +313,9 @@ class ToolRuntime:
                 bind_runtime_cancel_check,
                 reset_runtime_cancel_check,
             )
-            cancel_check = ctx.extras.get("cancel_check") if ctx is not None else None
-            cancel_token = bind_runtime_cancel_check(
-                cancel_check if callable(cancel_check) else None
-            )
+            user_cancel = ctx.extras.get("cancel_check") if ctx is not None else None
+            cancel_gate = _TimeoutCancelGate(user_cancel if callable(user_cancel) else None)
+            cancel_token = bind_runtime_cancel_check(cancel_gate)
             try:
                 task = asyncio.create_task(self._invoke_handler(handler, merged_args))
             finally:
@@ -308,6 +330,7 @@ class ToolRuntime:
             elapsed = (time.monotonic() - start) * 1000
             return _normalize_result(node, result, elapsed)
         except asyncio.TimeoutError:
+            cancel_gate.timed_out = True
             if operation_context is not None:
                 task.add_done_callback(
                     lambda done, correlation=operation_context, tool=node.tool:

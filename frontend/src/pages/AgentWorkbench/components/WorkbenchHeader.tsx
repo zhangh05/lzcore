@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { ChatMsg } from "../../../stores/workbench";
-import { IconChat, IconChevronDown, IconHistory } from "../../../components/Icon";
+import { IconChat, IconChevronDown, IconHistory, IconSidebarSimple } from "../../../components/Icon";
 
 export interface WorkbenchHeaderProps {
   sessionTitle: string;
@@ -16,6 +16,8 @@ export interface WorkbenchHeaderProps {
   };
   currentSessionId: string | null;
   visibleHistory: ChatMsg[];
+  taskProgressOpen?: boolean;
+  onToggleTaskProgress?: () => void;
 }
 
 export const WorkbenchHeader = memo(function WorkbenchHeader({
@@ -27,6 +29,8 @@ export const WorkbenchHeader = memo(function WorkbenchHeader({
   llmHealth,
   currentSessionId,
   visibleHistory,
+  taskProgressOpen,
+  onToggleTaskProgress,
 }: WorkbenchHeaderProps) {
   const llmStatusLabel = llmHealth.connected
     ? llmHealth.recentFailure
@@ -106,6 +110,20 @@ export const WorkbenchHeader = memo(function WorkbenchHeader({
           <IconHistory size={15} />
           <span>时间线</span>
         </button>
+        {onToggleTaskProgress ? (
+          <button
+            type="button"
+            className={`wb-mode-btn ${taskProgressOpen ? "active" : ""}`}
+            onClick={onToggleTaskProgress}
+            aria-label={taskProgressOpen ? "收起任务进度" : "展开任务进度"}
+            title={taskProgressOpen ? "收起任务进度" : "展开任务进度"}
+            aria-pressed={taskProgressOpen}
+            data-testid="btn-toggle-task-progress"
+          >
+            <IconSidebarSimple size={15} className="is-right" />
+            <span>进度</span>
+          </button>
+        ) : null}
         {currentSessionId && visibleHistory.length > 0 ? (
           <button className="wb-export-btn" title="导出对话" onClick={handleExport}>
             导出

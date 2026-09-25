@@ -28,9 +28,15 @@ def run_job(ws_id: str, job_id: str):
         elif rec.job_type == "network_inspection":
             _run_network_inspection(rec)
 
+        # A lost lease means another worker may already own this delivery.
+        # Do not record success over that uncertain outcome.
+        if _lease_was_lost():
+            return
         # Fresh-get final job for accurate summary
         final = get_job(ws_id, job_id)
         if not final or final.status in {"failed", "cancelled"}:
+            return
+        if _lease_was_lost():
             return
         mark_succeeded(ws_id, job_id, {
             **dict(final.result_summary or {}),
@@ -213,6 +219,12 @@ def _run_workflow(rec: JobRecord):
         mark_cancelled(rec.workspace_id, rec.job_id, "Workflow run cancelled")
     elif result["status"] != "succeeded":
         raise RuntimeError("workflow_run_failed")
+
+
+def _lease_was_lost() -> bool:
+    from jobs.worker import current_lease_lost
+    flag = current_lease_lost()
+    return bool(flag is not None and flag.is_set())
 
 
 def _cancel_check(rec: JobRecord) -> bool:

@@ -14,11 +14,6 @@ ROOT = Path(__file__).resolve().parents[3]
 _SHELL_TIMEOUT = 30
 
 
-def _safe_preview(text: str, max_chars: int = 500) -> str:
-    """Compatibility helper: callers receive the complete text unchanged."""
-    return text
-
-
 # ═══════════════ Helpers ═══════════════
 def _workspace_path(workspace_id: str, subpath: str = "") -> Path:
     try:
@@ -201,6 +196,27 @@ _PRIVATE_IP_PREFIXES = ("10.", "172.16.", "172.17.", "172.18.", "172.19.",
                          "172.30.", "172.31.", "192.168.", "127.", "0.", "169.254.")
 
 
+def _cancel_requested(cancel_check) -> bool:
+    """Honor an explicit callback and the server-owned runtime cancel gate."""
+    checks = []
+    if callable(cancel_check):
+        checks.append(cancel_check)
+    try:
+        from core.tools.context import get_runtime_cancel_check
+        runtime_check = get_runtime_cancel_check()
+    except Exception:
+        runtime_check = None
+    if callable(runtime_check) and runtime_check not in checks:
+        checks.append(runtime_check)
+    for check in checks:
+        try:
+            if check():
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def _shell_argv(command, shell: str = "/bin/bash", os_name: str | None = None):
     """Build the native shell argv without invoking a process."""
     import os as _os
@@ -268,34 +284,29 @@ def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
         proc = subprocess.Popen(argv, **popen_kwargs)
         deadline = time.monotonic() + float(actual_timeout)
         while True:
-            if callable(cancel_check):
+            if _cancel_requested(cancel_check):
+                from core.tools.general_tools.process_manager import kill_process_tree
                 try:
-                    cancelled = bool(cancel_check())
+                    kill_process_tree(proc.pid)
                 except Exception:
-                    cancelled = False
-                if cancelled:
-                    from core.tools.general_tools.process_manager import kill_process_tree
-                    try:
-                        kill_process_tree(proc.pid)
-                    except Exception:
-                        pass
-                    try:
-                        stdout, stderr = proc.communicate(timeout=2)
-                    except Exception:
-                        stdout, stderr = "", ""
-                    # The process was already started. Killing its process
-                    # tree cannot prove that no external side effect occurred,
-                    # so return the full uncertainty fact to the model.
-                    return {
-                        "ok": False,
-                        "executed": True,
-                        "cancelled": True,
-                        "execution_may_continue": True,
-                        "automatic_retry_allowed": False,
-                        "error_code": "TOOL_CANCELLED_UNCERTAIN",
-                        "error": "command cancelled after start; outcome requires verification",
-                        "process_tree_killed": True,
-                    }
+                    pass
+                try:
+                    stdout, stderr = proc.communicate(timeout=2)
+                except Exception:
+                    stdout, stderr = "", ""
+                # The process was already started. Killing its process
+                # tree cannot prove that no external side effect occurred,
+                # so return the full uncertainty fact to the model.
+                return {
+                    "ok": False,
+                    "executed": True,
+                    "cancelled": True,
+                    "execution_may_continue": True,
+                    "automatic_retry_allowed": False,
+                    "error_code": "TOOL_CANCELLED_UNCERTAIN",
+                    "error": "command cancelled after start; outcome requires verification",
+                    "process_tree_killed": True,
+                }
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise subprocess.TimeoutExpired(argv, actual_timeout)

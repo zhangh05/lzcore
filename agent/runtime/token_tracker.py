@@ -9,7 +9,7 @@ import logging
 from dataclasses import dataclass, field
 
 from agent.runtime.utils import now_iso
-from storage.usage_store import append_usage, clear_usage, read_usage
+from storage.usage_store import append_usage, read_usage
 
 _LOG = logging.getLogger(__name__)
 
@@ -41,22 +41,6 @@ def estimate_text(text: str) -> int:
     cjk = sum(1 for c in s if _is_cjk(c))
     non_cjk = len(s) - cjk
     return max(1, cjk + non_cjk // 4)
-
-
-def estimate_messages(messages: list) -> int:
-    """Estimate total tokens for a list of messages (dicts, objects, or strings)."""
-    total = 0
-    for msg in (messages or []):
-        if isinstance(msg, str):
-            total += estimate_text(msg)
-        elif isinstance(msg, dict):
-            for v in msg.values():
-                total += estimate_text(str(v) if not isinstance(v, str) else v)
-        elif hasattr(msg, 'content'):
-            total += estimate_text(getattr(msg, 'content', ''))
-        else:
-            total += estimate_text(str(msg))
-    return max(1, total)
 
 
 @dataclass
@@ -233,6 +217,3 @@ def _empty_usage(workspace_id: str, session_id: str) -> dict:
     }
 
 
-def reset_usage_for_tests(workspace_id: str = "default"):
-    """Remove usage data for tests."""
-    clear_usage(workspace_id)

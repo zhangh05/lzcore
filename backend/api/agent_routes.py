@@ -244,7 +244,7 @@ def agent_message():
                 _log.exception("unable to record failed HTTP turn claim session=%s", session_id)
         return _json_error(
             "INTERNAL_ERROR",
-            "agent execution failed",
+            safe_error,
             500,
         )
 

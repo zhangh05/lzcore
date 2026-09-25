@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMsg } from "../stores/workbench";
-import { buildTaskProgress } from "../utils/taskProgress";
+import { buildTaskProgress, formatRunSummaryMarkdown } from "../utils/taskProgress";
 
 function assistant(overrides: Partial<ChatMsg> = {}): ChatMsg {
   return {
@@ -151,4 +151,48 @@ describe("task progress projection", () => {
     expect(model.runId).toBeUndefined();
     expect(model.toolCount).toBe(0);
   });
+
+  it("identifies active in-flight tool and calculates duration totals", () => {
+    const model = buildTaskProgress(assistant({
+      toolCalls: [
+        { tool_id: "device.inspect", tool_name: "检查设备", ok: true, status: "done" },
+        { tool_id: "web.search", tool_name: "搜索", ok: false, status: "running", summary: "查询端口状态" },
+      ],
+    }), {
+      status: "running",
+      events: [
+        { event_id: "1", event_type: "turn_started", occurred_at: "2026-09-15T10:00:00.000Z" },
+        { event_id: "2", event_type: "planner_completed", occurred_at: "2026-09-15T10:00:02.000Z" },
+        { event_id: "3", event_type: "execution_started", occurred_at: "2026-09-15T10:00:03.000Z" },
+        { event_id: "4", event_type: "execution_completed", occurred_at: "2026-09-15T10:00:08.000Z" },
+      ],
+    }, { turnRunning: true });
+
+    expect(model.completedToolCount).toBe(1);
+    expect(model.activeTool?.title).toBe("信息检索");
+    expect(model.activeTool?.summary).toBe("查询端口状态");
+    expect(model.totalPhaseDurationMs).toBe(7000); // 2000ms + 5000ms
+  });
+
+  it("formats structured markdown report for one-click copy", () => {
+    const model = buildTaskProgress(assistant({
+      toolCalls: [
+        { tool_id: "device.inspect", tool_name: "设备检查", ok: true, status: "done", summary: "采集到 3 台交换机" },
+      ],
+    }), {
+      status: "succeeded",
+      run_id: "run_test999",
+      started_at: "2026-09-15T10:00:00.000Z",
+      finished_at: "2026-09-15T10:00:15.000Z",
+      stage: "turn_completed",
+    });
+
+    const markdown = formatRunSummaryMarkdown(model);
+    expect(markdown).toContain("### 任务执行报告");
+    expect(markdown).toContain("run_test999");
+    expect(markdown).toContain("实测总耗时");
+    expect(markdown).toContain("网络状态检查");
+    expect(markdown).toContain("采集到 3 台交换机");
+  });
 });
+

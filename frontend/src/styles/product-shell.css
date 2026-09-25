@@ -10,16 +10,18 @@
   box-shadow: none;
 }
 
-.brand {
+.brand-zone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
   min-width: calc(var(--w-sidebar) - var(--space-12));
   max-width: var(--w-sidebar);
 }
 
-/* 在品牌区和导航区之间画一条竖线。顶栏 brand + nav + actions 横向跨度大，
-   中间 700+px 全靠 margin-left:auto 吃掉，单靠位置感容易看成"散"。
-   用两条竖线把栏切成 3 段，视觉上空白变成"对称留白"而不是"断层"。 */
-.brand { position: relative; }
-.brand::after {
+/* 在品牌区和导航区之间画一条竖线 */
+.brand-zone::after {
   position: absolute;
   right: -9px;
   top: 50%;
@@ -28,6 +30,50 @@
   background: var(--line-2);
   content: "";
   transform: translateY(-50%);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sidebar-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-6);
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease);
+}
+
+.sidebar-toggle-btn:hover {
+  color: var(--text-1);
+  background: var(--surface-hover);
+  border-color: var(--line-2);
+}
+
+.sidebar-toggle-btn.is-active {
+  color: var(--accent);
+  background: var(--surface-2);
+}
+
+.sidebar-toggle-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
 }
 
 .brand-text > span {
@@ -138,6 +184,8 @@
   color: var(--text);
   background: var(--surface-3);
 }
+
+
 
 .feature-desc-btn {
   display: inline-flex;
@@ -523,6 +571,7 @@
 .app-settings-menu > summary, .collapse-btn, .theme-toggle, .nav-toggle { width: var(--h-control); height: var(--h-control); }
 @media (max-width: 900px) {
   .mobile-nav-advanced { display: block; }
+  .sidebar-toggle-btn { display: none; }
   .app-settings-menu > summary, .theme-toggle, .nav-toggle, .mobile-nav-item { min-height: var(--h-touch); }
   .theme-toggle, .nav-toggle { min-width: var(--h-touch); }
 }

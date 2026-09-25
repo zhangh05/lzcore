@@ -77,32 +77,6 @@ def runtime_record_file(*parts: str, create_parent: bool = True) -> Path:
     return parent / _safe_part(parts[-1], allow_ext=True)
 
 
-def user_runtime_record_file(*parts: str, create_parent: bool = True) -> Path:
-    """Return a principal-scoped runtime record file for user-visible state."""
-    if not parts:
-        raise ValueError("runtime record file requires at least one path part")
-    if len(parts) == 1:
-        parent = storage_paths.user_runtime_root()
-        if create_parent:
-            parent.mkdir(parents=True, exist_ok=True)
-    else:
-        safe_parts = [_safe_part(part, allow_ext=False) for part in parts[:-1]]
-        parent = storage_paths.user_runtime_root().joinpath(*safe_parts)
-        if create_parent:
-            parent.mkdir(parents=True, exist_ok=True)
-    return parent / _safe_part(parts[-1], allow_ext=True)
-
-
-@contextmanager
-def jsonl_transaction(workspace_id: str, parts: Iterable[str]):
-    """Hold the adapter lock for a JSONL record file."""
-    path = workspace_record_file(workspace_id, *tuple(parts))
-    lock = _lock_for(path)
-    with lock:
-        with _file_lock(path):
-            yield
-
-
 def append_jsonl(workspace_id: str, parts: Iterable[str], record: dict[str, Any]) -> dict[str, Any]:
     path = workspace_record_file(workspace_id, *tuple(parts))
     payload = dict(record)
@@ -154,16 +128,6 @@ def append_jsonl_once(
     return payload
 
 
-def append_jsonl_path(path: Path, record: dict[str, Any]) -> dict[str, Any]:
-    """Append one JSONL record to an explicit storage-owned path."""
-    payload = dict(record)
-    with _lock_for(path):
-        with _file_lock(path):
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
-    return payload
-
-
 def read_jsonl(workspace_id: str, parts: Iterable[str]) -> list[dict[str, Any]]:
     path = workspace_record_file(workspace_id, *tuple(parts), create_parent=False)
     if not path.exists():
@@ -181,55 +145,6 @@ def read_jsonl(workspace_id: str, parts: Iterable[str]) -> list[dict[str, Any]]:
         if isinstance(data, dict):
             rows.append(data)
     return rows
-
-
-def read_jsonl_path(path: Path) -> list[dict[str, Any]]:
-    """Read JSONL records from an explicit storage-owned path."""
-    if not path.exists():
-        return []
-    with _lock_for(path), _file_lock(path):
-        raw = path.read_text(encoding="utf-8")
-    rows: list[dict[str, Any]] = []
-    for line in raw.splitlines():
-        if not line.strip():
-            continue
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict):
-            rows.append(data)
-    return rows
-
-
-def rewrite_jsonl(
-    workspace_id: str,
-    parts: Iterable[str],
-    rows: Iterable[dict[str, Any] | str],
-) -> None:
-    path = workspace_record_file(workspace_id, *tuple(parts))
-    lines: list[str] = []
-    for row in rows:
-        if isinstance(row, str):
-            if row.strip():
-                lines.append(row)
-        else:
-            lines.append(json.dumps(dict(row), ensure_ascii=False, default=str))
-    with _lock_for(path), _file_lock(path):
-        atomic_write_text(path, "\n".join(lines) + ("\n" if lines else ""))
-
-
-def rewrite_jsonl_path(path: Path, rows: Iterable[dict[str, Any] | str]) -> None:
-    """Rewrite JSONL records at an explicit storage-owned path."""
-    lines: list[str] = []
-    for row in rows:
-        if isinstance(row, str):
-            if row.strip():
-                lines.append(row)
-        else:
-            lines.append(json.dumps(dict(row), ensure_ascii=False, default=str))
-    with _lock_for(path), _file_lock(path):
-        atomic_write_text(path, "\n".join(lines) + ("\n" if lines else ""))
 
 
 def mutate_jsonl(
@@ -339,20 +254,6 @@ def delete_json_record(workspace_id: str, parts: Iterable[str]) -> bool:
             return False
         path.unlink()
     return True
-
-
-def clear_json_record_dir(workspace_id: str, parts: Iterable[str]) -> int:
-    directory = workspace_record_dir(workspace_id, *tuple(parts), create=False)
-    if not directory.is_dir():
-        return 0
-    count = 0
-    with _lock_for(directory), _file_lock(directory / ".records"):
-        for path in directory.glob("*.json"):
-            if not path.is_file():
-                continue
-            path.unlink()
-            count += 1
-    return count
 
 
 def _safe_part(part: str, *, allow_ext: bool) -> str:

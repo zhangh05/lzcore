@@ -13,6 +13,18 @@ def _isolate_provider_store(monkeypatch, tmp_path):
     return providers
 
 
+def test_llm_probe_keeps_personal_drafts_and_does_not_elevate_on_identity_errors(monkeypatch):
+    from backend.api.llm_api import probe_allows_draft_overrides
+    import backend.core.identity as identity
+
+    monkeypatch.delenv("LZCORE_IDENTITY_ENABLED", raising=False)
+    assert probe_allows_draft_overrides() is True
+
+    monkeypatch.setenv("LZCORE_IDENTITY_ENABLED", "true")
+    monkeypatch.setattr(identity, "get_user", lambda _name: (_ for _ in ()).throw(OSError("store down")))
+    assert probe_allows_draft_overrides() is False
+
+
 class TestLLMProviderSettings:
     def test_resolve_uses_active_provider(self, monkeypatch, tmp_path):
         monkeypatch.setenv("LZCORE_LLM_ENABLED", "true")

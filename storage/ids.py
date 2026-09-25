@@ -65,14 +65,6 @@ def validate_session_id(sid: str) -> str:
     return sid
 
 
-def is_valid_session_id(sid: str) -> bool:
-    try:
-        validate_session_id(sid)
-        return True
-    except ValueError:
-        return False
-
-
 # Run IDs are generated as `run_<epoch>` or from `state.request_id`.
 # They become file path segments, so apply the same constraints as
 # workspace IDs but allow a leading `run_` prefix.
@@ -97,14 +89,6 @@ def validate_run_id(rid: str) -> str:
     if not _RUN_ID_RE.fullmatch(rid):
         raise ValueError("invalid_run_id")
     return rid
-
-
-def is_valid_run_id(rid: str) -> bool:
-    try:
-        validate_run_id(rid)
-        return True
-    except ValueError:
-        return False
 
 
 def validate_task_id(task_id: str) -> str:

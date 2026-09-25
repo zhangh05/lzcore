@@ -34,33 +34,6 @@ def register_command(name: str, handler, description: str = "", category: str = 
     _COMMAND_META[clean_name] = {"description": description, "category": category}
 
 
-def get_command(name: str):
-    """Get a command handler by name. Returns None if not found."""
-    clean_name = name.lstrip("/")
-    return SLASH_COMMANDS.get(clean_name)
-
-
-def list_commands(category: str = "") -> list[dict]:
-    """List all registered commands with metadata.
-
-    Args:
-        category: Optional filter by category. If empty, returns all.
-
-    Returns:
-        List of dicts with name, description, category.
-    """
-    results = []
-    for name, meta in sorted(_COMMAND_META.items()):
-        if category and meta.get("category") != category:
-            continue
-        results.append({
-            "name": f"/{name}",
-            "description": meta.get("description", ""),
-            "category": meta.get("category", "general"),
-        })
-    return results
-
-
 def execute_command(name: str, args: str = "", session_id: Optional[str] = None,
                     workspace_id: Optional[str] = None) -> str:
     """Execute a slash command.

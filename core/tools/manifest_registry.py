@@ -241,19 +241,6 @@ def get_manifest(tool_id: str) -> CapabilityManifest | None:
     return None
 
 
-def get_all_manifests() -> dict[str, CapabilityManifest]:
-    manifests = dict(MANIFESTS)
-    try:
-        from extensions.runtime import get_extension_tool_specs
-        for spec, _handler in get_extension_tool_specs():
-            extension_manifest = get_manifest(spec.tool_id)
-            if extension_manifest:
-                manifests[spec.tool_id] = extension_manifest
-    except Exception:
-        _LOG.warning("Unable to load extension manifests", exc_info=True)
-    return manifests
-
-
 def validate_all() -> tuple[list[str], int]:
     """Validate all manifests. Returns (errors, count)."""
     errors = []

@@ -262,10 +262,11 @@ def register_knowledge_routes(app):
             sid = s.get("source_id", "")
             if sid == source_id:
                 sd = dict(s)
+                from agent.modules.knowledge.index import child_counts_by_source
                 chunk_result = list_chunks(ws_id, source_id=source_id, limit=50)
                 chunks = chunk_result.get("chunks", []) if chunk_result.get("ok") else []
                 sd["chunks"] = [_chunk_dict(c) for c in chunks]
-                sd["chunk_count"] = len(chunks)
+                sd["chunk_count"] = child_counts_by_source(ws_id).get(source_id, 0)
                 return jsonify({"ok": True, "source": sd})
         return jsonify({"ok": False, "error": "source_not_found"}), 404
 
@@ -399,18 +400,12 @@ def _import_artifact_as_knowledge(workspace_id: str, artifact_id: str) -> dict:
 def _module_sources(workspace_id: str, status: str = None, scope: str = "") -> list:
     """Return sources from the document knowledge store."""
     try:
-        from agent.modules.knowledge.service import list_sources, list_chunks
+        from agent.modules.knowledge.index import child_counts_by_source
+        from agent.modules.knowledge.service import list_sources
         src_result = list_sources(workspace_id, scope=scope)
-        chunks_result = list_chunks(workspace_id, limit=500)
+        child_counts = child_counts_by_source(workspace_id)
     except Exception:
         return []
-    chunks = chunks_result.get("chunks", []) if isinstance(chunks_result, dict) else []
-    child_counts = {}
-    for c in chunks:
-        if c.get("chunk_type") == "parent":
-            continue
-        sid = c.get("source_id", "")
-        child_counts[sid] = child_counts.get(sid, 0) + 1
 
     out = []
     for s in src_result.get("sources", []):

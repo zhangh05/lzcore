@@ -42,8 +42,12 @@ export function InlineToolCallCard({ toolCall, seq, turnResult }: InlineToolCall
     ? orchestration.depends_on.filter((item): item is string => typeof item === "string")
     : [];
 
+  const elementId = toolCall.call_id ? `tool-call-${toolCall.call_id}` : `tool-call-${seq}`;
+
   return (
     <div
+      id={elementId}
+      data-call-id={toolCall.call_id}
       className={`tool-call-card ${state}${open ? " is-open" : ""}`}
       onClick={() => setOpen(!open)}
       role="button"

@@ -360,17 +360,6 @@ def read_file_content(workspace_id: str, file_id: str) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def read_workspace_text_file(workspace_id: str, filepath: str, *, max_bytes: int = 512_000) -> str:
-    """Read a workspace-relative text file with containment and size checks."""
-    target = _resolve_workspace_relative_path(workspace_id, filepath)
-    if not target.exists() or not target.is_file():
-        raise FileNotFoundError(f"file not found: {filepath}")
-    data = target.read_bytes()
-    if len(data) > max_bytes:
-        raise ValueError("source_config_too_large")
-    return data.decode("utf-8", errors="replace")
-
-
 def resolve_file_path(workspace_id: str, file_id: str) -> Path:
     """Resolve a file_id to its absolute filesystem path."""
     rec = get_file_record(workspace_id, file_id)

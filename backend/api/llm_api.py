@@ -90,6 +90,28 @@ def handle_llm_config_delete():
     return jsonify({"ok": True, "deleted": ok})
 
 
+def probe_allows_draft_overrides() -> bool:
+    """Personal installs without identity may test unsaved provider drafts.
+
+    When identity is on, only an enabled owner or admin may send a draft key.
+    A lookup failure must not promote a viewer.
+    """
+    from backend.core.identity import identity_enabled
+    if not identity_enabled():
+        return True
+    try:
+        from flask import session
+        from backend.core.identity import get_user
+        role = str(session.get("lzcore_role") or "viewer")
+        current = get_user(str(session.get("lzcore_user") or ""))
+        if isinstance(current, dict) and not current.get("enabled", True):
+            return False
+        effective = str((current or {}).get("role") or role)
+        return effective in {"owner", "admin"}
+    except Exception:
+        return False
+
+
 def handle_llm_test():
     """Test one provider's real chat-completions transport.
     
@@ -100,17 +122,7 @@ def handle_llm_test():
     data = request.get_json(silent=True) or {}
     message = data.get("message", "")
 
-    is_platform_admin = False
-    try:
-        from flask import session
-        from backend.core.identity import get_user
-        role = str(session.get("lzcore_role") or "viewer")
-        current = get_user(str(session.get("lzcore_user") or ""))
-        is_platform_admin = current is None or role == "owner"
-    except Exception:
-        # Identity-disabled deployments retain their existing authenticated
-        # operator behaviour.
-        is_platform_admin = True
+    is_platform_admin = probe_allows_draft_overrides()
 
     overrides = {}
     allowed_override_keys = ("base_url", "model", "api_key", "provider") if is_platform_admin else ("provider",)

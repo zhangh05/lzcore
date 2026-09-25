@@ -38,11 +38,6 @@ def estimate_json_tokens(value: Any) -> int:
     return estimate_text_tokens(text)
 
 
-def truncate_text_to_tokens(text: str, max_tokens: int) -> tuple[str, bool]:
-    """Return complete text; ``max_tokens`` is accounting-only."""
-    return str(text or ""), False
-
-
 def project_json_to_tokens(value: Any, max_tokens: int) -> tuple[Any, bool]:
     """Return a structure-preserving JSON projection within ``max_tokens``.
 

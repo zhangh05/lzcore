@@ -635,7 +635,8 @@ export const useWorkbenchStore = create<WorkbenchState>()(
             : undefined,
           role: m.role,
           text: m.role === "assistant" ? sanitizeAssistantText(m.content) : m.content,
-          status: "ready",
+          status: m.metadata?.status === "error" ? "error" : "ready",
+          error: typeof m.metadata?.error === "string" ? m.metadata.error : undefined,
           stageOutputs: Array.isArray(m.metadata?.stage_outputs)
             ? normalizeStageOutputs(m.metadata.stage_outputs) : undefined,
           created_at: m.created_at,

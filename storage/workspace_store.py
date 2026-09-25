@@ -246,21 +246,6 @@ def batch_delete_workspaces(ws_ids: list) -> dict:
     return {"ok": True, "deleted": deleted, "failed": failed, "total": len(ws_ids)}
 
 
-def get_workspace_runs(ws_id: str = "default") -> list[dict]:
-    ws_id = ensure_workspace(ws_id)
-    runs_dir = workspace_root(ws_id) / "runs"
-    runs = []
-    if runs_dir.is_dir():
-        for path in sorted(runs_dir.glob("*.json"), reverse=True):
-            if not is_run_record_file(path):
-                continue
-            try:
-                runs.append(json.loads(path.read_text(encoding="utf-8-sig")))
-            except Exception:
-                _LOG.debug("corrupt run file: %s", path, exc_info=True)
-    return runs
-
-
 def get_run(run_id: str, ws_id: str = "default") -> Optional[dict]:
     ws_id = validate_workspace_id(ws_id)
     path = workspace_root(ws_id) / "runs" / f"{run_id}.json"

@@ -126,33 +126,6 @@ def kill_process_tree(pid: int) -> bool:
         return True
 
 
-def cancel_process(key: str) -> dict:
-    """Cancel a running process by its registry key.
-
-    Returns:
-        {"ok": True/False, "pid": int, "message": str}
-    """
-    with _RUNNING_LOCK:
-        entry = RUNNING_PROCESSES.get(key)
-        if not entry:
-            return {"ok": False, "pid": 0, "message": f"no such process: {key}"}
-
-        proc = entry.get("process")
-        pid = entry.get("pid", 0)
-
-    killed = False
-    if proc and proc.poll() is None:
-        killed = kill_process_tree(pid)
-
-    _cleanup_entry(key)
-
-    if killed:
-        return {"ok": True, "pid": pid, "message": f"process {pid} terminated"}
-    else:
-        return {"ok": True, "pid": pid,
-                "message": f"process {pid} already exited or failed to kill"}
-
-
 def cleanup_orphans(key: str) -> None:
     """Clean up a process entry after it has finished (or been killed).
 
@@ -174,18 +147,3 @@ def cleanup_orphans(key: str) -> None:
         kill_process_tree(pid)
 
 
-def list_running() -> list[dict]:
-    """List all registered running processes."""
-    with _RUNNING_LOCK:
-        result = []
-        for key, entry in list(RUNNING_PROCESSES.items()):
-            proc = entry.get("process")
-            pid = entry.get("pid", 0)
-            alive = proc.poll() is None if proc else False
-            result.append({
-                "key": key,
-                "pid": pid,
-                "alive": alive,
-                "started_at": entry.get("started_at", 0),
-            })
-        return result

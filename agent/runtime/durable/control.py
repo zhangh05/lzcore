@@ -11,7 +11,7 @@ All operations:
 from __future__ import annotations
 from typing import Optional
 from .models import (
-    TaskState, RuntimeStep, RuntimeEvent, RuntimeCheckpoint,
+    RuntimeStep, RuntimeEvent, RuntimeCheckpoint,
     _next_id, _now,
 )
 from .store import save_task, append_event, save_checkpoint, get_task, get_checkpoints
@@ -86,19 +86,6 @@ def checkpoint_task(
         summary=reason,
     ))
     return cp
-
-
-def create_checkpoint_from_state(
-    task: TaskState, reason: str = "",
-    pending_action: Optional[dict] = None,
-) -> Optional[RuntimeCheckpoint]:
-    """Create a checkpoint directly from a TaskState instance."""
-    return checkpoint_task(
-        task.task_id, task.workspace_id,
-        reason=reason,
-        step_id=task.current_step_id,
-        pending_action=pending_action,
-    )
 
 
 # ── Cancel ──

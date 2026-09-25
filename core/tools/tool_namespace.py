@@ -85,10 +85,6 @@ def _build_namespace() -> dict[str, ToolNamespaceEntry]:
 TOOL_NAMESPACE: dict[str, ToolNamespaceEntry] = _build_namespace()
 
 
-def is_canonical(tool_id: str) -> bool:
-    return tool_id in TOOL_NAMESPACE
-
-
 def get_namespace_entry(tool_id: str) -> ToolNamespaceEntry:
     if tool_id not in TOOL_NAMESPACE:
         raise KeyError(f"unknown tool namespace id: {tool_id}")

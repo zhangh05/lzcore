@@ -234,39 +234,6 @@ def is_current_session_authenticated() -> bool:
     return bool(username and session_user and hmac.compare_digest(str(session_user), username))
 
 
-def current_request_actor() -> dict | None:
-    """Return the authenticated actor used by privileged business actions.
-
-    API-token callers are explicit system owners. Browser callers use the
-    server-side identity session and an immutable storage principal ID. No
-    authorization decision is inferred from the proxy/source IP.
-    """
-    if _request_has_valid_api_token():
-        return {
-            "username": "api-token",
-            "actor_id": "system:api-token",
-            "role": "owner",
-            "auth_type": "api_token",
-        }
-    if not is_current_session_authenticated():
-        return None
-    username = str(flask.session.get("lzcore_user") or "").strip()
-    if not username:
-        return None
-    role = str(flask.session.get("lzcore_role") or "admin")
-    try:
-        from storage.principal import principal_storage_key
-        actor_id = principal_storage_key(username)
-    except (OSError, TypeError, ValueError):
-        actor_id = ""
-    return {
-        "username": username,
-        "actor_id": actor_id,
-        "role": role,
-        "auth_type": "session",
-    }
-
-
 def handle_auth_status():
     api_token_authenticated = _request_has_valid_api_token()
     session_authenticated = is_current_session_authenticated()

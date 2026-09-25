@@ -368,5 +368,3 @@ def register_contract(contract: ToolContract) -> None:
     BUILTIN_CONTRACTS[contract.name] = contract
 
 
-def list_contracts() -> dict[str, ToolContract]:
-    return dict(BUILTIN_CONTRACTS)

@@ -114,21 +114,3 @@ def not_found(resource: str, resource_id: str = "") -> tuple[dict, int]:
     return error_response(code, f"{resource} not found: {resource_id}" if resource_id else f"{resource} not found", 404)
 
 
-def bad_request(error: str, message: str, details: dict = None) -> tuple[dict, int]:
-    """400 bad request — canonical form."""
-    return error_response(error, message, 400, details)
-
-
-def invalid_workspace() -> tuple[dict, int]:
-    """400 invalid workspace_id."""
-    return error_response("INVALID_WORKSPACE_ID", "invalid workspace_id", 400)
-
-
-def workspace_not_found() -> tuple[dict, int]:
-    """404 workspace not found."""
-    return error_response("WORKSPACE_NOT_FOUND", "workspace not found", 404)
-
-
-def internal_error(message: str = "internal server error") -> tuple[dict, int]:
-    """500 internal error."""
-    return error_response("INTERNAL_ERROR", message, 500)

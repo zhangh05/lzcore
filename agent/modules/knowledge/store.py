@@ -377,14 +377,3 @@ def query(
     }
 
 
-def store_stats(workspace_id: str) -> dict:
-    """Return store statistics."""
-    store = get_context_store(workspace_id)
-    return {
-        "workspace_id": workspace_id,
-        "source_count": store.count(item_type="knowledge_source"),
-        "chunk_count": store.count(item_type="knowledge_chunk"),
-        "memory_count": store.count(item_type="memory_hit"),
-        "total_items": store.count(),
-        "store_version": "3.1.0",
-    }

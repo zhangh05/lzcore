@@ -6,6 +6,7 @@ import os
 import socket
 import threading
 import time
+from contextvars import ContextVar, Token
 import hashlib
 import json
 from contextlib import nullcontext
@@ -14,8 +15,20 @@ from storage.time_utils import now_iso
 from storage.locking import FileLock
 from storage.runtime_state_store import job_worker_lock_path
 
-_worker_active = False
 _LOG = logging.getLogger(__name__)
+_lease_lost: ContextVar[threading.Event | None] = ContextVar("lzcore_job_lease_lost", default=None)
+
+
+def bind_lease_lost(flag: threading.Event) -> Token:
+    return _lease_lost.set(flag)
+
+
+def reset_lease_lost(token: Token) -> None:
+    _lease_lost.reset(token)
+
+
+def current_lease_lost() -> threading.Event | None:
+    return _lease_lost.get()
 
 
 def _worker_id() -> str:
@@ -31,20 +44,13 @@ def _lock_path():
 
 
 def start_worker(poll_interval=1.0):
-    global _worker_active
-    _worker_active = True
     _runtime_dir()
-    while _worker_active:
+    while True:
         try:
             run_once()
         except Exception:
             _LOG.exception("job worker iteration failed")
         time.sleep(poll_interval)
-
-
-def stop_worker():
-    global _worker_active
-    _worker_active = False
 
 
 def run_once() -> dict:
@@ -88,25 +94,39 @@ def run_once() -> dict:
             state = {"status": "running", "job_id": job.job_id, "job_type": job.job_type, "worker_id": worker_id, "attempt": receipt.attempt}
             _write_state(state)
             heartbeat_stop = threading.Event()
+            lease_lost = threading.Event()
             heartbeat = threading.Thread(
                 target=_heartbeat_loop,
-                args=(queue_backend, receipt, worker_id, heartbeat_stop, state, max(5, lease_seconds // 3)),
+                args=(
+                    queue_backend, receipt, worker_id, heartbeat_stop, state,
+                    _heartbeat_interval(lease_seconds), lease_lost,
+                ),
                 daemon=True,
                 name="job-lease-heartbeat",
             )
             heartbeat.start()
+            token = bind_lease_lost(lease_lost)
             try:
-                with principal_scope():
-                    run_job(job.workspace_id, job.job_id)
-            except Exception:
-                heartbeat_stop.set()
-                heartbeat.join(timeout=1)
-                queue_backend.retry(receipt, "worker_error")
-                raise
-            else:
-                heartbeat_stop.set()
-                heartbeat.join(timeout=1)
-                queue_backend.ack(receipt)
+                try:
+                    with principal_scope():
+                        run_job(job.workspace_id, job.job_id)
+                except Exception:
+                    heartbeat_stop.set()
+                    heartbeat.join(timeout=1)
+                    if lease_lost.is_set():
+                        _write_state({"status": "lease_lost", "job_id": job.job_id, "job_type": job.job_type, "worker_id": worker_id, "attempt": receipt.attempt})
+                        return {"status": "lease_lost", "job_id": job.job_id}
+                    queue_backend.retry(receipt, "worker_error")
+                    raise
+                else:
+                    heartbeat_stop.set()
+                    heartbeat.join(timeout=1)
+                    if lease_lost.is_set():
+                        _write_state({"status": "lease_lost", "job_id": job.job_id, "job_type": job.job_type, "worker_id": worker_id, "attempt": receipt.attempt})
+                        return {"status": "lease_lost", "job_id": job.job_id}
+                    queue_backend.ack(receipt)
+            finally:
+                reset_lease_lost(token)
             _write_state({"status": "completed", "job_id": job.job_id, "job_type": job.job_type, "worker_id": worker_id})
             return {"status": "completed", "job_id": job.job_id}
     except TimeoutError:
@@ -177,9 +197,20 @@ def _write_state(state):
     save_runtime_record("jobs_worker_state", state)
 
 
-def _heartbeat_loop(queue_backend, receipt, worker_id, stop_event, state, interval):
+def _heartbeat_interval(lease_seconds: int) -> float:
+    override = os.getenv("LZCORE_JOB_HEARTBEAT_SECONDS", "").strip()
+    if override:
+        try:
+            return max(0.05, float(override))
+        except ValueError:
+            pass
+    return float(max(5, lease_seconds // 3))
+
+
+def _heartbeat_loop(queue_backend, receipt, worker_id, stop_event, state, interval, lease_lost):
     while not stop_event.wait(interval):
         if not queue_backend.heartbeat(receipt, worker_id):
+            lease_lost.set()
             _LOG.error("job lease was lost: %s", receipt.job_id)
             return
         _write_state(dict(state))

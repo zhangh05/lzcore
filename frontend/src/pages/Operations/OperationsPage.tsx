@@ -1038,21 +1038,24 @@ function RunTraceView({ job, run, trace, tab, setTab, onBack }: {
   onBack: () => void;
 }) {
   const failInfo = useMemo(() => {
-    if (!trace) return null;
-    const fv = trace.find((e: any) => e.event_type === "turn_failed" || e.type === "turn_failed");
-    if (!fv) return null;
-    const d = formatEventDetail(fv);
-    const err = d.error || fv?.summary || String(d);
+    const fv = (trace || []).find((e: any) => {
+      const kind = String(e?.event_type || e?.type || "");
+      return kind === "turn_failed" || kind === "error" || kind === "SSOT Runtime error";
+    });
+    const d = fv ? formatEventDetail(fv) : {};
+    const err = d.error || fv?.summary || fv?.error || (run as { error?: string }).error || job?.error || "";
+    if (!String(err).trim()) return null;
     let secs: number | null = null;
-    const mr = trace.find((e: any) => /model.req/i.test(e.type || e.event_type || ""));
-    const mp = trace.find((e: any) => /model.resp/i.test(e.type || e.event_type || ""));
+    const events = trace || [];
+    const mr = events.find((e: any) => /model.req/i.test(e.type || e.event_type || ""));
+    const mp = events.find((e: any) => /model.resp/i.test(e.type || e.event_type || ""));
     if (mr && mp) {
       const t0 = new Date(formatEventTime(mr)).getTime();
       const t1 = new Date(formatEventTime(mp)).getTime();
       if (t0 && t1) secs = Math.round((t1 - t0) / 1000);
     }
     return { error: String(err).slice(0, 200), timeoutSecs: secs };
-  }, [trace]);
+  }, [trace, run, job]);
 
   const selectedStats = useMemo(() => deriveRunTraceStats(run, trace), [run, trace]);
 

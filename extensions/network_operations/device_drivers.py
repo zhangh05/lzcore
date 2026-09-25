@@ -346,11 +346,6 @@ DRIVERS: tuple[DeviceDriver, ...] = (
 )
 
 
-def get_driver(driver_id: str) -> DeviceDriver | None:
-    normalized = str(driver_id or "").strip().lower()
-    return next((driver for driver in DRIVERS if driver.driver_id == normalized), None)
-
-
 def resolve_driver(declared_vendor: str = "", transcript: str = "") -> tuple[DeviceDriver, str]:
     """Resolve a driver from observed evidence first, declaration second."""
     observed = str(transcript or "")

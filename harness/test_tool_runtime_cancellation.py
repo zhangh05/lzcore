@@ -29,6 +29,29 @@ def test_shell_execution_cooperatively_cancels_process_tree(tmp_path):
     assert result["process_tree_killed"] is True
 
 
+def test_shell_execution_honors_runtime_cancel_gate(tmp_path):
+    from core.tools.context import bind_runtime_cancel_check, reset_runtime_cancel_check
+    from core.tools.general_tools.shared import _run_shell
+
+    cancelled = threading.Event()
+    setter = threading.Timer(0.15, cancelled.set)
+    setter.start()
+    token = bind_runtime_cancel_check(cancelled.is_set)
+    try:
+        result = _run_shell(
+            "python3 -c \"import time; time.sleep(10)\"",
+            cwd=str(tmp_path),
+            timeout=10,
+        )
+    finally:
+        setter.cancel()
+        reset_runtime_cancel_check(token)
+
+    assert result["cancelled"] is True
+    assert result["error_code"] == "TOOL_CANCELLED_UNCERTAIN"
+    assert result["process_tree_killed"] is True
+
+
 def test_queryloop_runtime_binds_cancel_callback_to_canonical_invocation():
     from agent.runtime.ssot_runtime import _make_tool_handler
     from core.runtime_engine.models import ExecutionNode, SSOTRuntimeConfig, StatelessContext

@@ -762,14 +762,6 @@ def get_skill(workspace_id: str, skill_id: str) -> dict[str, Any] | None:
     return _with_skill_base_capability(record) if record else None
 
 
-def skill_contains_connection(skill: dict[str, Any] | None, connection_id: str) -> bool:
-    return bool(
-        skill and skill.get("enabled", True)
-        and "network.operations.device.manage" in (skill.get("allowed_tool_ids") or [])
-        and connection_id in (skill.get("connection_ids") or [])
-    )
-
-
 @_connection_transaction
 def save_skill(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name") or "").strip()
@@ -806,7 +798,7 @@ def save_skill(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     record = {
         "skill_id": skill_id,
         "name": name,
-        "description": str(payload.get("description") or "").strip()[:500],
+        "description": str(payload.get("description") or "").strip(),
         "enabled": bool(payload.get("enabled", existing.get("enabled", True))),
         "device_ids": device_ids,
         "connection_ids": connection_ids,
@@ -816,7 +808,7 @@ def save_skill(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         # explicitly enables it.
         "approval_enabled": bool(payload.get("approval_enabled", existing.get("approval_enabled", False))),
         "default_script_id": default_script_id,
-        "instructions": str(payload.get("instructions") or "").strip()[:2000],
+        "instructions": str(payload.get("instructions") or "").strip(),
         "created_at": str(existing.get("created_at") or now_iso()),
         "updated_at": now_iso(),
     }
@@ -1232,12 +1224,6 @@ def _enqueue_prepared_inspection(workspace_id: str, task: dict[str, Any], *, cre
         _store(workspace_id).save("inspections", task["task_id"], task)
         raise
     return get_inspection(workspace_id, task["task_id"]) or task
-
-
-def enqueue_inspection(workspace_id: str, asset_ids: list[str] | None = None, commands: list[str] | None = None, script_id: str = "", *, created_by: str = "user") -> dict[str, Any]:
-    """Create a durable inspection task and queue it on the platform Worker."""
-    task, _assets, _script = _new_inspection_task(workspace_id, asset_ids, commands, script_id)
-    return _enqueue_prepared_inspection(workspace_id, task, created_by=created_by)
 
 
 def enqueue_connection_inspection(

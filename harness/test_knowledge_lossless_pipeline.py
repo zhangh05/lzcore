@@ -119,6 +119,29 @@ def test_tool_reads_full_source_and_carries_retrieval_provenance(tmp_path, monke
     assert "chunk_id=" in context and "parent_chunk_id=" in context
 
 
+def test_reindex_keeps_existing_chunks_when_full_text_is_missing(tmp_path, monkeypatch):
+    _reset_context_runtime(tmp_path, monkeypatch)
+    from agent.modules.knowledge.ingestion import reindex_source
+    from agent.modules.knowledge.index import child_counts_by_source
+    from agent.modules.knowledge.store import import_document
+    import storage.file_store as file_store
+
+    imported = import_document(
+        "knowledge_lossless_ws", "长文档", "段落\n" * 400,
+    )
+    source_id = imported["source_id"]
+    before = child_counts_by_source("knowledge_lossless_ws").get(source_id, 0)
+    assert before > 0
+    monkeypatch.setattr(
+        file_store, "read_file_content",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError(source_id)),
+    )
+    result = reindex_source("knowledge_lossless_ws", source_id)
+    assert result["ok"] is False
+    assert result["errors"] == ["normalized_content_unavailable"]
+    assert child_counts_by_source("knowledge_lossless_ws").get(source_id, 0) == before
+
+
 def test_title_fallback_preserves_scope_and_accepts_spaced_query(tmp_path, monkeypatch):
     _reset_context_runtime(tmp_path, monkeypatch)
     from agent.modules.knowledge.store import import_document

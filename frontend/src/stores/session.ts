@@ -78,11 +78,16 @@ export const useSessionStore = create<SessionState>()(
 
 interface UIState {
   sidebarOpen: boolean;
+  /** Right-hand task progress rail open state in workbench. */
+  taskProgressOpen: boolean;
   /** Off-canvas navigation drawer state for tablet/mobile (≤900px). */
   mobileNavOpen: boolean;
   theme: "light" | "dark";
 
   toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
+  toggleTaskProgress: () => void;
+  setTaskProgressOpen: (open: boolean) => void;
   setMobileNavOpen: (open: boolean) => void;
   toggleMobileNav: () => void;
   setTheme: (t: "light" | "dark") => void;
@@ -92,9 +97,13 @@ export const useUIStore = create<UIState>()(
   persist(
     (set, get) => ({
       sidebarOpen: true,
+      taskProgressOpen: true,
       mobileNavOpen: false,
       theme: "light",
       toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      toggleTaskProgress: () => set({ taskProgressOpen: !get().taskProgressOpen }),
+      setTaskProgressOpen: (open) => set({ taskProgressOpen: open }),
       setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
       toggleMobileNav: () => set({ mobileNavOpen: !get().mobileNavOpen }),
       setTheme: (theme) => set({ theme }),
@@ -103,6 +112,7 @@ export const useUIStore = create<UIState>()(
       name: "lzcore_ui",
       partialize: (s) => ({
         sidebarOpen: s.sidebarOpen,
+        taskProgressOpen: s.taskProgressOpen,
         theme: s.theme,
       }),
     },
