@@ -68,6 +68,7 @@ test("23a. dragging an object in the default mode moves and persists it", async 
   await page.mouse.down();
   await page.mouse.move(centre.x + 90, centre.y + 50, { steps: 14 });
   await page.mouse.up();
+  await page.getByRole("button", { name: "保存" }).click();
 
   await expect.poll(() => saves.length).toBeGreaterThan(0);
   const moved = saves.at(-1)?.nodes as Array<{ node_id: string; x: number; y: number }>;
@@ -97,6 +98,7 @@ test("23b. a multi-selection opens the batch panel, and Delete removes all of it
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText("移除选中的对象");
   await confirm.getByRole("button", { name: "移除" }).click();
+  await page.getByRole("button", { name: "保存" }).click();
 
   await expect.poll(() => saves.length).toBeGreaterThan(0);
   const cleared = saves.at(-1) as { nodes: unknown[]; links: unknown[]; canvas_items: unknown[] };

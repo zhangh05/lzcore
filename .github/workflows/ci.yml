@@ -128,7 +128,11 @@ jobs:
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+            cgr.dev/chainguard/minio server /data || \
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            bitnami/minio:latest server /data
           for attempt in $(seq 1 30); do
             curl --fail --silent http://127.0.0.1:9000/minio/health/live && exit 0
             sleep 1
