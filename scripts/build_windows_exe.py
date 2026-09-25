@@ -77,7 +77,32 @@ def main():
     exe_dir = ROOT / "dist" / "lzcore"
     print(f"\n[SUCCESS] 构建完成！产物目录: {exe_dir}")
 
-    # 4. 可选打包 zip
+    # 4. 预置纯净默认工作区骨架与基础配置（不含任何私有业务数据，确保解压即有目录、前端开箱即交互）
+    try:
+        ws_root = exe_dir / "workspaces"
+        os.environ["LZCORE_WORKSPACE_ROOT"] = str(ws_root)
+        from storage.workspace_store import ensure_workspace
+        ensure_workspace("default")
+
+        # 确保网络运维扩展所需的目录就绪
+        netops_dir = ws_root / "default" / "extensions" / "network_operations"
+        for sub in ["topologies", "devices", "connections", "regions"]:
+            (netops_dir / sub).mkdir(parents=True, exist_ok=True)
+
+        # 清理初始化锁文件
+        for lock in ws_root.rglob("*.lock"):
+            lock.unlink(missing_ok=True)
+
+        print(f"[*] 已预置纯净默认工作区骨架: {ws_root}")
+
+        dist_config_dir = exe_dir / "config"
+        if not dist_config_dir.is_dir() and (ROOT / "config").is_dir():
+            shutil.copytree(ROOT / "config", dist_config_dir)
+            print(f"[*] 已预置基础配置文件目录: {dist_config_dir}")
+    except Exception as exc:
+        print(f"[!] 预置初始工作区警告 (非致命): {exc}")
+
+    # 5. 可选打包 zip
     if args.zip:
         try:
             from agent import __version__ as APP_VERSION
