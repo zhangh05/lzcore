@@ -2920,6 +2920,7 @@ export default function TopologyWorkspace({
             onClose={() => setWhiteboardActive(false)}
             onExportBackground={() => canvasApiRef.current?.exportPNG({ full: true, scale: 2, background: "#ffffff" }) || ""}
             topologyName={activeTopology?.name}
+            topologyId={activeTopology?.topology_id}
           />
 
           {/* Floating Bubble Popover Inspector */}

@@ -104,7 +104,6 @@ if "LZCORE_CONFIG_DIR" not in os.environ:
 
 # 5. 配置本地环境
 os.environ["LZCORE_EMBEDDED_WORKER"] = "true"
-os.environ["LZCORE_ALLOW_UNAUTHENTICATED_NETWORK"] = "true"
 os.environ["LZCORE_RUNTIME_BIND_HOST"] = "127.0.0.1"
 
 
@@ -341,18 +340,23 @@ if __name__ == "__main__":
     except Exception as exc:
         logger.critical("主程序启动崩溃: %s", exc, exc_info=True)
         try:
+            import html
             import webview
+            safe_err = html.escape(str(exc))
+            safe_log = html.escape(str(LOG_FILE))
             webview.create_window(
                 "启动失败 - 联智中枢",
                 html=(
-                    f"<html><body style='font-family:sans-serif;padding:30px;line-height:1.6;'>"
-                    f"<h2 style='color:#dc2626;'>程序启动发生异常</h2>"
-                    f"<p>错误详情: <b>{exc}</b></p>"
-                    f"<p>日志已写入: <code>{LOG_FILE}</code></p>"
+                    f"<!DOCTYPE html><html><head><meta charset='utf-8'></head>"
+                    f"<body style='font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;padding:30px;line-height:1.6;color:#1e293b;background:#f8fafc;'>"
+                    f"<h2 style='color:#dc2626;margin-top:0;'>程序启动发生异常</h2>"
+                    f"<p style='margin-bottom:8px;font-weight:600;'>错误详情：</p>"
+                    f"<pre style='background:#f1f5f9;border:1px solid #cbd5e1;padding:12px;border-radius:6px;white-space:pre-wrap;word-break:break-all;color:#334155;'>{safe_err}</pre>"
+                    f"<p style='font-size:13px;color:#64748b;'>详细运行日志已写入：<code style='background:#e2e8f0;padding:2px 6px;border-radius:4px;'>{safe_log}</code></p>"
                     f"</body></html>"
                 ),
-                width=640,
-                height=360,
+                width=680,
+                height=400,
             )
             webview.start()
         except Exception:

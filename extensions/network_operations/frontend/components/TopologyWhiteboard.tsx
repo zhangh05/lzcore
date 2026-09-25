@@ -39,13 +39,14 @@ export interface TopologyWhiteboardProps {
   onClose: () => void;
   onExportBackground?: () => string;
   topologyName?: string;
+  topologyId?: string;
 }
 
 const COLORS = [
   { id: "#ef4444", label: "红色", hint: "风险/故障/警示" },
   { id: "#f97316", label: "橙色", hint: "关注/优化" },
   { id: "#eab308", label: "黄色", hint: "高亮/待办" },
-  { id: "#10b981", label: "绿色", hint: "正常/已验证" },
+  { id: "#10b981", label: "绿色", hint: "基准/推荐/达标" },
   { id: "#3b82f6", label: "蓝色", hint: "重点/核心链路" },
 ];
 
@@ -60,6 +61,7 @@ export function TopologyWhiteboard({
   onClose,
   onExportBackground,
   topologyName,
+  topologyId,
 }: TopologyWhiteboardProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -75,6 +77,43 @@ export function TopologyWhiteboard({
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // 持久化存储：按拓扑 ID 本地缓存，关闭演示层或刷新页面批注不丢失
+  const storageKey = topologyId ? `lzcore_whiteboard_${topologyId}` : "lzcore_whiteboard_default";
+  const isLoadedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.strokes)) setStrokes(parsed.strokes);
+        else setStrokes([]);
+        if (Array.isArray(parsed.notes)) setNotes(parsed.notes);
+        else setNotes([]);
+      } else {
+        setStrokes([]);
+        setNotes([]);
+      }
+    } catch (e) {
+      console.warn("Failed to load whiteboard annotations:", e);
+    } finally {
+      isLoadedRef.current = true;
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!isLoadedRef.current) return;
+    try {
+      if (strokes.length > 0 || notes.length > 0) {
+        localStorage.setItem(storageKey, JSON.stringify({ strokes, notes }));
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    } catch (e) {
+      console.warn("Failed to save whiteboard annotations:", e);
+    }
+  }, [strokes, notes, storageKey]);
 
   // Draw arrow helper
   const drawArrow = useCallback(
@@ -318,6 +357,11 @@ export function TopologyWhiteboard({
     setStrokes([]);
     setNotes([]);
     setCurrentStroke(null);
+    try {
+      localStorage.removeItem(storageKey);
+    } catch (e) {
+      // ignore
+    }
   };
 
   // Export composite image
