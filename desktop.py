@@ -112,8 +112,10 @@ WORKSPACE_ROOT = APP_DIR / "workspaces"
 if "LZCORE_WORKSPACE_ROOT" not in os.environ and "LZCORE_WORKSPACE_DIR" not in os.environ:
     os.environ["LZCORE_WORKSPACE_ROOT"] = str(WORKSPACE_ROOT)
 
-CONFIG_DIR = APP_DIR / "config"
-if "LZCORE_CONFIG_DIR" not in os.environ:
+if "LZCORE_CONFIG_DIR" in os.environ:
+    CONFIG_DIR = Path(os.environ["LZCORE_CONFIG_DIR"])
+else:
+    CONFIG_DIR = APP_DIR / "config"
     os.environ["LZCORE_CONFIG_DIR"] = str(CONFIG_DIR)
 
 # 5. 配置本地环境

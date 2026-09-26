@@ -29,3 +29,18 @@ def test_same_origin_including_port_is_allowed():
         "http://127.0.0.1:8011",
         "127.0.0.1:8011",
     ) is True
+
+
+def test_dns_rebinding_origin_matching_untrusted_host_is_denied():
+    assert is_allowed_browser_origin(
+        "http://evil.example.com:8011",
+        "evil.example.com:8011",
+    ) is False
+
+
+def test_mdns_local_domain_denied_by_default():
+    assert is_allowed_browser_origin(
+        "http://attacker.local:5273",
+        "127.0.0.1:8011",
+    ) is False
+

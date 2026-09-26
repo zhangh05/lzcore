@@ -132,13 +132,28 @@ def test_restore_rewrites_structure_as_a_new_version_and_keeps_current_layout(wo
     revisions = drawings.list_topology_revisions(workspace, linked["topology_id"])
     baseline = next(item for item in revisions if item["version"] == linked["version"])
 
+    # Default restore (restore_layout=True): restores the complete snapshot geometry
     restored = drawings.restore_topology_revision(workspace, topo["topology_id"], baseline["revision_id"])
     assert len(restored["links"]) == 1
     assert restored["version"] > linked["version"] + 1
     positions = {node["node_id"]: (node["x"], node["y"]) for node in restored["nodes"]}
-    assert positions["r1"] == (900.0, 700.0)
-    # History is append-only: restoring never erases how we got here.
-    assert len(drawings.list_topology_revisions(workspace, linked["topology_id"])) == 4
+    assert positions["r1"] == (100.0, 100.0)
+
+    # Structure-only restore (restore_layout=False): keeps current layout coordinates
+    # Move r1 to (800, 600)
+    drawings.save_topology(workspace, {
+        **restored,
+        "version": restored["version"],
+        "nodes": [{**restored["nodes"][0], "x": 800, "y": 600}, restored["nodes"][1]],
+    })
+    restored_no_layout = drawings.restore_topology_revision(
+        workspace, topo["topology_id"], baseline["revision_id"], restore_layout=False
+    )
+    positions_no_layout = {node["node_id"]: (node["x"], node["y"]) for node in restored_no_layout["nodes"]}
+    assert positions_no_layout["r1"] == (800.0, 600.0)
+
+    # History is append-only and pre-restore checkpoint is captured
+    assert len(drawings.list_topology_revisions(workspace, linked["topology_id"])) >= 4
 
 
 def test_revision_history_is_removed_with_the_topology(workspace):

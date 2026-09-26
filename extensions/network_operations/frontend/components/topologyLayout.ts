@@ -183,8 +183,19 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
     if (item.kind !== "rectangle") return item;
     const halfW = (item.width || 200) / 2;
     const halfH = (item.height || 100) / 2;
+    const pad = 24;
     const memberIds = topology.nodes
-      .filter((n) => n.x >= item.x - halfW && n.x <= item.x + halfW && n.y >= item.y - halfH && n.y <= item.y + halfH)
+      .filter((n) => {
+        const isGeo =
+          n.x >= item.x - halfW - pad &&
+          n.x <= item.x + halfW + pad &&
+          n.y >= item.y - halfH - pad &&
+          n.y <= item.y + halfH + pad;
+        const isGroup =
+          Boolean(n.group_id) &&
+          (n.group_id === item.item_id || n.group_id === item.text);
+        return isGeo || isGroup;
+      })
       .map((n) => n.node_id);
     if (memberIds.length === 0) return item;
     const laidOutMembers = nodes.filter((n) => memberIds.includes(n.node_id));
@@ -197,14 +208,14 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
 
-    const padX = 60;
-    const padY = 50;
+    const padX = 50;
+    const padY = 40;
     return {
       ...item,
       x: Math.round((minX + maxX) / 2),
       y: Math.round((minY + maxY) / 2),
-      width: Math.max(item.width, Math.round(maxX - minX + padX * 2)),
-      height: Math.max(item.height, Math.round(maxY - minY + padY * 2)),
+      width: Math.max(160, Math.round(maxX - minX + padX * 2)),
+      height: Math.max(100, Math.round(maxY - minY + padY * 2)),
     };
   });
 

@@ -53,13 +53,29 @@ for pkg in [
 ]:
     hidden_imports.extend(collect_submodules(pkg))
 
-# 收集内置数据与前端编译资产（不含任何用户工作区与私有拓扑数据）
+# 收集内置数据与前端编译资产（严格配置白名单：仅打包示例/模板配置，严禁打包 live 密钥与凭据）
+config_datas = []
+for p in (ROOT / 'config').glob('*'):
+    if p.is_file() and (
+        p.name.endswith('.example')
+        or p.name.endswith('.example.yaml')
+        or p.name.endswith('.example.json')
+        or p.name == 'logging.yaml'
+    ):
+        config_datas.append((str(p), 'config'))
+
 datas = [
     (str(ROOT / 'frontend' / 'dist'), 'frontend/dist'),
     (str(ROOT / 'extensions'), 'extensions'),
     (str(ROOT / 'prompts'), 'prompts'),
-    (str(ROOT / 'config'), 'config'),
+    *config_datas,
 ]
+
+# 构建前安全断言：检查是否混入真实凭据或供应商密钥文件
+for src, dst in datas:
+    p = Path(src)
+    if 'providers' in p.parts or p.name in ('llm.yaml', 'credentials.yaml', 'secrets.yaml'):
+        raise RuntimeError(f"Packaging security violation: Secret configuration {src} must not be bundled into binary distribution!")
 
 if (ROOT / 'lzcore.ico').is_file():
     datas.append((str(ROOT / 'lzcore.ico'), '.'))

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import uuid
 from functools import wraps
@@ -169,7 +170,9 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     # Optimistic concurrency check
     if existing is not None:
         expected_version = payload.get("version")
-        if expected_version is not None and int(expected_version) != int(existing.get("version") or 1):
+        if expected_version is None:
+            raise ValueError("topology_version_conflict")
+        if int(expected_version) != int(existing.get("version") or 1):
             raise ValueError("topology_version_conflict")
         new_version = int(existing.get("version") or 1) + 1
     else:
@@ -197,6 +200,10 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             y = float(raw.get("y", 0.0))
         except (TypeError, ValueError):
             x, y = 0.0, 0.0
+        if not math.isfinite(x):
+            x = 0.0
+        if not math.isfinite(y):
+            y = 0.0
         normalized_nodes.append({
             "node_id": node_id,
             "device_type": str(raw.get("device_type") or "switch").strip()[:48],
@@ -233,6 +240,14 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             gh = float(raw.get("height", 240.0))
         except (TypeError, ValueError):
             gx, gy, gw, gh = 0.0, 0.0, 320.0, 240.0
+        if not math.isfinite(gx):
+            gx = 0.0
+        if not math.isfinite(gy):
+            gy = 0.0
+        if not math.isfinite(gw) or gw <= 0:
+            gw = 320.0
+        if not math.isfinite(gh) or gh <= 0:
+            gh = 240.0
         kind = str(raw.get("kind") or "datacenter").strip().lower()
         if kind not in {"as", "region", "datacenter", "tenant", "custom"}:
             kind = "custom"
@@ -270,16 +285,35 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             height = float(raw.get("height", 96.0))
         except (TypeError, ValueError):
             x, y, width, height = 0.0, 0.0, 180.0, 96.0
+        if not math.isfinite(x):
+            x = 0.0
+        if not math.isfinite(y):
+            y = 0.0
+        if not math.isfinite(width) or width <= 0:
+            width = 180.0
+        if not math.isfinite(height) or height <= 0:
+            height = 96.0
         style = dict(raw.get("style") or {}) if isinstance(raw.get("style"), dict) else {}
+        safe_style = {}
+        for key in ("fill", "border", "color"):
+            val = str(style.get(key) or "").strip()
+            if val:
+                # Valid color format: #hex (3..8 hex chars), rgba?(...), none, or alphanumeric CSS color name
+                if (
+                    re.match(r"^#(?:[0-9a-fA-F]{3,8})$", val)
+                    or re.match(r"^rgba?\([0-9\s,\.%]+\)$", val)
+                    or re.match(r"^[a-zA-Z]{1,24}$", val)
+                ):
+                    safe_style[key] = val[:32]
         normalized_canvas_items.append({
             "item_id": item_id,
             "kind": kind,
             "text": str(raw.get("text") or "").strip()[:240],
             "x": x,
             "y": y,
-            "width": min(1600.0, max(40.0, width)),
-            "height": min(1200.0, max(24.0, height)),
-            "style": {key: str(value)[:24] for key, value in style.items() if key in {"fill", "border", "color"}},
+            "width": min(10000.0, max(40.0, width)),
+            "height": min(10000.0, max(24.0, height)),
+            "style": safe_style,
         })
 
     raw_links = payload.get("links") if "links" in payload else (existing.get("links") if existing else [])
@@ -559,6 +593,11 @@ def _topology_structure_signature(topology: dict[str, Any]) -> str:
                     str(node.get("display_name") or ""),
                     str(node.get("group_id") or ""),
                     str(node.get("ip") or ""),
+                    str(node.get("vendor") or ""),
+                    str(node.get("model") or ""),
+                    str(node.get("role") or ""),
+                    str(node.get("vlan") or ""),
+                    str(node.get("location") or ""),
                     ",".join(sorted(str(item) for item in (node.get("labels") or []))),
                 ]
                 for node in (topology.get("nodes") or [])
@@ -884,7 +923,13 @@ def compare_topology_revision(workspace_id: str, topology_id: str, revision_id: 
 
 
 @_drawing_transaction
-def restore_topology_revision(workspace_id: str, topology_id: str, revision_id: str) -> dict[str, Any]:
+def restore_topology_revision(
+    workspace_id: str,
+    topology_id: str,
+    revision_id: str,
+    *,
+    restore_layout: bool = True,
+) -> dict[str, Any]:
     """Roll the canvas back to a revision.
 
     Restoring is a forward edit, not a rewrite of history: it writes the old
@@ -898,13 +943,21 @@ def restore_topology_revision(workspace_id: str, topology_id: str, revision_id: 
     current = get_topology(workspace_id, topology_id)
     if not current:
         raise ValueError("topology_not_found")
+
+    # Snapshot current state before restoring so user never loses current work (P0-4)
+    _record_topology_revision(workspace_id, current)
+
+    restored_nodes = (
+        snapshot.get("nodes") or []
+        if restore_layout
+        else _restore_with_current_layout(snapshot.get("nodes") or [], current.get("nodes") or [])
+    )
+
     return save_topology(workspace_id, {
         **snapshot,
         "topology_id": topology_id,
         "version": current.get("version"),
-        # Keep the newest layout: a rollback is about structure, and silently
-        # teleporting every node back would destroy work done since.
-        "nodes": _restore_with_current_layout(snapshot.get("nodes") or [], current.get("nodes") or []),
+        "nodes": restored_nodes,
     })
 
 

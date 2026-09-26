@@ -62,7 +62,7 @@ import { mergeTopologies, type MergeConflict, type MergeStats } from "./topology
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import { TopologyWhiteboard } from "./TopologyWhiteboard";
-import { dataUriToBlob, downloadBlob, exportTopologyToSvg } from "./topologyExport";
+import { downloadBlob, exportTopologyToSvg, svgToPngDataUrl, svgToPngBlob } from "./topologyExport";
 import "./TopologyStudio.css";
 
 
@@ -1514,14 +1514,21 @@ export default function TopologyWorkspace({
 
       const halfW = (item.width || 200) / 2;
       const halfH = (item.height || 100) / 2;
+      const pad = 24;
       current.nodes.forEach((node) => {
         if (byId.has(node.node_id)) return;
-        if (
-          node.x >= item.x - halfW &&
-          node.x <= item.x + halfW &&
-          node.y >= item.y - halfH &&
-          node.y <= item.y + halfH
-        ) {
+        const isEnclosed =
+          node.x >= item.x - halfW - pad &&
+          node.x <= item.x + halfW + pad &&
+          node.y >= item.y - halfH - pad &&
+          node.y <= item.y + halfH + pad;
+        const nodeGroupId = (node.group_id || "").trim();
+        const isMember =
+          Boolean(nodeGroupId) &&
+          (nodeGroupId === item.item_id ||
+            nodeGroupId === item.text ||
+            (Boolean(item.text) && item.text.trim().toLowerCase() === nodeGroupId.toLowerCase()));
+        if (isEnclosed || isMember) {
           nodeDeltas.set(node.node_id, { dx, dy });
         }
       });
@@ -1636,28 +1643,31 @@ export default function TopologyWorkspace({
   }, [activeTopology, pushState, setNotice]);
 
   const exportCanvas = useCallback(async (format: "png" | "svg" | "pdf") => {
-    const api = canvasApiRef.current;
-    if (!api || !activeTopology) {
+    if (!activeTopology) {
       setNotice("画布尚未就绪，请稍后再试", false);
       return;
     }
     const safeName = (activeTopology?.name || "topology").replace(/[\\/:*?"<>|\s]+/g, "_");
 
+    const getSvg = () => {
+      const storageKey = activeTopology?.topology_id ? `lzcore_whiteboard_${activeTopology.topology_id}` : "lzcore_whiteboard_default";
+      let wbData = null;
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) wbData = JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+      return exportTopologyToSvg(activeTopology, {
+        whiteboardData: wbData,
+        showInterfaces,
+        compactMode,
+      });
+    };
+
     if (format === "svg") {
       try {
-        const storageKey = activeTopology?.topology_id ? `lzcore_whiteboard_${activeTopology.topology_id}` : "lzcore_whiteboard_default";
-        let wbData = null;
-        try {
-          const saved = localStorage.getItem(storageKey);
-          if (saved) wbData = JSON.parse(saved);
-        } catch {
-          // ignore
-        }
-        const svgContent = exportTopologyToSvg(activeTopology, {
-          whiteboardData: wbData,
-          showInterfaces,
-          compactMode,
-        });
+        const svgContent = getSvg();
         const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
         downloadBlob(blob, `${safeName}.svg`);
         setNotice(`已导出 ${safeName}.svg`);
@@ -1671,8 +1681,8 @@ export default function TopologyWorkspace({
     if (format === "pdf") {
       setNotice("正在生成 PDF…");
       try {
-        const pngDataUrl = api.exportPNG({ full: true, scale: 2, background: "#ffffff" });
-        if (!pngDataUrl) throw new Error("empty_png");
+        const svgContent = getSvg();
+        const pngDataUrl = await svgToPngDataUrl(svgContent, 2);
         const pixels = await pngToRgbImage(pngDataUrl);
         const pdf = await buildImagePdf(pixels);
         downloadBlob(new Blob([pdf], { type: "application/pdf" }), `${safeName}.pdf`);
@@ -1686,12 +1696,9 @@ export default function TopologyWorkspace({
 
     // format === "png"
     try {
-      const pngDataUrl = api.exportPNG({ full: true, scale: 2, background: "#ffffff" });
-      if (!pngDataUrl) {
-        setNotice("PNG 导出失败，画布无图像", false);
-        return;
-      }
-      const blob = dataUriToBlob(pngDataUrl);
+      setNotice("正在生成 PNG…");
+      const svgContent = getSvg();
+      const blob = await svgToPngBlob(svgContent, 2);
       downloadBlob(blob, `${safeName}.png`);
       setNotice(`已导出 ${safeName}.png`);
     } catch (e) {
@@ -2283,6 +2290,8 @@ export default function TopologyWorkspace({
     }
   }, [activeTopology, workspaceId, adoptServerTopology, setNotice]);
 
+  const [restoreLayout, setRestoreLayout] = useState(true);
+
   const handleRestoreRevision = useCallback(async (revisionId: string) => {
     if (!activeTopology) return;
     setRestoringId(revisionId);
@@ -2291,6 +2300,7 @@ export default function TopologyWorkspace({
         method: "POST",
         url: `${base}/topologies/${activeTopology.topology_id}/revisions/${revisionId}/restore`,
         params: { workspace_id: workspaceId },
+        data: { restore_layout: restoreLayout },
       });
       if (res.topology) {
         // Keep the pre-restore drawing on the undo stack, but treat the
@@ -2301,8 +2311,10 @@ export default function TopologyWorkspace({
         const restoredVersion = revisions.find((item) => item.revision_id === revisionId)?.version;
         setNotice(
           restoredVersion
-            ? `已按版本 ${restoredVersion} 的结构恢复，节点位置保持当前布局`
-            : "已按所选版本的结构恢复，节点位置保持当前布局",
+            ? (restoreLayout
+                ? `已按版本 ${restoredVersion} 的结构恢复（含完整布局坐标）`
+                : `已按版本 ${restoredVersion} 的结构恢复，节点保留当前布局`)
+            : "已成功恢复所选版本",
           true,
         );
       }
@@ -2313,7 +2325,7 @@ export default function TopologyWorkspace({
     } finally {
       setRestoringId("");
     }
-  }, [activeTopology, workspaceId, adoptServerTopology, setNotice, revisions]);
+  }, [activeTopology, workspaceId, restoreLayout, adoptServerTopology, setNotice, revisions]);
 
   // Node selection inspector helpers
   const selectedNode = useMemo(() => {
@@ -2804,7 +2816,7 @@ export default function TopologyWorkspace({
             <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>绘图对话</Button>
           </div>
         </div>
-        {workspaceMode === "edit" && showEditbar && (
+        {workspaceMode === "edit" && showEditbar && !isFullscreen && (
           <div className="topology-editbar">
           <div className="studio-edit-tools" role="group" aria-label="画布工具">
             <button className="studio-mode-button" aria-label="选择" aria-pressed={canvasMode === "select" && !armedNodeType} onClick={() => { setCanvasMode("select"); setArmedNodeType(null); }} title="选择模式 (快捷键 V)"><IconMenu size={13} />选择</button>
@@ -4702,7 +4714,17 @@ export default function TopologyWorkspace({
         <dialog open role="dialog" aria-modal="true" className="network-dialog-modal compare-modal" aria-label="版本历史">
           <div className="network-panel modal-panel compare-panel">
             <div className="modal-header"><div><h3>版本历史 · {revisions.length} 个结构版本</h3><p>只记录结构变化；拖动位置、缩放不产生版本</p></div><Button aria-label="关闭版本历史" onClick={() => setShowRevisions(false)}><IconClose size={14} /></Button></div>
-            <div className="compare-notice-banner">恢复会把旧结构写成新版本，不会抹掉当前历史；节点位置沿用现在的布局。</div>
+            <div className="compare-notice-banner">恢复会把旧版本写成新版本并先备份当前快照，不会丢失历史；支持完整还原布局几何。</div>
+            <div style={{ padding: "0 12px 8px 12px" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer", color: "var(--fg, #0f172a)" }}>
+                <input
+                  type="checkbox"
+                  checked={restoreLayout}
+                  onChange={(e) => setRestoreLayout(e.target.checked)}
+                />
+                <span style={{ fontWeight: 500 }}>同时恢复布局坐标（完整几何，推荐）</span>
+              </label>
+            </div>
             <div className="compare-details-area">
               {revisions.map((revision) => (
                 <div className="compare-item revision-item" key={revision.revision_id}>

@@ -74,7 +74,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
 
 
 def atomic_write_json(path: Path, obj: Any, *, indent: Optional[int] = 2) -> None:
-    text = json.dumps(obj, ensure_ascii=False, indent=indent, default=str)
+    text = json.dumps(obj, ensure_ascii=False, indent=indent, default=str, allow_nan=False)
     atomic_write_text(Path(path), text)
 
 

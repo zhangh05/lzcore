@@ -471,7 +471,20 @@ def register_ws_routes(app):
 
 def _same_origin_ws_request() -> bool:
     origin = request.headers.get("Origin")
-    return is_allowed_browser_origin(origin, request.host)
+    if not is_allowed_browser_origin(origin, request.host):
+        return False
+    from backend.core.auth import _is_local_or_private_host, _AUTH_ENABLED, _is_login_enabled, _is_identity_enabled
+    if not _AUTH_ENABLED and not _is_login_enabled() and not _is_identity_enabled():
+        host = request.host.split("@")[-1]
+        if host.startswith("[") and "]" in host:
+            req_h = host[1:host.index("]")].lower()
+        elif ":" in host:
+            req_h = host.split(":")[0].lower()
+        else:
+            req_h = host.lower()
+        if not _is_local_or_private_host(req_h):
+            return False
+    return True
 
 
 def _api_token_matches(api_token: str, frame_token: str) -> bool:

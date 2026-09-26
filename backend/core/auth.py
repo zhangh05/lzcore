@@ -357,10 +357,21 @@ def _is_local_or_private_host(hostname: str) -> bool:
     value = (hostname or "").strip().lower()
     if value in {"localhost", "127.0.0.1", "::1"}:
         return True
+    allowed_hosts = {
+        h.strip().lower()
+        for h in os.environ.get("LZCORE_ALLOWED_HOSTS", "").split(",")
+        if h.strip()
+    }
+    if value in allowed_hosts:
+        return True
     try:
         ip = ipaddress.ip_address(value)
     except ValueError:
-        return value.endswith(".local")
+        allow_lan = os.environ.get("LZCORE_ALLOW_LAN", "false").strip().lower() in ("true", "1", "yes", "on")
+        allow_mdns = os.environ.get("LZCORE_ALLOW_MDNS", "false").strip().lower() in ("true", "1", "yes", "on")
+        if allow_lan or allow_mdns:
+            return value.endswith(".local")
+        return False
     shared_cgnat = ipaddress.ip_network("100.64.0.0/10")
     return bool(ip.is_loopback or ip.is_private or ip.is_link_local or ip in shared_cgnat)
 
@@ -373,21 +384,27 @@ def is_allowed_browser_origin(origin: str | None, request_host: str) -> bool:
         origin_url = urlparse(origin)
         origin_root = f"{origin_url.scheme}://{origin_url.netloc}".rstrip("/")
         host = request_host.split("@")[-1]
-        # Same origin (host + port) or a configured workbench port on a private host.
-        origin_hostname = origin_url.hostname or ""
+        origin_hostname = (origin_url.hostname or "").lower()
         if host.startswith("[") and "]" in host:
-            request_hostname = host[1:host.index("]")]
+            request_hostname = host[1:host.index("]")].lower()
             request_port_s = host.split("]:")[-1] if "]:" in host else ""
             request_port = int(request_port_s) if request_port_s.isdigit() else (443 if origin_url.scheme == "https" else 80)
         elif ":" in host:
             request_hostname, _, request_port_s = host.rpartition(":")
+            request_hostname = request_hostname.lower()
             request_port = int(request_port_s) if request_port_s.isdigit() else 80
         else:
-            request_hostname = host
+            request_hostname = host.lower()
             request_port = 80
         origin_port = origin_url.port or (443 if origin_url.scheme == "https" else 80)
+
+        # DNS rebinding protection: even if origin == host, the host must be a valid local or private host
+        # when authentication is disabled.
         if origin_hostname == request_hostname and origin_port == request_port:
+            if not _AUTH_ENABLED and not _is_login_enabled() and not _is_identity_enabled():
+                return _is_local_or_private_host(request_hostname)
             return True
+
         allowed_ports = _configured_workbench_ports()
         try:
             from backend.core.settings import UNIFIED_PORT
@@ -458,6 +475,25 @@ def register_auth_middleware(app: flask.Flask) -> None:
             return None
 
         path = flask.request.path
+
+        # DNS Rebinding protection: When authentication is disabled,
+        # request Host must be a local or trusted private host.
+        if not _AUTH_ENABLED and not _is_login_enabled() and not _is_identity_enabled():
+            host = flask.request.host.split("@")[-1]
+            if host.startswith("[") and "]" in host:
+                req_h = host[1:host.index("]")].lower()
+            elif ":" in host:
+                req_h = host.split(":")[0].lower()
+            else:
+                req_h = host.lower()
+            if not _is_local_or_private_host(req_h):
+                logger.warning("host_rejected_untrusted: host=%s path=%s", flask.request.host, path)
+                return flask.jsonify({
+                    "ok": False,
+                    "error": "host_header_invalid",
+                    "message": "Host header is not permitted. Only local or private network access is allowed when authentication is disabled.",
+                    "status": 403,
+                }), 403
 
         if path.startswith("/api/") and not _same_origin_api_request():
             logger.warning("csrf_denied: path=%s origin=%s", path, flask.request.headers.get("Origin", ""))

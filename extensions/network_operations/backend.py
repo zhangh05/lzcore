@@ -391,7 +391,9 @@ def register_routes(app):
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         try:
-            return jsonify({"ok": True, "topology": drawings.restore_topology_revision(ws, topology_id, revision_id)})
+            payload = _payload() if request.is_json and request.data else {}
+            restore_layout = bool(payload.get("restore_layout", True))
+            return jsonify({"ok": True, "topology": drawings.restore_topology_revision(ws, topology_id, revision_id, restore_layout=restore_layout)})
         except ValueError as exc:
             status = 409 if str(exc) == "topology_version_conflict" else 404
             return jsonify({"ok": False, "error": str(exc)}), status

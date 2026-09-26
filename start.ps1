@@ -15,8 +15,8 @@ $FrontendDir = Join-Path $Root "frontend"
 $LogDir = if ($env:LOG_DIR) { $env:LOG_DIR } else { Join-Path $Root "logs" }
 $BackendPort = if ($env:BACKEND_PORT) { [int]$env:BACKEND_PORT } else { 8011 }
 $FrontendPort = if ($env:FRONTEND_PORT) { [int]$env:FRONTEND_PORT } else { 5273 }
-$BackendHost = if ($env:BACKEND_HOST) { $env:BACKEND_HOST } else { "0.0.0.0" }
-$FrontendHost = if ($env:FRONTEND_HOST) { $env:FRONTEND_HOST } else { "0.0.0.0" }
+$BackendHost = if ($env:BACKEND_HOST) { $env:BACKEND_HOST } else { "127.0.0.1" }
+$FrontendHost = if ($env:FRONTEND_HOST) { $env:FRONTEND_HOST } else { "127.0.0.1" }
 $BackendPidFile = Join-Path $Root ".backend.pid"
 $FrontendPidFile = Join-Path $Root ".frontend.pid"
 $StateDir = Join-Path $Root ".runtime"
@@ -271,10 +271,12 @@ function Get-AllowedOrigins {
     $origins = [System.Collections.Generic.List[string]]::new()
     $origins.Add("http://localhost:$FrontendPort")
     $origins.Add("http://127.0.0.1:$FrontendPort")
-    $addresses = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" }
-    foreach ($address in $addresses) {
-        $origins.Add("http://$($address.IPAddress):$FrontendPort")
+    if ($BackendHost -ne "127.0.0.1" -and $BackendHost -ne "localhost" -or ($env:LZCORE_ALLOW_LAN -eq "true")) {
+        $addresses = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" }
+        foreach ($address in $addresses) {
+            $origins.Add("http://$($address.IPAddress):$FrontendPort")
+        }
     }
     return ($origins | Select-Object -Unique) -join ","
 }

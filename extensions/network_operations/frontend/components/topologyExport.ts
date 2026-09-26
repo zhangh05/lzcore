@@ -59,6 +59,83 @@ function escapeXml(unsafe: string): string {
     .replace(/'/g, "&apos;");
 }
 
+export function sanitizeColor(color?: string | null, fallback = "#3b82f6"): string {
+  const val = (color || "").trim();
+  if (!val) return fallback;
+  if (/^#(?:[0-9a-fA-F]{3,8})$/.test(val)) return val;
+  if (/^rgba?\([0-9\s,\.%]+\)$/.test(val)) return val;
+  if (/^[a-zA-Z]{1,24}$/.test(val)) return val;
+  return fallback;
+}
+
+export async function svgToPngDataUrl(svgString: string, scale = 2): Promise<string> {
+  return new Promise((resolve, reject) => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgString, "image/svg+xml");
+      const svgEl = doc.querySelector("svg");
+      if (!svgEl) {
+        return reject(new Error("invalid_svg_document"));
+      }
+
+      const viewBox = svgEl.getAttribute("viewBox");
+      let width = 1200;
+      let height = 800;
+
+      if (viewBox) {
+        const parts = viewBox.trim().split(/\s+/).map(Number);
+        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+          width = parts[2];
+          height = parts[3];
+        }
+      } else {
+        const wAttr = parseFloat(svgEl.getAttribute("width") || "1200");
+        const hAttr = parseFloat(svgEl.getAttribute("height") || "800");
+        if (wAttr > 0) width = wAttr;
+        if (hAttr > 0) height = hAttr;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return reject(new Error("canvas_context_failed"));
+      }
+
+      const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        try {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+          const dataUrl = canvas.toDataURL("image/png");
+          resolve(dataUrl);
+        } catch (err) {
+          URL.revokeObjectURL(url);
+          reject(err);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("svg_rasterize_failed"));
+      };
+      img.src = url;
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+export async function svgToPngBlob(svgString: string, scale = 2): Promise<Blob> {
+  const dataUrl = await svgToPngDataUrl(svgString, scale);
+  return dataUriToBlob(dataUrl);
+}
+
 export function exportTopologyToSvg(
   topology: Topology,
   options: {
@@ -153,11 +230,11 @@ export function exportTopologyToSvg(
     const w = item.width;
     const h = item.height;
     const style = item.style || {};
-    const fill = isText ? "none" : style.fill || "#dff5f0";
-    const border = isText ? "#94a3b8" : style.border || "#58a99b";
+    const fill = isText ? "none" : sanitizeColor(style.fill, "#dff5f0");
+    const border = isText ? "#94a3b8" : sanitizeColor(style.border, "#58a99b");
     const strokeDash = isText ? "stroke-dasharray=\"4,3\"" : "";
-    const borderWidth = isText ? 1.5 : (style as any).borderWidth || 2;
-    const textColor = isText ? "#0f172a" : style.color || "#0f5149";
+    const borderWidth = isText ? 1.5 : Math.max(1, Math.min(20, Number((style as any).borderWidth) || 2));
+    const textColor = isText ? "#0f172a" : sanitizeColor(style.color, "#0f5149");
 
     if (item.kind === "ellipse") {
       svgParts.push(
@@ -280,15 +357,16 @@ export function exportTopologyToSvg(
       const opacity = stroke.tool === "highlighter" ? 0.35 : 1.0;
       const strokeWidth = stroke.tool === "highlighter" ? stroke.size * 2.8 : stroke.size;
 
+      const safeStrokeColor = sanitizeColor(stroke.color, "#3b82f6");
       if (stroke.tool === "pen" || stroke.tool === "highlighter") {
         if (pts.length === 1) {
           svgParts.push(
-            `  <circle cx="${pts[0].x}" cy="${pts[0].y}" r="${strokeWidth / 2}" fill="${stroke.color}" opacity="${opacity}"/>`
+            `  <circle cx="${pts[0].x}" cy="${pts[0].y}" r="${strokeWidth / 2}" fill="${safeStrokeColor}" opacity="${opacity}"/>`
           );
         } else {
           const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x} ${p.y}`).join(" ");
           svgParts.push(
-            `  <path d="${d}" fill="none" stroke="${stroke.color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`
+            `  <path d="${d}" fill="none" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`
           );
         }
       } else if (stroke.tool === "rect" && pts.length >= 2) {
@@ -299,21 +377,22 @@ export function exportTopologyToSvg(
         const rw = Math.abs(end.x - start.x);
         const rh = Math.abs(end.y - start.y);
         svgParts.push(
-          `  <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="none" stroke="${stroke.color}" stroke-width="${strokeWidth}"/>`
+          `  <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="none" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}"/>`
         );
       } else if (stroke.tool === "arrow" && pts.length >= 2) {
         const start = pts[0];
         const end = pts[pts.length - 1];
         svgParts.push(
-          `  <line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="${stroke.color}" stroke-width="${strokeWidth}" stroke-linecap="round"/>`
+          `  <line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round"/>`
         );
       }
     });
 
     notes.forEach((note) => {
+      const safeNoteColor = sanitizeColor(note.color, "#fef08a");
       svgParts.push(
         `  <g transform="translate(${note.x}, ${note.y})">
-          <rect width="180" height="74" rx="6" fill="${note.color}" fill-opacity="0.16" stroke="${note.color}" stroke-width="2"/>
+          <rect width="180" height="74" rx="6" fill="${safeNoteColor}" fill-opacity="0.16" stroke="${safeNoteColor}" stroke-width="2"/>
           <text x="10" y="24" font-size="12" fill="#1e293b" font-weight="500">${escapeXml(note.text)}</text>
         </g>`
       );

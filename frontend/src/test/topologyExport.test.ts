@@ -110,4 +110,31 @@ describe("topologyExport", () => {
     expect(blob.type).toBe("image/png");
     expect(blob.size).toBeGreaterThan(0);
   });
+
+  it("sanitizes colors and prevents SVG attribute injection", () => {
+    const maliciousTopology: Topology = {
+      ...sampleTopology,
+      canvas_items: [
+        {
+          item_id: "item-inject",
+          kind: "rectangle",
+          text: "注入测试",
+          x: 100,
+          y: 100,
+          width: 200,
+          height: 100,
+          style: {
+            fill: '"><script>alert("xss")</script><rect fill="',
+            border: "#10b981",
+            color: "rgba(0, 0, 0, 0.8)",
+          },
+        },
+      ],
+    };
+    const svg = exportTopologyToSvg(maliciousTopology);
+    expect(svg).not.toContain("<script>");
+    expect(svg).not.toContain('alert("xss")');
+    expect(svg).toContain("#10b981");
+    expect(svg).toContain("rgba(0, 0, 0, 0.8)");
+  });
 });

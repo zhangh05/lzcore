@@ -75,8 +75,12 @@ def _build_safe_shell_env() -> dict:
     )
 
 _DESTRUCTIVE_SHELL = (
-    re.compile(r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f\b", re.IGNORECASE),
-    re.compile(r"\brm\s+-[a-zA-Z]*f[a-zA-Z]*r\b", re.IGNORECASE),
+    re.compile(r"\brm\s+.*(?:-[a-zA-Z]*r[a-zA-Z]*f\b|-[a-zA-Z]*f[a-zA-Z]*r\b|-(?:r|R)\b.*-f\b|-f\b.*-(?:r|R)\b|--recursive\b.*--force\b|--force\b.*--recursive\b)", re.IGNORECASE),
+    re.compile(r"\bfind\b.*-delete\b", re.IGNORECASE),
+    re.compile(r"\b(rd|rmdir)\b.*(?:/s\s+/q|/q\s+/s|/s\b.*(?:\s/q|$)|/q\b.*(?:\s/s|$))", re.IGNORECASE),
+    re.compile(r"\b(del|erase)\b.*(?:/s\s+/q|/q\s+/s|/s\b.*(?:\s/q|$)|/q\b.*(?:\s/s|$)|/f\b.*(?:\s/s|\s/q))", re.IGNORECASE),
+    re.compile(r"\b(Remove-Item|ri)\b.*-Recurse\b.*-Force\b", re.IGNORECASE),
+    re.compile(r"\b(Remove-Item|ri)\b.*-Force\b.*-Recurse\b", re.IGNORECASE),
     re.compile(r"\bmkfs(\.|$|\s)", re.IGNORECASE),
     re.compile(r"\bdd\b.*\bof=", re.IGNORECASE),
     re.compile(r"\b(shutdown|reboot|halt|poweroff)\b", re.IGNORECASE),

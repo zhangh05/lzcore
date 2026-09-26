@@ -131,11 +131,93 @@ def _run(async_fn):
         return {"ok": False, "error": str(e)[:300]}
 
 
+def _validate_browser_url(url: str) -> dict | None:
+    """Validate that the browser is not accessing local/private networks, files, or cloud metadata."""
+    if not url:
+        return None
+    from urllib.parse import urlparse
+    import ipaddress
+    import socket
+    import os
+
+    try:
+        parsed = urlparse(url.strip())
+    except Exception as exc:
+        return {"ok": False, "error": "invalid_url", "message": f"Malformed URL: {exc}"}
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "data":
+        return None
+    if scheme not in ("http", "https"):
+        return {
+            "ok": False,
+            "error": "url_blocked",
+            "message": f"URL scheme '{scheme}' is prohibited. Only http and https are allowed in browser navigation.",
+        }
+
+    hostname = (parsed.hostname or "").strip().lower()
+    if not hostname:
+        return {"ok": False, "error": "invalid_url", "message": "URL has no hostname."}
+
+    if os.environ.get("LZCORE_BROWSER_ALLOW_PRIVATE_NETWORK", "").strip().lower() in ("true", "1", "yes"):
+        return None
+
+    # Block obvious loopback/local hostnames
+    if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or hostname.endswith(".local") or hostname.endswith(".internal"):
+        return {
+            "ok": False,
+            "error": "url_blocked",
+            "message": "Access to local/loopback network addresses is prohibited in browser tools.",
+        }
+
+    # Check if hostname is an IP address
+    try:
+        ip = ipaddress.ip_address(hostname)
+        shared_cgnat = ipaddress.ip_network("100.64.0.0/10")
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip in shared_cgnat:
+            return {
+                "ok": False,
+                "error": "url_blocked",
+                "message": "Access to private or local network addresses is prohibited in browser tools.",
+            }
+    except ValueError:
+        # Not a literal IP address; resolve hostname to detect DNS rebinding / private targets
+        try:
+            addr_info = socket.getaddrinfo(hostname, None)
+            shared_cgnat = ipaddress.ip_network("100.64.0.0/10")
+            for item in addr_info:
+                ip_str = item[4][0]
+                try:
+                    resolved_ip = ipaddress.ip_address(ip_str)
+                    if (
+                        resolved_ip.is_loopback
+                        or resolved_ip.is_private
+                        or resolved_ip.is_link_local
+                        or resolved_ip.is_reserved
+                        or resolved_ip.is_multicast
+                        or resolved_ip in shared_cgnat
+                    ):
+                        return {
+                            "ok": False,
+                            "error": "url_blocked",
+                            "message": f"Access to private or local network ({hostname} resolves to {ip_str}) is prohibited.",
+                        }
+                except ValueError:
+                    pass
+        except Exception:
+            pass
+
+    return None
+
+
 # ──── Core Actions ──────────────────────────────────────────────────
 
 
 def browser_navigate(url: str, wait_selector: str = "", timeout: int = DEFAULT_TIMEOUT) -> dict:
     """Navigate to URL. Returns page title, URL, and accessible text."""
+    blocked = _validate_browser_url(url)
+    if blocked is not None:
+        return blocked
     async def _nav():
         page = await _get_page()
         await page.goto(url, timeout=timeout, wait_until="domcontentloaded")
@@ -316,6 +398,10 @@ def browser_screenshot(
         as_file: Save to workspace as PNG file (True) or return base64 (False).
         workspace_id: Workspace ID for file storage.
     """
+    if url:
+        blocked = _validate_browser_url(url)
+        if blocked is not None:
+            return blocked
     async def _shot():
         page = await _get_page()
         if url:
@@ -502,6 +588,10 @@ def browser_select_option(value: str, selector: str = "", ref: str = "") -> dict
 
 def browser_extract(url: str, selector: str = "body") -> dict:
     """Extract text content from a page element."""
+    if url:
+        blocked = _validate_browser_url(url)
+        if blocked is not None:
+            return blocked
     async def _extract():
         page = await _get_page()
         if url:
@@ -543,6 +633,13 @@ def browser_press_key(key: str) -> dict:
 
 def browser_evaluate(script: str) -> dict:
     """Execute JavaScript in the page context. Returns evaluated result."""
+    import os
+    if os.environ.get("LZCORE_BROWSER_EVALUATE_ENABLED", "").strip().lower() not in ("true", "1", "yes", "on"):
+        return {
+            "ok": False,
+            "error": "browser_evaluate_disabled",
+            "message": "browser_evaluate is disabled by default for security. Set LZCORE_BROWSER_EVALUATE_ENABLED=true to enable.",
+        }
     async def _eval():
         page = await _get_page()
         result = await page.evaluate(script)
@@ -584,6 +681,10 @@ def browser_tabs(action: str = "list", tab_index: int = 0, url: str = "") -> dic
         tab_index: Target tab index.
         url: URL for new tabs.
     """
+    if url:
+        blocked = _validate_browser_url(url)
+        if blocked is not None:
+            return blocked
     async def _tabs():
         global _pages, _active_tab
         # tabs is a public entry point and must work before navigate/snapshot.
