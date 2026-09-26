@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMsg } from "../stores/workbench";
-import { buildTaskProgress, formatRunSummaryMarkdown } from "../utils/taskProgress";
+import { buildTaskProgress, formatRunSummaryMarkdown, resolveStageIndex } from "../utils/taskProgress";
 
 function assistant(overrides: Partial<ChatMsg> = {}): ChatMsg {
   return {
@@ -193,6 +193,62 @@ describe("task progress projection", () => {
     expect(markdown).toContain("实测总耗时");
     expect(markdown).toContain("网络状态检查");
     expect(markdown).toContain("采集到 3 台交换机");
+  });
+
+  it("resolves model_started to proper phases according to stream_scope", () => {
+    expect(resolveStageIndex({ event_id: "1", event_type: "model_started", stream_scope: "planner" } as any)).toBe(0);
+    expect(resolveStageIndex({ event_id: "2", event_type: "model_started", stream_scope: "response" } as any)).toBe(3);
+    expect(resolveStageIndex({ event_id: "3", event_type: "model_started", stream_scope: "continuation" } as any)).toBe(2);
+    // Fallback without scope: no tools -> 0 (understand), with tools -> 2 (analysis)
+    expect(resolveStageIndex({ event_id: "4", event_type: "model_started" } as any, false)).toBe(0);
+    expect(resolveStageIndex({ event_id: "5", event_type: "model_started" } as any, true)).toBe(2);
+    expect(resolveStageIndex("provider_retrying")).toBe(0);
+  });
+
+  it("attributes planner model time to Phase 1 and avoids Phase 3 premature duration and regression", () => {
+    // Exact scenario from user's bug report:
+    // A turn begins, runs planner model for 6s, and finishes planner.
+    // Must NOT attribute 6s to Phase 3 or leave Phase 3 waiting with 6s while Phase 1 is active.
+    const model = buildTaskProgress(assistant({
+      status: "streaming",
+      runtimeEvents: [
+        { event_id: "e1", event_type: "turn_started", occurred_at: "2026-09-26T10:00:00.000Z" },
+        { event_id: "e2", event_type: "planner_started", occurred_at: "2026-09-26T10:00:00.000Z" },
+        { event_id: "e3", event_type: "model_started", occurred_at: "2026-09-26T10:00:00.000Z", stream_scope: "planner" } as any,
+        { event_id: "e4", event_type: "model_completed", occurred_at: "2026-09-26T10:00:06.000Z", stream_scope: "planner" } as any,
+        { event_id: "e5", event_type: "planner_completed", occurred_at: "2026-09-26T10:00:06.000Z" },
+      ],
+    }), {
+      status: "running",
+      stage: "planner_completed",
+    }, { turnRunning: true });
+
+    expect(model.activeIndex).toBe(0);
+    // Phase 1 (understand) has the 6s duration
+    expect(model.phases[0].durationMs).toBe(6000);
+    expect(model.phases[0].state).toBe("active");
+    // Phase 3 (analysis) must NOT have 6s duration or be active
+    expect(model.phases[2].durationMs).toBeUndefined();
+    expect(model.phases[2].state).toBe("idle");
+  });
+
+  it("enforces monotonic phase progression preventing backwards stage jumps", () => {
+    // If a tool has already run (Phase 2 evidence), an incoming late stage event
+    // with index 0 (e.g. planner_completed or turn_started) cannot jump activeIndex back to 0.
+    const model = buildTaskProgress(assistant({
+      status: "streaming",
+      runtimeEvents: [
+        { event_id: "e1", event_type: "turn_started" },
+        { event_id: "e2", event_type: "tool_call", tool_id: "web.search" },
+      ],
+    }), {
+      status: "running",
+      stage: "turn_started", // Stale polled snapshot stage
+    }, { turnRunning: true });
+
+    expect(model.activeIndex).toBe(1);
+    expect(model.phases[0].state).toBe("done");
+    expect(model.phases[1].state).toBe("active");
   });
 });
 

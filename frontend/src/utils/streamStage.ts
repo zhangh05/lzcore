@@ -2,6 +2,9 @@ export type StreamStagePayload = {
   elapsed_ms?: unknown;
   turn_elapsed_ms?: unknown;
   stage_elapsed_ms?: unknown;
+  stream_scope?: unknown;
+  attempt?: unknown;
+  error?: unknown;
 };
 
 export type StreamProgressPatch = {
@@ -36,6 +39,7 @@ export const STREAM_STAGE_LABELS: Record<string, string> = {
   response_started: "整理回复…",
   response_completed: "回复已就绪",
   turn_completed: "处理完成",
+  provider_retrying: "模型连接重试中…",
   cognitive_initialized: "已建立认知状态",
   cognitive_goal_normalized: "已规范化任务目标",
   cognitive_plan_selected: "已选择受控执行计划",
@@ -111,6 +115,7 @@ export const STREAM_STAGE_KINDS: Record<string, RuntimeEventKind> = {
   pre_repair_started: "recovery",
   pre_repair_completed: "recovery",
   repair_attempt: "recovery",
+  provider_retrying: "recovery",
   orchestration_planned: "agent",
   orchestration_layer_started: "agent",
   orchestration_layer_completed: "agent",
@@ -147,6 +152,7 @@ const TONE_BY_STAGE: Record<string, RuntimeEventTone> = {
   repair_attempt: "warn",
   pre_repair_started: "warn",
   cognitive_gap_detected: "warn",
+  provider_retrying: "warn",
   turn_completed: "ok",
   final: "ok",
   response_completed: "ok",
@@ -184,8 +190,24 @@ export function progressPatchForStreamStage(
   payload?: StreamStagePayload,
 ): StreamProgressPatch | null {
   if (stageName === "heartbeat") return null;
-  const progressText = STREAM_STAGE_LABELS[stageName];
+  let progressText = STREAM_STAGE_LABELS[stageName];
   if (!progressText) return null;
+
+  if (stageName === "model_started") {
+    const scope = String(payload?.stream_scope || "").toLowerCase();
+    if (scope === "planner") {
+      progressText = "正在分析任务并规划…";
+    } else if (scope === "response") {
+      progressText = "正在整理最终回复…";
+    } else if (scope === "continuation") {
+      progressText = "正在深入分析证据…";
+    }
+  } else if (stageName === "provider_retrying") {
+    const attempt = payload?.attempt;
+    if (attempt !== undefined && attempt !== null && Number(attempt) > 1) {
+      progressText = `模型连接重试中 (第${attempt}次)…`;
+    }
+  }
 
   const progressElapsedMs = toElapsedMs(payload?.turn_elapsed_ms ?? payload?.elapsed_ms);
   const stageElapsedMs = toElapsedMs(payload?.stage_elapsed_ms);

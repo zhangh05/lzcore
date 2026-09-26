@@ -70,6 +70,7 @@ const STAGE_INDEX: Record<string, number> = {
   pre_repair_completed: 0,
   risk_assessed: 0,
   budget_ok: 0,
+  provider_retrying: 0,
   execution_started: 1,
   orchestration_planned: 1,
   orchestration_layer_started: 1,
@@ -79,8 +80,9 @@ const STAGE_INDEX: Record<string, number> = {
   execution_completed: 1,
   repair_attempt: 1,
   merge_completed: 2,
-  response_started: 2,
-  model_started: 2,
+  model_started: 0,
+  model_completed: 0,
+  response_started: 3,
   response_completed: 3,
   turn_completed: 3,
   cognitive_initialized: 0,
@@ -93,6 +95,37 @@ const STAGE_INDEX: Record<string, number> = {
   cognitive_reflection_completed: 2,
   cognitive_model_state_recorded: 3,
 };
+
+export function resolveStageIndex(
+  eventOrStage: RuntimeEvent | string,
+  hasToolEvidence = false,
+): number | undefined {
+  if (typeof eventOrStage === "string") {
+    const stageName = eventOrStage.toLowerCase();
+    if (stageName === "model_started" || stageName === "model_completed") {
+      return hasToolEvidence ? 2 : 0;
+    }
+    return STAGE_INDEX[stageName];
+  }
+
+  const type = eventType(eventOrStage);
+  if (!type) return undefined;
+
+  if (type === "model_started" || type === "model_completed") {
+    const rawScope = String(
+      (eventOrStage as unknown as Record<string, unknown>).stream_scope ||
+      (eventOrStage.payload as Record<string, unknown> | undefined)?.stream_scope ||
+      (eventOrStage.metadata as Record<string, unknown> | undefined)?.stream_scope ||
+      "",
+    ).toLowerCase();
+    if (rawScope === "planner") return 0;
+    if (rawScope === "response") return 3;
+    if (rawScope === "continuation") return 2;
+    return hasToolEvidence ? 2 : 0;
+  }
+
+  return STAGE_INDEX[type];
+}
 
 const PHASE_COPY = [
   ["understand", "理解问题", "识别目标、范围与执行约束"],
@@ -153,18 +186,54 @@ export function buildTaskProgress(
   totalPhaseDurationMs?: number;
 } {
   const result = message?.result;
-  const events = (snapshot?.events?.length ? snapshot.events : message?.runtimeEvents?.length
-    ? message.runtimeEvents
-    : result?.events) || [];
-  const lastStage = String(snapshot?.stage || [...events].reverse().map(eventType).find(Boolean) || "");
+  const isStreaming = lifecycle.turnRunning ?? (snapshot?.status === "running" || message?.status === "streaming");
+
+  // Prioritize authoritative live runtimeEvents from WebSocket stream during active turns
+  const liveEvents = message?.runtimeEvents?.length ? message.runtimeEvents : undefined;
+  const snapshotEvents = snapshot?.events?.length ? snapshot.events : undefined;
+  const resultEvents = result?.events?.length ? result.events : undefined;
+  const events = (isStreaming && liveEvents)
+    ? liveEvents
+    : (snapshotEvents || liveEvents || resultEvents || []);
+
+  const liveTools = snapshot?.tool_calls || [];
+  const messageTools = message?.toolCalls || result?.tool_calls || [];
+  const hasToolEvidence = Boolean(
+    liveTools.length > 0 || messageTools.length > 0 || (result?.tool_calls?.length ?? 0) > 0,
+  );
+
+  const lastEvent = [...events].reverse().find((e) => Boolean(eventType(e)));
+  const streamLastStage = lastEvent ? eventType(lastEvent) : "";
+  const lastStage = (isStreaming && streamLastStage)
+    ? streamLastStage
+    : String(snapshot?.stage || streamLastStage || "");
+
   // `turnRunning` is intentionally an explicit override.  The page knows both
   // the WebSocket lifecycle and the durable job lifecycle; neither an earlier
   // `result` object nor a stale active-turn snapshot may turn that into a
   // completed UI state.
-  const isStreaming = lifecycle.turnRunning ?? (snapshot?.status === "running" || message?.status === "streaming");
   const failed = !isStreaming && (snapshot?.status === "failed" || message?.status === "error" || Boolean(result && !result.ok));
   const completed = !isStreaming && !failed && (snapshot?.status === "succeeded" || Boolean(result && message?.status !== "streaming"));
-  const activeIndex = completed ? 3 : Math.max(0, STAGE_INDEX[lastStage] ?? (isStreaming ? 0 : 0));
+
+  let targetIndex = 0;
+  if (completed) {
+    targetIndex = 3;
+  } else if (lastEvent) {
+    targetIndex = resolveStageIndex(lastEvent, hasToolEvidence) ?? 0;
+  } else if (lastStage) {
+    targetIndex = resolveStageIndex(lastStage, hasToolEvidence) ?? 0;
+  }
+
+  // Anti-regression: the stepper must be monotonic. Active index cannot drop below the highest phase reached.
+  let maxObservedIndex = 0;
+  events.forEach((event) => {
+    const idx = resolveStageIndex(event, hasToolEvidence);
+    if (idx !== undefined && idx > maxObservedIndex) {
+      maxObservedIndex = idx;
+    }
+  });
+
+  const activeIndex = completed ? 3 : Math.max(maxObservedIndex, targetIndex);
 
   // Phase spans come from the timestamps of the stage events the runtime
   // actually emitted, so the rail reports observed time rather than a
@@ -177,7 +246,7 @@ export function buildTaskProgress(
     if (at === null) return;
     firstEventAt = firstEventAt === null ? at : Math.min(firstEventAt, at);
     lastEventAt = lastEventAt === null ? at : Math.max(lastEventAt, at);
-    const index = STAGE_INDEX[eventType(event)];
+    const index = resolveStageIndex(event, hasToolEvidence);
     if (index === undefined) return;
     const span = spans.get(index);
     if (!span) spans.set(index, { start: at, end: at });
@@ -206,8 +275,6 @@ export function buildTaskProgress(
   const turnEnd = parsedTime(snapshot?.finished_at) ?? parsedTime(snapshot?.updated_at) ?? lastEventAt;
   const elapsedMs = turnStart !== null && turnEnd !== null && turnEnd > turnStart ? turnEnd - turnStart : undefined;
 
-  const liveTools = snapshot?.tool_calls || [];
-  const messageTools = message?.toolCalls || result?.tool_calls || [];
   const evidence = (liveTools.length ? liveTools : messageTools).map((tool, index) => {
     const toolId = String(tool.tool_id || "");
     const rawStatus = String("status" in tool ? tool.status || "" : "");

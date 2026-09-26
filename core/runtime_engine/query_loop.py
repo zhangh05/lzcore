@@ -66,6 +66,7 @@ from .stage_events import (
     MODEL_COMPLETED,
     MODEL_STARTED,
     PLANNER_COMPLETED,
+    PROVIDER_RETRYING,
     RESPONSE_COMPLETED,
     RESPONSE_STARTED,
 )
@@ -1879,6 +1880,12 @@ class QueryLoop:
                         llm_calls=budget.llm_calls,
                         error=provider_error if not all_results else None,
                     )
+                self._emit_stage(
+                    PROVIDER_RETRYING,
+                    t_start,
+                    attempt=provider_failure_count,
+                    error=provider_error,
+                )
                 await self._wait_for_provider_recovery(ctx, provider_failure_count)
                 continue
 

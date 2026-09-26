@@ -49,6 +49,7 @@ RESPONSE_STARTED = "response_started"
 RESPONSE_COMPLETED = "response_completed"
 TURN_STARTED = "turn_started"
 TURN_COMPLETED = "turn_completed"
+PROVIDER_RETRYING = "provider_retrying"
 
 # Heartbeat
 HEARTBEAT = "heartbeat"
@@ -63,6 +64,7 @@ STAGE_LABELS: dict[str, str] = {
     PLANNER_COMPLETED: "分析完成",
     MODEL_STARTED: "正在调用模型…",
     MODEL_COMPLETED: "模型调用完成",
+    PROVIDER_RETRYING: "模型连接重试中…",
     GRAPH_COMPILED: "构建执行图…",
     STRUCTURAL_VALIDATED: "图结构校验通过",
     SEMANTIC_VALIDATED: "语义校验通过",

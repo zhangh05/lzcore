@@ -394,11 +394,21 @@ _STAGE_PROGRESS: dict[str, tuple[int, str]] = {
     "tool_result": (2, "收集证据"),
     "execution_completed": (2, "收集证据"),
     "repair_attempt": (2, "收集证据"),
+    "cognitive_evidence_registered": (2, "收集证据"),
     "merge_completed": (3, "分析判断"),
-    "response_started": (3, "分析判断"),
+    "cognitive_gap_detected": (3, "分析判断"),
+    "cognitive_decision_made": (3, "分析判断"),
+    "cognitive_reflection_started": (3, "分析判断"),
+    "cognitive_reflection_completed": (3, "分析判断"),
+    "response_started": (4, "形成建议"),
     "model_started": (3, "分析判断"),
     "response_completed": (4, "形成建议"),
     "turn_completed": (4, "形成建议"),
+    "cognitive_model_state_recorded": (4, "形成建议"),
+    "cognitive_initialized": (1, "理解问题"),
+    "cognitive_goal_normalized": (1, "理解问题"),
+    "cognitive_plan_selected": (1, "理解问题"),
+    "provider_retrying": (1, "理解问题"),
 }
 
 
@@ -471,15 +481,33 @@ def update_session_turn_stage(
     if active.get("status") != "running":
         return
     stage = str(event.get("type") or event.get("name") or "event")
-    current, label = _STAGE_PROGRESS.get(stage, (
-        int((rec.progress or {}).get("current") or 1),
-        str((rec.progress or {}).get("current_step") or "理解问题"),
-    ))
+    scope = str(event.get("stream_scope") or "").lower()
+    if stage in {"model_started", "model_completed"}:
+        if scope == "planner":
+            current, label = (1, "理解问题")
+        elif scope == "response":
+            current, label = (4, "形成建议")
+        else:
+            tools = list(active.get("tool_calls") or [])
+            current, label = (3, "分析判断") if tools else (1, "理解问题")
+    else:
+        current, label = _STAGE_PROGRESS.get(stage, (
+            int((rec.progress or {}).get("current") or 1),
+            str((rec.progress or {}).get("current_step") or "理解问题"),
+        ))
+
+    # Anti-regression: progress current step must never step backwards during a turn
+    current_progress = int((rec.progress or {}).get("current") or 1)
+    if current < current_progress:
+        current = current_progress
+        label = str((rec.progress or {}).get("current_step") or label)
     compact = {
         "type": stage,
         "timestamp": event.get("timestamp"),
         "elapsed_ms": int(event.get("elapsed_ms") or 0),
     }
+    if scope:
+        compact["stream_scope"] = scope
     tool_id = str(event.get("tool_id") or event.get("name") or "") if stage in {"tool_call", "tool_result"} else ""
     if tool_id:
         compact["tool_id"] = tool_id

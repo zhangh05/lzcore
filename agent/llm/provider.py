@@ -5,7 +5,9 @@ Error diagnostics: preserves HTTP status, error type, and non-sensitive details.
 Only masks real tokens/Authorization/Bearer values.
 """
 
-import json, logging, time, urllib.request, urllib.error
+import json, logging, threading, time, urllib.request, urllib.error
+import requests
+from typing import Optional
 from agent.llm.schemas import LLMMessage, LLMRequest, LLMResponse, LLMToolCall
 
 _LOG = logging.getLogger(__name__)
@@ -22,6 +24,34 @@ ERROR_TYPE_PROVIDER_TIMEOUT = "provider_timeout"
 ERROR_TYPE_PROVIDER_NETWORK_ERROR = "provider_network_error"
 ERROR_TYPE_PROVIDER_SCHEMA_REJECTED = "provider_schema_rejected"
 ERROR_TYPE_PROVIDER_UNKNOWN = "provider_unknown_error"
+
+_LLM_SESSION: Optional[requests.Session] = None
+_LLM_SESSION_LOCK = threading.Lock()
+
+
+def _get_llm_session() -> requests.Session:
+    """Return a thread-safe pooled HTTP session for persistent keep-alive."""
+    global _LLM_SESSION
+    if _LLM_SESSION is None:
+        with _LLM_SESSION_LOCK:
+            if _LLM_SESSION is None:
+                s = requests.Session()
+                adapter = requests.adapters.HTTPAdapter(
+                    pool_connections=16,
+                    pool_maxsize=32,
+                    max_retries=0,
+                )
+                s.mount("https://", adapter)
+                s.mount("http://", adapter)
+                _LLM_SESSION = s
+    return _LLM_SESSION
+
+
+def _llm_timeout_tuple(cfg: dict) -> tuple[float, float]:
+    """Return (connect_timeout, read_timeout) with fast connect fail-fast."""
+    raw_timeout = float(cfg.get("timeout", 90) or 90)
+    connect_timeout = min(5.0, max(1.0, float(cfg.get("connect_timeout", 5.0) or 5.0)))
+    return (connect_timeout, raw_timeout)
 
 
 def get_provider_config() -> dict:
@@ -515,11 +545,11 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     reasoning_fields: dict = {}
 
     try:
-        resp = _requests.post(
+        resp = _get_llm_session().post(
             url,
             json=body_dict,
             headers=headers,
-            timeout=cfg.get("timeout", 120),
+            timeout=_llm_timeout_tuple(cfg),
             stream=True,
         )
 
@@ -829,8 +859,8 @@ def _anthropic_messages_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
         def send(active_body: dict) -> LLMResponse:
             if req.stream:
                 return _anthropic_messages_stream(url, active_body, headers, cfg, req)
-            response = _requests.post(
-                url, json=active_body, headers=headers, timeout=cfg.get("timeout", 120)
+            response = _get_llm_session().post(
+                url, json=active_body, headers=headers, timeout=_llm_timeout_tuple(cfg)
             )
             if response.status_code != 200:
                 detail = response.text[:500]
@@ -1047,7 +1077,7 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
     import requests as _requests
     content_parts, blocks, usage, model, stop_reason = [], {}, None, cfg.get("model", ""), ""
     try:
-        response = _requests.post(url, json=body, headers=headers, timeout=cfg.get("timeout", 120), stream=True)
+        response = _get_llm_session().post(url, json=body, headers=headers, timeout=_llm_timeout_tuple(cfg), stream=True)
         if response.status_code != 200:
             detail = response.text[:500]
             return LLMResponse(
