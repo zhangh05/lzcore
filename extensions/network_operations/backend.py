@@ -1016,7 +1016,7 @@ def register():
             {
                 "tool_id": "network.operations.topology",
                 "name": "拓扑绘图",
-                "description": "独立图纸绘制。只读写当前绘图 Skill 的图纸；节点以 node_id 标识，与登记设备无关。先 read 获取 version，再 patch 增改节点、链路、分组或图元；未提及的对象保留。不得执行设备命令、发现链路或查询运行状态。",
+                "description": "独立图纸绘制。只读写当前绘图 Skill 的图纸；节点以 node_id 标识，与登记设备无关。新图纸可直接依据当前绘图上下文中的 version 进行 patch 绘制；已有图纸可先 read 获取最新对象再增改或删除；未提及的对象保留。不得执行设备命令、发现链路或查询运行状态。",
                 "category": "ops", "risk_level": "medium", "permission_action": "write",
                 "action_execution_contracts": {
                     "read": {"action_class": "read", "risk_level": "low", "side_effects": "none", "idempotency": "safe_to_retry", "read_only": True},
