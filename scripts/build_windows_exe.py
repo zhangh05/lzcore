@@ -112,7 +112,91 @@ def prefabricate_workspace_and_config(exe_dir: Path):
     if not dist_config_dir.is_dir():
         raise RuntimeError(f"预置配置目录失败：未找到 {dist_config_dir}")
 
+    # 6. 生成一键创建桌面快捷方式批处理脚本（完全绿色，不写注册表）
+    create_shortcut_batch(exe_dir)
+
     print(f"[SUCCESS] 纯净工作区与配置文件预置成功！已就绪于: {ws_root}")
+
+
+def create_shortcut_batch(exe_dir: Path):
+    """在分发包根目录生成便携式快捷方式生成脚本（不写注册表，完全绿色）"""
+    bat_content = (
+        "@echo off\r\n"
+        "chcp 65001 >nul\r\n"
+        "title 创建联智中枢桌面快捷方式\r\n"
+        "echo ========================================================\r\n"
+        "echo   联智中枢 (LZCore) 桌面快捷方式生成工具 (便携版)\r\n"
+        "echo ========================================================\r\n"
+        "echo.\r\n"
+        "set \"CURRENT_DIR=%~dp0\"\r\n"
+        "set \"TARGET_EXE=%CURRENT_DIR%lzcore.exe\"\r\n"
+        "set \"ICO_FILE=%CURRENT_DIR%lzcore.ico\"\r\n"
+        "\r\n"
+        "if not exist \"%TARGET_EXE%\" (\r\n"
+        "    echo [错误] 未在当前目录下找到 lzcore.exe\r\n"
+        "    pause\r\n"
+        "    exit /b 1\r\n"
+        ")\r\n"
+        "\r\n"
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command ^\r\n"
+        "    \"$ws = New-Object -ComObject WScript.Shell; \" ^\r\n"
+        "    \"$desktop = [Environment]::GetFolderPath('Desktop'); \" ^\r\n"
+        "    \"$link = $ws.CreateShortcut((Join-Path $desktop '联智中枢.lnk')); \" ^\r\n"
+        "    \"$link.TargetPath = '%TARGET_EXE%'; \" ^\r\n"
+        "    \"$link.WorkingDirectory = '%CURRENT_DIR%'; \" ^\r\n"
+        "    \"if (Test-Path '%ICO_FILE%') { $link.IconLocation = '%ICO_FILE%'; } \" ^\r\n"
+        "    \"$link.Description = '联智中枢 LZCore 桌面工作台'; \" ^\r\n"
+        "    \"$link.Save()\"\r\n"
+        "\r\n"
+        "if %errorlevel% equ 0 (\r\n"
+        "    echo [成功] 桌面快捷方式已生成！可直接在桌面双击【联智中枢】图标启动。\r\n"
+        "    echo 提示：如需卸载，直接删除桌面图标与本解压文件夹即可，无任何注册表残留。\r\n"
+        ") else (\r\n"
+        "    echo [提示] 自动生成快捷方式失败，您可以直接右键 lzcore.exe 选择“发送到 - 桌面快捷方式”。\r\n"
+        ")\r\n"
+        "echo.\r\n"
+        "pause\r\n"
+    )
+    (exe_dir / "创建桌面快捷方式.bat").write_text(bat_content, encoding="utf-8")
+
+
+def ensure_version_info(app_version: str):
+    """确保 version_info.txt 与当前 APP_VERSION 一致"""
+    parts = [int(p) if p.isdigit() else 0 for p in app_version.split(".")[:4]]
+    while len(parts) < 4:
+        parts.append(0)
+    ver_tuple = tuple(parts)
+    content = f"""# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers={ver_tuple},
+    prodvers={ver_tuple},
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        '080404b0',
+        [StringStruct('CompanyName', 'LZCore'),
+        StringStruct('FileDescription', '联智中枢桌面客户端'),
+        StringStruct('FileVersion', '{app_version}.0'),
+        StringStruct('InternalName', 'lzcore'),
+        StringStruct('LegalCopyright', 'Copyright (C) 2026 LZCore. All rights reserved.'),
+        StringStruct('OriginalFilename', 'lzcore.exe'),
+        StringStruct('ProductName', '联智中枢 (LZCore)'),
+        StringStruct('ProductVersion', '{app_version}.0')])
+      ]), 
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)
+"""
+    (ROOT / "version_info.txt").write_text(content, encoding="utf-8")
 
 
 def main():
@@ -122,6 +206,13 @@ def main():
     args = parser.parse_args()
 
     os.chdir(ROOT)
+
+    try:
+        from agent import __version__ as APP_VERSION
+    except Exception:
+        APP_VERSION = "3.2.0"
+
+    ensure_version_info(APP_VERSION)
 
     if args.clean:
         print("[*] 清理旧构建产物...")

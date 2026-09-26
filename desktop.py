@@ -37,6 +37,21 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
+    # Windows High-DPI 高分屏感知（优先 Per-Monitor V2，杜绝 125%/150% 缩放下字体与拓扑图发虚）
+    try:
+        import ctypes
+        try:
+            # -4 代表 DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (Win10 1703+)
+            ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+        except Exception:
+            try:
+                # 2 代表 PROCESS_PER_MONITOR_DPI_AWARE (Win8.1+)
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            except Exception:
+                ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
 # 1. Windows 下 PyInstaller 多进程必备保护
 multiprocessing.freeze_support()
 
@@ -107,7 +122,7 @@ orig_err = sys.stderr
 sys.stdout = StreamToLogger(logger, logging.INFO, original=orig_out)
 sys.stderr = StreamToLogger(logger, logging.ERROR, original=orig_err)
 
-# 4. 配置持久化数据目录（保存在 exe 同级的 workspaces 与 config 目录中）
+# 4. 配置持久化数据目录与 WebView2 缓存隔离
 WORKSPACE_ROOT = APP_DIR / "workspaces"
 if "LZCORE_WORKSPACE_ROOT" not in os.environ and "LZCORE_WORKSPACE_DIR" not in os.environ:
     os.environ["LZCORE_WORKSPACE_ROOT"] = str(WORKSPACE_ROOT)
@@ -118,9 +133,56 @@ else:
     CONFIG_DIR = APP_DIR / "config"
     os.environ["LZCORE_CONFIG_DIR"] = str(CONFIG_DIR)
 
+# 将 WebView2 临时缓存（EBWebView）隔离到 .runtime/webview2_cache，避免散落在绿色便携根目录
+RUNTIME_DIR = APP_DIR / ".runtime"
+WEBVIEW2_CACHE = RUNTIME_DIR / "webview2_cache"
+WEBVIEW2_CACHE.mkdir(parents=True, exist_ok=True)
+os.environ["WEBVIEW2_USER_DATA_FOLDER"] = str(WEBVIEW2_CACHE)
+
 # 5. 配置本地环境
 os.environ["LZCORE_EMBEDDED_WORKER"] = "true"
 os.environ["LZCORE_RUNTIME_BIND_HOST"] = "127.0.0.1"
+
+_MUTEX_HANDLE = None
+
+
+def check_single_instance() -> bool:
+    """Windows 单实例互斥保护：防止用户连续双击拉起多个进程。若已有实例，唤醒并置顶窗口后退出。"""
+    global _MUTEX_HANDLE
+    if not sys.platform.startswith("win"):
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.windll.kernel32
+        user32 = ctypes.windll.user32
+        mutex_name = "Global\\LZCoreDesktopSingleInstanceMutex_v3"
+        _MUTEX_HANDLE = kernel32.CreateMutexW(None, False, mutex_name)
+        last_error = kernel32.GetLastError()
+        ERROR_ALREADY_EXISTS = 183
+        if last_error == ERROR_ALREADY_EXISTS:
+            logger.warning("检测到已有联智中枢实例正在运行，唤醒已有窗口并退出当前实例。")
+            try:
+                def enum_windows_callback(hwnd, _extra):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buff = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buff, length + 1)
+                        if "联智中枢" in buff.value:
+                            SW_RESTORE = 9
+                            user32.ShowWindow(hwnd, SW_RESTORE)
+                            user32.SetForegroundWindow(hwnd)
+                            return False
+                    return True
+
+                WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+                user32.EnumWindows(WNDENUMPROC(enum_windows_callback), 0)
+            except Exception:
+                pass
+            return False
+    except Exception as exc:
+        logger.warning("单实例互斥检查跳过: %s", exc)
+    return True
 
 
 def init_local_environment():
@@ -247,6 +309,10 @@ def main():
     parser.add_argument("--web-only", action="store_true", help="以常规浏览器模式运行，不拉起桌面窗体")
     args = parser.parse_args()
 
+    # 检查单实例互斥（Windows），防止多开冲突
+    if not args.web_only and not check_single_instance():
+        sys.exit(0)
+
     port = args.port if args.port > 0 else find_free_port()
     os.environ["LZCORE_PORT"] = str(port)
 
@@ -323,14 +389,27 @@ def main():
             icon_path = str(candidate)
             break
 
-    # 创建桌面窗口
+    # 动态适应当前屏幕尺寸，自适应视口
+    init_w, init_h = 1440, 900
+    try:
+        screens = webview.screens
+        if screens:
+            primary = screens[0]
+            # 还原窗口状态时的尺寸自适应为屏幕的 92% 宽和 88% 高，居中舒适
+            init_w = max(1024, int(primary.width * 0.92))
+            init_h = max(680, int(primary.height * 0.88))
+    except Exception:
+        pass
+
+    # 创建桌面窗口：初始贴合当前屏幕（最大化铺满工作区，保留任务栏）
     window_kwargs = {
         "title": window_title,
         "url": app_url,
-        "width": 1440,
-        "height": 900,
+        "width": init_w,
+        "height": init_h,
         "min_size": (1024, 680),
         "resizable": True,
+        "maximized": True,  # 初始尺寸直接贴合当前屏幕，全屏展示画布
         "text_select": True,
         "background_color": "#ffffff",
     }
@@ -340,12 +419,19 @@ def main():
     # Windows 优先调用内置的 Edge WebView2 内核
     gui_engine = "edgechromium" if sys.platform == "win32" else None
 
-    logger.info("正在唤起桌面应用窗口...")
+    logger.info("正在唤起桌面应用窗口 (初始全屏工作区模式)...")
     try:
         webview.start(gui=gui_engine, debug=False)
     finally:
         logger.info("桌面窗口已关闭，正在清理后台线程...")
         server.shutdown()
+        # 释放单实例互斥锁
+        if _MUTEX_HANDLE:
+            try:
+                import ctypes
+                ctypes.windll.kernel32.CloseHandle(_MUTEX_HANDLE)
+            except Exception:
+                pass
         logger.info("应用程序安全退出。")
         sys.exit(0)
 

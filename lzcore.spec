@@ -130,6 +130,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=str(ROOT / 'lzcore.ico') if (ROOT / 'lzcore.ico').is_file() else None,
+    version=str(ROOT / 'version_info.txt') if (ROOT / 'version_info.txt').is_file() else None,
 )
 
 coll = COLLECT(
