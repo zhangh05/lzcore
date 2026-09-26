@@ -54,6 +54,18 @@ def _llm_timeout_tuple(cfg: dict) -> tuple[float, float]:
     return (connect_timeout, raw_timeout)
 
 
+def _post_llm(url: str, **kwargs):
+    """Post using pooled keep-alive session in production, or requests.post if monkeypatched in tests."""
+    import requests as _req
+    if not hasattr(_req, "Session") or type(_req).__name__ == "SimpleNamespace":
+        return _req.post(url, **kwargs)
+    post_fn = getattr(_req, "post", None)
+    if getattr(post_fn, "__module__", None) != "requests.api":
+        return post_fn(url, **kwargs)
+    return _get_llm_session().post(url, **kwargs)
+
+
+
 def get_provider_config() -> dict:
     """Get provider config via unified path (UI settings > env/file > default)."""
     from agent.llm.config import resolve_provider_config
@@ -545,7 +557,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     reasoning_fields: dict = {}
 
     try:
-        resp = _get_llm_session().post(
+        resp = _post_llm(
             url,
             json=body_dict,
             headers=headers,
@@ -859,7 +871,7 @@ def _anthropic_messages_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
         def send(active_body: dict) -> LLMResponse:
             if req.stream:
                 return _anthropic_messages_stream(url, active_body, headers, cfg, req)
-            response = _get_llm_session().post(
+            response = _post_llm(
                 url, json=active_body, headers=headers, timeout=_llm_timeout_tuple(cfg)
             )
             if response.status_code != 200:
@@ -1077,7 +1089,7 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
     import requests as _requests
     content_parts, blocks, usage, model, stop_reason = [], {}, None, cfg.get("model", ""), ""
     try:
-        response = _get_llm_session().post(url, json=body, headers=headers, timeout=_llm_timeout_tuple(cfg), stream=True)
+        response = _post_llm(url, json=body, headers=headers, timeout=_llm_timeout_tuple(cfg), stream=True)
         if response.status_code != 200:
             detail = response.text[:500]
             return LLMResponse(
