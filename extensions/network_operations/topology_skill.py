@@ -68,9 +68,8 @@ link_updates: link_id for existing links; omit it for a new link; source_node_id
 target_node_id, source_interface, target_interface, kind (physical/logical), optional label/metadata.
 group_updates: group_id, name, kind (custom/region/datacenter/as/tenant), x, y, width, height.
 canvas_item_updates: item_id, kind (rectangle/ellipse/text), text, x, y, width, height, optional style (fill/border/color).
-CRITICAL FOR ZONES/RECTANGLES: (x, y) specifies the CENTER of the rectangle/ellipse (NOT the top-left!).
-To enclose member nodes with bounds [min_x..max_x, min_y..max_y]:
-center x = (min_x + max_x) / 2, center y = (min_y + max_y) / 2, width = (max_x - min_x) + 160, height = (max_y - min_y) + 140.
+CRITICAL FOR ZONES/RECTANGLES: (x, y) is the CENTER. Set each member node's group_id to the zone item_id.
+The server then places that zone around those nodes. Do not rely on hand-calculated bounds.
 Separate zones must not overlap each other.
 Use remove_node_ids/remove_link_ids/remove_group_ids/
 remove_canvas_item_ids only for requested removals. Node removal also removes incident links.

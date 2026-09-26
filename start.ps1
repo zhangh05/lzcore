@@ -271,7 +271,7 @@ function Get-AllowedOrigins {
     $origins = [System.Collections.Generic.List[string]]::new()
     $origins.Add("http://localhost:$FrontendPort")
     $origins.Add("http://127.0.0.1:$FrontendPort")
-    if ($BackendHost -ne "127.0.0.1" -and $BackendHost -ne "localhost" -or ($env:LZCORE_ALLOW_LAN -eq "true")) {
+    if ($env:LZCORE_ALLOW_LAN -eq "true") {
         $addresses = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
             Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" }
         foreach ($address in $addresses) {

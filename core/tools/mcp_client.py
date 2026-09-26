@@ -39,7 +39,9 @@ class StdioMcpClient:
         self._process = subprocess.Popen(
             list(self.config.command), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, bufsize=1, cwd=self.config.cwd,
-            env={**os.environ, **(self.config.env or {})},
+            env={**os.environ, **(self.config.env or {}), "PYTHONIOENCODING": "utf-8"},
+            encoding="utf-8",
+            errors="replace",
         )
         self.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "lzcore", "version": "1"}})
         self.notify("notifications/initialized", {})

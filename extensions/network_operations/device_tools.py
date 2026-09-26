@@ -100,7 +100,7 @@ def local_ipv4_addresses() -> list[str]:
         argv = [command] if command else []
     if argv:
         try:
-            output = subprocess.run(argv, capture_output=True, check=False, text=True, timeout=2).stdout
+            output = subprocess.run(argv, capture_output=True, check=False, text=True, encoding="utf-8", errors="replace", timeout=2).stdout
             found.update(re.findall(r"\binet\s+(\d{1,3}(?:\.\d{1,3}){3})\b", output))
         except (OSError, subprocess.SubprocessError):
             pass

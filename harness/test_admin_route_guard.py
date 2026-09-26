@@ -30,10 +30,11 @@ def _unauthenticated_app(monkeypatch, tmp_path):
 
 def test_remote_unauthenticated_admin_write_is_denied(monkeypatch, tmp_path):
     app = _unauthenticated_app(monkeypatch, tmp_path)
+    from backend.core.local_token import local_browser_token
     response = app.test_client().post(
         "/api/admin/backups/prune",
         json={"keep": 10},
-        headers={"Origin": "http://localhost:5273"},
+        headers={"Origin": "http://localhost:5273", "X-LZCore-Local-Token": local_browser_token()},
         environ_overrides={"REMOTE_ADDR": "192.168.5.12"},
     )
     assert response.status_code == 403
@@ -44,10 +45,11 @@ def test_remote_unauthenticated_admin_write_is_denied(monkeypatch, tmp_path):
 
 def test_loopback_unauthenticated_admin_write_still_works(monkeypatch, tmp_path):
     app = _unauthenticated_app(monkeypatch, tmp_path)
+    from backend.core.local_token import local_browser_token
     response = app.test_client().post(
         "/api/admin/backups/prune",
         json={"keep": 10},
-        headers={"Origin": "http://localhost:5273"},
+        headers={"Origin": "http://localhost:5273", "X-LZCore-Local-Token": local_browser_token()},
     )
     assert response.status_code == 200
     assert response.get_json()["ok"] is True

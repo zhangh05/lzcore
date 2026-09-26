@@ -55,6 +55,30 @@ export const apiClient: AxiosInstance = axios.create({
   },
 });
 
+let localBrowserToken = "";
+
+export async function ensureLocalBrowserToken(): Promise<string> {
+  if (typeof window === "undefined") return "";
+  if (getApiAccessToken()) return "";
+  if (localBrowserToken) return localBrowserToken;
+  const cached = window.sessionStorage.getItem("LZCORE_LOCAL_TOKEN") || "";
+  if (cached) {
+    localBrowserToken = cached;
+    return cached;
+  }
+  try {
+    const response = await axios.get(`${baseURL}/local-token`, { withCredentials: true });
+    const token = String(response.data?.token || "");
+    if (token) {
+      localBrowserToken = token;
+      window.sessionStorage.setItem("LZCORE_LOCAL_TOKEN", token);
+    }
+    return token;
+  } catch {
+    return "";
+  }
+}
+
 export function getApiAccessToken(): string {
   if (typeof window === "undefined") return "";
   // Browser sessions are preferred. A build-time token would be embedded in
@@ -79,13 +103,18 @@ function isRetryableReadMethod(method?: string): boolean {
   return normalized === "GET" || normalized === "HEAD" || normalized === "OPTIONS";
 }
 
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
   config.headers = config.headers ?? {};
   (config.headers as Record<string, string>)["X-Request-Id"] = nextRequestId();
   // Inject auth header if token is configured
   const token = getApiAccessToken();
   if (token) {
     (config.headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+  } else if (!String(config.url || "").includes("local-token")) {
+    const localToken = await ensureLocalBrowserToken();
+    if (localToken) {
+      (config.headers as Record<string, string>)["X-LZCore-Local-Token"] = localToken;
+    }
   }
   return config;
 });

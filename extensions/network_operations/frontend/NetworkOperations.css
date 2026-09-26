@@ -551,8 +551,8 @@
   inset: 0;
   z-index: 3;
   display: grid;
-  place-items: center;
-  padding: var(--space-6);
+  place-items: end start;
+  padding: var(--space-4);
   pointer-events: none;
 }
 

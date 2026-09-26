@@ -36,6 +36,7 @@ def test_destructive_shell_permits_safe_commands():
     assert _reject_unsafe_local_exec(inv, "git status") is None
     assert _reject_unsafe_local_exec(inv, "python -m pytest") is None
     assert _reject_unsafe_local_exec(inv, "cat requirements.txt") is None
+    assert _reject_unsafe_local_exec(inv, "cat config/providers/minimax.json") is not None
 
 
 def test_browser_url_validation_blocks_unsafe_targets():
@@ -59,6 +60,19 @@ def test_browser_url_validation_blocks_unsafe_targets():
     # .local domain
     assert _validate_browser_url("http://printer.local/") is not None
 
+    # Schemes and mapped loopback that the literal private check used to miss
+    assert _validate_browser_url("data:text/html,hi") is not None
+    assert _validate_browser_url("http://[::ffff:127.0.0.1]/") is not None
+    assert _validate_browser_url("http://[::ffff:169.254.169.254]/") is not None
+
+
+def test_browser_url_validation_fails_closed_when_dns_cannot_be_checked(monkeypatch):
+    import socket
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("dns down")))
+    blocked = _validate_browser_url("https://example.com/")
+    assert blocked is not None
+    assert blocked.get("error") == "url_blocked"
+
 
 def test_browser_evaluate_gated():
     # By default, disabled
@@ -80,3 +94,68 @@ def test_browser_evaluate_gated():
             os.environ["LZCORE_BROWSER_EVALUATE_ENABLED"] = old_val
         else:
             os.environ.pop("LZCORE_BROWSER_EVALUATE_ENABLED", None)
+
+
+def test_local_browser_token_lifecycle(tmp_path, monkeypatch):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    from backend.core.local_token import local_browser_token, local_browser_token_matches
+
+    token1 = local_browser_token()
+    assert len(token1) >= 32
+    # Calling it again returns the same cached/persisted token
+    assert local_browser_token() == token1
+
+    # Matching logic
+    assert local_browser_token_matches(token1) is True
+    assert local_browser_token_matches("wrong-token-of-same-length-------------------") is False
+    assert local_browser_token_matches("") is False
+    assert local_browser_token_matches("short") is False
+
+
+def test_os_secret_store_memory_backend(monkeypatch):
+    monkeypatch.setenv("LZCORE_OS_SECRET_STORE", "memory")
+    from storage.os_secret_store import (
+        available,
+        backend_name,
+        delete_os_secret,
+        get_os_secret,
+        set_os_secret,
+    )
+    assert available() is True
+    assert backend_name() == "memory"
+
+    # Set and get
+    assert set_os_secret("test/secret/key1", "val-12345") is True
+    assert get_os_secret("test/secret/key1") == "val-12345"
+
+    # Non-existent
+    assert get_os_secret("test/secret/missing") == ""
+
+    # Delete
+    assert delete_os_secret("test/secret/key1") is True
+    assert get_os_secret("test/secret/key1") == ""
+    assert delete_os_secret("test/secret/key1") is False
+
+
+def test_atomic_replace_with_retry_succeeds_after_transient_failure(tmp_path, monkeypatch):
+    from storage.atomic_io import _replace_with_retry, atomic_write_text
+
+    target = tmp_path / "target.txt"
+    tmp_file = tmp_path / "target.txt.tmp"
+    atomic_write_text(tmp_file, "new content")
+
+    calls = 0
+    real_replace = os.replace
+
+    def mock_replace(src, dst):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise OSError("WinError 32: The process cannot access the file")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", mock_replace)
+    _replace_with_retry(tmp_file, target)
+    assert target.read_text(encoding="utf-8") == "new content"
+    assert calls == 3
+

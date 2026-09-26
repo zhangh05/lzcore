@@ -39,6 +39,10 @@ _WS_FIRST_FRAME_TIMEOUT_SECONDS = max(1.0, float(os.getenv("LZCORE_WS_FIRST_FRAM
 # for auth, polling and cancellation even under an active-turn surge.
 _WS_MAX_CONNECTIONS = max(1, int(os.getenv("LZCORE_WS_MAX_CONNECTIONS", "12")))
 _WS_MAX_CONNECTIONS_PER_IP = max(1, int(os.getenv("LZCORE_WS_MAX_CONNECTIONS_PER_IP", "8")))
+_WS_MAX_CONNECTIONS_PER_LOOPBACK = max(
+    _WS_MAX_CONNECTIONS_PER_IP,
+    int(os.getenv("LZCORE_WS_MAX_CONNECTIONS_PER_LOOPBACK", "32")),
+)
 _ws_connection_counts: dict[str, int] = {}
 _ws_connection_total = 0
 _ws_connection_lock = threading.Lock()
@@ -50,7 +54,8 @@ def _acquire_ws_slot(client_ip: str) -> bool:
     with _ws_connection_lock:
         if _ws_connection_total >= _WS_MAX_CONNECTIONS:
             return False
-        if _ws_connection_counts.get(key, 0) >= _WS_MAX_CONNECTIONS_PER_IP:
+        per_ip_limit = _WS_MAX_CONNECTIONS_PER_LOOPBACK if key in {"127.0.0.1", "::1", "localhost"} else _WS_MAX_CONNECTIONS_PER_IP
+        if _ws_connection_counts.get(key, 0) >= per_ip_limit:
             return False
         _ws_connection_total += 1
         _ws_connection_counts[key] = _ws_connection_counts.get(key, 0) + 1
@@ -283,6 +288,16 @@ def register_ws_routes(app):
                         if has_valid_token:
                             authenticated_username = "api-token"
                             authenticated_role = "owner"
+                        elif (
+                            not _is_auth_enabled()
+                            and not _is_login_enabled()
+                            and not _is_identity_enabled()
+                            and request.headers.get("Origin")
+                        ):
+                            from backend.core.local_token import local_browser_token_matches
+                            if not local_browser_token_matches(str(msg.get("local_token") or "")):
+                                ws.send(json.dumps({"type": "error", "message": "local_token_required"}))
+                                return
                     else:
                         from flask import session
                         authenticated_username = str(session.get("lzcore_user") or "")
@@ -473,16 +488,15 @@ def _same_origin_ws_request() -> bool:
     origin = request.headers.get("Origin")
     if not is_allowed_browser_origin(origin, request.host):
         return False
-    from backend.core.auth import _is_local_or_private_host, _AUTH_ENABLED, _is_login_enabled, _is_identity_enabled
-    if not _AUTH_ENABLED and not _is_login_enabled() and not _is_identity_enabled():
-        host = request.host.split("@")[-1]
-        if host.startswith("[") and "]" in host:
-            req_h = host[1:host.index("]")].lower()
-        elif ":" in host:
-            req_h = host.split(":")[0].lower()
-        else:
-            req_h = host.lower()
-        if not _is_local_or_private_host(req_h):
+    from backend.core.auth import (
+        _hostname_from_host_header,
+        _is_auth_enabled,
+        _is_identity_enabled,
+        _unauthenticated_host_allowed,
+        _is_login_enabled,
+    )
+    if not _is_auth_enabled() and not _is_login_enabled() and not _is_identity_enabled():
+        if not _unauthenticated_host_allowed(_hostname_from_host_header(request.host)):
             return False
     return True
 

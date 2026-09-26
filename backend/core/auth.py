@@ -353,6 +353,64 @@ def _configured_workbench_ports() -> set[int]:
     return ports or {5273, 5274}
 
 
+def _browser_local_token_required() -> bool:
+    if _is_auth_enabled() or _is_login_enabled() or _is_identity_enabled():
+        return False
+    if flask.request.method in {"GET", "HEAD", "OPTIONS"}:
+        return False
+    if flask.request.path == "/api/local-token":
+        return False
+    return bool(flask.request.headers.get("Origin"))
+
+
+def _presented_local_token_matches() -> bool:
+    from backend.core.local_token import local_browser_token_matches
+    presented = flask.request.headers.get("X-LZCore-Local-Token", "")
+    return local_browser_token_matches(presented)
+
+
+def _hostname_from_host_header(host_header: str) -> str:
+    """Return the hostname from a Host header, including bracketed IPv6."""
+    host = (host_header or "").split("@")[-1].strip()
+    if host.startswith("[") and "]" in host:
+        return host[1:host.index("]")].lower()
+    if host.count(":") == 1:
+        hostname, _, port = host.rpartition(":")
+        if port.isdigit():
+            return hostname.lower()
+    return host.lower()
+
+
+def _is_loopback_host(hostname: str) -> bool:
+    value = (hostname or "").strip().lower()
+    if value in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return bool(ip.is_loopback)
+
+
+def _unauthenticated_host_allowed(hostname: str) -> bool:
+    """Personal mode trusts loopback only, unless LAN access is explicitly enabled."""
+    value = (hostname or "").strip().lower()
+    if _is_loopback_host(value):
+        return True
+    allowed_hosts = {
+        item.strip().lower()
+        for item in os.environ.get("LZCORE_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    }
+    if value in allowed_hosts:
+        return True
+    if os.environ.get("LZCORE_ALLOW_LAN", "false").strip().lower() in ("true", "1", "yes", "on"):
+        return _is_local_or_private_host(value)
+    return False
+
+
 def _is_local_or_private_host(hostname: str) -> bool:
     value = (hostname or "").strip().lower()
     if value in {"localhost", "127.0.0.1", "::1"}:
@@ -401,8 +459,8 @@ def is_allowed_browser_origin(origin: str | None, request_host: str) -> bool:
         # DNS rebinding protection: even if origin == host, the host must be a valid local or private host
         # when authentication is disabled.
         if origin_hostname == request_hostname and origin_port == request_port:
-            if not _AUTH_ENABLED and not _is_login_enabled() and not _is_identity_enabled():
-                return _is_local_or_private_host(request_hostname)
+            if not _is_auth_enabled() and not _is_login_enabled() and not _is_identity_enabled():
+                return _unauthenticated_host_allowed(request_hostname)
             return True
 
         allowed_ports = _configured_workbench_ports()
@@ -478,21 +536,21 @@ def register_auth_middleware(app: flask.Flask) -> None:
 
         # DNS Rebinding protection: When authentication is disabled,
         # request Host must be a local or trusted private host.
-        if not _AUTH_ENABLED and not _is_login_enabled() and not _is_identity_enabled():
-            host = flask.request.host.split("@")[-1]
-            if host.startswith("[") and "]" in host:
-                req_h = host[1:host.index("]")].lower()
-            elif ":" in host:
-                req_h = host.split(":")[0].lower()
-            else:
-                req_h = host.lower()
-            if not _is_local_or_private_host(req_h):
+        if not _is_auth_enabled() and not _is_login_enabled() and not _is_identity_enabled():
+            if not _unauthenticated_host_allowed(_hostname_from_host_header(flask.request.host)):
                 logger.warning("host_rejected_untrusted: host=%s path=%s", flask.request.host, path)
                 return flask.jsonify({
                     "ok": False,
                     "error": "host_header_invalid",
                     "message": "Host header is not permitted. Only local or private network access is allowed when authentication is disabled.",
                     "status": 403,
+                }), 403
+            if _browser_local_token_required() and not _presented_local_token_matches():
+                logger.warning("local_token_denied: path=%s", path)
+                return flask.jsonify({
+                    "ok": False,
+                    "error": "local_token_required",
+                    "message": "Browser requests in personal mode must present the local token.",
                 }), 403
 
         if path.startswith("/api/") and not _same_origin_api_request():

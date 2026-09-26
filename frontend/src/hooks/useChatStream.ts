@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { agentApi, jobsApi, sessionsApi } from "../api";
-import { getApiAccessToken, realtimeEndpoint } from "../api/client";
+import { ensureLocalBrowserToken, getApiAccessToken, realtimeEndpoint } from "../api/client";
 import { useWorkbenchStore } from "../stores/workbench";
 import { useSessionStore } from "../stores/session";
 import { isApiError } from "../types";
@@ -34,7 +34,7 @@ import {
   releaseJobCancellation,
 } from "../utils/jobCancellation";
 
-const WS_TIMEOUT_MS = 3000;
+const WS_TIMEOUT_MS = 10_000;
 // Rendering Markdown is substantially more expensive than receiving tokens.
 // Five text-node updates per second looks fluid and leaves enough main-thread
 // time for input, navigation and scrolling during long responses.
@@ -229,8 +229,26 @@ export function useChatStream(
     const streamClockNow = () => performance.now();
     const turnStartedAt = streamClockNow();
     try {
-      const socket = new WebSocket(wsUrl);
-      msgWsRef.current = socket;
+      const openSocket = () => new Promise<WebSocket>((resolve, reject) => {
+        const next = new WebSocket(wsUrl);
+        msgWsRef.current = next;
+        const timer = setTimeout(() => {
+          try { next.close(); } catch { /* noop */ }
+          reject(new Error("ws_timeout"));
+        }, WS_TIMEOUT_MS);
+        next.onopen = () => { clearTimeout(timer); resolve(next); };
+        next.onerror = () => { clearTimeout(timer); reject(new Error("ws_error")); };
+      });
+      let socket: WebSocket;
+      try {
+        socket = await openSocket();
+      } catch (firstError) {
+        try {
+          socket = await openSocket();
+        } catch {
+          throw firstError;
+        }
+      }
 
       // Token batching — buffer tokens, flush at a UI-friendly cadence.
       const tokenBufferRef = { pending: "" };
@@ -240,13 +258,6 @@ export function useChatStream(
       let resolvedSid: string = activeSessionId || "";
       let stageStartedAt: number | null = null;
 
-      const wsReady: Promise<void> = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { reject(new Error("ws_timeout")); }, WS_TIMEOUT_MS);
-        socket.onopen = () => { clearTimeout(timer); resolve(); };
-        socket.onerror = () => { clearTimeout(timer); reject(new Error("ws_error")); };
-      });
-      await wsReady;
-
       wsTurnSubmitted = true;
       socket.send(JSON.stringify({
         type: "message",
@@ -255,6 +266,7 @@ export function useChatStream(
         workspace_id: ws.workspaceId,
         metadata: turnMetadata,
         auth_token: getApiAccessToken(),
+        local_token: await ensureLocalBrowserToken(),
       }));
 
       const streamingResult: {
@@ -624,7 +636,7 @@ export function useChatStream(
         onInterruption?.(interruption);
         return;
       }
-      // No turn frame was submitted, so HTTP is a safe initial transport fallback.
+      // No turn frame was submitted. HTTP is a fallback, not a successful WebSocket turn.
       if (!workspaceId) return;
       try {
         const res = await agentApi.run({

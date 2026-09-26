@@ -13,7 +13,8 @@ from agent.modules.browser.core import (
 )
 
 
-def test_navigate_snapshot_and_ref_click_share_one_browser_session():
+def test_navigate_snapshot_and_ref_click_share_one_browser_session(monkeypatch):
+    monkeypatch.setenv("LZCORE_BROWSER_ALLOW_PRIVATE_NETWORK", "true")
     try:
         navigated = browser_navigate(
             'data:text/html,<main><h1>Hello</h1><button id="go">Go</button><input aria-label="Name"></main>'
@@ -37,7 +38,8 @@ def test_navigate_snapshot_and_ref_click_share_one_browser_session():
         browser_close()
 
 
-def test_public_switch_tab_action_is_implemented_by_browser_runtime():
+def test_public_switch_tab_action_is_implemented_by_browser_runtime(monkeypatch):
+    monkeypatch.setenv("LZCORE_BROWSER_ALLOW_PRIVATE_NETWORK", "true")
     try:
         created = browser_tabs(action="new", url="data:text/html,<title>Second</title>")
         if created.get("ok") is False and _browser_runtime_unavailable(created):

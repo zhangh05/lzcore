@@ -456,6 +456,26 @@ def create_app():
     # The UI is served exclusively by the Vite frontend on 5273. Keeping
     # 8011 API-only avoids split browser storage between two origins
     # (8011 and 5273), which made session/local UI state look unsynced.
+    @app.route("/api/local-token", methods=["GET"])
+    def local_browser_token_route():
+        from backend.core.auth import (
+            _hostname_from_host_header,
+            _is_auth_enabled,
+            _is_identity_enabled,
+            _is_login_enabled,
+            _unauthenticated_host_allowed,
+            is_allowed_browser_origin,
+        )
+        from backend.core.local_token import local_browser_token
+        if _is_auth_enabled() or _is_login_enabled() or _is_identity_enabled():
+            return jsonify({"ok": False, "error": "local_token_unused"}), 404
+        if not _unauthenticated_host_allowed(_hostname_from_host_header(request.host)):
+            return jsonify({"ok": False, "error": "host_header_invalid"}), 403
+        origin = request.headers.get("Origin")
+        if origin and not is_allowed_browser_origin(origin, request.host):
+            return jsonify({"ok": False, "error": "origin_denied"}), 403
+        return jsonify({"ok": True, "token": local_browser_token()})
+
     @app.route("/")
     def backend_root():
         return jsonify({

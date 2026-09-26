@@ -52,10 +52,11 @@ def test_rest_dry_run_previews_policy_without_requesting_handler_dry_run(monkeyp
     monkeypatch.setenv("LZCORE_AUTH_ENABLED", "false")
     from backend.main import create_app
 
+    from backend.core.local_token import local_browser_token
     response = create_app().test_client().post(
         "/api/tools/dry-run?workspace_id=default",
         json={"tool_id": "workspace.file", "arguments": {"action": "read", "filepath": "files/data/a.txt"}},
-        headers={"Origin": "http://localhost:8011"},
+        headers={"Origin": "http://localhost:8011", "X-LZCore-Local-Token": local_browser_token()},
     )
 
     assert response.status_code == 200

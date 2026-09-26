@@ -25,6 +25,7 @@ from extensions.network_operations.command_semantics import classify_raw_command
 def _setup(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     monkeypatch.setenv("LZCORE_MASTER_KEY", "test-extension-master-key")
+    monkeypatch.setenv("LZCORE_OS_SECRET_STORE", "off")
 
 
 def test_skill_save_keeps_full_instructions_and_description(monkeypatch, tmp_path):

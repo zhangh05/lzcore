@@ -64,18 +64,35 @@ for p in (ROOT / 'config').glob('*'):
     ):
         config_datas.append((str(p), 'config'))
 
+extension_datas = []
+for path in (ROOT / 'extensions').rglob('*'):
+    if not path.is_file():
+        continue
+    if '__pycache__' in path.parts or path.suffix.lower() in {'.tsx', '.ts', '.css', '.map'}:
+        continue
+    extension_datas.append((str(path), str(Path('extensions') / path.relative_to(ROOT / 'extensions').parent)))
+
 datas = [
     (str(ROOT / 'frontend' / 'dist'), 'frontend/dist'),
-    (str(ROOT / 'extensions'), 'extensions'),
+    *extension_datas,
     (str(ROOT / 'prompts'), 'prompts'),
     *config_datas,
 ]
 
-# 构建前安全断言：检查是否混入真实凭据或供应商密钥文件
+# 构建前安全断言：目录也要逐个文件检查，不能只看 datas 条目名
+_SECRET_NAMES = {'llm.yaml', 'credentials.yaml', 'secrets.yaml'}
+
+def _packaged_files(src):
+    path = Path(src)
+    if path.is_file():
+        yield path
+    elif path.is_dir():
+        yield from (item for item in path.rglob('*') if item.is_file())
+
 for src, dst in datas:
-    p = Path(src)
-    if 'providers' in p.parts or p.name in ('llm.yaml', 'credentials.yaml', 'secrets.yaml'):
-        raise RuntimeError(f"Packaging security violation: Secret configuration {src} must not be bundled into binary distribution!")
+    for path in _packaged_files(src):
+        if 'providers' in path.parts or path.name in _SECRET_NAMES:
+            raise RuntimeError(f"Packaging security violation: Secret configuration {path} must not be bundled into binary distribution!")
 
 if (ROOT / 'lzcore.ico').is_file():
     datas.append((str(ROOT / 'lzcore.ico'), '.'))

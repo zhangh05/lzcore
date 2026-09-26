@@ -93,6 +93,12 @@ _DESTRUCTIVE_SHELL = (
 def _reject_unsafe_local_exec(inv: ToolInvocation, command: str) -> dict | None:
     if any(pattern.search(command) for pattern in _DESTRUCTIVE_SHELL):
         return _error_inv(inv, "destructive shell action is blocked")
+    config_dir = os.environ.get("LZCORE_CONFIG_DIR", "").strip()
+    lowered = command.replace("\\", "/").lower()
+    if config_dir and config_dir.replace("\\", "/").lower() in lowered:
+        return _error_inv(inv, "shell access to the configuration directory is blocked")
+    if re.search(r"(?:^|[\s\"'])(?:\./)?config/providers\b", lowered):
+        return _error_inv(inv, "shell access to provider credentials is blocked")
     return None
 
 
@@ -209,7 +215,7 @@ def handle_powershell_script(inv: ToolInvocation) -> dict:
             return _error_inv(inv, "PowerShell executable not found")
         result = subprocess.run(
             [executable, "-NoProfile", "-NonInteractive", "-Command", command],
-            capture_output=True, text=True, errors="replace", timeout=timeout,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
             env=safe_env,
             cwd=cwd,
         )

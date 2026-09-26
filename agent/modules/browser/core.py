@@ -78,6 +78,7 @@ async def _get_page(tab_index: int | None = None) -> Any:
             viewport=VIEWPORT,
             user_agent=USER_AGENT,
         )
+        await _context.route("**/*", _abort_blocked_browser_request)
         _pages[0] = await _context.new_page()
         _active_tab = 0
 
@@ -131,14 +132,35 @@ def _run(async_fn):
         return {"ok": False, "error": str(e)[:300]}
 
 
+def _browser_private_network_allowed() -> bool:
+    import os
+    return os.environ.get("LZCORE_BROWSER_ALLOW_PRIVATE_NETWORK", "").strip().lower() in ("true", "1", "yes", "on")
+
+
+def _blocked_ip(value) -> bool:
+    import ipaddress
+    ip = value
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    shared_cgnat = ipaddress.ip_network("100.64.0.0/10")
+    return bool(
+        ip.is_loopback
+        or ip.is_private
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+        or ip in shared_cgnat
+    )
+
+
 def _validate_browser_url(url: str) -> dict | None:
-    """Validate that the browser is not accessing local/private networks, files, or cloud metadata."""
+    """Reject non-public browser targets. DNS failure is a block, not a pass."""
     if not url:
         return None
     from urllib.parse import urlparse
     import ipaddress
     import socket
-    import os
 
     try:
         parsed = urlparse(url.strip())
@@ -146,7 +168,9 @@ def _validate_browser_url(url: str) -> dict | None:
         return {"ok": False, "error": "invalid_url", "message": f"Malformed URL: {exc}"}
 
     scheme = (parsed.scheme or "").lower()
-    if scheme == "data":
+    if scheme in {"about", "blob", "chrome", "chrome-error"}:
+        return None
+    if scheme == "data" and _browser_private_network_allowed():
         return None
     if scheme not in ("http", "https"):
         return {
@@ -155,59 +179,70 @@ def _validate_browser_url(url: str) -> dict | None:
             "message": f"URL scheme '{scheme}' is prohibited. Only http and https are allowed in browser navigation.",
         }
 
-    hostname = (parsed.hostname or "").strip().lower()
+    hostname = (parsed.hostname or "").strip().lower().rstrip(".")
     if not hostname:
         return {"ok": False, "error": "invalid_url", "message": "URL has no hostname."}
-
-    if os.environ.get("LZCORE_BROWSER_ALLOW_PRIVATE_NETWORK", "").strip().lower() in ("true", "1", "yes"):
+    if _browser_private_network_allowed():
         return None
-
-    # Block obvious loopback/local hostnames
-    if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or hostname.endswith(".local") or hostname.endswith(".internal"):
+    if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or hostname.endswith(".local") or hostname.endswith(".internal") or hostname.endswith(".localhost"):
         return {
             "ok": False,
             "error": "url_blocked",
             "message": "Access to local/loopback network addresses is prohibited in browser tools.",
         }
 
-    # Check if hostname is an IP address
     try:
         ip = ipaddress.ip_address(hostname)
-        shared_cgnat = ipaddress.ip_network("100.64.0.0/10")
-        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip in shared_cgnat:
+    except ValueError:
+        ip = None
+    if ip is not None:
+        if _blocked_ip(ip):
             return {
                 "ok": False,
                 "error": "url_blocked",
                 "message": "Access to private or local network addresses is prohibited in browser tools.",
             }
-    except ValueError:
-        # Not a literal IP address; resolve hostname to detect DNS rebinding / private targets
-        try:
-            addr_info = socket.getaddrinfo(hostname, None)
-            shared_cgnat = ipaddress.ip_network("100.64.0.0/10")
-            for item in addr_info:
-                ip_str = item[4][0]
-                try:
-                    resolved_ip = ipaddress.ip_address(ip_str)
-                    if (
-                        resolved_ip.is_loopback
-                        or resolved_ip.is_private
-                        or resolved_ip.is_link_local
-                        or resolved_ip.is_reserved
-                        or resolved_ip.is_multicast
-                        or resolved_ip in shared_cgnat
-                    ):
-                        return {
-                            "ok": False,
-                            "error": "url_blocked",
-                            "message": f"Access to private or local network ({hostname} resolves to {ip_str}) is prohibited.",
-                        }
-                except ValueError:
-                    pass
-        except Exception:
-            pass
+        return None
 
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+    except Exception:
+        return {
+            "ok": False,
+            "error": "url_blocked",
+            "message": f"Could not verify that {hostname} is a public address.",
+        }
+    if not addr_info:
+        return {
+            "ok": False,
+            "error": "url_blocked",
+            "message": f"Could not verify that {hostname} is a public address.",
+        }
+    for item in addr_info:
+        try:
+            resolved_ip = ipaddress.ip_address(item[4][0])
+        except ValueError:
+            return {
+                "ok": False,
+                "error": "url_blocked",
+                "message": f"Could not verify that {hostname} is a public address.",
+            }
+        if _blocked_ip(resolved_ip):
+            return {
+                "ok": False,
+                "error": "url_blocked",
+                "message": f"Access to private or local network ({hostname} resolves to {resolved_ip}) is prohibited.",
+            }
     return None
+
+
+async def _abort_blocked_browser_request(route) -> None:
+    """Re-check the URL Playwright is about to fetch, including redirects."""
+    blocked = _validate_browser_url(getattr(route.request, "url", "") or "")
+    if blocked is not None:
+        await route.abort()
+        return
+    await route.continue_()
 
 
 # ──── Core Actions ──────────────────────────────────────────────────

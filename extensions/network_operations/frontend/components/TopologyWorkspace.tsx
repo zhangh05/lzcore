@@ -1523,11 +1523,7 @@ export default function TopologyWorkspace({
           node.y >= item.y - halfH - pad &&
           node.y <= item.y + halfH + pad;
         const nodeGroupId = (node.group_id || "").trim();
-        const isMember =
-          Boolean(nodeGroupId) &&
-          (nodeGroupId === item.item_id ||
-            nodeGroupId === item.text ||
-            (Boolean(item.text) && item.text.trim().toLowerCase() === nodeGroupId.toLowerCase()));
+        const isMember = Boolean(nodeGroupId) && nodeGroupId === item.item_id;
         if (isEnclosed || isMember) {
           nodeDeltas.set(node.node_id, { dx, dy });
         }
@@ -4048,12 +4044,12 @@ export default function TopologyWorkspace({
                       <input
                         type="number"
                         min="40"
-                        max="1600"
+                        max="10000"
                         value={Math.round(selectedCanvasItem.width)}
                         onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => {
                           if (!activeTopology) return;
-                          const width = Math.min(1600, Math.max(40, Number(e.target.value) || 40));
+                          const width = Math.min(10000, Math.max(40, Number(e.target.value) || 40));
                           pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, width } : item) });
                         }}
                       />
@@ -4062,12 +4058,12 @@ export default function TopologyWorkspace({
                       <input
                         type="number"
                         min="24"
-                        max="1200"
+                        max="10000"
                         value={Math.round(selectedCanvasItem.height)}
                         onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => {
                           if (!activeTopology) return;
-                          const height = Math.min(1200, Math.max(24, Number(e.target.value) || 24));
+                          const height = Math.min(10000, Math.max(24, Number(e.target.value) || 24));
                           pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, height } : item) });
                         }}
                       />

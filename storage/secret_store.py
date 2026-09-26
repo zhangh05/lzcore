@@ -33,7 +33,18 @@ def _path():
     return runtime_record_file("secrets", "encrypted.json", create_parent=True)
 
 
+def secret_backend_available() -> bool:
+    from storage.os_secret_store import available
+    if available():
+        return True
+    return bool(os.environ.get("LZCORE_MASTER_KEY", "").strip() or os.environ.get("LZCORE_MASTER_KEY_FILE", "").strip())
+
+
 def set_secret(secret_id: str, value: str) -> str:
+    from storage.os_secret_store import available, set_os_secret
+    if available() and set_os_secret(secret_id, value):
+        _forget_file_copy(secret_id)
+        return f"secret://{secret_id}"
     path = _path()
     with FileLock(path.with_name("encrypted.lock")):
         try:
@@ -47,6 +58,11 @@ def set_secret(secret_id: str, value: str) -> str:
 
 def get_secret(reference: str) -> str:
     secret_id = str(reference).removeprefix("secret://")
+    from storage.os_secret_store import available, get_os_secret
+    if available():
+        stored = get_os_secret(secret_id)
+        if stored:
+            return stored
     path = _path()
     if not path.is_file():
         return ""
@@ -58,8 +74,25 @@ def get_secret(reference: str) -> str:
         return ""
 
 
+def _forget_file_copy(secret_id: str) -> None:
+    path = _path()
+    if not path.is_file():
+        return
+    with FileLock(path.with_name("encrypted.lock")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        except (OSError, ValueError):
+            return
+        if secret_id not in data:
+            return
+        data.pop(secret_id, None)
+        atomic_write_json(path, data)
+
+
 def delete_secret(reference: str) -> bool:
     secret_id = str(reference).removeprefix("secret://")
+    from storage.os_secret_store import available, delete_os_secret
+    removed = delete_os_secret(secret_id) if available() else False
     path = _path()
     with FileLock(path.with_name("encrypted.lock")):
         try:
@@ -70,4 +103,4 @@ def delete_secret(reference: str) -> bool:
         if existed:
             data.pop(secret_id, None)
             atomic_write_json(path, data)
-        return existed
+        return existed or removed

@@ -51,6 +51,25 @@ def _drawing(workspace, **overrides):
     return drawings.save_topology(workspace, payload)
 
 
+def test_zone_is_fitted_around_nodes_that_name_it(workspace):
+    topo = drawings.save_topology(workspace, {
+        "name": "分区",
+        "nodes": [
+            {"node_id": "a", "display_name": "A", "x": 100, "y": 100, "group_id": "zone1"},
+            {"node_id": "b", "display_name": "B", "x": 400, "y": 280, "group_id": "zone1"},
+        ],
+        "canvas_items": [{
+            "item_id": "zone1", "kind": "rectangle", "text": "核心",
+            "x": 0, "y": 0, "width": 40, "height": 40,
+        }],
+    })
+    zone = topo["canvas_items"][0]
+    assert zone["x"] == 250
+    assert zone["y"] == 190
+    assert zone["width"] >= 300
+    assert zone["height"] >= 180
+
+
 def test_link_arc_direction_survives_save(workspace):
     topo = _drawing(workspace)
     topo["links"][0]["style"] = {"curve_style": "bezier", "curve_reverse": True, "color": "#336699"}

@@ -147,6 +147,7 @@ class TestLLMProviderSettings:
         monkeypatch.delenv("LZCORE_MASTER_KEY", raising=False)
         monkeypatch.delenv("LZCORE_MASTER_KEY_FILE", raising=False)
         monkeypatch.delenv("LZCORE_IDENTITY_ENABLED", raising=False)
+        monkeypatch.setenv("LZCORE_OS_SECRET_STORE", "off")
         providers.mkdir(parents=True)
         (providers / "minimax.json").write_text(json.dumps({
             "provider": "minimax",
@@ -161,6 +162,36 @@ class TestLLMProviderSettings:
         assert saved["api_key"] == "sk-replacement-key"
         assert "secret_ref" not in persisted
         assert load_provider_config("minimax")["api_key"] == "sk-replacement-key"
+
+
+def test_macos_keychain_roundtrip_when_available():
+    import sys
+    if sys.platform != "darwin":
+        return
+    from storage.os_secret_store import _keychain_delete, _keychain_get, _keychain_set
+    secret_id = "lzcore-test/keychain-roundtrip"
+    if not _keychain_set(secret_id, "sk-keychain-roundtrip"):
+        return
+    try:
+        assert _keychain_get(secret_id) == "sk-keychain-roundtrip"
+    finally:
+        _keychain_delete(secret_id)
+
+
+def test_provider_key_is_stored_in_the_system_secret_backend(monkeypatch, tmp_path):
+    providers = _isolate_provider_store(monkeypatch, tmp_path)
+    monkeypatch.setenv("LZCORE_OS_SECRET_STORE", "memory")
+    monkeypatch.delenv("LZCORE_MASTER_KEY", raising=False)
+    monkeypatch.delenv("LZCORE_MASTER_KEY_FILE", raising=False)
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
+    providers.mkdir(parents=True)
+    from agent.llm.provider_store import load_provider_config, save_provider_config
+    save_provider_config("minimax", {"api_key": "sk-system-store-key"})
+    persisted = json.loads((providers / "minimax.json").read_text())
+    assert persisted.get("api_key") in {"", None}
+    assert persisted["secret_ref"] == "secret://llm/minimax"
+    assert "sk-system-store-key" not in (providers / "minimax.json").read_text()
+    assert load_provider_config("minimax")["api_key"] == "sk-system-store-key"
 
 
 class TestKeyResolverMask:

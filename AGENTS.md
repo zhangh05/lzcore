@@ -37,7 +37,7 @@ HTTP / WebSocket
 - `extensions/`：扩展清单、业务工具、业务路由和扩展前端。
 - `agent/capabilities/catalog.py`：能力目录，只供展示和推荐，不注册工具或授权。
 - `jobs/`：作业模型和 worker。默认是文件锁队列；生产 Compose 可切换为 Redis 队列。不是 Celery。
-- `storage/`：持久化边界。密钥用 Fernet。`workspaces/`、`logs/`、`config/providers/` 是本机数据，不提交。
+- `storage/`：持久化边界。密钥优先进系统凭据库，没有系统凭据库时用 Fernet。`workspaces/`、`logs/`、`config/providers/` 是本机数据，不提交。
 - `frontend/`：React 18、Vite、原生 CSS tokens、Zustand。浏览器不得复制服务端权限或终态判定。
 
 ## 修改检查

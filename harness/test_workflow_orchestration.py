@@ -244,6 +244,7 @@ def test_queued_workflow_rejects_raw_secrets_before_job_persistence(monkeypatch,
 
     app = create_app()
     app.config.update(TESTING=True)
+    from backend.core.local_token import local_browser_token
     response = app.test_client().post(
         "/api/workflows/network_asset_read/runs",
         json={
@@ -251,7 +252,7 @@ def test_queued_workflow_rejects_raw_secrets_before_job_persistence(monkeypatch,
             "enqueue": True,
             "inputs": {"text": "alpha beta", "api_token": "must-not-persist"},
         },
-        headers={"Origin": "http://localhost:5273"},
+        headers={"Origin": "http://localhost:5273", "X-LZCore-Local-Token": local_browser_token()},
     )
 
     assert response.status_code == 400

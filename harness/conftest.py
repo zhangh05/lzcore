@@ -33,6 +33,7 @@ os.environ["LZCORE_WORKSPACE_DIR"] = str(_temp_ws)
 os.environ["LZCORE_MEMORY_DIR"] = str(_temp_mem)
 os.environ["LZCORE_REPORTS_DIR"] = str(_temp_rpts)
 os.environ["LZCORE_EMBEDDED_WORKER"] = "false"
+os.environ["LZCORE_OS_SECRET_STORE"] = "memory"
 
 
 @pytest.fixture(autouse=True)

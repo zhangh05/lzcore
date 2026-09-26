@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import pytest
 from flask import Flask
@@ -122,10 +123,12 @@ def test_coordinates_nan_and_infinity_sanitized(workspace, tmp_path):
     assert math.isfinite(item["width"]) and item["width"] == 180.0
     assert math.isfinite(item["height"]) and item["height"] == 96.0
 
-    # atomic_write_json with NaN raises ValueError
+    # Non-finite numbers must not crash unrelated record writes.
     nan_file = tmp_path / "bad.json"
-    with pytest.raises(ValueError):
-        atomic_write_json(nan_file, {"coord": float("nan")})
+    atomic_write_json(nan_file, {"coord": float("nan"), "ok": 1.5})
+    written = json.loads(nan_file.read_text(encoding="utf-8"))
+    assert written["coord"] is None
+    assert written["ok"] == 1.5
 
 
 def test_svg_attribute_sanitization(workspace):
@@ -146,3 +149,58 @@ def test_svg_attribute_sanitization(workspace):
     assert "fill" not in item["style"]
     assert item["style"]["border"] == "#ff0000"
     assert item["style"]["color"] == "rgba(255, 0, 0, 0.5)"
+
+
+def test_node_ip_normalization(workspace):
+    # Valid IPv4
+    topo = drawings.save_topology(workspace, {
+        "name": "IpTest1",
+        "nodes": [{"node_id": "n1", "display_name": "R1", "x": 100, "y": 100, "ip": "192.168.1.1"}],
+    })
+    assert topo["nodes"][0]["ip"] == "192.168.1.1"
+
+    # Valid IPv6
+    topo2 = drawings.save_topology(workspace, {
+        "name": "IpTest2",
+        "nodes": [{"node_id": "n2", "display_name": "R2", "x": 100, "y": 100, "ip": "2001:db8::1"}],
+    })
+    assert topo2["nodes"][0]["ip"] == "2001:db8::1"
+
+    # Empty string or None becomes None
+    topo3 = drawings.save_topology(workspace, {
+        "name": "IpTest3",
+        "nodes": [{"node_id": "n3", "display_name": "R3", "x": 100, "y": 100, "ip": "  "}],
+    })
+    assert topo3["nodes"][0]["ip"] is None
+
+    # Invalid IP raises ValueError
+    with pytest.raises(ValueError, match="topology_ip_invalid"):
+        drawings.save_topology(workspace, {
+            "name": "IpTest4",
+            "nodes": [{"node_id": "n4", "display_name": "R4", "x": 100, "y": 100, "ip": "999.999.999.999"}],
+        })
+
+    with pytest.raises(ValueError, match="topology_ip_invalid"):
+        drawings.save_topology(workspace, {
+            "name": "IpTest5",
+            "nodes": [{"node_id": "n5", "display_name": "R5", "x": 100, "y": 100, "ip": "invalid-hostname"}],
+        })
+
+
+def test_fit_member_zones_adapts_to_member_nodes(workspace):
+    topo = drawings.save_topology(workspace, {
+        "name": "ZoneFittingTest",
+        "nodes": [
+            {"node_id": "dev1", "display_name": "D1", "x": 100, "y": 200, "group_id": "zone_rect"},
+            {"node_id": "dev2", "display_name": "D2", "x": 300, "y": 400, "group_id": "zone_rect"},
+        ],
+        "canvas_items": [
+            {"item_id": "zone_rect", "kind": "rectangle", "text": "数据中心", "x": 0, "y": 0, "width": 50, "height": 50},
+        ],
+    })
+    zone = topo["canvas_items"][0]
+    assert zone["x"] == 200.0  # (100 + 300) / 2
+    assert zone["y"] == 300.0  # (200 + 400) / 2
+    assert zone["width"] == 380.0  # (300 - 100) + 90 * 2 = 380
+    assert zone["height"] == 360.0  # (400 - 200) + 80 * 2 = 360
+

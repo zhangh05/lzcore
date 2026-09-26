@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -12,6 +14,24 @@ from typing import Any, Optional
 def _unique_tmp(path: Path) -> Path:
     suffix = f".tmp.{os.getpid()}.{uuid.uuid4().hex[:8]}"
     return path.with_name(path.name + suffix)
+
+
+def _replace_with_retry(tmp: Path, path: Path) -> None:
+    last_error: Exception | None = None
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except OSError as exc:
+            last_error = exc
+            time.sleep(0.05 * (attempt + 1))
+    try:
+        tmp.unlink()
+    except OSError:
+        pass
+    if last_error is not None:
+        raise last_error
+    raise OSError(f"failed to replace {path}")
 
 
 def atomic_write_text(path: Path, text: str) -> None:
@@ -33,14 +53,7 @@ def atomic_write_text(path: Path, text: str) -> None:
         except OSError:
             pass
         raise
-    try:
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
-        raise
+    _replace_with_retry(tmp, path)
 
 
 def atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -63,18 +76,28 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
         except OSError:
             pass
         raise
-    try:
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
-        raise
+    _replace_with_retry(tmp, path)
+
+
+def _json_without_nonfinite(value: Any) -> Any:
+    """Keep a NaN in one record from failing every other JSON write."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_without_nonfinite(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_without_nonfinite(item) for item in value]
+    return value
 
 
 def atomic_write_json(path: Path, obj: Any, *, indent: Optional[int] = 2) -> None:
-    text = json.dumps(obj, ensure_ascii=False, indent=indent, default=str, allow_nan=False)
+    text = json.dumps(
+        _json_without_nonfinite(obj),
+        ensure_ascii=False,
+        indent=indent,
+        default=str,
+        allow_nan=False,
+    )
     atomic_write_text(Path(path), text)
 
 

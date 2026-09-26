@@ -191,9 +191,7 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
           n.x <= item.x + halfW + pad &&
           n.y >= item.y - halfH - pad &&
           n.y <= item.y + halfH + pad;
-        const isGroup =
-          Boolean(n.group_id) &&
-          (n.group_id === item.item_id || n.group_id === item.text);
+        const isGroup = Boolean(n.group_id) && n.group_id === item.item_id;
         return isGeo || isGroup;
       })
       .map((n) => n.node_id);

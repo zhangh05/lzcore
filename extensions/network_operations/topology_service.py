@@ -6,6 +6,7 @@ Only the one-time legacy adapter reads asset names; normal drawing operations do
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import math
 import re
@@ -159,6 +160,44 @@ def get_topology(workspace_id: str, topology_id: str) -> dict[str, Any] | None:
     return _public_topology(record) if record else None
 
 
+def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Place a zone around nodes that name it, instead of trusting model geometry."""
+    fitted: list[dict[str, Any]] = []
+    for item in items:
+        if str(item.get("kind") or "") not in {"rectangle", "ellipse"}:
+            fitted.append(item)
+            continue
+        item_id = str(item.get("item_id") or "")
+        members = [node for node in nodes if item_id and str(node.get("group_id") or "") == item_id]
+        if not members:
+            fitted.append(item)
+            continue
+        xs = [float(node.get("x") or 0) for node in members]
+        ys = [float(node.get("y") or 0) for node in members]
+        pad_x, pad_y = 90.0, 80.0
+        fitted.append({
+            **item,
+            "x": round((min(xs) + max(xs)) / 2, 1),
+            "y": round((min(ys) + max(ys)) / 2, 1),
+            "width": max(160.0, round(max(xs) - min(xs) + pad_x * 2, 1)),
+            "height": max(120.0, round(max(ys) - min(ys) + pad_y * 2, 1)),
+        })
+    return fitted
+
+
+def _normalize_node_ip(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if len(text) > 48:
+        raise ValueError("topology_ip_invalid")
+    try:
+        ipaddress.ip_address(text)
+    except ValueError as exc:
+        raise ValueError("topology_ip_invalid") from exc
+    return text
+
+
 @_drawing_transaction
 def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name") or "").strip()
@@ -212,7 +251,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             "group_id": str(raw.get("group_id") or "").strip() or None,
             "x": x,
             "y": y,
-            "ip": str(raw.get("ip") or "").strip()[:48] or None,
+            "ip": _normalize_node_ip(raw.get("ip")),
             "vendor": str(raw.get("vendor") or "").strip()[:48] or None,
             "model": str(raw.get("model") or "").strip()[:48] or None,
             "role": str(raw.get("role") or "").strip()[:32] or None,
@@ -383,6 +422,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             link_entry["style"] = cleaned_style
         normalized_links.append(link_entry)
 
+    normalized_canvas_items = _fit_member_zones(normalized_nodes, normalized_canvas_items)
     record = {
         "schema_version": 2,
         "topology_id": topology_id,

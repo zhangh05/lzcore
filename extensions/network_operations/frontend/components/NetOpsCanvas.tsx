@@ -1664,7 +1664,8 @@ export default function NetOpsCanvas(props: Props) {
         const vendorTint = "#fbfcfd";
         const caption = props.nodeOverlayLines?.[node.node_id] || "";
         const name = node.display_name || "未命名设备";
-        const subtitle = caption || node.ip || "";
+        const ipAlreadyInName = Boolean(node.ip) && name.includes(String(node.ip));
+        const subtitle = caption || (ipAlreadyInName ? "" : node.ip || "");
         const label = subtitle ? `${name}\n${subtitle}` : name;
         const classes = [
           subtitle ? "drawing-node has-overlay" : "drawing-node",
