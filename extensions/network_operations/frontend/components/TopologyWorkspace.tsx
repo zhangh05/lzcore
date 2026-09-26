@@ -328,6 +328,106 @@ function canvasItemStylePreset(style?: TopologyCanvasItem["style"]): keyof typeo
   return (match?.[0] as keyof typeof canvasItemStylePresets | undefined) || "custom";
 }
 
+function CanvasItemDimensionInputs({
+  item,
+  onChange,
+}: {
+  item: TopologyCanvasItem;
+  onChange: (patch: { width?: number; height?: number }) => void;
+}) {
+  const [widthStr, setWidthStr] = useState(() => String(Math.round(item.width)));
+  const [heightStr, setHeightStr] = useState(() => String(Math.round(item.height)));
+
+  useEffect(() => {
+    setWidthStr(String(Math.round(item.width)));
+  }, [item.item_id, item.width]);
+
+  useEffect(() => {
+    setHeightStr(String(Math.round(item.height)));
+  }, [item.item_id, item.height]);
+
+  const commitWidth = (val: string) => {
+    const num = parseInt(val, 10);
+    if (!Number.isNaN(num) && num > 0) {
+      const clamped = Math.min(10000, Math.max(1, num));
+      setWidthStr(String(clamped));
+      if (clamped !== Math.round(item.width)) {
+        onChange({ width: clamped });
+      }
+    } else {
+      setWidthStr(String(Math.round(item.width)));
+    }
+  };
+
+  const commitHeight = (val: string) => {
+    const num = parseInt(val, 10);
+    if (!Number.isNaN(num) && num > 0) {
+      const clamped = Math.min(10000, Math.max(1, num));
+      setHeightStr(String(clamped));
+      if (clamped !== Math.round(item.height)) {
+        onChange({ height: clamped });
+      }
+    } else {
+      setHeightStr(String(Math.round(item.height)));
+    }
+  };
+
+  return (
+    <div className="inspector-dimension-grid">
+      <label className="inspector-field">
+        宽度
+        <input
+          type="number"
+          min="1"
+          max="10000"
+          value={widthStr}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setWidthStr(raw);
+            const num = parseInt(raw, 10);
+            if (!Number.isNaN(num) && num >= 1 && num <= 10000) {
+              onChange({ width: num });
+            }
+          }}
+          onBlur={(e) => commitWidth(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              commitWidth((e.target as HTMLInputElement).value);
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+        />
+      </label>
+      <label className="inspector-field">
+        高度
+        <input
+          type="number"
+          min="1"
+          max="10000"
+          value={heightStr}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setHeightStr(raw);
+            const num = parseInt(raw, 10);
+            if (!Number.isNaN(num) && num >= 1 && num <= 10000) {
+              onChange({ height: num });
+            }
+          }}
+          onBlur={(e) => commitHeight(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              commitHeight((e.target as HTMLInputElement).value);
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
 /**
  * 设备类型图标。导出给网络运维主页用 —— 设备列表和拓扑画布节点用同一套
  * 类型 → 图标映射，用户从列表切到画布时不会认错设备。
@@ -1503,39 +1603,9 @@ export default function TopologyWorkspace({
     if (!current || !positions.length) return;
     const byId = new Map(positions.map((position) => [position.element_id, position]));
 
-    // Check if any canvas items (zones) moved, and calculate deltas for member nodes enclosed within them
-    const nodeDeltas = new Map<string, { dx: number; dy: number }>();
-    (current.canvas_items || []).forEach((item) => {
-      const moved = byId.get(`canvas-${item.item_id}`);
-      if (!moved) return;
-      const dx = Math.round(moved.x - item.x);
-      const dy = Math.round(moved.y - item.y);
-      if (dx === 0 && dy === 0) return;
-
-      const halfW = (item.width || 200) / 2;
-      const halfH = (item.height || 100) / 2;
-      const pad = 24;
-      current.nodes.forEach((node) => {
-        if (byId.has(node.node_id)) return;
-        const isEnclosed =
-          node.x >= item.x - halfW - pad &&
-          node.x <= item.x + halfW + pad &&
-          node.y >= item.y - halfH - pad &&
-          node.y <= item.y + halfH + pad;
-        const nodeGroupId = (node.group_id || "").trim();
-        const isMember = Boolean(nodeGroupId) && nodeGroupId === item.item_id;
-        if (isEnclosed || isMember) {
-          nodeDeltas.set(node.node_id, { dx, dy });
-        }
-      });
-    });
-
     const nextNodes = current.nodes.map((node) => {
       const direct = byId.get(node.node_id);
-      if (direct) return { ...node, x: Math.round(direct.x), y: Math.round(direct.y) };
-      const delta = nodeDeltas.get(node.node_id);
-      if (delta) return { ...node, x: Math.round(node.x + delta.dx), y: Math.round(node.y + delta.dy) };
-      return node;
+      return direct ? { ...node, x: Math.round(direct.x), y: Math.round(direct.y) } : node;
     });
 
     const nextCanvasItems = (current.canvas_items || []).map((item) => {
@@ -4039,36 +4109,18 @@ export default function TopologyWorkspace({
                 </label>
 
                 <div className="inspector-dimension-section">
-                  <div className="inspector-dimension-grid">
-                    <label className="inspector-field">宽度
-                      <input
-                        type="number"
-                        min="40"
-                        max="10000"
-                        value={Math.round(selectedCanvasItem.width)}
-                        onFocus={(e) => e.currentTarget.select()}
-                        onChange={(e) => {
-                          if (!activeTopology) return;
-                          const width = Math.min(10000, Math.max(40, Number(e.target.value) || 40));
-                          pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, width } : item) });
-                        }}
-                      />
-                    </label>
-                    <label className="inspector-field">高度
-                      <input
-                        type="number"
-                        min="24"
-                        max="10000"
-                        value={Math.round(selectedCanvasItem.height)}
-                        onFocus={(e) => e.currentTarget.select()}
-                        onChange={(e) => {
-                          if (!activeTopology) return;
-                          const height = Math.min(10000, Math.max(24, Number(e.target.value) || 24));
-                          pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, height } : item) });
-                        }}
-                      />
-                    </label>
-                  </div>
+                  <CanvasItemDimensionInputs
+                    item={selectedCanvasItem}
+                    onChange={(patch) => {
+                      if (!activeTopology) return;
+                      pushState({
+                        ...activeTopology,
+                        canvas_items: (activeTopology.canvas_items || []).map((item) =>
+                          item.item_id === selectedCanvasItem.item_id ? { ...item, ...patch } : item
+                        ),
+                      });
+                    }}
+                  />
                   <div className="dimension-presets">
                     {(selectedCanvasItem.kind === "text"
                       ? [

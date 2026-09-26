@@ -434,6 +434,23 @@ test("text and ellipse diagram items share the editable, deletable inspector", a
   expect(screen.getByRole("combobox", { name: "图元类型" })).toHaveValue("text");
   expect(screen.getByRole("button", { name: "删除图纸图元" })).toBeInTheDocument();
 
+  // Dimension inputs can be cleared and freely edited without being clamped back to 40
+  const widthInput = screen.getByLabelText("宽度");
+  const heightInput = screen.getByLabelText("高度");
+  expect(widthInput).toHaveValue(160);
+  expect(heightInput).toHaveValue(36);
+
+  // Clearing the input allows empty state for typing
+  fireEvent.change(widthInput, { target: { value: "" } });
+  expect(widthInput).toHaveValue(null);
+
+  // User can type custom dimensions like 20
+  fireEvent.change(widthInput, { target: { value: "20" } });
+  expect(widthInput).toHaveValue(20);
+
+  fireEvent.blur(widthInput);
+  expect(widthInput).toHaveValue(20);
+
   fireEvent.click(screen.getByTestId("topo-item-ellipse-note"));
   expect(await screen.findByRole("heading", { name: "图纸图元 · 核心业务域" })).toBeInTheDocument();
   expect(screen.getByRole("combobox", { name: "图元类型" })).toHaveValue("ellipse");

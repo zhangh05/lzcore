@@ -13,6 +13,7 @@ vi.mock("../../../extensions/network_operations/frontend/components/NetOpsCanvas
     <button onClick={() => props.onSelectNode("old")}>旧详情</button>
     <button onClick={() => props.onSelectionChange(["canvas-note"])}>框选一个文本框</button>
     <button onClick={() => props.onSelectionChange(["old", "other"])}>框选两个节点</button>
+    <button onClick={() => props.onMoveElements([{ element_id: "canvas-note", x: 250, y: 250 }])}>拖拽移动图元</button>
   </>,
 }));
 
@@ -76,4 +77,20 @@ test("modal keyboard events do not move the selected drawing or replace its conf
   expect(screen.getByRole("button", { name: "撤销" })).toBeDisabled();
   fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test("moving a shape/canvas item does not drag enclosed or nearby nodes along with it", async () => {
+  setup();
+  // Drag the canvas item to (250, 250)
+  fireEvent.click(screen.getByText("拖拽移动图元"));
+  // Save changes
+  fireEvent.click(await screen.findByRole("button", { name: "保存" }));
+  await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({
+    method: "PUT",
+    data: expect.objectContaining({
+      // Nodes must remain in their original positions (0,0) and (100,100), not dragged!
+      nodes: topology.nodes,
+      canvas_items: [{ item_id: "note", kind: "text", text: "备注", x: 250, y: 250, width: 100, height: 40 }],
+    }),
+  })), { timeout: 3000 });
 });
