@@ -1735,6 +1735,7 @@ class QueryLoop:
                     "Tools remain available if more verification is needed.",
                 )
 
+        consecutive_tool_failures: dict[str, int] = {}
         while True:
             if self._is_cancelled(ctx):
                 # If tools already produced results, surface them as a
@@ -1755,6 +1756,24 @@ class QueryLoop:
                     error="cancelled_by_user",
                 )
             iterations += 1
+            if iterations > 15:
+                if all_results:
+                    return finish(
+                        final_response=self._build_tool_result_fallback(ctx, all_results),
+                        tool_results=all_results,
+                        iterations=iterations,
+                        total_tool_calls=len(all_results),
+                        llm_calls=budget.llm_calls,
+                        error="iteration_limit_exceeded",
+                    )
+                return finish(
+                    final_response="任务执行轮次达到上限（15轮），已中止自动循环以保护资源。已保留当前全部生成与执行结果。",
+                    tool_results=all_results,
+                    iterations=iterations,
+                    total_tool_calls=len(all_results),
+                    llm_calls=budget.llm_calls,
+                    error="iteration_limit_exceeded",
+                )
 
             # The counter is telemetry only.  A model-directed task has no
             # runtime turn cap; it ends only on explicit completion,
@@ -2272,6 +2291,28 @@ class QueryLoop:
                     if item.get("evidence_id") in registered_evidence_ids
                     and item.get("kind") == "image"
                 ]
+
+                # Track consecutive identical tool failures to prevent infinite retry loops
+                for res in results:
+                    if not res.ok:
+                        err_code = str((res.output or {}).get("error") or res.error or "unknown_error")
+                        sig = f"{res.tool_name}:{err_code}"
+                        consecutive_tool_failures[sig] = consecutive_tool_failures.get(sig, 0) + 1
+                        if consecutive_tool_failures[sig] >= 3:
+                            ctx.extras["response_outcome"] = "tool_failure_limit_reached"
+                            return finish(
+                                final_response=(
+                                    f"任务受阻：工具 {res.tool_name} 连续多次返回相同错误（{err_code}）。"
+                                    "已主动停止重复重试，避免陷入无限循环。已保留当前已生成的图纸与对话状态，请核对后继续。"
+                                ),
+                                tool_results=all_results,
+                                iterations=iterations,
+                                total_tool_calls=len(all_results),
+                                llm_calls=budget.llm_calls,
+                                error="consecutive_tool_failures",
+                            )
+                    else:
+                        consecutive_tool_failures.clear()
 
                 # Append assistant message (with tool_calls) + tool results
                 messages = self._append_tool_round(messages, model_tool_calls, results, response=response)

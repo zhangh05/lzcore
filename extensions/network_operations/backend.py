@@ -686,10 +686,27 @@ def topology_tool(invocation):
             return {"ok": True, "topology": topology, "version": topology["version"]}
         if action == "patch":
             topology = drawings.patch_topology(invocation.workspace_id, topology_id, args)
-            return {"ok": True, "topology": topology, "version": topology["version"]}
+            node_count = len(topology.get("nodes") or [])
+            link_count = len(topology.get("links") or [])
+            return {
+                "ok": True,
+                "topology_id": topology_id,
+                "version": topology["version"],
+                "node_count": node_count,
+                "link_count": link_count,
+                "topology": topology,
+                "message": f"图纸已成功更新到画布！当前版本为 v{topology['version']}，包含 {node_count} 个节点、{link_count} 条链路。",
+            }
         return {"ok": False, "error": "drawing_action_must_be_read_or_patch"}
     except ValueError as exc:
-        return {"ok": False, "error": str(exc), "topology_id": topology_id}
+        current_v = topology.get("version") if topology else 1
+        return {
+            "ok": False,
+            "error": str(exc),
+            "topology_id": topology_id,
+            "current_version": current_v,
+            "hint": f"图纸操作提示: {exc}。当前图纸最新版本为 v{current_v}。",
+        }
 
 
 def _inspection_result(task: dict[str, Any]) -> dict[str, Any]:

@@ -686,6 +686,44 @@ def test_topology_repeated_tool_suppression_resilience():
     assert note == ""
 
 
+def test_topology_patch_auto_version_and_fault_tolerance(workspace):
+    """Verify that patch_topology auto-heals version mismatches and tolerates dangling links."""
+    topo = drawings.save_topology(workspace, {
+        "name": "容错测试",
+        "nodes": [{"node_id": "core1", "x": 100, "y": 100}],
+        "links": [],
+    })
+    assert topo["version"] == 1
+
+    # 1. Patch with stale version 0 succeeds (auto-healed)
+    p1 = drawings.patch_topology(workspace, topo["topology_id"], {
+        "version": 0,
+        "node_updates": [{"node_id": "core2", "x": 200, "y": 100}],
+    })
+    assert p1["version"] == 2
+    assert len(p1["nodes"]) == 2
+
+    # 2. Patch without version succeeds (auto-healed)
+    p2 = drawings.patch_topology(workspace, topo["topology_id"], {
+        "node_updates": [{"node_id": "core3", "x": 300, "y": 100}],
+    })
+    assert p2["version"] == 3
+    assert len(p2["nodes"]) == 3
+
+    # 3. Patch with dangling link endpoint does not crash, but skips the invalid link
+    p3 = drawings.patch_topology(workspace, topo["topology_id"], {
+        "link_updates": [
+            {"source_node_id": "core1", "target_node_id": "core2", "label": "Valid Link"},
+            {"source_node_id": "core1", "target_node_id": "nonexistent_node", "label": "Bad Link"},
+        ],
+    })
+    assert p3["version"] == 4
+    # The valid link is preserved, the bad link is skipped without crashing
+    assert len(p3["links"]) == 1
+    assert p3["links"][0]["target_node_id"] == "core2"
+
+
+
 
 
 

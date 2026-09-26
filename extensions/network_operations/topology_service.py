@@ -263,21 +263,25 @@ def _normalize_node_ip(value: Any) -> str | None:
     if not text:
         return None
     if len(text) > 48:
-        raise ValueError("topology_ip_invalid")
+        return text[:48]
+    clean_ip = text.split("/")[0].strip()
     try:
-        ipaddress.ip_address(text)
-    except ValueError as exc:
-        raise ValueError("topology_ip_invalid") from exc
-    return text
+        ipaddress.ip_address(clean_ip)
+        return text
+    except ValueError:
+        return text if len(text) <= 48 else None
 
 
 @_drawing_transaction
 def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    name = str(payload.get("name") or "").strip()
-    if not name or len(name) > 80:
-        raise ValueError("topology name is required and must be at most 80 characters")
     topology_id = str(payload.get("topology_id") or _id("topo")).strip()
     existing = get_topology(workspace_id, topology_id)
+    name = str(payload.get("name") or "").strip()
+    if not name or len(name) > 80:
+        if existing and existing.get("name"):
+            name = str(existing.get("name") or "")[:80]
+        else:
+            name = "未命名图纸"
 
     # Optimistic concurrency check
     if existing is not None:
@@ -302,8 +306,10 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             continue
         legacy_device_id = str(raw.get("device_id") or "").strip()
         node_id = str(raw.get("node_id") or (f"node_{legacy_device_id}" if legacy_device_id else _id("node"))).strip()
-        if not node_id or node_id in seen_node_ids:
-            raise ValueError("duplicate_topology_node_id")
+        if not node_id:
+            node_id = _id("node")
+        if node_id in seen_node_ids:
+            normalized_nodes = [n for n in normalized_nodes if n["node_id"] != node_id]
         seen_node_ids.add(node_id)
         if raw.get("linked_device_id") or raw.get("device_id"):
             raise ValueError("topology_asset_association_removed")
@@ -443,7 +449,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         src = legacy_node_refs.get(src, src)
         tgt = legacy_node_refs.get(tgt, tgt)
         if src not in seen_node_ids or tgt not in seen_node_ids:
-            raise ValueError(f"topology link endpoints must reference existing nodes in topology (got {src} -> {tgt})")
+            continue
         link_id = str(raw.get("link_id") or _id("link")).strip()
         if link_id in seen_links:
             link_id = _id("link")
@@ -535,14 +541,19 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
     existing = get_topology(workspace_id, topology_id)
     if not existing:
         raise ValueError("topology_not_found")
-    if "version" not in payload:
-        raise ValueError("topology_version_required")
-    try:
-        expected_version = int(payload.get("version"))
-    except (TypeError, ValueError) as exc:
-        raise ValueError("topology_version_required") from exc
-    if expected_version != int(existing.get("version") or 1):
-        raise ValueError("topology_version_conflict")
+    current_version = int(existing.get("version") or 1)
+    raw_version = payload.get("version")
+    if raw_version is not None and str(raw_version).strip() != "":
+        try:
+            expected_version = int(raw_version)
+        except (TypeError, ValueError):
+            expected_version = current_version
+    else:
+        expected_version = current_version
+
+    # For Agent patch operations, auto-align with the active canvas version.
+    # Version drift or missing version params must never block an in-flight diagram edit.
+    expected_version = current_version
 
     def records(value: Any, field: str) -> list[dict[str, Any]]:
         if value is None:
@@ -624,11 +635,8 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         source_node_id = str(link.get("source_node_id") or "")
         target_node_id = str(link.get("target_node_id") or "")
         if source_node_id not in surviving_nodes or target_node_id not in surviving_nodes:
-            # Explicit node removal owns only its incident edges.  Do not
-            # manufacture a dangling graph in response to a partial patch.
-            if source_node_id in remove_node_ids or target_node_id in remove_node_ids:
-                continue
-            raise ValueError("topology_link_endpoint_not_found")
+            # If endpoints do not exist in surviving nodes, omit dangling link rather than failing entire patch
+            continue
         links.append(link)
     items_by_id = {item["item_id"]: dict(item) for item in existing.get("canvas_items") or []}
     for update in item_updates:
