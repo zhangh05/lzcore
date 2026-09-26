@@ -562,10 +562,15 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
             raise ValueError(f"{field} must be a list of objects")
         return [dict(item) for item in value]
 
-    node_updates = records(payload.get("node_updates"), "node_updates")
-    link_updates = records(payload.get("link_updates"), "link_updates")
-    group_updates = records(payload.get("group_updates"), "group_updates")
-    item_updates = records(payload.get("canvas_item_updates"), "canvas_item_updates")
+    raw_node_updates = payload.get("node_updates") if payload.get("node_updates") is not None else payload.get("nodes")
+    raw_link_updates = payload.get("link_updates") if payload.get("link_updates") is not None else payload.get("links")
+    raw_group_updates = payload.get("group_updates") if payload.get("group_updates") is not None else (payload.get("groups") if payload.get("groups") is not None else payload.get("zones"))
+    raw_item_updates = payload.get("canvas_item_updates") if payload.get("canvas_item_updates") is not None else payload.get("canvas_items")
+
+    node_updates = records(raw_node_updates, "node_updates")
+    link_updates = records(raw_link_updates, "link_updates")
+    group_updates = records(raw_group_updates, "group_updates")
+    item_updates = records(raw_item_updates, "canvas_item_updates")
     remove_node_ids = {str(item).strip() for item in (payload.get("remove_node_ids") or []) if str(item).strip()}
     remove_link_ids = {
         str(item).strip() for item in (payload.get("remove_link_ids") or []) if str(item).strip()
@@ -585,9 +590,18 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         for item in existing.get("nodes") or []
     }
     for update in node_updates:
-        node_id = str(update.get("node_id") or "").strip()
+        node_id = str(update.get("node_id") or update.get("id") or "").strip()
         if not node_id:
-            raise ValueError("node_update_requires_node_id")
+            node_id = _id("node")
+        update["node_id"] = node_id
+        if not update.get("display_name") and (update.get("name") or update.get("label")):
+            update["display_name"] = str(update.get("name") or update.get("label")).strip()
+        if not update.get("device_type") and (update.get("type") or update.get("role")):
+            update["device_type"] = str(update.get("type") or update.get("role")).strip()
+        if not update.get("zone") and (update.get("group") or update.get("group_id")):
+            update["zone"] = str(update.get("group") or update.get("group_id")).strip()
+        if not update.get("group_id") and update.get("zone"):
+            update["group_id"] = update["zone"]
         if "ip" in update and update["ip"] is not None:
             try:
                 _normalize_node_ip(update["ip"])
@@ -596,30 +610,52 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         nodes_by_id[node_id] = {**nodes_by_id.get(node_id, {}), **update, "node_id": node_id}
 
     for node_id in remove_node_ids:
-        if node_id not in nodes_by_id:
-            raise ValueError("topology_node_not_found")
-        del nodes_by_id[node_id]
+        nodes_by_id.pop(node_id, None)
 
     groups_by_id = {
         str(item.get("group_id") or ""): dict(item)
         for item in existing.get("groups") or []
     }
     for update in group_updates:
-        group_id = str(update.get("group_id") or "").strip()
+        group_id = str(update.get("group_id") or update.get("id") or update.get("name") or "").strip()
         if not group_id:
-            raise ValueError("group_update_requires_group_id")
+            group_id = _id("group")
+        update["group_id"] = group_id
         groups_by_id[group_id] = {**groups_by_id.get(group_id, {}), **update, "group_id": group_id}
     for group_id in remove_group_ids:
-        if group_id not in groups_by_id:
-            raise ValueError("topology_group_not_found")
-        del groups_by_id[group_id]
+        groups_by_id.pop(group_id, None)
 
     links_by_id = {
         str(item.get("link_id") or ""): dict(item)
         for item in existing.get("links") or []
     }
     for update in link_updates:
-        link_id = str(update.get("link_id") or "").strip()
+        link_id = str(update.get("link_id") or update.get("id") or "").strip()
+        src = str(
+            update.get("source_node_id")
+            or update.get("source")
+            or update.get("source_id")
+            or update.get("src")
+            or update.get("from")
+            or ""
+        ).strip()
+        tgt = str(
+            update.get("target_node_id")
+            or update.get("target")
+            or update.get("target_id")
+            or update.get("dst")
+            or update.get("to")
+            or ""
+        ).strip()
+        if src:
+            update["source_node_id"] = src
+        if tgt:
+            update["target_node_id"] = tgt
+        if not update.get("source_interface") and (update.get("source_port") or update.get("src_port") or update.get("src_iface")):
+            update["source_interface"] = str(update.get("source_port") or update.get("src_port") or update.get("src_iface")).strip()
+        if not update.get("target_interface") and (update.get("target_port") or update.get("dst_port") or update.get("dst_iface")):
+            update["target_interface"] = str(update.get("target_port") or update.get("dst_port") or update.get("dst_iface")).strip()
+
         if link_id:
             links_by_id[link_id] = {**links_by_id.get(link_id, {}), **update, "link_id": link_id}
             continue
@@ -628,9 +664,7 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         generated_id = _id("link")
         links_by_id[generated_id] = {**update, "link_id": generated_id}
     for link_id in remove_link_ids:
-        if link_id not in links_by_id:
-            raise ValueError("topology_link_not_found")
-        del links_by_id[link_id]
+        links_by_id.pop(link_id, None)
 
     # Removing a node also removes only its incident links.  It must never
     # leave a graph whose links point at invisible/nonexistent nodes.
@@ -645,17 +679,15 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         links.append(link)
     items_by_id = {item["item_id"]: dict(item) for item in existing.get("canvas_items") or []}
     for update in item_updates:
-        item_id = str(update.get("item_id") or "").strip()
+        item_id = str(update.get("item_id") or update.get("id") or "").strip()
         if not item_id:
-            raise ValueError("canvas_item_update_requires_item_id")
-        items_by_id[item_id] = {**items_by_id.get(item_id, {}), **update}
+            item_id = _id("item")
+        update["item_id"] = item_id
+        items_by_id[item_id] = {**items_by_id.get(item_id, {}), **update, "item_id": item_id}
     remove_items = payload.get("remove_canvas_item_ids") or []
-    if not isinstance(remove_items, list) or any(not isinstance(item, str) for item in remove_items):
-        raise ValueError("remove_canvas_item_ids must be a list of strings")
-    for item_id in remove_items:
-        if item_id not in items_by_id:
-            raise ValueError("topology_canvas_item_not_found")
-        del items_by_id[item_id]
+    if isinstance(remove_items, list):
+        for item_id in remove_items:
+            items_by_id.pop(str(item_id).strip(), None)
 
     # save_topology remains the single normalizer/validator for every graph
     # write.  It also keeps the stored representation and API representation

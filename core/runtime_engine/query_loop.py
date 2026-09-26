@@ -3418,6 +3418,27 @@ class QueryLoop:
                 "message": f"工具编排校验失败：{message}",
             }
 
+        # Pre-normalize topology calls so LLM aliases and omissions never trigger schema errors
+        for node in nodes:
+            if node.tool == "network.operations.topology":
+                t_args = dict(node.args or {})
+                if "nodes" in t_args and not t_args.get("node_updates"):
+                    t_args["node_updates"] = t_args.get("nodes")
+                if "links" in t_args and not t_args.get("link_updates"):
+                    t_args["link_updates"] = t_args.get("links")
+                if "groups" in t_args and not t_args.get("group_updates"):
+                    t_args["group_updates"] = t_args.get("groups")
+                if "zones" in t_args and not t_args.get("group_updates"):
+                    t_args["group_updates"] = t_args.get("zones")
+                if "canvas_items" in t_args and not t_args.get("canvas_item_updates"):
+                    t_args["canvas_item_updates"] = t_args.get("canvas_items")
+                if not t_args.get("action"):
+                    if any(t_args.get(k) for k in ("nodes", "node_updates", "links", "link_updates", "groups", "group_updates", "zones", "canvas_items", "canvas_item_updates", "remove_node_ids", "remove_link_ids")):
+                        t_args["action"] = "patch"
+                    else:
+                        t_args["action"] = "read"
+                node.args = t_args
+
         validator = SemanticValidator(self._tool_registry)
         validation = validator.validate(nodes)
         if not validation.valid:
@@ -3426,6 +3447,16 @@ class QueryLoop:
             if repair.repaired and repair.repaired_nodes is not None:
                 nodes = repair.repaired_nodes
                 validation = validator.validate(nodes)
+
+        # Drawing calls have their own optimistic concurrency and self-healing engine in topology_service.
+        # Never block network.operations.topology with pre-execution schema errors.
+        if not validation.valid:
+            validation.errors = [
+                e for e in validation.errors
+                if not any(n.id == e.node_id and n.tool == "network.operations.topology" for n in nodes)
+            ]
+            if not validation.errors:
+                validation.valid = True
 
         if not validation.valid:
             for node in nodes:

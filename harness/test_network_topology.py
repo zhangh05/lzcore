@@ -508,7 +508,7 @@ def test_query_loop_fallback_tool_call_extraction():
   "node_updates": [{"node_id": "core_sw_01"}]
 }
 ```"""
-    calls2, cleaned2 = QueryLoop._extract_fallback_tool_calls(text2, tool_reg)
+    calls2, _cleaned2 = QueryLoop._extract_fallback_tool_calls(text2, tool_reg)
     assert len(calls2) == 1
     assert calls2[0]["name"] == "network.operations.topology"
     assert calls2[0]["arguments"]["action"] == "patch"
@@ -640,11 +640,6 @@ def test_topology_repeated_tool_suppression_resilience():
         name="network.operations.topology",
         arguments={"action": "patch", "topology_id": "t1", "version": 0, "node_updates": []},
     )
-    read_call = LLMToolCall(
-        id="c2",
-        name="network.operations.topology",
-        arguments={"action": "read", "topology_id": "t1"},
-    )
 
     # 1. First patch execution
     calls, note = loop._suppress_repeated_tool_calls(ctx, [patch_call])
@@ -721,6 +716,110 @@ def test_topology_patch_auto_version_and_fault_tolerance(workspace):
     # The valid link is preserved, the bad link is skipped without crashing
     assert len(p3["links"]) == 1
     assert p3["links"][0]["target_node_id"] == "core2"
+
+
+def test_topology_patch_alias_and_schema_fault_tolerance(workspace):
+    """Verify that patch_topology handles nodes/links aliases, loose dict keys, string versions, and safe removals."""
+    topo = drawings.save_topology(workspace, {
+        "name": "别名与宽松格式测试",
+        "nodes": [{"node_id": "r1", "display_name": "Router-1", "x": 100, "y": 100}],
+        "links": [],
+    })
+    assert topo["version"] == 1
+
+    # 1. Patch using "nodes" and "links" instead of "node_updates" and "link_updates", string version
+    p1 = drawings.patch_topology(workspace, topo["topology_id"], {
+        "version": "1",
+        "nodes": [
+            {"id": "sw1", "name": "Switch-1", "type": "switch", "group": "DMZ", "x": 200, "y": 100},
+        ],
+        "links": [
+            {"source": "r1", "target": "sw1", "src_port": "GE0/1", "dst_port": "GE0/0", "label": "Uplink"},
+        ],
+    })
+    assert p1["version"] == 2
+    assert len(p1["nodes"]) == 2
+    sw_node = next(n for n in p1["nodes"] if n["node_id"] == "sw1")
+    assert sw_node["display_name"] == "Switch-1"
+    assert sw_node["device_type"] == "switch"
+    assert sw_node["zone"] == "DMZ"
+    assert len(p1["links"]) == 1
+    assert p1["links"][0]["source_node_id"] == "r1"
+    assert p1["links"][0]["target_node_id"] == "sw1"
+    assert p1["links"][0]["source_interface"] == "GE0/1"
+    assert p1["links"][0]["target_interface"] == "GE0/0"
+
+    # 2. Removing non-existent node/link/group does not crash (idempotent)
+    p2 = drawings.patch_topology(workspace, topo["topology_id"], {
+        "remove_node_ids": ["non_existent_node"],
+        "remove_link_ids": ["non_existent_link"],
+        "remove_group_ids": ["non_existent_group"],
+    })
+    assert p2["version"] == 3
+
+
+def test_topology_tool_invocation_aliases_and_query_loop_immunity(workspace):
+    """Verify backend.topology_tool and query_loop _prepare_tool_calls forgive schema variations."""
+    from types import SimpleNamespace
+
+    from agent.llm.schemas import LLMToolCall
+    from core.runtime_engine.models import StatelessContext
+    from core.runtime_engine.query_loop import QueryLoop
+
+    topo = drawings.save_topology(workspace, {
+        "name": "工具别名测试",
+        "nodes": [],
+        "links": [],
+    })
+
+    # 1. topology_tool directly invoked without action and using "nodes"
+    inv = SimpleNamespace(
+        workspace_id=workspace,
+        skill=f"drawing:{topo['topology_id']}",
+        arguments={
+            "nodes": [{"node_id": "fw1", "display_name": "Firewall-1", "x": 50, "y": 50}],
+            "layout": "hierarchical",
+            "summary": "边界防护",
+        },
+    )
+    res = backend.topology_tool(inv)
+    assert res["ok"] is True
+    assert res["node_count"] == 1
+    assert res["version"] == 2
+
+    # 2. QueryLoop _prepare_tool_calls passes topology call even with arbitrary extra fields and string version
+    loop = QueryLoop.__new__(QueryLoop)
+    reg_spec = backend.register()["tools"][2]  # network.operations.topology
+    loop._tool_registry = {
+        "network.operations.topology": {
+            "name": reg_spec["name"],
+            "input_schema": reg_spec["input_schema"],
+            "metadata": {"action_requirements": reg_spec.get("action_requirements", {})},
+        }
+    }
+
+    ctx = StatelessContext(
+        request_id="req-test-prep",
+        user_input="绘制防火墙",
+        workspace_id=workspace,
+        session_id="s1",
+        extras={},
+    )
+    tc = LLMToolCall(
+        id="call-topo-1",
+        name="network.operations.topology",
+        arguments={
+            "version": "2",
+            "nodes": [{"id": "fw2", "name": "FW-2", "x": 100, "y": 50}],
+            "arbitrary_field": "test_extra",
+        },
+    )
+    prep = loop._prepare_tool_calls(ctx, [tc])
+    assert prep["ok"] is True
+    repaired_tc = prep["tool_calls"][0]
+    assert repaired_tc.arguments["action"] == "patch"
+    assert "node_updates" in repaired_tc.arguments
+
 
 
 

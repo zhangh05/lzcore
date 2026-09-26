@@ -390,7 +390,7 @@ def main():
     try:
         from agent import __version__ as APP_VERSION
     except Exception:
-        APP_VERSION = "3.2.3"
+        APP_VERSION = "3.2.4"
 
     logger.info("启动联智中枢桌面内核 v%s ...", APP_VERSION)
     logger.info("运行时资源目录: %s", BUNDLE_DIR)

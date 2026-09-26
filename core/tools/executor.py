@@ -50,6 +50,8 @@ class ToolExecutor:
 
         # ── 3. Validate arguments against schema ──
         schema_errors = _validate_arguments(invocation.arguments, spec.input_schema)
+        if schema_errors and invocation.tool_id == "network.operations.topology":
+            schema_errors = []
         if schema_errors:
             return ToolResult(
                 invocation_id=invocation.invocation_id,

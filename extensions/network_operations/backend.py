@@ -666,7 +666,7 @@ def inspection(invocation):
 
 def topology_tool(invocation):
     """The drawing Skill can only read/edit its own drawing, never assets."""
-    args = invocation.arguments or {}
+    args = dict(invocation.arguments or {})
     skill = str(getattr(invocation, "skill", "") or "")
     if not skill.startswith("drawing:"):
         return {"ok": False, "error": "drawing_skill_required"}
@@ -678,7 +678,26 @@ def topology_tool(invocation):
     topology = drawings.get_topology(invocation.workspace_id, topology_id)
     if not topology:
         return {"ok": False, "error": "topology_not_found"}
-    action = str(args.get("action") or "read")
+
+    # Automatically map natural aliases
+    if "nodes" in args and not args.get("node_updates"):
+        args["node_updates"] = args.get("nodes")
+    if "links" in args and not args.get("link_updates"):
+        args["link_updates"] = args.get("links")
+    if "groups" in args and not args.get("group_updates"):
+        args["group_updates"] = args.get("groups")
+    if "zones" in args and not args.get("group_updates"):
+        args["group_updates"] = args.get("zones")
+    if "canvas_items" in args and not args.get("canvas_item_updates"):
+        args["canvas_item_updates"] = args.get("canvas_items")
+
+    action = str(args.get("action") or "").strip().lower()
+    if not action:
+        if any(args.get(k) for k in ("node_updates", "nodes", "link_updates", "links", "group_updates", "groups", "zones", "canvas_item_updates", "canvas_items", "remove_node_ids", "remove_link_ids")):
+            action = "patch"
+        else:
+            action = "read"
+
     if is_ro and action == "patch":
         return {"ok": False, "error": "topology_edit_not_permitted", "message": "当前为只读分析模式，未授权修改图纸。"}
     try:
@@ -1041,7 +1060,7 @@ def register():
                 },
                 "bindable_inputs": {"read": ["topology_id"], "patch": ["topology_id", "version"]},
                 "referenceable_outputs": {"read": ["topology", "version"], "patch": ["topology", "version"]},
-                "action_requirements": {"all": {"patch": ["version"]}},
+                "action_requirements": {},
                 "handler": topology_tool, "timeout_seconds": 60,
                 "input_schema": {
                     "type": "object",
@@ -1049,7 +1068,7 @@ def register():
                         **common,
                         "action": {"type": "string", "enum": ["read", "patch"]},
                         "topology_id": {"type": "string", "description": "目标图纸ID，从当前绘图上下文获取"},
-                        "version": {"type": "integer", "description": "当前图纸版本号，patch 提交修改时必填"},
+                        "version": {"oneOf": [{"type": "integer"}, {"type": "string"}], "description": "当前图纸版本号（可选，系统会自动对齐）"},
                         "name": {"type": "string", "description": "图纸名称"},
                         "description": {"type": "string", "description": "图纸描述"},
                         "node_updates": {
@@ -1057,16 +1076,33 @@ def register():
                             "description": "要添加或更新的节点对象列表，包含 node_id, display_name, device_type, x, y, zone, ip, role, vendor, model",
                             "items": {"type": "object"},
                         },
+                        "nodes": {
+                            "type": "array",
+                            "description": "要添加或更新的节点对象列表（node_updates 的自然别名）",
+                            "items": {"type": "object"},
+                        },
                         "link_updates": {
                             "type": "array",
                             "description": "要添加或更新的链路对象列表，包含 source_node_id, target_node_id, source_interface, target_interface, kind, label",
                             "items": {"type": "object"},
                         },
+                        "links": {
+                            "type": "array",
+                            "description": "要添加或更新的链路对象列表（link_updates 的自然别名）",
+                            "items": {"type": "object"},
+                        },
                         "group_updates": {"type": "array", "description": "逻辑分组列表", "items": {"type": "object"}},
+                        "groups": {"type": "array", "description": "逻辑分组列表（group_updates 的自然别名）", "items": {"type": "object"}},
+                        "zones": {"type": "array", "description": "区域分组列表（group_updates 的自然别名）", "items": {"type": "object"}},
                         "canvas_item_updates": {"type": "array", "description": "画布装饰/区域文本元素列表", "items": {"type": "object"}},
+                        "canvas_items": {"type": "array", "description": "画布装饰/区域文本元素列表（canvas_item_updates 的自然别名）", "items": {"type": "object"}},
+                        "title": {"type": "string", "description": "图纸标题或名称"},
+                        "summary": {"type": "string", "description": "拓扑说明"},
+                        "comment": {"type": "string", "description": "设计说明"},
+                        "layout": {"type": "string", "description": "布局偏好"},
                         **{key: {"type": "array", "items": {"type": "string"}} for key in ("remove_node_ids", "remove_link_ids", "remove_group_ids", "remove_canvas_item_ids")},
                     },
-                    "required": ["action"], "additionalProperties": False,
+                    "required": ["action"],
                 },
             },
         ],
