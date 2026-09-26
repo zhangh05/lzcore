@@ -210,7 +210,7 @@ def main():
     try:
         from agent import __version__ as APP_VERSION
     except Exception:
-        APP_VERSION = "3.2.0"
+        APP_VERSION = "3.2.1"
 
     ensure_version_info(APP_VERSION)
 
@@ -260,7 +260,7 @@ def main():
         try:
             from agent import __version__ as APP_VERSION
         except Exception:
-            APP_VERSION = "3.2.0"
+            APP_VERSION = "3.2.1"
         zip_name = f"lzcore-v{APP_VERSION}-windows-desktop"
         zip_out = ROOT / "dist" / zip_name
         print(f"[*] 正在打包压缩文件: {zip_out}.zip ...")

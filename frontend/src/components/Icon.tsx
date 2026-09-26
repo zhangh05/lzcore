@@ -43,6 +43,7 @@ export {
   Lightning as IconBolt,
   LinkSimple as IconLink,
   Lock as IconLock,
+  LockOpen as IconUnlock,
   List as IconMenu,
   ListChecks as IconChecklist,
   MagnifyingGlass as IconSearch,

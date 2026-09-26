@@ -25,6 +25,8 @@ import {
   IconGrid,
   IconLayers,
   IconLink,
+  IconLock,
+  IconUnlock,
   IconMenu,
   IconPlus,
   IconRedo,
@@ -75,6 +77,7 @@ export type TopologyNode = {
   display_name?: string;
   labels?: string[];
   group_id?: string;
+  lock_group?: string;
   ip?: string;
   vendor?: string;
   model?: string;
@@ -1374,13 +1377,22 @@ export default function TopologyWorkspace({
       if (!confirmed) return;
 
       const nextNodes = activeTopology.nodes.filter((n) => n.node_id !== nodeId);
+      const groupCounts = new Map<string, number>();
+      for (const n of nextNodes) {
+        if (n.lock_group) groupCounts.set(n.lock_group, (groupCounts.get(n.lock_group) || 0) + 1);
+      }
+      const cleanedNodes = nextNodes.map((n) =>
+        n.lock_group && (groupCounts.get(n.lock_group) || 0) < 2
+          ? { ...n, lock_group: undefined }
+          : n
+      );
       const nextLinks = activeTopology.links.filter(
         (l) => l.source_node_id !== nodeId && l.target_node_id !== nodeId
       );
 
       pushState({
         ...activeTopology,
-        nodes: nextNodes,
+        nodes: cleanedNodes,
         links: nextLinks,
       });
       setSelectedElement(null);
@@ -1603,9 +1615,28 @@ export default function TopologyWorkspace({
     if (!current || !positions.length) return;
     const byId = new Map(positions.map((position) => [position.element_id, position]));
 
+    // Synchronize displacement for all nodes in the same lock group
+    const groupDeltas = new Map<string, { dx: number; dy: number }>();
+    for (const node of current.nodes) {
+      const direct = byId.get(node.node_id);
+      if (direct && node.lock_group && !groupDeltas.has(node.lock_group)) {
+        groupDeltas.set(node.lock_group, {
+          dx: Math.round(direct.x - node.x),
+          dy: Math.round(direct.y - node.y),
+        });
+      }
+    }
+
     const nextNodes = current.nodes.map((node) => {
       const direct = byId.get(node.node_id);
-      return direct ? { ...node, x: Math.round(direct.x), y: Math.round(direct.y) } : node;
+      if (direct) {
+        return { ...node, x: Math.round(direct.x), y: Math.round(direct.y) };
+      }
+      if (node.lock_group && groupDeltas.has(node.lock_group)) {
+        const delta = groupDeltas.get(node.lock_group)!;
+        return { ...node, x: Math.round(node.x + delta.dx), y: Math.round(node.y + delta.dy) };
+      }
+      return node;
     });
 
     const nextCanvasItems = (current.canvas_items || []).map((item) => {
@@ -1902,12 +1933,94 @@ export default function TopologyWorkspace({
     const current = activeTopologyRef.current;
     if (!current || !canvasSelectedElementIds.length) return;
     const ids = new Set(canvasSelectedElementIds);
+    const lockGroups = new Set<string>();
+    for (const node of current.nodes) {
+      if (ids.has(node.node_id) && node.lock_group) {
+        lockGroups.add(node.lock_group);
+      }
+    }
+    if (lockGroups.size > 0) {
+      for (const node of current.nodes) {
+        if (node.lock_group && lockGroups.has(node.lock_group)) {
+          ids.add(node.node_id);
+        }
+      }
+    }
     pushState({
       ...current,
       nodes: current.nodes.map((node) => (ids.has(node.node_id) ? { ...node, x: node.x + dx, y: node.y + dy } : node)),
       canvas_items: (current.canvas_items || []).map((item) => (ids.has(`canvas-${item.item_id}`) ? { ...item, x: item.x + dx, y: item.y + dy } : item)),
     });
   }, [canvasSelectedElementIds, pushState]);
+
+  const handleLockSelectedNodes = useCallback(() => {
+    const current = activeTopologyRef.current;
+    if (!current) return;
+    const selectedIds = new Set(canvasSelectedElementIds);
+    const selected = current.nodes.filter((node) => selectedIds.has(node.node_id));
+    if (selected.length < 2) {
+      setNotice("请先框选至少两台设备，再执行固定", false);
+      return;
+    }
+    const lockGroupId = `lg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const nextNodes = current.nodes.map((node) =>
+      selectedIds.has(node.node_id) ? { ...node, lock_group: lockGroupId } : node
+    );
+    pushState({ ...current, nodes: nextNodes });
+    setNotice(`已将选中的 ${selected.length} 台设备固定相对位置 (拖动其中一台时其他设备同步联动)`);
+  }, [canvasSelectedElementIds, pushState, setNotice]);
+
+  const handleUnlockSelectedNodes = useCallback(() => {
+    const current = activeTopologyRef.current;
+    if (!current) return;
+    const selectedIds = new Set(canvasSelectedElementIds);
+    const uncleanedNodes = current.nodes.map((node) =>
+      selectedIds.has(node.node_id) ? { ...node, lock_group: undefined } : node
+    );
+    // Clean up any lock groups that have fewer than 2 nodes remaining
+    const groupCounts = new Map<string, number>();
+    for (const node of uncleanedNodes) {
+      if (node.lock_group) groupCounts.set(node.lock_group, (groupCounts.get(node.lock_group) || 0) + 1);
+    }
+    const nextNodes = uncleanedNodes.map((node) =>
+      node.lock_group && (groupCounts.get(node.lock_group) || 0) < 2
+        ? { ...node, lock_group: undefined }
+        : node
+    );
+    pushState({ ...current, nodes: nextNodes });
+    setNotice("已解除选中设备的固定联动");
+  }, [canvasSelectedElementIds, pushState, setNotice]);
+
+  const handleUnlockNode = useCallback((nodeId: string) => {
+    const current = activeTopologyRef.current;
+    if (!current) return;
+    const uncleanedNodes = current.nodes.map((node) =>
+      node.node_id === nodeId ? { ...node, lock_group: undefined } : node
+    );
+    const groupCounts = new Map<string, number>();
+    for (const node of uncleanedNodes) {
+      if (node.lock_group) groupCounts.set(node.lock_group, (groupCounts.get(node.lock_group) || 0) + 1);
+    }
+    const nextNodes = uncleanedNodes.map((node) =>
+      node.lock_group && (groupCounts.get(node.lock_group) || 0) < 2
+        ? { ...node, lock_group: undefined }
+        : node
+    );
+    pushState({ ...current, nodes: nextNodes });
+    setNotice("已解除设备固定联动");
+  }, [pushState, setNotice]);
+
+  const handleSelectLockGroup = useCallback((nodeId: string) => {
+    const current = activeTopologyRef.current;
+    if (!current) return;
+    const targetNode = current.nodes.find((n) => n.node_id === nodeId);
+    if (!targetNode?.lock_group) return;
+    const peerIds = current.nodes
+      .filter((n) => n.lock_group === targetNode.lock_group)
+      .map((n) => n.node_id);
+    canvasApiRef.current?.selectElements?.(peerIds);
+    setNotice(`已选中同组固定的 ${peerIds.length} 台设备`);
+  }, [setNotice]);
 
   // Batch editing: selecting ten devices and being able to do nothing with
   // them is the point where people go back to Visio.
@@ -1967,9 +2080,19 @@ export default function TopologyWorkspace({
     if (!confirmed) return;
     const nodeSet = new Set(nodeIds);
     const itemSet = new Set(itemIds);
+    const remainingNodes = activeTopology.nodes.filter((node) => !nodeSet.has(node.node_id));
+    const groupCounts = new Map<string, number>();
+    for (const n of remainingNodes) {
+      if (n.lock_group) groupCounts.set(n.lock_group, (groupCounts.get(n.lock_group) || 0) + 1);
+    }
+    const cleanedNodes = remainingNodes.map((n) =>
+      n.lock_group && (groupCounts.get(n.lock_group) || 0) < 2
+        ? { ...n, lock_group: undefined }
+        : n
+    );
     pushState({
       ...activeTopology,
-      nodes: activeTopology.nodes.filter((node) => !nodeSet.has(node.node_id)),
+      nodes: cleanedNodes,
       links: activeTopology.links.filter((link) => !nodeSet.has(link.source_node_id) && !nodeSet.has(link.target_node_id)),
       canvas_items: (activeTopology.canvas_items || []).filter((item) => !itemSet.has(item.item_id)),
     });
@@ -2897,6 +3020,26 @@ export default function TopologyWorkspace({
               <button onClick={() => handleAlignSelectedNodes("left")}>左对齐</button><button onClick={() => handleAlignSelectedNodes("center")}>水平居中</button><button onClick={() => handleAlignSelectedNodes("right")}>右对齐</button>
               <button onClick={() => handleAlignSelectedNodes("top")}>顶对齐</button><button onClick={() => handleAlignSelectedNodes("middle")}>垂直居中</button><button onClick={() => handleAlignSelectedNodes("bottom")}>底对齐</button>
             </div></details>
+            {selectedNodes.length >= 2 && (
+              <button
+                className="studio-mode-button"
+                type="button"
+                onClick={handleLockSelectedNodes}
+                title="固定选中设备相对位置 (拖动其中任意一台时其他设备跟随同样轨迹移动)"
+              >
+                <IconLock size={13} />固定
+              </button>
+            )}
+            {selectedNodes.length > 0 && selectedNodes.some((n) => Boolean(n.lock_group)) && (
+              <button
+                className="studio-mode-button"
+                type="button"
+                onClick={handleUnlockSelectedNodes}
+                title="解除选中设备的固定联动"
+              >
+                <IconUnlock size={13} />解除固定
+              </button>
+            )}
           </div>
           <div className="toolbar-right">
             <Button
@@ -3174,6 +3317,28 @@ export default function TopologyWorkspace({
                 <div className="batch-grid">
                   <Button size="sm" onClick={() => distributeSelected("horizontal")}>水平等距</Button>
                   <Button size="sm" onClick={() => distributeSelected("vertical")}>垂直等距</Button>
+                </div>
+                <span className="inspector-label">固定联动</span>
+                <div className="batch-grid">
+                  <Button
+                    size="sm"
+                    variant={selectedNodes.length >= 2 ? "primary" : "default"}
+                    icon={<IconLock size={13} />}
+                    onClick={handleLockSelectedNodes}
+                    title="固定选中设备的相对位置，拖动其中任意一台，其他设备跟随同样轨迹移动"
+                  >
+                    固定选中设备
+                  </Button>
+                  {selectedNodes.some((n) => Boolean(n.lock_group)) && (
+                    <Button
+                      size="sm"
+                      icon={<IconUnlock size={13} />}
+                      onClick={handleUnlockSelectedNodes}
+                      title="解除选中设备的固定联动"
+                    >
+                      解除固定
+                    </Button>
+                  )}
                 </div>
                 <span className="inspector-label">批量设置设备类型</span>
                 <div className="batch-type-grid" role="group" aria-label="批量设置设备类型选项">
@@ -3460,6 +3625,36 @@ export default function TopologyWorkspace({
                     />
                   </label>
                 </div>
+              </div>
+
+              <div className="inspector-section">
+                <span className="inspector-label">固定联动</span>
+                {selectedNode.lock_group ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                      已与 {(activeTopology?.nodes || []).filter((n) => n.lock_group === selectedNode.lock_group && n.node_id !== selectedNode.node_id).length} 台设备固定联动（拖动任意一台，同组设备沿相同轨迹同步移动）
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <Button
+                        size="sm"
+                        onClick={() => handleSelectLockGroup(selectedNode.node_id)}
+                      >
+                        选中同组设备
+                      </Button>
+                      <Button
+                        size="sm"
+                        icon={<IconUnlock size={13} />}
+                        onClick={() => handleUnlockNode(selectedNode.node_id)}
+                      >
+                        解除固定
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="inspector-label" style={{ margin: 0 }}>
+                    多选设备后可点击“固定选中设备”，拖动其中一台时其他设备将跟随相同轨迹移动。
+                  </p>
+                )}
               </div>
 
               <div className="inspector-section">
@@ -4372,27 +4567,52 @@ export default function TopologyWorkspace({
             event.stopPropagation();
           }}
         >
-          {contextMenu.kind === "node" && (
-            <>
-              <button type="button" onClick={() => {
-                setCanvasMode("connect");
-                canvasApiRef.current?.startConnectFrom?.(contextMenu.id);
-                setContextMenu(null);
-                const sLabel = nodeLabelById.get(contextMenu.id) || contextMenu.id;
-                setNotice(`已选择起点设备“${sLabel}”，请点击目标设备完成连线 (Esc 取消)`);
-              }}>从此处连线 (C)</button>
-              <button type="button" onClick={() => {
-                openLinkComposer(contextMenu.id);
-                setContextMenu(null);
-              }}>高级连线 (指定端口)...</button>
-              <button type="button" onClick={() => {
-                handleCloneNode(contextMenu.id);
-                setContextMenu(null);
-              }}>克隆设备 (⌘D)</button>
-              <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>打开设备详情</button>
-              <button type="button" className="danger" onClick={() => { void handleRemoveNode(contextMenu.id); setContextMenu(null); }}>从拓扑移除</button>
-            </>
-          )}
+          {contextMenu.kind === "node" && (() => {
+            const node = activeTopology?.nodes.find((n) => n.node_id === contextMenu.id);
+            const isSelectedInMulti = selectedNodes.length >= 2 && selectedNodes.some((n) => n.node_id === contextMenu.id);
+            return (
+              <>
+                <button type="button" onClick={() => {
+                  setCanvasMode("connect");
+                  canvasApiRef.current?.startConnectFrom?.(contextMenu.id);
+                  setContextMenu(null);
+                  const sLabel = nodeLabelById.get(contextMenu.id) || contextMenu.id;
+                  setNotice(`已选择起点设备“${sLabel}”，请点击目标设备完成连线 (Esc 取消)`);
+                }}>从此处连线 (C)</button>
+                <button type="button" onClick={() => {
+                  openLinkComposer(contextMenu.id);
+                  setContextMenu(null);
+                }}>高级连线 (指定端口)...</button>
+                <button type="button" onClick={() => {
+                  handleCloneNode(contextMenu.id);
+                  setContextMenu(null);
+                }}>克隆设备 (⌘D)</button>
+                {isSelectedInMulti ? (
+                  <>
+                    <button type="button" onClick={() => { handleLockSelectedNodes(); setContextMenu(null); }}>
+                      固定选中设备相对位置
+                    </button>
+                    {selectedNodes.some((n) => Boolean(n.lock_group)) && (
+                      <button type="button" onClick={() => { handleUnlockSelectedNodes(); setContextMenu(null); }}>
+                        解除选中设备固定
+                      </button>
+                    )}
+                  </>
+                ) : node?.lock_group ? (
+                  <>
+                    <button type="button" onClick={() => { handleSelectLockGroup(contextMenu.id); setContextMenu(null); }}>
+                      选中同组固定设备
+                    </button>
+                    <button type="button" onClick={() => { handleUnlockNode(contextMenu.id); setContextMenu(null); }}>
+                      解除当前设备固定联动
+                    </button>
+                  </>
+                ) : null}
+                <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>打开设备详情</button>
+                <button type="button" className="danger" onClick={() => { void handleRemoveNode(contextMenu.id); setContextMenu(null); }}>从拓扑移除</button>
+              </>
+            );
+          })()}
           {contextMenu.kind === "link" && (
             <>
               <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑链路</button>

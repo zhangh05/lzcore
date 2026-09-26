@@ -29,6 +29,7 @@ export type CanvasApi = {
   zoomBy: (delta: number) => void;
   focusIds: (ids: string[], zoom?: number) => void;
   selectAll: () => string[];
+  selectElements?: (ids: string[]) => void;
   clearSelection: () => void;
   getViewport: () => { x: number; y: number; zoom: number };
   setViewport: (view: { x: number; y: number; zoom: number }) => void;
@@ -723,6 +724,8 @@ export default function NetOpsCanvas(props: Props) {
   // following the pointer. Carrying the offset lets the next frame subtract it
   // and recover the position the pointer actually asked for.
   const snapResidualRef = useRef({ x: 0, y: 0 });
+  const grabAnchorRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const lockGroupInitialPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const [linkPreview, setLinkPreview] = useState<AlignGuide | null>(null);
   const connectStartRef = useRef<string | null>(null);
   propsRef.current = props;
@@ -1267,6 +1270,37 @@ export default function NetOpsCanvas(props: Props) {
       const NODE_HALF_W = 47;
       const NODE_HALF_H = 38;
       const SNAP = 5;
+      cy.on("grab", "node", (event) => {
+        const node = event.target as CyNode | undefined;
+        if (!node || node.id().startsWith("group-")) return;
+        const grabbedId = node.id();
+        const currentNodes = propsRef.current.topology.nodes;
+        const activeLockGroups = new Set<string>();
+
+        const grabbedNodeData = currentNodes.find((n) => n.node_id === grabbedId);
+        if (grabbedNodeData?.lock_group) {
+          activeLockGroups.add(grabbedNodeData.lock_group);
+        }
+        cy.$("node:selected").forEach((sel) => {
+          const d = currentNodes.find((n) => n.node_id === sel.id());
+          if (d?.lock_group) activeLockGroups.add(d.lock_group);
+        });
+
+        const initMap = new Map<string, { x: number; y: number }>();
+        if (activeLockGroups.size > 0) {
+          currentNodes.forEach((n) => {
+            if (n.lock_group && activeLockGroups.has(n.lock_group)) {
+              const cyElem = cy.getElementById(n.node_id) as CyNode;
+              if (cyElem && cyElem.length) {
+                const pos = cyElem.position();
+                initMap.set(n.node_id, { x: pos.x, y: pos.y });
+              }
+            }
+          });
+        }
+        lockGroupInitialPositionsRef.current = initMap;
+        grabAnchorRef.current = { id: grabbedId, x: node.position().x, y: node.position().y };
+      });
       cy.on("drag", "node", (event) => {
         const node = event.target as CyNode | undefined;
         // Dragging an object moves it in every mode. The mode decides what a
@@ -1276,9 +1310,40 @@ export default function NetOpsCanvas(props: Props) {
         const selectedIds = new Set(cy.$("node:selected").map((item) => item.id()));
         const halfW = Math.max(8, ((node as CyNode).width?.() || 94) / 2);
         const halfH = Math.max(8, ((node as CyNode).height?.() || 76) / 2);
+
+        if (!grabAnchorRef.current) {
+          const grabbedId = node.id();
+          const currentNodes = propsRef.current.topology.nodes;
+          const activeLockGroups = new Set<string>();
+          const grabbedNodeData = currentNodes.find((n) => n.node_id === grabbedId);
+          if (grabbedNodeData?.lock_group) activeLockGroups.add(grabbedNodeData.lock_group);
+          cy.$("node:selected").forEach((sel) => {
+            const d = currentNodes.find((n) => n.node_id === sel.id());
+            if (d?.lock_group) activeLockGroups.add(d.lock_group);
+          });
+          const initMap = new Map<string, { x: number; y: number }>();
+          if (activeLockGroups.size > 0) {
+            currentNodes.forEach((n) => {
+              if (n.lock_group && activeLockGroups.has(n.lock_group)) {
+                const cyElem = cy.getElementById(n.node_id) as CyNode;
+                if (cyElem && cyElem.length) {
+                  initMap.set(n.node_id, { ...cyElem.position() });
+                }
+              }
+            });
+          }
+          lockGroupInitialPositionsRef.current = initMap;
+          grabAnchorRef.current = { id: grabbedId, x: node.position().x, y: node.position().y };
+        }
+
+        const lockedPeerIds = new Set(lockGroupInitialPositionsRef.current.keys());
         const others = [
-          ...propsRef.current.topology.nodes.filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id)).map((item) => ({ x: item.x, y: item.y, halfW: NODE_HALF_W, halfH: NODE_HALF_H })),
-          ...(propsRef.current.topology.canvas_items || []).filter((item) => !selectedIds.has(`canvas-${item.item_id}`)).map((item) => ({ x: item.x, y: item.y, halfW: item.width / 2, halfH: item.height / 2 })),
+          ...propsRef.current.topology.nodes
+            .filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id) && !lockedPeerIds.has(item.node_id))
+            .map((item) => ({ x: item.x, y: item.y, halfW: NODE_HALF_W, halfH: NODE_HALF_H })),
+          ...(propsRef.current.topology.canvas_items || [])
+            .filter((item) => !selectedIds.has(`canvas-${item.item_id}`))
+            .map((item) => ({ x: item.x, y: item.y, halfW: item.width / 2, halfH: item.height / 2 })),
         ];
         const position = node.position();
         // A guide pairs one of this node's three lines (near edge, centre, far
@@ -1323,6 +1388,25 @@ export default function NetOpsCanvas(props: Props) {
         snapResidualRef.current = { x: nextX - rawX, y: nextY - rawY };
         if (nextX !== position.x || nextY !== position.y) node.position({ x: nextX, y: nextY });
 
+        // Synchronize all peer nodes in the same lock group with the anchor node's displacement
+        if (grabAnchorRef.current && grabAnchorRef.current.id === node.id()) {
+          const dx = nextX - grabAnchorRef.current.x;
+          const dy = nextY - grabAnchorRef.current.y;
+          const initMap = lockGroupInitialPositionsRef.current;
+          if (initMap.size > 0) {
+            initMap.forEach((initPos, peerId) => {
+              if (peerId === node.id()) return;
+              const peerCyNode = cy.getElementById(peerId) as CyNode;
+              if (peerCyNode && peerCyNode.length) {
+                peerCyNode.position({
+                  x: Math.round(initPos.x + dx),
+                  y: Math.round(initPos.y + dy),
+                });
+              }
+            });
+          }
+        }
+
         const lines: AlignGuide[] = [];
         if (snappedX) {
           const near = others.filter((other) => Math.abs(other.x - nextX) <= NODE_HALF_W * 2 + 60);
@@ -1346,6 +1430,8 @@ export default function NetOpsCanvas(props: Props) {
         // The correction only describes an in-progress drag; the next grab
         // starts from a position the pointer agrees with.
         snapResidualRef.current = { x: 0, y: 0 };
+        grabAnchorRef.current = null;
+        lockGroupInitialPositionsRef.current.clear();
         if (!guideSignatureRef.current) return;
         guideSignatureRef.current = "";
         setAlignGuides([]);
@@ -1358,6 +1444,21 @@ export default function NetOpsCanvas(props: Props) {
         const dragged = (event.target as CyNode | undefined)?.id?.() || "";
         const ids = new Set(cy.$("node:selected").map((node) => node.id()));
         if (dragged) ids.add(dragged);
+
+        // Include all peer nodes from any active lock groups
+        const lockGroups = new Set<string>();
+        for (const id of ids) {
+          const n = propsRef.current.topology.nodes.find((item) => item.node_id === id);
+          if (n?.lock_group) lockGroups.add(n.lock_group);
+        }
+        if (lockGroups.size > 0) {
+          for (const n of propsRef.current.topology.nodes) {
+            if (n.lock_group && lockGroups.has(n.lock_group)) {
+              ids.add(n.node_id);
+            }
+          }
+        }
+
         const shouldSnap = propsRef.current.gridEnabled;
         const snap = (v: number) => shouldSnap ? Math.round(v / 32) * 32 : Math.round(v);
         const positions = cy.nodes()
@@ -1370,6 +1471,10 @@ export default function NetOpsCanvas(props: Props) {
             }
             return { element_id: node.id(), ...snapped };
           });
+
+        grabAnchorRef.current = null;
+        lockGroupInitialPositionsRef.current.clear();
+
         if (positions.length) propsRef.current.onMoveElements(positions);
       });
     }).catch(() => undefined);
@@ -1479,6 +1584,20 @@ export default function NetOpsCanvas(props: Props) {
         ids.forEach((id) => cy.getElementById(id).select());
         propsRef.current.onSelectionChange(ids);
         return ids;
+      },
+      selectElements: (ids: string[]) => {
+        cy.elements().unselect();
+        if (!ids.length) {
+          propsRef.current.onSelectionChange([]);
+          propsRef.current.onClearSelection();
+          return;
+        }
+        const selector = ids.map((id) => `[id = "${id}"]`).join(",");
+        const collection = cy.$(selector);
+        const selectable = collection.filter((element) => !element.id().startsWith("group-"));
+        selectable.forEach((element) => element.select());
+        const selectedIds = selectable.map((element) => element.id());
+        propsRef.current.onSelectionChange(selectedIds);
       },
       clearSelection: () => {
         cy.elements().unselect();
@@ -1667,11 +1786,27 @@ export default function NetOpsCanvas(props: Props) {
         const ipAlreadyInName = Boolean(node.ip) && name.includes(String(node.ip));
         const subtitle = caption || (ipAlreadyInName ? "" : node.ip || "");
         const label = subtitle ? `${name}\n${subtitle}` : name;
+        const isLocked = Boolean(node.lock_group);
         const classes = [
           subtitle ? "drawing-node has-overlay" : "drawing-node",
+          isLocked ? "is-locked" : "",
           props.compactMode ? "compact" : "",
         ].filter(Boolean).join(" ");
-        return { group: "nodes", classes: dimClass(node.node_id, classes), data: { id: node.node_id, label, status, statusColor, statusWidth: status === "unknown" ? 1.5 : 2.5, vendorTint, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
+        return {
+          group: "nodes",
+          classes: dimClass(node.node_id, classes),
+          data: {
+            id: node.node_id,
+            label,
+            status,
+            statusColor,
+            statusWidth: status === "unknown" ? 1.5 : 2.5,
+            vendorTint,
+            icon: netOpsIconForDeviceType(type),
+            lock_group: node.lock_group,
+          },
+          position: { x: node.x, y: node.y },
+        };
       }),
       ...(props.topology.canvas_items || []).map((item) => {
         const style = { ...canvasItemDefaults[item.kind], ...item.style };
@@ -2327,6 +2462,24 @@ export default function NetOpsCanvas(props: Props) {
     <div className="netops-canvas-accessibility" aria-label="画布设备快捷选择">
       {props.topology.nodes.map((node) => <button key={node.node_id} type="button" data-testid={`topo-node-${node.node_id}`} onClick={() => props.onSelectNode(node.node_id)}>{node.display_name || node.node_id}</button>)}
       {(props.topology.canvas_items || []).map((item) => <button key={item.item_id} type="button" data-testid={`topo-item-${item.item_id}`} onClick={() => props.onSelectCanvasItem(item.item_id)}>{item.text || item.kind}</button>)}
+      <button
+        type="button"
+        data-testid="topo-batch-select"
+        onClick={(e) => {
+          const ids = (e.currentTarget.dataset.ids || "").split(",").filter(Boolean);
+          props.onSelectionChange(ids);
+        }}
+      />
+      <button
+        type="button"
+        data-testid="topo-move-elements"
+        onClick={(e) => {
+          try {
+            const raw = e.currentTarget.dataset.positions;
+            if (raw) props.onMoveElements(JSON.parse(raw));
+          } catch { /* ignore */ }
+        }}
+      />
     </div>
   </div>;
 }

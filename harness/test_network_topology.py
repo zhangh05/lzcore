@@ -428,3 +428,21 @@ def test_drawing_selection_normalization_and_defense(workspace):
     ))
     assert res["ok"] is True
     assert res["topology"]["topology_id"] == topo["topology_id"]
+
+
+def test_nodes_lock_group_persistence(workspace):
+    """Verify that lock_group is persisted and retrieved on nodes."""
+    saved = drawings.save_topology(workspace, {
+        "name": "锁定拓扑",
+        "nodes": [
+            {"node_id": "sw1", "display_name": "SW1", "x": 100, "y": 100, "lock_group": "group_alpha"},
+            {"node_id": "sw2", "display_name": "SW2", "x": 200, "y": 100, "lock_group": "group_alpha"},
+            {"node_id": "sw3", "display_name": "SW3", "x": 300, "y": 100},
+        ],
+    })
+    topo = drawings.get_topology(workspace, saved["topology_id"])
+    nodes_by_id = {n["node_id"]: n for n in topo["nodes"]}
+    assert nodes_by_id["sw1"]["lock_group"] == "group_alpha"
+    assert nodes_by_id["sw2"]["lock_group"] == "group_alpha"
+    assert nodes_by_id["sw3"]["lock_group"] is None
+
