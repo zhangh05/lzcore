@@ -65,3 +65,27 @@ def test_rest_dry_run_previews_policy_without_requesting_handler_dry_run(monkeyp
     assert body["dry_run"] is True
     assert body["handler_will_execute"] is False
     assert body["policy_decision"]["allowed"] is True
+
+
+def test_executor_explicitly_blocks_dry_run_even_if_policy_allowed():
+    called = []
+    registry = ToolRegistry()
+    registry.register_tool(
+        ToolSpec(tool_id="test.mutate", category="workspace", dry_run_supported=False),
+        lambda _inv: called.append(True) or {"ok": True},
+    )
+
+    class PermissivePolicy:
+        def check(self, spec, invocation):
+            from core.tools.schemas import PolicyDecision
+            return PolicyDecision(allowed=True)
+
+    executor = ToolExecutor(registry, policy=PermissivePolicy())
+    result = executor.execute(ToolInvocation(
+        tool_id="test.mutate", workspace_id="default", dry_run=True,
+    ))
+
+    assert result.status == "blocked"
+    assert "dry_run not supported" in result.summary
+    assert called == []
+

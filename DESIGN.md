@@ -102,16 +102,23 @@
 
 ## 4. 工具边界、治理网关与纵深防御
 
-所有工具调用必须唯一通过 `ToolRuntimeClient.invoke()` 统一网关。`core/tools/manifest_registry.py` 构成了平台的权威 Manifest 注册表。
+平台实行双网关统一治理：外部系统与审批流程接入通过 `ToolRuntimeClient.invoke()`，模型编排与运行时节点通过 `ToolRuntime.execute_node()`。两个执行网关底层统一以 `core/tools/manifest_registry.py` 为权威 Manifest 注册表与契约中心，严格校验调用方身份（`allowed_callers`）、参数 Schema 与权限。
 
 ```text
-Tool ID ──> Manifest 匹配 ──> Caller Gate 验证 ──> 权限与 Skill 核定
-        ──> 执行器调用 ──> 动态数据脱敏 ──> 审计总线写入 ──> ToolResult 产出
+外部调用 / REST / Approval  ──> ToolRuntimeClient.invoke()  ──┐
+                                                             ├──> Manifest 契约校验 (manifest_registry.py)
+模型编排 / TurnRunner / Agent ──> ToolRuntime.execute_node() ──┘    ├──> allowed_callers 准入校验
+                                                                   ├──> Fail-Closed dry_run 防护
+                                                                   ├──> 权限与 Skill 核定
+                                                                   ├──> 执行器调用 (Executor)
+                                                                   ├──> 动态数据脱敏 (Redaction)
+                                                                   └──> 审计与账本写入 (Ledger/Audit)
 ```
 
 ### 4.1 运行时防护核心契约
+- **双网关统一契约**：无论是大模型自主编排还是外部 API 驱动，均禁止绕过治理网关直接调用 handler。`allowed_callers` 显式声明允许调用该工具的角色（如 `turn_runner`、`human_review`、`orchestrator`、`system_job`），未经声明的调用方将被网关直接拦截。
 - **内部实现隐藏**：底层 `handler_id` 仅用于服务端内部模块路由，严禁向大模型、前端工作台或开放 API 泄露，防止针对底层处理器的恶意逆向利用。
-- **调用级 `dry_run` 安全防护**：默认关闭并拒绝执行未授权尝试。即使工具显式标记了 `dry_run_supported`，执行器也绝不调用任何具备副作用的写入逻辑，仅生成无害的配置预览。公开端点 `/api/tools/dry-run` 仅输出参数校验与策略元数据，绝不触碰工具真实 Handler。
+- **调用级 `dry_run` 安全防护**：默认关闭并拒绝执行未授权尝试。即使工具显式标记了 `dry_run_supported`，执行器也绝不调用任何具备副作用的写入逻辑，仅生成无害的配置预览；在未支持 `dry_run` 的工具上请求 dry_run 时，执行层实施 Fail-Closed 熔断阻断。公开端点 `/api/tools/dry-run` 仅输出参数校验与策略元数据，绝不触碰工具真实 Handler。
 - **命令语义服务端强分类**：针对网络运维工具 `network.operations.device.manage`，命令是只读（`read`）还是配置下发（`configure`）由服务端依据真实命令语法字典与 AST 进行严密判定，**绝不信任模型在参数中自行声明的 `action` 字段**，坚决堵死模型通过伪造 `action=read` 绕过审批或触发非法重试的漏洞。
 - **文件路径越界防护**：`workspace.file` 工具内部内置沙箱校验，严禁使用 `..` 相对路径、符号链接或绝对路径逃逸出当前指定的 `workspace_id` 物理目录。
 - **代码与脚本执行边界**：`exec.run` 针对 Shell / PowerShell 命令在宿主机上执行，但实施严格的高危破坏性指令拦截；针对 Python 脚本，单机回环开发默认以本机子进程运行（best-effort），仅在配置或检测到强隔离策略（非回环监听、身份认证启用或显式开启强隔离）时强制调度 Docker 容器，当容器环境不可用时实行安全闭环（Fail-Closed）直接拒绝执行。

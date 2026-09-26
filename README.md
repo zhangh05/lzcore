@@ -17,7 +17,7 @@
 
 一次任务没有累计墙钟上限。结束条件是目标完成、确定性无进展、结构性容量或用户取消。单次模型或工具调用仍可按协议超时。
 
-所有工具经过 `ToolRuntimeClient.invoke()`：manifest、调用方、Skill 范围、执行、脱敏、审计。禁止直接调用 handler。跨数据访问必须带已验证的 `workspace_id`。
+所有工具经过统一治理网关（外部/审批经 `ToolRuntimeClient.invoke()`，模型编排经 `ToolRuntime.execute_node()`）：manifest、调用方、Skill 范围、执行、脱敏、审计。禁止直接调用 handler。跨数据访问必须带已验证的 `workspace_id`。
 
 只读失败可以在有证据目标时恢复。外部写入结果未知时不自动重放，只能 read-back 或 reconcile。网络命令的只读/配置由服务端按命令文本分类，不信任模型填写的 `action`。
 
@@ -30,7 +30,7 @@
   -> AgentApp
   -> SSOTRuntimeEngine（TaskState）
   -> QueryLoop（plan_goal_ids、goal_loop、runtime_recoveries）
-  -> ToolRuntimeClient（core/tools/manifest_registry.py）
+  -> ToolRuntime / ToolRuntimeClient（core/tools/manifest_registry.py）
   -> canonical tool 或扩展工具
   -> storage、artifacts、jobs、AgentResult
 ```

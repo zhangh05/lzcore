@@ -32,6 +32,17 @@ _SECRET_PATTERNS = [
     # Authorization headers
     (re.compile(r'authorization\s*[:=]\s*[^\s,}"\']+', re.IGNORECASE),
      lambda m: 'Authorization=[REDACTED]'),
+    # Private key blocks (RSA, EC, OpenSSH, DSA, PKCS#8)
+    (re.compile(r'-----BEGIN\s+(?:[A-Z0-9_-]+\s+)?PRIVATE KEY-----[\s\S]*?-----END\s+(?:[A-Z0-9_-]+\s+)?PRIVATE KEY-----', re.MULTILINE),
+     '[PRIVATE_KEY_REDACTED]'),
+    # Standalone private key headers (unclosed or truncated)
+    (re.compile(r'-----BEGIN\s+(?:[A-Z0-9_-]+\s+)?PRIVATE KEY[^\r\n]*', re.MULTILINE),
+     '[PRIVATE_KEY_REDACTED]'),
+    # JWT tokens (structured 3-segment and long base64 prefixes)
+    (re.compile(r'\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b'),
+     '[JWT_REDACTED]'),
+    (re.compile(r'\beyJ[A-Za-z0-9+/=_-]{20,}\b'),
+     '[JWT_REDACTED]'),
     # Absolute paths (Unix style)
     (re.compile(r'(^|[\s`(])/(?:home|Users|root|tmp|etc|var|opt|usr)/[^\s"\'`<>]*', re.MULTILINE),
      lambda m: m.group(1) + '[PATH_REDACTED]'),
@@ -42,6 +53,7 @@ _SENSITIVE_DICT_KEYS = {
     'password', 'passwd', 'secret', 'token', 'api_key', 'apikey',
     'community', 'authorization', 'bearer', 'private_key',
     'ssh_key', 'psk', 'pre_shared_key', 'access_key', 'secret_key',
+    'jwt', 'id_token', 'access_token', 'refresh_token',
 }
 
 _SENSITIVE_KEY_PATTERNS = (

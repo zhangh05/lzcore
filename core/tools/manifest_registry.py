@@ -221,6 +221,18 @@ def get_manifest(tool_id: str) -> CapabilityManifest | None:
         from extensions.runtime import get_extension_tool_specs
         for spec, _handler in get_extension_tool_specs():
             if spec.tool_id == tool_id:
+                if spec.permission_action == "write":
+                    derived_side_effects = "write"
+                elif spec.permission_action == "exec":
+                    derived_side_effects = "remote_exec"
+                elif spec.permission_action == "network":
+                    derived_side_effects = "network_change" if getattr(spec, "destructive", False) else "none"
+                else:
+                    derived_side_effects = "none"
+
+                from .manifest import DEFAULT_ALLOWED_CALLERS
+                allowed_callers = getattr(spec, "allowed_callers", None) or list(DEFAULT_ALLOWED_CALLERS)
+
                 return CapabilityManifest(
                     tool_id=spec.tool_id,
                     category=spec.category or "general",
@@ -230,10 +242,11 @@ def get_manifest(tool_id: str) -> CapabilityManifest | None:
                         spec.permission_action if spec.permission_action in {"read", "write", "network"} else "read"
                     ),
                     risk_level=spec.risk_level,
-                    side_effects="write" if spec.permission_action == "write" else "none",
+                    side_effects=derived_side_effects,
                     idempotency="safe_to_retry" if spec.permission_action == "read" else "unknown",
                     timeout_seconds=spec.timeout_seconds,
                     input_schema=spec.input_schema,
+                    allowed_callers=list(allowed_callers),
                 )
     except Exception:
         _LOG.warning("Unable to load extension manifest for %s", tool_id, exc_info=True)

@@ -35,6 +35,18 @@ that has not moved into PostgreSQL/S3 is shared through `lzcore-data`; do not
 scale Web or worker replicas until the distributed integration suite and the
 target volume's locking semantics have been validated.
 
+## Network listener security and fail-closed binding
+
+By default, backend services bind exclusively to loopback (`127.0.0.1` / `localhost`).
+
+When configuring non-loopback exposure (e.g. `0.0.0.0` or a public interface via `LZCORE_LISTEN_HOST` or `--host`):
+- **Fail-closed authentication requirement**: The backend startup sequence (`validate_network_listener`) strictly refuses to bind to non-loopback interfaces without effective authentication configured.
+- **Supported authentication configurations**:
+  1. API Token Authentication: `LZCORE_AUTH_ENABLED=true` together with `LZCORE_API_TOKEN` (or mounted file `LZCORE_API_TOKEN_FILE`).
+  2. Web Login Authentication: `LZCORE_LOGIN_USERNAME` together with `LZCORE_LOGIN_PASSWORD` (or mounted file `LZCORE_LOGIN_PASSWORD_FILE`).
+  3. Enterprise Identity Authentication: `LZCORE_IDENTITY_ENABLED=true` (OIDC/OAuth2 SSO).
+- **Explicit override**: In isolated development sandboxes or container tests where unauthenticated network access is intentional, `LZCORE_ALLOW_UNAUTHENTICATED_NETWORK=true` may be set; this emits an explicit critical security warning.
+
 ## Single-server Compose profile
 
 An existing single host that intentionally keeps filesystem records, workspace

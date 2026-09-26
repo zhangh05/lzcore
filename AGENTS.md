@@ -12,7 +12,7 @@
 ## 不可突破的边界
 
 1. 内核保持领域中立。行业对象、厂商 CLI 和业务 UI 放在 `extensions/`。
-2. 工具必须经 `ToolRuntimeClient.invoke()`。禁止直接调用 handler，绕过 manifest、调用方、授权、脱敏和审计。
+2. 工具必须经治理网关执行（外部/审批经 `ToolRuntimeClient.invoke()`，模型编排经 `ToolRuntime.execute_node()`）。禁止直接调用 handler，绕过 manifest、调用方、授权、脱敏和审计。
 3. 跨数据访问必须使用已验证的 `workspace_id`。前端不得伪造默认工作区。
 4. 工具失败、任务结果和外部写入未知是不同状态。只读失败可在有证据目标时恢复。写入未知只能 read-back 或 reconcile，不能自动重放。
 5. 网络配置范围由服务端在调用时按已发布 Skill 重新核定。设备账号决定命令最终权限。模型填写的 `action` 不能把配置命令变成只读。

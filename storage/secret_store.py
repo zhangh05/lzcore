@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -13,6 +14,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from storage.atomic_io import atomic_write_json
 from storage.locking import FileLock
 from storage.records import runtime_record_file
+
+_LOG = logging.getLogger("lzcore.secret_store")
+
 
 
 def _has_master_key() -> bool:
@@ -87,8 +91,14 @@ def get_secret(reference: str) -> str:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         encrypted = data.get(secret_id, "")
-        return _fernet().decrypt(encrypted.encode()).decode() if encrypted else ""
-    except (InvalidToken, OSError, RuntimeError, TypeError, ValueError):
+        if not encrypted:
+            return ""
+        return _fernet().decrypt(encrypted.encode()).decode()
+    except InvalidToken:
+        _LOG.warning("Secret '%s' decryption failed: invalid master key or corrupted token", secret_id)
+        return ""
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        _LOG.warning("Failed to read or decode secret '%s': %s", secret_id, exc)
         return ""
 
 

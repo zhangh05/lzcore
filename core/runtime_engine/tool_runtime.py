@@ -294,6 +294,24 @@ class ToolRuntime:
                 retry_count=0,
             )
 
+        from core.tools.manifest_registry import get_manifest
+        manifest = get_manifest(node.tool)
+        if manifest is not None and getattr(manifest, "allowed_callers", None):
+            caller = str((ctx.extras.get("caller_type") if ctx else None) or "turn_runner")
+            if caller not in manifest.allowed_callers:
+                elapsed = (time.monotonic() - start) * 1000
+                return ToolResult(
+                    node_id=node.id,
+                    tool=node.tool,
+                    success=False,
+                    error=f"Caller '{caller}' not allowed to invoke tool '{node.tool}'",
+                    error_code="CALLER_NOT_ALLOWED",
+                    error_code_raw="",
+                    error_code_norm="CALLER_NOT_ALLOWED",
+                    latency_ms=elapsed,
+                    retry_count=0,
+                )
+
         # Inject dependency results into args
         merged_args = self._merge_dep_results(node.args, dep_results)
 

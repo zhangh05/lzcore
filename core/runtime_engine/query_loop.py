@@ -1065,6 +1065,10 @@ class StreamingToolExecutor:
                     result = await self._maybe_retry_node(node, ctx, result, budget)
             return self._from_tool_result(result, fallback_call_id=tc.id)
 
+        # Context-free fallback: only reached in isolated unit test harnesses or when
+        # runtime lacks execute_node. Production agent turns always provide StatelessContext
+        # and invoke through execute_node with full contracts, retry budget, and audit trails.
+        _LOG.debug("Invoking raw tool %s (context-free test fallback)", tool_id)
         try:
             # Map LLM name (dots → underscores) back to canonical tool_id
             _t0 = time.monotonic()

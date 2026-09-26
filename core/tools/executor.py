@@ -86,20 +86,32 @@ class ToolExecutor:
                 policy_decision=decision,
             )
         # ── 5. Handle dry_run ──
-        if invocation.dry_run and spec.dry_run_supported:
-            duration = int((time.time() - start_time) * 1000)
-            output = {
-                "dry_run": True,
-                "executed": False,
-                "summary": f"dry_run completed for {invocation.tool_id}",
-            }
+        if invocation.dry_run:
+            if spec.dry_run_supported:
+                duration = int((time.time() - start_time) * 1000)
+                output = {
+                    "dry_run": True,
+                    "executed": False,
+                    "summary": f"dry_run completed for {invocation.tool_id}",
+                }
+                return ToolResult(
+                    invocation_id=invocation.invocation_id,
+                    tool_id=invocation.tool_id,
+                    status="dry_run",
+                    output=output,
+                    summary=output["summary"],
+                    duration_ms=duration,
+                    redacted=True,
+                    policy_decision=decision,
+                )
+            # Defense-in-depth: Executor must fail-closed if dry_run requested on unsupported tool
             return ToolResult(
                 invocation_id=invocation.invocation_id,
                 tool_id=invocation.tool_id,
-                status="dry_run",
-                output=output,
-                summary=output["summary"],
-                duration_ms=duration,
+                status="blocked",
+                summary=f"dry_run not supported by tool '{invocation.tool_id}'",
+                errors=[f"Tool '{invocation.tool_id}' does not support dry_run"],
+                duration_ms=int((time.time() - start_time) * 1000),
                 redacted=True,
                 policy_decision=decision,
             )

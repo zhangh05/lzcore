@@ -99,7 +99,9 @@ def validate_network_listener(host: str) -> None:
         return
     raise RuntimeError(
         "Refusing non-loopback backend listener without effective authentication. "
-        "Configure API token, login or identity authentication."
+        "Configure API token (LZCORE_AUTH_ENABLED=true and LZCORE_API_TOKEN), "
+        "login (LZCORE_LOGIN_USERNAME and LZCORE_LOGIN_PASSWORD), "
+        "or identity authentication (LZCORE_IDENTITY_ENABLED=true)."
     )
 
 

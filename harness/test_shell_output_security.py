@@ -286,3 +286,32 @@ def test_redactor_preserves_task_ids_while_masking_standalone_sk_keys():
 
     assert redact_string(task_id) == task_id
     assert secret not in redact_string(f"Authorization: Bearer {secret}")
+
+
+def test_redactor_masks_private_key_blocks_and_jwt_tokens():
+    from core.tools.redaction import redact_string, redact_tool_output
+
+    rsa_block = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0fakekeydata\n-----END RSA PRIVATE KEY-----"
+    ec_block = "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIfakeecdata\n-----END EC PRIVATE KEY-----"
+    ssh_block = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAfake\n-----END OPENSSH PRIVATE KEY-----"
+    jwt_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+
+    for block in (rsa_block, ec_block, ssh_block):
+        redacted = redact_string(f"Device key:\n{block}\nfinished")
+        assert "PRIVATE KEY" not in redacted
+        assert "[PRIVATE_KEY_REDACTED]" in redacted
+
+    redacted_jwt = redact_string(f"Token: {jwt_token}")
+    assert jwt_token not in redacted_jwt
+    assert "[JWT_REDACTED]" in redacted_jwt
+
+    dict_output = redact_tool_output({
+        "status": "ok",
+        "private_key": rsa_block,
+        "token": jwt_token,
+        "nested": {"output": f"auth: {jwt_token}"},
+    })
+    assert dict_output["private_key"] == "[REDACTED]"
+    assert dict_output["token"] == "[REDACTED]"
+    assert "[JWT_REDACTED]" in dict_output["nested"]["output"]
+

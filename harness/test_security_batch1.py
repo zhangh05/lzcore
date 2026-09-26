@@ -159,3 +159,24 @@ def test_atomic_replace_with_retry_succeeds_after_transient_failure(tmp_path, mo
     assert target.read_text(encoding="utf-8") == "new content"
     assert calls == 3
 
+
+def test_secret_store_decryption_failure_logs_warning(tmp_path, monkeypatch, caplog):
+    import logging
+    from storage import secret_store
+
+    monkeypatch.setenv("LZCORE_OS_SECRET_STORE", "off")
+    monkeypatch.setenv("LZCORE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("LZCORE_MASTER_KEY", "1234567890123456")
+
+    ref = secret_store.set_secret("test-key", "my-super-secret")
+    assert ref == "secret://test-key"
+    assert secret_store.get_secret(ref) == "my-super-secret"
+
+    # Change master key so decryption raises InvalidToken
+    monkeypatch.setenv("LZCORE_MASTER_KEY", "different-master-key-67890")
+    with caplog.at_level(logging.WARNING, logger="lzcore.secret_store"):
+        val = secret_store.get_secret(ref)
+        assert val == ""
+        assert any("decryption failed" in r.message for r in caplog.records)
+
+
