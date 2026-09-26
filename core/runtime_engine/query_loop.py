@@ -3721,9 +3721,9 @@ class QueryLoop:
         ctx.extras["drawing_final_nudge_pending"] = True
         return (
             "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]\n"
-            "当前处于拓扑绘图工作台，用户提出了拓扑绘制或修改需求，但本轮次尚未通过 `network.operations.topology` "
-            "(action=\"patch\") 成功提交画布变更。\n"
-            "严禁仅在对话中说明方案而不执行绘图。请立即发起 `network.operations.topology` 原生工具调用提交图纸数据！"
+            "当前处于拓扑绘图工作台，用户提出了拓扑绘制或修改需求。方案构思已很清晰，但本轮次尚未通过 `network.operations.topology` "
+            "(action=\"patch\") 将图纸正式绘制到画布中。\n"
+            "请继续发起 `network.operations.topology` 工具调用（可先 read 核对图纸，或直接 patch 提交绘制），将规划好的节点、链路与 Zones 正式绘制到画布中！"
         )
 
     @staticmethod
