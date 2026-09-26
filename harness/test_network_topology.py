@@ -565,4 +565,57 @@ def test_query_loop_drawing_final_gate_enforcement():
     assert nudge_read == ""
 
 
+def test_collaborative_consultative_topology_workflow_simulation():
+    """Verify the 4-phase consultative workflow: 先聊/看图 -> 落盘 -> 交付."""
+    from core.runtime_engine.query_loop import QueryLoop, StreamingToolResult
+    from core.runtime_engine.models import StatelessContext
+    from extensions.network_operations.topology_skill import render_prompt
+
+    # 1. Verify prompt contains positive consultative guidance
+    prompt = render_prompt({"topology": {"topology_id": "topo_dc", "name": "DC", "version": 0, "node_count": 0}, "allow_edit": True})
+    assert "自然交流与架构构思（先聊）" in prompt
+    assert "图纸洞察与基线核对（看图）" in prompt
+    assert "落实画卷与工具执行（落盘）" in prompt
+    assert "交付说明与后续演进（交付）" in prompt
+
+    # 2. Simulate Turn 1: Model chats and reads baseline first
+    ctx = StatelessContext(
+        request_id="req-consultative",
+        user_input="请帮我设计并绘制一个大型企业数据中心网络拓扑图",
+        workspace_id="ws1",
+        session_id="s1",
+        extras={
+            "workbench_context": {
+                "extension_id": "network.operations",
+                "skill_id": "drawing:topo_dc",
+                "allow_edit": True,
+            }
+        },
+    )
+
+    read_result = StreamingToolResult(
+        tool_name="network.operations.topology",
+        call_id="call-read-1",
+        output={"action": "read", "topology_id": "topo_dc", "version": 0, "nodes": [], "links": []},
+        ok=True,
+    )
+    # Turn 1 tool execution: read succeeds, but if model terminates prematurely without patch, drawing gate nudges
+    turn1_premature_nudge = QueryLoop._drawing_final_gate(ctx, "我先看完了图纸，目前是空的。", [read_result])
+    assert "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]" in turn1_premature_nudge
+
+    # 3. Simulate Turn 2: Model executes patch on canvas
+    patch_result = StreamingToolResult(
+        tool_name="network.operations.topology",
+        call_id="call-patch-1",
+        output={"action": "patch", "topology_id": "topo_dc", "version": 1, "node_count": 16, "link_count": 22},
+        ok=True,
+    )
+
+    # 4. Simulate Turn 3: Delivery presentation
+    # With patch completed, drawing gate gives green light to deliver structured explanation
+    turn3_gate = QueryLoop._drawing_final_gate(ctx, "架构已成功绘制至画布：采用五层模块化设计...", [read_result, patch_result])
+    assert turn3_gate == ""
+
+
+
 
