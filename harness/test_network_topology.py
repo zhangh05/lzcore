@@ -474,3 +474,95 @@ def test_nodes_zone_persistence_and_auto_synthesis(workspace):
     assert zone_item["height"] >= 170.0
 
 
+def test_query_loop_fallback_tool_call_extraction():
+    from core.runtime_engine.query_loop import QueryLoop
+    tool_reg = {"network.operations.topology": {}}
+
+    # 1. Markdown code block
+    text1 = """好的，我为你生成拓扑结构：
+```json
+{
+  "name": "network.operations.topology",
+  "arguments": {
+    "action": "patch",
+    "topology_id": "topo_dc",
+    "version": 1,
+    "node_updates": [{"node_id": "core_sw_01", "display_name": "Core-SW-01"}]
+  }
+}
+```
+请查看！"""
+    calls, cleaned = QueryLoop._extract_fallback_tool_calls(text1, tool_reg)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "network.operations.topology"
+    assert calls[0]["arguments"]["action"] == "patch"
+    assert "```json" not in cleaned
+    assert "请查看！" in cleaned
+
+    # 2. Raw JSON block with action
+    text2 = """```json
+{
+  "action": "patch",
+  "topology_id": "topo_dc",
+  "version": 1,
+  "node_updates": [{"node_id": "core_sw_01"}]
+}
+```"""
+    calls2, cleaned2 = QueryLoop._extract_fallback_tool_calls(text2, tool_reg)
+    assert len(calls2) == 1
+    assert calls2[0]["name"] == "network.operations.topology"
+    assert calls2[0]["arguments"]["action"] == "patch"
+
+
+def test_query_loop_drawing_final_gate_enforcement():
+    from core.runtime_engine.query_loop import QueryLoop, StreamingToolResult
+    from core.runtime_engine.models import StatelessContext
+
+    ctx_draw = StatelessContext(
+        request_id="req-draw",
+        user_input="画一个大型企业的数据中心",
+        workspace_id="ws1",
+        session_id="s1",
+        extras={
+            "workbench_context": {
+                "extension_id": "network.operations",
+                "skill_id": "drawing:topo_dc",
+                "allow_edit": True,
+            }
+        },
+    )
+
+    # 1. User wants to draw, but no tool calls occurred -> BLOCKED by drawing final gate
+    nudge = QueryLoop._drawing_final_gate(ctx_draw, "好的，我为你设计了五层架构...", [])
+    assert "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]" in nudge
+    assert "network.operations.topology" in nudge
+
+    # 2. When patch already succeeded -> PASSES (no nudge)
+    patch_result = StreamingToolResult(
+        tool_name="network.operations.topology",
+        call_id="c1",
+        output={"action": "patch", "ok": True, "version": 2},
+        ok=True,
+    )
+    nudge_ok = QueryLoop._drawing_final_gate(ctx_draw, "交付说明...", [patch_result])
+    assert nudge_ok == ""
+
+    # 3. Read-only user request ("请读取当前图纸。") -> PASSES (no drawing enforcement)
+    ctx_read = StatelessContext(
+        request_id="req-read",
+        user_input="请读取当前图纸。",
+        workspace_id="ws1",
+        session_id="s1",
+        extras={
+            "workbench_context": {
+                "extension_id": "network.operations",
+                "skill_id": "drawing:topo_dc",
+                "allow_edit": True,
+            }
+        },
+    )
+    nudge_read = QueryLoop._drawing_final_gate(ctx_read, "图纸包含2个节点...", [])
+    assert nudge_read == ""
+
+
+

@@ -1896,9 +1896,18 @@ class QueryLoop:
             llm_calls = budget.llm_calls
 
             # Check for tool calls
-            if response.tool_calls:
+            raw_tool_calls = response.tool_calls
+            if not raw_tool_calls and response.content:
+                fallback_calls, cleaned_content = self._extract_fallback_tool_calls(
+                    response.content, self._tool_registry
+                )
+                if fallback_calls:
+                    raw_tool_calls = fallback_calls
+                    response.tool_calls = fallback_calls
+                    response.content = cleaned_content
+            if raw_tool_calls:
                 # Convert to LLMToolCall objects
-                tool_calls = self._parse_tool_calls(response.tool_calls)
+                tool_calls = self._parse_tool_calls(raw_tool_calls)
                 tool_calls = self._unique_call_ids(tool_calls, iterations, used_call_ids)
                 from .batch_compiler import (
                     compile_batchable_calls,
@@ -2238,6 +2247,7 @@ class QueryLoop:
                 # final-text-only response after a nudge is handled below as a
                 # truthful blocked state, not an unbounded dialogue loop.
                 ctx.extras.pop("recovery_final_nudge_pending", None)
+                ctx.extras.pop("drawing_final_nudge_pending", None)
                 checkpoint_nudge = self._task_state_checkpoint_nudge(ctx)
                 if checkpoint_nudge:
                     messages = self._append_turn_nudge(messages, checkpoint_nudge)
@@ -2378,6 +2388,19 @@ class QueryLoop:
                 ]
                 ctx.extras.setdefault("network_execution_evidence_events", []).append({
                     "type": "unsupported_network_retry_final_rejected",
+                    "iteration": iterations,
+                })
+                continue
+
+            drawing_nudge = self._drawing_final_gate(ctx, str(response.content or ""), all_results)
+            if drawing_nudge:
+                messages = [
+                    *messages,
+                    response.assistant_message(),
+                    LLMMessage(role="user", content=drawing_nudge),
+                ]
+                ctx.extras.setdefault("drawing_evidence_events", []).append({
+                    "type": "unexecuted_drawing_final_rejected",
                     "iteration": iterations,
                 })
                 continue
@@ -3657,6 +3680,108 @@ class QueryLoop:
                 "Continue the active workflow now using the full conversation and tool evidence, or report a concrete terminal device/transport blocker. Do not ask for confirmation or merely promise a later action."
             )
         return ""
+
+    @staticmethod
+    def _drawing_final_gate(ctx, final_text: str, tool_results: list[StreamingToolResult]) -> str:
+        """Ensure drawing workbench requests execute real canvas modifications."""
+        workbench = ctx.extras.get("workbench_context") if isinstance(ctx.extras, dict) else None
+        if (
+            not isinstance(workbench, dict)
+            or workbench.get("extension_id") != "network.operations"
+            or not str(workbench.get("skill_id") or "").startswith("drawing:")
+            or not bool(workbench.get("allow_edit", True))
+        ):
+            return ""
+
+        if ctx.extras.get("drawing_final_nudge_pending"):
+            return ""
+
+        user_req = str(ctx.extras.get("__raw_user_input") or ctx.user_input or "").lower()
+        read_kw = ("读取", "查看", "分析", "只读", "read", "inspect", "check", "examine")
+        draw_kw = ("画", "绘", "添加", "修改", "生成", "建立", "创建", "patch", "draw")
+
+        is_read_only = any(k in user_req for k in read_kw) and not any(k in user_req for k in draw_kw)
+        if is_read_only:
+            return ""
+
+        is_draw = any(k in user_req for k in draw_kw)
+        if not is_draw:
+            return ""
+
+        has_successful_patch = any(
+            str(item.tool_name or "").replace("__", ".") == "network.operations.topology"
+            and isinstance(item.output, dict)
+            and item.output.get("action") == "patch"
+            and item.ok
+            for item in tool_results
+        )
+        if has_successful_patch:
+            return ""
+
+        ctx.extras["drawing_final_nudge_pending"] = True
+        return (
+            "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]\n"
+            "当前处于拓扑绘图工作台，用户提出了拓扑绘制或修改需求，但本轮次尚未通过 `network.operations.topology` "
+            "(action=\"patch\") 成功提交画布变更。\n"
+            "严禁仅在对话中说明方案而不执行绘图。请立即发起 `network.operations.topology` 原生工具调用提交图纸数据！"
+        )
+
+    @staticmethod
+    def _extract_fallback_tool_calls(
+        content: str,
+        tool_registry: Mapping[str, Any],
+    ) -> tuple[list[dict[str, Any]], str]:
+        """Extract tool calls emitted as Markdown JSON blocks or raw JSON in text."""
+        if not content or not isinstance(content, str):
+            return [], content
+
+        import re
+        blocks = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+        candidates = []
+        for b in blocks:
+            b_clean = b.strip()
+            if (b_clean.startswith("{") and b_clean.endswith("}")) or (b_clean.startswith("[") and b_clean.endswith("]")):
+                candidates.append(b_clean)
+
+        c_clean = content.strip()
+        if (c_clean.startswith("{") and c_clean.endswith("}")) or (c_clean.startswith("[") and c_clean.endswith("]")):
+            if c_clean not in candidates:
+                candidates.append(c_clean)
+
+        if not candidates:
+            return [], content
+
+        canonical_reg = {k.replace("__", "."): k for k in tool_registry.keys()}
+        extracted_calls: list[dict[str, Any]] = []
+
+        for c in candidates:
+            try:
+                data = json.loads(c)
+            except Exception:
+                continue
+            items = data if isinstance(data, list) else [data]
+            for idx, item in enumerate(items):
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name") or item.get("tool") or "").strip()
+                args = item.get("arguments") or item.get("parameters")
+                if args is None and "action" in item:
+                    if "network.operations.topology" in canonical_reg:
+                        name = "network.operations.topology"
+                        args = {k: v for k, v in item.items() if k not in ("name", "tool")}
+                norm_name = name.replace("__", ".")
+                if norm_name in canonical_reg and isinstance(args, dict):
+                    actual_name = canonical_reg[norm_name]
+                    extracted_calls.append({
+                        "id": f"fallback_call_{len(extracted_calls) + 1}",
+                        "name": actual_name,
+                        "arguments": args,
+                    })
+
+        if extracted_calls:
+            cleaned = re.sub(r"```(?:json)?\s*[\s\S]*?\s*```", "", content).strip()
+            return extracted_calls, cleaned
+        return [], content
 
     def _append_tool_round(
         self,
