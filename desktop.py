@@ -233,6 +233,13 @@ class DesktopApi:
     JS 端通过 window.pywebview.api.save_file(...) 调用。
     """
 
+    def __init__(self):
+        self._window = None
+
+    def set_window(self, window):
+        """由启动流程调用，注入 pywebview window 引用以便使用原生文件对话框。"""
+        self._window = window
+
     def save_file(self, filename: str, data_base64: str, mime: str = "image/png") -> dict:
         """
         弹出系统原生"另存为"对话框，将 base64 编码的文件内容写入用户选择的路径。
@@ -255,35 +262,31 @@ class DesktopApi:
             logger.error("save_file: base64 解码失败: %s", exc)
             return {"ok": False, "error": f"base64_decode_error: {exc}"}
 
-        # 根据 MIME 构建对话框文件类型过滤器
-        ext_map = {
-            "image/png": [("PNG 图像", "*.png"), ("所有文件", "*.*")],
-            "image/svg+xml": [("SVG 矢量图", "*.svg"), ("所有文件", "*.*")],
-            "application/pdf": [("PDF 文档", "*.pdf"), ("所有文件", "*.*")],
-        }
-        filetypes = ext_map.get(mime, [("所有文件", "*.*")])
-
+        # 使用 pywebview 自带的原生保存文件对话框（不依赖 tkinter，不会阻塞主线程）
         try:
-            import tkinter as tk
-            from tkinter import filedialog
-            root = tk.Tk()
-            root.withdraw()          # 隐藏 Tk 主窗口，只显示文件对话框
-            root.attributes("-topmost", True)   # 置顶，避免被 WebView 窗口遮挡
-            save_path = filedialog.asksaveasfilename(
-                parent=root,
-                title="导出拓扑图",
-                initialfile=filename,
-                defaultextension=f".{filename.rsplit('.', 1)[-1]}" if "." in filename else "",
-                filetypes=filetypes,
+            import webview
+            ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "png"
+            type_map = {
+                "png": ("PNG 图像 (*.png)",),
+                "svg": ("SVG 矢量图 (*.svg)",),
+                "pdf": ("PDF 文档 (*.pdf)",),
+            }
+            file_types = type_map.get(ext, ("所有文件 (*.*)",))
+
+            result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=filename,
+                file_types=file_types,
             )
-            root.destroy()
         except Exception as exc:
             logger.error("save_file: 打开保存对话框失败: %s", exc)
             return {"ok": False, "error": f"dialog_error: {exc}"}
 
-        if not save_path:
+        if not result:
             # 用户点击了取消
             return {"ok": False, "error": "cancelled"}
+
+        save_path = result if isinstance(result, str) else result[0]
 
         try:
             Path(save_path).write_bytes(raw)
@@ -484,6 +487,7 @@ def main():
     }
 
     window = webview.create_window(**window_kwargs)
+    desktop_api.set_window(window)
 
     # Windows 优先调用内置的 Edge WebView2 内核
     gui_engine = "edgechromium" if sys.platform == "win32" else None
