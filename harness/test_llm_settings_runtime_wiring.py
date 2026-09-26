@@ -222,3 +222,74 @@ class TestMiniMaxM3NoResidue:
             model = provider.get("model", "")
             if model == "MiniMax-M1":
                 raise AssertionError(f"Provider {name} has MiniMax-M1 as model")
+
+
+class TestOSSecretSanitizationAndFallback:
+    def test_account_name_sanitizes_windows_illegal_characters(self):
+        from storage.os_secret_store import _account
+        illegal_chars = set('<>:"/\\|?*')
+        for test_id in ("llm/minimax", "extension/ext1/ws1/foo", "test|pipe", "test:colon*star?question"):
+            acc = _account(test_id)
+            assert not any(c in illegal_chars for c in acc), f"Illegal char found in {acc}"
+        assert _account("llm/minimax") == "llm_minimax"
+        assert _account("CON").startswith("sec_")
+
+    def test_provider_save_falls_back_to_local_file_when_secret_store_fails_in_personal_mode(self, monkeypatch, tmp_path):
+        providers = _isolate_provider_store(monkeypatch, tmp_path)
+        monkeypatch.delenv("LZCORE_IDENTITY_ENABLED", raising=False)
+        monkeypatch.delenv("LZCORE_MASTER_KEY", raising=False)
+        monkeypatch.delenv("LZCORE_MASTER_KEY_FILE", raising=False)
+        monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
+        providers.mkdir(parents=True)
+
+        import storage.os_secret_store as os_store
+        monkeypatch.setattr(os_store, "available", lambda: True)
+        monkeypatch.setattr(os_store, "set_os_secret", lambda _k, _v: (_ for _ in ()).throw(OSError("DPAPI write failed")))
+
+        from agent.llm.provider_store import load_provider_config, save_provider_config
+        saved = save_provider_config("minimax", {"api_key": "sk-fallback-key-12345"})
+        persisted = json.loads((providers / "minimax.json").read_text())
+
+        assert saved["api_key"] == "sk-fallback-key-12345"
+        assert persisted.get("api_key") == "sk-fallback-key-12345"
+        assert "secret_ref" not in persisted
+        assert load_provider_config("minimax")["api_key"] == "sk-fallback-key-12345"
+
+    def test_provider_save_raises_in_identity_mode_when_secret_store_fails(self, monkeypatch, tmp_path):
+        _isolate_provider_store(monkeypatch, tmp_path)
+        monkeypatch.setenv("LZCORE_IDENTITY_ENABLED", "true")
+        monkeypatch.delenv("LZCORE_MASTER_KEY", raising=False)
+        monkeypatch.delenv("LZCORE_MASTER_KEY_FILE", raising=False)
+
+        import storage.os_secret_store as os_store
+        monkeypatch.setattr(os_store, "available", lambda: True)
+        monkeypatch.setattr(os_store, "set_os_secret", lambda _k, _v: (_ for _ in ()).throw(OSError("DPAPI failed")))
+
+        import pytest
+        from agent.llm.provider_store import save_provider_config
+        with pytest.raises((OSError, RuntimeError)):
+            save_provider_config("minimax", {"api_key": "sk-identity-key"})
+
+    def test_provider_save_api_endpoint_handles_fallback_cleanly(self, monkeypatch, tmp_path):
+        _isolate_provider_store(monkeypatch, tmp_path)
+        monkeypatch.delenv("LZCORE_IDENTITY_ENABLED", raising=False)
+        monkeypatch.delenv("LZCORE_MASTER_KEY", raising=False)
+        monkeypatch.delenv("LZCORE_MASTER_KEY_FILE", raising=False)
+        monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
+
+        import storage.os_secret_store as os_store
+        monkeypatch.setattr(os_store, "available", lambda: True)
+        monkeypatch.setattr(os_store, "set_os_secret", lambda _k, _v: (_ for _ in ()).throw(OSError("Simulated DPAPI error")))
+
+        from backend.main import create_app
+        client = create_app().test_client()
+        res = client.post("/api/agent/llm/providers/minimax", json={
+            "api_key": "sk-endpoint-test-12345",
+            "model": "MiniMax-M3",
+            "enabled": True,
+        })
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["ok"] is True
+        assert data["config"]["key_configured"] is True
+        assert data["config"]["api_key"] is None

@@ -15,6 +15,18 @@ from storage.locking import FileLock
 from storage.records import runtime_record_file
 
 
+def _has_master_key() -> bool:
+    master = os.environ.get("LZCORE_MASTER_KEY", "").strip()
+    if not master:
+        key_file = os.environ.get("LZCORE_MASTER_KEY_FILE", "").strip()
+        if key_file:
+            try:
+                master = Path(key_file).read_text(encoding="utf-8").strip()
+            except OSError:
+                master = ""
+    return len(master) >= 16
+
+
 def _fernet() -> Fernet:
     master = os.environ.get("LZCORE_MASTER_KEY", "").strip()
     if not master:
@@ -37,23 +49,29 @@ def secret_backend_available() -> bool:
     from storage.os_secret_store import available
     if available():
         return True
-    return bool(os.environ.get("LZCORE_MASTER_KEY", "").strip() or os.environ.get("LZCORE_MASTER_KEY_FILE", "").strip())
+    return _has_master_key()
 
 
 def set_secret(secret_id: str, value: str) -> str:
     from storage.os_secret_store import available, set_os_secret
-    if available() and set_os_secret(secret_id, value):
-        _forget_file_copy(secret_id)
-        return f"secret://{secret_id}"
-    path = _path()
-    with FileLock(path.with_name("encrypted.lock")):
+    if available():
         try:
-            data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-        except (OSError, ValueError):
-            data = {}
-        data[secret_id] = _fernet().encrypt(value.encode()).decode()
-        atomic_write_json(path, data)
-    return f"secret://{secret_id}"
+            if set_os_secret(secret_id, value):
+                _forget_file_copy(secret_id)
+                return f"secret://{secret_id}"
+        except Exception:
+            pass
+    if _has_master_key():
+        path = _path()
+        with FileLock(path.with_name("encrypted.lock")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+            except (OSError, ValueError):
+                data = {}
+            data[secret_id] = _fernet().encrypt(value.encode()).decode()
+            atomic_write_json(path, data)
+        return f"secret://{secret_id}"
+    raise RuntimeError("No secure secret backend available (OS store unavailable and LZCORE_MASTER_KEY not set)")
 
 
 def get_secret(reference: str) -> str:

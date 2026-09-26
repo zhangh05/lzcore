@@ -212,10 +212,15 @@ def handle_provider_save(provider_id: str):
     if errors:
         return jsonify({"ok": False, "errors": errors}), 400
 
-    cfg = save_provider_config(provider_id, data)
-    result = _sanitize_provider(cfg)
-    result["is_active"] = (provider_id == get_active_provider())
-    return jsonify({"ok": True, "config": result})
+    try:
+        cfg = save_provider_config(provider_id, data)
+        result = _sanitize_provider(cfg)
+        result["is_active"] = (provider_id == get_active_provider())
+        return jsonify({"ok": True, "config": result})
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("Failed to save provider %s: %s", provider_id, exc)
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 def handle_llm_activate():
@@ -235,21 +240,26 @@ def handle_llm_activate():
     if data.get("clear_api_key"):
         save_fields["clear_api_key"] = True
 
-    if save_fields:
-        save_provider_config(provider_id, save_fields)
+    try:
+        if save_fields:
+            save_provider_config(provider_id, save_fields)
 
-    set_active_provider(provider_id)
-    cfg = load_provider_config(provider_id)
-    result = _sanitize_provider(cfg)
-    result["is_active"] = True
-    result["active_provider"] = provider_id
+        set_active_provider(provider_id)
+        cfg = load_provider_config(provider_id)
+        result = _sanitize_provider(cfg)
+        result["is_active"] = True
+        result["active_provider"] = provider_id
 
-    return jsonify({
-        "ok": True,
-        "config": result,
-        "active": provider_id,
-        "message": f"Switched to {PROVIDER_PRESETS[provider_id]['label']}",
-    })
+        return jsonify({
+            "ok": True,
+            "config": result,
+            "active": provider_id,
+            "message": f"Switched to {PROVIDER_PRESETS[provider_id]['label']}",
+        })
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("Failed to activate provider %s: %s", provider_id, exc)
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 def handle_provider_delete(provider_id: str):

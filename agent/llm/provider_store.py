@@ -133,13 +133,25 @@ def _write_json(provider_id: str, data: dict):
     data["updated_at"] = now_iso()
     persisted = dict(data)
     from storage.secret_store import secret_backend_available, set_secret
+    saved_to_secret_backend = False
     if persisted.get("api_key") and secret_backend_available():
-        persisted["secret_ref"] = set_secret(f"llm/{provider_id}", persisted["api_key"])
-        persisted["api_key"] = ""
-        data["secret_ref"] = persisted["secret_ref"]
-    elif persisted.get("api_key") and os.environ.get("LZCORE_IDENTITY_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
-        raise RuntimeError("LZCORE_MASTER_KEY is required before saving provider keys in identity mode")
-    elif persisted.get("api_key"):
+        try:
+            persisted["secret_ref"] = set_secret(f"llm/{provider_id}", persisted["api_key"])
+            persisted["api_key"] = ""
+            data["secret_ref"] = persisted["secret_ref"]
+            saved_to_secret_backend = True
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to store API key in secret backend for provider '%s': %s",
+                provider_id,
+                exc,
+            )
+            if os.environ.get("LZCORE_IDENTITY_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
+                raise
+    if not saved_to_secret_backend and persisted.get("api_key"):
+        if os.environ.get("LZCORE_IDENTITY_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
+            raise RuntimeError("LZCORE_MASTER_KEY is required before saving provider keys in identity mode")
         # Non-identity local development supports a plaintext fallback.  It
         # must replace an old encrypted reference; otherwise later reads try
         # the unavailable reference first and make a successful draft test
