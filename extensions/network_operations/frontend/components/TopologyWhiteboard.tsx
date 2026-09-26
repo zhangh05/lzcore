@@ -10,6 +10,8 @@ import {
   IconDownload,
   IconClose,
 } from "../../../../frontend/src/components/Icon";
+import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
+import { downloadBlob } from "./topologyExport";
 
 export type WhiteboardTool = "pen" | "highlighter" | "arrow" | "rect" | "note";
 
@@ -184,13 +186,20 @@ export function TopologyWhiteboard({
         }
 
         if (stroke.tool === "pen" || stroke.tool === "highlighter") {
-          ctx.beginPath();
           const pts = stroke.points;
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (let i = 1; i < pts.length; i++) {
-            ctx.lineTo(pts[i].x, pts[i].y);
+          if (pts.length === 1) {
+            ctx.beginPath();
+            ctx.arc(pts[0].x, pts[0].y, Math.max(1.5, stroke.size / 2), 0, Math.PI * 2);
+            ctx.fillStyle = stroke.color;
+            ctx.fill();
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) {
+              ctx.lineTo(pts[i].x, pts[i].y);
+            }
+            ctx.stroke();
           }
-          ctx.stroke();
         } else if (stroke.tool === "arrow" && stroke.points.length >= 2) {
           const start = stroke.points[0];
           const end = stroke.points[stroke.points.length - 1];
@@ -353,7 +362,16 @@ export function TopologyWhiteboard({
   };
 
   // Clear all
-  const handleClear = () => {
+  const handleClear = async () => {
+    const ok = await confirm({
+      title: "清空画板批注",
+      body: "确认清空当前拓扑的所有白板批注与便签吗？此操作无法撤销。",
+      confirmLabel: "清空",
+      cancelLabel: "取消",
+      destructive: true,
+    });
+    if (!ok) return;
+
     setStrokes([]);
     setNotes([]);
     setCurrentStroke(null);
@@ -401,11 +419,12 @@ export function TopologyWhiteboard({
         ctx.restore();
       }
 
-      const link = document.createElement("a");
-      const name = (topologyName || "网络拓扑").replace(/\s+/g, "_");
-      link.download = `${name}_批注画板.png`;
-      link.href = exportCanvas.toDataURL("image/png");
-      link.click();
+      const name = (topologyName || "网络拓扑").replace(/[\\/:*?"<>|\s]+/g, "_");
+      exportCanvas.toBlob((blob) => {
+        if (blob) {
+          downloadBlob(blob, `${name}_批注画板.png`);
+        }
+      }, "image/png");
     };
 
     if (bgDataUrl) {

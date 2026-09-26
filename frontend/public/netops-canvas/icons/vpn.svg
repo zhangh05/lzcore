@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 118 97" width="118" height="97">
+  <rect width="118" height="97" rx="11" fill="#1262aa"/>
+  <!-- Security Shield & Lock / VPN Tunnel -->
+  <path d="M59 18 L86 28 C86 54 72 72 59 78 C46 72 32 54 32 28 Z" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- Lock body and shackle inside shield -->
+  <rect x="50" y="46" width="18" height="15" rx="2.5" fill="#ffffff"/>
+  <path d="M53 46 V39 C53 35.7 55.7 33 59 33 C62.3 33 65 35.7 65 39 V46" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="59" cy="52" r="2" fill="#1262aa"/>
+  <line x1="59" y1="54" x2="59" y2="58" stroke="#1262aa" stroke-width="2" stroke-linecap="round"/>
+</svg>

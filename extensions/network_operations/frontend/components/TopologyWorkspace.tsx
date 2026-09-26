@@ -42,6 +42,8 @@ import {
   IconArrowsIn,
   IconPencil,
   IconChevronUp,
+  IconChevronLeft,
+  IconChevronRight,
   IconWrench,
   IconChat,
 } from "../../../../frontend/src/components/Icon";
@@ -60,6 +62,7 @@ import { mergeTopologies, type MergeConflict, type MergeStats } from "./topology
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import { TopologyWhiteboard } from "./TopologyWhiteboard";
+import { dataUriToBlob, downloadBlob, exportTopologyToSvg } from "./topologyExport";
 import "./TopologyStudio.css";
 
 
@@ -72,6 +75,12 @@ export type TopologyNode = {
   display_name?: string;
   labels?: string[];
   group_id?: string;
+  ip?: string;
+  vendor?: string;
+  model?: string;
+  role?: string;
+  vlan?: string;
+  location?: string;
 };
 
 export type TopologyLinkStyle = {
@@ -172,6 +181,10 @@ const DRAWING_DEVICE_TYPES = [
   { value: "pc", label: "终端 PC" },
   { value: "cloud", label: "云网络" },
   { value: "wireless", label: "无线 AP" },
+  { value: "wlc", label: "无线控制器 AC" },
+  { value: "storage", label: "存储设备" },
+  { value: "vpn", label: "VPN 网关" },
+  { value: "isp", label: "运营商专线" },
   { value: "wan", label: "广域网 WAN" },
   { value: "database", label: "数据库" },
   { value: "camera", label: "监控设备" },
@@ -735,6 +748,7 @@ export default function TopologyWorkspace({
   const [focusMode, setFocusMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [whiteboardActive, setWhiteboardActive] = useState(false);
+  const [compactMode, setCompactMode] = useState<boolean>(false);
   const studioContainerRef = useRef<HTMLDivElement | null>(null);
 
   const handleToggleFullscreen = useCallback(() => {
@@ -1441,10 +1455,11 @@ export default function TopologyWorkspace({
       const nextLinks = [...links, newLink];
       pushState({ ...activeTopology, links: nextLinks });
       setSelectedElement({ type: "link", linkId: newLink.link_id });
+      setCanvasMode("select");
 
       const sLabel = nodeLabelById.get(source) || source;
       const tLabel = nodeLabelById.get(target) || target;
-      setNotice(`已连接 ${sLabel}(${sourceInterface}) ↔ ${tLabel}(${targetInterface})。连线笔保持激活，可继续点击设备连线，按 Esc 退出。`);
+      setNotice(`已连接 ${sLabel}(${sourceInterface}) ↔ ${tLabel}(${targetInterface})，已自动切换回选择模式`);
     },
     [activeTopology, nextFreeInterface, nodeLabelById, pushState, setNotice]
   );
@@ -1487,13 +1502,45 @@ export default function TopologyWorkspace({
     const current = activeTopologyRef.current;
     if (!current || !positions.length) return;
     const byId = new Map(positions.map((position) => [position.element_id, position]));
-    pushState({ ...current, nodes: current.nodes.map((node) => {
-      const position = byId.get(node.node_id);
-      return position ? { ...node, x: Math.round(position.x), y: Math.round(position.y) } : node;
-    }), canvas_items: (current.canvas_items || []).map((item) => {
-      const position = byId.get(`canvas-${item.item_id}`);
-      return position ? { ...item, x: Math.round(position.x), y: Math.round(position.y) } : item;
-    }) });
+
+    // Check if any canvas items (zones) moved, and calculate deltas for member nodes enclosed within them
+    const nodeDeltas = new Map<string, { dx: number; dy: number }>();
+    (current.canvas_items || []).forEach((item) => {
+      const moved = byId.get(`canvas-${item.item_id}`);
+      if (!moved) return;
+      const dx = Math.round(moved.x - item.x);
+      const dy = Math.round(moved.y - item.y);
+      if (dx === 0 && dy === 0) return;
+
+      const halfW = (item.width || 200) / 2;
+      const halfH = (item.height || 100) / 2;
+      current.nodes.forEach((node) => {
+        if (byId.has(node.node_id)) return;
+        if (
+          node.x >= item.x - halfW &&
+          node.x <= item.x + halfW &&
+          node.y >= item.y - halfH &&
+          node.y <= item.y + halfH
+        ) {
+          nodeDeltas.set(node.node_id, { dx, dy });
+        }
+      });
+    });
+
+    const nextNodes = current.nodes.map((node) => {
+      const direct = byId.get(node.node_id);
+      if (direct) return { ...node, x: Math.round(direct.x), y: Math.round(direct.y) };
+      const delta = nodeDeltas.get(node.node_id);
+      if (delta) return { ...node, x: Math.round(node.x + delta.dx), y: Math.round(node.y + delta.dy) };
+      return node;
+    });
+
+    const nextCanvasItems = (current.canvas_items || []).map((item) => {
+      const direct = byId.get(`canvas-${item.item_id}`);
+      return direct ? { ...item, x: Math.round(direct.x), y: Math.round(direct.y) } : item;
+    });
+
+    pushState({ ...current, nodes: nextNodes, canvas_items: nextCanvasItems });
     requestAnimationFrame(() => updatePopoverAnchor());
   }, [pushState, updatePopoverAnchor]);
 
@@ -1527,54 +1574,131 @@ export default function TopologyWorkspace({
     setNotice("图纸图元已删除");
   }, [activeTopology, pushState, setNotice]);
 
-  // A diagram that cannot leave the tool ends up as a screenshot in a report.
-  // PNG and SVG come straight from the renderer; PDF is wrapped from the
-  // rendered pixels, because a PDF page is what a delivery document needs.
-  const downloadBlob = useCallback((blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    // Some browsers start consuming the Object URL after the click handler
-    // returns. Revoking it in the same turn can leave a PDF download empty.
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  }, []);
+  const handleAutoFitCanvasItem = useCallback((itemId: string) => {
+    if (!activeTopology || !activeTopology.canvas_items) return;
+    const item = activeTopology.canvas_items.find((i) => i.item_id === itemId);
+    if (!item) return;
+
+    const halfW = (item.width || 200) / 2;
+    const halfH = (item.height || 100) / 2;
+    const insideNodes = activeTopology.nodes.filter(
+      (n) =>
+        n.x >= item.x - halfW &&
+        n.x <= item.x + halfW &&
+        n.y >= item.y - halfH &&
+        n.y <= item.y + halfH
+    );
+
+    if (insideNodes.length === 0) {
+      setNotice("当前区域内未检测到设备节点，无法自动调整大小", false);
+      return;
+    }
+
+    const xs = insideNodes.map((n) => n.x);
+    const ys = insideNodes.map((n) => n.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const padX = 60;
+    const padY = 50;
+    const newW = Math.max(160, Math.round((maxX - minX) + padX * 2));
+    const newH = Math.max(100, Math.round((maxY - minY) + padY * 2));
+    const newX = Math.round((minX + maxX) / 2);
+    const newY = Math.round((minY + maxY) / 2);
+
+    pushState({
+      ...activeTopology,
+      canvas_items: activeTopology.canvas_items.map((ci) =>
+        ci.item_id === itemId ? { ...ci, x: newX, y: newY, width: newW, height: newH } : ci
+      ),
+    });
+    setNotice(`已自动包住 ${insideNodes.length} 台设备 (${newW} × ${newH})`);
+  }, [activeTopology, pushState, setNotice]);
+
+  const handleSendCanvasItemToBack = useCallback((itemId: string) => {
+    if (!activeTopology || !activeTopology.canvas_items) return;
+    const item = activeTopology.canvas_items.find((i) => i.item_id === itemId);
+    if (!item) return;
+    const others = activeTopology.canvas_items.filter((i) => i.item_id !== itemId);
+    pushState({ ...activeTopology, canvas_items: [item, ...others] });
+    setNotice("图元已置于最底层");
+  }, [activeTopology, pushState, setNotice]);
+
+  const handleBringCanvasItemToFront = useCallback((itemId: string) => {
+    if (!activeTopology || !activeTopology.canvas_items) return;
+    const item = activeTopology.canvas_items.find((i) => i.item_id === itemId);
+    if (!item) return;
+    const others = activeTopology.canvas_items.filter((i) => i.item_id !== itemId);
+    pushState({ ...activeTopology, canvas_items: [...others, item] });
+    setNotice("图元已置于最顶层");
+  }, [activeTopology, pushState, setNotice]);
 
   const exportCanvas = useCallback(async (format: "png" | "svg" | "pdf") => {
     const api = canvasApiRef.current;
-    if (!api) {
+    if (!api || !activeTopology) {
       setNotice("画布尚未就绪，请稍后再试", false);
       return;
     }
     const safeName = (activeTopology?.name || "topology").replace(/[\\/:*?"<>|\s]+/g, "_");
+
+    if (format === "svg") {
+      try {
+        const storageKey = activeTopology?.topology_id ? `lzcore_whiteboard_${activeTopology.topology_id}` : "lzcore_whiteboard_default";
+        let wbData = null;
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) wbData = JSON.parse(saved);
+        } catch {
+          // ignore
+        }
+        const svgContent = exportTopologyToSvg(activeTopology, {
+          whiteboardData: wbData,
+          showInterfaces,
+          compactMode,
+        });
+        const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
+        downloadBlob(blob, `${safeName}.svg`);
+        setNotice(`已导出 ${safeName}.svg`);
+      } catch (e) {
+        console.error("SVG export failed:", e);
+        setNotice("SVG 导出失败，请稍后重试", false);
+      }
+      return;
+    }
+
     if (format === "pdf") {
       setNotice("正在生成 PDF…");
       try {
-        const pixels = await pngToRgbImage(api.exportPNG({ full: true, scale: 2, background: "#ffffff" }));
+        const pngDataUrl = api.exportPNG({ full: true, scale: 2, background: "#ffffff" });
+        if (!pngDataUrl) throw new Error("empty_png");
+        const pixels = await pngToRgbImage(pngDataUrl);
         const pdf = await buildImagePdf(pixels);
         downloadBlob(new Blob([pdf], { type: "application/pdf" }), `${safeName}.pdf`);
         setNotice(`已导出 ${safeName}.pdf`);
-      } catch {
+      } catch (e) {
+        console.error("PDF export failed:", e);
         setNotice("PDF 导出失败，请改用 PNG 或 SVG", false);
       }
       return;
     }
-    const anchor = document.createElement("a");
-    if (format === "svg") {
-      anchor.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(api.exportSVG())}`;
-      anchor.download = `${safeName}.svg`;
-    } else {
-      anchor.href = api.exportPNG({ full: true, scale: 2, background: "#ffffff" });
-      anchor.download = `${safeName}.png`;
+
+    // format === "png"
+    try {
+      const pngDataUrl = api.exportPNG({ full: true, scale: 2, background: "#ffffff" });
+      if (!pngDataUrl) {
+        setNotice("PNG 导出失败，画布无图像", false);
+        return;
+      }
+      const blob = dataUriToBlob(pngDataUrl);
+      downloadBlob(blob, `${safeName}.png`);
+      setNotice(`已导出 ${safeName}.png`);
+    } catch (e) {
+      console.error("PNG export failed:", e);
+      setNotice("PNG 导出失败，请改用 SVG", false);
     }
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setNotice(`已导出 ${safeName}.${format}`);
-  }, [activeTopology, setNotice, downloadBlob]);
+  }, [activeTopology, compactMode, setNotice, showInterfaces]);
 
   /**
    * Deep link. A diagram that cannot be linked to cannot be shared, attached
@@ -1609,10 +1733,13 @@ export default function TopologyWorkspace({
   // work people redo every time; a saved viewport costs one click.
   const bookmarkKey = useMemo(() => `lzcore.topology.views.${workspaceId}.${selectedTopologyId}`, [workspaceId, selectedTopologyId]);
   const [bookmarks, setBookmarks] = useState<Array<{ name: string; x: number; y: number; zoom: number }>>([]);
+  const [currentBookmarkName, setCurrentBookmarkName] = useState<string>("");
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(bookmarkKey);
-      setBookmarks(stored ? JSON.parse(stored) : []);
+      const list = stored ? JSON.parse(stored) : [];
+      setBookmarks(list);
+      if (list.length > 0) setCurrentBookmarkName(list[0].name);
     } catch {
       setBookmarks([]);
     }
@@ -1624,16 +1751,21 @@ export default function TopologyWorkspace({
     if (!name) return;
     const next = [...bookmarks.filter((item) => item.name !== name), { name, ...view }];
     setBookmarks(next);
+    setCurrentBookmarkName(name);
     window.localStorage.setItem(bookmarkKey, JSON.stringify(next));
     setNotice(`已保存视图「${name}」`);
   };
   const applyBookmark = (bookmark: { name: string; x: number; y: number; zoom: number }) => {
     canvasApiRef.current?.setViewport(bookmark);
+    setCurrentBookmarkName(bookmark.name);
     setNotice(`已切换到视图「${bookmark.name}」`);
   };
   const removeBookmark = (name: string) => {
     const next = bookmarks.filter((item) => item.name !== name);
     setBookmarks(next);
+    if (currentBookmarkName === name) {
+      setCurrentBookmarkName(next.length ? next[0].name : "");
+    }
     window.localStorage.setItem(bookmarkKey, JSON.stringify(next));
   };
 
@@ -2818,16 +2950,17 @@ export default function TopologyWorkspace({
                 </span>
                 <label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label>
                 <label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label>
+                <label title="紧凑模式缩小节点尺寸，避免密集拓扑中标签重叠"><input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />紧凑模式</label>
               </>
             )}
           </div>
-          {!activeTopology?.nodes?.length && (
+          {!activeTopology?.nodes?.length && !armedNodeType && (
             <div className="topology-canvas-onboarding">
               <div className="topology-canvas-onboarding-card">
                 <IconBranch size={24} />
                 <div>
                   <strong>从符号开始建图</strong>
-                  <p>从左侧图形库放入节点，再用连线工具把它们接上。</p>
+                  <p>从左侧图形库点选设备放入画布，再用连线工具把它们接上。</p>
                 </div>
                 <Button size="sm" variant="primary" onClick={() => setShowManualNodeModal(true)}>放入节点</Button>
               </div>
@@ -2841,6 +2974,7 @@ export default function TopologyWorkspace({
             interactionMode={workspaceMode}
             gridEnabled={gridEnabled}
             showInterfaces={showInterfaces}
+            compactMode={compactMode}
             onSelectNode={(nodeId) => {
               if (workspaceMode === "view") {
                 setViewOverlayNodeId(nodeId);
@@ -3120,6 +3254,134 @@ export default function TopologyWorkspace({
                     ))}
                   </select>
                 </label>
+
+                <div className="inspector-field-group" style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed var(--line, #e2e8f0)" }}>
+                  <span className="inspector-label" style={{ fontWeight: 600, color: "var(--accent, #2563eb)" }}>网络规划与设备属性</span>
+
+                  <label className="inspector-field">
+                    管理 IP 地址
+                    <input
+                      value={selectedNode.ip || ""}
+                      placeholder="例如 192.168.1.1 或 10.0.0.1/24"
+                      onChange={(e) => {
+                        if (!activeTopology) return;
+                        const val = e.target.value;
+                        const updated = activeTopology.nodes.map((n) =>
+                          n.node_id === selectedNode.node_id ? { ...n, ip: val || undefined } : n
+                        );
+                        pushState({ ...activeTopology, nodes: updated });
+                      }}
+                    />
+                  </label>
+
+                  <div className="inspector-dimension-grid">
+                    <label className="inspector-field">
+                      网络角色 / 层级
+                      <select
+                        value={selectedNode.role || ""}
+                        onChange={(e) => {
+                          if (!activeTopology) return;
+                          const val = e.target.value;
+                          const updated = activeTopology.nodes.map((n) =>
+                            n.node_id === selectedNode.node_id ? { ...n, role: val || undefined } : n
+                          );
+                          pushState({ ...activeTopology, nodes: updated });
+                        }}
+                      >
+                        <option value="">未指定角色</option>
+                        <option value="core">核心层 (Core)</option>
+                        <option value="aggregation">汇聚层 (Aggregation)</option>
+                        <option value="access">接入层 (Access)</option>
+                        <option value="edge">边界/出口 (Edge)</option>
+                        <option value="firewall">安全/防火墙 (Firewall)</option>
+                        <option value="spine">Spine</option>
+                        <option value="leaf">Leaf</option>
+                        <option value="server">服务器 (Server)</option>
+                        <option value="terminal">终端/办公 (Terminal)</option>
+                        <option value="storage">存储 (Storage)</option>
+                        <option value="management">管理网 (OOB/Mgt)</option>
+                        <option value="custom">自定义角色</option>
+                      </select>
+                    </label>
+
+                    <label className="inspector-field">
+                      设备厂商
+                      <input
+                        value={selectedNode.vendor || ""}
+                        placeholder="Cisco / 华为 / 华三等"
+                        list="topo-vendor-options"
+                        onChange={(e) => {
+                          if (!activeTopology) return;
+                          const val = e.target.value;
+                          const updated = activeTopology.nodes.map((n) =>
+                            n.node_id === selectedNode.node_id ? { ...n, vendor: val || undefined } : n
+                          );
+                          pushState({ ...activeTopology, nodes: updated });
+                        }}
+                      />
+                      <datalist id="topo-vendor-options">
+                        <option value="Huawei" />
+                        <option value="Cisco" />
+                        <option value="H3C" />
+                        <option value="Ruijie" />
+                        <option value="Fortinet" />
+                        <option value="Palo Alto" />
+                        <option value="Juniper" />
+                        <option value="Linux" />
+                      </datalist>
+                    </label>
+                  </div>
+
+                  <div className="inspector-dimension-grid">
+                    <label className="inspector-field">
+                      设备型号
+                      <input
+                        value={selectedNode.model || ""}
+                        placeholder="如 S5720-28X-SI"
+                        onChange={(e) => {
+                          if (!activeTopology) return;
+                          const val = e.target.value;
+                          const updated = activeTopology.nodes.map((n) =>
+                            n.node_id === selectedNode.node_id ? { ...n, model: val || undefined } : n
+                          );
+                          pushState({ ...activeTopology, nodes: updated });
+                        }}
+                      />
+                    </label>
+
+                    <label className="inspector-field">
+                      业务/管理 VLAN
+                      <input
+                        value={selectedNode.vlan || ""}
+                        placeholder="如 VLAN 10, 20"
+                        onChange={(e) => {
+                          if (!activeTopology) return;
+                          const val = e.target.value;
+                          const updated = activeTopology.nodes.map((n) =>
+                            n.node_id === selectedNode.node_id ? { ...n, vlan: val || undefined } : n
+                          );
+                          pushState({ ...activeTopology, nodes: updated });
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="inspector-field">
+                    物理位置 / 机房机柜
+                    <input
+                      value={selectedNode.location || ""}
+                      placeholder="如 主机房 A01 机柜 4U"
+                      onChange={(e) => {
+                        if (!activeTopology) return;
+                        const val = e.target.value;
+                        const updated = activeTopology.nodes.map((n) =>
+                          n.node_id === selectedNode.node_id ? { ...n, location: val || undefined } : n
+                        );
+                        pushState({ ...activeTopology, nodes: updated });
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="inspector-section">
@@ -3771,18 +4033,32 @@ export default function TopologyWorkspace({
                 <div className="inspector-dimension-section">
                   <div className="inspector-dimension-grid">
                     <label className="inspector-field">宽度
-                      <input type="number" min="40" max="1600" value={Math.round(selectedCanvasItem.width)} onChange={(e) => {
-                        if (!activeTopology) return;
-                        const width = Math.min(1600, Math.max(40, Number(e.target.value) || 40));
-                        pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, width } : item) });
-                      }} />
+                      <input
+                        type="number"
+                        min="40"
+                        max="1600"
+                        value={Math.round(selectedCanvasItem.width)}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onChange={(e) => {
+                          if (!activeTopology) return;
+                          const width = Math.min(1600, Math.max(40, Number(e.target.value) || 40));
+                          pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, width } : item) });
+                        }}
+                      />
                     </label>
                     <label className="inspector-field">高度
-                      <input type="number" min="24" max="1200" value={Math.round(selectedCanvasItem.height)} onChange={(e) => {
-                        if (!activeTopology) return;
-                        const height = Math.min(1200, Math.max(24, Number(e.target.value) || 24));
-                        pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, height } : item) });
-                      }} />
+                      <input
+                        type="number"
+                        min="24"
+                        max="1200"
+                        value={Math.round(selectedCanvasItem.height)}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onChange={(e) => {
+                          if (!activeTopology) return;
+                          const height = Math.min(1200, Math.max(24, Number(e.target.value) || 24));
+                          pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).map((item) => item.item_id === selectedCanvasItem.item_id ? { ...item, height } : item) });
+                        }}
+                      />
                     </label>
                   </div>
                   <div className="dimension-presets">
@@ -3817,6 +4093,35 @@ export default function TopologyWorkspace({
                       </button>
                     ))}
                   </div>
+
+                  {selectedCanvasItem.kind === "rectangle" && (
+                    <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed var(--line, #e2e8f0)" }}>
+                      <span className="inspector-label" style={{ fontWeight: 600, display: "block", marginBottom: "6px" }}>区域排版与层级</span>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAutoFitCanvasItem(selectedCanvasItem.item_id)}
+                          title="根据区域内的设备自动调整区域框大小与中心位置"
+                        >
+                          自动包住区域节点
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleSendCanvasItemToBack(selectedCanvasItem.item_id)}
+                          title="将图元置于最底层"
+                        >
+                          置于底层
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleBringCanvasItemToFront(selectedCanvasItem.item_id)}
+                          title="将图元置于最顶层"
+                        >
+                          置于顶层
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -4034,12 +4339,18 @@ export default function TopologyWorkspace({
               <button type="button" className="danger" onClick={() => { void handleRemoveLink(contextMenu.id); setContextMenu(null); }}>删除链路</button>
             </>
           )}
-          {contextMenu.kind === "canvas_item" && (
-            <>
-              <button type="button" onClick={() => { setSelectedElement({ type: "canvas_item", itemId: contextMenu.id.replace(/^canvas-/, "") }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑图元</button>
-              <button type="button" className="danger" onClick={() => { void handleRemoveCanvasItem(contextMenu.id.replace(/^canvas-/, "")); setContextMenu(null); }}>删除图元</button>
-            </>
-          )}
+          {contextMenu.kind === "canvas_item" && (() => {
+            const rawId = contextMenu.id.replace(/^canvas-/, "");
+            return (
+              <>
+                <button type="button" onClick={() => { setSelectedElement({ type: "canvas_item", itemId: rawId }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑图元</button>
+                <button type="button" onClick={() => { handleAutoFitCanvasItem(rawId); setContextMenu(null); }}>自动包住区域节点</button>
+                <button type="button" onClick={() => { handleSendCanvasItemToBack(rawId); setContextMenu(null); }}>置于底层</button>
+                <button type="button" onClick={() => { handleBringCanvasItemToFront(rawId); setContextMenu(null); }}>置于顶层</button>
+                <button type="button" className="danger" onClick={() => { void handleRemoveCanvasItem(rawId); setContextMenu(null); }}>删除图元</button>
+              </>
+            );
+          })()}
           {contextMenu.kind === "canvas" && (
             <>
               <button type="button" onClick={() => { canvasApiRef.current?.selectAll(); setContextMenu(null); }}>全选对象</button>
@@ -4440,6 +4751,91 @@ export default function TopologyWorkspace({
         </dialog>
       )}
 
+      {isFullscreen && (
+        <div className="topology-presentation-bar" role="toolbar" aria-label="全屏演示控制器">
+          <div className="presentation-brand">
+            <span className="presentation-title">{activeTopology?.name || "拓扑演示"}</span>
+            <span className="presentation-badge">演示模式</span>
+          </div>
+
+          {bookmarks.length > 0 && (
+            <div className="presentation-view-nav">
+              <button
+                type="button"
+                className="presentation-btn"
+                title="上一视图"
+                onClick={() => {
+                  const currentIdx = bookmarks.findIndex((b) => b.name === currentBookmarkName);
+                  const prevIdx = currentIdx <= 0 ? bookmarks.length - 1 : currentIdx - 1;
+                  applyBookmark(bookmarks[prevIdx]);
+                }}
+              >
+                <IconChevronLeft size={14} />
+              </button>
+              <select
+                className="presentation-view-select"
+                value={currentBookmarkName}
+                aria-label="切换保存的视图"
+                onChange={(e) => {
+                  const found = bookmarks.find((b) => b.name === e.target.value);
+                  if (found) {
+                    applyBookmark(found);
+                  }
+                }}
+              >
+                <option value="" disabled>选择视图 ({bookmarks.length})</option>
+                {bookmarks.map((b) => (
+                  <option key={b.name} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="presentation-btn"
+                title="下一视图"
+                onClick={() => {
+                  const currentIdx = bookmarks.findIndex((b) => b.name === currentBookmarkName);
+                  const nextIdx = (currentIdx + 1) % bookmarks.length;
+                  applyBookmark(bookmarks[nextIdx]);
+                }}
+              >
+                <IconChevronRight size={14} />
+              </button>
+            </div>
+          )}
+
+          <div className="presentation-actions">
+            <button
+              type="button"
+              className="presentation-btn"
+              onClick={() => canvasApiRef.current?.fit()}
+              title="适配画布 (F)"
+            >
+              <IconExpand size={14} />
+              <span>适配</span>
+            </button>
+
+            <button
+              type="button"
+              className={`presentation-btn ${whiteboardActive ? "is-active" : ""}`}
+              onClick={handleToggleWhiteboard}
+              title="切换画板批注"
+            >
+              <IconEdit size={14} />
+              <span>{whiteboardActive ? "关闭批注" : "画板批注"}</span>
+            </button>
+
+            <button
+              type="button"
+              className="presentation-btn presentation-btn-exit"
+              onClick={handleToggleFullscreen}
+              title="退出全屏演示 (Esc / F11)"
+            >
+              <IconArrowsIn size={14} />
+              <span>退出</span>
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

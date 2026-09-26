@@ -53,3 +53,46 @@ test("packs disconnected devices into compact rows instead of a tall column", as
   expect(maxY).toBeLessThanOrEqual(430);
   expect(result.nodes.find((node) => node.node_id === "a")!.x).toBeLessThan(result.nodes.find((node) => node.node_id === "b")!.x);
 });
+
+test("layoutTopology automatically resizes canvas item rectangle zones enclosing member nodes", async () => {
+  const topology: Topology = {
+    topology_id: "t-zone",
+    name: "Zone Test",
+    description: "",
+    version: 1,
+    created_at: "",
+    updated_at: "",
+    nodes: [
+      { node_id: "core1", display_name: "Core-SW", role: "core", x: 100, y: 100 },
+      { node_id: "access1", display_name: "Access-SW", role: "access", x: 100, y: 120 },
+    ],
+    groups: [],
+    canvas_items: [
+      { item_id: "zone-dc", kind: "rectangle", text: "数据中心区", x: 100, y: 110, width: 200, height: 160 },
+    ],
+    links: [
+      { link_id: "l1", source_node_id: "core1", target_node_id: "access1", source_interface: "GE1", target_interface: "GE1", kind: "physical", source: "manual", status: "up" },
+    ],
+  };
+
+  const result = await layoutTopology(topology, "hierarchy-v");
+  const zone = result.canvas_items?.find((item) => item.item_id === "zone-dc");
+  expect(zone).toBeDefined();
+
+  const coreNode = result.nodes.find((n) => n.node_id === "core1")!;
+  const accessNode = result.nodes.find((n) => n.node_id === "access1")!;
+
+  // Tier-aware check: Core switch should be above access switch in hierarchy-v
+  expect(coreNode.y).toBeLessThan(accessNode.y);
+
+  // Auto-fit zone bounds check: Zone must enclose both nodes
+  const halfW = zone!.width / 2;
+  const halfH = zone!.height / 2;
+  for (const node of [coreNode, accessNode]) {
+    expect(node.x).toBeGreaterThanOrEqual(zone!.x - halfW);
+    expect(node.x).toBeLessThanOrEqual(zone!.x + halfW);
+    expect(node.y).toBeGreaterThanOrEqual(zone!.y - halfH);
+    expect(node.y).toBeLessThanOrEqual(zone!.y + halfH);
+  }
+});
+

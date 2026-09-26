@@ -87,6 +87,7 @@ type Props = {
   interactionMode?: "view" | "edit";
   gridEnabled: boolean;
   showInterfaces: boolean;
+  compactMode?: boolean;
   onSelectNode: (nodeId: string) => void;
   onSelectCanvasItem: (itemId: string) => void;
   onSelectLink: (linkId: string) => void;
@@ -736,47 +737,64 @@ export default function NetOpsCanvas(props: Props) {
     host?.addEventListener("contextmenu", preventContextMenu, { capture: true });
     void loadNetOpsCytoscape().then(() => {
       if (disposed || !hostRef.current || !window.cytoscape) return;
-      const cy = window.cytoscape({
-        container: hostRef.current,
-        layout: { name: "preset" },
-        // The sheet itself is fixed. Editing changes object coordinates only.
-        panningEnabled: true,
-        // Cytoscape 3.28 gates wheel zoom behind userPanningEnabled as well
-        // (see the wheel handler in cytoscape.min.js). Keeping panning on for
-        // every mode is what makes the wheel work outside layout mode.
-        userPanningEnabled: true,
-        // Default 1 means one mouse notch (deltaY 100) zooms 10^(100/250)
-        // = 2.5x. 0.25 puts a notch near 1.26x, which is the familiar feel.
-        wheelSensitivity: 0.25,
-        minZoom: 0.15,
-        maxZoom: 4,
-        boxSelectionEnabled: false,
-        pixelRatio: typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 3) : 1,
-        style: [
-          {
-            selector: "node",
-            style: {
-              label: "data(label)",
-              "text-valign": "bottom",
-              "text-halign": "center",
-              "text-margin-y": "8px",
-              "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
-              "font-size": 12,
-              "font-weight": 600,
-              color: "#0f172a",
-              "text-wrap": "ellipsis",
-              "text-max-width": 148,
-              "text-background-opacity": 0,
-              "text-border-width": 0,
-              width: 94,
-              height: 76,
-              shape: "roundrectangle",
-              "border-width": "data(statusWidth)",
-              "border-color": "data(statusColor)",
-              "text-opacity": "data(labelOpacity)",
-              "z-index": 10,
+      const origWarn = console.warn;
+      console.warn = (...args: unknown[]) => {
+        if (typeof args[0] === "string" && args[0].includes("wheel sensitivity")) return;
+        origWarn.apply(console, args);
+      };
+      let cy: Cy | undefined;
+      try {
+        cy = window.cytoscape({
+          container: hostRef.current,
+          layout: { name: "preset" },
+          // The sheet itself is fixed. Editing changes object coordinates only.
+          panningEnabled: true,
+          // Cytoscape 3.28 gates wheel zoom behind userPanningEnabled as well
+          // (see the wheel handler in cytoscape.min.js). Keeping panning on for
+          // every mode is what makes the wheel work outside layout mode.
+          userPanningEnabled: true,
+          // Default 1 means one mouse notch (deltaY 100) zooms 10^(100/250)
+          // = 2.5x. 0.25 puts a notch near 1.26x, which is the familiar feel.
+          wheelSensitivity: 0.25,
+          minZoom: 0.15,
+          maxZoom: 4,
+          boxSelectionEnabled: false,
+          pixelRatio: typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 3) : 1,
+          style: [
+            {
+              selector: "node",
+              style: {
+                label: "data(label)",
+                "text-valign": "bottom",
+                "text-halign": "center",
+                "text-margin-y": "8px",
+                "font-family": 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+                "font-size": 12,
+                "font-weight": 600,
+                color: "#0f172a",
+                "text-wrap": "wrap",
+                "text-max-width": 128,
+                "text-background-opacity": 0,
+                "text-border-width": 0,
+                width: 76,
+                height: 60,
+                shape: "roundrectangle",
+                "border-width": "data(statusWidth)",
+                "border-color": "data(statusColor)",
+                "text-opacity": "data(labelOpacity)",
+                "z-index": 10,
+              },
             },
-          },
+            {
+              selector: "node.compact",
+              style: {
+                width: 52,
+                height: 42,
+                "font-size": 11,
+                "text-max-width": 96,
+                "text-margin-y": "6px",
+              },
+            },
           // Drawing items deliberately have no vendor field. Keeping this data
           // mapping on asset nodes prevents Cytoscape from warning on every
           // canvas refresh when it encounters a text box or an ellipse.
@@ -897,7 +915,7 @@ export default function NetOpsCanvas(props: Props) {
               "text-valign": "center",
               "text-halign": "center",
               "text-opacity": "data(labelOpacity)",
-              "z-index": 2,
+              "z-index": 1,
             },
           },
           // A text box with no border and no fill is an invisible hit area: the
@@ -986,7 +1004,12 @@ export default function NetOpsCanvas(props: Props) {
           },
         ],
       });
-      cyRef.current = cy;
+    } catch (err) {
+      console.error("Failed to initialize Cytoscape", err);
+      return;
+    }
+    if (!cy) return;
+    cyRef.current = cy;
       // Prevent low-resolution texture caching for text and interface labels:
       // Cytoscape by default rasterizes labels into fixed power-of-two offscreen
       // textures and scales them up with drawImage(), causing blurry text on zoom.
@@ -1069,13 +1092,26 @@ export default function NetOpsCanvas(props: Props) {
           }
           return;
         }
+        if (current.armedNodeType) {
+          const id = event.target.isNode?.() ? (event.target.id?.() || "") : "";
+          if (!id || id.startsWith("canvas-") || id.startsWith("group-")) {
+            const host = hostRef.current;
+            const point = event.position || (() => {
+              const nativeEvent = event.originalEvent;
+              if (!nativeEvent || !host) return null;
+              const local = toHostPoint(host, nativeEvent.clientX, nativeEvent.clientY);
+              const pan = cy.pan();
+              const zoom = cy.zoom();
+              return { x: (local.x - pan.x) / zoom, y: (local.y - pan.y) / zoom };
+            })();
+            if (point) current.onPlaceNodeType(current.armedNodeType, point);
+            return;
+          }
+        }
         if (event.target.isNode?.()) {
           const id = event.target.id?.() || "";
           if (!id) return;
           if (id.startsWith("group-")) return;
-          // Clicking an object is a decision about that object, not a
-          // placement; it ends the palette's wait rather than dropping a
-          // device on top of what was just clicked.
           current.onDisarmNodeType();
           if (id.startsWith("canvas-")) {
             if (current.mode !== "connect") {
@@ -1376,8 +1412,20 @@ export default function NetOpsCanvas(props: Props) {
     }
     (window as unknown as { __netops_cy?: Cy | null }).__netops_cy = cy;
     propsRef.current.onReady?.({
-      exportPNG: (options) => cy.png({ full: true, scale: 2, bg: "#ffffff", ...options }),
-      exportSVG: (options) => cy.svg({ full: true, ...options }),
+      exportPNG: (options) => {
+        try {
+          return cy.png({ full: true, scale: 2, bg: "#ffffff", ...options });
+        } catch {
+          return "";
+        }
+      },
+      exportSVG: (options) => {
+        try {
+          return typeof (cy as any).svg === "function" ? (cy as any).svg({ full: true, ...options }) : "";
+        } catch {
+          return "";
+        }
+      },
       fit: () => {
         cy.fit(undefined, 48);
         if (cy.zoom() > 1.0) {
@@ -1616,7 +1664,13 @@ export default function NetOpsCanvas(props: Props) {
         const vendorTint = "#fbfcfd";
         const caption = props.nodeOverlayLines?.[node.node_id] || "";
         const name = node.display_name || "未命名设备";
-        return { group: "nodes", classes: dimClass(node.node_id, caption ? "drawing-node has-overlay" : "drawing-node"), data: { id: node.node_id, label: caption ? `${name}\n${caption}` : name, status, statusColor, statusWidth: status === "unknown" ? 1.5 : 2.5, vendorTint, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
+        const subtitle = caption || node.ip || "";
+        const label = subtitle ? `${name}\n${subtitle}` : name;
+        const classes = [
+          subtitle ? "drawing-node has-overlay" : "drawing-node",
+          props.compactMode ? "compact" : "",
+        ].filter(Boolean).join(" ");
+        return { group: "nodes", classes: dimClass(node.node_id, classes), data: { id: node.node_id, label, status, statusColor, statusWidth: status === "unknown" ? 1.5 : 2.5, vendorTint, icon: netOpsIconForDeviceType(type) }, position: { x: node.x, y: node.y } };
       }),
       ...(props.topology.canvas_items || []).map((item) => {
         const style = { ...canvasItemDefaults[item.kind], ...item.style };
@@ -1698,7 +1752,7 @@ export default function NetOpsCanvas(props: Props) {
         setViewport({ ...cy.pan(), zoom: cy.zoom() });
       }, 0);
     }
-  }, [rendererReady, props.topology, props.dimmedNodeIds, props.nodeObservationStatus, props.nodeOverlayLines, theme]);
+  }, [rendererReady, props.topology, props.dimmedNodeIds, props.nodeObservationStatus, props.nodeOverlayLines, props.compactMode, theme]);
 
 
 

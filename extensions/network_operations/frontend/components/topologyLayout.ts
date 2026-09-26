@@ -77,6 +77,28 @@ function gridPositions(nodeIds: string[]): Map<string, PositionedNode> {
   return positions;
 }
 
+function nodeTierScore(node?: Topology["nodes"][number]): number {
+  if (!node) return 50;
+  const role = (node.role || "").toLowerCase();
+  const type = (node.device_type || "").toLowerCase();
+  const name = (node.display_name || node.node_id || "").toLowerCase();
+
+  // Tier 1: External / Edge / Carrier / ISP / Cloud
+  if (role.includes("edge") || role.includes("isp") || type.includes("isp") || type.includes("cloud") || name.includes("isp") || name.includes("出口") || name.includes("互联网")) return 10;
+  // Tier 2: Security / Firewall / VPN
+  if (role.includes("firewall") || role.includes("sec") || role.includes("vpn") || type.includes("firewall") || type.includes("vpn") || name.includes("fw") || name.includes("防火墙") || name.includes("vpn")) return 20;
+  // Tier 3: Core / Spine
+  if (role.includes("core") || role.includes("spine") || name.includes("core") || name.includes("核心") || name.includes("spine")) return 30;
+  // Tier 4: Aggregation / Distribution
+  if (role.includes("agg") || role.includes("dist") || name.includes("agg") || name.includes("汇聚")) return 40;
+  // Tier 5: Access / WLC / Leaf
+  if (role.includes("access") || role.includes("leaf") || role.includes("wlc") || type.includes("wlc") || name.includes("access") || name.includes("接入") || name.includes("ac")) return 50;
+  // Tier 6: Endpoints / Server / Storage / AP / Terminal
+  if (role.includes("server") || role.includes("storage") || type.includes("server") || type.includes("storage") || type.includes("ap") || role.includes("terminal") || type.includes("terminal") || name.includes("server") || name.includes("ap") || name.includes("pc")) return 60;
+
+  return 50;
+}
+
 /**
  * Lay out each connected component structurally, then pack the components into
  * compact rows. ELK's default component placer favours tall columns when a
@@ -96,6 +118,7 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
   } else {
     const { default: ELK } = await import("elkjs/lib/elk.bundled.js");
     const elk = new ELK();
+    const nodeById = new Map(topology.nodes.map((n) => [n.node_id, n]));
     let cursorX = 70;
     let cursorY = 70;
     let rowHeight = 0;
@@ -104,23 +127,34 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
     for (const component of connectedComponents(topology)) {
       const componentIds = new Set(component);
       const componentLinks = topology.links.filter((link) => componentIds.has(link.source_node_id) && componentIds.has(link.target_node_id));
+      const edges = componentLinks.map((link) => {
+        const srcNode = nodeById.get(link.source_node_id);
+        const tgtNode = nodeById.get(link.target_node_id);
+        const srcTier = nodeTierScore(srcNode);
+        const tgtTier = nodeTierScore(tgtNode);
+        if (srcTier > tgtTier) {
+          return { id: link.link_id, sources: [link.target_node_id], targets: [link.source_node_id] };
+        }
+        return { id: link.link_id, sources: [link.source_node_id], targets: [link.target_node_id] };
+      });
+
       const result = await elk.layout({
         id: `component-${component[0]}`,
         layoutOptions: {
           "elk.algorithm": "layered",
           "elk.direction": algorithm === "hierarchy-v" ? "DOWN" : "RIGHT",
-          "elk.spacing.nodeNode": "90",
-          "elk.layered.spacing.nodeNodeBetweenLayers": "140",
+          "elk.spacing.nodeNode": "80",
+          "elk.layered.spacing.nodeNodeBetweenLayers": "130",
           "elk.padding": "[top=0,left=0,bottom=0,right=0]",
         },
-        children: component.map((id) => ({ id, width: 160, height: 130 })),
-        edges: componentLinks.map((link) => ({ id: link.link_id, sources: [link.source_node_id], targets: [link.target_node_id] })),
+        children: component.map((id) => ({ id, width: 140, height: 110 })),
+        edges,
       });
       const laidOut = result.children || [];
       const minX = Math.min(...laidOut.map((node) => node.x || 0));
       const minY = Math.min(...laidOut.map((node) => node.y || 0));
-      const width = Math.max(...laidOut.map((node) => (node.x || 0) - minX + 160));
-      const height = Math.max(...laidOut.map((node) => (node.y || 0) - minY + 130));
+      const width = Math.max(...laidOut.map((node) => (node.x || 0) - minX + 140));
+      const height = Math.max(...laidOut.map((node) => (node.y || 0) - minY + 110));
       if (cursorX > 70 && cursorX + width > rowWidth) {
         cursorX = 70;
         cursorY += rowHeight + 100;
@@ -144,7 +178,37 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
     const y = Math.min(...members.map((node) => node.y)) - 60;
     return { ...group, x, y, width: Math.max(...members.map((node) => node.x)) - x + 195, height: Math.max(...members.map((node) => node.y)) - y + 165 };
   });
-  return { ...topology, nodes, groups };
+
+  const canvas_items = (topology.canvas_items || []).map((item) => {
+    if (item.kind !== "rectangle") return item;
+    const halfW = (item.width || 200) / 2;
+    const halfH = (item.height || 100) / 2;
+    const memberIds = topology.nodes
+      .filter((n) => n.x >= item.x - halfW && n.x <= item.x + halfW && n.y >= item.y - halfH && n.y <= item.y + halfH)
+      .map((n) => n.node_id);
+    if (memberIds.length === 0) return item;
+    const laidOutMembers = nodes.filter((n) => memberIds.includes(n.node_id));
+    if (laidOutMembers.length === 0) return item;
+
+    const xs = laidOutMembers.map((n) => n.x);
+    const ys = laidOutMembers.map((n) => n.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const padX = 60;
+    const padY = 50;
+    return {
+      ...item,
+      x: Math.round((minX + maxX) / 2),
+      y: Math.round((minY + maxY) / 2),
+      width: Math.max(item.width, Math.round(maxX - minX + padX * 2)),
+      height: Math.max(item.height, Math.round(maxY - minY + padY * 2)),
+    };
+  });
+
+  return { ...topology, nodes, groups, canvas_items };
 }
 
 export function linkHandles(source: { x: number; y: number }, target: { x: number; y: number }) {

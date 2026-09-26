@@ -94,6 +94,12 @@ def _topology_graph_for_read(record: dict[str, Any]) -> tuple[list[dict[str, Any
             "group_id": raw.get("group_id") or None,
             "x": raw.get("x", 0.0),
             "y": raw.get("y", 0.0),
+            "ip": str(raw.get("ip") or "").strip() or None,
+            "vendor": str(raw.get("vendor") or "").strip() or None,
+            "model": str(raw.get("model") or "").strip() or None,
+            "role": str(raw.get("role") or "").strip() or None,
+            "vlan": str(raw.get("vlan") or "").strip() or None,
+            "location": str(raw.get("location") or "").strip() or None,
         }
         nodes.append(node)
         if legacy_id:
@@ -199,6 +205,12 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             "group_id": str(raw.get("group_id") or "").strip() or None,
             "x": x,
             "y": y,
+            "ip": str(raw.get("ip") or "").strip()[:48] or None,
+            "vendor": str(raw.get("vendor") or "").strip()[:48] or None,
+            "model": str(raw.get("model") or "").strip()[:48] or None,
+            "role": str(raw.get("role") or "").strip()[:32] or None,
+            "vlan": str(raw.get("vlan") or "").strip()[:32] or None,
+            "location": str(raw.get("location") or "").strip()[:64] or None,
         })
 
     raw_groups = payload.get("groups") if "groups" in payload else (existing.get("groups") if existing else [])
@@ -546,6 +558,7 @@ def _topology_structure_signature(topology: dict[str, Any]) -> str:
                     str(node.get("device_type") or ""),
                     str(node.get("display_name") or ""),
                     str(node.get("group_id") or ""),
+                    str(node.get("ip") or ""),
                     ",".join(sorted(str(item) for item in (node.get("labels") or []))),
                 ]
                 for node in (topology.get("nodes") or [])
@@ -719,6 +732,12 @@ def _node_facts(node: dict[str, Any]) -> dict[str, Any]:
         "device_type": str(node.get("device_type") or ""),
         "display_name": str(node.get("display_name") or ""),
         "group_id": str(node.get("group_id") or ""),
+        "ip": str(node.get("ip") or ""),
+        "vendor": str(node.get("vendor") or ""),
+        "model": str(node.get("model") or ""),
+        "role": str(node.get("role") or ""),
+        "vlan": str(node.get("vlan") or ""),
+        "location": str(node.get("location") or ""),
     }
 
 
