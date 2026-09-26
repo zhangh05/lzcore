@@ -263,13 +263,13 @@ def _normalize_node_ip(value: Any) -> str | None:
     if not text:
         return None
     if len(text) > 48:
-        return text[:48]
+        raise ValueError("topology_ip_invalid")
     clean_ip = text.split("/")[0].strip()
     try:
         ipaddress.ip_address(clean_ip)
         return text
-    except ValueError:
-        return text if len(text) <= 48 else None
+    except ValueError as exc:
+        raise ValueError("topology_ip_invalid") from exc
 
 
 @_drawing_transaction
@@ -588,6 +588,11 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         node_id = str(update.get("node_id") or "").strip()
         if not node_id:
             raise ValueError("node_update_requires_node_id")
+        if "ip" in update and update["ip"] is not None:
+            try:
+                _normalize_node_ip(update["ip"])
+            except ValueError:
+                update["ip"] = None
         nodes_by_id[node_id] = {**nodes_by_id.get(node_id, {}), **update, "node_id": node_id}
 
     for node_id in remove_node_ids:
