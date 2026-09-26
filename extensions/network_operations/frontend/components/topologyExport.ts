@@ -50,6 +50,43 @@ export function downloadBlob(blob: Blob, filename: string): void {
   }, 60_000);
 }
 
+/**
+ * 桌面环境（pywebview）下弹出原生"另存为"对话框保存文件；
+ * 浏览器环境降级为 downloadBlob 触发浏览器下载。
+ *
+ * @returns 保存成功时返回保存路径字符串；用户取消或浏览器下载时返回 null
+ */
+export async function nativeSaveBlob(
+  blob: Blob,
+  filename: string,
+  mime: string
+): Promise<string | null> {
+  // 检测是否运行在 pywebview 桌面容器内
+  const api = (window as unknown as Record<string, unknown>)["pywebview"] as
+    | { api?: { save_file?: (f: string, d: string, m: string) => Promise<{ ok: boolean; path?: string; error?: string }> } }
+    | undefined;
+
+  if (api?.api?.save_file) {
+    // 桌面模式：将 Blob 转为 base64，调用 Python 原生保存对话框
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+      reader.onerror = () => reject(new Error("blob_read_error"));
+      reader.readAsDataURL(blob);
+    });
+    const result = await api.api.save_file(filename, base64, mime);
+    if (result.ok && result.path) {
+      return result.path;
+    }
+    // 用户取消或失败，不触发浏览器下载
+    return null;
+  }
+
+  // 浏览器模式降级：普通 <a> 下载
+  downloadBlob(blob, filename);
+  return null;
+}
+
 function escapeXml(unsafe: string): string {
   return (unsafe || "")
     .replace(/&/g, "&amp;")

@@ -64,7 +64,7 @@ import { mergeTopologies, type MergeConflict, type MergeStats } from "./topology
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import { TopologyWhiteboard } from "./TopologyWhiteboard";
-import { downloadBlob, exportTopologyToSvg, svgToPngDataUrl, svgToPngBlob } from "./topologyExport";
+import { exportTopologyToSvg, svgToPngDataUrl, svgToPngBlob, nativeSaveBlob } from "./topologyExport";
 import "./TopologyStudio.css";
 
 
@@ -1766,8 +1766,10 @@ export default function TopologyWorkspace({
       try {
         const svgContent = getSvg();
         const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
-        downloadBlob(blob, `${safeName}.svg`);
-        setNotice(`已导出 ${safeName}.svg`);
+        const savedPath = await nativeSaveBlob(blob, `${safeName}.svg`, "image/svg+xml");
+        if (savedPath !== null || !(window as unknown as Record<string, unknown>)["pywebview"]) {
+          setNotice(savedPath ? `已导出至 ${savedPath}` : `已导出 ${safeName}.svg`);
+        }
       } catch (e) {
         console.error("SVG export failed:", e);
         setNotice("SVG 导出失败，请稍后重试", false);
@@ -1782,8 +1784,10 @@ export default function TopologyWorkspace({
         const pngDataUrl = await svgToPngDataUrl(svgContent, 2);
         const pixels = await pngToRgbImage(pngDataUrl);
         const pdf = await buildImagePdf(pixels);
-        downloadBlob(new Blob([pdf], { type: "application/pdf" }), `${safeName}.pdf`);
-        setNotice(`已导出 ${safeName}.pdf`);
+        const savedPath = await nativeSaveBlob(new Blob([pdf], { type: "application/pdf" }), `${safeName}.pdf`, "application/pdf");
+        if (savedPath !== null || !(window as unknown as Record<string, unknown>)["pywebview"]) {
+          setNotice(savedPath ? `已导出至 ${savedPath}` : `已导出 ${safeName}.pdf`);
+        }
       } catch (e) {
         console.error("PDF export failed:", e);
         setNotice("PDF 导出失败，请改用 PNG 或 SVG", false);
@@ -1796,8 +1800,10 @@ export default function TopologyWorkspace({
       setNotice("正在生成 PNG…");
       const svgContent = getSvg();
       const blob = await svgToPngBlob(svgContent, 2);
-      downloadBlob(blob, `${safeName}.png`);
-      setNotice(`已导出 ${safeName}.png`);
+      const savedPath = await nativeSaveBlob(blob, `${safeName}.png`, "image/png");
+      if (savedPath !== null || !(window as unknown as Record<string, unknown>)["pywebview"]) {
+        setNotice(savedPath ? `已导出至 ${savedPath}` : `已导出 ${safeName}.png`);
+      }
     } catch (e) {
       console.error("PNG export failed:", e);
       setNotice("PNG 导出失败，请改用 SVG", false);

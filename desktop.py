@@ -227,6 +227,73 @@ def find_free_port() -> int:
     return port
 
 
+class DesktopApi:
+    """
+    通过 pywebview js_api 暴露给前端的原生桌面能力。
+    JS 端通过 window.pywebview.api.save_file(...) 调用。
+    """
+
+    def save_file(self, filename: str, data_base64: str, mime: str = "image/png") -> dict:
+        """
+        弹出系统原生"另存为"对话框，将 base64 编码的文件内容写入用户选择的路径。
+
+        Args:
+            filename: 建议的文件名（含扩展名），显示在对话框默认文件名框中
+            data_base64: 文件二进制内容的 base64 编码字符串（不含 data: 前缀）
+            mime: MIME 类型，用于过滤对话框文件类型
+
+        Returns:
+            {"ok": True, "path": "<保存路径>"} 或 {"ok": False, "error": "<原因>"}
+        """
+        import base64
+        try:
+            # 解析 base64（兼容带 data:xxx;base64, 前缀的格式）
+            if "," in data_base64:
+                data_base64 = data_base64.split(",", 1)[1]
+            raw = base64.b64decode(data_base64)
+        except Exception as exc:
+            logger.error("save_file: base64 解码失败: %s", exc)
+            return {"ok": False, "error": f"base64_decode_error: {exc}"}
+
+        # 根据 MIME 构建对话框文件类型过滤器
+        ext_map = {
+            "image/png": [("PNG 图像", "*.png"), ("所有文件", "*.*")],
+            "image/svg+xml": [("SVG 矢量图", "*.svg"), ("所有文件", "*.*")],
+            "application/pdf": [("PDF 文档", "*.pdf"), ("所有文件", "*.*")],
+        }
+        filetypes = ext_map.get(mime, [("所有文件", "*.*")])
+
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()          # 隐藏 Tk 主窗口，只显示文件对话框
+            root.attributes("-topmost", True)   # 置顶，避免被 WebView 窗口遮挡
+            save_path = filedialog.asksaveasfilename(
+                parent=root,
+                title="导出拓扑图",
+                initialfile=filename,
+                defaultextension=f".{filename.rsplit('.', 1)[-1]}" if "." in filename else "",
+                filetypes=filetypes,
+            )
+            root.destroy()
+        except Exception as exc:
+            logger.error("save_file: 打开保存对话框失败: %s", exc)
+            return {"ok": False, "error": f"dialog_error: {exc}"}
+
+        if not save_path:
+            # 用户点击了取消
+            return {"ok": False, "error": "cancelled"}
+
+        try:
+            Path(save_path).write_bytes(raw)
+            logger.info("save_file: 文件已保存至 %s (%d bytes)", save_path, len(raw))
+            return {"ok": True, "path": save_path}
+        except Exception as exc:
+            logger.error("save_file: 写文件失败: %s", exc)
+            return {"ok": False, "error": f"write_error: {exc}"}
+
+
 class BackgroundServerThread(threading.Thread):
     """在后台独立线程中托管 Flask 服务"""
 
@@ -320,7 +387,7 @@ def main():
     try:
         from agent import __version__ as APP_VERSION
     except Exception:
-        APP_VERSION = "3.2.1"
+        APP_VERSION = "3.2.2"
 
     logger.info("启动联智中枢桌面内核 v%s ...", APP_VERSION)
     logger.info("运行时资源目录: %s", BUNDLE_DIR)
@@ -402,6 +469,7 @@ def main():
         pass
 
     # 创建桌面窗口：初始贴合当前屏幕（最大化铺满工作区，保留任务栏）
+    desktop_api = DesktopApi()
     window_kwargs = {
         "title": window_title,
         "url": app_url,
@@ -412,6 +480,7 @@ def main():
         "maximized": True,  # 初始尺寸直接贴合当前屏幕，全屏展示画布
         "text_select": True,
         "background_color": "#ffffff",
+        "js_api": desktop_api,  # 原生桌面能力（保存对话框等）暴露给前端
     }
 
     window = webview.create_window(**window_kwargs)
