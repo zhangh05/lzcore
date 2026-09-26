@@ -446,3 +446,31 @@ def test_nodes_lock_group_persistence(workspace):
     assert nodes_by_id["sw2"]["lock_group"] == "group_alpha"
     assert nodes_by_id["sw3"]["lock_group"] is None
 
+
+def test_nodes_zone_persistence_and_auto_synthesis(workspace):
+    """Verify that node zone is persisted and auto-synthesizes visual zone bounding box."""
+    saved = drawings.save_topology(workspace, {
+        "name": "智能区域拓扑",
+        "nodes": [
+            {"node_id": "core1", "display_name": "核心1", "x": 100, "y": 100, "zone": "核心骨干区"},
+            {"node_id": "core2", "display_name": "核心2", "x": 300, "y": 100, "zone": "核心骨干区"},
+            {"node_id": "edge1", "display_name": "边界", "x": 200, "y": 400},
+        ],
+    })
+    topo = drawings.get_topology(workspace, saved["topology_id"])
+    nodes_by_id = {n["node_id"]: n for n in topo["nodes"]}
+    assert nodes_by_id["core1"]["zone"] == "核心骨干区"
+    assert nodes_by_id["core2"]["zone"] == "核心骨干区"
+    assert nodes_by_id["edge1"]["zone"] is None
+
+    # Verify auto-synthesized canvas_item for "核心骨干区"
+    items = topo.get("canvas_items") or []
+    assert len(items) == 1
+    zone_item = items[0]
+    assert zone_item["text"] == "核心骨干区"
+    assert zone_item["x"] == 200.0  # midpoint of 100 and 300
+    assert zone_item["y"] == 100.0  # midpoint of 100 and 100
+    assert zone_item["width"] >= 220.0
+    assert zone_item["height"] >= 170.0
+
+

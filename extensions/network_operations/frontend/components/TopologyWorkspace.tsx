@@ -77,6 +77,7 @@ export type TopologyNode = {
   display_name?: string;
   labels?: string[];
   group_id?: string;
+  zone?: string;
   lock_group?: string;
   ip?: string;
   vendor?: string;
@@ -127,8 +128,41 @@ export type TopologyCanvasItem = {
   y: number;
   width: number;
   height: number;
-  style?: { fill?: string; border?: string; color?: string };
+  style?: { fill?: string; border?: string; color?: string; borderWidth?: number };
 };
+
+export const ZONE_COLOR_PRESETS = [
+  { key: "blue", name: "商务蓝", fill: "#eff6ff", border: "#93c5fd", color: "#1e40af" },
+  { key: "green", name: "翡翠绿", fill: "#f0fdf4", border: "#86efac", color: "#166534" },
+  { key: "amber", name: "暖金橙", fill: "#fffbeb", border: "#fcd34d", color: "#92400e" },
+  { key: "purple", name: "科技紫", fill: "#faf5ff", border: "#d8b4fe", color: "#6b21a8" },
+  { key: "teal", name: "薄荷青", fill: "#f0fdfa", border: "#5eead4", color: "#115e59" },
+  { key: "slate", name: "典雅灰", fill: "#f8fafc", border: "#cbd5e1", color: "#334155" },
+] as const;
+
+export function calculateZoneBounds(nodes: TopologyNode[]): { x: number; y: number; width: number; height: number } {
+  if (!nodes.length) {
+    return { x: 300, y: 200, width: 320, height: 220 };
+  }
+  const xs = nodes.map((n) => n.x);
+  const ys = nodes.map((n) => n.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  const PAD_X = 90;
+  const PAD_Y = 80;
+  const MIN_W = 240;
+  const MIN_H = 180;
+
+  const w = Math.max(MIN_W, Math.round((maxX - minX) + PAD_X * 2));
+  const h = Math.max(MIN_H, Math.round((maxY - minY) + PAD_Y * 2));
+  const cx = Math.round((minX + maxX) / 2);
+  const cy = Math.round((minY + maxY) / 2);
+
+  return { x: cx, y: cy, width: w, height: h };
+}
 
 export type TopologyGroup = {
   group_id: string;
@@ -1018,6 +1052,9 @@ export default function TopologyWorkspace({
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
   const [groupKindInput, setGroupKindInput] = useState<"as" | "region" | "datacenter" | "tenant" | "custom">("datacenter");
+  const [showCreateZoneModal, setShowCreateZoneModal] = useState(false);
+  const [zoneNameInput, setZoneNameInput] = useState("");
+  const [zoneColorIndex, setZoneColorIndex] = useState(0);
   const [showManualNodeModal, setShowManualNodeModal] = useState(false);
   const [manualNodeName, setManualNodeName] = useState("");
   const [manualNodeType, setManualNodeType] = useState("switch");
@@ -1683,42 +1720,146 @@ export default function TopologyWorkspace({
     const item = activeTopology.canvas_items.find((i) => i.item_id === itemId);
     if (!item) return;
 
-    const halfW = (item.width || 200) / 2;
-    const halfH = (item.height || 100) / 2;
-    const insideNodes = activeTopology.nodes.filter(
+    // 1. Match member nodes by group_id, zone, or text
+    const itemText = (item.text || "").trim();
+    let memberNodes = activeTopology.nodes.filter(
       (n) =>
-        n.x >= item.x - halfW &&
-        n.x <= item.x + halfW &&
-        n.y >= item.y - halfH &&
-        n.y <= item.y + halfH
+        (n.group_id && n.group_id === itemId) ||
+        (n.zone && n.zone === itemId) ||
+        (itemText && n.zone && n.zone === itemText) ||
+        (itemText && n.group_id && n.group_id === itemText)
     );
 
-    if (insideNodes.length === 0) {
-      setNotice("当前区域内未检测到设备节点，无法自动调整大小", false);
+    // 2. Fall back to bounding box intersection
+    if (memberNodes.length === 0) {
+      const halfW = (item.width || 200) / 2;
+      const halfH = (item.height || 100) / 2;
+      const left = item.x - halfW;
+      const right = item.x + halfW;
+      const top = item.y - halfH;
+      const bottom = item.y + halfH;
+      memberNodes = activeTopology.nodes.filter(
+        (n) => n.x + 38 >= left && n.x - 38 <= right && n.y + 50 >= top && n.y - 30 <= bottom
+      );
+    }
+
+    // 3. Fall back to currently selected nodes if any
+    if (memberNodes.length === 0 && canvasSelectedElementIds.length > 0) {
+      const selectedIds = new Set(canvasSelectedElementIds);
+      memberNodes = activeTopology.nodes.filter((n) => selectedIds.has(n.node_id));
+    }
+
+    if (memberNodes.length === 0) {
+      setNotice("未检测到关联设备节点，请先在画布上选择要包裹的设备", false);
       return;
     }
 
-    const xs = insideNodes.map((n) => n.x);
-    const ys = insideNodes.map((n) => n.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
+    const bounds = calculateZoneBounds(memberNodes);
+    const memberIds = new Set(memberNodes.map((n) => n.node_id));
 
-    const padX = 60;
-    const padY = 50;
-    const newW = Math.max(160, Math.round((maxX - minX) + padX * 2));
-    const newH = Math.max(100, Math.round((maxY - minY) + padY * 2));
-    const newX = Math.round((minX + maxX) / 2);
-    const newY = Math.round((minY + maxY) / 2);
+    const nextNodes = activeTopology.nodes.map((n) =>
+      memberIds.has(n.node_id) ? { ...n, zone: item.text || n.zone, group_id: itemId } : n
+    );
 
     pushState({
       ...activeTopology,
+      nodes: nextNodes,
       canvas_items: activeTopology.canvas_items.map((ci) =>
-        ci.item_id === itemId ? { ...ci, x: newX, y: newY, width: newW, height: newH } : ci
+        ci.item_id === itemId ? { ...ci, x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : ci
       ),
     });
-    setNotice(`已自动包住 ${insideNodes.length} 台设备 (${newW} × ${newH})`);
+    setNotice(`已自适应贴合【${item.text || "区域"}】，完美包裹 ${memberNodes.length} 台设备`);
+  }, [activeTopology, canvasSelectedElementIds, pushState, setNotice]);
+
+  const handleOpenCreateZone = useCallback(() => {
+    if (!activeTopology) return;
+    const selected = activeTopology.nodes.filter((n) => canvasSelectedElementIds.includes(n.node_id));
+    if (selected.length === 0) {
+      setNotice("请先框选或多选至少一台设备后再创建区域", false);
+      return;
+    }
+    const first = selected[0];
+    const defaultName = first.role === "core" ? "核心骨干区" : first.role === "aggregation" ? "汇聚区域" : first.role === "access" ? "接入区域" : "业务功能区";
+    setZoneNameInput(defaultName);
+    setZoneColorIndex((activeTopology.canvas_items || []).length % ZONE_COLOR_PRESETS.length);
+    setShowCreateZoneModal(true);
+  }, [activeTopology, canvasSelectedElementIds, setNotice]);
+
+  const handleConfirmCreateZone = useCallback((e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeTopology) return;
+    const selectedIds = new Set(canvasSelectedElementIds);
+    const selected = activeTopology.nodes.filter((n) => selectedIds.has(n.node_id));
+    if (!selected.length) return;
+
+    const bounds = calculateZoneBounds(selected);
+    const preset = ZONE_COLOR_PRESETS[zoneColorIndex % ZONE_COLOR_PRESETS.length];
+    const zoneName = zoneNameInput.trim() || "未命名区域";
+    const zoneId = `zone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+    const newZoneItem: TopologyCanvasItem = {
+      item_id: zoneId,
+      kind: "rectangle",
+      text: zoneName,
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      style: {
+        fill: preset.fill,
+        border: preset.border,
+        color: preset.color,
+        borderWidth: 2,
+      },
+    };
+
+    const nextNodes = activeTopology.nodes.map((n) =>
+      selectedIds.has(n.node_id) ? { ...n, zone: zoneName, group_id: zoneId } : n
+    );
+
+    pushState({
+      ...activeTopology,
+      nodes: nextNodes,
+      canvas_items: [newZoneItem, ...(activeTopology.canvas_items || [])],
+    });
+
+    setShowCreateZoneModal(false);
+    setNotice(`已生成智能区域【${zoneName}】，自适应包裹 ${selected.length} 台设备`);
+  }, [activeTopology, canvasSelectedElementIds, pushState, setNotice, zoneColorIndex, zoneNameInput]);
+
+  const handleSelectZoneMembers = useCallback((nodeId: string) => {
+    if (!activeTopology) return;
+    const target = activeTopology.nodes.find((n) => n.node_id === nodeId);
+    if (!target) return;
+    const zoneKey = target.zone || target.group_id;
+    if (!zoneKey) return;
+    const peers = activeTopology.nodes
+      .filter((n) => n.zone === zoneKey || n.group_id === zoneKey)
+      .map((n) => n.node_id);
+    if (peers.length > 0) {
+      canvasApiRef.current?.selectElements?.(peers);
+      setNotice(`已选中同区域【${target.zone || "未命名区域"}】的 ${peers.length} 台设备`);
+    }
+  }, [activeTopology, setNotice]);
+
+  const handleLeaveZone = useCallback((nodeId: string) => {
+    if (!activeTopology) return;
+    const nextNodes = activeTopology.nodes.map((n) =>
+      n.node_id === nodeId ? { ...n, zone: undefined, group_id: undefined } : n
+    );
+    pushState({ ...activeTopology, nodes: nextNodes });
+    setNotice("已将设备移出所属区域");
+  }, [activeTopology, pushState, setNotice]);
+
+  const handleJoinZone = useCallback((nodeId: string, zoneItemId: string) => {
+    if (!activeTopology) return;
+    const zoneItem = (activeTopology.canvas_items || []).find((ci) => ci.item_id === zoneItemId);
+    const zoneName = zoneItem?.text || "区域";
+    const nextNodes = activeTopology.nodes.map((n) =>
+      n.node_id === nodeId ? { ...n, zone: zoneName, group_id: zoneItemId } : n
+    );
+    pushState({ ...activeTopology, nodes: nextNodes });
+    setNotice(`已将设备加入区域【${zoneName}】`);
   }, [activeTopology, pushState, setNotice]);
 
   const handleSendCanvasItemToBack = useCallback((itemId: string) => {
@@ -2752,36 +2893,43 @@ export default function TopologyWorkspace({
 
 
 
-        {/* Group Palette */}
+        {/* Smart Zones Palette */}
         <div className="topology-sidebar-section palette-group-section">
           <div className="section-title-row">
-            <span className="section-title">拓扑分组 ({activeTopology?.groups?.length || 0})</span>
+            <span className="section-title">智能区域 ({(activeTopology?.canvas_items || []).filter((ci) => ci.kind === "rectangle" || ci.kind === "ellipse").length})</span>
             <Button
               size="sm"
               icon={<IconPlus size={12} />}
-              onClick={() => {
-                setShowGroupModal(true);
-                setGroupNameInput("");
-              }}
+              onClick={handleOpenCreateZone}
+              title={selectedNodes.length ? "将当前选中的设备编为新区域" : "框选设备后可直接一键编为智能区域"}
             >
-              分组
+              新建区域
             </Button>
           </div>
           <div className="palette-group-list">
-            {activeTopology?.groups?.length ? (
-              activeTopology.groups.map((g) => (
-                <div
-                  key={g.group_id}
-                  className={`palette-group-item ${selectedElement?.type === "group" && selectedElement.groupId === g.group_id ? "active" : ""}`}
-                  onClick={() => setSelectedElement({ type: "group", groupId: g.group_id })}
-                >
-                  <IconGrid size={14} />
-                  <span className="palette-group-name">{g.name}</span>
-                  <span className="group-kind-tag">{g.kind}</span>
-                </div>
-              ))
+            {(activeTopology?.canvas_items || []).filter((ci) => ci.kind === "rectangle" || ci.kind === "ellipse").length ? (
+              (activeTopology?.canvas_items || []).filter((ci) => ci.kind === "rectangle" || ci.kind === "ellipse").map((ci) => {
+                const memberCount = (activeTopology?.nodes || []).filter((n) => n.group_id === ci.item_id || n.zone === ci.text).length;
+                const isSelected = selectedElement?.type === "canvas_item" && selectedElement.itemId === ci.item_id;
+                const tagColor = ci.style?.border || "var(--accent)";
+                return (
+                  <div
+                    key={ci.item_id}
+                    className={`palette-group-item ${isSelected ? "active" : ""}`}
+                    onClick={() => {
+                      setSelectedElement({ type: "canvas_item", itemId: ci.item_id });
+                      canvasApiRef.current?.selectElements?.([`canvas-${ci.item_id}`]);
+                    }}
+                    title="点击在画布上高亮选中该区域底框"
+                  >
+                    <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: tagColor, flexShrink: 0 }} />
+                    <span className="palette-group-name">{ci.text || "未命名区域"}</span>
+                    <span className="group-kind-tag">{memberCount ? `${memberCount}台` : ci.kind === "ellipse" ? "椭圆" : "矩形"}</span>
+                  </div>
+                );
+              })
             ) : (
-              <div className="palette-empty-groups">尚未创建分组</div>
+              <div className="palette-empty-groups">暂无区域，框选设备点“编为区域”</div>
             )}
           </div>
         </div>
@@ -3026,6 +3174,16 @@ export default function TopologyWorkspace({
               <button onClick={() => handleAlignSelectedNodes("left")}>左对齐</button><button onClick={() => handleAlignSelectedNodes("center")}>水平居中</button><button onClick={() => handleAlignSelectedNodes("right")}>右对齐</button>
               <button onClick={() => handleAlignSelectedNodes("top")}>顶对齐</button><button onClick={() => handleAlignSelectedNodes("middle")}>垂直居中</button><button onClick={() => handleAlignSelectedNodes("bottom")}>底对齐</button>
             </div></details>
+            {selectedNodes.length >= 1 && (
+              <button
+                className="studio-mode-button"
+                type="button"
+                onClick={handleOpenCreateZone}
+                title="将选中设备自动生成自适应区域底框 (完美包裹，留足间距)"
+              >
+                <IconBox size={13} />编为区域
+              </button>
+            )}
             {selectedNodes.length >= 2 && (
               <button
                 className="studio-mode-button"
@@ -3324,6 +3482,22 @@ export default function TopologyWorkspace({
                   <Button size="sm" onClick={() => distributeSelected("horizontal")}>水平等距</Button>
                   <Button size="sm" onClick={() => distributeSelected("vertical")}>垂直等距</Button>
                 </div>
+                {selectedNodes.length >= 1 && (
+                  <>
+                    <span className="inspector-label">智能区域</span>
+                    <div className="batch-grid">
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        icon={<IconBox size={13} />}
+                        onClick={handleOpenCreateZone}
+                        title="依据选中设备的坐标范围与呼吸留白，自动计算并生成贴合底框"
+                      >
+                        编为智能区域底框
+                      </Button>
+                    </div>
+                  </>
+                )}
                 <span className="inspector-label">固定联动</span>
                 <div className="batch-grid">
                   <Button
@@ -3631,6 +3805,51 @@ export default function TopologyWorkspace({
                     />
                   </label>
                 </div>
+              </div>
+
+              <div className="inspector-section">
+                <span className="inspector-label">所属区域</span>
+                {selectedNode.zone || selectedNode.group_id ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                      当前归属：<strong>{selectedNode.zone || (activeTopology?.canvas_items || []).find((ci) => ci.item_id === selectedNode.group_id)?.text || "未命名区域"}</strong>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <Button
+                        size="sm"
+                        onClick={() => handleSelectZoneMembers(selectedNode.node_id)}
+                      >
+                        选中同区设备
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleLeaveZone(selectedNode.node_id)}
+                      >
+                        移出区域
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <p className="inspector-label" style={{ margin: 0 }}>
+                      暂未归属区域。多选设备后可直接“编为区域底框”。
+                    </p>
+                    {(activeTopology?.canvas_items || []).filter((ci) => ci.kind === "rectangle" || ci.kind === "ellipse").length > 0 && (
+                      <select
+                        style={{ width: "100%", padding: "4px 8px", fontSize: 12, borderRadius: 4, border: "1px solid var(--line)" }}
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) handleJoinZone(selectedNode.node_id, e.target.value);
+                        }}
+                      >
+                        <option value="">加入已有区域底框...</option>
+                        {(activeTopology?.canvas_items || []).filter((ci) => ci.kind === "rectangle" || ci.kind === "ellipse").map((ci) => (
+                          <option key={ci.item_id} value={ci.item_id}>{ci.text || `区域 ${ci.item_id.slice(-4)}`}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="inspector-section">
@@ -4598,6 +4817,9 @@ export default function TopologyWorkspace({
                     <button type="button" onClick={() => { handleLockSelectedNodes(); setContextMenu(null); }}>
                       固定选中设备相对位置
                     </button>
+                    <button type="button" onClick={() => { handleOpenCreateZone(); setContextMenu(null); }}>
+                      编为智能区域底框
+                    </button>
                     {selectedNodes.some((n) => Boolean(n.lock_group)) && (
                       <button type="button" onClick={() => { handleUnlockSelectedNodes(); setContextMenu(null); }}>
                         解除选中设备固定
@@ -4886,6 +5108,74 @@ export default function TopologyWorkspace({
 
             </div>
             <div className="modal-actions"><Button type="button" onClick={() => setShowManualNodeModal(false)}>取消</Button><Button variant="primary" type="submit">放入画布</Button></div>
+          </form>
+        </dialog>
+      )}
+
+      {/* MODAL 3: Create Smart Zone */}
+      {showCreateZoneModal && (
+        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal" aria-label="新建智能区域底框">
+          <form onSubmit={handleConfirmCreateZone} className="network-panel modal-panel">
+            <div className="modal-header">
+              <div>
+                <h3>新建智能区域底框</h3>
+                <p>基于所选设备的外接矩形与呼吸留白，自动生成严丝合缝的自适应底框。</p>
+              </div>
+              <Button size="sm" type="button" onClick={() => setShowCreateZoneModal(false)}>
+                <IconClose size={14} />
+              </Button>
+            </div>
+            <div className="form-grid">
+              <label className="full-field">
+                区域名称
+                <input
+                  required
+                  autoFocus
+                  placeholder="如：核心骨干区、DMZ安全区、接入汇聚区"
+                  value={zoneNameInput}
+                  onChange={(e) => setZoneNameInput(e.target.value)}
+                />
+              </label>
+              <div className="full-field">
+                <span className="inspector-label" style={{ marginBottom: 6, display: "block" }}>区域配色风格</span>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                  {ZONE_COLOR_PRESETS.map((preset, idx) => (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => setZoneColorIndex(idx)}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 6,
+                        border: zoneColorIndex === idx ? `2px solid ${preset.color}` : `1px solid ${preset.border}`,
+                        background: preset.fill,
+                        color: preset.color,
+                        fontWeight: zoneColorIndex === idx ? 600 : 400,
+                        fontSize: 12,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: preset.border, border: `1px solid ${preset.color}` }} />
+                      <span>{preset.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="full-field" style={{ fontSize: 12, color: "var(--text-secondary)", background: "var(--surface-2, #f8fafc)", padding: "8px 12px", borderRadius: 6 }}>
+                💡 提示：系统将根据已选中的 {activeTopology?.nodes.filter((n) => canvasSelectedElementIds.includes(n.node_id)).length || 0} 台设备位置，自动生成带标题的半透明彩色底框。后续在属性面板中随时可一键【自适应贴合】重新自适应包裹。
+              </div>
+            </div>
+            <div className="modal-actions">
+              <Button type="button" onClick={() => setShowCreateZoneModal(false)}>
+                取消
+              </Button>
+              <Button variant="primary" type="submit">
+                生成区域底框
+              </Button>
+            </div>
           </form>
         </dialog>
       )}

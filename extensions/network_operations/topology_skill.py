@@ -62,15 +62,16 @@ Patch preserves unnamed objects. On a version conflict, read again and reconside
 All positions and sizes are drawing coordinates. Make readable layouts with room for port labels.
 node_updates: objects with node_id (choose a new unique ID to add), display_name,
 device_type (router/router_core/switch/switch_core/switch_access/firewall/server/pc/cloud/wireless/wan/database/camera/phone/printer/wlc/storage/vpn/isp),
-x, y, optional group_id/labels, and structured network attributes: ip (management IP), vendor, model, role (core/aggregation/access/edge/datacenter/branch), vlan, location.
+x, y, optional zone (logical zone name e.g. "核心骨干区" or "DMZ安全区"),
+labels, and structured network attributes: ip (management IP), vendor, model, role (core/aggregation/access/edge/datacenter/branch), vlan, location.
 
 link_updates: link_id for existing links; omit it for a new link; source_node_id,
 target_node_id, source_interface, target_interface, kind (physical/logical), optional label/metadata.
-group_updates: group_id, name, kind (custom/region/datacenter/as/tenant), x, y, width, height.
-canvas_item_updates: item_id, kind (rectangle/ellipse/text), text, x, y, width, height, optional style (fill/border/color).
-CRITICAL FOR ZONES/RECTANGLES: (x, y) is the CENTER. Set each member node's group_id to the zone item_id.
-The server then places that zone around those nodes. Do not rely on hand-calculated bounds.
-Separate zones must not overlap each other.
+canvas_item_updates: optional manual shapes or annotations: item_id, kind (rectangle/ellipse/text), text, style (fill/border/color).
+CRITICAL FOR ZONES / REGIONS: You DO NOT need to calculate zone (x, y, width, height) coordinates!
+Simply specify the zone name in each node's "zone" attribute (e.g. "核心区", "办公接入区").
+The server geometric algorithm will automatically calculate the exact bounding box, padding, and center coordinates with 100% precision around all member devices.
+Separate logical zones should have their nodes arranged in distinct coordinate clusters.
 Use remove_node_ids/remove_link_ids/remove_group_ids/
 remove_canvas_item_ids only for requested removals. Node removal also removes incident links.
 Report actual saved results, not promises or invented device state. Requests unrelated to drawing

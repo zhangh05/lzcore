@@ -93,7 +93,8 @@ def _topology_graph_for_read(record: dict[str, Any]) -> tuple[list[dict[str, Any
             "device_type": str(raw.get("device_type") or "switch"),
             "display_name": str(raw.get("display_name") or ""),
             "labels": list(raw.get("labels") or []),
-            "group_id": raw.get("group_id") or None,
+            "group_id": raw.get("group_id") or raw.get("zone") or None,
+            "zone": str(raw.get("zone") or raw.get("group_id") or "").strip() or None,
             "lock_group": str(raw.get("lock_group") or "").strip() or None,
             "x": raw.get("x", 0.0),
             "y": raw.get("y", 0.0),
@@ -162,27 +163,98 @@ def get_topology(workspace_id: str, topology_id: str) -> dict[str, Any] | None:
 
 
 def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Place a zone around nodes that name it, instead of trusting model geometry."""
+    """Place a zone around nodes that belong to it, using Visual Hull calculation."""
     fitted: list[dict[str, Any]] = []
+    existing_texts: set[str] = set()
+    existing_ids: set[str] = set()
+
+    PAD_X = 90.0
+    PAD_Y = 80.0
+    MIN_WIDTH = 220.0
+    MIN_HEIGHT = 170.0
+
+    def _calc_box(member_nodes: list[dict[str, Any]]) -> dict[str, float]:
+        xs = [float(n.get("x") or 0.0) for n in member_nodes]
+        ys = [float(n.get("y") or 0.0) for n in member_nodes]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+
+        w = max(MIN_WIDTH, round(max_x - min_x + PAD_X * 2, 1))
+        h = max(MIN_HEIGHT, round(max_y - min_y + PAD_Y * 2, 1))
+        cx = round((min_x + max_x) / 2.0, 1)
+        cy = round((min_y + max_y) / 2.0, 1)
+        return {
+            "x": cx,
+            "y": cy,
+            "width": w,
+            "height": h,
+        }
+
     for item in items:
+        item_id = str(item.get("item_id") or "")
+        item_text = str(item.get("text") or "").strip()
+        if item_id:
+            existing_ids.add(item_id)
+        if item_text:
+            existing_texts.add(item_text)
+
         if str(item.get("kind") or "") not in {"rectangle", "ellipse"}:
             fitted.append(item)
             continue
-        item_id = str(item.get("item_id") or "")
-        members = [node for node in nodes if item_id and str(node.get("group_id") or "") == item_id]
+
+        # Match members by item_id, zone, or text
+        members = [
+            node for node in nodes
+            if (item_id and str(node.get("group_id") or "") == item_id)
+            or (item_id and str(node.get("zone") or "") == item_id)
+            or (item_text and str(node.get("zone") or "") == item_text)
+            or (item_text and str(node.get("group_id") or "") == item_text)
+        ]
         if not members:
             fitted.append(item)
             continue
-        xs = [float(node.get("x") or 0) for node in members]
-        ys = [float(node.get("y") or 0) for node in members]
-        pad_x, pad_y = 90.0, 80.0
+
+        box = _calc_box(members)
         fitted.append({
             **item,
-            "x": round((min(xs) + max(xs)) / 2, 1),
-            "y": round((min(ys) + max(ys)) / 2, 1),
-            "width": max(160.0, round(max(xs) - min(xs) + pad_x * 2, 1)),
-            "height": max(120.0, round(max(ys) - min(ys) + pad_y * 2, 1)),
+            **box,
         })
+
+    # Auto-synthesize zones declared in nodes that do not have a canvas_item yet
+    zone_palette = [
+        {"fill": "#eff6ff", "border": "#93c5fd", "color": "#1e40af"},  # blue
+        {"fill": "#f0fdf4", "border": "#86efac", "color": "#166534"},  # green
+        {"fill": "#fffbeb", "border": "#fcd34d", "color": "#92400e"},  # amber
+        {"fill": "#faf5ff", "border": "#d8b4fe", "color": "#6b21a8"},  # purple
+        {"fill": "#f0fdfa", "border": "#5eead4", "color": "#115e59"},  # teal
+        {"fill": "#f8fafc", "border": "#cbd5e1", "color": "#334155"},  # slate
+    ]
+    declared_zones: dict[str, list[dict[str, Any]]] = {}
+    for node in nodes:
+        z = str(node.get("zone") or node.get("group_id") or "").strip()
+        if z and z not in existing_ids and z not in existing_texts:
+            declared_zones.setdefault(z, []).append(node)
+
+    color_idx = len(fitted)
+    for z_name, z_members in declared_zones.items():
+        box = _calc_box(z_members)
+        style = dict(zone_palette[color_idx % len(zone_palette)])
+        color_idx += 1
+        new_item = {
+            "item_id": f"zone-{abs(hash(z_name)) % 10000000}",
+            "kind": "rectangle",
+            "text": z_name,
+            "x": box["x"],
+            "y": box["y"],
+            "width": box["width"],
+            "height": box["height"],
+            "style": style,
+        }
+        for n in z_members:
+            n["group_id"] = new_item["item_id"]
+            n["zone"] = z_name
+        fitted.insert(0, new_item)
+
     return fitted
 
 
@@ -248,8 +320,8 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             "node_id": node_id,
             "device_type": str(raw.get("device_type") or "switch").strip()[:48],
             "display_name": str(raw.get("display_name") or "").strip()[:80],
-            "labels": sorted({str(item).strip() for item in (raw.get("labels") or []) if str(item).strip()}),
-            "group_id": str(raw.get("group_id") or "").strip() or None,
+            "group_id": str(raw.get("group_id") or raw.get("zone") or "").strip() or None,
+            "zone": str(raw.get("zone") or raw.get("group_id") or "").strip() or None,
             "lock_group": str(raw.get("lock_group") or "").strip() or None,
             "x": x,
             "y": y,
@@ -812,7 +884,8 @@ def _node_facts(node: dict[str, Any]) -> dict[str, Any]:
     return {
         "device_type": str(node.get("device_type") or ""),
         "display_name": str(node.get("display_name") or ""),
-        "group_id": str(node.get("group_id") or ""),
+        "group_id": str(node.get("group_id") or node.get("zone") or ""),
+        "zone": str(node.get("zone") or node.get("group_id") or ""),
         "lock_group": str(node.get("lock_group") or ""),
         "ip": str(node.get("ip") or ""),
         "vendor": str(node.get("vendor") or ""),
