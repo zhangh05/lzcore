@@ -1947,6 +1947,38 @@ class QueryLoop:
                     signature = str(ctx.extras.get("last_suppressed_tool_signature") or "")
                     current_signature = str(ctx.extras.get("suppressed_tool_signature") or "")
                     if current_signature and current_signature == signature:
+                        has_successful_patch = any(
+                            str(item.tool_name or "").replace("__", ".") == "network.operations.topology"
+                            and isinstance(item.output, dict)
+                            and item.output.get("action") == "patch"
+                            and item.ok
+                            for item in all_results
+                        )
+                        if has_successful_patch and (response.content or "").strip():
+                            return finish(
+                                final_response=response.content,
+                                tool_results=all_results,
+                                iterations=iterations,
+                                total_tool_calls=len(all_results),
+                                llm_calls=budget.llm_calls,
+                            )
+                        workbench = ctx.extras.get("workbench_context") if isinstance(ctx.extras, dict) else None
+                        is_drawing = (
+                            isinstance(workbench, dict)
+                            and workbench.get("extension_id") == "network.operations"
+                            and str(workbench.get("skill_id") or "").startswith("drawing:")
+                            and bool(workbench.get("allow_edit", True))
+                        )
+                        if is_drawing and not ctx.extras.get("drawing_suppress_guidance_sent"):
+                            ctx.extras["drawing_suppress_guidance_sent"] = True
+                            messages = self._append_turn_nudge(
+                                messages,
+                                "[TOPOLOGY DRAWING GUIDANCE]\n"
+                                "当前图纸基线此前已读取成功。图纸已在上下文中，无需重复执行 read。\n"
+                                "请立即发起 `network.operations.topology` (action=\"patch\") 原生工具调用，将规划好的节点、链路与 Zones 正式提交到画布中！",
+                            )
+                            continue
+
                         ctx.extras["response_outcome"] = "blocked_no_progress"
                         ctx.extras.setdefault("no_progress_events", []).append({
                             "kind": "repeated_terminal_tool_proposal",
@@ -3064,8 +3096,27 @@ class QueryLoop:
             for item in (ctx.extras.get("task_state_execution_manifest") or [])
             if isinstance(item, dict)
         }
+        has_patch = any(
+            str(item.get("tool_id") or "").replace("__", ".") == "network.operations.topology"
+            and item.get("side_effecting")
+            and item.get("ok")
+            for item in (ctx.extras.get("task_state_execution_manifest") or [])
+            if isinstance(item, dict)
+        )
         executable, suppressed, suppressed_keys = [], [], []
         for call in tool_calls:
+            call_tool = str(call.name).replace("__", ".")
+            if call_tool == "network.operations.topology":
+                action = str((call.arguments or {}).get("action") or "").lower()
+                # 1. Never suppress canvas patch calls
+                if action == "patch":
+                    executable.append(call)
+                    continue
+                # 2. Legitimate read-back after canvas mutation
+                if action == "read" and has_patch:
+                    executable.append(call)
+                    continue
+
             prior = previous.get(self._durable_call_key(call))
             if not prior:
                 executable.append(call)
@@ -3718,12 +3769,28 @@ class QueryLoop:
         if has_successful_patch:
             return ""
 
+        has_successful_read = any(
+            str(item.tool_name or "").replace("__", ".") == "network.operations.topology"
+            and isinstance(item.output, dict)
+            and item.output.get("action") == "read"
+            and item.ok
+            for item in tool_results
+        )
+
         ctx.extras["drawing_final_nudge_pending"] = True
+        if has_successful_read:
+            return (
+                "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]\n"
+                "当前图纸已成功读取，架构方案也已构思明确。但本轮次尚未通过 `network.operations.topology` "
+                "(action=\"patch\") 将图纸正式绘制到画布中。\n"
+                "切勿只在对话中说明“接下来正式落盘到画布”而停止。请立即发起 `network.operations.topology` "
+                "(action=\"patch\") 原生工具调用，将规划好的 node_updates、link_updates 与 zones 正式提交落盘！"
+            )
         return (
             "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]\n"
             "当前处于拓扑绘图工作台，用户提出了拓扑绘制或修改需求。方案构思已很清晰，但本轮次尚未通过 `network.operations.topology` "
             "(action=\"patch\") 将图纸正式绘制到画布中。\n"
-            "请继续发起 `network.operations.topology` 工具调用（可先 read 核对图纸，或直接 patch 提交绘制），将规划好的节点、链路与 Zones 正式绘制到画布中！"
+            "请立即发起 `network.operations.topology` (action=\"patch\") 原生工具调用，将规划好的 node_updates、link_updates 与 zones 正式提交落盘！"
         )
 
     @staticmethod

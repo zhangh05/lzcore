@@ -617,5 +617,61 @@ def test_collaborative_consultative_topology_workflow_simulation():
     assert turn3_gate == ""
 
 
+def test_topology_repeated_tool_suppression_resilience():
+    """Verify that topology patch is never suppressed, and post-patch reads are never suppressed."""
+    from core.runtime_engine.query_loop import QueryLoop
+    from core.runtime_engine.models import StatelessContext
+    from agent.llm.schemas import LLMToolCall
+
+    loop = QueryLoop.__new__(QueryLoop)
+    loop._tool_registry = {}
+    loop._executor = type("MockExecutor", (), {"_is_read_only_call": lambda self, tc: tc.arguments.get("action") == "read"})()
+
+    ctx = StatelessContext(
+        request_id="req-suppress-test",
+        user_input="绘图",
+        workspace_id="ws1",
+        session_id="s1",
+        extras={"task_state_execution_manifest": []},
+    )
+
+    patch_call = LLMToolCall(
+        id="c1",
+        name="network.operations.topology",
+        arguments={"action": "patch", "topology_id": "t1", "version": 0, "node_updates": []},
+    )
+    read_call = LLMToolCall(
+        id="c2",
+        name="network.operations.topology",
+        arguments={"action": "read", "topology_id": "t1"},
+    )
+
+    # 1. First patch execution
+    calls, note = loop._suppress_repeated_tool_calls(ctx, [patch_call])
+    assert len(calls) == 1
+    assert note == ""
+
+    # Record patch in manifest
+    manifest_item = {
+        "tool_id": "network.operations.topology",
+        "call_key": loop._durable_call_key(patch_call),
+        "side_effecting": True,
+        "ok": True,
+        "execution_may_continue": False,
+    }
+    ctx.extras["task_state_execution_manifest"].append(manifest_item)
+
+    # 2. Patch is NEVER suppressed even if called again with same args
+    calls, note = loop._suppress_repeated_tool_calls(ctx, [patch_call])
+    assert len(calls) == 1
+    assert note == ""
+
+    # 3. Read call after patch is NOT suppressed (legitimate canvas readback)
+    calls, note = loop._suppress_repeated_tool_calls(ctx, [read_call])
+    assert len(calls) == 1
+    assert note == ""
+
+
+
 
 

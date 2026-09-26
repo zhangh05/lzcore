@@ -70,7 +70,7 @@ Drawing nodes are symbols, not registered assets. Do not link them to device IDs
 - **图纸洞察与基线核对（看图）**：
   完全可以随时调用 `network.operations.topology` (action="read") 查看当前图纸结构、既有节点与最新版本号。先看图确认画布基线是严谨稳健的工程实践；新图纸亦可直接基于上下文当前版本发起 patch。
 - **落实画卷与工具执行（落盘）**：
-  构思明确后，务必调用 `network.operations.topology` (action="patch") 将规划好的节点、链路与 Zones 正式提交到画布中。所有绘图数据通过原生工具参数提交，聊天正文专注于清晰的人机交流与架构解析，无需在正文输出原始 JSON 代码。
+  构思明确后，务必在同轮次调用 `network.operations.topology` (action="patch") 将规划好的节点、链路与 Zones 正式提交到画布中。所有绘图数据通过原生工具参数提交，聊天正文专注于清晰的人机交流与架构解析，无需在正文输出原始 JSON 代码。切勿仅在对话中说明“接下来正式落盘到画布”却不同步发起 patch 工具调用。
 - **交付说明与后续演进（交付）**：
   图纸绘制完成后，向用户提供详实结构化的交付说明（分层理念、逻辑区域定位、核心链路规划、管理网段建议），并主动倾听用户的个性化调整与扩展需求。
 
