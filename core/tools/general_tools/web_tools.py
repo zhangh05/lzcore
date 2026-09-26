@@ -159,7 +159,7 @@ def _wikipedia_search_results(requests_module, query: str, domains: list[str], l
             "namespace": 0,
             "format": "json",
         },
-        timeout=8,
+        timeout=(2.5, 4.0),
         headers={"User-Agent": "LZCore/1.0 (+https://github.com/zhangh05/lzcore)"},
     )
     data = resp.json()
@@ -377,7 +377,7 @@ def handle_web_search(inv: ToolInvocation) -> dict:
             html_resp = requests.get(
                 "https://html.duckduckgo.com/html/",
                 params=_duckduckgo_search_params(search_query, recency, language, safe_search),
-                timeout=12,
+                timeout=(2.5, 4.0),
                 headers={
                     "User-Agent": "LZCore/1.0 (+https://github.com/zhangh05/lzcore)",
                     "Accept-Language": language,
@@ -419,7 +419,7 @@ def handle_web_search(inv: ToolInvocation) -> dict:
             ia_resp = requests.get(
                 "https://api.duckduckgo.com/",
                 params={"q": search_query, "format": "json", "no_html": 1, "skip_disambig": 1},
-                timeout=10,
+                timeout=(2.0, 3.5),
             )
             ia_data = ia_resp.json()
             ia_results = []

@@ -203,17 +203,128 @@ def _confidence(
     return max(0.0, min(base, 0.99))
 
 
+def _candidate_from_dict(data: dict) -> LocationCandidate:
+    return LocationCandidate(
+        canonical_name=str(data.get("canonical_name") or ""),
+        latitude=float(data.get("latitude") or 0.0),
+        longitude=float(data.get("longitude") or 0.0),
+        provider=str(data.get("provider") or ""),
+        provider_id=str(data.get("provider_id") or ""),
+        country=str(data.get("country") or ""),
+        country_code=str(data.get("country_code") or ""),
+        admin1=str(data.get("admin1") or ""),
+        admin2=str(data.get("admin2") or ""),
+        locality=str(data.get("locality") or ""),
+        place_type=str(data.get("place_type") or "unknown"),
+        population=int(data.get("population") or 0),
+        importance=float(data.get("importance") or 0.0),
+        timezone=str(data.get("timezone") or ""),
+        corroborating_providers=tuple(data.get("corroborating_providers") or ()),
+    )
+
+
+def _resolution_from_dict(data: dict) -> LocationResolution:
+    resolved_data = data.get("resolved")
+    resolved = _candidate_from_dict(resolved_data) if isinstance(resolved_data, dict) else None
+    candidates = tuple(
+        _candidate_from_dict(item) for item in data.get("candidates") or ()
+        if isinstance(item, dict)
+    )
+    return LocationResolution(
+        ok=bool(data.get("ok")),
+        query=str(data.get("query") or ""),
+        status=str(data.get("status") or ""),
+        resolved=resolved,
+        candidates=candidates,
+        confidence=float(data.get("confidence") or 0.0),
+        provider_chain=tuple(data.get("provider_chain") or ()),
+        warnings=tuple(data.get("warnings") or ()),
+    )
+
+
+def _get_persistent_cache_file():
+    try:
+        from storage.paths import runtime_root
+        return runtime_root() / "cache" / "location_resolution.json"
+    except Exception:
+        return None
+
+
 class LocationResolver:
     """Extensible resolver that composes ordered provider adapters."""
 
-    def __init__(self, providers: tuple[LocationProvider, ...] | None = None):
+    def __init__(
+        self,
+        providers: tuple[LocationProvider, ...] | None = None,
+        *,
+        timeout: float = 6.0,
+    ):
         self.providers = providers or (
             OpenMeteoLocationProvider(),
             PhotonLocationProvider(),
             NominatimLocationProvider(),
         )
+        self.timeout = float(timeout or 6.0)
         self._cache: dict[tuple[object, ...], tuple[float, LocationResolution]] = {}
         self._cache_lock = threading.Lock()
+        self._persistent_loaded = False
+
+    def _ensure_persistent_cache_loaded(self) -> None:
+        if self._persistent_loaded:
+            return
+        self._persistent_loaded = True
+        cache_file = _get_persistent_cache_file()
+        if not cache_file or not cache_file.exists():
+            return
+        try:
+            import json
+            raw_data = json.loads(cache_file.read_text(encoding="utf-8"))
+            now_epoch = time.time()
+            now_mono = time.monotonic()
+            with self._cache_lock:
+                for entry in raw_data.get("entries", []):
+                    exp = float(entry.get("expires_at", 0))
+                    if exp <= now_epoch:
+                        continue
+                    key = tuple(entry.get("key", ()))
+                    res_dict = entry.get("resolution")
+                    if key and res_dict and key not in self._cache:
+                        res = _resolution_from_dict(res_dict)
+                        self._cache[key] = (now_mono + (exp - now_epoch), res)
+        except Exception:
+            pass
+
+    def _persist_entry(self, key: tuple[object, ...], resolution: LocationResolution, ttl: float) -> None:
+        if not resolution.ok or ttl <= 0:
+            return
+        cache_file = _get_persistent_cache_file()
+        if not cache_file:
+            return
+        try:
+            from storage.atomic_io import atomic_write_text
+            import json
+            now_epoch = time.time()
+            entries: list[dict] = []
+            if cache_file.exists():
+                try:
+                    old_data = json.loads(cache_file.read_text(encoding="utf-8"))
+                    entries = [
+                        e for e in old_data.get("entries", [])
+                        if float(e.get("expires_at", 0)) > now_epoch
+                        and tuple(e.get("key", ())) != key
+                    ]
+                except Exception:
+                    entries = []
+            entries.append({
+                "key": list(key),
+                "expires_at": now_epoch + ttl,
+                "resolution": resolution.as_dict(),
+            })
+            if len(entries) > 1000:
+                entries = entries[-1000:]
+            atomic_write_text(cache_file, json.dumps({"entries": entries}, ensure_ascii=False))
+        except Exception:
+            pass
 
     def resolve(
         self,
@@ -223,6 +334,7 @@ class LocationResolver:
         country_code: str = "",
         admin_hint: str = "",
         limit: int = 5,
+        timeout: float | None = None,
     ) -> LocationResolution:
         query = str(query or "").strip()
         language = str(language or "zh").strip() or "zh"
@@ -231,6 +343,7 @@ class LocationResolver:
         limit = max(1, min(int(limit or 5), 10))
         if not query:
             return LocationResolution(False, query, "location_required")
+        self._ensure_persistent_cache_loaded()
         cache_key = (query.casefold(), language.casefold(), country_code, admin_hint.casefold(), limit)
         now = time.monotonic()
         with self._cache_lock:
@@ -242,6 +355,7 @@ class LocationResolver:
         resolution = self._resolve_from_providers(
             query, language=language, country_code=country_code,
             admin_hint=admin_hint, limit=limit,
+            timeout=timeout or self.timeout,
         )
         ttl = self._cache_ttl(resolution)
         if ttl > 0:
@@ -250,6 +364,8 @@ class LocationResolver:
                     oldest = min(self._cache, key=lambda key: self._cache[key][0])
                     self._cache.pop(oldest, None)
                 self._cache[cache_key] = (time.monotonic() + ttl, resolution)
+            if resolution.ok:
+                self._persist_entry(cache_key, resolution, ttl)
         return resolution
 
     @staticmethod
@@ -272,11 +388,16 @@ class LocationResolver:
         country_code: str,
         admin_hint: str,
         limit: int,
+        timeout: float = 6.0,
     ) -> LocationResolution:
         candidates: list[LocationCandidate] = []
         provider_chain: list[str] = []
         warnings: list[str] = []
+        deadline = time.monotonic() + max(0.01, float(timeout or 6.0))
         for provider in self.providers:
+            if time.monotonic() >= deadline:
+                warnings.append("resolution_budget_exhausted")
+                break
             provider_chain.append(provider.name)
             try:
                 candidates.extend(provider.search(
@@ -348,7 +469,11 @@ class LocationResolver:
         query = f"{float(latitude):.6f},{float(longitude):.6f}"
         provider_chain: list[str] = []
         warnings: list[str] = []
+        deadline = time.monotonic() + 4.0
         for provider in self.providers:
+            if time.monotonic() >= deadline:
+                warnings.append("resolution_budget_exhausted")
+                break
             if not getattr(provider, "supports_reverse", True):
                 continue
             provider_chain.append(provider.name)

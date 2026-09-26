@@ -487,7 +487,7 @@ def _lookup_open_meteo_weather(*, location: str, days: int, language: str,
             "provider_id": "",
             "confidence": 1.0,
         }
-    acquired = _WEATHER_PROVIDER_SLOTS.acquire(timeout=20)
+    acquired = _WEATHER_PROVIDER_SLOTS.acquire(timeout=4.0)
     if not acquired:
         return _result(_DummyInv(""), False, {
             "status": "weather_provider_busy",
@@ -556,7 +556,7 @@ def _lookup_open_meteo_weather(*, location: str, days: int, language: str,
                 weather_resp = requests.get(
                     "https://api.open-meteo.com/v1/forecast",
                     params=forecast_params,
-                    timeout=15,
+                    timeout=(3.0, 5.0),
                     headers={"User-Agent": "LZCore/1.0 (+https://github.com/zhangh05/lzcore)"},
                 )
                 if weather_resp.status_code == 200 or attempt == 1:

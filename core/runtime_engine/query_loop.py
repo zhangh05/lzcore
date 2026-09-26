@@ -1029,6 +1029,17 @@ class StreamingToolExecutor:
     ) -> StreamingToolResult:
         """Execute a single tool call via the tool runtime client."""
         tool_id = tc.name.replace("__", ".")
+        if self._emitter:
+            try:
+                action = str((tc.arguments or {}).get("action") or "")
+                self._emitter.emit("execution_started", {
+                    "stage": "execution_started",
+                    "tool": tool_id,
+                    "action": action,
+                    "call_id": tc.id,
+                })
+            except Exception:
+                pass
         if ctx is not None and hasattr(self._runtime, "execute_node"):
             node = ExecutionNode(
                 id=tc.id,

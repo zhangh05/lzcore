@@ -42,19 +42,22 @@ def _provider_get(
 
     last_error: Exception | None = None
     last_response: object | None = None
-    with slots:
-        for attempt in range(3):
+    acquired = slots.acquire(timeout=2.0)
+    if not acquired:
+        raise LocationProviderUnavailable(f"{provider_name} concurrency busy")
+    try:
+        for attempt in range(2):
             try:
                 response = requests.get(
                     url,
                     params=params,
-                    timeout=(4, 8),
+                    timeout=(2.5, 4.0),
                     headers={"User-Agent": _USER_AGENT},
                 )
                 last_response = response
             except requests.RequestException as exc:
                 last_error = exc
-                if attempt == 2:
+                if attempt == 1:
                     break
                 time.sleep(_retry_delay(None, attempt))
                 continue
@@ -62,8 +65,10 @@ def _provider_get(
                 return response
             if response.status_code not in _RETRYABLE_HTTP_STATUSES:
                 return response
-            if attempt < 2:
+            if attempt < 1:
                 time.sleep(_retry_delay(response, attempt))
+    finally:
+        slots.release()
     detail = (
         type(last_error).__name__
         if last_error else getattr(last_response, "status_code", "unknown")
@@ -145,9 +150,12 @@ class OpenMeteoLocationProvider:
                     "language": query_language,
                     "format": "json",
                 }
-                if country_code:
-                    params["countryCode"] = country_code.upper()
-                response = _open_meteo_get(params=params)
+                try:
+                    response = _open_meteo_get(params=params)
+                except LocationProviderUnavailable:
+                    if not found:
+                        raise
+                    break
                 if response.status_code != 200:
                     continue
                 for raw in response.json().get("results") or []:
