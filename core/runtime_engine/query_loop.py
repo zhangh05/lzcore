@@ -1954,14 +1954,6 @@ class QueryLoop:
                             and item.ok
                             for item in all_results
                         )
-                        if has_successful_patch and (response.content or "").strip():
-                            return finish(
-                                final_response=response.content,
-                                tool_results=all_results,
-                                iterations=iterations,
-                                total_tool_calls=len(all_results),
-                                llm_calls=budget.llm_calls,
-                            )
                         workbench = ctx.extras.get("workbench_context") if isinstance(ctx.extras, dict) else None
                         is_drawing = (
                             isinstance(workbench, dict)
@@ -1969,6 +1961,14 @@ class QueryLoop:
                             and str(workbench.get("skill_id") or "").startswith("drawing:")
                             and bool(workbench.get("allow_edit", True))
                         )
+                        if (is_drawing or has_successful_patch) and (response.content or "").strip():
+                            return finish(
+                                final_response=response.content,
+                                tool_results=all_results,
+                                iterations=iterations,
+                                total_tool_calls=len(all_results),
+                                llm_calls=budget.llm_calls,
+                            )
                         if is_drawing and not ctx.extras.get("drawing_suppress_guidance_sent"):
                             ctx.extras["drawing_suppress_guidance_sent"] = True
                             messages = self._append_turn_nudge(
@@ -3096,26 +3096,15 @@ class QueryLoop:
             for item in (ctx.extras.get("task_state_execution_manifest") or [])
             if isinstance(item, dict)
         }
-        has_patch = any(
-            str(item.get("tool_id") or "").replace("__", ".") == "network.operations.topology"
-            and item.get("side_effecting")
-            and item.get("ok")
-            for item in (ctx.extras.get("task_state_execution_manifest") or [])
-            if isinstance(item, dict)
-        )
         executable, suppressed, suppressed_keys = [], [], []
         for call in tool_calls:
             call_tool = str(call.name).replace("__", ".")
             if call_tool == "network.operations.topology":
-                action = str((call.arguments or {}).get("action") or "").lower()
-                # 1. Never suppress canvas patch calls
-                if action == "patch":
-                    executable.append(call)
-                    continue
-                # 2. Legitimate read-back after canvas mutation
-                if action == "read" and has_patch:
-                    executable.append(call)
-                    continue
+                # Canvas topology operations must NEVER be suppressed by runtime deduplication!
+                # Both patch (canvas mutation) and read (canvas inspection) are lightweight
+                # state queries/updates that must always be allowed to execute without interception.
+                executable.append(call)
+                continue
 
             prior = previous.get(self._durable_call_key(call))
             if not prior:

@@ -666,8 +666,22 @@ def test_topology_repeated_tool_suppression_resilience():
     assert len(calls) == 1
     assert note == ""
 
-    # 3. Read call after patch is NOT suppressed (legitimate canvas readback)
-    calls, note = loop._suppress_repeated_tool_calls(ctx, [read_call])
+    # 3. Read call is NEVER suppressed, even before patch or called repeatedly
+    read_call_fresh = LLMToolCall(
+        id="c0",
+        name="network.operations.topology",
+        arguments={"action": "read", "topology_id": "t1"},
+    )
+    read_manifest = {
+        "tool_id": "network.operations.topology",
+        "call_key": loop._durable_call_key(read_call_fresh),
+        "side_effecting": False,
+        "ok": True,
+        "execution_may_continue": False,
+    }
+    ctx.extras["task_state_execution_manifest"].append(read_manifest)
+    # Proposing read again must NOT be suppressed
+    calls, note = loop._suppress_repeated_tool_calls(ctx, [read_call_fresh])
     assert len(calls) == 1
     assert note == ""
 
