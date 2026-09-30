@@ -257,15 +257,10 @@ class SemanticValidator:
                         message=f"Node '{node.id}' arg '{field_name}' allows at most {maximum} item(s)",
                         details={"field": field_name, "length": len(value), "maxItems": maximum},
                     ))
-                item_type = (field_schema.get("items") or {}).get("type")
-                if item_type == "string" and any(not isinstance(item, str) for item in value):
-                    result.errors.append(SemanticError(
-                        node_id=node.id, code="ARG_TYPE_MISMATCH",
-                        message=f"Node '{node.id}' arg '{field_name}' items must be string",
-                        details={"field": field_name, "item_type": "string"},
-                    ))
                 item_schema = field_schema.get("items") or {}
-                if isinstance(item_schema.get("oneOf"), list):
+                if isinstance(item_schema, dict) and item_schema:
+                    # Match the gateway for object lists and nested fields,
+                    # as well as scalar items and oneOf alternatives.
                     from core.tools.executor import validate_schema_value
                     for index, item in enumerate(value):
                         schema_errors = validate_schema_value(

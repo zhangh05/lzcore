@@ -859,13 +859,22 @@ class StreamingToolExecutor:
             # decides why outside input is needed.  Later calls in the same
             # model round are still prepared independently so one deferred
             # target never silently erases the rest of the proposed plan.
-            from .execution_interceptors import before_tool_execution
-            interception = before_tool_execution(
-                tool_id=tc.name.replace("__", "."),
-                call_id=tc.id,
-                arguments=tc.arguments,
-                ctx=ctx,
-            )
+            from .execution_interceptors import before_tool_execution, ExecutionInterceptionError
+            try:
+                interception = before_tool_execution(
+                    tool_id=tc.name.replace("__", "."),
+                    call_id=tc.id,
+                    arguments=tc.arguments,
+                    ctx=ctx,
+                )
+            except ExecutionInterceptionError:
+                result_by_id[tc.id] = StreamingToolResult(
+                    tool_name=tc.name, call_id=tc.id, ok=False,
+                    error="execution_interceptor_failed", error_code="EXECUTION_INTERCEPTOR_FAILED",
+                    output={"ok": False, "executed": False, "error": "execution_interceptor_failed",
+                            "error_code": "EXECUTION_INTERCEPTOR_FAILED", "retryable": False},
+                )
+                continue
             if interception is not None:
                 output = interception.as_tool_output()
                 result_by_id[tc.id] = StreamingToolResult(
@@ -3418,7 +3427,7 @@ class QueryLoop:
                 "message": f"工具编排校验失败：{message}",
             }
 
-        # Pre-normalize topology calls so LLM aliases and omissions never trigger schema errors
+        # Normalize supported topology aliases before validating their shapes.
         for node in nodes:
             if node.tool == "network.operations.topology":
                 t_args = dict(node.args or {})
@@ -3433,7 +3442,11 @@ class QueryLoop:
                 if "canvas_items" in t_args and not t_args.get("canvas_item_updates"):
                     t_args["canvas_item_updates"] = t_args.get("canvas_items")
                 if not t_args.get("action"):
-                    if any(t_args.get(k) for k in ("nodes", "node_updates", "links", "link_updates", "groups", "group_updates", "zones", "canvas_items", "canvas_item_updates", "remove_node_ids", "remove_link_ids")):
+                    if any(t_args.get(k) for k in (
+                        "nodes", "node_updates", "links", "link_updates", "groups", "group_updates", "zones",
+                        "canvas_items", "canvas_item_updates", "remove_node_ids", "remove_link_ids",
+                        "remove_group_ids", "remove_canvas_item_ids",
+                    )) or any(k in t_args for k in ("name", "title", "description", "summary", "comment")):
                         t_args["action"] = "patch"
                     else:
                         t_args["action"] = "read"
@@ -3447,16 +3460,6 @@ class QueryLoop:
             if repair.repaired and repair.repaired_nodes is not None:
                 nodes = repair.repaired_nodes
                 validation = validator.validate(nodes)
-
-        # Drawing calls have their own optimistic concurrency and self-healing engine in topology_service.
-        # Never block network.operations.topology with pre-execution schema errors.
-        if not validation.valid:
-            validation.errors = [
-                e for e in validation.errors
-                if not any(n.id == e.node_id and n.tool == "network.operations.topology" for n in nodes)
-            ]
-            if not validation.errors:
-                validation.valid = True
 
         if not validation.valid:
             for node in nodes:

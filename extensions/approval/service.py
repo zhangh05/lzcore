@@ -60,8 +60,6 @@ def _public_connection(connection: dict[str, Any] | None) -> dict[str, Any]:
 def prepare_network_operation(request: dict[str, Any]) -> dict[str, Any] | None:
     """Freeze one authorized configure call without touching the device."""
     context = request.get("workbench_context") if isinstance(request.get("workbench_context"), dict) else {}
-    if not bool(context.get("approval_enabled")):
-        return None
     if str(request.get("tool_id") or "") != NETWORK_TOOL_ID:
         return None
     arguments = request.get("arguments") if isinstance(request.get("arguments"), dict) else {}
@@ -78,13 +76,22 @@ def prepare_network_operation(request: dict[str, Any]) -> dict[str, Any] | None:
     from extensions.network_operations import service as network
 
     skill = network.get_skill(workspace_id, skill_id)
+    if not skill or not bool(skill.get("approval_enabled")):
+        return None
     connection = network.get_connection(workspace_id, connection_id)
     device = network.get_device(workspace_id, str((connection or {}).get("device_id") or ""))
-    if not skill or not connection or not device:
+    if not connection or not device:
         # The regular tool route will return its normal structured scope error.
         return None
+    connection_id = str(connection.get("connection_id") or "")
     selected_connection_ids = [str(value) for value in (context.get("connection_ids") or [])]
-    if connection_id not in selected_connection_ids:
+    if (
+        not skill.get("enabled", True)
+        or NETWORK_TOOL_ID not in set(skill.get("allowed_tool_ids") or [])
+        or connection_id not in set(skill.get("connection_ids") or [])
+        or str(device.get("device_id") or "") not in set(skill.get("device_ids") or [])
+        or connection_id not in selected_connection_ids
+    ):
         return None
 
     frozen = {

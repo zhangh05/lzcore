@@ -758,8 +758,8 @@ def test_topology_patch_alias_and_schema_fault_tolerance(workspace):
     assert p2["version"] == 3
 
 
-def test_topology_tool_invocation_aliases_and_query_loop_immunity(workspace):
-    """Verify backend.topology_tool and query_loop _prepare_tool_calls forgive schema variations."""
+def test_topology_tool_invocation_aliases_and_query_loop_normalization(workspace):
+    """Supported aliases and omissions remain usable with schema validation."""
     from types import SimpleNamespace
 
     from agent.llm.schemas import LLMToolCall
@@ -789,7 +789,7 @@ def test_topology_tool_invocation_aliases_and_query_loop_immunity(workspace):
 
     # 2. QueryLoop _prepare_tool_calls passes topology call even with arbitrary extra fields and string version
     loop = QueryLoop.__new__(QueryLoop)
-    reg_spec = backend.register()["tools"][2]  # network.operations.topology
+    reg_spec = next(item for item in backend.register()["tools"] if item["tool_id"] == "network.operations.topology")
     loop._tool_registry = {
         "network.operations.topology": {
             "name": reg_spec["name"],
@@ -821,8 +821,106 @@ def test_topology_tool_invocation_aliases_and_query_loop_immunity(workspace):
     assert "node_updates" in repaired_tc.arguments
 
 
+def test_real_topology_result_closes_the_drawing_final_gate(workspace):
+    from types import SimpleNamespace
+    from core.runtime_engine.models import StatelessContext
+    from core.runtime_engine.query_loop import QueryLoop, StreamingToolResult
+
+    topo = _drawing(workspace)
+    output = backend.topology_tool(SimpleNamespace(
+        workspace_id=workspace, skill=f"drawing:{topo['topology_id']}",
+        arguments={"action": "patch", "node_updates": [{"node_id": "new", "display_name": "New"}]},
+    ))
+    assert output["ok"] is True
+    ctx = StatelessContext(
+        workspace_id=workspace, session_id="session", request_id="request", user_input="添加节点",
+        extras={"workbench_context": {"extension_id": "network.operations", "skill_id": f"drawing:{topo['topology_id']}"}},
+    )
+    assert QueryLoop._drawing_final_gate(ctx, "已添加节点", [StreamingToolResult(
+        tool_name="network.operations.topology", call_id="patch", output=output, ok=True,
+    )]) == ""
 
 
+@pytest.mark.parametrize("field", ["remove_group_ids", "remove_canvas_item_ids"])
+def test_topology_delete_only_calls_infer_patch(workspace, field):
+    from types import SimpleNamespace
+
+    topo = _drawing(workspace)
+    collection, id_field = ("groups", "group_id") if field == "remove_group_ids" else ("canvas_items", "item_id")
+    target_id = topo[collection][0][id_field]
+    output = backend.topology_tool(SimpleNamespace(
+        workspace_id=workspace, skill=f"drawing:{topo['topology_id']}", arguments={field: [target_id]},
+    ))
+    assert output["ok"] is True
+    assert output["version"] == topo["version"] + 1
+    assert output["action"] == "patch"
+    saved = drawings.get_topology(workspace, topo["topology_id"])
+    assert all(item[id_field] != target_id for item in saved[collection])
+    assert saved["nodes"] == topo["nodes"]
+
+
+@pytest.mark.parametrize("arguments, name, description", [
+    ({"title": "New title", "summary": "New description"}, "New title", "New description"),
+    ({"name": "Canonical", "title": "Ignored", "description": "", "summary": "Ignored"}, "Canonical", ""),
+])
+def test_topology_title_and_summary_aliases_are_persisted(workspace, arguments, name, description):
+    from types import SimpleNamespace
+
+    topo = _drawing(workspace, description="Existing description")
+    output = backend.topology_tool(SimpleNamespace(
+        workspace_id=workspace, skill=f"drawing:{topo['topology_id']}",
+        arguments=arguments,
+    ))
+    assert output["ok"] is True
+    saved = drawings.get_topology(workspace, topo["topology_id"])
+    assert output["action"] == "patch"
+    assert saved["name"] == name
+    assert saved["description"] == description
+
+
+@pytest.mark.parametrize("arguments", [
+    {"action": "patch", "remove_node_ids": "pe1"},
+    {"action": "patch", "nodes": ["not-an-object"]},
+    {"action": "read", "topology_id": []},
+    {"action": "patch", "version": []},
+])
+def test_topology_gateway_rejects_malformed_arguments_before_handler(workspace, arguments):
+    from core.tools.executor import ToolExecutor
+    from core.tools.registry import ToolRegistry
+    from core.tools.schemas import ToolInvocation, ToolSpec
+
+    spec = next(item for item in backend.register()["tools"] if item["tool_id"] == "network.operations.topology")
+    invoked = []
+    registry = ToolRegistry()
+    registry.register_tool(ToolSpec(
+        tool_id=spec["tool_id"], category="ops", input_schema=spec["input_schema"],
+    ), lambda inv: invoked.append(inv) or {"ok": True})
+    result = ToolExecutor(registry).execute(ToolInvocation(
+        tool_id=spec["tool_id"], workspace_id=workspace, arguments=arguments,
+    ))
+    assert invoked == []
+    assert result.status == "blocked"
+    assert result.output["error_code"] == "TOOL_ARGUMENT_VALIDATION_FAILED"
+
+    # Model orchestration must apply the same schema instead of removing
+    # topology validation errors before calls reach the gateway.
+    from agent.llm.schemas import LLMToolCall
+    from core.runtime_engine.models import StatelessContext
+    from core.runtime_engine.query_loop import QueryLoop
+
+    loop = QueryLoop.__new__(QueryLoop)
+    loop._tool_registry = {spec["tool_id"]: {
+        "name": spec["name"], "input_schema": spec["input_schema"],
+        "metadata": {"action_requirements": spec.get("action_requirements", {})},
+    }}
+    context = StatelessContext(
+        workspace_id=workspace, session_id="session", request_id="request", user_input="edit drawing", extras={},
+    )
+    prepared = loop._prepare_tool_calls(context, [LLMToolCall(
+        id="malformed", name=spec["tool_id"], arguments=arguments,
+    )])
+    assert prepared["ok"] is False
+    assert prepared["error"] == "semantic_validation_failed"
 
 
 

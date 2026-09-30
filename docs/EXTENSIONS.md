@@ -23,6 +23,8 @@ python3 scripts/extension_cli.py validate plugins/acme_insights
 
 可选的 configure 审批见 [审批扩展](APPROVAL_EXTENSION.md)。
 
+拓扑工具按 schema 校验参数类型；支持的自然别名不会豁免校验。编排层与执行网关对数组元素共用递归 schema 校验，包含对象及其嵌套字段。模型编排在校验前补全遗漏的 `action`，仅删除分组或图元、修改标题或描述也识别为 `patch`。`title` 对应 `name`，`summary` / `comment` 对应 `description`，显式 canonical 字段优先，包括清空描述。成功结果包含实际 `action`，用于工作台绘图完成判定。工具增量 patch 在服务端对齐当前版本并保留未点名对象；直接保存图纸仍使用版本冲突校验。
+
 ## 恢复集成
 
 扩展不维护自己的 LLM 循环。平台可接受经过合同校验的领域无关 `runtime_recoveries`，但 `network.operations` 对厂商 CLI 拒绝只返回模型可读的结构化反馈，不自动选择替代命令、语义模板或文档检索。厂商命令模板和语义映射留在驱动内，平台内核只保存 Observation / Reference 的通用来源与生命周期，不固化网络协议或厂商 CLI。

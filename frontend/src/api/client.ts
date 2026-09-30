@@ -56,6 +56,8 @@ export const apiClient: AxiosInstance = axios.create({
 });
 
 let localBrowserToken = "";
+let localTokenUnused = false;
+let localTokenRequest: Promise<string> | null = null;
 
 export async function ensureLocalBrowserToken(): Promise<string> {
   if (typeof window === "undefined") return "";
@@ -66,17 +68,24 @@ export async function ensureLocalBrowserToken(): Promise<string> {
     localBrowserToken = cached;
     return cached;
   }
-  try {
-    const response = await axios.get(`${baseURL}/local-token`, { withCredentials: true });
+  if (localTokenUnused) return "";
+  if (localTokenRequest) return localTokenRequest;
+  localTokenRequest = axios.get(`${baseURL}/local-token`, { withCredentials: true }).then((response) => {
     const token = String(response.data?.token || "");
     if (token) {
       localBrowserToken = token;
       window.sessionStorage.setItem("LZCORE_LOCAL_TOKEN", token);
     }
     return token;
-  } catch {
+  }).catch((error: unknown) => {
+    // Authenticated deployments explicitly disable the local-mode token.
+    // Cache that fact for this page, but retry transient/auth failures later.
+    if (axios.isAxiosError(error) && error.response?.status === 404 && error.response.data?.error === "local_token_unused") {
+      localTokenUnused = true;
+    }
     return "";
-  }
+  }).finally(() => { localTokenRequest = null; });
+  return localTokenRequest;
 }
 
 export function getApiAccessToken(): string {

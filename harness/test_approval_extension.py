@@ -54,6 +54,86 @@ def test_approval_is_absent_when_the_skill_has_not_enabled_it(monkeypatch, tmp_p
     assert approval.prepare_network_operation(_request("default", skill, connection)) is None
 
 
+def test_connection_suffix_cannot_bypass_enabled_approval(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    request = _request("default", skill, connection)
+    request["arguments"]["connection_id"] = connection["connection_id"].removeprefix("connection_")
+    record = approval.prepare_network_operation(request)
+    assert record is not None
+    assert record["target"]["connection"]["connection_id"] == connection["connection_id"]
+
+
+@pytest.mark.parametrize("initial, current", [(False, True), (True, False)])
+def test_approval_uses_current_skill_setting_not_selection_snapshot(monkeypatch, tmp_path, initial, current):
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=initial)
+    request = _request("default", skill, connection)
+    network.save_skill("default", {**skill, "approval_enabled": current})
+    record = approval.prepare_network_operation(request)
+    assert (record is not None) is current
+
+
+@pytest.mark.parametrize("failure_stage", ["discovery", "hook"])
+def test_interceptor_failure_never_executes_the_write(monkeypatch, tmp_path, failure_stage):
+    import asyncio
+    from agent.llm.schemas import LLMToolCall
+    from core.runtime_engine.models import SSOTRuntimeConfig, StatelessContext
+    from core.runtime_engine.query_loop import StreamingToolExecutor
+
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    request = _request("default", skill, connection)
+
+    def broken_hook(_request):
+        raise OSError("private error details")
+
+    def discover_hooks():
+        if failure_stage == "discovery":
+            raise OSError("private error details")
+        return [("approval", broken_hook)]
+
+    monkeypatch.setattr("extensions.runtime.execution_interceptors", discover_hooks)
+    invoked = []
+
+    class Runtime:
+        def invoke_raw(self, tool_id, arguments):
+            invoked.append(tool_id)
+            return {"ok": True}
+
+    ctx = StatelessContext(
+        workspace_id="default", session_id="session_approval", request_id="request_approval",
+        user_input="configure device", extras={"workbench_context": request["workbench_context"]},
+    )
+    result = asyncio.run(StreamingToolExecutor(Runtime(), SSOTRuntimeConfig()).execute([
+        LLMToolCall(id="write", name=request["tool_id"], arguments=request["arguments"]),
+    ], ctx=ctx))[0]
+    assert invoked == []
+    assert result.ok is False
+    assert result.output["executed"] is False
+    assert result.error_code == "EXECUTION_INTERCEPTOR_FAILED"
+    assert "private error details" not in str(result.output)
+
+
+def test_approval_actor_is_taken_from_authenticated_storage_principal(monkeypatch, tmp_path):
+    from flask import Flask
+    from extensions.approval.backend import register_routes
+    from storage.principal import storage_principal
+
+    _setup(monkeypatch, tmp_path)
+    app = Flask(__name__)
+    register_routes(app)
+    with storage_principal("api-token"):
+        _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+        record = approval.prepare_network_operation(_request("default", skill, connection))
+        response = app.test_client().post(
+            f"/api/extensions/approval/operations/{record['operation_id']}/decision?workspace_id=default",
+            json={"decision": "reject", "decided_by": "forged-admin"},
+        )
+    assert response.status_code == 200
+    assert response.get_json()["operation"]["decision"]["decided_by"] == "api-token"
+
+
 def test_only_display_and_show_command_batches_bypass_approval(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     _, connection, skill = _connection_and_skill("default", approval_enabled=True)

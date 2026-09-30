@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from flask import jsonify, request
-from storage.principal import ContextThreadPoolExecutor
+from storage.principal import ContextThreadPoolExecutor, current_storage_principal
 
 from extensions.approval import service
 
@@ -78,7 +78,7 @@ def register_routes(app):
                 workspace_id,
                 operation_id,
                 str(payload.get("decision") or ""),
-                decided_by=str(payload.get("decided_by") or "user"),
+                decided_by=current_storage_principal() or "user",
                 note=str(payload.get("note") or ""),
             )
             if record.get("status") != "approved":

@@ -690,10 +690,21 @@ def topology_tool(invocation):
         args["group_updates"] = args.get("zones")
     if "canvas_items" in args and not args.get("canvas_item_updates"):
         args["canvas_item_updates"] = args.get("canvas_items")
+    if "name" not in args and "title" in args:
+        args["name"] = args["title"]
+    if "description" not in args:
+        if "summary" in args:
+            args["description"] = args["summary"]
+        elif "comment" in args:
+            args["description"] = args["comment"]
 
     action = str(args.get("action") or "").strip().lower()
     if not action:
-        if any(args.get(k) for k in ("node_updates", "nodes", "link_updates", "links", "group_updates", "groups", "zones", "canvas_item_updates", "canvas_items", "remove_node_ids", "remove_link_ids")):
+        if any(args.get(k) for k in (
+            "node_updates", "nodes", "link_updates", "links", "group_updates", "groups", "zones",
+            "canvas_item_updates", "canvas_items", "remove_node_ids", "remove_link_ids",
+            "remove_group_ids", "remove_canvas_item_ids",
+        )) or any(k in args for k in ("name", "description")):
             action = "patch"
         else:
             action = "read"
@@ -702,13 +713,14 @@ def topology_tool(invocation):
         return {"ok": False, "error": "topology_edit_not_permitted", "message": "当前为只读分析模式，未授权修改图纸。"}
     try:
         if action == "read":
-            return {"ok": True, "topology": topology, "version": topology["version"]}
+            return {"ok": True, "action": "read", "topology": topology, "version": topology["version"]}
         if action == "patch":
             topology = drawings.patch_topology(invocation.workspace_id, topology_id, args)
             node_count = len(topology.get("nodes") or [])
             link_count = len(topology.get("links") or [])
             return {
                 "ok": True,
+                "action": "patch",
                 "topology_id": topology_id,
                 "version": topology["version"],
                 "node_count": node_count,

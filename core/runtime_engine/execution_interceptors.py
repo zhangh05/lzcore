@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+class ExecutionInterceptionError(RuntimeError):
+    """An execution guard could not decide safely; the handler must not run."""
+
+
 @dataclass(frozen=True)
 class ExecutionInterception:
     """A server-created request to defer one tool invocation."""
@@ -48,8 +52,8 @@ def before_tool_execution(*, tool_id: str, call_id: str, arguments: dict[str, An
         from extensions.runtime import execution_interceptors
 
         hooks = execution_interceptors()
-    except Exception:
-        return None
+    except Exception as exc:
+        raise ExecutionInterceptionError("execution_interceptor_discovery_failed") from exc
     request = {
         "tool_id": str(tool_id),
         "call_id": str(call_id),
@@ -63,11 +67,10 @@ def before_tool_execution(*, tool_id: str, call_id: str, arguments: dict[str, An
     for extension_id, hook in hooks:
         try:
             outcome = hook(dict(request))
-        except Exception:
-            # An optional extension must not turn an unrelated tool call into
-            # a synthetic platform failure.  Extension health remains visible
-            # through its own lifecycle state.
-            continue
+        except Exception as exc:
+            # Hooks must return None for unrelated invocations. An exception
+            # is not permission to bypass a guard on the current operation.
+            raise ExecutionInterceptionError("execution_interceptor_failed") from exc
         if not isinstance(outcome, dict) or outcome.get("action") != "suspend":
             continue
         interruption_id = str(outcome.get("interruption_id") or "").strip()

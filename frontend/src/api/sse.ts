@@ -101,10 +101,16 @@ class FetchSSEConnection extends EventTarget implements SSEConnection {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let previousChunkEndedWithCR = false;
     try {
       while (!this.closed) {
         const { value, done } = await reader.read();
-        buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const decoded = decoder.decode(value, { stream: !done });
+        // A CRLF pair may straddle reads. The CR was already normalized,
+        // so consume its following LF without inventing a blank SSE line.
+        const chunk = previousChunkEndedWithCR && decoded.startsWith("\n") ? decoded.slice(1) : decoded;
+        if (decoded) previousChunkEndedWithCR = decoded.endsWith("\r");
+        buffer += chunk.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
         if (buffer.length > MAX_SSE_BUFFER_CHARS && !buffer.includes("\n\n")) {
           throw new Error("sse_frame_too_large");
         }

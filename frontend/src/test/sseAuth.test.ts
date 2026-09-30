@@ -57,6 +57,34 @@ describe("authenticated SSE transport", () => {
     connection.close();
   });
 
+  it("preserves named multiline events when CRLF is split between chunks", async () => {
+    window.sessionStorage.setItem("LZCORE_API_TOKEN", "token");
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of ["id: 42\r", "\nevent: turn_completed\r", "\ndata: first\r", "\ndata: second\r", "\n\r", "\n"]) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    })));
+    const connection = openSSE("/agent/sse/stream/session-1?workspace_id=default");
+    const events: MessageEvent<string>[] = [];
+    connection.onmessage = (event) => events.push(event);
+    connection.addEventListener("turn_completed", (event) => events.push(event as MessageEvent<string>));
+    try {
+      await vi.waitFor(() => expect(events).toHaveLength(1));
+      expect(events[0].type).toBe("turn_completed");
+      expect(events[0].data).toBe("first\nsecond");
+      expect(events[0].lastEventId).toBe("42");
+    } finally {
+      connection.close();
+    }
+  });
+
   it("stops reconnecting when a static API token is rejected", async () => {
     vi.useFakeTimers();
     window.sessionStorage.setItem("LZCORE_API_TOKEN", "expired-token");

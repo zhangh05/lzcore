@@ -6,6 +6,8 @@
 
 它不是权限系统，也不判断命令是否“危险”。网络设备账号仍是实际命令权限的最终来源；Skill 和连接选择仍由网络扩展在服务端实时校验。
 
+拦截时读取 Skill 当前的 `approval_enabled`，不使用工作台选择时保存的开关快照。连接短 ID 先解析为完整 ID，再与当前 Skill 范围和工作台已选连接核对。拦截器发现或执行失败时，运行时返回 `EXECUTION_INTERCEPTOR_FAILED`、`executed: false`，不会继续执行该写入。
+
 ## 生命周期
 
 ```text
@@ -41,3 +43,5 @@ checkpoint 没有 TTL；等待十分钟或更久不会使其过期。若等待�
 - `POST /api/extensions/approval/operations/{operation_id}/decision`
 
 所有 API 均要求 `workspace_id`。扩展记录不会存储设备明文凭据。
+
+决定记录的 `decided_by` 来自服务端认证主体，不接受请求正文声明的身份；无认证主体的本地模式记录为 `user`。

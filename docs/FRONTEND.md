@@ -35,6 +35,7 @@ route state + Zustand store
 
 - 登录态使用 HttpOnly Cookie。受控 token 流只允许从 `sessionStorage` 读取，不得写入 URL、`localStorage`、构建变量或日志。
 - 分离部署时，`VITE_API_BASE` 同时决定 HTTP、WebSocket 和 SSE 的 API origin。
+- 本地令牌探测共享并发请求；服务端明确返回 `local_token_unused` 时，同一页面不再重复探测，临时网络故障仍可重试。fetch SSE 解析支持跨网络分片的 CRLF 换行，保留事件名、多行内容与事件 ID。
 - 前端显示服务端给出的 `execution_outcome`、`tool_execution_outcome`、恢复目标和结构化错误，不自行推断或改写任务事实。
 - 单个工具失败不能渲染成整个任务失败。外部操作结果未知时，界面必须如实呈现完整结果与不确定性，不把模型仍在运行的会话误显示为完成。
 - 浏览器不能自行扩大 `workspace_id`、设备范围、连接范围或 Skill 工具范围；网络 Skill 的配置能力由已发布 Skill 的服务端范围决定，不是浏览器可传入的开关。
