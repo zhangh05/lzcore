@@ -2,7 +2,7 @@ export function netOpsIconForDeviceType(deviceType: string): string {
   const type = deviceType.trim().toLowerCase();
   if (type.includes("firewall") || type.includes("fw") || type.includes("security")) return "/netops-canvas/icons/icon_firewall_custom.svg";
   if (type.includes("router")) {
-    if (type.includes("core")) return "/netops-canvas/icons/router_core.svg";
+    if (type.includes("core")) return "/netops-canvas/icons/router.svg";
     if (type.includes("advanced") || type.includes("border") || type.includes("edge")) return "/netops-canvas/icons/router_advanced.svg";
     return "/netops-canvas/icons/router.svg";
   }
