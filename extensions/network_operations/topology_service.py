@@ -22,6 +22,22 @@ def _store(workspace_id: str) -> ExtensionDataStore:
     return ExtensionDataStore("network.operations", workspace_id)
 
 
+def _notify_topology_saved(workspace_id: str, saved: dict[str, Any]) -> None:
+    """One commit, one notice. patch_topology already ends in save_topology."""
+    try:
+        from backend.ws.agent_ws import broadcast_ws_event
+        broadcast_ws_event({
+            "name": "topology_updated",
+            "data": {
+                "workspace_id": workspace_id,
+                "topology_id": str(saved.get("topology_id") or ""),
+                "version": int(saved.get("version") or 0),
+            },
+        })
+    except Exception:
+        pass
+
+
 def _drawing_transaction(func):
     @wraps(func)
     def mutate(workspace_id, *args, **kwargs):
@@ -527,7 +543,9 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         topology_id,
         {str(node.get("node_id") or "") for node in normalized_nodes},
     )
-    return _public_topology(record)
+    saved = _public_topology(record)
+    _notify_topology_saved(workspace_id, saved)
+    return saved
 
 
 @_drawing_transaction

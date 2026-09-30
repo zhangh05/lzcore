@@ -5,12 +5,13 @@ import { useChatStream } from "../hooks/useChatStream";
 import { useWorkbenchStore } from "../stores/workbench";
 import { precedingStageOutputs } from "../utils/stageOutputs";
 import { installMockApi, resetMocks } from "./mockServer";
+import { resetTurnTransport } from "../realtime/turnTransport";
 
 beforeEach(() => {
   installMockApi();
-  useWorkbenchStore.setState({ bySession: {}, currentSessionId: "stages", sending: false });
+  useWorkbenchStore.setState({ bySession: {}, currentSessionId: "stages", sending: false, activeTurns: {} });
 });
-afterEach(() => { vi.unstubAllGlobals(); resetMocks(); });
+afterEach(() => { resetTurnTransport(); vi.unstubAllGlobals(); resetMocks(); });
 
 it("preserves queued text across tool and model boundaries, then restores it from server history", async () => {
   let socket: FakeSocket;
@@ -18,10 +19,13 @@ it("preserves queued text across tool and model boundaries, then restores it fro
     onopen?: () => void;
     onmessage?: (event: { data: string }) => void;
     onclose?: () => void;
+    static OPEN = 1;
+    readyState = 1;
+    sent = false;
     constructor() { socket = this; queueMicrotask(() => this.onopen?.()); }
-    send() {}
+    send(raw: string) { if (JSON.parse(raw).type === "message") this.sent = true; }
     close() { this.onclose?.(); }
-    frame(data: object) { this.onmessage?.({ data: JSON.stringify(data) }); }
+    frame(data: object) { this.onmessage?.({ data: JSON.stringify({ client_request_id: useWorkbenchStore.getState().activeTurns.stages, ...data }) }); }
   }
   vi.stubGlobal("WebSocket", FakeSocket);
   const hook = renderHook(() => useChatStream(
@@ -30,7 +34,7 @@ it("preserves queued text across tool and model boundaries, then restores it fro
   ));
   let pending: Promise<void>;
   act(() => { pending = hook.result.current.send({ text: "检查", attachments: [], effectiveSessionId: "stages" }); });
-  await waitFor(() => expect(socket!.onmessage).toBeTypeOf("function"));
+  await waitFor(() => expect(socket!.sent).toBe(true));
   act(() => {
     socket.frame({ type: "event", name: "model_started", data: {} });
     socket.frame({ type: "token", content: "先检查第一项。" });
@@ -54,6 +58,27 @@ it("preserves queued text across tool and model boundaries, then restores it fro
   }]));
   expect(useWorkbenchStore.getState().bySession.stages[0].stageOutputs).toEqual(stages);
   hook.unmount();
+});
+
+it("keeps the turn socket open when the page unmounts", async () => {
+  let closed = false;
+  class FakeSocket {
+    onopen?: () => void;
+    onmessage?: (event: { data: string }) => void;
+    constructor() { queueMicrotask(() => this.onopen?.()); }
+    send() {}
+    close() { closed = true; }
+  }
+  vi.stubGlobal("WebSocket", FakeSocket);
+  const hook = renderHook(() => useChatStream(
+    { workspaceId: "default", sessionId: "stages", llmHealth: {} },
+    { onSessionResolved: vi.fn() },
+  ));
+  act(() => { void hook.result.current.send({ text: "继续", attachments: [], effectiveSessionId: "stages" }); });
+  await waitFor(() => expect(useWorkbenchStore.getState().activeTurns.stages).toBeTruthy());
+  hook.unmount();
+  expect(closed).toBe(false);
+  expect(useWorkbenchStore.getState().activeTurns.stages).toBeTruthy();
 });
 
 it("keeps earlier outputs collapsible and removes only the duplicate final stage", () => {

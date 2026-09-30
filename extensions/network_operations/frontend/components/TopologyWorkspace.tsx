@@ -51,7 +51,10 @@ import {
 } from "../../../../frontend/src/components/Icon";
 import { Link, useNavigate } from "../../../../frontend/src/router";
 import { useSessionStore } from "../../../../frontend/src/stores/session";
+import { useWorkbenchStore } from "../../../../frontend/src/stores/workbench";
 import { apiRequest } from "../../../../frontend/src/api/client";
+import { shouldAdoptRemoteTopology } from "../../../../frontend/src/realtime/adoptTopology";
+import { onTopologyUpdated, onTransportResumed } from "../../../../frontend/src/realtime/turnTransport";
 import { overlayBorderStatus, overlayCanvasLine, overlayCaption, type NodeOverlay } from "./nodeOverlay";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
@@ -1030,6 +1033,8 @@ export default function TopologyWorkspace({
   /** The object a locate action is still trying to centre, if any. */
   const pendingFocusRef = useRef<string>("");
   const [layoutBusy, setLayoutBusy] = useState(false);
+  const workspaceIdRef = useRef(workspaceId);
+  workspaceIdRef.current = workspaceId;
   const activeTopologyRef = useRef(activeTopology);
   activeTopologyRef.current = activeTopology;
   /**
@@ -2603,28 +2608,70 @@ export default function TopologyWorkspace({
    * turn finishes we reconcile: adopt the server drawing when the local canvas
    * has nothing unsaved, and never silently overwrite pending local edits.
    */
-  const handleAgentCompleted = useCallback(async () => {
-    if (!activeTopology) return;
+  const reconcileServerTopology = useCallback(async (topologyId: string) => {
+    const requestedWorkspaceId = workspaceId;
     try {
       const res = await apiRequest<{ topology: Topology }>({
         method: "GET",
-        url: `${base}/topologies/${activeTopology.topology_id}`,
-        params: { workspace_id: workspaceId },
+        url: `${base}/topologies/${topologyId}`,
+        params: { workspace_id: requestedWorkspaceId },
       });
+      if (requestedWorkspaceId !== workspaceIdRef.current) return;
       const remote = res.topology;
-      if (!remote || remote.version === activeTopologyRef.current?.version) return;
-      if (saveStatusRef.current !== "saved") {
-        setNotice("Agent 已更新服务端图纸；本地还有未保存改动，保存后即可看到结论", false);
+      const current = activeTopologyRef.current;
+      const adopt = shouldAdoptRemoteTopology({
+        requestedWorkspaceId,
+        requestedTopologyId: topologyId,
+        currentWorkspaceId: workspaceIdRef.current,
+        currentTopologyId: current?.topology_id ?? null,
+        saveStatus: saveStatusRef.current,
+        currentVersion: current?.version ?? null,
+        remote,
+      });
+      if (!adopt || !remote) {
+        if (remote && saveStatusRef.current !== "saved" && remote.topology_id === current?.topology_id && remote.version > (current?.version ?? 0)) {
+          setNotice("Agent 已更新服务端图纸；本地还有未保存改动，保存后即可看到结论", false);
+        }
         return;
       }
-      // The agent wrote on the server, so this is a server-confirmed state,
-      // not a local edit waiting to be saved.
+      const previous = current?.version ?? remote.version;
       adoptServerTopology(remote);
-      setNotice(`Agent 已把结论写回画布（版本 ${activeTopology.version} → ${remote.version}）`, true);
+      if (remote.version !== previous) {
+        setNotice(`Agent 已把结论写回画布（版本 ${previous} → ${remote.version}）`, true);
+      }
     } catch {
       // A failed reconciliation must not disturb the canvas the user is on.
     }
-  }, [activeTopology, workspaceId, adoptServerTopology, setNotice]);
+  }, [workspaceId, adoptServerTopology, setNotice]);
+
+  const handleAgentCompleted = useCallback(async () => {
+    const topologyId = activeTopologyRef.current?.topology_id;
+    if (!topologyId) return;
+    await reconcileServerTopology(topologyId);
+  }, [reconcileServerTopology]);
+
+  useEffect(() => {
+    return onTopologyUpdated((data) => {
+      if (data.workspace_id !== workspaceId) return;
+      if (!data.topology_id || data.topology_id !== activeTopologyRef.current?.topology_id) return;
+      if ((data.version || 0) <= (activeTopologyRef.current?.version || 0)) return;
+      void reconcileServerTopology(data.topology_id);
+    });
+  }, [workspaceId, reconcileServerTopology]);
+
+  useEffect(() => {
+    return onTransportResumed(() => {
+      const topologyId = activeTopologyRef.current?.topology_id;
+      if (topologyId) void reconcileServerTopology(topologyId);
+    });
+  }, [reconcileServerTopology]);
+
+  useEffect(() => {
+    const active = useWorkbenchStore.getState().activeTurns;
+    if (!active || Object.keys(active).length === 0) return;
+    const topologyId = activeTopologyRef.current?.topology_id || selectedTopologyId;
+    if (topologyId) void reconcileServerTopology(topologyId);
+  }, [selectedTopologyId, workspaceId, reconcileServerTopology]);
 
   const [restoreLayout, setRestoreLayout] = useState(true);
 

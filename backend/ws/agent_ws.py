@@ -203,6 +203,67 @@ def _enqueue_broadcast(username: str, workspace_id: str, coalesce_key: str, payl
         _broadcast_cv.notify()
 
 
+_broadcast_listener_started = False
+
+
+def _ensure_broadcast_listener() -> None:
+    global _broadcast_listener_started
+    from agent.runtime.turn_replay import _redis_url
+    if _broadcast_listener_started:
+        return
+    url = _redis_url()
+    if not url:
+        return
+    _broadcast_listener_started = True
+    threading.Thread(
+        target=_listen_broadcasts, args=(url,), name="lzcore-ws-event-bus", daemon=True,
+    ).start()
+
+
+def _listen_broadcasts(url: str) -> None:
+    from agent.runtime.turn_replay import PROCESS_ORIGIN
+    from storage.principal import storage_principal
+    try:
+        import redis
+        client = redis.Redis.from_url(url, decode_responses=True)
+        pubsub = client.pubsub()
+        pubsub.subscribe("lzcore:ws_events")
+        for message in pubsub.listen():
+            if message.get("type") != "message":
+                continue
+            try:
+                payload = json.loads(message.get("data") or "{}")
+            except json.JSONDecodeError:
+                continue
+            if payload.get("origin") == PROCESS_ORIGIN:
+                continue
+            event = payload.get("event")
+            if isinstance(event, dict):
+                with storage_principal(str(payload.get("username") or "")):
+                    broadcast_ws_event(event, remote=True)
+    except Exception:
+        _log.warning("websocket event listener stopped", exc_info=True)
+
+
+def _publish_broadcast(event: dict) -> None:
+    """Fan a snapshot to other processes. Local delivery already happened."""
+    from agent.runtime.turn_replay import PROCESS_ORIGIN, _redis_url
+    from storage.principal import current_storage_principal
+    url = _redis_url()
+    if not url:
+        return
+    try:
+        import redis
+        client = redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=1, socket_timeout=1)
+        client.publish("lzcore:ws_events", json.dumps({
+            "origin": PROCESS_ORIGIN,
+            "username": current_storage_principal(),
+            "event": event,
+        }, ensure_ascii=True, default=str))
+    except Exception:
+        _log.warning("unable to publish websocket event", exc_info=True)
+
+
 def request_active_turn_cancel(username: str, workspace_id: str, job_id: str) -> bool:
     """Signal the in-process runtime worker owned by this user/workspace."""
     key = (str(username or ""), str(workspace_id or ""), str(job_id or ""))
@@ -214,7 +275,22 @@ def request_active_turn_cancel(username: str, workspace_id: str, job_id: str) ->
     return True
 
 
-def broadcast_ws_event(event: dict) -> None:
+def broadcast_coalesce_key(username: str, workspace_id: str, event: dict) -> str:
+    """Snapshots collapse to the latest object. Turn frames never share a key."""
+    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    name = str(event.get("name") or "event")
+    if name == "turn_frame":
+        request_id = str(data.get("client_request_id") or "")
+        seq = str(data.get("seq") or data.get("stream_seq") or "")
+        return f"{username}:{workspace_id}:turn:{request_id}:{seq}"
+    if name == "topology_updated":
+        topology_id = str(data.get("topology_id") or "")
+        return f"{username}:{workspace_id}:topology:{topology_id}"
+    durable_id = str(data.get("job_id") or data.get("session_id") or name or "event")
+    return f"{username}:{workspace_id}:{durable_id}"
+
+
+def broadcast_ws_event(event: dict, *, remote: bool = False) -> None:
     """Push a system event only to clients in the owning workspace."""
     data = event.get("data") if isinstance(event.get("data"), dict) else {}
     workspace_id = str(data.get("workspace_id") or "").strip()
@@ -224,13 +300,92 @@ def broadcast_ws_event(event: dict) -> None:
     from storage.principal import current_storage_principal
     username = current_storage_principal()
     payload = json.dumps({"type": "event", "name": event["name"], "data": event.get("data", {})}, ensure_ascii=True, default=str)
-    durable_id = str(data.get("job_id") or data.get("session_id") or event.get("name") or "event")
-    _enqueue_broadcast(username, workspace_id, f"{username}:{workspace_id}:{durable_id}", payload)
+    _enqueue_broadcast(username, workspace_id, broadcast_coalesce_key(username, workspace_id, event), payload)
+    if not remote:
+        _publish_broadcast(event)
+
+
+class _SocketOutbox:
+    """One sender owns the socket so control frames and turn frames stay ordered."""
+
+    def __init__(self, ws):
+        self.ws = ws
+        self.queue: queue.Queue[str | None] = queue.Queue(maxsize=1000)
+        self.closed = threading.Event()
+        self.turn_count = 0
+        self.turn_started_at: float | None = None
+        self.next_heartbeat_at = 0.0
+        self.thread = threading.Thread(target=self._run, name="lzcore-ws-sender", daemon=True)
+        self.thread.start()
+
+    def send(self, payload: str) -> bool:
+        if self.closed.is_set():
+            return False
+        try:
+            self.queue.put(payload, timeout=30)
+            return True
+        except queue.Full:
+            return False
+
+    def attach_turn(self) -> None:
+        self.turn_count += 1
+        if self.turn_started_at is None:
+            self.turn_started_at = time.monotonic()
+            self.next_heartbeat_at = self.turn_started_at + _WS_HEARTBEAT_INTERVAL_SECONDS
+
+    def detach_turn(self) -> None:
+        self.turn_count = max(0, self.turn_count - 1)
+        if self.turn_count == 0:
+            self.turn_started_at = None
+
+    def close(self) -> None:
+        self.closed.set()
+        try:
+            self.queue.put_nowait(None)
+        except queue.Full:
+            pass
+
+    def _run(self) -> None:
+        while not self.closed.is_set():
+            try:
+                item = self.queue.get(timeout=0.25)
+            except queue.Empty:
+                self._heartbeat()
+                continue
+            if item is None:
+                break
+            try:
+                self.ws.send(item)
+            except Exception:
+                self.closed.set()
+                return
+            if self.turn_started_at is not None:
+                self.next_heartbeat_at = time.monotonic() + _WS_HEARTBEAT_INTERVAL_SECONDS
+
+    def _heartbeat(self) -> None:
+        if self.turn_started_at is None or self.closed.is_set():
+            return
+        now = time.monotonic()
+        if now < self.next_heartbeat_at:
+            return
+        payload = json.dumps(_heartbeat_payload(self.turn_started_at, now), ensure_ascii=True)
+        try:
+            self.ws.send(payload)
+        except Exception:
+            self.closed.set()
+            return
+        self.next_heartbeat_at = now + _WS_HEARTBEAT_INTERVAL_SECONDS
 
 
 def register_ws_routes(app):
     """Register WebSocket routes on the Flask app."""
     sock.init_app(app)
+    try:
+        from agent.runtime.turn_replay import ensure_replay_listener
+        ensure_replay_listener()
+    except Exception:
+        _log.warning("turn replay listener was not started", exc_info=True)
+    _ensure_broadcast_listener()
 
     @sock.route("/ws/agent")
     def ws_agent(ws):
@@ -252,6 +407,11 @@ def register_ws_routes(app):
         authenticated_workspaces: list[str] = []
         ws_key = ""
         active_cancel_event = None
+        outbox = _SocketOutbox(ws)
+        unsubscribers: dict[tuple[str, str, str], object] = {}
+
+        def emit(payload: dict) -> None:
+            outbox.send(json.dumps(payload, ensure_ascii=True, default=str))
 
         try:
             first_frame = True
@@ -325,8 +485,17 @@ def register_ws_routes(app):
                         continue
                     ws_key = f"{id(ws)}_{threading.current_thread().ident}"
                     with _active_ws_lock:
-                        _active_ws_connections[ws_key] = (authenticated_username, workspace_id, ws)
-                    ws.send(json.dumps({"type": "pong", "message": "connected"}, ensure_ascii=True))
+                        _active_ws_connections[ws_key] = (authenticated_username, workspace_id, outbox)
+                    emit({"type": "pong", "message": "connected"})
+                    continue
+
+                if msg.get("type") == "resume":
+                    resumed = _attach_turn_replay(
+                        msg, authenticated_username, authenticated_role,
+                        authenticated_workspaces, outbox, unsubscribers, emit,
+                    )
+                    if not resumed:
+                        continue
                     continue
 
                 if msg.get("type") != "message":
@@ -417,55 +586,17 @@ def register_ws_routes(app):
                     ),
                     daemon=True,
                 )
+                outbox.attach_turn()
                 thread.start()
-
-                # Stream events from queue to WebSocket
-                turn_started_at = time.monotonic()
-                next_heartbeat_at = turn_started_at + _WS_HEARTBEAT_INTERVAL_SECONDS
-                while True:
-                    try:
-                        event = event_queue.get(timeout=0.25)
-                    except queue.Empty:
-                        if not thread.is_alive():
-                            try:
-                                event = event_queue.get(timeout=0.5)
-                            except queue.Empty:
-                                break
-                        else:
-                            now = time.monotonic()
-                            if now >= next_heartbeat_at:
-                                try:
-                                    ws.send(json.dumps(
-                                        _heartbeat_payload(turn_started_at, now),
-                                        ensure_ascii=True,
-                                    ))
-                                except Exception:
-                                    # A browser refresh only detaches the viewer.
-                                    # The durable turn continues and can be recovered
-                                    # through the session job snapshot after reconnect.
-                                    transport_closed.set()
-                                    return
-                                next_heartbeat_at = now + _WS_HEARTBEAT_INTERVAL_SECONDS
-                            continue
-
-                    if event is None:
-                        break
-
-                    try:
-                        ws.send(json.dumps(event, ensure_ascii=True, default=str))
-                        next_heartbeat_at = time.monotonic() + _WS_HEARTBEAT_INTERVAL_SECONDS
-                    except Exception:  # noqa: BLE001 - transport failure must not cancel the detached business turn
-                        # Do not cancel business execution merely because the
-                        # transport disappeared (refresh, sleep, network flap).
-                        transport_closed.set()
-                        return
-
-                if error_holder["error"]:
-                    try:
-                        ws.send(json.dumps({"type": "error", "message": error_holder["error"]}, ensure_ascii=True))
-                    except Exception:
-                        pass
-                active_cancel_event = None
+                # Drain on a side thread so this socket can still receive
+                # resume, ping and later messages. The log, not this queue,
+                # is what a reconnect reads.
+                threading.Thread(
+                    target=_drain_turn_queue,
+                    args=(event_queue, outbox, transport_closed),
+                    name="lzcore-ws-turn-drain",
+                    daemon=True,
+                ).start()
 
         except (ConnectionClosed, TimeoutError):
             # Normal browser close/refresh or an idle unauthenticated handshake.
@@ -477,8 +608,14 @@ def register_ws_routes(app):
             except Exception:
                 pass
         finally:
+            for unsubscribe in list(unsubscribers.values()):
+                try:
+                    unsubscribe()
+                except Exception:
+                    pass
+            outbox.close()
             if ws_key:
-                _drop_broadcast_client(ws_key, ws)
+                _drop_broadcast_client(ws_key, outbox)
             _release_ws_slot(client_ip)
 
     return app
@@ -557,6 +694,109 @@ def _ws_workspace_allowed(username: str, role: str, allowed: list[str], workspac
         return False
 
 
+def _drain_turn_queue(event_queue: queue.Queue, outbox: _SocketOutbox, transport_closed: threading.Event) -> None:
+    """Forward one turn's frames without occupying the socket receive loop."""
+    while True:
+        try:
+            event = event_queue.get(timeout=0.25)
+        except queue.Empty:
+            if transport_closed.is_set():
+                outbox.detach_turn()
+                return
+            continue
+        if event is None:
+            outbox.detach_turn()
+            return
+        payload = json.dumps(event, ensure_ascii=True, default=str)
+        if not outbox.send(payload):
+            transport_closed.set()
+            outbox.detach_turn()
+            return
+
+
+def _attach_turn_replay(msg, username, role, workspaces, outbox, unsubscribers, emit) -> bool:
+    """Read an existing turn log. This never submits the user message again."""
+    session_id = str(msg.get("session_id") or "")
+    workspace_id = str(msg.get("workspace_id") or "")
+    client_request_id = str(msg.get("client_request_id") or "")
+    try:
+        cursor = int(msg.get("stream_seq") or 0)
+    except (TypeError, ValueError):
+        cursor = 0
+    if not workspace_id or not session_id or not client_request_id:
+        emit({"type": "error", "message": "resume_target_required"})
+        return False
+    try:
+        from storage.ids import validate_session_id, validate_workspace_id
+        workspace_id = validate_workspace_id(workspace_id)
+        session_id = validate_session_id(session_id)
+    except ValueError:
+        emit({"type": "error", "message": "Invalid session_id or workspace_id"})
+        return False
+    if not _ws_workspace_allowed(username, role, workspaces, workspace_id, write=False):
+        emit({"type": "error", "message": "workspace_forbidden"})
+        return False
+    from agent.runtime.turn_replay import subscribe_turn, turn_exists
+    try:
+        known = turn_exists(workspace_id, session_id, client_request_id, username=username)
+    except ValueError:
+        known = False
+    if not known:
+        emit({"type": "error", "message": "resume_not_found", "session_id": session_id, "client_request_id": client_request_id})
+        return False
+    key = (workspace_id, session_id, client_request_id)
+    previous = unsubscribers.pop(key, None)
+    if previous:
+        previous()
+    if len(unsubscribers) >= 128:
+        emit({"type": "error", "message": "resume_limit_exceeded", "session_id": session_id, "client_request_id": client_request_id})
+        return False
+    outbox.attach_turn()
+    unsubscribers[key] = subscribe_turn(
+        workspace_id, session_id, client_request_id,
+        send=outbox.send, cursor=cursor, username=username,
+        on_terminal=outbox.detach_turn,
+    )
+    return True
+
+
+def _stamp_replay_frame(
+    workspace_id: str,
+    session_id: str,
+    client_request_id: str,
+    username: str,
+    stats: dict,
+    stats_lock: threading.Lock,
+    frame: dict,
+) -> dict:
+    """Give every replayable frame, including done and error, its own sequence."""
+    from storage.redaction import redact_value
+    stamped = redact_value(dict(frame))
+    if session_id and not stamped.get("session_id"):
+        stamped["session_id"] = session_id
+    if client_request_id:
+        stamped["client_request_id"] = client_request_id
+    if client_request_id and session_id and workspace_id:
+        try:
+            from agent.runtime.turn_replay import append_frame
+            stored = append_frame(
+                workspace_id, session_id, client_request_id, stamped, username=username,
+            )
+            seq = int(stored.get("seq") or 0)
+            if seq:
+                with stats_lock:
+                    stats["event_seq"] = seq
+                return stored
+        except Exception:
+            _log.exception("turn replay append failed session=%s", session_id)
+    with stats_lock:
+        seq = int(stats.get("event_seq", 0)) + 1
+        stats["event_seq"] = seq
+    stamped["seq"] = seq
+    stamped["stream_seq"] = seq
+    return stamped
+
+
 def _run_agent_thread(
     user_input, session_id, workspace_id, metadata, event_queue, error_holder,
     stats, cancel_event=None, username="", transport_closed=None,
@@ -593,7 +833,11 @@ def _run_agent_thread(
         # reject callbacks copied into a late `asyncio.to_thread()` worker.
         with emission_lock:
             emissions_open.clear()
-            enqueue_live(event)
+            stamped = _stamp_replay_frame(
+                workspace_id, session_id, client_request_id, username,
+                stats, stats_lock, event if isinstance(event, dict) else {"type": "event"},
+            )
+            enqueue_live(stamped)
 
     def realtime_callback(event):
         emission_lock.acquire()
@@ -602,10 +846,14 @@ def _run_agent_thread(
                 return
             with stats_lock:
                 stats["live_events"] = int(stats.get("live_events", 0)) + 1
-                seq = int(stats.get("event_seq", 0)) + 1
-                stats["event_seq"] = seq
             if isinstance(event, dict) and event.get("type") == "token":
-                enqueue_live({"type": "token", "content": event.get("content", ""), "seq": seq})
+                enqueue_live(_stamp_replay_frame(
+                    workspace_id, session_id, client_request_id, username,
+                    stats, stats_lock,
+                    {"type": "token", "content": event.get("content", "")},
+                ))
+            elif isinstance(event, dict) and event.get("type") == "heartbeat":
+                enqueue_live({"type": "event", "name": "heartbeat", "data": event})
             else:
                 name = event.get("type", event.get("name", "event")) if isinstance(event, dict) else "event"
                 data = event
@@ -640,12 +888,11 @@ def _run_agent_thread(
                         )
                     except Exception:
                         _log.exception("unable to persist live stage job=%s stage=%s", job_id_for_event, name)
-                enqueue_live({
-                    "type": "event",
-                    "name": name,
-                    "data": data,
-                    "seq": seq,
-                })
+                enqueue_live(_stamp_replay_frame(
+                    workspace_id, session_id, client_request_id, username,
+                    stats, stats_lock,
+                    {"type": "event", "name": name, "data": data},
+                ))
         except Exception:
             _log.warning("realtime_callback event push failed seq=%s", stats.get("event_seq"), exc_info=True)
         finally:
@@ -677,9 +924,17 @@ def _run_agent_thread(
                     )
                 elif turn_claim.status == "failed" and not errors:
                     errors = ["同一请求此前处理失败。"]
-                put_terminal({
+                resume_request_id = client_request_id
+                if turn_claim.status in {"running", "conflict"}:
+                    from jobs.store import get_job
+                    existing_job = get_job(workspace_id, job_id)
+                    if existing_job:
+                        active = (existing_job.metadata or {}).get("active_turn") or {}
+                        resume_request_id = str(active.get("client_request_id") or client_request_id)
+                enqueue_live({
                     "type": "done",
                     "session_id": session_id,
+                    "client_request_id": client_request_id,
                     "turn_id": turn_claim.run_id,
                     "trace_id": turn_claim.trace_id,
                     "final_response": final_response,
@@ -692,13 +947,13 @@ def _run_agent_thread(
                         "idempotent_redirect": {
                             "job_id": job_id,
                             "status": turn_claim.status or "running",
+                            "client_request_id": resume_request_id,
                         },
                     },
                     "errors": errors,
                     "warnings": [],
                     "tool_decision": {},
                     "no_tool_reason": "",
-                    "stream_seq": stats.get("event_seq", 0),
                     "capability": "",
                     "error_type": "",
                 })
@@ -803,7 +1058,10 @@ def _run_agent_thread(
         # older runtime paths still produce observable progress data.
         if int(stats.get("live_events", 0)) == 0:
             for ev in result_payload.get("events", []):
-                if not enqueue_live({"type": "event", "name": ev.get("type", "event"), "data": ev}):
+                if not enqueue_live(_stamp_replay_frame(
+                    workspace_id, session_id, client_request_id, username, stats, stats_lock,
+                    {"type": "event", "name": ev.get("type", "event"), "data": ev},
+                )):
                     break
 
         tool_calls = result_payload.get("tool_calls", [])
@@ -832,7 +1090,6 @@ def _run_agent_thread(
             "warnings": result_payload.get("warnings", []),
             "tool_decision": result_payload.get("tool_decision", {}),
             "no_tool_reason": result_payload.get("no_tool_reason", ""),
-            "stream_seq": stats.get("event_seq", 0),
             "capability": result_payload.get("capability", ""),
             "error_type": result_payload.get("error_type", ""),
         })

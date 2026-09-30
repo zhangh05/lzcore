@@ -36,8 +36,10 @@ function idleJsonStorage<T>(key: string, delayMs = 500): PersistStorage<T> {
     if (!next) return;
     try { localStorage.setItem(next.targetKey, JSON.stringify(next.value)); } catch {}
   };
+  window.addEventListener("pagehide", flush);
   return {
     getItem: () => {
+      flush();
       try {
         const raw = localStorage.getItem(scopedLocalStorageKey(key));
         return raw ? JSON.parse(raw) as StorageValue<T> : null;
@@ -91,6 +93,11 @@ export interface ChatMsg {
   stageOutputs?: StageOutput[];
   /** Durable session-job id for explicit cancellation and refresh recovery. */
   activeJobId?: string;
+  /** Last replay sequence applied to this bubble. Kept with the text. */
+  streamSeq?: number;
+  /** Full filtered buffer at streamSeq, even while text is progressively revealed. */
+  streamDraft?: string;
+  streamFilterState?: { mode: "idle" | "open" | "done"; pending?: string };
   /** Immutable Skill snapshot used for this user turn. */
   skill?: { skill_id: string; name: string };
   attachments?: Array<{ file_id: string; name: string; mime_type: string; size_bytes: number; kind: "image" | "file"; previewUrl?: string }>;
@@ -205,6 +212,8 @@ interface WorkbenchState {
   bySession: Record<string, ChatMsg[]>;
   currentSessionId: string | null;
   sending: boolean;
+  /** session id -> client_request_id for turns the transport still owns. */
+  activeTurns: Record<string, string>;
   lastUserInput: string;
   /**
    * Lazy-loaded run detail cache, keyed by run_id (not by session).
@@ -231,10 +240,12 @@ interface WorkbenchState {
   /** Update an existing message (streaming→ready/error, append tool calls) */
   updateAssistant: (
     msgId: string,
-    patch: Partial<Pick<ChatMsg, "status" | "text" | "error" | "toolCalls" | "trace_id" | "result" | "run_id" | "progressText" | "progressElapsedMs" | "stageElapsedMs" | "runtimeEvents" | "activeJobId" | "stageOutputs">>,
+    patch: Partial<Pick<ChatMsg, "status" | "text" | "error" | "toolCalls" | "trace_id" | "result" | "run_id" | "progressText" | "progressElapsedMs" | "stageElapsedMs" | "runtimeEvents" | "activeJobId" | "stageOutputs" | "streamSeq" | "streamFilterState" | "streamDraft" | "client_request_id">>,
     session_id?: string,
   ) => void;
   setSending: (v: boolean) => void;
+  beginTurn: (sessionId: string, clientRequestId: string) => void;
+  endTurn: (sessionId: string, clientRequestId: string) => void;
   /**
    * Attach a finalized AgentResult to the matching assistant message in `sid`
    * (defaults to currentSessionId). Matched by ChatMsg.run_id === result.turn_id.
@@ -268,6 +279,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(
       bySession: {},
       currentSessionId: null,
       sending: false,
+      activeTurns: {},
       lastUserInput: "",
       runDetails: {},
       runDetailLoading: {},
@@ -275,13 +287,15 @@ export const useWorkbenchStore = create<WorkbenchState>()(
 
       switchSession: (session_id) => {
         set((s) => {
+          const sending = Boolean(session_id && s.activeTurns?.[session_id]);
           if (session_id && !s.bySession[session_id]) {
             return {
               currentSessionId: session_id,
               bySession: { ...s.bySession, [session_id]: [] },
+              sending,
             };
           }
-          return { currentSessionId: session_id };
+          return { currentSessionId: session_id, sending };
         });
       },
 
@@ -338,6 +352,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(
           status: "streaming",
           created_at: new Date().toISOString(),
           toolCalls: [],
+          streamSeq: 0,
         };
         set((s) => {
           const cur = s.bySession[sid] ?? [];
@@ -383,6 +398,20 @@ export const useWorkbenchStore = create<WorkbenchState>()(
       },
 
       setSending: (v) => set({ sending: v }),
+      beginTurn: (sessionId, clientRequestId) => set((s) => ({
+        activeTurns: { ...(s.activeTurns || {}), [sessionId]: clientRequestId },
+        sending: s.currentSessionId === sessionId ? true : s.sending,
+      })),
+      endTurn: (sessionId, clientRequestId) => set((s) => {
+        const current = s.activeTurns || {};
+        if (current[sessionId] !== clientRequestId) return s;
+        const activeTurns = { ...current };
+        delete activeTurns[sessionId];
+        return {
+          activeTurns,
+          sending: Boolean(s.currentSessionId && activeTurns[s.currentSessionId]),
+        };
+      }),
       // C-plan refactor: setLatestResult attaches the AgentResult to the
       // matching assistant ChatMsg (by run_id == turn_id). Timeline view
       // derives runs from bySession, so this single source-of-truth works
@@ -617,6 +646,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(
         bySession: {},
         currentSessionId: null,
         sending: false,
+        activeTurns: {},
         lastUserInput: "",
         runDetails: {},
         runDetailLoading: {},
@@ -788,7 +818,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(
         if (safe && typeof safe === "object" && !Array.isArray(safe)) {
           merged.bySession = safe as Record<string, ChatMsg[]>;
         }
-        return { ...current, ...merged };
+        return { ...current, ...merged, activeTurns: {}, sending: false, currentSessionId: null, runDetails: {}, runDetailLoading: {}, runDetailError: {} };
       },
     },
   ),

@@ -17,13 +17,15 @@
 | `GET` | `/api/auth/oidc/start`, `/api/auth/oidc/callback` | Optional OIDC flow. |
 | `POST` | `/api/agent/message` | Run one Agent turn. |
 | `GET` | `/api/agent/sse/stream/<session_id>` | Stream one session's agent events. |
-| `WS` | `/ws/agent` | WebSocket agent stream. |
+| `WS` | `/ws/agent` | WebSocket agent stream. One connection can subscribe, send and resume. |
 | `GET` | `/api/agent/status`, `/api/agent/usage` | Agent status and usage projection. |
 | `GET/POST/DELETE` | `/api/agent/llm/config` | LLM configuration lifecycle. |
 | `GET` | `/api/agent/llm/providers`, `/api/agent/llm/providers/<provider_id>` | Provider catalog/detail. |
 | `POST/DELETE` | `/api/agent/llm/providers/<provider_id>` | Provider save/delete. |
 | `POST` | `/api/agent/llm/activate`, `/api/agent/llm/test` | Activate or test an LLM configuration. |
 | `GET` | `/api/agent/llm/status` | Safe LLM availability projection. |
+
+`/ws/agent` frames are `ping`, `message`, and `resume`. `resume` carries `workspace_id`, `session_id`, `client_request_id` and the last applied `stream_seq`; it reads the turn log and does not submit the message again. Every replayable frame, including `done` and `error`, has its own `seq`. `topology_updated` is a version hint (`workspace_id`, `topology_id`, `version`), not a drawing payload. `job_updated` remains a coalesced snapshot. Turn logs are stored beneath the owning principal's session directory, keyed by a SHA-256 digest of the complete request ID. Readers and writers refresh the shared log tail under the cross-platform file lock before assigning sequences. A socket control response for an idempotent redirect is never appended as the existing turn's terminal; its redirect metadata names the existing request to resume. Unknown resume targets return `resume_not_found` without starting a worker or executing a tool. Redis notification envelopes preserve the owning username and use a process-instance identifier rather than PID; `LZCORE_EVENT_BUS_MODE` / `LZCORE_EVENT_BUS_URL` select the existing event bus, with queue settings as a compatibility fallback.
 
 ## Runtime, context and prompts
 

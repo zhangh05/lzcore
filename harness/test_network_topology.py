@@ -681,6 +681,30 @@ def test_topology_repeated_tool_suppression_resilience():
     assert note == ""
 
 
+def test_topology_commit_emits_one_version_notice(workspace, monkeypatch):
+    events = []
+
+    def capture(event):
+        events.append(event)
+
+    monkeypatch.setattr("backend.ws.agent_ws.broadcast_ws_event", capture)
+    topo = drawings.save_topology(workspace, {
+        "name": "广播",
+        "nodes": [{"node_id": "core1", "x": 10, "y": 10}],
+        "links": [],
+    })
+    assert len(events) == 1
+    assert events[0]["name"] == "topology_updated"
+    assert events[0]["data"]["topology_id"] == topo["topology_id"]
+    assert events[0]["data"]["version"] == 1
+    drawings.patch_topology(workspace, topo["topology_id"], {
+        "version": 1,
+        "node_updates": [{"node_id": "core2", "x": 20, "y": 20}],
+    })
+    assert len(events) == 2
+    assert events[1]["data"]["version"] == 2
+
+
 def test_topology_patch_auto_version_and_fault_tolerance(workspace):
     """Verify that patch_topology auto-heals version mismatches and tolerates dangling links."""
     topo = drawings.save_topology(workspace, {

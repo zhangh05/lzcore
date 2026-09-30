@@ -40,6 +40,39 @@ def test_broadcast_enqueue_does_not_block_runtime_thread(monkeypatch):
     slow.release.set()
 
 
+def test_turn_frames_do_not_share_a_coalesce_key():
+    from backend.ws.agent_ws import broadcast_coalesce_key
+
+    first = broadcast_coalesce_key("alice", "ws-1", {
+        "name": "turn_frame",
+        "data": {"workspace_id": "ws-1", "client_request_id": "req-1", "seq": 1},
+    })
+    second = broadcast_coalesce_key("alice", "ws-1", {
+        "name": "turn_frame",
+        "data": {"workspace_id": "ws-1", "client_request_id": "req-1", "seq": 2},
+    })
+    assert first != second
+
+
+def test_topology_updates_coalesce_by_topology_id():
+    from backend.ws.agent_ws import broadcast_coalesce_key
+
+    older = broadcast_coalesce_key("alice", "ws-1", {
+        "name": "topology_updated",
+        "data": {"workspace_id": "ws-1", "topology_id": "topo-1", "version": 2},
+    })
+    newer = broadcast_coalesce_key("alice", "ws-1", {
+        "name": "topology_updated",
+        "data": {"workspace_id": "ws-1", "topology_id": "topo-1", "version": 3},
+    })
+    other = broadcast_coalesce_key("alice", "ws-1", {
+        "name": "topology_updated",
+        "data": {"workspace_id": "ws-1", "topology_id": "topo-2", "version": 1},
+    })
+    assert older == newer
+    assert older != other
+
+
 def test_pending_broadcasts_coalesce_to_latest_snapshot():
     with agent_ws._broadcast_cv:
         agent_ws._broadcast_pending.clear()
@@ -113,3 +146,24 @@ def test_slow_recipient_preserves_deferred_events_for_distinct_jobs(monkeypatch)
     assert [
         json.loads(payload)["data"]["job_id"] for payload in slow.sent
     ] == ["job-first", "job-second", "job-third"]
+
+
+def test_remote_broadcast_restores_owner_from_bus_envelope(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from storage.principal import current_storage_principal
+    delivered = []
+    event = {"name": "topology_updated", "data": {"workspace_id": "default", "topology_id": "topo", "version": 2}}
+    class Pubsub:
+        def subscribe(self, _channel):
+            pass
+        def listen(self):
+            yield {"type": "message", "data": json.dumps({"origin": "other-process", "username": "alice", "event": event})}
+    class Redis:
+        @staticmethod
+        def from_url(*args, **kwargs):
+            return SimpleNamespace(pubsub=lambda: Pubsub())
+    monkeypatch.setitem(sys.modules, "redis", SimpleNamespace(Redis=Redis))
+    monkeypatch.setattr(agent_ws, "broadcast_ws_event", lambda value, **kw: delivered.append((current_storage_principal(), value)))
+    agent_ws._listen_broadcasts("redis://test")
+    assert delivered == [("alice", event)]

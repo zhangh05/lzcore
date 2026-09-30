@@ -92,7 +92,7 @@ export function TaskWorkbench() {
     }
     return workbenchSkills.filter((s) => !s.skill_id.startsWith("drawing:"));
   }, [isSkillLocked, selectedSkill, workbenchSkills]);
-  const sending = useWorkbenchStore((s) => s.sending);
+  const sending = useWorkbenchStore((s) => Boolean(currentSessionId && s.activeTurns?.[currentSessionId]));
   const lastUserInput = useWorkbenchStore((s) => s.lastUserInput);
   const visibleHistory = useWorkbenchStore(
     (s) => s.bySession?.[currentSessionId ?? "_scratch"] ?? EMPTY_CHAT_MESSAGES,

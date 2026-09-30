@@ -85,6 +85,49 @@ def test_ws_done_payload_includes_full_inspector_fields(monkeypatch):
     assert error_holder["error"] is None
 
 
+def test_ws_done_sequence_is_after_the_last_live_token(monkeypatch, temp_dirs):
+    from backend.ws import agent_ws
+    import agent.app.service as service
+    from agent.runtime.stream_emitter import StreamEmitter
+
+    class FakeResult:
+        def to_dict(self):
+            return {
+                "ok": True,
+                "final_response": "answer",
+                "session_id": "sess1",
+                "turn_id": "t-1",
+                "trace_id": "trace-1",
+                "events": [],
+                "tool_calls": [],
+                "metadata": {},
+                "warnings": [],
+                "errors": [],
+            }
+
+    class FakeApp:
+        def submit_user_message(self, **_kwargs):
+            StreamEmitter().emit("token", {"content": "answer"})
+            return FakeResult()
+
+    monkeypatch.setattr(service, "get_default_agent_app", lambda: FakeApp())
+    event_queue = queue.Queue()
+    agent_ws._run_agent_thread(
+        "q", "sess1", "default",
+        {"client_request_id": "req-seq"},
+        event_queue, {"error": None}, {"live_events": 0},
+    )
+    messages = []
+    while not event_queue.empty():
+        item = event_queue.get()
+        if isinstance(item, dict):
+            messages.append(item)
+    token = next(item for item in messages if item.get("type") == "token")
+    done = next(item for item in messages if item.get("type") == "done")
+    assert done["stream_seq"] > token["seq"]
+    assert done["seq"] == done["stream_seq"]
+
+
 def test_ws_worker_injects_cooperative_cancel_check(monkeypatch):
     import threading
     from backend.ws import agent_ws
@@ -216,6 +259,7 @@ def test_ws_duplicate_client_request_skips_second_agent_execution(monkeypatch):
     assert duplicate_done["metadata"]["idempotent"] is True
     assert duplicate_done["metadata"]["idempotent_redirect"] == {
         "job_id": "job-idempotent", "status": "running",
+        "client_request_id": "request-idempotent",
     }
 
 
@@ -321,3 +365,69 @@ def test_ws_worker_projects_unknown_outcome_into_durable_job_snapshot(monkeypatc
     )
 
     assert snapshots[-1]["unknown_outcome"] == unknown
+
+
+def test_terminal_stamp_is_serialized_with_inflight_token(monkeypatch, temp_dirs):
+    import threading
+    from backend.ws import agent_ws
+    from agent.runtime.stream_emitter import StreamEmitter
+    import agent.app.service as service
+
+    token_entered = threading.Event()
+    release_token = threading.Event()
+    terminal_entered = threading.Event()
+    original_stamp = agent_ws._stamp_replay_frame
+    callbacks = []
+
+    def stamp(*args):
+        if args[-1].get("type") == "token":
+            token_entered.set()
+            assert release_token.wait(2)
+        if args[-1].get("type") == "done":
+            terminal_entered.set()
+            release_token.set()
+        return original_stamp(*args)
+
+    class Result:
+        def to_dict(self):
+            return {"ok": True, "final_response": "hi", "events": [], "tool_calls": [], "metadata": {}}
+
+    class App:
+        def submit_user_message(self, **_kwargs):
+            callback = StreamEmitter._get_realtime()
+            thread = threading.Thread(target=lambda: callback({"type": "token", "content": "hi"}))
+            callbacks.append(thread)
+            thread.start()
+            assert token_entered.wait(1)
+            # Release after the terminal attempts to stamp, or when it correctly
+            # waits for the callback's emission lock.
+            def release():
+                terminal_entered.wait(0.05)
+                release_token.set()
+            threading.Thread(target=release).start()
+            return Result()
+
+    monkeypatch.setattr(agent_ws, "_stamp_replay_frame", stamp)
+    monkeypatch.setattr(service, "get_default_agent_app", lambda: App())
+    events = queue.Queue()
+    agent_ws._run_agent_thread("q", "sess-race", "default", {"client_request_id": "req-race"}, events, {"error": None}, {"live_events": 0})
+    for thread in callbacks:
+        thread.join(2)
+    frames = [item for item in list(events.queue) if isinstance(item, dict)]
+    assert [(item["type"], item["seq"]) for item in frames] == [("token", 1), ("done", 2)]
+
+
+def test_running_redirect_does_not_write_a_terminal_to_real_turn_log(monkeypatch, temp_dirs):
+    from backend.ws import agent_ws
+    from agent.runtime.turn_replay import append_frame, frames_after
+    import jobs.lifecycle as lifecycle
+    import jobs.store as store
+    append_frame("default", "sess-redirect", "req", {"type": "token", "content": "first"})
+    monkeypatch.setattr(lifecycle, "claim_session_turn", lambda *a, **kw: lifecycle.SessionTurnClaim(
+        job_id="job", should_execute=False, status="running"))
+    monkeypatch.setattr(store, "get_job", lambda *a, **kw: None)
+    events = queue.Queue()
+    agent_ws._run_agent_thread("q", "sess-redirect", "default", {"client_request_id": "req"}, events, {"error": None}, {})
+    append_frame("default", "sess-redirect", "req", {"type": "token", "content": "second"})
+    assert [item["type"] for item in frames_after("default", "sess-redirect", "req", 0)] == ["token", "token"]
+    assert events.get()["metadata"]["idempotent_redirect"]["status"] == "running"

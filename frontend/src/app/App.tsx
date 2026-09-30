@@ -8,6 +8,7 @@ import { ToastHost } from "../components/ToastHost";
 import { ConfirmHost } from "../components/ConfirmDialog";
 import { useSessionStore, useUIStore } from "../stores/session";
 import { useWorkbenchStore } from "../stores/workbench";
+import { disconnectTurnTransport, recoverStreamingTurns } from "../realtime/turnTransport";
 import { initWebVitals } from "../utils/webVitals";
 import { authApi, systemApi } from "../api";
 import { isApiError } from "../types";
@@ -43,6 +44,7 @@ function formatVersion(version: string): string {
 }
 
 function clearUserScopedFrontendState(nextSession?: Awaited<ReturnType<typeof authApi.status>>) {
+  disconnectTurnTransport();
   const allowed = nextSession?.workspace_ids || [];
   const currentWorkspace = useSessionStore.getState().currentWorkspaceId;
   const nextWorkspace = nextSession?.platform_admin
@@ -393,9 +395,13 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
   // WebSocket streaming and the first operational request on constrained links.
 
   useEffect(() => {
-    if (!session?.username || !currentWorkspaceId) return;
+    if (!currentWorkspaceId) return;
+    let active = true;
     setActiveWorkspaceScope(currentWorkspaceId);
-    void useWorkbenchStore.persist.rehydrate();
+    void Promise.resolve(useWorkbenchStore.persist.rehydrate()).then(() => {
+      if (active) return recoverStreamingTurns(currentWorkspaceId);
+    }).catch(() => { /* Reconnection remains owned by the transport. */ });
+    return () => { active = false; disconnectTurnTransport(); };
   }, [session?.username, currentWorkspaceId]);
 
   return (

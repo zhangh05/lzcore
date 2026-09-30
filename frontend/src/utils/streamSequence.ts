@@ -15,10 +15,10 @@ function readSequence(value: unknown): number | undefined {
 }
 
 /**
- * Preserve server emission order for live frames without requiring a new
- * transport protocol. Live frames carry `seq`; the final done frame mirrors
- * the last live value as `stream_seq`, so equality is valid only for terminal
- * frames. Unsequenced frames remain backward-compatible.
+ * Every replayable frame, including done and error, has its own increasing
+ * sequence. The cursor is the last sequence already applied to the buffer.
+ * Equality is a duplicate, not a terminal alias. Unsequenced frames remain
+ * backward-compatible.
  */
 export function decideStreamFrame(
   frame: StreamEnvelope,
@@ -30,15 +30,8 @@ export function decideStreamFrame(
   const sequence = readSequence(frame.seq ?? frame.stream_seq);
   if (sequence === undefined) return { accept: true, nextSequence: lastSequence };
 
-  const terminal = frame.type === "done" || frame.type === "error";
-  if (terminal) {
-    return {
-      accept: sequence >= lastSequence,
-      nextSequence: Math.max(lastSequence, sequence),
-    };
-  }
   return {
-    accept: sequence > lastSequence,
-    nextSequence: Math.max(lastSequence, sequence),
+    accept: sequence === lastSequence + 1,
+    nextSequence: sequence === lastSequence + 1 ? sequence : lastSequence,
   };
 }
