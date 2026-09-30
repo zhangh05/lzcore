@@ -11,6 +11,8 @@ test("17. unknown write outcome is visible without a runtime freeze claim", asyn
       if (frame.type !== "message") return;
       ws.send(JSON.stringify({
         type: "done",
+        client_request_id: frame.metadata.client_request_id,
+        seq: 1,
         session_id: frame.session_id,
         turn_id: "turn-unknown-e2e",
         trace_id: "trace-unknown-e2e",
