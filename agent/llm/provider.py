@@ -554,6 +554,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     provider_model = ""
     usage = None
     tool_calls_accum: list[dict] = [{}]
+    tool_names = {str((tool.get("function") or {}).get("name") or "") for tool in (req.tools or [])}
     reasoning_fields: dict = {}
 
     try:
@@ -670,10 +671,14 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
                     # name may be at top level or inside function.name
                     fn_name = tc.get("function", {}).get("name") or tc.get("name")
                     if fn_name:
-                        tc_acc["name"] = fn_name
+                        # Names can be streamed in fragments just like JSON.
+                        # A published full name is also an authoritative
+                        # snapshot for compatible providers that repeat it.
+                        tc_acc["name"] = fn_name if fn_name in tool_names else tc_acc.get("name", "") + fn_name
                         tc_acc["function"] = tc.get("function", {})
-                        tc_acc["id"] = tc.get("id", tc_acc.get("id", ""))
                         tc_acc.setdefault("arguments", "")
+                    if tc.get("id"):
+                        tc_acc["id"] = tc["id"]
                     if tc.get("function", {}).get("arguments"):
                         tc_acc["arguments"] = tc_acc.get("arguments", "") + tc["function"]["arguments"]
 
@@ -709,12 +714,11 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     content = "".join(content_parts)
     tool_calls = []
     for tc_acc in tool_calls_accum:
-        if tc_acc.get("name"):
-            try:
-                args = json.loads(tc_acc.get("arguments", "{}"))
-            except json.JSONDecodeError:
-                args = {}
-            tool_calls.append(_ToolCallRaw(id=tc_acc.get("id", ""), name=tc_acc["name"], arguments=args))
+        if tc_acc:
+            args = _decode_tool_arguments(tc_acc.get("arguments", "{}"))
+            # Retain nameless proposals so planning can report the missing
+            # tool identity instead of treating the provider output as final.
+            tool_calls.append(_ToolCallRaw(id=tc_acc.get("id", ""), name=tc_acc.get("name", ""), arguments=args))
 
     _debug_log("[stream] done: content_len=%s, tool_calls=%s, finish=%s", len(content), len(tool_calls), finish_reason)
     # Debug: dump last 3 raw chunks with actual values
@@ -1081,7 +1085,7 @@ def _parse_anthropic_messages_response(data: dict, cfg: dict) -> LLMResponse:
         if block.get("type") == "text":
             content.append(str(block.get("text") or ""))
         elif block.get("type") == "tool_use":
-            calls.append(LLMToolCall(id=str(block.get("id") or ""), name=str(block.get("name") or ""), arguments=dict(block.get("input") or {})))
+            calls.append(LLMToolCall(id=str(block.get("id") or ""), name=str(block.get("name") or ""), arguments=_decode_tool_arguments(block.get("input", {}))))
     return LLMResponse(content="".join(content), provider=cfg.get("provider", ""), model=data.get("model", cfg.get("model", "")), usage=data.get("usage"), finish_reason=data.get("stop_reason", ""), raw=data, tool_calls=calls, protocol={"anthropic": data.get("content") or []})
 
 
@@ -1148,8 +1152,7 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
     calls = []
     for block in blocks.values():
         if block.get("type") == "tool_use":
-            try: args = json.loads(block.pop("_partial_json")) if "_partial_json" in block else block.get("input", {})
-            except json.JSONDecodeError: args = {}
+            args = _decode_tool_arguments(block.pop("_partial_json") if "_partial_json" in block else block.get("input", {}))
             block["input"] = args
             calls.append(LLMToolCall(id=str(block.get("id") or ""), name=str(block.get("name") or ""), arguments=args))
     return LLMResponse(content="".join(content_parts), provider=cfg.get("provider", "minimax"), model=model, usage=usage, finish_reason=stop_reason, tool_calls=calls, protocol={"anthropic": [blocks[index] for index in sorted(blocks)]})
@@ -1174,6 +1177,18 @@ def _parse_message_tool_calls(message: dict) -> list:
     return []
 
 
+def _decode_tool_arguments(arguments) -> dict:
+    """Keep transport errors visible to the existing semantic repair path."""
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError as exc:
+            return {"__invalid_tool_arguments_json__": str(exc)[:240]}
+    if not isinstance(arguments, dict):
+        return {"__invalid_tool_arguments_json__": "tool arguments must decode to a JSON object"}
+    return dict(arguments)
+
+
 def _parse_tool_calls(raw) -> list:
     """Parse OpenAI-format tool_calls into LLMToolCall objects."""
     result = []
@@ -1189,10 +1204,7 @@ def _parse_tool_calls(raw) -> list:
             fn = {}
         name = fn.get("name") or tc.get("name", "")
         arguments = fn.get("arguments", tc.get("arguments", "{}"))
-        try:
-            args = json.loads(arguments) if isinstance(arguments, str) else dict(arguments or {})
-        except (json.JSONDecodeError, TypeError):
-            args = {}
+        args = _decode_tool_arguments(arguments)
         result.append(LLMToolCall(
             id=tc.get("id", ""),
             name=name,
