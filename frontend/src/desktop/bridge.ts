@@ -1,7 +1,7 @@
 import { activeUsername } from "../utils/userScope";
 import { useUIStore } from '../stores/session';
 export type DesktopInfo = {
-  ok: boolean; error?: string; version: string; commit: string; mode: string; data_dir: string;
+  ok: boolean; admin?: boolean; error?: string; version: string; commit: string; mode: string; data_dir: string;
   signed: boolean; webview2: string; active_jobs: number; dirty: boolean; tray: boolean; restore: string;
   shutdown: { status: string; message?: string };
   settings: { close_to_tray?: boolean; notifications?: boolean; autostart?: boolean; previous_version?: string };

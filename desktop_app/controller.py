@@ -40,6 +40,9 @@ def native_method(method):
         try:
             if self._controller.window.evaluate_js("window.location.origin") != self._controller.origin:
                 return {"ok": False, "error": "native_origin_denied"}
+            privileged = {"open_folder", "create_backup", "import_backup", "migrate_data", "apply_restore", "export_diagnostics", "apply_update"}
+            if method.__name__ in privileged and not self._controller.admin_allowed():
+                return {"ok": False, "error": "请先登录默认组织的管理员账号，再执行此桌面数据操作。"}
             return method(self, *args, **kwargs)
         except (ValueError, RuntimeError, OSError, zipfile.BadZipFile) as exc:
             from storage.redaction import redact_text
@@ -71,6 +74,26 @@ class DesktopController:
         self.prepared_update = None
         self._dialog_lock = threading.Lock()
         self._shutdown_attempt = 0
+
+    def admin_allowed(self):
+        # Verify the real HttpOnly session cookie with Flask. A username
+        # reported by the UI is suitable for notifications, never authority.
+        from backend.core.auth import _is_identity_enabled, _is_login_enabled, _is_auth_enabled, is_current_session_authenticated
+        if not (_is_identity_enabled() or _is_login_enabled() or _is_auth_enabled()):
+            return True
+        from backend.main import app
+        from flask import session
+        from backend.core.identity import has_role
+        name = app.config.get("SESSION_COOKIE_NAME", "session")
+        value = ""
+        for cookie in self.window.get_cookies():
+            if name in cookie:
+                value = cookie[name].value
+                break
+        with app.test_request_context("/", base_url=self.origin, headers={"Cookie": f"{name}={value}"}):
+            if not is_current_session_authenticated():
+                return False
+            return not _is_identity_enabled() or (session.get("lzcore_org") == "default" and has_role(str(session.get("lzcore_role") or ""), "admin"))
 
     def attach(self, window):
         self.window = window
@@ -252,7 +275,7 @@ class DesktopApi:
             build = json.loads((c.paths.app / "build-info.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             build = {}
-        return {"ok": True, "version": c.version, "commit": build.get("commit", "development"), "mode": c.paths.mode, "data_dir": str(c.paths.data), "schema": DATA_SCHEMA, "signed": bool(build.get("signed")), "settings": {**c.state.snapshot(), "autostart": autostart_enabled(c.paths)}, "active_jobs": len(active_jobs()), "dirty": c.dirty, "shutdown": dict(c.shutdown), "update": c.updater.snapshot(), "restore": c.pending_restore, "tray": bool(c.tray), "webview2": build.get("webview2_version", "system")}
+        return {"ok": True, "admin": c.admin_allowed(), "version": c.version, "commit": build.get("commit", "development"), "mode": c.paths.mode, "data_dir": str(c.paths.data), "schema": DATA_SCHEMA, "signed": bool(build.get("signed")), "settings": {**c.state.snapshot(), "autostart": autostart_enabled(c.paths)}, "active_jobs": len(active_jobs()), "dirty": c.dirty, "shutdown": dict(c.shutdown), "update": c.updater.snapshot(), "restore": c.pending_restore, "tray": bool(c.tray), "webview2": build.get("webview2_version", "system")}
 
     @native_method
     def report_state(self, state):

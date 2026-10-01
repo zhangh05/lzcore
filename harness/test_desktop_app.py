@@ -161,3 +161,17 @@ def test_return_abandons_previous_shutdown_attempt(monkeypatch, tmp_path):
     thread.join(timeout=2)
     assert not thread.is_alive() and not destroyed and c.gate.accepting
     c.gate.release()
+
+
+def test_native_data_access_cannot_trust_reported_username(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from desktop_app.controller import DesktopController, DesktopApi
+    from desktop_app.environment import DesktopPaths
+    from backend.core import auth
+    monkeypatch.setattr(auth, '_is_identity_enabled', lambda:True)
+    from http.cookies import SimpleCookie
+    c=DesktopController(DesktopPaths(tmp_path,tmp_path,tmp_path,'development'),'3.3.0',LocalLifecycle(),'http://localhost')
+    c.window=SimpleNamespace(evaluate_js=lambda _:c.origin,get_cookies=lambda:[SimpleCookie('session=forged')])
+    c.principal='admin'
+    assert not c.admin_allowed()
+    assert not DesktopApi(c).open_folder()['ok']

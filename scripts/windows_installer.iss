@@ -33,7 +33,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: unchecked
 [Files]
-Source: "..\dist\lzcore\*"; DestDir: "{app}"; Excludes: "portable.json,data,workspaces,config"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\lzcore\lzcore.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\lzcore\build-info.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\lzcore\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{autoprograms}\联智中枢"; Filename: "{app}\lzcore.exe"
 Name: "{autodesktop}\联智中枢"; Filename: "{app}\lzcore.exe"; Tasks: desktopicon
