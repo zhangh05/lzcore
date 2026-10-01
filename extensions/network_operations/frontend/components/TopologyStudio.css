@@ -7,13 +7,17 @@
 .network-admin.is-topology > .network-notice { position: absolute; bottom: 46px; left: 20px; z-index: 40; max-width: min(520px, 80vw); margin: 0; box-shadow: var(--shadow-menu); backdrop-filter: blur(8px); }
 .network-admin .network-topology-workspace.topology-studio {
   --topology-link: #778ba0;
+  position: relative;
   display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
   flex: 1; height: 100%; min-height: 0; width: 100%; isolation: isolate;
   background: var(--bg);
 }
 .network-admin .topology-studio.library-open { grid-template-columns: 252px minmax(0, 1fr); }
-.network-admin .topology-studio.agent-open { grid-template-columns: minmax(0, 1fr) 380px; }
-.network-admin .topology-studio.library-open.agent-open { grid-template-columns: 252px minmax(0, 1fr) 380px; }
+/* The drawing chat covers the canvas. It must not take a grid column, or the
+   toolbar and the drawing are squeezed whenever the window is not fullscreen. */
+.network-admin .topology-studio.agent-open,
+.network-admin .topology-studio.library-open.agent-open { grid-template-columns: minmax(0, 1fr); }
+.network-admin .topology-studio.library-open.agent-open { grid-template-columns: 252px minmax(0, 1fr); }
 .network-admin .topology-studio.focus-mode { position: fixed; inset: var(--h-header, 56px) 0 0; z-index: 1000; height: auto; min-height: 0; }
 .topology-studio .topology-sidebar { display: none; min-height: 0; grid-column: 1; border-right: 1px solid var(--line); background: var(--surface); }
 .topology-studio.library-open .topology-sidebar { display: flex; }
@@ -22,9 +26,9 @@
 .topology-studio.agent-open .topology-canvas-area { grid-column: 1; }
 .topology-studio.library-open.agent-open .topology-canvas-area { grid-column: 2; }
 /* Above the edit bar (z-index 20) so its dropdowns are not covered by it. */
-.topology-studio .topology-canvas-toolbar { position: relative; z-index: 30; flex: 0 0 54px; min-height: 54px; box-sizing: border-box; padding: 0 16px; flex-direction: row; align-items: center; gap: 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topology-studio .topology-canvas-toolbar { position: relative; z-index: 30; flex: 0 0 auto; min-height: 54px; height: auto; box-sizing: border-box; padding: 8px 16px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .topology-studio .toolbar-left { flex: 1 1 auto; min-width: 0; gap: 10px; }
-.topology-studio .toolbar-right { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; align-items: center; }
+.topology-studio .toolbar-right { flex: 1 1 280px; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 6px; align-items: center; }
 .topology-studio .topology-canvas-title { max-width: none; font-size: 14px; letter-spacing: -.2px; color: var(--text); }
 .topology-studio .topology-save-btn { white-space: nowrap; font-size: 12px; height: 26px; padding: 0 10px; gap: 5px; font-weight: 500; transition: all var(--t-fast, 140ms); }
 .topology-studio .topology-save-btn.status-saved { color: var(--ok); background: transparent; border-color: transparent; }
@@ -1177,6 +1181,15 @@
 .studio-device-status > div > span, .studio-device-status p { color: var(--text-3); font-size: 11px; margin-bottom: 10px; }
 .studio-agent-dock { display: none; min-width: 0; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); z-index: 12; }
 .agent-open .studio-agent-dock { display: flex; }
+.topology-studio.agent-open:not(.is-fullscreen) .studio-agent-dock {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(400px, 42vw);
+  z-index: 20;
+  box-shadow: -16px 0 36px rgba(16, 24, 40, 0.12);
+}
 .topology-agent { min-height: 0; min-width: 0; width: 100%; display: flex; flex-direction: column; font-size: 12px; }
 .topology-agent > header { display: flex; align-items: center; gap: 10px; padding: 16px; border-bottom: 1px solid var(--line); }
 .topology-agent > header > svg { color: var(--accent); }
@@ -1229,7 +1242,7 @@
 .topology-agent-error { color: var(--danger); }
 .topology-agent-error button { padding: 3px; margin-left: 6px; background: transparent; border: 0; color: inherit; text-decoration: underline; }
 @media (max-width: 1180px) {
-  .network-admin .topology-studio.library-open.agent-open { grid-template-columns: 220px minmax(0, 1fr) 360px; }
+  .network-admin .topology-studio.library-open.agent-open { grid-template-columns: 220px minmax(0, 1fr); }
   /* The wrap itself now lives on the base rule; only the tighter padding is
      specific to this width. */
   .topology-studio .topology-editbar { padding: 5px 12px; }
