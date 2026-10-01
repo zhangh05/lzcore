@@ -46,8 +46,9 @@ def mount_frontend_spa(app, dist_dir, bootstrap=None):
         raise RuntimeError('缺少前端构建产物，请先构建 frontend')
     def index():
         html = (root / 'index.html').read_text(encoding='utf-8')
-        payload = json.dumps(bootstrap or {}, ensure_ascii=True).replace('<', '\\u003c')
-        html = html.replace('<head>', '<head><script>window.__LZCORE_DESKTOP__=' + payload + ';</script>', 1)
+        if bootstrap is not None:
+            payload = json.dumps(bootstrap, ensure_ascii=True).replace('<', '\\u003c')
+            html = html.replace('<head>', '<head><script>window.__LZCORE_DESKTOP__=' + payload + ';</script>', 1)
         response = make_response(html)
         response.headers['Cache-Control'] = 'no-store'
         return response
@@ -151,7 +152,7 @@ def main():
         ui = controller.state.snapshot().get('ui', {})
         if ui.get('themePreference', 'system') == 'system':
             ui = {**ui, 'theme': system_theme(), 'themePreference': 'system'}
-        mount_frontend_spa(app, bundle / 'frontend' / 'dist', {'theme': ui.get('theme', 'light'), 'ui': ui})
+        mount_frontend_spa(app, bundle / 'frontend' / 'dist', None if args.web_only else {'theme': ui.get('theme', 'light'), 'ui': ui})
         server = BackgroundServerThread(app, port)
         server.start()
         for _ in range(120):

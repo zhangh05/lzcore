@@ -10,6 +10,18 @@ from desktop_app.window import fit_window, DesktopState
 from desktop_app.backup import create_backup, stage_restore, queue_restore, apply_pending_restore, read_backup
 
 
+def test_web_only_spa_does_not_advertise_an_unavailable_native_bridge(tmp_path):
+    from flask import Flask
+    from desktop import mount_frontend_spa
+    (tmp_path/'index.html').write_text('<html><head></head><body></body></html>')
+    for bootstrap in [None, {'theme':'light','ui':{}}]:
+        app=Flask(__name__)
+        app.add_url_rule('/', 'backend_root', lambda: 'placeholder')
+        mount_frontend_spa(app, tmp_path, bootstrap)
+        html=app.test_client().get('/').get_data(as_text=True)
+        assert ('window.__LZCORE_DESKTOP__' in html) is (bootstrap is not None)
+
+
 def test_distribution_data_paths(tmp_path):
     app = tmp_path / '中文 程序'; app.mkdir()
     bundle = app / '_internal'; bundle.mkdir()
