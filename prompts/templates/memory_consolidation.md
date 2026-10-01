@@ -11,7 +11,7 @@ Memory types:
 Boundaries:
 - Raw device state, interface status, routes, neighbors, alarms, and other current device readings are evidence, not memory.
 - A baseline or artifact stays an external authority. Memory may say how to use it, not replace it.
-- Tool completion alone is not a fact. Use findings from successful tool events in the batch.
+- Tool completion alone is not a fact. Cite only findings relevant to each claim; unrelated successful tools cannot verify it. Reflected statements remain pending for human confirmation.
 - Do not store secrets, credentials, tokens, community strings, raw configurations, prompts, or absolute paths.
 - Do not invent event IDs. Prefer supersede or expire over a near-duplicate.
 
@@ -25,6 +25,6 @@ Each object:
 - content: reusable statement, including conditions and outcome when relevant
 - summary: short retrieval title
 - confidence: 0.0-1.0
-- score: 1-5; only 4-5 may become active automatically, and only with verified tool evidence
+- score: 1-5; prioritizes review, never establishes verified authority or activates a generated statement
 - reason: why this should change later behavior
 - evidence_event_ids: exact IDs from the batch

@@ -1713,7 +1713,17 @@ def _load_context_messages(
             "metadata": {"client_request_id": client_request_id},
         })
     overlap = _history_overlap(persisted, memory)
-    merged = persisted + memory[overlap:]
+    persisted_ids = {m["message_id"] for m in persisted}
+    persisted_runs = {(m["run_id"], m["role"]) for m in persisted if m.get("run_id")}
+    persisted_requests = {
+        (m["client_request_id"], m["role"]) for m in persisted if m.get("client_request_id")
+    }
+    merged = persisted + [
+        m for m in memory[overlap:]
+        if m["message_id"] not in persisted_ids
+        and (m.get("run_id"), m["role"]) not in persisted_runs
+        and (m.get("client_request_id"), m["role"]) not in persisted_requests
+    ]
     excluded = str(exclude_run_id or "").strip()
     if excluded:
         merged = [
@@ -1730,7 +1740,11 @@ def _history_overlap(
     for size in range(min(len(persisted), len(memory)), 0, -1):
         if all(
             left.get("role") == right.get("role")
-            and left.get("content") == right.get("content")
+            and (
+                (left.get("message_id") and left.get("message_id") == right.get("message_id"))
+                or left.get("source_content", left.get("content"))
+                == right.get("source_content", right.get("content"))
+            )
             for left, right in zip(persisted[-size:], memory[:size])
         ):
             return size
@@ -1742,6 +1756,7 @@ def _append_context_message(messages: list[dict[str, Any]], seen: set[str], raw:
         return
     role = str(raw.get("role") or "")
     content = str(raw.get("content") or "").strip()
+    source_content = content
     if role not in ("user", "assistant") or not content:
         return
     key = str(raw.get("message_id") or raw.get("id") or raw.get("run_id") or f"{role}:{content[:80]}")
@@ -1775,11 +1790,15 @@ def _append_context_message(messages: list[dict[str, Any]], seen: set[str], raw:
         "message_id": key,
         "role": role,
         "content": content,
+        "source_content": source_content,
     }
     history_state = metadata.get("history_state")
     run_id = str(raw.get("run_id") or metadata.get("run_id") or "").strip()
     if run_id:
         message["run_id"] = run_id
+    client_request_id = str(metadata.get("client_request_id") or "").strip()
+    if client_request_id:
+        message["client_request_id"] = client_request_id
     if isinstance(history_state, dict) and history_state.get("schema") == "runtime.history_state.v1":
         from storage.redaction import redact_value
 

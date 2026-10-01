@@ -476,8 +476,16 @@ class UnifiedRetriever:
         session_id: str,
         task_id: str,
     ) -> bool:
-        from storage.memory_governance import memory_scope_visible
-        return memory_scope_visible(hit, session_id=session_id, task_id=task_id)
+        from storage.memory_governance import MemoryRecord, memory_scope_visible
+        # A projection may outlive its TTL without any write changing the index.
+        # Revalidate lifecycle on every read, including the legacy fallback.
+        record = dict(hit, status=hit.get("memory_status") or hit.get("status"))
+        if record["status"] == "confirmed":
+            record["status"] = "active"
+        return (
+            MemoryRecord.from_dict(record).is_retrievable()
+            and memory_scope_visible(hit, session_id=session_id, task_id=task_id)
+        )
 
     @staticmethod
     def _apply_boosts(results: list[dict]) -> list[dict]:

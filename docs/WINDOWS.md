@@ -57,4 +57,6 @@ python scripts/build_windows_exe.py --webview2-runtime $env:LZCORE_WEBVIEW2_DIR
 
 发行工作流使用锁定的 Windows/Python 3.12 依赖。Inno Setup 生成每用户安装器，卸载保留用户数据，升级要求先退出程序。`scripts/windows_desktop_smoke.py` 启动真实 EXE，通过 WebView2 CDP 验证页面、桥接、主题、窗口缩放、托盘、第二次启动、原生导出对话框和 WebSocket；工作流同时验证安装、升级和卸载后数据保留。截图与启动报告在 `windows-desktop-validation` 构建产物中。
 
+修复后保留版本号和已有 tag 时，可以从修复提交手动运行 Release 工作流，并在 `release_tag` 填已有的同版本 Release。工作流核对版本与目标 Release、完成 Windows 验证后替换附件，不移动 Git tag。更新清单的 `source_commit` 标明附件对应的真实构建提交。同版本附件重建不会触发按版本号判断的应用内升级，需要重新下载安装器或便携包；保留原用户数据。
+
 自动化 Windows runner 的结果不等同于 Windows 10/11 实体机、多个显示器及所有 DPI 的人工验收；这些场景仍需要目标机器复核。

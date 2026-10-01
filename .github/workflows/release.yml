@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag whose assets should be rebuilt from this ref (tag is unchanged)
+        required: false
+        type: string
   push:
     tags:
       - "v*"
@@ -14,6 +19,18 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Validate existing release target
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          $version = (Select-String -Path agent/__init__.py -Pattern '__version__ = "([^"]+)"').Matches.Groups[1].Value
+          if ($env:RELEASE_TAG -ne "v$version") { throw 'Existing release tag must match the code version' }
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json tagName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Set up Python 3.12
         id: python312
@@ -65,7 +82,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & $python -c "import flask, flask_sock, yaml, bs4, lxml, pdfplumber, paramiko"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            & $python -m pytest -q harness/test_windows_runtime_contract.py harness/test_session_management.py harness/test_storage_filestore_foundation.py harness/test_turn_replay.py harness/test_turn_closeout.py harness/test_replay_persist_fault.py harness/test_stream_secret_buffer.py harness/test_ws_agent_contract.py harness/test_ws_system_broadcast.py
+            & $python -m pytest -q harness/test_windows_runtime_contract.py harness/test_session_management.py harness/test_storage_filestore_foundation.py harness/test_turn_replay.py harness/test_turn_closeout.py harness/test_replay_persist_fault.py harness/test_stream_secret_buffer.py harness/test_ws_agent_contract.py harness/test_ws_system_broadcast.py harness/test_context_memory_repairs.py
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
@@ -230,12 +247,13 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish release asset
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: |
             release/lzcore-*.zip
             release/lzcore-*-setup.exe
             release/windows-update.json
             release/SHA256SUMS.txt
-          generate_release_notes: true
+          generate_release_notes: ${{ github.event_name != 'workflow_dispatch' }}

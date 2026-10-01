@@ -195,15 +195,20 @@ def _apply(proposal, workspace_id, session_id, task_id, events, store):
     if action == "ignore":
         return {"ok": True, "status": "ignored"}
     if action == "expire" and target:
+        old = store.get(workspace_id, target)
+        if old and (old.source in {"user", "manual_confirm"} or old.memory_type == "core_rule"):
+            return {"ok": True, "status": "ignored", "reason": "user_memory_requires_explicit_control"}
         return expire_memory(workspace_id, target)
 
     evidence_ids = set(proposal.get("evidence_event_ids") or [])
     evidence_events = [row for row in events if row.get("event_id") in evidence_ids]
-    has_verified_tool = any(call.get("ok") for row in evidence_events for call in row.get("tool_calls") or [])
     memory_type = proposal["memory_type"]
-    authority = "verified_tool" if has_verified_tool else "agent_inference"
-    authority_rank = 70 if has_verified_tool else 30
-    status = "active" if has_verified_tool and proposal["score"] >= 4 else "pending"
+    # An event id proves provenance, not that a generated claim follows from
+    # the tool output. Reflection has no claim-level verification contract.
+    # Retain its proposals for confirmation without inventing tool authority.
+    authority = "agent_inference"
+    authority_rank = 30
+    status = "pending"
     proposal_id = str(proposal.get("proposal_id") or "")
     record_kwargs = {}
     if proposal_id:
@@ -223,7 +228,7 @@ def _apply(proposal, workspace_id, session_id, task_id, events, store):
         content=proposal["content"],
         summary=proposal["summary"],
         confidence=proposal["confidence"],
-        citations=[{"event_id": item} for item in evidence_ids],
+        citations=[{"event_id": row["event_id"]} for row in evidence_events],
         created_by="memory_consolidator",
         metadata={
             "memory_key": proposal.get("memory_key"),
@@ -234,7 +239,7 @@ def _apply(proposal, workspace_id, session_id, task_id, events, store):
             "llm_summary": proposal["summary"],
             "extraction_reason": proposal.get("reason"),
             "evidence_source": "experience_journal",
-            "evidence_event_ids": list(evidence_ids),
+            "evidence_event_ids": [row["event_id"] for row in evidence_events],
             "consolidation_origin": "task_reflection",
             "generation_origin": "task_reflection",
             "consolidation_proposal_id": proposal_id,

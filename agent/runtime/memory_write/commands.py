@@ -9,8 +9,8 @@ from typing import Any
 
 _FORGET = re.compile(r"(?:不要记住|别记住|忘掉|忘记|删除(?:这条|刚才的)?记忆|不再记得)\s*(.*)", re.I)
 _REMEMBER = re.compile(
-    r"(?:请记住|记住|以后(?:都|请|要|不要|别)?|下次(?:请|要|不要|别)?|"
-    r"我希望你|我要求你|默认(?:要|使用)?|不要再|别再|always\b|never\b|please remember\b)",
+    r"(?:请记住|记住|以后(?=都|请|要|不要|别|默认|每|全量|回复|回答|使用|用|先|只)|下次(?:请|要|不要|别)|"
+    r"我希望你|我要求你|默认(?:要|使用|采用|用|请)|不要再|别再|always\b|never\b|please remember\b)",
     re.I,
 )
 
@@ -20,14 +20,16 @@ def parse_memory_command(user_input: str) -> dict[str, Any] | None:
     text = str(user_input or "").strip()
     if not text:
         return None
-    forget = _FORGET.search(text)
+    # A control command must be the user's own leading intent. Keywords inside
+    # an audit request, quotation, document or code fence are not authorization.
+    forget = _FORGET.match(text)
     if forget:
         return {
             "action": "forget",
             "query": (forget.group(1) or "").strip(" ，。.!！?"),
             "reason": "explicit_user_forget_command",
         }
-    if not _REMEMBER.search(text):
+    if not _REMEMBER.match(text):
         return None
     # Avoid weak conversational phrases that are not durable instructions.
     if re.fullmatch(r"以后(?:再说|看看|讨论|处理)[。.!！?]?", text, re.I):
@@ -54,7 +56,7 @@ def apply_memory_command(
     store = MemoryStore()
     if command.get("action") == "forget":
         query = str(command.get("query") or "").strip()
-        candidates = store.search(workspace_id, query, limit=10) if query else list(reversed(store.list_all(workspace_id)))
+        candidates = store.search(workspace_id, query, limit=10) if query else store.list_all(workspace_id)
         expired = []
         for item in candidates:
             memory_id = item.get("memory_id") if isinstance(item, dict) else getattr(item, "memory_id", "")
@@ -95,15 +97,6 @@ def apply_memory_command(
 
 def _rule_key(text: str) -> str:
     normalized = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", text.lower())
-    topics = (
-        ("user.testing_policy", ("测试", "pytest", "test", "全量")),
-        ("project.memory_policy", ("记忆", "memory")),
-        ("project.baseline_authority", ("基线", "权威", "baseline")),
-        ("user.git_policy", ("分支", "合并", "提交", "同步", "branch", "commit")),
-        ("user.legacy_content_policy", ("旧代码", "旧内容", "兼容", "legacy")),
-        ("user.response_style", ("回答", "回复", "简洁", "详细", "中文")),
-    )
-    for key, markers in topics:
-        if any(marker in normalized for marker in markers):
-            return key
+    # Shared topic words cannot establish that two preferences replace one
+    # another. Explicit structured keys remain supported by MemoryWriteGate.
     return "rule:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]

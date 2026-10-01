@@ -243,7 +243,7 @@ class TestExplicitCommands:
         command = parse_memory_command("以后全量测试只跑一次，失败后只跑相关测试。")
         assert command["action"] == "remember"
         assert command["memory_type"] == "core_rule"
-        assert command["memory_key"] == "user.testing_policy"
+        assert command["memory_key"].startswith("rule:")
 
     def test_conversational_future_phrase_is_not_memory(self):
         from agent.runtime.memory_write.commands import parse_memory_command

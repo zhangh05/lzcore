@@ -33,6 +33,7 @@ from core.tools.redaction import redact_tool_output
 from .cognitive_state import initialize_cognitive_state
 from .context_budget import (
     RuntimeContextBudget,
+    estimate_json_tokens,
 )
 from .context_compaction import (
     estimate_chars as _estimate_chars,
@@ -96,6 +97,7 @@ def _normalize_llm_error(error: Any) -> str:
     if value in {
         "llm_call_timeout", "llm_rate_limited", "llm_auth_failed",
         "llm_configuration_error", "llm_request_rejected", "llm_provider_error", "no_response",
+        "context_capacity_exceeded",
     }:
         return value
     if "timeout" in value or "timed out" in value:
@@ -129,6 +131,7 @@ def _llm_failure_message(error_code: str) -> str:
         "llm_auth_failed": "模型服务认证失败，请联系管理员检查模型配置。",
         "llm_configuration_error": "模型服务配置不可用，请联系管理员检查配置。",
         "llm_request_rejected": "模型服务拒绝了当前请求；保留的上下文和证据未丢失，但需要修正请求或模型约束后才能继续。",
+        "context_capacity_exceeded": "完整上下文的估算大小超过当前模型的可用容量，已停止重复请求。历史和工具结果仍保留，请使用容量更大的模型或在新会话中继续。",
     }
     return messages.get(error_code, "模型服务暂时不可用，请稍后重试。")
 
@@ -1885,12 +1888,17 @@ class QueryLoop:
                 # and invalid model configuration cannot: retrying the exact
                 # same request only creates a busy loop.  Return the complete
                 # already-collected evidence and a typed operator-facing state.
-                if provider_error in {"llm_auth_failed", "llm_configuration_error", "llm_request_rejected"}:
+                if provider_error in {"llm_auth_failed", "llm_configuration_error", "llm_request_rejected", "context_capacity_exceeded"}:
                     final_response = (
                         self._build_tool_result_fallback(ctx, all_results)
                         if all_results else _llm_failure_message(provider_error)
                     )
-                    ctx.extras["response_outcome"] = "llm_configuration_unavailable"
+                    if all_results and provider_error == "context_capacity_exceeded":
+                        final_response = _llm_failure_message(provider_error) + "\n\n" + final_response
+                    ctx.extras["response_outcome"] = (
+                        "context_capacity_exceeded" if provider_error == "context_capacity_exceeded"
+                        else "llm_configuration_unavailable"
+                    )
                     return finish(
                         final_response=final_response,
                         tool_results=all_results,
@@ -2684,6 +2692,22 @@ class QueryLoop:
             # the same visible tool surface; the model may still choose a
             # necessary safe verification action.
             tools_for_call = self._cached_tools if tools_override is None else tools_override
+            # Preserve the complete transcript; do not send the same oversized
+            # request repeatedly or silently truncate evidence to make it fit.
+            # max_input_tokens is telemetry, while the model window is capacity.
+            estimated_tokens = _estimate_message_tokens(messages) + estimate_json_tokens(tools_for_call)
+            available_tokens = (
+                self._context_budget.context_window_tokens
+                - self._context_budget.reserved_output_tokens
+                - self._context_budget.safety_tokens
+            )
+            if estimated_tokens > available_tokens:
+                ctx.extras["context_capacity"] = {
+                    "estimated_input_tokens": estimated_tokens,
+                    "available_input_tokens": available_tokens,
+                    "messages_preserved": True,
+                }
+                return LLMResponse(error="context_capacity_exceeded")
             evidence_for_call = pending_llm_evidence(ctx.extras)
             if self._llm_invoke is not None:
                 raw = await asyncio.wait_for(
