@@ -52,8 +52,9 @@ def run(exe: Path, mode: str, output: Path):
             page.on('pageerror', lambda e: errors.append(str(e)))
             info = page.evaluate('window.pywebview.api.get_info()')
             assert info['data_dir'] == str(data.resolve()) and info['mode'] == mode
-            page.evaluate("window.pywebview.api.save_preferences({ui:{theme:'dark',themePreference:'dark',sidebarOpen:false,taskProgressOpen:false}})")
-            assert json.loads((data/'.runtime/desktop.json').read_text(encoding='utf-8'))['ui']['theme']=='dark'
+            page.get_by_role('combobox').select_option('dark')
+            page.wait_for_function("document.documentElement.dataset.theme === 'dark'")
+            wait_until(lambda: json.loads((data/'.runtime/desktop.json').read_text(encoding='utf-8'))['ui']['theme']=='dark')
             page.screenshot(path=str(output/'desktop-settings.png'), full_page=True)
             page.get_by_role('button', name='完成', exact=True).click()
             # Native resize uses the real HWND, so DPI and WebView layout agree.

@@ -1,38 +1,51 @@
 param([int]$ParentPid, [string]$FileName)
 $ErrorActionPreference='Stop'
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-$root=[System.Windows.Automation.AutomationElement]::RootElement
-$condition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $ParentPid)
-$editCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Edit)
+Add-Type @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class LZDialog {
+  public delegate bool EnumWindow(IntPtr handle, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindow callback, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr handle, EnumWindow callback, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint process);
+  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr handle);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr handle, StringBuilder value, int length);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr handle, uint message, IntPtr parameter, string value);
+}
+'@
 $deadline=(Get-Date).AddSeconds(25)
 do {
-  $windows=$root.FindAll([System.Windows.Automation.TreeScope]::Children,$condition)
-  foreach($window in $windows) {
-    # Modern Common Item Dialog exposes 1001 as a ComboBox; its Edit child
-    # owns ValuePattern. Classic SaveFileDialog uses 1148 for the edit itself.
-    foreach($id in @('1001','1148')) {
-      $fieldCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,$id)
-      $field=$window.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$fieldCondition)
-      if(-not $field) {continue}
-      $edit=if($field.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit){$field}else{$field.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$editCondition)}
-      if(-not $edit) {continue}
-      $value=$null
-      if(-not $edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$value) -or $value.Current.IsReadOnly) {continue}
-      $value.SetValue($FileName)
-      $buttonCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'1')
-      $save=$window.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$buttonCondition)
-      if(-not $save) {throw 'Native Save button not found'}
-      $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $script:dialog=[IntPtr]::Zero
+  $callback=[LZDialog+EnumWindow]{param($hwnd,$parameter)
+    $processId=0
+    [void][LZDialog]::GetWindowThreadProcessId($hwnd,[ref]$processId)
+    $class=New-Object Text.StringBuilder 128
+    [void][LZDialog]::GetClassName($hwnd,$class,128)
+    if($processId -eq $ParentPid -and $class.ToString() -eq '#32770') {$script:dialog=$hwnd}
+    return $true
+  }
+  [void][LZDialog]::EnumWindows($callback,[IntPtr]::Zero)
+  if($script:dialog -ne [IntPtr]::Zero) {
+    $script:edit=[IntPtr]::Zero; $script:save=[IntPtr]::Zero
+    $child=[LZDialog+EnumWindow]{param($hwnd,$parameter)
+      $id=[LZDialog]::GetDlgCtrlID($hwnd)
+      $class=New-Object Text.StringBuilder 128
+      [void][LZDialog]::GetClassName($hwnd,$class,128)
+      if($id -in @(1001,1148) -and $class.ToString() -eq 'Edit') {$script:edit=$hwnd}
+      if($id -eq 1 -and $class.ToString() -eq 'Button') {$script:save=$hwnd}
+      return $true
+    }
+    [void][LZDialog]::EnumChildWindows($script:dialog,$child,[IntPtr]::Zero)
+    if($script:edit -ne [IntPtr]::Zero -and $script:save -ne [IntPtr]::Zero) {
+      # Windows runner's legacy .NET UIA exposes these as panes without
+      # patterns. The native Edit and Button still implement standard messages.
+      $set=[LZDialog]::SendMessage($script:edit,0x000C,[IntPtr]::Zero,$FileName)
+      if($set -eq [IntPtr]::Zero) {throw 'Native filename field rejected text'}
+      [void][LZDialog]::SendMessage($script:save,0x00F5,[IntPtr]::Zero,$null)
       exit 0
     }
   }
   Start-Sleep -Milliseconds 200
 } while((Get-Date)-lt $deadline)
-# Isolated fixture UI only: report control shape for environment diagnosis.
-foreach($window in $windows) {
-  $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object {
-    Write-Host "$($_.Current.ControlType.ProgrammaticName) / $($_.Current.AutomationId) / $($_.Current.Name)"
-  }
-}
-throw 'Native editable filename control not found'
+throw 'Native filename Edit or Save Button not found'
