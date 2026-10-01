@@ -62,11 +62,12 @@ it("preserves queued text across tool and model boundaries, then restores it fro
 
 it("keeps the turn socket open when the page unmounts", async () => {
   let closed = false;
+  let sent = false;
   class FakeSocket {
     onopen?: () => void;
     onmessage?: (event: { data: string }) => void;
     constructor() { queueMicrotask(() => this.onopen?.()); }
-    send() {}
+    send(raw: string) { if (JSON.parse(raw).type === 'message') sent = true; }
     close() { closed = true; }
   }
   vi.stubGlobal("WebSocket", FakeSocket);
@@ -75,7 +76,9 @@ it("keeps the turn socket open when the page unmounts", async () => {
     { onSessionResolved: vi.fn() },
   ));
   act(() => { void hook.result.current.send({ text: "继续", attachments: [], effectiveSessionId: "stages" }); });
-  await waitFor(() => expect(useWorkbenchStore.getState().activeTurns.stages).toBeTruthy());
+  // Registration precedes the async socket/auth work. Wait for the actual
+  // message so teardown cannot restore WebSocket while that work is pending.
+  await waitFor(() => expect(sent).toBe(true));
   hook.unmount();
   expect(closed).toBe(false);
   expect(useWorkbenchStore.getState().activeTurns.stages).toBeTruthy();

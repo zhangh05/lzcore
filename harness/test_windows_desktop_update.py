@@ -52,6 +52,7 @@ def test_portable_update_retains_data_and_rolls_back(tmp_path, failure):
     try:
         result = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
             '-File', str(Path(__file__).parents[1] / 'scripts/windows_update.ps1'), '-Plan', str(plan)],
+            env={**os.environ, 'PSModulePath': str(Path(os.environ['ProgramFiles']) / 'PowerShell/7/Modules')},
             capture_output=True, timeout=30)
     finally:
         if handle: kernel.CloseHandle(handle)

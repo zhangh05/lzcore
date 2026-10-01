@@ -1,5 +1,8 @@
 ﻿param([Parameter(Mandatory=$true)][string]$Plan)
 $ErrorActionPreference = 'Stop'
+# A PowerShell 7 parent can pass its module path to Windows PowerShell 5.
+# Resolve built-in commands (including Get-FileHash) from this host's modules.
+$env:PSModulePath = Join-Path $PSHOME 'Modules'
 $planPath = [IO.Path]::GetFullPath($Plan)
 $state = Get-Content -LiteralPath $planPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $statusPath = Join-Path (Split-Path $planPath) 'result.json'
