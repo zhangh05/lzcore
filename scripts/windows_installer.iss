@@ -28,7 +28,7 @@ SignTool=lzcore {#SignCommand}
 SignedUninstaller=yes
 #endif
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimp"; MessagesFile: "..\packaging\inno\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: unchecked
