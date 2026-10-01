@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Plan)
+﻿param([Parameter(Mandatory=$true)][string]$Plan)
 $ErrorActionPreference = 'Stop'
 $planPath = [IO.Path]::GetFullPath($Plan)
 $state = Get-Content -LiteralPath $planPath -Raw -Encoding UTF8 | ConvertFrom-Json

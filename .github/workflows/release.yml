@@ -70,7 +70,7 @@ jobs:
           }
 
       - name: Validate Windows launch scripts
-        shell: pwsh
+        shell: powershell
         run: |
           $tokens = $null
           $errors = $null
