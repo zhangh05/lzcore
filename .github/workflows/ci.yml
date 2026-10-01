@@ -89,7 +89,8 @@ jobs:
           LZCORE_RUN_DOCKER_INTEGRATION: "1"
           LZCORE_RUNTIME_BIND_HOST: "0.0.0.0"
         run: |
-          python -m pip install pytest
+          python -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pytest harness/integration/test_docker_runner_integration.py -q --tb=short
 
   distributed-adapters:
@@ -262,6 +263,6 @@ jobs:
             )
             if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
           }
-          python -m pytest harness/test_windows_runtime_contract.py harness/test_windows_desktop_update.py -q
+          python -m pytest harness/test_windows_runtime_contract.py harness/test_desktop_app.py harness/test_windows_desktop_update.py -q
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\start.ps1 -NoBrowser -ValidateOnly
