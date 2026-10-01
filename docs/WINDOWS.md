@@ -11,6 +11,8 @@
 
 两个包都附带固定版本 WebView2，离线启动无需下载 Python、Node 或浏览器运行时。运行时版本和官方 Microsoft 下载地址锁在 `packaging/webview2.json`；构建时验证 Microsoft 数字签名。固定运行时随应用发行更新，不采用 Evergreen 的自动更新。Windows 10 首次启动会为这一运行时目录授予 App Container 读取和执行权限；它不能从 UNC 网络目录运行。[Microsoft 部署说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)
 
+安装器拒绝安装到带有 `portable.json` 标记的便携版目录，避免混用发行方式导致数据位置变化。转换为安装版时请选择独立目录，再通过桌面设置迁移便携版的 `data/`。
+
 另外保留 `windows-x64.zip` 作为带源码的浏览器运行包，启动入口为 `start.bat`。它不属于上述两种原生桌面发行方式。该包自带 `runtime\python\python.exe` 和 `runtime\node\node.exe`，不要求用户另行安装开发环境。
 
 可用 `lzcore.exe --data-dir "D:\联智数据"` 显式选数据目录。两种发行方式的数据布局和格式相同：`workspaces/` 保存业务数据和按用户隔离的数据，`config/` 保存用户配置，`.runtime/` 保存窗口偏好、WebView 缓存、恢复暂存和更新文件，`logs/` 保存脱敏桌面日志。程序文件和用户数据分开。启动时持有数据目录锁；同一数据目录第二次启动唤醒已有窗口。

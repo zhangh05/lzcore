@@ -55,6 +55,10 @@ var Code: Integer;
 begin
   { No automatic termination: a running process may own a network write. }
   Result := '';
+  if FileExists(ExpandConstant('{app}\portable.json')) then begin
+    Result := '此目录是便携版。请选择独立的安装目录，安装后可在桌面设置中迁移原数据。';
+    Exit;
+  end;
   if FileExists(ExpandConstant('{app}\lzcore.exe')) then begin
     if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
       '-NoProfile -NonInteractive -Command "if (Get-Process lzcore -ErrorAction SilentlyContinue) {exit 1}"', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then

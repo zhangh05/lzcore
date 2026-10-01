@@ -202,6 +202,13 @@ jobs:
           if (Test-Path (Join-Path $target 'portable.json')) { throw 'Installed mode marker is wrong' }
           & "${{ steps.python312.outputs.python-path }}" scripts/windows_desktop_smoke.py --exe "$target/lzcore.exe" --mode installed --output "$env:RUNNER_TEMP/desktop-qa/installed"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Mixing installed and portable modes would change the data path.
+          # Refuse the directory without removing its marker or user files.
+          $marker = Join-Path $target 'portable.json'
+          Set-Content -LiteralPath $marker -Value '{}' -Encoding UTF8
+          $mixed = Start-Process -FilePath $setup -ArgumentList $installArguments -Wait -PassThru
+          if ($mixed.ExitCode -eq 0 -or -not (Test-Path $marker)) { throw 'Mixed-mode installation was not safely refused' }
+          Remove-Item -LiteralPath $marker
           $upgrade = Start-Process -FilePath $setup -ArgumentList $installArguments -Wait -PassThru
           if ($upgrade.ExitCode -ne 0) { throw 'Upgrade failed' }
           $sentinel = Join-Path $env:RUNNER_TEMP 'desktop-qa/installed/中文 用户数据/sentinel.txt'
