@@ -39,6 +39,7 @@ export function DesktopHost() {
         window.history.pushState({}, '', '/workbench'); window.dispatchEvent(new PopStateEvent('popstate')); return;
       }
       if (d.action === 'settings') { setPanel('settings'); void refresh().catch(() => {}); }
+      if (d.action === 'shutdown') { setPanel('close'); setInfo(current => current ? {...current, shutdown: d.shutdown} : current); void refresh().catch(() => {}); }
       if (d.action === 'close') {
         try { const current = await refresh(); if (!current.active_jobs && !current.dirty && current.shutdown.status === 'idle') { await nativeCall('request_exit', 'exit'); return; } } catch { /* show recovery controls */ }
         setPanel('close'); setForce(false); setDiscard(false);
@@ -58,7 +59,7 @@ export function DesktopHost() {
     <div className="desktop-dialog-body">
       {message && <p role="status" className="desktop-message">{message}</p>}
       {panel === 'close' ? <>
-        <p>{info?.active_jobs || 0} 个任务待处理或运行中。后台运行会保留当前窗口和任务。</p>
+        <p>{info?.active_jobs ? `${info.active_jobs} 个任务待处理或运行中。后台运行会保留当前窗口和任务。` : '当前没有待处理或运行中的任务。'}</p>
         {info?.dirty && <label><input type="checkbox" checked={discard} onChange={e => setDiscard(e.target.checked)}/> 确认放弃未保存的编辑</label>}
         {info?.shutdown.status === 'stopping' && <p role="status">正在停止任务并等待收尾…</p>}
         {info?.shutdown.status === 'waiting' && <><p>{info.shutdown.message}</p><label><input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)}/> 确认中断退出，后续需核对尚未确认的写入</label></>}

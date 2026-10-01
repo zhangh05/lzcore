@@ -126,6 +126,8 @@ export type TopologyLink = {
 /** User-authored visual context.  It is deliberately separate from devices. */
 export type TopologyCanvasItem = {
   item_id: string;
+  zone?: string;
+  auto_fit?: boolean;
   kind: "rectangle" | "ellipse" | "text";
   text: string;
   x: number;
@@ -1688,7 +1690,7 @@ export default function TopologyWorkspace({
 
     const nextCanvasItems = (current.canvas_items || []).map((item) => {
       const direct = byId.get(`canvas-${item.item_id}`);
-      return direct ? { ...item, x: Math.round(direct.x), y: Math.round(direct.y) } : item;
+      return direct ? { ...item, auto_fit: false, x: Math.round(direct.x), y: Math.round(direct.y) } : item;
     });
 
     pushState({ ...current, nodes: nextNodes, canvas_items: nextCanvasItems });
@@ -1775,7 +1777,7 @@ export default function TopologyWorkspace({
       ...activeTopology,
       nodes: nextNodes,
       canvas_items: activeTopology.canvas_items.map((ci) =>
-        ci.item_id === itemId ? { ...ci, x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : ci
+        ci.item_id === itemId ? { ...ci, auto_fit: true, x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : ci
       ),
     });
     setNotice(`已自适应贴合【${item.text || "区域"}】，完美包裹 ${memberNodes.length} 台设备`);
@@ -1809,6 +1811,8 @@ export default function TopologyWorkspace({
 
     const newZoneItem: TopologyCanvasItem = {
       item_id: zoneId,
+      auto_fit: true,
+      zone: zoneName,
       kind: "rectangle",
       text: zoneName,
       x: bounds.x,
@@ -2106,7 +2110,7 @@ export default function TopologyWorkspace({
     pushState({
       ...current,
       nodes: current.nodes.map((node) => (ids.has(node.node_id) ? { ...node, x: node.x + dx, y: node.y + dy } : node)),
-      canvas_items: (current.canvas_items || []).map((item) => (ids.has(`canvas-${item.item_id}`) ? { ...item, x: item.x + dx, y: item.y + dy } : item)),
+      canvas_items: (current.canvas_items || []).map((item) => (ids.has(`canvas-${item.item_id}`) ? { ...item, auto_fit: false, x: item.x + dx, y: item.y + dy } : item)),
     });
   }, [canvasSelectedElementIds, pushState]);
 
@@ -4589,7 +4593,7 @@ export default function TopologyWorkspace({
                       pushState({
                         ...activeTopology,
                         canvas_items: (activeTopology.canvas_items || []).map((item) =>
-                          item.item_id === selectedCanvasItem.item_id ? { ...item, ...patch } : item
+                          item.item_id === selectedCanvasItem.item_id ? { ...item, ...patch, auto_fit: false } : item
                         ),
                       });
                     }}
@@ -4616,7 +4620,7 @@ export default function TopologyWorkspace({
                           pushState({
                             ...activeTopology,
                             canvas_items: (activeTopology.canvas_items || []).map((item) =>
-                              item.item_id === selectedCanvasItem.item_id ? { ...item, width: preset.w, height: preset.h } : item
+                              item.item_id === selectedCanvasItem.item_id ? { ...item, auto_fit: false, width: preset.w, height: preset.h } : item
                             ),
                           });
                         }}

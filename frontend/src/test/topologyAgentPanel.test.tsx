@@ -67,7 +67,7 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
     it("generates editing instructions when allowEdit is true", () => {
       const result = buildTopologyRequest(mockTopology as never, mockSelection, "添加一台路由器", true);
       expect(result).toContain("添加一台路由器");
-      expect(result).toContain("已明确授权绘图。请先读取当前图纸，再按要求绘图。");
+      expect(result).toContain("【当前允许编辑图纸】是否修改以用户本次明确要求为准。");
       expect(result).not.toContain("只读咨询模式");
       expect(result).toContain('"topology_id":"topo_test_123"');
     });
@@ -77,7 +77,7 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
       expect(result).toContain("分析网络结构");
       expect(result).toContain("【当前为只读咨询模式，未授权修改图纸】");
       expect(result).toContain("严禁调用 patch 或修改任何图纸内容");
-      expect(result).not.toContain("已明确授权绘图");
+      expect(result).not.toContain("当前允许编辑图纸");
       expect(result).toContain('"topology_id":"topo_test_123"');
     });
   });

@@ -728,6 +728,7 @@ def topology_tool(invocation):
         if action == "read":
             return {"ok": True, "action": "read", "topology": topology, "version": topology["version"]}
         if action == "patch":
+            previous_version = topology["version"]
             topology = drawings.patch_topology(invocation.workspace_id, topology_id, args)
             node_count = len(topology.get("nodes") or [])
             link_count = len(topology.get("links") or [])
@@ -739,7 +740,9 @@ def topology_tool(invocation):
                 "node_count": node_count,
                 "link_count": link_count,
                 "topology": topology,
-                "message": f"图纸已成功更新到画布！当前版本为 v{topology['version']}，包含 {node_count} 个节点、{link_count} 条链路。",
+                "changed": topology["version"] != previous_version,
+                "message": (f"图纸已更新到 v{topology['version']}，包含 {node_count} 个节点、{link_count} 条链路。"
+                            if topology["version"] != previous_version else "本次 patch 未改变图纸。请核对当前结果；目标已满足就结束，不要重复提交。"),
             }
         return {"ok": False, "error": "drawing_action_must_be_read_or_patch"}
     except ValueError as exc:
@@ -935,6 +938,37 @@ def _inspection_in_scope(task: dict[str, Any], scope: dict[str, Any] | None) -> 
 
 
 def register():
+    node_schema = {
+        "type": "object", "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
+        "properties": {
+            **{key: {"type": "string"} for key in ("node_id", "id", "display_name", "device_type", "name", "type")},
+            **{key: {"type": ["string", "null"]} for key in ("group_id", "zone", "lock_group", "ip", "role", "vendor", "model", "vlan", "location")},
+            "x": {"type": "number"}, "y": {"type": "number"},
+        },
+    }
+    link_schema = {
+        "type": "object",
+        "anyOf": [{"required": ["link_id"]}, {"required": ["id"]},
+                  {"required": ["source_node_id", "target_node_id"]}, {"required": ["source", "target"]}],
+        "properties": {**{key: {"type": "string"} for key in
+            ("link_id", "id", "source_node_id", "target_node_id", "source_interface", "target_interface", "label")},
+            "kind": {"enum": ["physical", "logical"]}, "style": {"type": "object"}},
+    }
+    canvas_schema = {
+        "type": "object", "additionalProperties": False,
+        "anyOf": [{"required": ["item_id"]}, {"required": ["id"]}],
+        "properties": {
+            "item_id": {"type": "string", "minLength": 1}, "id": {"type": "string", "minLength": 1},
+            "kind": {"enum": ["rectangle", "ellipse", "text"]}, "text": {"type": "string", "maxLength": 240},
+            "zone": {"type": "string"}, "auto_fit": {"type": "boolean"},
+            "x": {"type": "number"}, "y": {"type": "number"},
+            "width": {"type": "number", "minimum": 40, "maximum": 10000},
+            "height": {"type": "number", "minimum": 24, "maximum": 10000},
+            "style": {"type": "object", "additionalProperties": False, "properties": {
+                **{key: {"type": "string"} for key in ("fill", "border", "color")},
+                "borderWidth": {"type": "number", "minimum": 0, "maximum": 20}}},
+        },
+    }
     common = {"workspace_id": {"type": "string"}}
     return {
         "tools": [
@@ -1093,38 +1127,37 @@ def register():
                         **common,
                         "action": {"type": "string", "enum": ["read", "patch"]},
                         "topology_id": {"type": "string", "description": "目标图纸ID，从当前绘图上下文获取"},
-                        "version": {"oneOf": [{"type": "integer"}, {"type": "string"}], "description": "当前图纸版本号（可选，系统会自动对齐）"},
+                        "version": {"oneOf": [{"type": "integer"}, {"type": "string"}], "description": "read 返回的版本号；提供旧版本会拒绝写入，须先 read 核对差异"},
                         "name": {"type": "string", "description": "图纸名称"},
                         "description": {"type": "string", "description": "图纸描述"},
                         "node_updates": {
                             "type": "array",
                             "description": "要添加或更新的节点对象列表，包含 node_id, display_name, device_type, x, y, zone, ip, role, vendor, model",
-                            "items": {"type": "object"},
+                            "items": node_schema,
                         },
                         "nodes": {
                             "type": "array",
                             "description": "要添加或更新的节点对象列表（node_updates 的自然别名）",
-                            "items": {"type": "object"},
+                            "items": node_schema,
                         },
                         "link_updates": {
                             "type": "array",
                             "description": "要添加或更新的链路对象列表，包含 source_node_id, target_node_id, source_interface, target_interface, kind, label",
-                            "items": {"type": "object"},
+                            "items": link_schema,
                         },
                         "links": {
                             "type": "array",
                             "description": "要添加或更新的链路对象列表（link_updates 的自然别名）",
-                            "items": {"type": "object"},
+                            "items": link_schema,
                         },
                         "group_updates": {"type": "array", "description": "逻辑分组列表", "items": {"type": "object"}},
                         "groups": {"type": "array", "description": "逻辑分组列表（group_updates 的自然别名）", "items": {"type": "object"}},
                         "zones": {"type": "array", "description": "区域分组列表（group_updates 的自然别名）", "items": {"type": "object"}},
-                        "canvas_item_updates": {"type": "array", "description": "画布装饰/区域文本元素列表", "items": {"type": "object"}},
-                        "canvas_items": {"type": "array", "description": "画布装饰/区域文本元素列表（canvas_item_updates 的自然别名）", "items": {"type": "object"}},
+                        "canvas_item_updates": {"type": "array", "description": "按 item_id 更新或创建图元。改名保留 ID；手动坐标关闭 auto_fit，设 auto_fit=true 恢复按成员包围", "items": canvas_schema},
+                        "canvas_items": {"type": "array", "description": "按 item_id 更新或创建图元。改名保留 ID；手动坐标关闭 auto_fit，设 auto_fit=true 恢复按成员包围（canvas_item_updates 的自然别名）", "items": canvas_schema},
                         "title": {"type": "string", "description": "图纸标题或名称"},
                         "summary": {"type": "string", "description": "拓扑说明"},
                         "comment": {"type": "string", "description": "设计说明"},
-                        "layout": {"type": "string", "description": "布局偏好"},
                         **{key: {"type": "array", "items": {"type": "string"}} for key in ("remove_node_ids", "remove_link_ids", "remove_group_ids", "remove_canvas_item_ids")},
                     },
                     "required": ["action"],

@@ -228,6 +228,7 @@ class DesktopController:
             self.shutdown = {"status": "stopping"}
             self._shutdown_attempt += 1
             attempt = self._shutdown_attempt
+        self.emit("shutdown", shutdown=dict(self.shutdown))
         if force:
             self.allow_exit = True
             self.window.destroy()
@@ -237,10 +238,14 @@ class DesktopController:
 
     def _stop_jobs(self, attempt):
         try:
+            if attempt != self._shutdown_attempt:
+                return
             from jobs.manager import cancel_job
             from backend.ws.agent_ws import request_active_turn_cancel
             from storage.principal import storage_principal
             for principal, job in active_jobs():
+                if attempt != self._shutdown_attempt:
+                    return
                 with storage_principal(principal):
                     cancel_job(job["workspace_id"], job["job_id"])
                     request_active_turn_cancel(principal, job["workspace_id"], job["job_id"])
@@ -262,11 +267,15 @@ class DesktopController:
                 if attempt != self._shutdown_attempt:
                     return
                 self.shutdown = {"status": "waiting", "message": "任务尚未完成收尾。可继续等待、返回应用，或确认中断并退出；未知写入不会自动重试。"}
+            self.emit("shutdown", shutdown=dict(self.shutdown))
         except Exception:
             log.exception("Desktop shutdown deferred")
             with self.lock:
                 if attempt == self._shutdown_attempt:
                     self.shutdown = {"status": "waiting", "message": "无法确认任务已安全结束，请返回应用核对或确认中断退出。"}
+                else:
+                    return
+            self.emit("shutdown", shutdown=dict(self.shutdown))
 
     def cleanup(self):
         self._stop.set()

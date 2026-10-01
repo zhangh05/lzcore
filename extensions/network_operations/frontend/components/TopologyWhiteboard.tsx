@@ -14,7 +14,7 @@ import {
   IconClose,
 } from "../../../../frontend/src/components/Icon";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
-import { downloadBlob } from "./topologyExport";
+import { nativeSaveBlob } from "./topologyExport";
 
 export type WhiteboardTool = "pen" | "highlighter" | "arrow" | "rect" | "note";
 
@@ -85,6 +85,7 @@ export function TopologyWhiteboard({
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  const [exportError, setExportError] = useState("");
   const [persistenceError, setPersistenceError] = useState("");
   const [loadedKey, setLoadedKey] = useState("");
   const ownerRef = useRef(activeUsername());
@@ -445,7 +446,8 @@ export function TopologyWhiteboard({
       const name = (topologyName || "网络拓扑").replace(/[\\/:*?"<>|\s]+/g, "_");
       exportCanvas.toBlob((blob) => {
         if (blob) {
-          downloadBlob(blob, `${name}_批注画板.png`);
+          setExportError("");
+          void nativeSaveBlob(blob, `${name}_批注画板.png`, "image/png").catch(error => setExportError(error instanceof Error ? error.message : "导出失败，请重试"));
         }
       }, "image/png");
     };
@@ -478,6 +480,7 @@ export function TopologyWhiteboard({
       className={`topology-whiteboard-overlay tool-${tool}`}
       onClick={loadedKey === key ? handleCanvasClick : undefined}
     >
+      {exportError && <div className="whiteboard-persistence" role="alert">{exportError}</div>}
       {(persistenceError || loadedKey !== key) && <div className="whiteboard-persistence" role="status">{persistenceError || "正在加载批注…"}{persistenceError && loadedKey === key && <button onClick={e => { e.stopPropagation(); setRetry(v => v + 1); }}>重试保存</button>}</div>}
       <canvas
         ref={canvasRef}

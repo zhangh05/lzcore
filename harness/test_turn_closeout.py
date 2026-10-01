@@ -57,7 +57,7 @@ def test_successful_job_with_missing_terminal_is_repaired(temp_dirs, monkeypatch
     store.write_message("run-ok", "assistant", "已经完成。", metadata={"client_request_id": "req-ok"})
     append_frame("default", "sess1", "req-ok", {"type": "token", "content": "partial"})
     job = SimpleNamespace(job_id="job-ok", status="succeeded", error="", metadata={"active_turn": {"session_id": "sess1", "client_request_id": "req-ok", "status": "succeeded", "run_id": "run-ok"}})
-    monkeypatch.setattr("jobs.store.list_jobs", lambda ws, **kw: [job])
+    monkeypatch.setattr("jobs.store.list_jobs", lambda ws, **kw: [vars(job)])
     monkeypatch.setattr("jobs.store.get_job", lambda *a: job)
     monkeypatch.setattr("storage.workspace_store.list_workspace_ids", lambda: ["default"])
     monkeypatch.setattr("storage.principal.known_storage_principals", lambda: [])

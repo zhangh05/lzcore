@@ -1572,9 +1572,9 @@ class QueryLoop:
         def finish(**values) -> QueryLoopResult:
             """Build every exit projection with the same runtime metrics."""
             nonlocal cognitive_events_emitted, cognitive_registered_results
-            if (ctx.extras.get("synthesis_recovery") or {}).get("error") == "cancelled_by_user":
+            if values.get("error") == "cancelled_by_user" or (ctx.extras.get("synthesis_recovery") or {}).get("error") == "cancelled_by_user":
                 values["error"] = "cancelled_by_user"
-                values["final_response"] = "任务已取消，已采集的证据保留在运行记录中。"
+                values["final_response"] = ("任务已取消。已完成的操作及证据保留在运行记录中；未完成或结果未知的写入没有自动重跑。" if all_results else "任务已取消。")
                 ctx.extras["response_outcome"] = "cancelled"
             projected_metrics = {
                 "elapsed_ms": (time.monotonic() - t_start) * 1000,
@@ -1748,6 +1748,7 @@ class QueryLoop:
                 )
 
         consecutive_tool_failures: dict[str, int] = {}
+        consecutive_no_changes = 0
         while True:
             if self._is_cancelled(ctx):
                 # If tools already produced results, surface them as a
@@ -1768,24 +1769,6 @@ class QueryLoop:
                     error="cancelled_by_user",
                 )
             iterations += 1
-            if iterations > 15:
-                if all_results:
-                    return finish(
-                        final_response=self._build_tool_result_fallback(ctx, all_results),
-                        tool_results=all_results,
-                        iterations=iterations,
-                        total_tool_calls=len(all_results),
-                        llm_calls=budget.llm_calls,
-                        error="iteration_limit_exceeded",
-                    )
-                return finish(
-                    final_response="任务执行轮次达到上限（15轮），已中止自动循环以保护资源。已保留当前全部生成与执行结果。",
-                    tool_results=all_results,
-                    iterations=iterations,
-                    total_tool_calls=len(all_results),
-                    llm_calls=budget.llm_calls,
-                    error="iteration_limit_exceeded",
-                )
 
             # The counter is telemetry only.  A model-directed task has no
             # runtime turn cap; it ends only on explicit completion,
@@ -1823,6 +1806,8 @@ class QueryLoop:
                 MODEL_COMPLETED, t_start, stage_started_at=model_started_at,
                 iteration=iterations, stream_scope=stream_scope,
                 ok=bool(response is not None and not response.error),
+                finish_reason=str(response.finish_reason or "") if response else "",
+                output_truncated=bool((response.metadata or {}).get("output_truncated")) if response else False,
             )
             if not planner_completed_emitted:
                 self._emit_stage(
@@ -2317,6 +2302,18 @@ class QueryLoop:
                     if item.get("evidence_id") in registered_evidence_ids
                     and item.get("kind") == "image"
                 ]
+
+                # Producers may explicitly report a successful no-op. This is
+                # not progress, even if their calls have different ids.
+                if results and all(res.ok and (res.output or {}).get("changed") is False for res in results):
+                    consecutive_no_changes += 1
+                elif any((res.output or {}).get("changed") is True for res in results):
+                    consecutive_no_changes = 0
+                if consecutive_no_changes >= 3:
+                    return finish(final_response="三次修改均未产生新的变更，已停止重复提交。已保留当前结果，请核对尚未满足的要求。",
+                                  tool_results=all_results, iterations=iterations,
+                                  total_tool_calls=len(all_results), llm_calls=budget.llm_calls,
+                                  error="tool_no_progress")
 
                 # Track consecutive identical tool failures to prevent infinite retry loops
                 for res in results:

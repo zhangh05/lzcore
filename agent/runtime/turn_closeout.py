@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from contextlib import nullcontext
 
 _log = logging.getLogger(__name__)
 _INTERRUPTED = "本轮在完成前中断，没有可确认的最终结果。"
@@ -91,15 +90,15 @@ def close_restarted_turns(username: str = "") -> int:
     from storage.time_utils import now_iso
 
     repaired = 0
-    for principal in [username] if username else ["", *known_storage_principals()]:
-        with storage_principal(principal) if principal else nullcontext():
+    for principal in [username] if username else sorted(set(["", *known_storage_principals()])):
+        with storage_principal(principal):
             for ws_id in list_workspace_ids():
                 candidates = {}
                 for job in list_jobs(ws_id, limit=10000):
-                    active = dict((job.metadata or {}).get("active_turn") or {})
+                    active = dict((job.get("metadata") or {}).get("active_turn") or {})
                     sid, request_id = active.get("session_id"), active.get("client_request_id")
                     if sid and request_id:
-                        candidates[(sid, request_id)] = {**active, "status": job.status, "job_id": job.job_id, "error": job.error or active.get("error") or ""}
+                        candidates[(sid, request_id)] = {**active, "status": job["status"], "job_id": job["job_id"], "error": job.get("error") or active.get("error") or ""}
                 for path in workspace_record_dir(ws_id, "sys", "request_registry").glob("*/*.json"):
                     try:
                         record = json.loads(path.read_text(encoding="utf-8"))

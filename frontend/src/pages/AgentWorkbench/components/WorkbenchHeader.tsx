@@ -1,4 +1,5 @@
-import { memo } from "react";
+import { memo, useState } from "react";
+import { saveBlob } from "../../../utils/saveBlob";
 import type { ChatMsg } from "../../../stores/workbench";
 import { IconChat, IconChevronDown, IconHistory, IconSidebarSimple } from "../../../components/Icon";
 
@@ -38,17 +39,18 @@ export const WorkbenchHeader = memo(function WorkbenchHeader({
       : `模型可用 · ${llmHealth.model || llmHealth.provider || "在线"}`
     : "模型不可用";
 
-  const handleExport = () => {
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const handleExport = async () => {
     if (!currentSessionId || visibleHistory.length === 0) return;
     const md = visibleHistory
       .map((m) => `## ${m.role === "user" ? "用户" : "AI"}\n\n${m.text}\n\n---\n`)
       .join("\n");
     const blob = new Blob([md], { type: "text/markdown" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `session-${currentSessionId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.md`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 100);
+    setExporting(true); setExportError('');
+    try { await saveBlob(blob, `session-${currentSessionId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.md`); }
+    catch (error) { setExportError(error instanceof Error ? error.message : '导出失败，请重试'); }
+    finally { setExporting(false); }
   };
 
   return (
@@ -125,10 +127,11 @@ export const WorkbenchHeader = memo(function WorkbenchHeader({
           </button>
         ) : null}
         {currentSessionId && visibleHistory.length > 0 ? (
-          <button className="wb-export-btn" title="导出对话" onClick={handleExport}>
-            导出
+          <button className="wb-export-btn" title="导出对话" disabled={exporting} onClick={() => { void handleExport(); }}>
+            {exporting ? '保存中…' : '导出'}
           </button>
         ) : null}
+        {exportError && <span role="alert">{exportError}</span>}
       </div>
     </header>
   );

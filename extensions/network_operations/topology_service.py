@@ -157,7 +157,7 @@ def _public_topology(record: dict[str, Any]) -> dict[str, Any]:
         "groups": list(record.get("groups") or []),
         # Diagram annotations are user-owned visual context.  They are never
         # graph endpoints or execution targets.
-        "canvas_items": list(record.get("canvas_items") or []),
+        "canvas_items": list({str(item["item_id"]): item for item in record.get("canvas_items") or []}.values()),
         "created_at": str(record.get("created_at") or ""),
         "updated_at": str(record.get("updated_at") or ""),
     }
@@ -181,8 +181,6 @@ def get_topology(workspace_id: str, topology_id: str) -> dict[str, Any] | None:
 def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Place a zone around nodes that belong to it, using Visual Hull calculation."""
     fitted: list[dict[str, Any]] = []
-    existing_texts: set[str] = set()
-    existing_ids: set[str] = set()
 
     PAD_X = 90.0
     PAD_Y = 80.0
@@ -206,70 +204,60 @@ def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) 
             "height": h,
         }
 
-    for item in items:
-        item_id = str(item.get("item_id") or "")
-        item_text = str(item.get("text") or "").strip()
-        if item_id:
-            existing_ids.add(item_id)
-        if item_text:
-            existing_texts.add(item_text)
-
-        if str(item.get("kind") or "") not in {"rectangle", "ellipse"}:
-            fitted.append(item)
-            continue
-
-        # Match members by item_id, zone, or text
-        members = [
-            node for node in nodes
-            if (item_id and str(node.get("group_id") or "") == item_id)
-            or (item_id and str(node.get("zone") or "") == item_id)
-            or (item_text and str(node.get("zone") or "") == item_text)
-            or (item_text and str(node.get("group_id") or "") == item_text)
-        ]
-        if not members:
-            fitted.append(item)
-            continue
-
-        box = _calc_box(members)
-        fitted.append({
-            **item,
-            **box,
-        })
-
-    # Auto-synthesize zones declared in nodes that do not have a canvas_item yet
-    zone_palette = [
-        {"fill": "#eff6ff", "border": "#93c5fd", "color": "#1e40af"},  # blue
-        {"fill": "#f0fdf4", "border": "#86efac", "color": "#166534"},  # green
-        {"fill": "#fffbeb", "border": "#fcd34d", "color": "#92400e"},  # amber
-        {"fill": "#faf5ff", "border": "#d8b4fe", "color": "#6b21a8"},  # purple
-        {"fill": "#f0fdfa", "border": "#5eead4", "color": "#115e59"},  # teal
-        {"fill": "#f8fafc", "border": "#cbd5e1", "color": "#334155"},  # slate
-    ]
-    declared_zones: dict[str, list[dict[str, Any]]] = {}
+    # Legacy versions could contain two entries with the same id. Keep the
+    # last authored entry, and never allocate a second identity for that id.
+    by_id = {str(item["item_id"]): dict(item) for item in items}
+    zones: dict[str, list[dict[str, Any]]] = {}
     for node in nodes:
-        z = str(node.get("zone") or node.get("group_id") or "").strip()
-        if z and z not in existing_ids and z not in existing_texts:
-            declared_zones.setdefault(z, []).append(node)
+        zone = str(node.get("zone") or node.get("group_id") or "").strip()
+        if zone:
+            zones.setdefault(zone, []).append(node)
 
-    color_idx = len(fitted)
-    for z_name, z_members in declared_zones.items():
-        box = _calc_box(z_members)
-        style = dict(zone_palette[color_idx % len(zone_palette)])
-        color_idx += 1
-        new_item = {
-            "item_id": f"zone-{abs(hash(z_name)) % 10000000}",
-            "kind": "rectangle",
-            "text": z_name,
-            "x": box["x"],
-            "y": box["y"],
-            "width": box["width"],
-            "height": box["height"],
-            "style": style,
-        }
-        for n in z_members:
-            n["group_id"] = new_item["item_id"]
-            n["zone"] = z_name
-        fitted.insert(0, new_item)
+    palette = [
+        {"fill": "#eff6ff", "border": "#93c5fd", "color": "#1e40af"},
+        {"fill": "#f0fdf4", "border": "#86efac", "color": "#166534"},
+        {"fill": "#fffbeb", "border": "#fcd34d", "color": "#92400e"},
+        {"fill": "#faf5ff", "border": "#d8b4fe", "color": "#6b21a8"},
+        {"fill": "#f0fdfa", "border": "#5eead4", "color": "#115e59"},
+        {"fill": "#f8fafc", "border": "#cbd5e1", "color": "#334155"},
+    ]
+    members_by_item: dict[str, list[dict[str, Any]]] = {}
+    for zone, members in zones.items():
+        # Membership wins over display text: renaming a box never creates a
+        # new zone or changes its stable identity (including legacy ids).
+        item_id = next((str(n.get("group_id")) for n in members
+                        if str(n.get("group_id")) in by_id), "")
+        if not item_id:
+            item_id = next((key for key, item in by_id.items()
+                            if item.get("zone") == zone or item.get("text") == zone or key == zone), "")
+        if not item_id:
+            item_id = "zone-" + hashlib.sha256(zone.encode("utf-8")).hexdigest()[:16]
+            by_id[item_id] = {"item_id": item_id, "kind": "rectangle", "text": zone,
+                              "zone": zone, "auto_fit": True, **_calc_box(members),
+                              "style": dict(palette[len(by_id) % len(palette)])}
+        # Earlier auto-synthesis could leave another generated box for the
+        # same zone. Membership owns the identity; preserve manual decorations
+        # and explicitly positioned boxes instead of deleting them by label.
+        for duplicate_id, duplicate in list(by_id.items()):
+            if (duplicate_id != item_id and duplicate_id.startswith("zone-")
+                    and duplicate.get("kind") in {"rectangle", "ellipse"}
+                    and duplicate.get("auto_fit") is not False
+                    and zone in {duplicate.get("zone"), duplicate.get("text")}):
+                if not by_id[item_id].get("text"):
+                    by_id[item_id]["text"] = str(duplicate.get("text") or zone)
+                del by_id[duplicate_id]
+        members_by_item.setdefault(item_id, []).extend(members)
+        for node in members:
+            node["group_id"] = item_id
+        by_id[item_id].setdefault("zone", zone)
+
+    for item_id, item in by_id.items():
+        members = members_by_item.get(item_id, [])
+        if members and item.get("kind") in {"rectangle", "ellipse"}:
+            item.setdefault("auto_fit", True)
+            if item["auto_fit"]:
+                item.update(_calc_box(members))
+        fitted.append(item)
 
     return fitted
 
@@ -408,7 +396,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             continue
         item_id = str(raw.get("item_id") or _id("canvas")).strip()
         if item_id in seen_canvas_item_ids:
-            item_id = _id("canvas")
+            normalized_canvas_items = [item for item in normalized_canvas_items if item["item_id"] != item_id]
         seen_canvas_item_ids.add(item_id)
         kind = str(raw.get("kind") or "rectangle").strip().lower()
         if kind not in {"rectangle", "ellipse", "text"}:
@@ -440,6 +428,13 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
                     or re.match(r"^[a-zA-Z]{1,24}$", val)
                 ):
                     safe_style[key] = val[:32]
+        if "borderWidth" in style:
+            try:
+                border_width = float(style["borderWidth"])
+                if math.isfinite(border_width):
+                    safe_style["borderWidth"] = max(0, min(20, border_width))
+            except (ValueError, TypeError):
+                pass
         normalized_canvas_items.append({
             "item_id": item_id,
             "kind": kind,
@@ -449,6 +444,8 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             "width": min(10000.0, max(40.0, width)),
             "height": min(10000.0, max(24.0, height)),
             "style": safe_style,
+            **({"zone": str(raw["zone"]).strip()[:80]} if raw.get("zone") else {}),
+            **({"auto_fit": bool(raw["auto_fit"])} if "auto_fit" in raw else {}),
         })
 
     raw_links = payload.get("links") if "links" in payload else (existing.get("links") if existing else [])
@@ -518,6 +515,17 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             link_entry["style"] = cleaned_style
         normalized_links.append(link_entry)
 
+    remaining_items = {item["item_id"]: item for item in normalized_canvas_items}
+    removed_items = {item["item_id"]: item for item in (existing or {}).get("canvas_items", [])
+                     if item["item_id"] not in remaining_items}
+    for node in normalized_nodes:
+        removed = removed_items.get(node.get("group_id"))
+        if removed:
+            replacement = next((item for item in remaining_items.values()
+                                if node.get("zone") and node["zone"] in {item.get("zone"), item.get("text")}), None)
+            node["group_id"] = replacement["item_id"] if replacement else None
+            if not replacement:
+                node["zone"] = None
     normalized_canvas_items = _fit_member_zones(normalized_nodes, normalized_canvas_items)
     record = {
         "schema_version": 2,
@@ -532,6 +540,10 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         "created_at": str(existing.get("created_at") or now_iso()) if existing else now_iso(),
         "updated_at": now_iso(),
     }
+    public_record = _public_topology(record)
+    if existing and all(public_record[key] == existing.get(key) for key in
+                        ("name", "description", "nodes", "links", "groups", "canvas_items")):
+        return existing
     _store(workspace_id).save("topologies", topology_id, record)
     try:
         _record_topology_revision(workspace_id, record)
@@ -561,17 +573,12 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         raise ValueError("topology_not_found")
     current_version = int(existing.get("version") or 1)
     raw_version = payload.get("version")
-    if raw_version is not None and str(raw_version).strip() != "":
-        try:
-            expected_version = int(raw_version)
-        except (TypeError, ValueError):
-            expected_version = current_version
-    else:
-        expected_version = current_version
-
-    # For Agent patch operations, auto-align with the active canvas version.
-    # Version drift or missing version params must never block an in-flight diagram edit.
-    expected_version = current_version
+    try:
+        expected_version = current_version if raw_version is None else int(raw_version)
+    except (TypeError, ValueError):
+        raise ValueError("topology_version_invalid") from None
+    if expected_version != current_version:
+        raise ValueError("topology_version_conflict")
 
     def records(value: Any, field: str) -> list[dict[str, Any]]:
         if value is None:
@@ -701,6 +708,8 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         if not item_id:
             item_id = _id("item")
         update["item_id"] = item_id
+        if any(key in update for key in ("x", "y", "width", "height")) and "auto_fit" not in update:
+            update["auto_fit"] = False
         items_by_id[item_id] = {**items_by_id.get(item_id, {}), **update, "item_id": item_id}
     remove_items = payload.get("remove_canvas_item_ids") or []
     if isinstance(remove_items, list):

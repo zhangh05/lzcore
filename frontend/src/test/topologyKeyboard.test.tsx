@@ -90,7 +90,7 @@ test("moving a shape/canvas item does not drag enclosed or nearby nodes along wi
     data: expect.objectContaining({
       // Nodes must remain in their original positions (0,0) and (100,100), not dragged!
       nodes: topology.nodes,
-      canvas_items: [{ item_id: "note", kind: "text", text: "备注", x: 250, y: 250, width: 100, height: 40 }],
+      canvas_items: [{ item_id: "note", kind: "text", text: "备注", auto_fit: false, x: 250, y: 250, width: 100, height: 40 }],
     }),
   })), { timeout: 3000 });
 });

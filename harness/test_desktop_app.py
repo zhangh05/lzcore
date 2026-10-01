@@ -205,6 +205,26 @@ def test_maintenance_barrier_cannot_be_reentered_or_released_by_close(monkeypatc
     c.gate.resume()
 
 
+def test_return_during_job_lookup_prevents_stale_shutdown_cancellation(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from desktop_app import controller
+    from desktop_app.environment import DesktopPaths
+    from jobs import manager
+    c = controller.DesktopController(DesktopPaths(tmp_path,tmp_path,tmp_path,'development'),
+        '3.3.1', LocalLifecycle(), 'http://localhost')
+    c.window = SimpleNamespace(evaluate_js=lambda _: c.origin)
+    c._shutdown_attempt = 1
+    c.shutdown = {'status': 'stopping'}
+    def jobs_after_return():
+        controller.DesktopApi(c).request_exit('return')
+        return [('', {'workspace_id': 'default', 'job_id': 'new_job', 'status': 'running'})]
+    cancelled = []
+    monkeypatch.setattr(controller, 'active_jobs', jobs_after_return)
+    monkeypatch.setattr(manager, 'cancel_job', lambda *args: cancelled.append(args))
+    c._stop_jobs(1)
+    assert not cancelled and c.shutdown['status'] == 'idle'
+
+
 def test_native_close_of_idle_window_does_not_need_frontend(monkeypatch, tmp_path):
     from desktop_app import controller
     from desktop_app.environment import DesktopPaths
@@ -216,6 +236,41 @@ def test_native_close_of_idle_window_does_not_need_frontend(monkeypatch, tmp_pat
     monkeypatch.setattr(c, 'emit', lambda *args, **kwargs: pytest.fail('idle close must not depend on page'))
     c._request_close()
     assert calls == ['quit']
+
+
+def test_first_native_close_with_finished_job_runs_real_closeout(monkeypatch, tmp_path):
+    from desktop_app import controller
+    from desktop_app.environment import DesktopPaths
+    from jobs.store import create_job
+    from jobs.schemas import JobRecord
+    from storage.workspace_store import ensure_workspace
+    from types import SimpleNamespace
+    ensure_workspace('default')
+    create_job(JobRecord(job_id='job_history', workspace_id='default', job_type='test', status='succeeded'))
+    c = controller.DesktopController(DesktopPaths(tmp_path,tmp_path,tmp_path,'development'), '3.3.1', LocalLifecycle(), 'http://localhost')
+    destroyed = threading.Event(); events=[]
+    c.window = SimpleNamespace(destroy=destroyed.set, evaluate_js=lambda _:c.origin)
+    monkeypatch.setattr(c, 'emit', lambda action, **kw: events.append(action))
+    c._request_close()
+    assert destroyed.wait(3)
+    assert c.allow_exit and c.shutdown['status'] == 'stopping'
+    assert events == ['shutdown']
+
+
+def test_shutdown_failure_notifies_page_without_second_close(monkeypatch, tmp_path):
+    from desktop_app import controller
+    from desktop_app.environment import DesktopPaths
+    from types import SimpleNamespace
+    c = controller.DesktopController(DesktopPaths(tmp_path,tmp_path,tmp_path,'development'), '3.3.1', LocalLifecycle(), 'http://localhost')
+    events=[]; c._shutdown_attempt=1
+    c.window=SimpleNamespace(destroy=lambda: pytest.fail('must not exit on closeout failure'))
+    monkeypatch.setattr(controller, 'active_jobs', lambda: [])
+    def broken(): raise OSError('closeout failed')
+    monkeypatch.setattr('agent.runtime.turn_closeout.close_restarted_turns', broken)
+    monkeypatch.setattr(c, 'emit', lambda action, **kw: events.append((action,kw)))
+    c._stop_jobs(1)
+    assert c.shutdown['status']=='waiting'
+    assert events[0][0]=='shutdown' and events[0][1]['shutdown']['status']=='waiting'
 
 
 def test_native_data_access_cannot_trust_reported_username(monkeypatch, tmp_path):

@@ -175,3 +175,36 @@ def test_fragmented_drawing_call_saves_21_nodes_and_30_links_and_finishes(monkey
         assert "new complete native tool calls" in prompts[1][-1].content
         assert "None of those partial calls was executed" in prompts[1][-1].content
     assert result.error is None
+
+
+@pytest.mark.parametrize('limit,noop', [(0,False), (3,False), (0,True)])
+def test_drawing_loop_continues_with_progress_but_stops_noops(temp_dirs, limit, noop):
+    from agent.llm.schemas import LLMToolCall
+    from core.tools.schemas import ToolSpec, ToolInvocation
+    from core.tools.registry import ToolRegistry
+    from core.tools.executor import ToolExecutor
+    workspace='long-drawing'; topo=drawings.save_topology(workspace, {'name':'长回合','nodes':[],'links':[]})
+    spec,registry=_drawing_registry(); tools=ToolRegistry()
+    tools.register_tool(ToolSpec(tool_id=spec['tool_id'],category='ops',input_schema=spec['input_schema'],risk_level='medium'),backend.topology_tool)
+    gateway=ToolExecutor(tools)
+    class Runtime:
+        def invoke_raw(self, tool_id, args):
+            return gateway.execute(ToolInvocation(tool_id=tool_id,workspace_id=workspace,skill=f"drawing:{topo['topology_id']}",arguments=args)).output
+    calls=[]
+    def llm(**kwargs):
+        index=len(calls);calls.append(kwargs)
+        if index>=20: return LLMResponse(content='已完成20个批次。')
+        current=drawings.get_topology(workspace,topo['topology_id'])
+        return LLMResponse(tool_calls=[LLMToolCall(id=f'call-{index}',name=TOOL_NAME,arguments={
+            'action':'patch','version':current['version'],
+            'nodes':[] if noop else [{'node_id':f'n{index}','x':index*200,'y':100,'zone':'核心区'}]})])
+    cfg=SSOTRuntimeConfig(max_query_loop_iterations=limit)
+    ctx=StatelessContext(workspace_id=workspace,session_id='s',request_id='r',user_input='绘制20批设备',
+        extras={'workbench_context':{'extension_id':'network.operations','skill_id':f"drawing:{topo['topology_id']}"}})
+    result=asyncio.run(QueryLoop(cfg,registry,Runtime(),llm_invoke=llm).run(ctx,BudgetController(cfg),None))
+    saved=drawings.get_topology(workspace,topo['topology_id'])
+    if noop:
+        assert result.error=='tool_no_progress' and len(calls)==3 and saved['version']==1
+    else:
+        assert result.error is None and len(calls)==21 and len(saved['nodes'])==20
+        assert len(saved['canvas_items'])==1

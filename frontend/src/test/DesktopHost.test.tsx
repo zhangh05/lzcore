@@ -13,6 +13,17 @@ beforeEach(() => {
 });
 afterEach(() => {cleanup(); delete window.__LZCORE_DESKTOP__; vi.clearAllMocks();});
 describe('desktop lifecycle UI', () => {
+  it('shows first shutdown progress and later failure without a second close click', async () => {
+    api.get_info.mockResolvedValue({...info(),shutdown:{status:'stopping'}}); render(<DesktopHost/>);
+    window.dispatchEvent(new CustomEvent('lzcore:desktop-action',{detail:{action:'shutdown',shutdown:{status:'stopping'}}}));
+    expect(await screen.findByText('正在停止任务并等待收尾…')).toBeVisible();
+    expect(screen.getByText('当前没有待处理或运行中的任务。')).toBeVisible();
+    api.get_info.mockResolvedValue({...info(),shutdown:{status:'waiting',message:'收尾失败，请核对'}});
+    window.dispatchEvent(new CustomEvent('lzcore:desktop-action',{detail:{action:'shutdown',shutdown:{status:'waiting',message:'收尾失败，请核对'}}}));
+    expect(await screen.findByText('收尾失败，请核对')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'停止任务并退出'}));
+    await waitFor(() => expect(api.request_exit).toHaveBeenCalledWith('exit',false));
+  });
   it('keeps desktop-only controls out of the web app', () => {delete window.__LZCORE_DESKTOP__; render(<><DesktopSettingsButton/><DesktopHost/></>); expect(screen.queryByRole('button',{name:'桌面设置'})).toBeNull();});
   it('offers background or explicit shutdown for active tasks', async () => {
     api.get_info.mockResolvedValue({...info(),active_jobs:1}); render(<DesktopHost/>);

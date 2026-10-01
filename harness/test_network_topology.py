@@ -705,8 +705,8 @@ def test_topology_commit_emits_one_version_notice(workspace, monkeypatch):
     assert events[1]["data"]["version"] == 2
 
 
-def test_topology_patch_auto_version_and_fault_tolerance(workspace):
-    """Verify that patch_topology auto-heals version mismatches and tolerates dangling links."""
+def test_topology_patch_checks_explicit_version_and_allows_omission(workspace):
+    """An explicitly stale baseline is never silently adopted."""
     topo = drawings.save_topology(workspace, {
         "name": "容错测试",
         "nodes": [{"node_id": "core1", "x": 100, "y": 100}],
@@ -714,9 +714,11 @@ def test_topology_patch_auto_version_and_fault_tolerance(workspace):
     })
     assert topo["version"] == 1
 
-    # 1. Patch with stale version 0 succeeds (auto-healed)
+    with pytest.raises(ValueError, match="topology_version_conflict"):
+        drawings.patch_topology(workspace, topo["topology_id"], {"version": 0, "node_updates": [{"node_id": "core2"}]})
+    assert drawings.get_topology(workspace, topo["topology_id"])["version"] == 1
     p1 = drawings.patch_topology(workspace, topo["topology_id"], {
-        "version": 0,
+        "version": 1,
         "node_updates": [{"node_id": "core2", "x": 200, "y": 100}],
     })
     assert p1["version"] == 2
@@ -779,7 +781,7 @@ def test_topology_patch_alias_and_schema_fault_tolerance(workspace):
         "remove_link_ids": ["non_existent_link"],
         "remove_group_ids": ["non_existent_group"],
     })
-    assert p2["version"] == 3
+    assert p2["version"] == 2
 
 
 def test_topology_tool_invocation_aliases_and_query_loop_normalization(workspace):

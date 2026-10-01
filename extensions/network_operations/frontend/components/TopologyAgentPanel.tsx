@@ -18,7 +18,7 @@ export type { CanvasSelection } from "./canvasSelection";
 
 export function buildTopologyRequest(topology: Topology, selection: CanvasSelection, request: string, allowEdit = true) {
   const modeInstruction = allowEdit
-    ? "已明确授权绘图。请先读取当前图纸，再按要求绘图。只修改用户要求的对象，不查询或操作真实设备。"
+    ? "【当前允许编辑图纸】是否修改以用户本次明确要求为准。解释、审核和追问只读检查，不产生新的修改授权。先读取当前图纸，仅提交已授权且尚未完成的修改。不查询或操作真实设备。"
     : "【当前为只读咨询模式，未授权修改图纸】请通过 read 操作读取当前图纸结构并进行分析解答，严禁调用 patch 或修改任何图纸内容。不查询或操作真实设备。";
   return `${request}\n\n当前图纸上下文：\n${JSON.stringify({ topology_id: topology.topology_id, version: topology.version, selection })}\n${modeInstruction}`;
 }

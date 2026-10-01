@@ -56,7 +56,7 @@ def test_layout_only_edits_do_not_create_revisions(workspace):
     for step in range(4):
         moved = {
             **topo,
-            "version": topo["version"] + step,
+            "version": drawings.get_topology(workspace, topo["topology_id"])["version"],
             "nodes": [
                 {**topo["nodes"][0], "x": 100 + step * 8, "y": 100 + step * 8},
                 topo["nodes"][1],

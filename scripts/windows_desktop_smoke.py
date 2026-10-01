@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright
 
 
@@ -30,9 +31,24 @@ def run(exe: Path, mode: str, output: Path):
     output.mkdir(parents=True, exist_ok=True)
     data = output / '中文 用户数据'
     report = output / 'startup.json'
+    # Seed only this smoke run's isolated storage, then exercise the actual
+    # business export button rather than just calling the bridge directly.
+    sid = 'smoke_export'
+    sessions = data/'workspaces/default/sessions'
+    messages = sessions/sid/'messages'
+    messages.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc).isoformat()
+    (sessions/f'{sid}.json').write_text(json.dumps({
+        'session_id':sid, 'workspace_id':'default', 'title':'桌面业务导出验证',
+        'status':'active', 'created_at':now, 'updated_at':now, 'metadata':{}, 'run_ids':['smoke_export'],
+    }), encoding='utf-8')
+    (messages/'smoke_export.assistant.json').write_text(json.dumps({
+        'session_id':sid, 'run_id':'smoke_export', 'role':'assistant',
+        'content':'真实工作台中文导出', 'metadata':{'created_at':now},
+    }), encoding='utf-8')
     with socket.socket() as probe:
         probe.bind(('127.0.0.1',0)); cdp = probe.getsockname()[1]
-    env = {**os.environ, 'LZCORE_SMOKE_CDP_PORT':str(cdp), 'LZCORE_EMBEDDED_WORKER':'true', 'PYTHONUTF8':'1'}
+    env = {**os.environ, 'LZCORE_SMOKE_CDP_PORT':str(cdp), 'LZCORE_EMBEDDED_WORKER':'true', 'PYTHONUTF8':'1', 'LZCORE_LLM_ENABLED':'false'}
     proc = subprocess.Popen([str(exe.resolve()), '--data-dir', str(data.resolve()), '--smoke-test', str(report.resolve())], env=env)
     try:
         start = wait_until(lambda: json.loads(report.read_text(encoding='utf-8')) if report.exists() else None)
@@ -75,6 +91,15 @@ def run(exe: Path, mode: str, output: Path):
             page.wait_for_function('window.__exportResult !== null', timeout=20000)
             assert exported.exists(), page.evaluate('window.__exportResult')
             assert exported.read_text(encoding='utf-8')=='真实原生导出'
+            assert user32.MoveWindow(hwnd, 40, 40, 1280, 900, True)
+            page.goto(start['origin']+'/workbench')
+            page.get_by_text('桌面业务导出验证', exact=True).first.click()
+            page.get_by_text('真实工作台中文导出', exact=True).wait_for()
+            page.get_by_role('button', name='导出', exact=True).click()
+            conversation = output/'中文 会话.md'
+            subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),'-ParentPid',str(proc.pid),'-FileName',str(conversation.resolve())],check=True,timeout=35)
+            wait_until(lambda: conversation.exists())
+            assert '真实工作台中文导出' in conversation.read_text(encoding='utf-8')
             # Background does not stop the local server or detach the durable transport.
             page.evaluate("window.pywebview.api.request_exit('background')")
             assert not user32.IsWindowVisible(hwnd)
@@ -96,6 +121,15 @@ def run(exe: Path, mode: str, output: Path):
             assert result
             assert not errors, errors
             (data/'sentinel.txt').write_text('卸载保留',encoding='utf-8')
+            # A clean installation hid a dict/object mismatch in shutdown.
+            # Keep a real, finished historical job in the packaged storage.
+            history = data/'workspaces/default/jobs/job_smoke_history'
+            history.mkdir(parents=True, exist_ok=True)
+            (history/'job_smoke_history.json').write_text(json.dumps({
+                'job_id':'job_smoke_history', 'workspace_id':'default',
+                'job_type':'desktop_smoke', 'status':'succeeded', 'metadata':{},
+            }), encoding='utf-8')
+            assert page.evaluate('window.pywebview.api.get_info()')['active_jobs']==0
             # Exercise the real Windows Close action, including the native
             # lifecycle path rather than asking the JS bridge to terminate.
             assert user32.PostMessageW(hwnd, 0x0010, 0, 0)
