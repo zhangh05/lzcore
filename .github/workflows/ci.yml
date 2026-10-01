@@ -251,20 +251,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Validate Windows scripts and shell routing
-        shell: pwsh
+        shell: powershell
         run: |
           python -m pip install pytest
-          $tokens = $null
-          $errors = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path "start.ps1"), [ref]$tokens, [ref]$errors
-          )
-          if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
-          $tokens = $null
-          $errors = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path "stop.ps1"), [ref]$tokens, [ref]$errors
-          )
-          if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
-          python -m pytest harness/test_windows_runtime_contract.py -q
+          foreach ($script in @('start.ps1','stop.ps1','scripts/windows_update.ps1','scripts/windows_dialog_smoke.ps1','scripts/download_webview2.ps1','scripts/sign_windows.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script), [ref]$tokens, [ref]$errors
+            )
+            if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
+          }
+          python -m pytest harness/test_windows_runtime_contract.py harness/test_windows_desktop_update.py -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\start.ps1 -NoBrowser -ValidateOnly
