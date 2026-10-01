@@ -13,6 +13,7 @@ public static class LZDialog {
   [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr handle);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr handle, StringBuilder value, int length);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr handle, uint message, IntPtr parameter, string value);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageW")] public static extern IntPtr ReadMessage(IntPtr handle, uint message, IntPtr parameter, StringBuilder value);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint own, uint target, bool attach);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr handle);
@@ -28,11 +29,20 @@ public static class LZDialog {
   }
   [DllImport("user32.dll")] public static extern uint SendInput(uint count, Input[] inputs, int size);
   public static void TypeText(string text) {
+    var inputs = new System.Collections.Generic.List<Input>();
     foreach(char c in text) {
       Input down=new Input {type=1, value=new InputUnion {keyboard=new Keyboard {scan=c, flags=4}}};
       Input up=down; up.value.keyboard.flags=6;
-      if(SendInput(2,new[]{down,up},Marshal.SizeOf(typeof(Input)))!=2) throw new Exception("Keyboard input rejected");
+      inputs.Add(down); inputs.Add(up);
     }
+    // One native input batch preserves ordering across the entire filename.
+    var batch=inputs.ToArray();
+    if(SendInput((uint)batch.Length,batch,Marshal.SizeOf(typeof(Input)))!=(uint)batch.Length) throw new Exception("Keyboard input rejected");
+  }
+  public static string ReadText(IntPtr edit) {
+    var value=new StringBuilder(32768);
+    ReadMessage(edit,0x000D,new IntPtr(value.Capacity),value);
+    return value.ToString();
   }
 }
 '@
@@ -67,13 +77,20 @@ do {
       $ownThread=[LZDialog]::GetCurrentThreadId()
       [void][LZDialog]::AttachThreadInput($ownThread,$targetThread,$true)
       try {
-        [void][LZDialog]::SetForegroundWindow($script:dialog)
+        if(-not [LZDialog]::SetForegroundWindow($script:dialog)) { throw 'Native save dialog could not receive keyboard focus' }
         [void][LZDialog]::SetFocus($script:edit)
+        [System.Windows.Forms.SendKeys]::SendWait('^a')
+        [LZDialog]::TypeText($FileName)
+        # SendInput queues keyboard events. Do not click Save until the native
+        # Edit has processed every character, including spaces and Unicode.
+        $inputDeadline=(Get-Date).AddSeconds(5)
+        while([LZDialog]::ReadText($script:edit) -ne $FileName) {
+          if((Get-Date) -gt $inputDeadline) { throw 'Native filename input was incomplete; refusing to save to a different path' }
+          Start-Sleep -Milliseconds 50
+        }
+        Start-Sleep -Milliseconds 200
+        [void][LZDialog]::SendMessage($script:save,0x00F5,[IntPtr]::Zero,$null)
       } finally { [void][LZDialog]::AttachThreadInput($ownThread,$targetThread,$false) }
-      [System.Windows.Forms.SendKeys]::SendWait('^a')
-      [LZDialog]::TypeText($FileName)
-      Start-Sleep -Milliseconds 200
-      [void][LZDialog]::SendMessage($script:save,0x00F5,[IntPtr]::Zero,$null)
       exit 0
     }
   }
