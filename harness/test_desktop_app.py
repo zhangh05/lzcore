@@ -175,3 +175,17 @@ def test_native_data_access_cannot_trust_reported_username(monkeypatch, tmp_path
     c.principal='admin'
     assert not c.admin_allowed()
     assert not DesktopApi(c).open_folder()['ok']
+
+
+def test_migration_refuses_a_source_owned_by_another_thread(tmp_path):
+    from desktop_app.environment import migration_source
+    from storage.locking import FileLock
+    source=tmp_path/'source'; lock=source/'.runtime/desktop-instance.lock'
+    started=threading.Event(); finish=threading.Event()
+    def owner():
+        with FileLock(lock): started.set(); finish.wait(5)
+    thread=threading.Thread(target=owner);thread.start();started.wait(2)
+    try:
+        with pytest.raises(ValueError,match='仍在使用'):
+            with migration_source(source): pytest.fail('must not copy live source')
+    finally: finish.set(); thread.join(2)

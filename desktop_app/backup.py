@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from storage.atomic_io import atomic_write_json
-from desktop_app.environment import DATA_SCHEMA, copy_verified
+from desktop_app.environment import DATA_SCHEMA, copy_verified, migration_source
 
 MAX_BACKUP_BYTES = 512 * 1024 * 1024
 MAX_BACKUP_FILES = 100000
@@ -227,6 +227,11 @@ def stage_restore(data: Path, source: Path, *, password=""):
 
 
 def stage_migration(data: Path, source: Path):
+    with migration_source(source):
+        return _stage_migration(data, source)
+
+
+def _stage_migration(data: Path, source: Path):
     """Selected old desktop data is copied and verified; source is retained."""
     if not (source / "workspaces").is_dir():
         raise ValueError("所选目录没有 workspaces，请选择旧版本程序或数据目录")

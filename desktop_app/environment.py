@@ -6,6 +6,8 @@ import json
 import os
 import shutil
 import tempfile
+import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -73,12 +75,38 @@ def prepare_paths(paths: DesktopPaths):
     os.environ["WEBVIEW2_USER_DATA_FOLDER"] = str(paths.runtime / "webview2")
 
 
+@contextmanager
+def migration_source(source: Path):
+    """Refuse to copy data still owned by another desktop process."""
+    from storage.locking import FileLock
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.windll.kernel32
+        kernel.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+        kernel.OpenMutexW.restype = wintypes.HANDLE
+        handle = kernel.OpenMutexW(0x00100000, False, r"Global\LZCoreDesktopSingleInstanceMutex_v3")
+        if handle:
+            kernel.CloseHandle(wintypes.HANDLE(handle))
+            raise ValueError("旧版桌面仍在运行，请结束任务并退出旧版后迁移")
+    lock = source / ".runtime" / "desktop-instance.lock"
+    if lock.exists():
+        try:
+            with FileLock(lock, timeout=0):
+                yield
+        except TimeoutError as exc:
+            raise ValueError("源数据仍在使用，请结束任务并退出源程序后迁移") from exc
+    else:
+        yield
+
+
 def copy_verified(source: Path, destination: Path) -> int:
     """Copy without following links; verify bytes before committing a migration."""
     if source.is_symlink() or not source.is_dir():
         raise ValueError("迁移源必须是普通目录")
     destination.mkdir(parents=True, exist_ok=True)
     count = 0
+    verified = {}
     for item in sorted(source.rglob("*")):
         if item.is_symlink():
             raise ValueError("Migration cannot follow symbolic links")
@@ -89,9 +117,13 @@ def copy_verified(source: Path, destination: Path) -> int:
         elif item.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, target)
-            if file_sha256(item) != file_sha256(target):
+            digest = file_sha256(target)
+            if file_sha256(item) != digest:
                 raise OSError("Migration verification failed")
+            verified[item] = digest
             count += 1
+    if any(not path.is_file() or file_sha256(path) != digest for path, digest in verified.items()):
+        raise ValueError("迁移过程中源数据发生变化，请退出源程序后重试")
     return count
 
 
@@ -104,6 +136,13 @@ def file_sha256(path: Path) -> str:
 
 
 def migrate_legacy(paths: DesktopPaths):
+    if not (paths.app / "workspaces").is_dir():
+        return {"complete": True, "migrated": False}
+    with migration_source(paths.app):
+        return _migrate_legacy(paths)
+
+
+def _migrate_legacy(paths: DesktopPaths):
     """Copy the adjacent legacy roots once; keep the original as recovery data.
 
     A journal makes the directory moves repeatable after interruption. An
