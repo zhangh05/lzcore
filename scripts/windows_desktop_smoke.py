@@ -82,13 +82,15 @@ def run(exe: Path, mode: str, output: Path):
             wait_until(lambda: user32.IsWindowVisible(hwnd))
             user32.ShowWindow(hwnd,3); time.sleep(.4); user32.ShowWindow(hwnd,9)
             # Same-origin websocket contract uses the packaged app, not a test server.
-            result = page.evaluate('''async () => await new Promise((resolve,reject) => {
+            result = page.evaluate('''async () => {
+              const token = (await (await fetch('/api/local-token')).json()).token;
+              return await new Promise((resolve,reject) => {
               const ws = new WebSocket(location.origin.replace('http:', 'ws:') + '/ws/agent');
               const timer = setTimeout(() => {ws.close(); reject(new Error('WS timeout'));}, 10000);
-              ws.onopen = () => ws.send(JSON.stringify({type:'ping'}));
+              ws.onopen = () => ws.send(JSON.stringify({type:'ping',workspace_id:'default',local_token:token}));
               ws.onmessage = e => {const f=JSON.parse(e.data); if(f.type==='pong') {clearTimeout(timer); ws.close(); resolve(true);}};
               ws.onerror = () => reject(new Error('WS failed'));
-            })''')
+            }); }''')
             assert result
             assert not errors, errors
             (data/'sentinel.txt').write_text('卸载保留',encoding='utf-8')
