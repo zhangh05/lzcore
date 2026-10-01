@@ -250,7 +250,8 @@ class TurnLog:
             if self.frames and self.frames[-1].get("type") in {"done", "error"}:
                 if frame.get("type") not in {"done", "error"}:
                     raise ValueError("turn already terminal")
-                with self.path.open("rb") as handle:
+                # Windows _commit requires a writable descriptor.
+                with self.path.open("r+b") as handle:
                     os.fsync(handle.fileno())
                 return self.frames[-1]
             seq = int(self.frames[-1]["seq"]) + 1 if self.frames else 1
