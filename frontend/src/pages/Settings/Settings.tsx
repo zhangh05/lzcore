@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { settingsApi } from "../../api";
 import { Badge, EmptyState, LoadingState } from "../../components/common";
-import { Button, Input, FormField } from "../../components/ui";
+import { Button, Input, Select, FormField } from "../../components/ui";
 import { confirm } from "../../components/ConfirmDialog";
 import { useSessionStore } from "../../stores/session";
 import { useToastStore } from "../../stores/toast";
@@ -482,11 +482,11 @@ export function Settings() {
                   <FormField label="Top P（留空使用服务商默认）"><Input type="number" min="0.01" max="1" step="0.05" aria-label="Top P"
                     value={draft.top_p ?? ""} onChange={e => setDraft({...draft, top_p: e.target.value === "" ? null : Number(e.target.value)})}/></FormField>
                   {selectedId === "minimax" && draft.model?.toLowerCase().startsWith("minimax-m3") && <FormField label="模型思考" hint="复杂设计可启用；思考占用输出额度，通常会增加等待时间。">
-                    <select aria-label="模型思考" value={draft.thinking ?? "provider_default"}
+                    <Select aria-label="模型思考" value={draft.thinking ?? "provider_default"}
                       onChange={e => setDraft({...draft, thinking: e.target.value as ProviderConfig["thinking"]})}>
                       <option value="provider_default">服务商默认</option><option value="adaptive">启用自适应思考</option>
                       {!draft.model?.toLowerCase().startsWith("minimax-m3.1") && <option value="disabled">关闭思考</option>}
-                    </select></FormField>}
+                    </Select></FormField>}
                 </div>
 
                 {/* Test result */}
