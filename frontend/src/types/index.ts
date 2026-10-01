@@ -655,6 +655,8 @@ export interface ProviderConfig {
   base_url: string;
   model: string;
   temperature: number;
+  top_p?: number | null;
+  thinking?: "provider_default" | "adaptive" | "disabled";
   max_tokens: number;
   safe_mode: boolean;
   prompt_cache_enabled: boolean;

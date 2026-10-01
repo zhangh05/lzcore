@@ -561,6 +561,17 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @_drawing_transaction
+def patch_topology_with_receipt(workspace_id: str, topology_id: str, payload: dict[str, Any]) -> tuple[dict, dict, bool]:
+    """Compute the model's receipt from the same locked baseline as its write."""
+    from .drawing_feedback import change_set
+    before = get_topology(workspace_id, topology_id)
+    if not before:
+        raise ValueError("topology_not_found")
+    after = patch_topology(workspace_id, topology_id, payload)
+    return after, change_set(before, after), after["version"] != before["version"]
+
+
+@_drawing_transaction
 def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Apply a small, versioned topology change without replacing the graph.
 
@@ -636,6 +647,12 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
 
     for node_id in remove_node_ids:
         nodes_by_id.pop(node_id, None)
+
+    if payload.get("layout") is not None:
+        from .drawing_feedback import apply_optional_layout
+        apply_optional_layout(nodes_by_id, payload["layout"], {
+            item["node_id"] for item in node_updates if "x" in item or "y" in item
+        })
 
     groups_by_id = {
         str(item.get("group_id") or ""): dict(item)

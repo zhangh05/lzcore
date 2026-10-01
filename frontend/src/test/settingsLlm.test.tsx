@@ -187,8 +187,10 @@ describe("Settings — LLM Provider configuration v2", () => {
     render(<Settings />);
     await waitFor(() => screen.getByTestId("toggle-enabled"));
 
-    // Change temperature only (minimax starts enabled=true from makeProviders)
+    // Explicit generation settings travel with the selected provider.
     fireEvent.change(screen.getByTestId("field-temperature"), { target: { value: "0.5" } });
+    fireEvent.change(screen.getByLabelText("Top P"), { target: { value: "0.85" } });
+    fireEvent.change(screen.getByLabelText("模型思考"), { target: { value: "adaptive" } });
 
     await act(async () => {
       fireEvent.click(screen.getByTestId("btn-save-llm"));
@@ -196,7 +198,7 @@ describe("Settings — LLM Provider configuration v2", () => {
 
     expect(spy.providerSave).toHaveBeenCalledWith(
       "minimax",
-      expect.objectContaining({ enabled: true, temperature: 0.5 }),
+      expect.objectContaining({ enabled: true, temperature: 0.5, top_p: 0.85, thinking: "adaptive" }),
     );
   });
 
@@ -204,6 +206,9 @@ describe("Settings — LLM Provider configuration v2", () => {
     const spy = mockApi();
     render(<Settings />);
     await waitFor(() => screen.getByTestId("btn-apply-llm"));
+    fireEvent.change(screen.getByLabelText("模型思考"), { target: { value: "disabled" } });
+    fireEvent.change(screen.getByTestId("field-model"), { target: { value: "MiniMax-M3.1" } });
+    expect(screen.queryByRole("option", { name: "关闭思考" })).not.toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByTestId("btn-apply-llm"));
@@ -212,6 +217,7 @@ describe("Settings — LLM Provider configuration v2", () => {
     expect(spy.llmActivate).toHaveBeenCalled();
     const call = spy.llmActivate.mock.calls[0];
     expect(call[0]).toBe("minimax"); // providerId
+    expect(call[1]).toMatchObject({ top_p: null, thinking: "provider_default", model: "MiniMax-M3.1" });
   });
 
   it("测试连接调 llmTest, 成功后显示 result", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import {
   buildTopologyRequest,
+  buildTopologySelection,
   TopologyAgentPanel,
 } from "../../../extensions/network_operations/frontend/components/TopologyAgentPanel";
 
@@ -63,22 +64,15 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
     localStorage.clear();
   });
 
-  describe("buildTopologyRequest prompt generation", () => {
-    it("generates editing instructions when allowEdit is true", () => {
-      const result = buildTopologyRequest(mockTopology as never, mockSelection, "添加一台路由器", true);
-      expect(result).toContain("添加一台路由器");
-      expect(result).toContain("【当前允许编辑图纸】是否修改以用户本次明确要求为准。");
-      expect(result).not.toContain("只读咨询模式");
-      expect(result).toContain('"topology_id":"topo_test_123"');
+  describe("separate user text and drawing selection", () => {
+    it("keeps questions and negated edits as the exact user request", () => {
+      expect(buildTopologyRequest(" 只检查画板，不要修改 ")).toBe("只检查画板，不要修改");
+      expect(buildTopologyRequest("你什么情况")).toBe("你什么情况");
     });
-
-    it("generates strict read-only instructions when allowEdit is false", () => {
-      const result = buildTopologyRequest(mockTopology as never, mockSelection, "分析网络结构", false);
-      expect(result).toContain("分析网络结构");
-      expect(result).toContain("【当前为只读咨询模式，未授权修改图纸】");
-      expect(result).toContain("严禁调用 patch 或修改任何图纸内容");
-      expect(result).not.toContain("当前允许编辑图纸");
-      expect(result).toContain('"topology_id":"topo_test_123"');
+    it("sends editing scope and selected ids separately", () => {
+      expect(buildTopologySelection(mockTopology as never, {...mockSelection, node_ids:["n1"]}, false)).toMatchObject({
+        skill_id:"drawing:topo_test_123:ro", allow_edit:false, canvas_selection:{node_ids:["n1"]},
+      });
     });
   });
 
@@ -233,7 +227,13 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
       // Press Enter -> submits via mockSend
       fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
       await vi.waitFor(() => {
-        expect(mockSend).toHaveBeenCalled();
+        expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+          text: "写的是啥", turnMetadata: expect.objectContaining({
+            workbench_selection: expect.objectContaining({
+              skill_id: "drawing:topo_test_123", canvas_selection: mockSelection,
+            }),
+          }),
+        }));
       });
 
       // Cleanup mock state

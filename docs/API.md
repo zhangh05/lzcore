@@ -164,6 +164,26 @@ history, references and advisory syntax outcomes; it performs no network I/O.
 Inspection completion creates an Observation and may create a candidate
 Reference. Only a complete candidate can be explicitly confirmed.
 
+Drawing Skill selection accepts `canvas_selection` containing `node_ids`,
+`link_ids`, `group_ids` and `canvas_item_ids`. The server validates them against
+the selected drawing; missing IDs are reported as `canvas_selection_unavailable`
+and client labels are not copied into the Skill prompt. User text stays separate.
+The `network.operations.topology` tool keeps `read` and `patch`: read returns the
+complete topology; patch defaults to `changes` (upserted objects, removed IDs and
+changed name/description), version, counts, `changed` and estimated geometry
+`feedback`. `snapshot_complete=false` marks a partial receipt; explicitly setting
+`response_detail=full` also returns the complete topology. REST drawing responses
+are unchanged. Optional patch `layout` supports `algorithm=grid|radial`, `node_ids`,
+`preserve_node_ids`, `origin` and `spacing_x/spacing_y` (minimum 140). Explicit node
+x/y take precedence. Permission and optimistic version checks still apply.
+
+Provider save and activate accept optional `top_p` (null or 0 < value <= 1) and
+`thinking=provider_default|adaptive|disabled`. Top P null omits the provider field;
+MiniMax-M3 uses Anthropic Messages thinking configuration when explicitly selected,
+and MiniMax-M3.1 rejects disabled thinking. Existing explicit temperature and output
+limits are preserved. Newly initialized MiniMax profiles default to 1/8192;
+other profiles retain 0.2/4096. QueryLoop uses the resolved provider settings.
+
 ## Workflows, identity and administration
 
 | Method | Path | Purpose |

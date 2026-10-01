@@ -208,7 +208,7 @@ def handle_provider_save(provider_id: str):
 
     data = request.get_json(silent=True) or {}
 
-    errors = validate_llm_settings({**data, "provider": provider_id})
+    errors = validate_llm_settings({**load_provider_config(provider_id), **data, "provider": provider_id})
     if errors:
         return jsonify({"ok": False, "errors": errors}), 400
 
@@ -234,11 +234,15 @@ def handle_llm_activate():
     # Optionally save config fields before activating
     save_fields = {}
     for key in ("enabled", "base_url", "model", "temperature", "max_tokens",
-                 "safe_mode", "prompt_cache_enabled", "api_key"):
+                 "safe_mode", "prompt_cache_enabled", "api_key", "top_p", "thinking"):
         if key in data:
             save_fields[key] = data[key]
     if data.get("clear_api_key"):
         save_fields["clear_api_key"] = True
+
+    errors = validate_llm_settings({**load_provider_config(provider_id), **save_fields, "provider": provider_id})
+    if errors:
+        return jsonify({"ok": False, "errors": errors}), 400
 
     try:
         if save_fields:

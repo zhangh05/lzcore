@@ -514,109 +514,6 @@ def test_query_loop_fallback_tool_call_extraction():
     assert calls2[0]["arguments"]["action"] == "patch"
 
 
-def test_query_loop_drawing_final_gate_enforcement():
-    from core.runtime_engine.query_loop import QueryLoop, StreamingToolResult
-    from core.runtime_engine.models import StatelessContext
-
-    ctx_draw = StatelessContext(
-        request_id="req-draw",
-        user_input="画一个大型企业的数据中心",
-        workspace_id="ws1",
-        session_id="s1",
-        extras={
-            "workbench_context": {
-                "extension_id": "network.operations",
-                "skill_id": "drawing:topo_dc",
-                "allow_edit": True,
-            }
-        },
-    )
-
-    # 1. User wants to draw, but no tool calls occurred -> BLOCKED by drawing final gate
-    nudge = QueryLoop._drawing_final_gate(ctx_draw, "好的，我为你设计了五层架构...", [])
-    assert "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]" in nudge
-    assert "network.operations.topology" in nudge
-
-    # 2. When patch already succeeded -> PASSES (no nudge)
-    patch_result = StreamingToolResult(
-        tool_name="network.operations.topology",
-        call_id="c1",
-        output={"action": "patch", "ok": True, "version": 2},
-        ok=True,
-    )
-    nudge_ok = QueryLoop._drawing_final_gate(ctx_draw, "交付说明...", [patch_result])
-    assert nudge_ok == ""
-
-    # 3. Read-only user request ("请读取当前图纸。") -> PASSES (no drawing enforcement)
-    ctx_read = StatelessContext(
-        request_id="req-read",
-        user_input="请读取当前图纸。",
-        workspace_id="ws1",
-        session_id="s1",
-        extras={
-            "workbench_context": {
-                "extension_id": "network.operations",
-                "skill_id": "drawing:topo_dc",
-                "allow_edit": True,
-            }
-        },
-    )
-    nudge_read = QueryLoop._drawing_final_gate(ctx_read, "图纸包含2个节点...", [])
-    assert nudge_read == ""
-
-
-def test_collaborative_consultative_topology_workflow_simulation():
-    """Verify the 4-phase consultative workflow: 先聊/看图 -> 落盘 -> 交付."""
-    from core.runtime_engine.query_loop import QueryLoop, StreamingToolResult
-    from core.runtime_engine.models import StatelessContext
-    from extensions.network_operations.topology_skill import render_prompt
-
-    # 1. Verify prompt contains positive consultative guidance
-    prompt = render_prompt({"topology": {"topology_id": "topo_dc", "name": "DC", "version": 0, "node_count": 0}, "allow_edit": True})
-    assert "自然交流与架构构思（先聊）" in prompt
-    assert "图纸洞察与基线核对（看图）" in prompt
-    assert "落实画卷与工具执行（落盘）" in prompt
-    assert "交付说明与后续演进（交付）" in prompt
-
-    # 2. Simulate Turn 1: Model chats and reads baseline first
-    ctx = StatelessContext(
-        request_id="req-consultative",
-        user_input="请帮我设计并绘制一个大型企业数据中心网络拓扑图",
-        workspace_id="ws1",
-        session_id="s1",
-        extras={
-            "workbench_context": {
-                "extension_id": "network.operations",
-                "skill_id": "drawing:topo_dc",
-                "allow_edit": True,
-            }
-        },
-    )
-
-    read_result = StreamingToolResult(
-        tool_name="network.operations.topology",
-        call_id="call-read-1",
-        output={"action": "read", "topology_id": "topo_dc", "version": 0, "nodes": [], "links": []},
-        ok=True,
-    )
-    # Turn 1 tool execution: read succeeds, but if model terminates prematurely without patch, drawing gate nudges
-    turn1_premature_nudge = QueryLoop._drawing_final_gate(ctx, "我先看完了图纸，目前是空的。", [read_result])
-    assert "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]" in turn1_premature_nudge
-
-    # 3. Simulate Turn 2: Model executes patch on canvas
-    patch_result = StreamingToolResult(
-        tool_name="network.operations.topology",
-        call_id="call-patch-1",
-        output={"action": "patch", "topology_id": "topo_dc", "version": 1, "node_count": 16, "link_count": 22},
-        ok=True,
-    )
-
-    # 4. Simulate Turn 3: Delivery presentation
-    # With patch completed, drawing gate gives green light to deliver structured explanation
-    turn3_gate = QueryLoop._drawing_final_gate(ctx, "架构已成功绘制至画布：采用五层模块化设计...", [read_result, patch_result])
-    assert turn3_gate == ""
-
-
 def test_topology_repeated_tool_suppression_resilience():
     """Verify that topology patch is never suppressed, and post-patch reads are never suppressed."""
     from core.runtime_engine.query_loop import QueryLoop
@@ -804,7 +701,7 @@ def test_topology_tool_invocation_aliases_and_query_loop_normalization(workspace
         skill=f"drawing:{topo['topology_id']}",
         arguments={
             "nodes": [{"node_id": "fw1", "display_name": "Firewall-1", "x": 50, "y": 50}],
-            "layout": "hierarchical",
+            "layout": {"algorithm": "grid"},
             "summary": "边界防护",
         },
     )
@@ -845,26 +742,6 @@ def test_topology_tool_invocation_aliases_and_query_loop_normalization(workspace
     repaired_tc = prep["tool_calls"][0]
     assert repaired_tc.arguments["action"] == "patch"
     assert "node_updates" in repaired_tc.arguments
-
-
-def test_real_topology_result_closes_the_drawing_final_gate(workspace):
-    from types import SimpleNamespace
-    from core.runtime_engine.models import StatelessContext
-    from core.runtime_engine.query_loop import QueryLoop, StreamingToolResult
-
-    topo = _drawing(workspace)
-    output = backend.topology_tool(SimpleNamespace(
-        workspace_id=workspace, skill=f"drawing:{topo['topology_id']}",
-        arguments={"action": "patch", "node_updates": [{"node_id": "new", "display_name": "New"}]},
-    ))
-    assert output["ok"] is True
-    ctx = StatelessContext(
-        workspace_id=workspace, session_id="session", request_id="request", user_input="添加节点",
-        extras={"workbench_context": {"extension_id": "network.operations", "skill_id": f"drawing:{topo['topology_id']}"}},
-    )
-    assert QueryLoop._drawing_final_gate(ctx, "已添加节点", [StreamingToolResult(
-        tool_name="network.operations.topology", call_id="patch", output=output, ok=True,
-    )]) == ""
 
 
 @pytest.mark.parametrize("field", ["remove_group_ids", "remove_canvas_item_ids"])

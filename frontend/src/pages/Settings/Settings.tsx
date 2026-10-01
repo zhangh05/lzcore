@@ -159,8 +159,10 @@ export function Settings() {
           enabled: false,
           base_url: preset.base_url,
           model: preset.model,
-          temperature: 0.2,
-          max_tokens: 4096,
+          temperature: providerId === "minimax" ? 1 : 0.2,
+          max_tokens: providerId === "minimax" ? 8192 : 4096,
+          thinking: "provider_default",
+          top_p: null,
           safe_mode: true,
           prompt_cache_enabled: true,
           key_configured: false,
@@ -192,6 +194,8 @@ export function Settings() {
         model: draft.model,
         temperature: draft.temperature,
         max_tokens: draft.max_tokens,
+        top_p: draft.top_p ?? null,
+        thinking: draft.thinking ?? "provider_default",
         safe_mode: draft.safe_mode,
         prompt_cache_enabled: draft.prompt_cache_enabled,
       };
@@ -224,6 +228,8 @@ export function Settings() {
         model: draft.model,
         temperature: draft.temperature,
         max_tokens: draft.max_tokens,
+        top_p: draft.top_p ?? null,
+        thinking: draft.thinking ?? "provider_default",
         safe_mode: draft.safe_mode,
         prompt_cache_enabled: draft.prompt_cache_enabled,
       };
@@ -429,7 +435,9 @@ export function Settings() {
                 </div>
 
                 <div className="settings-row">
-                  <TextField label="模型名称" value={draft.model ?? ""} onChange={(v) => setDraft({ ...draft, model: v })} testid="field-model" placeholder="模型名称" />
+                  <TextField label="模型名称" value={draft.model ?? ""} onChange={(v) => setDraft({ ...draft, model: v,
+                    thinking: v.toLowerCase().startsWith("minimax-m3.1") && draft.thinking === "disabled" ? "provider_default" : draft.thinking,
+                  })} testid="field-model" placeholder="模型名称" />
                 </div>
 
                 <div className="settings-row">
@@ -468,6 +476,17 @@ export function Settings() {
                     onChange={(v) => setDraft({ ...draft, prompt_cache_enabled: v })}
                     testid="toggle-prompt_cache"
                   />
+                </div>
+
+                <div className="settings-row-grid">
+                  <FormField label="Top P（留空使用服务商默认）"><Input type="number" min="0.01" max="1" step="0.05" aria-label="Top P"
+                    value={draft.top_p ?? ""} onChange={e => setDraft({...draft, top_p: e.target.value === "" ? null : Number(e.target.value)})}/></FormField>
+                  {selectedId === "minimax" && draft.model?.toLowerCase().startsWith("minimax-m3") && <FormField label="模型思考" hint="复杂设计可启用；思考占用输出额度，通常会增加等待时间。">
+                    <select aria-label="模型思考" value={draft.thinking ?? "provider_default"}
+                      onChange={e => setDraft({...draft, thinking: e.target.value as ProviderConfig["thinking"]})}>
+                      <option value="provider_default">服务商默认</option><option value="adaptive">启用自适应思考</option>
+                      {!draft.model?.toLowerCase().startsWith("minimax-m3.1") && <option value="disabled">关闭思考</option>}
+                    </select></FormField>}
                 </div>
 
                 {/* Test result */}

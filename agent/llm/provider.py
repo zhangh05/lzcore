@@ -351,6 +351,8 @@ def _api_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
             "temperature": cfg.get("temperature", req.temperature),
             "max_tokens": cfg.get("max_tokens", req.max_tokens),
         }
+        if cfg.get("top_p") is not None:
+            body_dict["top_p"] = cfg["top_p"]
         if req.tools:
             body_dict["tools"] = req.tools
             body_dict["tool_choice"] = "auto"
@@ -974,6 +976,11 @@ def _to_anthropic_messages_request(req: LLMRequest, cfg: dict) -> dict:
         "temperature": cfg.get("temperature", req.temperature),
         "messages": messages,
     }
+    if cfg.get("top_p") is not None:
+        body["top_p"] = cfg["top_p"]
+    thinking = cfg.get("thinking", "provider_default")
+    if str(body["model"]).lower().startswith("minimax-m3") and thinking != "provider_default":
+        body["thinking"] = {"type": thinking}
     if stable_system or dynamic_system:
         if _anthropic_prompt_cache_enabled(cfg):
             # Anthropic's prefix hierarchy is tools -> system -> messages. A

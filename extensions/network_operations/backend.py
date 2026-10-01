@@ -715,7 +715,7 @@ def topology_tool(invocation):
     if not action:
         if any(args.get(k) for k in (
             "node_updates", "nodes", "link_updates", "links", "group_updates", "groups", "zones",
-            "canvas_item_updates", "canvas_items", "remove_node_ids", "remove_link_ids",
+            "canvas_item_updates", "canvas_items", "layout", "remove_node_ids", "remove_link_ids",
             "remove_group_ids", "remove_canvas_item_ids",
         )) or any(k in args for k in ("name", "description")):
             action = "patch"
@@ -726,10 +726,12 @@ def topology_tool(invocation):
         return {"ok": False, "error": "topology_edit_not_permitted", "message": "当前为只读分析模式，未授权修改图纸。"}
     try:
         if action == "read":
-            return {"ok": True, "action": "read", "topology": topology, "version": topology["version"]}
+            from extensions.network_operations.drawing_feedback import geometry_feedback
+            return {"ok": True, "action": "read", "topology": topology, "version": topology["version"],
+                    "snapshot_complete": True, "feedback": geometry_feedback(topology)}
         if action == "patch":
-            previous_version = topology["version"]
-            topology = drawings.patch_topology(invocation.workspace_id, topology_id, args)
+            from extensions.network_operations.drawing_feedback import geometry_feedback
+            topology, changes, changed = drawings.patch_topology_with_receipt(invocation.workspace_id, topology_id, args)
             node_count = len(topology.get("nodes") or [])
             link_count = len(topology.get("links") or [])
             return {
@@ -739,14 +741,18 @@ def topology_tool(invocation):
                 "version": topology["version"],
                 "node_count": node_count,
                 "link_count": link_count,
-                "topology": topology,
-                "changed": topology["version"] != previous_version,
+                "snapshot_complete": args.get("response_detail") == "full",
+                **({"topology": topology} if args.get("response_detail") == "full" else {}),
+                "changes": changes,
+                "feedback": geometry_feedback(topology),
+                "changed": changed,
                 "message": (f"图纸已更新到 v{topology['version']}，包含 {node_count} 个节点、{link_count} 条链路。"
-                            if topology["version"] != previous_version else "本次 patch 未改变图纸。请核对当前结果；目标已满足就结束，不要重复提交。"),
+                            if changed else "本次 patch 未改变图纸。请核对当前结果；目标已满足就结束，不要重复提交。"),
             }
         return {"ok": False, "error": "drawing_action_must_be_read_or_patch"}
     except ValueError as exc:
-        current_v = topology.get("version") if topology else 1
+        current = drawings.get_topology(invocation.workspace_id, topology_id)
+        current_v = current.get("version") if current else None
         return {
             "ok": False,
             "error": str(exc),
@@ -1118,7 +1124,7 @@ def register():
                     "patch": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
                 },
                 "bindable_inputs": {"read": ["topology_id"], "patch": ["topology_id", "version"]},
-                "referenceable_outputs": {"read": ["topology", "version"], "patch": ["topology", "version"]},
+                "referenceable_outputs": {"read": ["topology", "version", "feedback"], "patch": ["changes", "version", "changed", "feedback", "topology"]},
                 "action_requirements": {},
                 "handler": topology_tool, "timeout_seconds": 60,
                 "input_schema": {
@@ -1130,6 +1136,15 @@ def register():
                         "version": {"oneOf": [{"type": "integer"}, {"type": "string"}], "description": "read 返回的版本号；提供旧版本会拒绝写入，须先 read 核对差异"},
                         "name": {"type": "string", "description": "图纸名称"},
                         "description": {"type": "string", "description": "图纸描述"},
+                        "response_detail": {"enum": ["changes", "full"], "description": "patch 默认返回完整实际变更对象及版本，避免反复回传整图；full 返回完整图纸。read 始终返回完整图纸"},
+                        "layout": {"type": "object", "additionalProperties": False,
+                            "description": "可选辅助布局。省略时保留直接坐标编辑；node_ids 可限定局部，preserve_node_ids 保留指定位置；本次显式 x/y 优先",
+                            "properties": {"algorithm": {"enum": ["grid", "radial"]},
+                                "node_ids": {"type": "array", "items": {"type": "string"}},
+                                "preserve_node_ids": {"type": "array", "items": {"type": "string"}},
+                                "origin": {"type": "object", "properties": {"x": {"type": "number"}, "y": {"type": "number"}}, "additionalProperties": False},
+                                "spacing_x": {"type": "number", "minimum": 140}, "spacing_y": {"type": "number", "minimum": 140}},
+                            "required": ["algorithm"]},
                         "node_updates": {
                             "type": "array",
                             "description": "要添加或更新的节点对象列表，包含 node_id, display_name, device_type, x, y, zone, ip, role, vendor, model",

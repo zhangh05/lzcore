@@ -16,11 +16,11 @@ import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
 const EMPTY: ChatMsg[] = [];
 export type { CanvasSelection } from "./canvasSelection";
 
-export function buildTopologyRequest(topology: Topology, selection: CanvasSelection, request: string, allowEdit = true) {
-  const modeInstruction = allowEdit
-    ? "【当前允许编辑图纸】是否修改以用户本次明确要求为准。解释、审核和追问只读检查，不产生新的修改授权。先读取当前图纸，仅提交已授权且尚未完成的修改。不查询或操作真实设备。"
-    : "【当前为只读咨询模式，未授权修改图纸】请通过 read 操作读取当前图纸结构并进行分析解答，严禁调用 patch 或修改任何图纸内容。不查询或操作真实设备。";
-  return `${request}\n\n当前图纸上下文：\n${JSON.stringify({ topology_id: topology.topology_id, version: topology.version, selection })}\n${modeInstruction}`;
+export function buildTopologyRequest(request: string) { return request.trim(); }
+
+export function buildTopologySelection(topology: Topology, selection: CanvasSelection, allowEdit = true) {
+  return { extension_id: "network.operations", skill_id: `drawing:${topology.topology_id}${allowEdit ? "" : ":ro"}`,
+    resource_ids: [topology.topology_id], allow_edit: allowEdit, canvas_selection: selection };
 }
 
 export function TopologyAgentPanel({ workspaceId, topology, selection, onCompleted }: {
@@ -147,9 +147,8 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
         }
       }
       setInput(""); pinnedRef.current = true;
-      const skillId = allowEdit ? `drawing:${topology.topology_id}` : `drawing:${topology.topology_id}:ro`;
-      await send({ text: buildTopologyRequest(topology, selection, request.trim(), allowEdit), attachments: [], effectiveSessionId: id,
-        turnMetadata: { workbench_selection: { extension_id: "network.operations", skill_id: skillId, resource_ids: [topology.topology_id], allow_edit: allowEdit } },
+      await send({ text: buildTopologyRequest(request), attachments: [], effectiveSessionId: id,
+        turnMetadata: { workbench_selection: buildTopologySelection(topology, selection, allowEdit) },
       });
       await refresh();
     } catch { setError("发送失败，请检查服务连接后重试。"); }

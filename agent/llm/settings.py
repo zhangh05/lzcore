@@ -62,6 +62,8 @@ def sanitize_llm_settings(data: dict) -> dict:
         "base_url": data.get("base_url", ""),
         "model": data.get("model", ""),
         "temperature": data.get("temperature", 0.2),
+        "top_p": data.get("top_p"),
+        "thinking": data.get("thinking", "provider_default"),
         "max_tokens": data.get("max_tokens", 4096),
         "key_configured": bool(key),
         "key_preview": mask_key(key) if key else None,
@@ -122,6 +124,8 @@ def resolve_effective_llm_config() -> dict:
         result["model"] = provider_cfg.get("model", "")
         result["temperature"] = provider_cfg.get("temperature", 0.2)
         result["max_tokens"] = provider_cfg.get("max_tokens", 4096)
+        result["top_p"] = provider_cfg.get("top_p")
+        result["thinking"] = provider_cfg.get("thinking", "provider_default")
         result["prompt_cache_enabled"] = provider_cfg.get("prompt_cache_enabled", True)
         if not env_key:
             file_key = resolve_api_key(
@@ -162,6 +166,8 @@ def _provider_runtime_config(provider_id: str, cfg: dict, api_key: str) -> dict:
         "base_url": cfg.get("base_url", ""),
         "model": cfg.get("model", ""),
         "temperature": cfg.get("temperature", 0.2),
+        "top_p": cfg.get("top_p"),
+        "thinking": cfg.get("thinking", "provider_default"),
         "max_tokens": cfg.get("max_tokens", 4096),
         "api_key": api_key or "",
         "provider_type": _provider_type(provider_id, cfg),
@@ -183,7 +189,7 @@ def _provider_type(provider_id: str, cfg: dict) -> str:
         return "ollama_compatible"
     if provider_id == "anthropic":
         return "anthropic_messages"
-    if provider_id == "minimax" and str(cfg.get("model") or "").lower() == "minimax-m3":
+    if provider_id == "minimax" and str(cfg.get("model") or "").lower().startswith("minimax-m3"):
         return "anthropic_messages"
     if provider_id in ("disabled", "mock"):
         return provider_id
@@ -217,11 +223,19 @@ def validate_llm_settings(data: dict) -> list:
         if data.get("provider") not in ("minimax", "ollama_compatible"):
             errors.append("model is required")
     temp = data.get("temperature", 0.7)
-    if not isinstance(temp, (int, float)) or temp < 0 or temp > 2:
+    if isinstance(temp, bool) or not isinstance(temp, (int, float)) or not 0 <= temp <= 2:
         errors.append("temperature must be 0-2")
     mt = data.get("max_tokens", 4096)
-    if not isinstance(mt, int) or mt < 1 or mt > 128000:
+    if isinstance(mt, bool) or not isinstance(mt, int) or mt < 1 or mt > 128000:
         errors.append("max_tokens must be 1-128000")
     if "prompt_cache_enabled" in data and not isinstance(data.get("prompt_cache_enabled"), bool):
         errors.append("prompt_cache_enabled must be boolean")
+    top_p = data.get("top_p")
+    if top_p is not None and (isinstance(top_p, bool) or not isinstance(top_p, (int, float)) or not 0 < top_p <= 1):
+        errors.append("top_p must be greater than 0 and at most 1")
+    thinking = data.get("thinking", "provider_default")
+    if not isinstance(thinking, str) or thinking not in {"provider_default", "adaptive", "disabled"}:
+        errors.append("thinking must be provider_default, adaptive or disabled")
+    if data.get("thinking") == "disabled" and str(data.get("model", "")).lower().startswith("minimax-m3.1"):
+        errors.append("MiniMax-M3.1 requires adaptive thinking")
     return errors

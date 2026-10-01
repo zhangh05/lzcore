@@ -1999,16 +1999,6 @@ class QueryLoop:
                                 total_tool_calls=len(all_results),
                                 llm_calls=budget.llm_calls,
                             )
-                        if is_drawing and not ctx.extras.get("drawing_suppress_guidance_sent"):
-                            ctx.extras["drawing_suppress_guidance_sent"] = True
-                            messages = self._append_turn_nudge(
-                                messages,
-                                "[TOPOLOGY DRAWING GUIDANCE]\n"
-                                "当前图纸基线此前已读取成功。图纸已在上下文中，无需重复执行 read。\n"
-                                "请立即发起 `network.operations.topology` (action=\"patch\") 原生工具调用，将规划好的节点、链路与 Zones 正式提交到画布中！",
-                            )
-                            continue
-
                         ctx.extras["response_outcome"] = "blocked_no_progress"
                         ctx.extras.setdefault("no_progress_events", []).append({
                             "kind": "repeated_terminal_tool_proposal",
@@ -2343,7 +2333,6 @@ class QueryLoop:
                 # final-text-only response after a nudge is handled below as a
                 # truthful blocked state, not an unbounded dialogue loop.
                 ctx.extras.pop("recovery_final_nudge_pending", None)
-                ctx.extras.pop("drawing_final_nudge_pending", None)
                 checkpoint_nudge = self._task_state_checkpoint_nudge(ctx)
                 if checkpoint_nudge:
                     messages = self._append_turn_nudge(messages, checkpoint_nudge)
@@ -2484,19 +2473,6 @@ class QueryLoop:
                 ]
                 ctx.extras.setdefault("network_execution_evidence_events", []).append({
                     "type": "unsupported_network_retry_final_rejected",
-                    "iteration": iterations,
-                })
-                continue
-
-            drawing_nudge = self._drawing_final_gate(ctx, str(response.content or ""), all_results)
-            if drawing_nudge:
-                messages = [
-                    *messages,
-                    response.assistant_message(),
-                    LLMMessage(role="user", content=drawing_nudge),
-                ]
-                ctx.extras.setdefault("drawing_evidence_events", []).append({
-                    "type": "unexecuted_drawing_final_rejected",
                     "iteration": iterations,
                 })
                 continue
@@ -2713,7 +2689,6 @@ class QueryLoop:
                         system=system_prompt,
                         user=self._messages_to_user_text(messages),
                         messages=list(messages),
-                        temperature=0.2,
                         timeout=provider_timeout_seconds,
                         tools=tools_for_call,
                         workspace_id=ctx.workspace_id,
@@ -3826,66 +3801,6 @@ class QueryLoop:
             )
         return ""
 
-    @staticmethod
-    def _drawing_final_gate(ctx, final_text: str, tool_results: list[StreamingToolResult]) -> str:
-        """Ensure drawing workbench requests execute real canvas modifications."""
-        workbench = ctx.extras.get("workbench_context") if isinstance(ctx.extras, dict) else None
-        if (
-            not isinstance(workbench, dict)
-            or workbench.get("extension_id") != "network.operations"
-            or not str(workbench.get("skill_id") or "").startswith("drawing:")
-            or not bool(workbench.get("allow_edit", True))
-        ):
-            return ""
-
-        if ctx.extras.get("drawing_final_nudge_pending"):
-            return ""
-
-        user_req = str(ctx.extras.get("__raw_user_input") or ctx.user_input or "").lower()
-        read_kw = ("读取", "查看", "分析", "只读", "read", "inspect", "check", "examine")
-        draw_kw = ("画", "绘", "添加", "修改", "生成", "建立", "创建", "patch", "draw")
-
-        is_read_only = any(k in user_req for k in read_kw) and not any(k in user_req for k in draw_kw)
-        if is_read_only:
-            return ""
-
-        is_draw = any(k in user_req for k in draw_kw)
-        if not is_draw:
-            return ""
-
-        has_successful_patch = any(
-            str(item.tool_name or "").replace("__", ".") == "network.operations.topology"
-            and isinstance(item.output, dict)
-            and item.output.get("action") == "patch"
-            and item.ok
-            for item in tool_results
-        )
-        if has_successful_patch:
-            return ""
-
-        has_successful_read = any(
-            str(item.tool_name or "").replace("__", ".") == "network.operations.topology"
-            and isinstance(item.output, dict)
-            and item.output.get("action") == "read"
-            and item.ok
-            for item in tool_results
-        )
-
-        ctx.extras["drawing_final_nudge_pending"] = True
-        if has_successful_read:
-            return (
-                "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]\n"
-                "当前图纸已成功读取，架构方案也已构思明确。但本轮次尚未通过 `network.operations.topology` "
-                "(action=\"patch\") 将图纸正式绘制到画布中。\n"
-                "切勿只在对话中说明“接下来正式落盘到画布”而停止。请立即发起 `network.operations.topology` "
-                "(action=\"patch\") 原生工具调用，将规划好的 node_updates、link_updates 与 zones 正式提交落盘！"
-            )
-        return (
-            "[RUNTIME TOPOLOGY DRAWING ENFORCEMENT]\n"
-            "当前处于拓扑绘图工作台，用户提出了拓扑绘制或修改需求。方案构思已很清晰，但本轮次尚未通过 `network.operations.topology` "
-            "(action=\"patch\") 将图纸正式绘制到画布中。\n"
-            "请立即发起 `network.operations.topology` (action=\"patch\") 原生工具调用，将规划好的 node_updates、link_updates 与 zones 正式提交落盘！"
-        )
 
     @staticmethod
     def _extract_fallback_tool_calls(

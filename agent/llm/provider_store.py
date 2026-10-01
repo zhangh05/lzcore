@@ -94,8 +94,10 @@ def _build_provider_config(provider_id: str, data: Optional[dict] = None) -> dic
         "enabled": True,
         "base_url": preset["base_url"],
         "model": preset["model"],
-        "temperature": 0.2,
-        "max_tokens": 4096,
+        "temperature": 1.0 if provider_id == "minimax" else 0.2,
+        "max_tokens": 8192 if provider_id == "minimax" else 4096,
+        "top_p": None,
+        "thinking": "provider_default",
         "safe_mode": True,
         "prompt_cache_enabled": True,
         "api_key": "",
@@ -104,7 +106,7 @@ def _build_provider_config(provider_id: str, data: Optional[dict] = None) -> dic
     }
     if data:
         for key in ("enabled", "base_url", "model", "temperature", "max_tokens",
-                     "safe_mode", "prompt_cache_enabled", "api_key", "secret_ref", "label"):
+                     "safe_mode", "prompt_cache_enabled", "api_key", "secret_ref", "label", "top_p", "thinking"):
             if key in data:
                 cfg[key] = data[key]
         # A failed or manually restarted process can be missing the master key
@@ -217,7 +219,7 @@ def save_provider_config(provider_id: str, data: dict) -> dict:
 
     # Merge allowed fields from incoming data
     for key in ("enabled", "base_url", "model", "temperature", "max_tokens",
-                 "safe_mode", "prompt_cache_enabled", "label"):
+                 "safe_mode", "prompt_cache_enabled", "label", "top_p", "thinking"):
         if key in data:
             existing[key] = data[key]
 
