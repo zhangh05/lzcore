@@ -3,6 +3,13 @@
   .desktop-dialog-body { overflow-y: auto; min-height: 0; padding: 20px; display: grid; gap: 16px; }
   .desktop-dialog-body section { display: grid; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
   .desktop-dialog-body label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .desktop-dialog-body :is(select, input[type="password"]) { min-height: 36px; min-width: 0; max-width: 100%; padding: 6px 10px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: var(--r-8); }
+  .desktop-dialog-body select { min-width: 160px; }
+  .desktop-dialog-body input[type="password"] { flex: 1; max-width: 360px; }
+  .desktop-dialog-body input[type="password"]::placeholder { color: var(--text-3); }
+  .desktop-dialog-body input[type="checkbox"] { accent-color: var(--accent); }
+  .desktop-dialog-body :is(select, input):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  [data-theme="dark"] .desktop-dialog { color-scheme: dark; }
   .desktop-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   .desktop-path, .desktop-notes { overflow-wrap: anywhere; white-space: pre-wrap; }
   .desktop-notes { max-height: 140px; overflow: auto; font: inherit; }

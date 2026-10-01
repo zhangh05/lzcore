@@ -78,11 +78,10 @@ try {
       if (Test-Path -LiteralPath $original) { Move-Item -LiteralPath $original -Destination $destination }
     }
   }
-  @{ok=$false; error='更新未完成。原数据保留，请重新启动并核对程序版本。'} | ConvertTo-Json | Set-Content -LiteralPath $statusPath -Encoding UTF8
+  @{ok=$false; error='更新未完成。原数据保留，请重新启动并核对程序版本。'; reason=$_.FullyQualifiedErrorId; line=$_.InvocationInfo.ScriptLineNumber} | ConvertTo-Json | Set-Content -LiteralPath $statusPath -Encoding UTF8
   $exitCode = 1
 } finally {
   if ($instanceLock) { $instanceLock.Dispose() }
 }
 if (Test-Path (Join-Path $state.app 'lzcore.exe')) { Start-Process -FilePath (Join-Path $state.app 'lzcore.exe') -ArgumentList @('--data-dir',('"' + $state.data + '"')) }
 exit $exitCode
-

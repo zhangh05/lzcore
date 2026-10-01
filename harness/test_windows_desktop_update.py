@@ -55,13 +55,13 @@ def test_portable_update_retains_data_and_rolls_back(tmp_path, failure):
             capture_output=True, timeout=30)
     finally:
         if handle: kernel.CloseHandle(handle)
-    assert result.returncode == (1 if failure else 0), result.stderr.decode(errors='replace')
+    status = json.loads((updates / 'result.json').read_text(encoding='utf-8-sig'))
+    assert result.returncode == (1 if failure else 0), (status, result.stderr.decode(errors='replace'))
     assert (data / 'history.json').read_text(encoding='utf-8') == '用户记录'
     assert not (tmp_path / 'outside.txt').exists()
     assert (app / '_internal/payload.txt').read_text() == ('old' if failure else 'new')
     assert json.loads((app / 'build-info.json').read_text())['version'] == ('3.2.8' if failure else '3.3.0')
     assert (app / 'lzcore.exe').read_bytes() == original_exe
-    status = json.loads((updates / 'result.json').read_text(encoding='utf-8-sig'))
     assert status['ok'] is (failure is None)
     if not failure:
         assert json.loads((data / '.runtime/desktop.json').read_text(encoding='utf-8-sig'))['previous_version'] == '3.2.8'
