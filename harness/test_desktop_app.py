@@ -243,6 +243,17 @@ def test_download_storage_failure_leaves_retryable_error(tmp_path):
     assert updater.snapshot()['status']=='error' and updater.package is None
 
 
+def test_update_failure_is_visible_after_restart_without_raw_error(tmp_path):
+    from types import SimpleNamespace
+    from desktop_app.updates import DesktopUpdater
+    result=tmp_path/'updates/one/result.json'; result.parent.mkdir(parents=True)
+    result.write_text(json.dumps({'ok':False,'error':'private raw exception'}),encoding='utf-8-sig')
+    updater=DesktopUpdater(SimpleNamespace(runtime=tmp_path),'3.3.0',DesktopState(tmp_path/'prefs.json'))
+    assert updater.snapshot()['status']=='error'
+    assert '3.3.0' in updater.snapshot()['message']
+    assert 'private raw exception' not in updater.snapshot()['message']
+
+
 def test_signature_check_keeps_filename_out_of_command_text(monkeypatch):
     from types import SimpleNamespace
     from desktop_app import updates

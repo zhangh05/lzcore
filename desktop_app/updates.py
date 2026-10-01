@@ -91,6 +91,18 @@ class DesktopUpdater:
         self.value = {"status": "idle"}
         self.package = None
         self.thread = None
+        try:
+            result = max(self.paths.runtime.glob('updates/*/result.json'),
+                         key=lambda p: p.stat().st_mtime_ns, default=None)
+            if result:
+                with result.open(encoding='utf-8-sig') as handle:
+                    outcome = json.loads(handle.read(4096))
+                if isinstance(outcome, dict) and outcome.get('ok') is False:
+                    # Keep the failure visible after the helper restarts the
+                    # program. Never reflect an arbitrary local error string.
+                    self.value = {'status': 'error', 'message': f'上次更新未完成，用户数据已保留。当前版本 v{version}，请重新检查更新。'}
+        except (OSError, ValueError):
+            pass
 
     def snapshot(self):
         with self.lock:
