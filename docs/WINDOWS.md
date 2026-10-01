@@ -1,97 +1,56 @@
-# 联智中枢（LZCore）Windows 运行与交付指南
+# Windows 桌面版
 
-> **Enterprise Windows Standalone Desktop & Headless Server Operations Guide**
-> 本指南系统介绍联智中枢在 Windows 操作系统上的两种企业级部署形态：**独立桌面端原生应用（Standalone Desktop App）** 与 **无头后台守护进程（Headless Server Service）**。
+联智中枢提供两种桌面发行包，使用同一套 `lzcore.exe`、本地 Flask 后端和 pywebview / WebView2 窗口。最低环境为 Windows 10 2004 x64、.NET Framework 4.8；支持 Windows 11 x64。界面沿用网页版本，Windows 拥有标题栏、拖动、缩放、最大化、任务栏和 Snap。首次窗口按当前显示器工作区定位；窗口位置、大小和最大化状态按显示器和 DPI 保存，移除显示器后会重新限制到可见区域。
 
----
+## 选择发行包
 
-## 1. Windows 交付形态与核心优势
+| 包 | 使用方法 | 用户数据 | 系统集成 |
+| --- | --- | --- | --- |
+| `lzcore-v3.3.0-windows-portable.zip` | 解压到可写的本地目录，双击 `lzcore/lzcore.exe` | 程序旁 `data/` | 默认不创建快捷方式、注册表项或自启动 |
+| `lzcore-v3.3.0-windows-setup.exe` | 运行安装向导，默认无需管理员权限 | `%LOCALAPPDATA%\LZCore` | 开始菜单、可选桌面快捷方式、卸载项；自启动在应用内单独开启 |
 
-在企业网络运维现场，工程师经常面临严苛的保密隔离或无法接入公网的环境，常规安装往往受到主机缺少 Python 或 Node.js 编译工具链的巨大制约。
+两个包都附带固定版本 WebView2，离线启动无需下载 Python、Node 或浏览器运行时。运行时版本和官方 Microsoft 下载地址锁在 `packaging/webview2.json`；构建时验证 Microsoft 数字签名。固定运行时随应用发行更新，不采用 Evergreen 的自动更新。Windows 10 首次启动会为这一运行时目录授予 App Container 读取和执行权限；它不能从 UNC 网络目录运行。[Microsoft 部署说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)
 
-联智中枢针对 Windows 平台提供了深度的工业级优化：
-1. **免安装与便携式运行时**：
-   Windows 发行运行不要求用户另行安装开发环境；发行包使用 `runtime\python\python.exe` 和 `runtime\node\node.exe` 提供所需运行时，做到双击即用。
-2. **预制纯净工作区骨架**：
-   发行压缩包（`lzcore-v3.2.8-windows-desktop.zip`）已内置合规且纯净的 `workspaces/` 与 `config/` 目录结构。用户初次解压即可直接建立拓扑与文件交互，同时确保绝无开发者的私有数据外溢。
-3. **回环原生安全屏障**：
-   严格默认绑定至本机回环地址（`127.0.0.1`），结合受保护的进程间通信，彻底杜绝未经授权的局域网端口探测风险。
+另外保留 `windows-x64.zip` 作为带源码的浏览器运行包，启动入口为 `start.bat`。它不属于上述两种原生桌面发行方式。该包自带 `runtime\python\python.exe` 和 `runtime\node\node.exe`，不要求用户另行安装开发环境。
 
----
+可用 `lzcore.exe --data-dir "D:\联智数据"` 显式选数据目录。两种发行方式的数据布局和格式相同：`workspaces/` 保存业务数据和按用户隔离的数据，`config/` 保存用户配置，`.runtime/` 保存窗口偏好、WebView 缓存、恢复暂存和更新文件，`logs/` 保存脱敏桌面日志。程序文件和用户数据分开。启动时持有数据目录锁；同一数据目录第二次启动唤醒已有窗口。
 
-## 2. 形态 A：独立桌面端原生应用 (Desktop App)
+## 关闭和后台运行
 
-针对运维人员的单兵作战或日常拓扑绘制，系统提供了基于 pywebview 容器（Windows 上优先采用 Edge WebView2 内核）的原生桌面应用。
+普通最小化进入任务栏。点击关闭，空闲且没有未保存编辑时退出；任务仍在运行或有未保存编辑时提供返回应用、后台运行、停止任务并退出。桌面设置可开启「关闭窗口时进入托盘」。托盘提供打开窗口、设置、数据目录和退出；隐藏窗口不停止后端任务。后台任务完成显示简短通知，点击通知返回对应工作区和会话，正常认证与授权仍有效。
 
-### 2.1 启动与执行架构
-```text
- ┌────────────────────────────────────────────────────────────────────────┐
- │ 桌面主进程: desktop.py / lzcore.exe                                    │
- │ ├─ 1. 初始化环境变量 (LZCORE_EMBEDDED_WORKER=true, 绑定 127.0.0.1)     │
- │ ├─ 2. 嵌入式启动工作进程与异步作业调度器 (Embedded Worker Thread)     │
- │ ├─ 3. 探活后端健康检查接口: http://127.0.0.1:8011/api/health            │
- │ ├─ 4. 加载前端静态资产工作台 (http://127.0.0.1:5273)                   │
- │ └─ 5. 渲染原生 GUI 视窗并接管崩溃安全弹窗 (HTML Escaped Crash Dialog) │
- └────────────────────────────────────────────────────────────────────────┘
-```
+退出、备份、恢复或更新前，应用通过 `LocalLifecycle` 停止接受新操作。退出请求通过已有取消机制停止任务并等待收尾；无法确认结束时提示继续等待、返回或明确中断。中断后的任务由已有启动恢复机制记录为中断，不补造成功，不重跑结果未知的网络写入。
 
-### 2.2 运行与操作
-- **双击启动**：解压发行包后，双击运行根目录下的 `lzcore.exe` 即可直接拉起全功能运维工作台。
-- **白板与拓扑持久化**：桌面端拓扑画布内建本地白板演示层，笔迹与便签按拓扑 ID 缓存于浏览器 localStorage，常规页面刷新与模式切换时自动复原，方便演示标注（可随时一键清空白板）。
-- **崩溃防护与安全转义**：若底层端口冲突或初始化失败，主进程将捕获的物理异常文本进行严格的 HTML 安全转义，在原生对话框中清晰指引排查日志（`lzcore_desktop.log`），杜绝界面静默卡死。
+窗口和主题偏好保存在数据目录，内嵌浏览器关闭私密模式并使用明确的用户数据目录。主题支持浅色、深色和跟随 Windows。工作台在窄窗口仍可打开任务进度抽屉；网络图纸批注通过扩展后端保存，独立版本控制，不改变拓扑布局或拓扑版本。
 
----
+## 数据迁移、备份和恢复
 
-## 3. 形态 B：无头服务器与守护脚本 (Headless Server)
+旧桌面目录旁的 `workspaces/`、`config/` 在新数据目录为空时自动复制校验，保留源目录，并用日志使中断迁移可继续。已存在的目标数据不会自动合并覆盖。也可在桌面设置选择旧程序或数据目录进行迁移；先退出旧程序。DPAPI 凭据依赖原 Windows 用户和机器；跨用户或跨机器迁移请在原用户下生成带凭据的加密备份。
 
-若需在 Windows Server 服务器上作为无人值守后台服务运行，仓库根目录提供了功能完备的自动化脚本：
-- **PowerShell 入口**：`start.ps1` 与 `stop.ps1`
-- **传统批处理入口**：`start.bat` 与 `stop.bat`
+备份只允许空闲且编辑已保存时创建。普通 ZIP 包含工作区和脱敏后的配置，不包含密钥存储。可选加密备份使用用户口令、Scrypt 和 Fernet；至少 12 个字符的口令，可显式包含凭据。带凭据备份在内存中解密后加密打包，恢复时重新用当前 Windows 用户的 DPAPI 保存，不把明文凭据写入暂存目录。请保存口令，应用不保存口令。
 
-它们与 Linux / macOS 上的 `start.sh` 和 `stop.sh` 遵循完全一致的端口、认证和进程生命周期约定。
+恢复先检查格式版本、大小、文件路径和每个文件的 SHA-256，然后暂存；确认后在重启时切换数据目录。原工作区与配置保留在 `.runtime/before-restore/`，恢复动作有可重试日志。普通备份缺少凭据时保留已有本地密钥存储。图纸、会话、批注随工作区备份。
 
-### 3.1 启动与停止操作
+导出使用原生文件选择对话框；桌面设置可打开最近导出目录。诊断 ZIP 只包含程序身份和脱敏桌面日志，不复制工作区正文、环境变量和供应商配置。
 
-**使用 PowerShell 启动**：
-```powershell
-# 切换至解压或克隆的根目录
-.\start.ps1
+## 更新和回退
 
-# 若仅执行自检探针而不自动打开默认浏览器：
-.\start.ps1 -NoBrowser -ValidateOnly
-```
+桌面设置从固定的 `zhangh05/lzcore` GitHub Releases 检查更新。`windows-update.json` 提供两种包的名称、数据格式、大小和 SHA-256；下载包经过校验后才可应用。带签名的发行包还校验 Windows 签名。用户保存编辑并结束任务后确认更新，外部 PowerShell 助手等待主程序自行退出后替换程序并重启。更新不修改工作区和配置；程序替换失败时保留数据，并尝试恢复已备份的程序文件。
 
-**停止运行**：
-```powershell
-.\stop.ps1
-```
+更新后记录上一程序版本；「检查可回退版本」只接受同一数据格式且有更新清单的已发布版本。回退只替换程序，不能用来撤销用户数据。3.2.x 没有桌面更新清单，不能通过这一入口回退；旧版数据仍可迁移。发布提供 `SHA256SUMS.txt`，便于手动核对。
 
-**默认端点**：
-- 前端工作台交互入口：`http://127.0.0.1:5273`
-- 后端服务健康检查探针：`http://127.0.0.1:8011/api/health`
-- WebSocket 实时流通道：`ws://127.0.0.1:8011/ws/agent`
+代码签名是可配置能力：GitHub Secrets `LZCORE_SIGNING_PFX`（PFX 的 Base64）与 `LZCORE_SIGNING_PASSWORD` 用于签主程序、安装器和卸载器；未配置时明确标记未签名，不宣称签名或 SmartScreen 信誉。
 
----
-
-## 4. 安全配置与网络准入边界
-
-1. **拒绝无认证公网暴露**：
-   启动脚本与后端服务默认仅监听 `127.0.0.1` 回环接口。若在 `config/` 中显式指定监听外部局域网地址（如 `0.0.0.0` 或物理网卡 IP），系统强制要求在配置中启用 API Token、密码认证或接入企业 OIDC 身份源。未经认证的外部网络监听将被平台安全门禁强行拒绝。
-2. **原子文件持久化策略**：
-   在 Windows 文件系统（NTFS）下，多进程直接覆写可能触发 `Access Denied` 锁冲突。LZCore 在底层 `storage/` 存储层采用了经 Windows 契约测试验证的原子临时写入与安全替换策略，杜绝使用可能导致文件句柄锁死的非安全操作。
-
----
-
-## 5. 源码构建与发行包制作 (Packaging)
-
-若需要从源代码重新编译打包 Windows 原生 EXE 与离线绿色包：
+## 构建和验证
 
 ```powershell
-# 1. 运行 Windows 契约自动化测试套件
-.venv/Scripts/pytest harness/test_windows_runtime_contract.py
-
-# 2. 执行桌面端自动化编译打包脚本
-python scripts/build_windows_exe.py
+python -m pip install -r requirements-desktop.lock
+npm --prefix frontend ci
+npm --prefix frontend run build
+./scripts/download_webview2.ps1
+python scripts/build_windows_exe.py --webview2-runtime $env:LZCORE_WEBVIEW2_DIR
 ```
 
-构建脚本将自动聚合前端静态编译产物、后端微服务、离线依赖缓存与原生桌面壳体，生成自包含的部署制品。
+发行工作流使用锁定的 Windows/Python 3.12 依赖。Inno Setup 生成每用户安装器，卸载保留用户数据，升级要求先退出程序。`scripts/windows_desktop_smoke.py` 启动真实 EXE，通过 WebView2 CDP 验证页面、桥接、主题、窗口缩放、托盘、第二次启动、原生导出对话框和 WebSocket；工作流同时验证安装、升级和卸载后数据保留。截图与启动报告在 `windows-desktop-validation` 构建产物中。
+
+自动化 Windows runner 的结果不等同于 Windows 10/11 实体机、多个显示器及所有 DPI 的人工验收；这些场景仍需要目标机器复核。

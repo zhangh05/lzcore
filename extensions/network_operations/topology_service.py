@@ -1166,4 +1166,5 @@ def delete_topology(workspace_id: str, topology_id: str) -> bool:
         store.delete(collection, str(revision.get("revision_id") or ""))
     from .node_bindings import delete_topology_bindings
     delete_topology_bindings(workspace_id, topology_id)
+    store.delete("annotations", topology_id)
     return store.delete("topologies", topology_id)

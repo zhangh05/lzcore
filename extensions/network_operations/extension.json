@@ -29,6 +29,7 @@
     "/api/extensions/network.operations/topologies",
     "/api/extensions/network.operations/topologies/<topology_id>",
     "/api/extensions/network.operations/topologies/<topology_id>/overlay",
+    "/api/extensions/network.operations/topologies/<topology_id>/annotations",
     "/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>/binding",
     "/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>",
     "/api/extensions/network.operations/topologies/<topology_id>/revisions",

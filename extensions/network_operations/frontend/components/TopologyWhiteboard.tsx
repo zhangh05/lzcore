@@ -1,3 +1,6 @@
+import { activeUsername } from "../../../../frontend/src/utils/userScope";
+import { apiRequest } from "../../../../frontend/src/api/client";
+import { desktopDirty } from "../../../../frontend/src/desktop/bridge";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   IconPencil,
@@ -42,6 +45,7 @@ export interface TopologyWhiteboardProps {
   onExportBackground?: () => string;
   topologyName?: string;
   topologyId?: string;
+  workspaceId?: string;
 }
 
 const COLORS = [
@@ -64,6 +68,7 @@ export function TopologyWhiteboard({
   onExportBackground,
   topologyName,
   topologyId,
+  workspaceId,
 }: TopologyWhiteboardProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -80,42 +85,60 @@ export function TopologyWhiteboard({
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // 持久化存储：按拓扑 ID 本地缓存，关闭演示层或刷新页面批注不丢失
-  const storageKey = topologyId ? `lzcore_whiteboard_${topologyId}` : "lzcore_whiteboard_default";
-  const isLoadedRef = useRef<boolean>(false);
-
+  const [persistenceError, setPersistenceError] = useState("");
+  const [loadedKey, setLoadedKey] = useState("");
+  const ownerRef = useRef(activeUsername());
+  const versionRef = useRef(0);
+  const savedRef = useRef("");
+  const pendingRef = useRef(0);
+  const [retry, setRetry] = useState(0);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const key = workspaceId && topologyId ? `${workspaceId}:${topologyId}` : "";
+  const storageKey = topologyId ? `lzcore_whiteboard_${topologyId}` : "";
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.strokes)) setStrokes(parsed.strokes);
-        else setStrokes([]);
-        if (Array.isArray(parsed.notes)) setNotes(parsed.notes);
-        else setNotes([]);
-      } else {
-        setStrokes([]);
-        setNotes([]);
-      }
-    } catch (e) {
-      console.warn("Failed to load whiteboard annotations:", e);
-    } finally {
-      isLoadedRef.current = true;
-    }
-  }, [storageKey]);
-
-  useEffect(() => {
-    if (!isLoadedRef.current) return;
-    try {
-      if (strokes.length > 0 || notes.length > 0) {
-        localStorage.setItem(storageKey, JSON.stringify({ strokes, notes }));
-      } else {
+    if (!active || loadedKey === key) return;
+    let alive = true;
+    setLoadedKey(""); setPersistenceError(""); setStrokes([]); setNotes([]);
+    if (!workspaceId || !topologyId) return;
+    const url = `/extensions/network.operations/topologies/${encodeURIComponent(topologyId)}/annotations`;
+    void apiRequest<{annotations: {version: number; strokes: WhiteboardStroke[]; notes: WhiteboardNote[]}}>({url, params: {workspace_id: workspaceId}}).then(async res => {
+      if (!res.annotations || !alive) throw new Error("批注加载失败，请重试");
+      let value = res.annotations;
+      // Legacy origin cache is migrated only into an empty, server-confirmed diagram.
+      const legacy = localStorage.getItem(storageKey);
+      if (legacy && value.version === 0) {
+        const raw = JSON.parse(legacy);
+        const migrated = await apiRequest<{annotations: typeof value}>({method: "PUT", url, data: {workspace_id: workspaceId, version: 0, strokes: raw.strokes || [], notes: raw.notes || []}});
+        if (!migrated.annotations) throw new Error("旧批注迁移失败，原缓存仍保留");
+        value = migrated.annotations;
         localStorage.removeItem(storageKey);
       }
-    } catch (e) {
-      console.warn("Failed to save whiteboard annotations:", e);
-    }
-  }, [strokes, notes, storageKey]);
+      if (!alive) return;
+      versionRef.current = value.version;
+      savedRef.current = JSON.stringify({strokes: value.strokes, notes: value.notes});
+      setStrokes(value.strokes); setNotes(value.notes); setLoadedKey(key);
+    }).catch(e => { if (alive) setPersistenceError(String(e.message || "批注加载失败")); });
+    return () => { alive = false; };
+  }, [active, workspaceId, topologyId, key, storageKey]);
+  useEffect(() => {
+    if (!key || loadedKey !== key || !workspaceId || !topologyId) return;
+    const content = JSON.stringify({strokes, notes});
+    if (content === savedRef.current) return;
+    desktopDirty(`annotations:${key}`, true);
+    // Queue saves immediately: changing page must not cancel a pending save.
+    const url = `/extensions/network.operations/topologies/${encodeURIComponent(topologyId)}/annotations`;
+    pendingRef.current += 1;
+    queueRef.current = queueRef.current.then(async () => {
+      if (activeUsername() !== ownerRef.current) throw new Error("用户已切换，旧批注未继续提交");
+      const response = await apiRequest<{annotations: {version: number}}>({method: "PUT", url, data: {workspace_id: workspaceId, version: versionRef.current, strokes, notes}});
+      if (!response.annotations) throw new Error("批注保存失败或版本冲突，请保留页面并重试");
+      versionRef.current = response.annotations.version;
+      savedRef.current = content;
+      pendingRef.current -= 1;
+      if (!pendingRef.current) desktopDirty(`annotations:${key}`, false);
+      setPersistenceError("");
+    }).catch(e => { pendingRef.current -= 1; setPersistenceError(String(e.message)); });
+  }, [strokes, notes, loadedKey, key, workspaceId, topologyId, retry]);
 
   // Draw arrow helper
   const drawArrow = useCallback(
@@ -453,12 +476,13 @@ export function TopologyWhiteboard({
     <div
       ref={containerRef}
       className={`topology-whiteboard-overlay tool-${tool}`}
-      onClick={handleCanvasClick}
+      onClick={loadedKey === key ? handleCanvasClick : undefined}
     >
+      {(persistenceError || loadedKey !== key) && <div className="whiteboard-persistence" role="status">{persistenceError || "正在加载批注…"}{persistenceError && loadedKey === key && <button onClick={e => { e.stopPropagation(); setRetry(v => v + 1); }}>重试保存</button>}</div>}
       <canvas
         ref={canvasRef}
         className="topology-whiteboard-canvas"
-        onPointerDown={handlePointerDown}
+        onPointerDown={loadedKey === key ? handlePointerDown : undefined}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       />

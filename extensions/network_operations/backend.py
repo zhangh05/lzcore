@@ -319,6 +319,19 @@ def register_routes(app):
             status = 409 if str(exc) == "topology_version_conflict" else (404 if str(exc) == "topology_not_found" else 400)
             return jsonify({"ok": False, "error": str(exc)}), status
 
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/annotations", methods=["GET", "PUT"])
+    def network_topology_annotations(topology_id):
+        from extensions.network_operations.annotations import get_annotations, save_annotations
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        try:
+            result = get_annotations(ws, topology_id) if request.method == "GET" else save_annotations(ws, topology_id, _payload())
+            return jsonify({"ok": True, "annotations": result})
+        except ValueError as exc:
+            status = 409 if str(exc) == "annotations_version_conflict" else 404 if str(exc) == "topology_not_found" else 400
+            return jsonify({"ok": False, "error": str(exc)}), status
+
     @app.route("/api/extensions/network.operations/topologies/<topology_id>/overlay")
     def network_topology_overlay(topology_id):
         ws = _workspace()

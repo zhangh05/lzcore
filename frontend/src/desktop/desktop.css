@@ -1,0 +1,23 @@
+@layer responsive {
+  .desktop-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; }
+  .desktop-dialog-body { overflow-y: auto; min-height: 0; padding: 20px; display: grid; gap: 16px; }
+  .desktop-dialog-body section { display: grid; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+  .desktop-dialog-body label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .desktop-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .desktop-path, .desktop-notes { overflow-wrap: anywhere; white-space: pre-wrap; }
+  .desktop-notes { max-height: 140px; overflow: auto; font: inherit; }
+  .desktop-message { color: var(--text-3); padding: 8px; background: var(--surface-hover); }
+  .desktop-dialog .modal-footer { flex-shrink: 0; flex-wrap: wrap; }
+  @media (max-width: 900px) {
+    .progress-drawer .task-progress-panel { display: flex !important; width: 100%; min-width: 0; max-height: 65dvh; overflow: auto; }
+    .progress-drawer { max-height: calc(100dvh - 24px); width: min(420px, calc(100vw - 24px)); }
+  }
+}
+
+@layer responsive {
+  .whiteboard-persistence { position: absolute; top: 12px; left: 12px; z-index: 75; max-width: calc(100% - 24px); background: var(--surface); padding: 8px; }
+  @media (max-width: 760px) {
+    .topology-whiteboard-toolbar { max-width: calc(100% - 20px); flex-wrap: wrap; justify-content: center; border-radius: 12px; }
+    .studio-toolbar, .studio-statusbar, .topology-toolbar { flex-wrap: wrap; height: auto; min-height: 44px; }
+  }
+}

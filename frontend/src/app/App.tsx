@@ -1,3 +1,4 @@
+import { DesktopSettingsButton } from "../desktop/DesktopHost";
 import { BrowserRouter, Link, Navigate, NavLink, useLocation } from "../router";
 import { Suspense, memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, MouseEvent, ReactNode } from "react";
@@ -454,6 +455,7 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
             <IconSparkle size={14} weight="duotone" />
             <span>功能描述</span>
           </button>
+          <DesktopSettingsButton />
           <SettingsNav items={settingsNavigationItems} currentPath={location.pathname} />
 
           <button

@@ -83,6 +83,9 @@ interface UIState {
   /** Off-canvas navigation drawer state for tablet/mobile (≤900px). */
   mobileNavOpen: boolean;
   theme: "light" | "dark";
+  themePreference: "light" | "dark" | "system";
+  setThemePreference: (t: "light" | "dark" | "system") => void;
+  syncTheme: (t: "light" | "dark") => void;
 
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
@@ -100,13 +103,16 @@ export const useUIStore = create<UIState>()(
       taskProgressOpen: true,
       mobileNavOpen: false,
       theme: "light",
+      themePreference: "system",
+      syncTheme: (theme) => set({ theme }),
+      setThemePreference: (themePreference) => set({themePreference, theme: themePreference === "system" ? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light") : themePreference}),
       toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       toggleTaskProgress: () => set({ taskProgressOpen: !get().taskProgressOpen }),
       setTaskProgressOpen: (open) => set({ taskProgressOpen: open }),
       setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
       toggleMobileNav: () => set({ mobileNavOpen: !get().mobileNavOpen }),
-      setTheme: (theme) => set({ theme }),
+      setTheme: (theme) => set({ theme, themePreference: theme }),
     }),
     {
       name: "lzcore_ui",
@@ -114,6 +120,7 @@ export const useUIStore = create<UIState>()(
         sidebarOpen: s.sidebarOpen,
         taskProgressOpen: s.taskProgressOpen,
         theme: s.theme,
+        themePreference: s.themePreference,
       }),
     },
   ),

@@ -279,3 +279,7 @@ GET         /api/workspaces/<ws_id>/status
 GET         /api/workspaces/<ws_id>/storage/health
 GET         /api/workspaces/<ws_id>/traces
 ```
+
+### 图纸批注
+
+`GET /api/extensions/network.operations/topologies/<topology_id>/annotations?workspace_id=...` 返回 `{ok, annotations: {version, strokes, notes}}`。`PUT` 使用相同路径，JSON 中显式传 `workspace_id`、上次读取的 `version`、`strokes` 和 `notes`；成功后批注版本加一。版本冲突返回 409，缺少图纸返回 404，非法坐标、形状或过大内容返回 400。批注按用户和工作区隔离，独立于图纸版本；图纸硬删除时同时删除其批注。

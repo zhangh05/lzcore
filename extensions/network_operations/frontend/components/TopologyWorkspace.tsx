@@ -1,3 +1,4 @@
+import { desktopDirty } from "../../../../frontend/src/desktop/bridge";
 import {
   useCallback,
   useEffect,
@@ -598,6 +599,10 @@ export default function TopologyWorkspace({
   const [history, setHistory] = useState<Topology[]>([]);
   const [future, setFuture] = useState<Topology[]>([]);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "conflict">("saved");
+  useEffect(() => {
+    desktopDirty("topology", saveStatus !== "saved");
+    return () => desktopDirty("topology", false);
+  }, [saveStatus]);
   // A conflict is a decision, not an error: hold both sides until the user picks.
   const [conflict, setConflict] = useState<{
     base: Topology; mine: Topology; theirs: Topology; merged: Topology;
@@ -3481,12 +3486,13 @@ export default function TopologyWorkspace({
             </aside>
           ) : null}
 
-          <TopologyWhiteboard
+          <TopologyWhiteboard key={`${workspaceId}:${activeTopology?.topology_id}`}
             active={whiteboardActive}
             onClose={() => setWhiteboardActive(false)}
             onExportBackground={() => canvasApiRef.current?.exportPNG({ full: true, scale: 2, background: "#ffffff" }) || ""}
             topologyName={activeTopology?.name}
             topologyId={activeTopology?.topology_id}
+            workspaceId={workspaceId}
           />
 
           {/* Floating Bubble Popover Inspector */}

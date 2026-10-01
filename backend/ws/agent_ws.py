@@ -577,9 +577,22 @@ def register_ws_routes(app):
                 # attached slow browser receives every frame through backpressure.
                 transport_closed = threading.Event()
 
+                from agent.runtime.local_lifecycle import local_lifecycle
+                gate = local_lifecycle()
+                if gate and not gate.reserve():
+                    ws.send(json.dumps({"type": "error", "message": "desktop_paused", "session_id": session_id, "client_request_id": metadata.get("client_request_id")}, ensure_ascii=True))
+                    continue
+
+                def run_admitted(*args, reservation=gate):
+                    try:
+                        _run_agent_thread(*args)
+                    finally:
+                        if reservation:
+                            reservation.release()
+
                 active_cancel_event = threading.Event()
                 thread = threading.Thread(
-                    target=_run_agent_thread,
+                    target=run_admitted,
                     args=(
                         user_input, session_id, workspace_id, metadata,
                         event_queue, error_holder, stats, active_cancel_event,
@@ -588,7 +601,12 @@ def register_ws_routes(app):
                     daemon=True,
                 )
                 outbox.attach_turn()
-                thread.start()
+                try:
+                    thread.start()
+                except Exception:
+                    if gate:
+                        gate.release()
+                    raise
                 # Drain on a side thread so this socket can still receive
                 # resume, ping and later messages. The log, not this queue,
                 # is what a reconnect reads.

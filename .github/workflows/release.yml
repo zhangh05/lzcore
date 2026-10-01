@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
@@ -94,6 +95,10 @@ jobs:
           $robocopyExitCode = $LASTEXITCODE
           if ($robocopyExitCode -ge 8) { exit $robocopyExitCode }
 
+          Remove-Item -Recurse -Force (Join-Path $stage "config")
+          New-Item -ItemType Directory -Force (Join-Path $stage "config") | Out-Null
+          Get-ChildItem config -File | Where-Object { $_.Name -like '*.example*' -or $_.Name -eq 'logging.yaml' } | Copy-Item -Destination (Join-Path $stage "config")
+
           # A Windows release is self-contained: users only extract the archive
           # and double-click start.bat. Bundle the verified Python runtime,
           # Node executable, and Vite runtime dependencies.
@@ -127,32 +132,98 @@ jobs:
           # Robocopy uses 1-7 for successful copy states. Reset the native exit
           # code so GitHub's pwsh wrapper does not mark the step as failed.
           $global:LASTEXITCODE = 0
-          $version = "${{ github.ref_name }}"
+          $version = "v$(& '${{ steps.python312.outputs.python-path }}' -c 'from agent import __version__; print(__version__)')"
           Compress-Archive -Path $stage -DestinationPath "release/lzcore-$version-windows-x64.zip" -Force
 
-      - name: Assemble Windows desktop standalone EXE package
+      - name: Install locked desktop dependencies
+        shell: pwsh
+        run: |
+          & "${{ steps.python312.outputs.python-path }}" -m pip install --disable-pip-version-check -r requirements-desktop.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "${{ steps.python312.outputs.python-path }}" -m pytest -q harness/test_desktop_app.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Download and verify Microsoft WebView2
+        shell: pwsh
+        run: ./scripts/download_webview2.ps1
+
+      - name: Build desktop EXE
         shell: pwsh
         env:
           PYTHONIOENCODING: utf-8
+          LZCORE_SIGNING_PFX: ${{ secrets.LZCORE_SIGNING_PFX }}
         run: |
-          & "${{ steps.python312.outputs.python-path }}" -m pip install --disable-pip-version-check --no-index --find-links wheelhouse -r requirements.txt
-          & "${{ steps.python312.outputs.python-path }}" -m pip install --disable-pip-version-check --quiet pywebview pyinstaller
-          & "${{ steps.python312.outputs.python-path }}" scripts/build_windows_exe.py --zip
-          if (-not (Test-Path "dist\lzcore\workspaces\default\sys\workspace.yaml")) {
-            throw "CRITICAL: dist\lzcore\workspaces was NOT generated!"
+          & "${{ steps.python312.outputs.python-path }}" scripts/build_windows_exe.py --webview2-runtime "$env:LZCORE_WEBVIEW2_DIR"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Sign desktop executable when configured
+        shell: pwsh
+        env:
+          LZCORE_SIGNING_PFX: ${{ secrets.LZCORE_SIGNING_PFX }}
+          LZCORE_SIGNING_PASSWORD: ${{ secrets.LZCORE_SIGNING_PASSWORD }}
+        run: ./scripts/sign_windows.ps1 -File dist/lzcore/lzcore.exe
+
+      - name: Test actual portable desktop
+        shell: pwsh
+        run: |
+          & "${{ steps.python312.outputs.python-path }}" scripts/windows_desktop_smoke.py --exe dist/lzcore/lzcore.exe --mode portable --output "$env:RUNNER_TEMP/desktop-qa/portable"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Smoke data is outside the program folder; no user data enters ZIP.
+          Compress-Archive -Path dist/lzcore -DestinationPath "release/lzcore-v$( & '${{ steps.python312.outputs.python-path }}' -c 'from agent import __version__; print(__version__)')-windows-portable.zip" -Force
+
+      - name: Build per-user installer
+        shell: pwsh
+        env:
+          LZCORE_SIGNING_PFX: ${{ secrets.LZCORE_SIGNING_PFX }}
+          LZCORE_SIGNING_PASSWORD: ${{ secrets.LZCORE_SIGNING_PASSWORD }}
+        run: |
+          $version = & "${{ steps.python312.outputs.python-path }}" -c "from agent import __version__; print(__version__)"
+          $compiler = "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler unavailable" }
+          $arguments = @("/DAppVersion=$version", 'scripts/windows_installer.iss')
+          if ($env:LZCORE_SIGNING_PFX) {
+            $sign = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $PWD 'scripts/sign_windows.ps1') + '" -File $f'
+            $arguments = @("/DAppVersion=$version", "/DSignCommand=$sign", 'scripts/windows_installer.iss')
           }
-          if (-not (Test-Path "dist\lzcore\config")) {
-            throw "CRITICAL: dist\lzcore\config was NOT generated!"
-          }
-          Write-Host "Directory contents of dist\lzcore:"
-          Get-ChildItem -Path dist\lzcore
-          $version = "${{ github.ref_name }}"
-          Get-ChildItem -Path dist\lzcore-*-windows-desktop.zip | ForEach-Object {
-            Copy-Item $_.FullName "release/lzcore-$version-windows-desktop.zip" -Force
-          }
+          & $compiler @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify install, upgrade and uninstall data retention
+        shell: pwsh
+        run: |
+          $version = & "${{ steps.python312.outputs.python-path }}" -c "from agent import __version__; print(__version__)"
+          $setup = (Resolve-Path "release/lzcore-v$version-windows-setup.exe").Path
+          $target = Join-Path $env:RUNNER_TEMP '中文 安装目录/LZCore'
+          $args = @('/CURRENTUSER','/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART', ('/DIR="' + $target + '"'),'/TASKS=')
+          $install = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installation failed" }
+          if (Test-Path (Join-Path $target 'portable.json')) { throw 'Installed mode marker is wrong' }
+          & "${{ steps.python312.outputs.python-path }}" scripts/windows_desktop_smoke.py --exe "$target/lzcore.exe" --mode installed --output "$env:RUNNER_TEMP/desktop-qa/installed"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $upgrade = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          if ($upgrade.ExitCode -ne 0) { throw 'Upgrade failed' }
+          $sentinel = Join-Path $env:RUNNER_TEMP 'desktop-qa/installed/中文 用户数据/sentinel.txt'
+          if (-not (Test-Path $sentinel)) { throw 'Upgrade removed data' }
+          $uninstall = Start-Process -FilePath (Join-Path $target 'unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0 -or -not (Test-Path $sentinel)) { throw 'Uninstall did not preserve data' }
+          & "${{ steps.python312.outputs.python-path }}" scripts/windows_release_manifest.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload native desktop validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-desktop-validation
+          path: ${{ runner.temp }}/desktop-qa
+          if-no-files-found: warn
 
       - name: Publish release asset
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: release/lzcore-*.zip
+          files: |
+            release/lzcore-*.zip
+            release/lzcore-*-setup.exe
+            release/windows-update.json
+            release/SHA256SUMS.txt
           generate_release_notes: true

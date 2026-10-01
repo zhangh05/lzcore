@@ -87,6 +87,24 @@ def create_app():
     from observability.metrics import install_http_metrics
     install_http_metrics(app)
 
+    # The optional desktop admission barrier covers writes before a job exists.
+    @app.before_request
+    def _desktop_admission():
+        from flask import g
+        from agent.runtime.local_lifecycle import local_lifecycle
+        gate = local_lifecycle()
+        if gate and request.path.startswith("/api/") and request.path not in {"/api/health", "/api/version"}:
+            if not gate.reserve():
+                return jsonify({"ok": False, "error": "desktop_paused", "message": "桌面应用正在备份、更新或退出，请稍后重试"}), 503
+            g.desktop_reservation = gate
+
+    @app.teardown_request
+    def _desktop_release(_error):
+        from flask import g
+        gate = g.pop("desktop_reservation", None)
+        if gate:
+            gate.release()
+
     # ── CORS: allow configured workbench origins (Vite / LAN access) ──
     def _allowed_cors_origin():
         origin = request.headers.get("Origin")
@@ -423,10 +441,22 @@ def create_app():
             "1", "true", "yes", "on",
         }:
             from jobs.worker import start_worker
-            start_worker()
+            _threading.Thread(target=start_worker, name="embedded-worker", daemon=True).start()
+
+    from agent.runtime.local_lifecycle import local_lifecycle as _desktop_lifecycle
+    _startup_gate = _desktop_lifecycle()
+    if _startup_gate:
+        _startup_gate.reserve()
+
+    def _desktop_startup_reconcile():
+        try:
+            _startup_reconcile_async()
+        finally:
+            if _startup_gate:
+                _startup_gate.release()
 
     _recon_t = _threading.Thread(
-        target=_startup_reconcile_async,
+        target=_desktop_startup_reconcile,
         name="startup-reconcile",
         daemon=True,
     )
@@ -445,8 +475,13 @@ def create_app():
             try:
                 from agent.runtime.turn_closeout import close_restarted_turns
                 from agent.runtime.turn_replay import prune_expired_logs
-                close_restarted_turns()
-                prune_expired_logs()
+                from agent.runtime.local_lifecycle import local_lifecycle
+                from contextlib import nullcontext
+                gate = local_lifecycle()
+                with gate.operation() if gate else nullcontext(True) as admitted:
+                    if admitted:
+                        close_restarted_turns()
+                        prune_expired_logs()
             except Exception:
                 import logging
                 logging.getLogger(__name__).warning("turn maintenance deferred", exc_info=True)

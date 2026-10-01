@@ -14,6 +14,8 @@ UNIFIED_PORT = int(os.environ.get("LZCORE_PORT", "8011"))
 
 # Build commit
 def _resolve_build_commit() -> str:
+    if os.environ.get("LZCORE_BUILD_COMMIT"):
+        return os.environ["LZCORE_BUILD_COMMIT"][:40]
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],

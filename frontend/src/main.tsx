@@ -1,5 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { DesktopHost } from "./desktop/DesktopHost";
+import { useUIStore } from "./stores/session";
 import { App } from "./app/App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 // Cascade order is declared in one place, not decided by import order.
@@ -21,12 +23,19 @@ import "./styles/pages.css";
 // refine, and a declared layer is what makes that true regardless of import
 // order. See styles/responsive.css.
 import "./styles/responsive.css";
+import "./desktop/desktop.css";
 
 // Theme initialization — read from Zustand persist store (lzcore_ui) or
 // fall back to prefers-color-scheme. We do this BEFORE React mounts so
 // the first paint uses the correct tokens and there's no flash.
 (function initTheme() {
   try {
+    const desktop = window.__LZCORE_DESKTOP__;
+    if (desktop) {
+      useUIStore.setState({...desktop.ui, theme: desktop.theme});
+      document.documentElement.dataset.theme = desktop.theme;
+      return;
+    }
     const raw = localStorage.getItem("lzcore_ui");
     if (raw) {
       const ui = JSON.parse(raw);
@@ -59,6 +68,7 @@ ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <ErrorBoundary>
       <App />
+      <DesktopHost />
     </ErrorBoundary>
   </React.StrictMode>,
 );

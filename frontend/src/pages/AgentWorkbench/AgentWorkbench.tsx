@@ -1,3 +1,4 @@
+import { ModalShell } from "../../components/ui/ModalShell";
 import React, { lazy, Suspense, useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { jobsApi, sessionsApi, settingsApi } from "../../api";
 import { apiRequest } from "../../api/client";
@@ -230,7 +231,16 @@ export function TaskWorkbench() {
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const taskProgressOpen = useUIStore((s) => s.taskProgressOpen);
   const toggleTaskProgress = useUIStore((s) => s.toggleTaskProgress);
-  const progressPanelCollapsed = !taskProgressOpen;
+  const [narrow, setNarrow] = useState(() => window.matchMedia?.("(max-width: 900px)").matches ?? false);
+  const [progressDrawerOpen, setProgressDrawerOpen] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia?.("(max-width: 900px)");
+    if (!media) return;
+    const update = () => setNarrow(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const progressPanelCollapsed = narrow || !taskProgressOpen;
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
@@ -620,8 +630,8 @@ export function TaskWorkbench() {
           llmHealth={llmHealth}
           currentSessionId={currentSessionId}
           visibleHistory={visibleHistory}
-          taskProgressOpen={taskProgressOpen}
-          onToggleTaskProgress={toggleTaskProgress}
+          taskProgressOpen={narrow ? progressDrawerOpen : taskProgressOpen}
+          onToggleTaskProgress={narrow ? () => setProgressDrawerOpen(v => !v) : toggleTaskProgress}
         />
 
         <div className="wb-chat" data-testid="chat-stream">
@@ -716,14 +726,17 @@ export function TaskWorkbench() {
         />
       </section>
 
-      <TaskProgressPanel
+      {!narrow && <TaskProgressPanel
         latestAssistant={progressAssistant}
         snapshot={durableTurn}
         turnRunning={turnRunning}
         onShowTimeline={handleShowTimeline}
         collapsed={progressPanelCollapsed}
         onToggleCollapsed={handleToggleProgressPanel}
-      />
+      />}
+      <ModalShell open={narrow && progressDrawerOpen} onClose={() => setProgressDrawerOpen(false)} title="任务进度" size="sheet" className="progress-drawer">
+        <TaskProgressPanel latestAssistant={progressAssistant} snapshot={durableTurn} turnRunning={turnRunning} onShowTimeline={handleShowTimeline} collapsed={false} onToggleCollapsed={() => setProgressDrawerOpen(false)} />
+      </ModalShell>
     </div>
   );
 }

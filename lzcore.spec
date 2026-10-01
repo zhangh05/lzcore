@@ -40,6 +40,7 @@ hidden_imports = [
 ]
 
 for pkg in [
+    'desktop_app',
     'agent',
     'artifacts',
     'backend',
@@ -77,6 +78,7 @@ datas = [
     *extension_datas,
     (str(ROOT / 'prompts'), 'prompts'),
     *config_datas,
+    (str(ROOT / 'scripts' / 'windows_update.ps1'), 'scripts'),
 ]
 
 # 构建前安全断言：目录也要逐个文件检查，不能只看 datas 条目名
@@ -122,7 +124,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,  # 桌面应用：无控制台黑框！直接展示原生窗口
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -139,7 +141,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='lzcore',
 )

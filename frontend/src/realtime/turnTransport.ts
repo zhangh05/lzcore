@@ -667,7 +667,7 @@ async function runTurn(input: {
         if (turn.terminal) return;
         watchdog.touch();
         const code = String(msg.error_code || msg.message || "");
-        if (msg.type === "transport_error") {
+        if (msg.type === "transport_error" || (msg.type === "error" && code === "desktop_paused")) {
           transportFault = code;
           turn.terminal = true;
           finish();

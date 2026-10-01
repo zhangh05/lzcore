@@ -54,6 +54,15 @@ def start_worker(poll_interval=1.0):
 
 
 def run_once() -> dict:
+    from agent.runtime.local_lifecycle import local_lifecycle
+    gate = local_lifecycle()
+    if gate is None:
+        return _run_once()
+    with gate.operation() as admitted:
+        return _run_once() if admitted else {"status": "paused"}
+
+
+def _run_once() -> dict:
     """Poll and execute one queued job. Returns result."""
     from jobs.runner import run_job
     from jobs.queue import get_job_queue
