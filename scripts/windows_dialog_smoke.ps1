@@ -18,7 +18,7 @@ $deadline=(Get-Date).AddSeconds(25)
 do {
   $script:dialog=[IntPtr]::Zero
   $callback=[LZDialog+EnumWindow]{param($hwnd,$parameter)
-    $processId=0
+    [uint32]$processId=0
     [void][LZDialog]::GetWindowThreadProcessId($hwnd,[ref]$processId)
     $class=New-Object Text.StringBuilder 128
     [void][LZDialog]::GetClassName($hwnd,$class,128)

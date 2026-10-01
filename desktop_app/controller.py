@@ -114,6 +114,7 @@ class DesktopController:
 
     def on_closing(self):
         if self.allow_exit:
+            self.native.save()
             return True
         if self.state.snapshot().get("close_to_tray") and self.tray:
             threading.Thread(target=self.hide, daemon=True).start()

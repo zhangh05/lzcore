@@ -189,3 +189,23 @@ def test_migration_refuses_a_source_owned_by_another_thread(tmp_path):
         with pytest.raises(ValueError,match='仍在使用'):
             with migration_source(source): pytest.fail('must not copy live source')
     finally: finish.set(); thread.join(2)
+
+
+def test_download_storage_failure_leaves_retryable_error(tmp_path):
+    from types import SimpleNamespace
+    from desktop_app.updates import DesktopUpdater
+    runtime=tmp_path/'runtime';runtime.write_text('not a directory')
+    updater=DesktopUpdater(SimpleNamespace(runtime=runtime),'3.3.0',DesktopState(tmp_path/'prefs.json'))
+    updater._download({'name':'pkg.zip'})
+    assert updater.snapshot()['status']=='error' and updater.package is None
+
+
+def test_signature_check_keeps_filename_out_of_command_text(monkeypatch):
+    from types import SimpleNamespace
+    from desktop_app import updates
+    calls=[]
+    monkeypatch.setattr(updates.subprocess,'run',lambda args,**kwargs:calls.append((args,kwargs)) or SimpleNamespace(returncode=0))
+    path=Path("D:/中文 $(unexpected)/package.exe")
+    updates.verify_authenticode(path)
+    assert str(path) not in calls[0][0]
+    assert calls[0][1]['env']['LZCORE_VERIFY_SIGNATURE_PATH']==str(path)

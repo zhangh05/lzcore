@@ -129,9 +129,9 @@ class DesktopUpdater:
 
     def _download(self, metadata):
         directory = self.paths.runtime / "updates" / uuid.uuid4().hex
-        directory.mkdir(parents=True)
         target = directory / metadata["name"]
         try:
+            directory.mkdir(parents=True)
             received = 0
             with _open(metadata["url"]) as response, target.open("xb") as handle:
                 while chunk := response.read(1024 * 1024):
@@ -151,9 +151,12 @@ class DesktopUpdater:
                 self.package = target
                 self.value = {**metadata, "status": "ready", "progress": 100}
         except Exception:
-            target.unlink(missing_ok=True)
             with self.lock:
                 self.value = {"status": "error", "message": "更新包下载或校验失败，请重新检查更新。"}
+            try:
+                target.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def prepare_apply(self):
         with self.lock:
@@ -179,7 +182,9 @@ def powershell():
 
 
 def verify_authenticode(path: Path):
-    # Filename is passed as an argument, never interpolated into shell code.
-    result = subprocess.run([powershell(), "-NoProfile", "-NonInteractive", "-Command", "& {param($p) if ((Get-AuthenticodeSignature -LiteralPath $p).Status -ne 'Valid') {exit 1}}", str(path)], capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    # -Command parses trailing arguments as code; keep the command fixed and
+    # transfer the literal filename through a task-specific child environment.
+    command = "if ((Get-AuthenticodeSignature -LiteralPath $env:LZCORE_VERIFY_SIGNATURE_PATH).Status -ne 'Valid') {exit 1}"
+    result = subprocess.run([powershell(), "-NoProfile", "-NonInteractive", "-Command", command], env={**os.environ, "LZCORE_VERIFY_SIGNATURE_PATH": str(path)}, capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if result.returncode:
         raise ValueError("程序的 Windows 签名无效")
