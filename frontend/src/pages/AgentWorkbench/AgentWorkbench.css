@@ -277,9 +277,13 @@
   line-height: 1.78;
 }
 
-.chat-bubble.assistant.stage-output {
+.chat-bubble.assistant.sending-line.stage-output {
   padding: 0;
-  background: var(--surface);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
 }
 
 .chat-bubble.user {
@@ -2087,7 +2091,7 @@ details[open] .task-phase-caret {
 }
 
 /* Full-width operational reading and integrated context controls. */
-.wb-chat-list { scrollbar-gutter: stable; }
+.wb-chat-list { scrollbar-gutter: auto; }
 .stage-outputs {
   display: flex;
   flex-direction: column;
@@ -2175,6 +2179,26 @@ details[open] .task-phase-caret {
 
 .stage-output.active {
   display: block;
+}
+
+.chat-bubble.assistant.sending-line.stage-output > summary {
+  padding: 0 0 6px;
+  background: none;
+  font-weight: 600;
+}
+
+.chat-bubble.assistant.sending-line.stage-output > summary span {
+  margin-left: 8px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+.chat-bubble.assistant.sending-line .streaming-plain-text,
+.chat-bubble.assistant.sending-line .ssot-runtime-progress-row {
+  padding: 0;
+  background: none;
+  border: 0;
 }
 /* Second, later duplicate of the same `.markdown-body` typography. Removed for
    the same reason as the first: type values belong to src/styles/typography.css.
