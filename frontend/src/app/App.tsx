@@ -422,6 +422,7 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
 
         <div className="brand-zone">
           <Link className="brand" to="/workbench" aria-label="联智中枢" viewTransition>
+            <span className="brand-mark" aria-hidden="true">联</span>
             <span className="brand-text">
               <span>联智中枢</span>
               <small>{version ? formatVersion(version) : ""}</small>

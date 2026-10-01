@@ -76,4 +76,8 @@ export {
   Eraser as IconEraser,
   DownloadSimple as IconDownload,
   SidebarSimple as IconSidebarSimple,
+  Info as IconInfo,
+  CheckCircle as IconCheckCircle,
+  WarningCircle as IconWarningCircle,
+  XCircle as IconXCircle,
 } from "@phosphor-icons/react";

@@ -5,9 +5,11 @@
   min-height: 48px;
   gap: 18px;
   padding: 0 var(--space-6);
-  background: var(--surface);
-  border-bottom-color: var(--line-2);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line-2);
+  box-shadow: var(--shadow-xs);
 }
 
 .brand-zone {
@@ -35,10 +37,26 @@
 .brand {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   text-decoration: none;
   color: inherit;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .sidebar-toggle-btn {
@@ -141,6 +159,7 @@
   content: "";
   background: var(--accent);
   border-radius: 2px 2px 0 0;
+  box-shadow: 0 0 8px var(--lz-primary-glow);
 }
 
 .app-nav-menu {
@@ -286,16 +305,25 @@
   color: var(--text-4);
 }
 
-.sidebar-new-session,
-.sidebar-new-session:hover {
-  min-height: 42px;
+.sidebar-new-session {
+  min-height: 40px;
   border-radius: var(--r-6);
   color: var(--accent-text);
   background: var(--accent);
+  box-shadow: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
 }
 
-.sidebar-new-session:hover { background: var(--accent-2); }
-.sidebar-new-session .sidebar-shortcut-tail { color: color-mix(in srgb, var(--accent-text) 72%, transparent); }
+.sidebar-new-session:hover {
+  background: var(--accent-2);
+  transform: none;
+}
+
+.sidebar-new-session .sidebar-shortcut-tail {
+  color: color-mix(in srgb, var(--accent-text) 72%, transparent);
+}
 
 .sidebar-session-panel,
 .sidebar-runs-panel {
@@ -348,20 +376,35 @@
 }
 
 .sidebar-content .list-item {
+  position: relative;
   min-height: 38px;
-  padding: 7px 10px;
+  padding: 7px 10px 7px 12px;
   border-radius: var(--r-6);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 
 .sidebar-content .list-item.active {
-  color: var(--accent-2);
-  background: var(--accent-soft);
+  color: var(--accent);
+  background: var(--surface-selected);
   border-color: transparent;
   box-shadow: none;
+  font-weight: 600;
 }
 
-.sidebar-content .list-item:hover {
+.sidebar-content .list-item.active::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.sidebar-content .list-item:hover:not(.active) {
   background: var(--surface-3);
+  color: var(--text-1);
 }
 
 .session-item-main .title,

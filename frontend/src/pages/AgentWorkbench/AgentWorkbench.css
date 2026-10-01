@@ -145,40 +145,46 @@
    carries the explanation. */
 .wb-empty-lead {
   margin: 0 0 var(--flow-base);
-  color: var(--text-2);
-  font-size: var(--fs-16);
-  font-weight: var(--weight-subhead);
+  color: var(--text);
+  font-size: var(--fs-18);
+  font-weight: 620;
   letter-spacing: var(--tracking-cjk);
+  line-height: 1.35;
 }
 
 .wb-empty-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--flow-tight);
+  gap: var(--space-2);
 }
 
 .wb-input-chip {
-  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
   padding: 8px 14px;
   color: var(--text-2);
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: none;
-  font-size: 12px;
-  font-weight: 600;
-  transition:
-    color 140ms ease,
-    background 140ms ease,
-    border-color 140ms ease,
-    transform 140ms ease;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  box-shadow: var(--shadow-xs);
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: all var(--dur-2) var(--ease);
 }
 
 .wb-input-chip:hover:not(:disabled) {
   color: var(--accent);
   background: var(--accent-soft);
   border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
   transform: none;
+}
+.wb-input-chip:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .message-row {
@@ -271,17 +277,22 @@
   line-height: 1.78;
 }
 
+.chat-bubble.assistant.stage-output {
+  padding: 0;
+  background: var(--surface);
+}
+
 .chat-bubble.user {
-  padding: 13px 16px;
+  padding: 12px 18px;
   color: var(--text);
   /* User input gets the only tinted conversation plane. */
   background: var(--message-user);
   border: 1px solid var(--message-user-border);
-  border-radius: var(--r-12) var(--r-12) var(--r-8) var(--r-12);
-  box-shadow: none;
+  border-radius: var(--r-12) var(--r-12) var(--r-4) var(--r-12);
+  box-shadow: var(--shadow-xs);
   font-size: 14px;
-  font-weight: 620;
-  line-height: 1.65;
+  font-weight: 550;
+  line-height: 1.6;
 }
 
 .user-message-skill {
@@ -337,11 +348,14 @@
 }
 
 .approval-card {
-  padding: 16px;
+  padding: 18px 20px;
   color: var(--text);
-  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--surface) 95%, var(--accent) 5%);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line-2));
+  border-left: 4px solid var(--accent);
   border-radius: var(--r-12);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--dur-2) var(--ease);
 }
 
 .approval-card header {
@@ -362,7 +376,7 @@
 .approval-card pre {
   max-height: 360px;
   margin: 12px 0;
-  padding: 12px;
+  padding: 14px 16px;
   overflow: auto;
   color: var(--text);
   background: var(--surface);
@@ -371,6 +385,7 @@
   font: 12px/1.65 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .approval-card-actions {
@@ -405,10 +420,12 @@
 }
 
 .wb-input-bar {
-  padding: var(--space-2) var(--space-4) var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-3);
   min-width: 0;
-  background: var(--lz-surface-dock);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
   border-top: 1px solid var(--line-2);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .wb-input-row {
@@ -426,13 +443,13 @@
   box-sizing: border-box;
   overflow: hidden;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-12);
-  box-shadow: none;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-16);
+  box-shadow: var(--shadow-md);
   transform: none;
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+    border-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
 
 .wb-composer-toolbar {
@@ -454,9 +471,9 @@
 
 .wb-input-row:focus-within {
   border-color: var(--lz-primary);
+  box-shadow: 0 0 0 4px var(--focus-ring-shadow), var(--shadow-md);
   outline: var(--focus-width) solid var(--focus-ring);
-  outline-offset: 2px;
-  box-shadow: none;
+  outline-offset: 3px;
   transform: none;
 }
 
@@ -543,21 +560,29 @@
   background: var(--lz-primary);
   border: 0;
   border-radius: 9px;
-  box-shadow: none;
-  transition: background 140ms ease, transform 120ms ease;
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease), transform var(--dur-1) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
 
 .wb-send:hover:not(:disabled) {
   color: var(--accent-text);
   background: var(--lz-primary-hover);
+  box-shadow: var(--shadow-sm);
   transform: none;
 }
 
-.wb-send:active:not(:disabled) { transform: translateY(0); }
+.wb-send:active:not(:disabled) { transform: none; }
+.wb-send:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 .wb-send:disabled {
   color: var(--text-4);
   background: var(--surface-3);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 .wb-composer-meta {
@@ -793,15 +818,16 @@
 /* 运行态实时看板 */
 .task-in-flight-card {
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
-  border-radius: 8px;
-  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line-2));
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-8);
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .task-in-flight-header {
@@ -971,7 +997,7 @@
 }
 
 .task-phase.done .task-phase-index {
-  background: var(--surface);
+  background: var(--ok-soft);
   border-color: var(--ok);
   color: var(--ok);
 }
@@ -980,11 +1006,11 @@
   color: var(--accent-text);
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 80%, transparent);
+  box-shadow: 0 0 0 3px var(--lz-primary-glow);
 }
 
 .task-phase.failed .task-phase-index {
-  color: #fff;
+  color: var(--danger-text);
   background: var(--danger);
   border-color: var(--danger);
 }
@@ -1267,7 +1293,7 @@ details[open] .task-phase-caret {
 .task-footprint-card:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent-soft) 25%, var(--surface));
-  transform: translateY(-1px);
+  transform: none;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
@@ -1653,7 +1679,6 @@ details[open] .task-phase-caret {
 .task-progress-panel.is-collapsed { background: var(--surface-2); }
 .chat-bubble.assistant {
   box-shadow: none;
-  border-color: var(--line-2);
 }
 .wb-skill-picker {
   display: flex;
@@ -1758,21 +1783,23 @@ details[open] .task-phase-caret {
 
 /* Component-specific workbench refinements. */
 .thinking-block {
-  margin: var(--flow-tight) 0;
-  /* Reasoning is the lowest-weight content of a turn: it must not outrank the
-     stage output or the answer. It used to carry a 3px accent left border and
-     an accent icon, which made it the most prominent block in the message and
-     spent the product's signal colour on the thing a reader needs least. */
+  margin: var(--space-2) 0;
   border: 1px solid var(--line-2);
-  border-left: 2px solid var(--line);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 45%, var(--line-2));
   border-radius: var(--r-8);
   background: var(--surface);
   overflow: hidden;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+.thinking-block:hover {
+  border-color: var(--line);
 }
 
 .thinking-block.is-expanded {
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
+  border-color: var(--line);
 }
 
 .thinking-header {
@@ -1781,8 +1808,9 @@ details[open] .task-phase-caret {
   gap: 6px;
   background: var(--surface-2);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 550;
   color: var(--text-2);
+  transition: background var(--dur-2) var(--ease);
 }
 
 .thinking-disclosure {
@@ -1799,6 +1827,7 @@ details[open] .task-phase-caret {
   font: inherit;
   text-align: left;
   user-select: none;
+  transition: background var(--dur-2) var(--ease);
 }
 
 .thinking-disclosure:hover {
@@ -1821,13 +1850,16 @@ details[open] .task-phase-caret {
 .thinking-header.open .chev { transform: none; }
 
 .thinking-icon {
-  color: var(--text-4);
+  color: var(--accent);
 }
 
 .thinking-header-toggle {
   margin-left: auto;
   color: var(--text-4);
   font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
 }
 
 .thinking-copy-btn {
@@ -1869,16 +1901,36 @@ details[open] .task-phase-caret {
 /* Tool Call Card Refinement */
 .tool-call-card {
   margin: 6px 0;
-  border-radius: 8px;
+  border-radius: var(--r-8);
   border: 1px solid var(--line-2);
+  border-left: 3px solid var(--text-4);
   background: var(--surface);
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
   overflow: hidden;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
 }
 
 .tool-call-card:hover {
   border-color: var(--line);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+.tool-call-card.ok {
+  border-left-color: var(--ok);
+}
+
+.tool-call-card.fail,
+.tool-call-card.error {
+  border-left-color: var(--danger);
+}
+
+.tool-call-card.pending {
+  border-left-color: var(--warn);
+}
+
+.tool-call-card.unknown {
+  border-left-color: var(--unknown);
 }
 
 @keyframes tool-card-flash {
@@ -1911,6 +1963,12 @@ details[open] .task-phase-caret {
   padding: 8px 12px;
   cursor: pointer;
   user-select: none;
+  background: var(--surface);
+  transition: background var(--dur-2) var(--ease);
+}
+
+.tool-call-card-header:hover {
+  background: var(--surface-hover);
 }
 
 .tc-duration-pill {
@@ -1918,9 +1976,10 @@ details[open] .task-phase-caret {
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
   background: var(--surface-2);
+  border: 1px solid var(--line-2);
   color: var(--text-3);
   font-size: 10px;
   font-family: var(--font-mono);
@@ -1928,6 +1987,8 @@ details[open] .task-phase-caret {
 
 .tc-icon.ok { color: var(--ok); }
 .tc-icon.fail { color: var(--danger); }
+.tc-icon.pending { color: var(--warn); }
+.tc-icon.unknown { color: var(--unknown); }
 
 /* Result Inline Modern Polish */
 .chat-result-inline {
@@ -1987,52 +2048,134 @@ details[open] .task-phase-caret {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  border-radius: 7px;
-  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border-radius: var(--r-8);
+  border: 1px solid var(--line-2);
   background: var(--surface);
   color: var(--text-2);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 550;
+  box-shadow: var(--shadow-xs);
   cursor: pointer;
-  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+  transition: all var(--dur-2) var(--ease);
 }
 
 .run-detail-button:hover:not(:disabled) {
   background: var(--surface-hover);
-  border-color: var(--text-4);
+  border-color: var(--line);
   color: var(--text);
+  box-shadow: var(--shadow-sm);
+  transform: none;
 }
 
 .action-btn-memory:hover:not(:disabled) {
+  background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
 }
 
 .action-btn-knowledge:hover:not(:disabled) {
+  background: var(--ok-soft);
   border-color: var(--ok);
   color: var(--ok);
 }
 
 .action-btn-retry:hover:not(:disabled) {
+  background: var(--warn-soft);
   border-color: var(--warn);
   color: var(--warn);
 }
 
 /* Full-width operational reading and integrated context controls. */
 .wb-chat-list { scrollbar-gutter: stable; }
-.stage-outputs { display: grid; gap: var(--space-2); min-width: 0; }
-.stage-output { min-width: 0; }
+.stage-outputs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: var(--space-2) 0;
+}
+
+.stage-output {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+.stage-output:hover {
+  border-color: var(--line);
+}
+
+.stage-output[open] {
+  border-color: var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
 .stage-output > summary {
-  display: list-item;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   cursor: pointer;
-  padding: var(--space-2) var(--space-3);
+  padding: 8px 12px;
   color: var(--text-2);
   font-size: var(--fs-12);
+  font-weight: 550;
+  background: var(--surface-2);
+  list-style: none;
+  user-select: none;
+  transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
 }
-.stage-output > summary span { margin-inline-start: var(--space-3); }
-.stage-output-body { padding: var(--space-3); overflow-wrap: anywhere; }
-.stage-output.active { display: block; }
+
+.stage-output > summary::-webkit-details-marker {
+  display: none;
+}
+
+.stage-output > summary::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  transform: rotate(-45deg);
+  transition: transform var(--dur-2) var(--ease);
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.stage-output[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.stage-output > summary:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}
+
+.stage-output > summary span {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-4);
+  font-weight: 450;
+  padding: 2px 7px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  border-radius: var(--r-pill);
+}
+
+.stage-output-body {
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+  border-top: 1px solid var(--line-2);
+  background: var(--surface);
+}
+
+.stage-output.active {
+  display: block;
+}
 /* Second, later duplicate of the same `.markdown-body` typography. Removed for
    the same reason as the first: type values belong to src/styles/typography.css.
    The overflow guard below is layout, not type, so it stays. */

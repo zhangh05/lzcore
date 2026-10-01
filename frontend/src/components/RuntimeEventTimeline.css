@@ -13,11 +13,19 @@
 
 /* ── card ── */
 .rt-card {
-  border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
   /* v3.9.1: was overflow:hidden, which clipped expanded bodies.
      Keep radius by allowing children to render normally; the rt-list above
      is the scroll container. */
   overflow: visible;
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.rt-card:hover {
+  border-color: var(--line-3);
+  box-shadow: var(--shadow-sm);
 }
 .rt-card-bar {
   display: flex; align-items: center; gap: 8px; padding: 10px 14px;
@@ -33,8 +41,8 @@
   color: var(--text); flex-shrink: 0;
 }
 .rt-card-ws {
-  font-size: 10px; padding: 1px 6px; border-radius: 3px;
-  background: var(--surface-2); color: var(--text-3); border: 1px solid var(--line);
+  font-size: 10px; padding: 1px 6px; border-radius: var(--r-4);
+  background: var(--surface-2); color: var(--text-3); border: 1px solid var(--line-2);
 }
 .rt-card-snippet {
   flex: 1; min-width: 0; font-size: 12px; color: var(--text-3);
@@ -102,14 +110,15 @@
 /* ── tool step ── */
 .rt-step-tool { padding: 2px 0; }
 .rt-step-head {
-  display: flex; align-items: center; gap: 7px; padding: 4px 10px;
-  border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2);
-  transition: border-color 0.12s;
+  display: flex; align-items: center; gap: 7px; padding: 5px 11px;
+  border: 1px solid var(--line-2); border-radius: var(--r-6); background: var(--surface-2);
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
-.rt-step-head:hover { border-color: var(--line-3); }
+.rt-step-head:hover { border-color: var(--line-3); box-shadow: var(--shadow-sm); }
 .rt-step-ok { font-size: 11px; color: var(--ok); flex-shrink: 0; }
 .rt-step-name { font-size: 12px; font-weight: 600; color: var(--text-2); font-family: "SF Mono", Menlo, monospace; }
-.rt-tag { font-size: 10px; padding: 1px 5px; border-radius: 3px; color: var(--text-3); }
+.rt-tag { font-size: 10px; padding: 1px 5px; border-radius: var(--r-4); color: var(--text-3); }
 .rt-dur { font-size: 11px; color: var(--text-4); font-family: "SF Mono", Menlo, monospace; }
 .rt-chev { font-size: 10px; color: var(--text-4); margin-left: auto; flex-shrink: 0; }
 .rt-step-detail {
@@ -140,15 +149,16 @@
 /* ── chips ── */
 .rt-chips { display: flex; gap: 4px; flex-wrap: wrap; padding: 4px 0 0; }
 .rt-chip {
-  font-size: 10px; padding: 1px 6px; border-radius: 3px;
+  font-size: 10px; padding: 1px 6px; border-radius: var(--r-pill);
   background: var(--ok-soft); color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent);
 }
 
 /* ── artifacts bar ── */
 .rt-artifacts {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; border: 1px solid var(--line); border-radius: 5px;
-  background: var(--surface-2);
+  padding: 6px 10px; border: 1px solid var(--line-2); border-radius: var(--r-6);
+  background: var(--surface-2); box-shadow: var(--shadow-xs);
 }
 .rt-art-label { font-size: 11px; font-weight: 600; color: var(--text-3); flex-shrink: 0; }
 
@@ -157,22 +167,24 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-6);
   background: var(--surface-2);
+  box-shadow: var(--shadow-xs);
 }
 .rt-retry-items { display: flex; flex-wrap: wrap; gap: 4px; }
 .rt-retry-chip {
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 3px;
-  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
   color: var(--text-3);
   background: var(--surface);
 }
 .rt-retry-chip.ok {
   color: var(--ok);
   background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 25%, transparent);
 }
 .rt-retry-chip.muted {
   color: var(--text-4);
@@ -183,9 +195,10 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-6);
   background: var(--surface-2);
+  box-shadow: var(--shadow-xs);
 }
 .rt-tracking-id {
   font-size: 11px;

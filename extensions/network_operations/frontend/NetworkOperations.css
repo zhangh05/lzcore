@@ -28,6 +28,7 @@
   color: var(--warn);
   font-size: var(--fs-13);
   line-height: 1.5;
+  box-shadow: var(--shadow-xs);
   animation: network-notice-appear 0.18s ease-out;
 }
 
@@ -103,10 +104,10 @@
 .network-admin .skill-page { display: grid; gap: var(--space-4); }
 .network-admin .drawing-skill-card .skill-title { display: flex; align-items: center; gap: 6px; }
 .network-admin .drawing-skill-card .skill-title svg { color: var(--accent); flex-shrink: 0; }
-.network-admin .drawing-skill-link { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-6); color: var(--text); background: var(--surface-2); font-size: var(--fs-12); font-weight: 500; text-decoration: none; transition: all 0.15s ease; }
-.network-admin .drawing-skill-link:hover { background: var(--surface-3); border-color: var(--accent); color: var(--accent); }
+.network-admin .drawing-skill-link { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-6); color: var(--text); background: var(--surface-2); box-shadow: var(--shadow-xs); font-size: var(--fs-12); font-weight: 500; text-decoration: none; transition: all 0.15s ease; }
+.network-admin .drawing-skill-link:hover { background: var(--surface-3); border-color: var(--accent); color: var(--accent); box-shadow: var(--shadow-sm); }
 .network-context-layout { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(520px, 1.3fr); gap: var(--space-4); width: 100%; padding: var(--space-4) var(--space-6) var(--space-6); }
-.network-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-12); padding: 0; min-width: 0; overflow: hidden; }
+.network-panel { background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r-12); box-shadow: var(--shadow-card); padding: 0; min-width: 0; overflow: hidden; }
 .network-panel h2 { margin: 0 0 var(--space-1); font-size: var(--fs-18); }
 .network-panel p { margin: 0; color: var(--text-3); font-size: var(--fs-13); line-height: 1.6; }
 .network-admin .panel-heading { display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; margin: 0; padding: var(--space-4); border-bottom: 1px solid var(--line); }
@@ -185,11 +186,15 @@
 .network-editor {
   position: fixed; inset: 0 0 0 auto; margin: 0; width: min(640px, calc(100vw / var(--ui-scale))); max-width: calc(100vw / var(--ui-scale));
   height: calc(100dvh / var(--ui-scale)); max-height: calc(100dvh / var(--ui-scale)); padding: 0; overflow-y: auto; box-sizing: border-box;
-  background: var(--surface); color: var(--text); border: 0; border-left: 1px solid var(--line);
-  box-shadow: var(--shadow-menu);
+  background: var(--surface); color: var(--text); border: 0; border-left: 1px solid var(--line-2);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.28);
 }
-.network-editor::backdrop { background: var(--overlay); }
-.network-editor-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-13); color: var(--text-3); }
+.network-editor::backdrop {
+  background: var(--overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.network-editor-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--line-2); font-size: var(--fs-13); color: var(--text-3); }
 .network-editor .network-panel { border: 0; border-radius: 0; padding: var(--space-6); overflow: visible; }
 .network-editor .form-grid,
 .network-dialog-modal .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 14px; }
@@ -206,7 +211,10 @@
 .network-editor input:focus-visible, .network-editor select:focus-visible, .network-editor textarea:focus-visible,
 .network-dialog-modal input:focus-visible, .network-dialog-modal select:focus-visible, .network-dialog-modal textarea:focus-visible,
 .network-filters input:focus-visible, .network-filters select:focus-visible {
-  border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring-shadow);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring-shadow);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 1px;
 }
 .network-editor textarea,
 .network-dialog-modal textarea { min-height: 80px; resize: vertical; }
@@ -1216,7 +1224,7 @@
 
 .link-width-chip.active {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--accent-text);
   border-color: var(--accent);
   font-weight: 600;
 }

@@ -70,54 +70,33 @@
   background: var(--console-surface);
   border: 1px solid var(--console-border);
   border-radius: var(--r-6);
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
   font-size: var(--fs-13);
   font-weight: 550;
   line-height: 1;
   white-space: nowrap;
   transition:
-    color 140ms ease,
-    background 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    transform 140ms ease;
+    color var(--dur-2) var(--ease),
+    background var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
 .btn:hover:not(:disabled) {
   color: var(--console-ink);
   background: var(--console-muted);
-  border-color: var(--text-4);
-  /* 全 app 是 flat 设计，按钮 hover 不应跳出阴影和位移，否则跟整套语言不搭。
-     之前 translate3d(-1px) + box-shadow 让按钮在紧贴列表项时抖一下。 */
+  border-color: var(--line-3);
+  box-shadow: var(--shadow-sm);
   transform: none;
 }
-/* Must sit *after* :hover. Pressing a button also hovers it, and both selectors
-   are (0,3,0), so order decides. This rule already sat after :hover in
-   global.css and still never took effect, because a later layer wins before
-   order is ever consulted — the press feedback has been missing since the
-   Design System 3.0 sheet was added, split or no split.
-
-   Only the plain `.btn` gets it: `.btn.primary:hover` and `.btn.ghost:hover`
-   are (0,4,0) and outrank this, so the primary and ghost buttons keep their own
-   pressed colour instead of turning grey. */
+/* Button hover feedback is strictly planar (transform: none, no spatial displacement)
+   using surface contrast and border transitions rather than physical floating, avoiding
+   micro-jitter across dense operational consoles. */
 .btn:active:not(:disabled) { background: var(--surface-3); }
-/* `:focus-visible` and `:disabled` are here for the same reason as `.btn.sm`
-   below — a layer beats specificity, so from `base` they lose to this very
-   `.btn` on every property both set. That is not a hypothetical: under the
-   split a focused `.btn` measured `box-shadow: none`, while `.collapse-btn`,
-   which shares the same rule in global.css, kept its
-   `rgba(15,119,120,.18) 0 0 0 2px` ring.
-
-   Only `box-shadow` came across. The `outline: none` that shipped with it
-   stayed in global.css on purpose: the keyboard ring users actually see is
-   drawn by `:root :is(button, a, ...):focus-visible` over there — (0,2,1) but
-   in the `base` layer — and an `outline: none` in this layer would outrank it
-   and take the ring away altogether.
-
-   Kept above `.btn.primary` / `.btn.ghost` deliberately. Both are (0,2,0),
-   both set `box-shadow: none`, and both won on load order before the split.
-   Later still wins inside a layer, so this preserves what the single-layer
-   state measured. */
-.btn:focus-visible { box-shadow: var(--shadow-focus); }
+.btn:focus-visible {
+  box-shadow: var(--shadow-focus);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
 .btn:disabled { opacity: 0.48; }
 .btn.primary {
   color: var(--accent-text);
@@ -126,13 +105,10 @@
   box-shadow: none;
 }
 .btn.primary:hover:not(:disabled) {
-  /* The only declaration that survived out of global.css's copy of this rule:
-     console's version never set `color`, so the old one was still winning it.
-     Same value as `.btn.primary` above, so the primary button's label does not
-     shift colour on hover — kept explicitly rather than left to inheritance. */
   color: var(--accent-text);
   background: var(--console-action-strong);
   border-color: var(--console-action-strong);
+  box-shadow: none;
   transform: none;
 }
 .btn.ghost {
@@ -220,19 +196,20 @@ select.input {
   color: var(--console-ink);
   background: var(--console-surface);
   border: 1px solid var(--console-border);
-  border-radius: var(--r-6);
-  box-shadow: none;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  border-radius: var(--r-8);
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
 .input:hover,
 textarea.input:hover,
-select.input:hover { border-color: var(--text-4); }
+select.input:hover { border-color: var(--line-3); }
 .input:focus-visible,
 textarea.input:focus-visible,
 select.input:focus-visible {
   border-color: var(--lz-primary, var(--focus-ring));
-  box-shadow: 0 0 0 2px var(--lz-primary-glow, var(--focus-ring-shadow));
-  outline: none;
+  box-shadow: 0 0 0 3px var(--lz-primary-glow, var(--focus-ring-shadow));
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .ui-filter-bar {
@@ -242,12 +219,13 @@ select.input:focus-visible {
   background: var(--console-muted);
   border: 1px solid var(--console-border-soft);
   border-radius: var(--r-8);
+  box-shadow: var(--shadow-xs);
 }
 .data-table-scroll {
   background: var(--console-surface);
   border: 1px solid var(--console-border-soft);
   border-radius: var(--r-8);
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
 }
 .tbl { background: var(--console-surface); }
 .tbl th {
@@ -255,9 +233,9 @@ select.input:focus-visible {
   color: var(--console-muted-ink);
   background: var(--console-muted);
   border-bottom-color: var(--console-border-soft);
-  font-size: var(--fs-11);
+  font-size: var(--fs-12);
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: normal;
 }
 .tbl td {
   height: 42px;
@@ -323,7 +301,7 @@ select.input:focus-visible {
   background: var(--console-surface);
   border-color: var(--console-border-soft);
   border-radius: var(--r-12);
-  box-shadow: none;
+  box-shadow: var(--shadow-card);
 }
 .data-summary-head,
 .data-panel-head { min-height: 42px; padding: 10px 14px; border-bottom-color: var(--console-border-soft); }
@@ -342,11 +320,20 @@ select.input:focus-visible {
 .job-card{
   border: 1px solid var(--console-border-soft);
   border-radius: var(--r-8);
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
+  transition: all var(--dur-2) var(--ease);
 }
 .job-card { width: 100%; margin: 0; background: transparent; }
-.job-card:hover { background: var(--console-surface); border-color: var(--console-border); }
-.job-card.selected { background: var(--console-action-soft); border-color: color-mix(in srgb, var(--console-action) 34%, var(--console-border)); }
+.job-card:hover {
+  background: var(--console-surface);
+  border-color: var(--console-border);
+  box-shadow: var(--shadow-sm);
+}
+.job-card.selected {
+  background: var(--console-action-soft);
+  border-color: color-mix(in srgb, var(--console-action) 34%, var(--console-border));
+  box-shadow: var(--shadow-xs);
+}
 .job-card.selected::before { width: 2px; background: var(--console-action); }
 .job-card-head { min-height: 28px; }
 .job-card-meta{ color: var(--console-muted-ink); font-size: 11px; }
@@ -396,6 +383,7 @@ select.input:focus-visible {
   background: var(--console-surface);
   border-color: var(--console-border-soft);
   border-radius: var(--r-12);
+  box-shadow: var(--shadow-card);
 }
 .stat-card { min-height: 64px; padding: 12px 16px; }
 .stat-card + .stat-card { border-left: 1px solid var(--console-border-soft); }
@@ -603,6 +591,7 @@ select.input:focus-visible {
   border: 1px solid var(--console-border-soft);
   border-radius: var(--r-8);
   background: var(--console-surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .empty-onboarding .empty-text {
@@ -1152,6 +1141,7 @@ select.input:focus-visible {
   background: var(--console-surface);
   border: 1px solid var(--console-border-soft);
   border-radius: var(--r-12);
+  box-shadow: var(--shadow-card);
 }
 .capability-directory-list {
   padding: var(--space-2);
@@ -1216,6 +1206,7 @@ select.input:focus-visible {
 .settings-page .settings-layout {
   grid-template-columns: 300px minmax(0, 1fr);
   border-radius: var(--r-12);
+  box-shadow: var(--shadow-card);
 }
 .settings-page .provider-sidebar { padding: var(--space-3); }
 .settings-page .provider-sidebar .provider-card {

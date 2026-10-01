@@ -6,8 +6,8 @@
 
 | 包 | 使用方法 | 用户数据 | 系统集成 |
 | --- | --- | --- | --- |
-| `lzcore-v3.3.0-windows-portable.zip` | 解压到可写的本地目录，双击 `lzcore/lzcore.exe` | 程序旁 `data/` | 默认不创建快捷方式、注册表项或自启动 |
-| `lzcore-v3.3.0-windows-setup.exe` | 运行安装向导，默认无需管理员权限 | `%LOCALAPPDATA%\LZCore` | 开始菜单、可选桌面快捷方式、卸载项；自启动在应用内单独开启 |
+| `lzcore-v3.3.1-windows-portable.zip` | 解压到可写的本地目录，双击 `lzcore/lzcore.exe` | 程序旁 `data/` | 默认不创建快捷方式、注册表项或自启动 |
+| `lzcore-v3.3.1-windows-setup.exe` | 运行安装向导，默认无需管理员权限 | `%LOCALAPPDATA%\LZCore` | 开始菜单、可选桌面快捷方式、卸载项；自启动在应用内单独开启 |
 
 两个包都附带固定版本 WebView2，离线启动无需下载 Python、Node 或浏览器运行时。运行时版本和官方 Microsoft 下载地址锁在 `packaging/webview2.json`；构建时验证 Microsoft 数字签名。固定运行时随应用发行更新，不采用 Evergreen 的自动更新。Windows 10 首次启动会为这一运行时目录授予 App Container 读取和执行权限；它不能从 UNC 网络目录运行。[Microsoft 部署说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)
 

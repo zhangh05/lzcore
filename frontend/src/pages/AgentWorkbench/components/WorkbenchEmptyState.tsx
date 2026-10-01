@@ -19,9 +19,7 @@ export const WorkbenchEmptyState = memo(function WorkbenchEmptyState({
   */
   return (
     <div className="wb-empty" data-testid="workbench-empty">
-      {/* A heading, not a paragraph: the lead line names this block, and screen
-          readers navigate by it. It is sized as a question rather than as a
-          page title, so the heading role costs no visual weight. */}
+      <span className="empty-mark" aria-hidden="true">联</span>
       <h2 className="wb-empty-lead">{currentSessionId ? "今天需要处理什么？" : "请先新建会话"}</h2>
       <div className="wb-empty-chips">
         {QUICK_CHIPS.map((chip) => (

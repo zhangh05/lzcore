@@ -69,8 +69,30 @@
 .topology-studio .topology-editbar > .toolbar-right { flex: 0 1 auto; flex-wrap: wrap; }
 .topology-studio .topology-editbar .btn { border-color: var(--line); background: var(--surface); padding: 5px 8px; height: 30px; white-space: nowrap; box-shadow: none; }
 .topology-studio .topology-editbar .btn:hover { background: var(--accent-soft); border-color: var(--accent); }
-.studio-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); cursor: pointer; }
-.studio-icon-button:hover, .studio-icon-button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.studio-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-6);
+  background: var(--surface);
+  color: var(--text-2);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  transition: all var(--dur-2) var(--ease);
+}
+
+.studio-icon-button:hover,
+.studio-icon-button[aria-pressed=true] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
 .studio-edit-tools { display: flex; align-items: center; gap: 3px; min-width: 0; }
 /* Belt and braces for a bar narrower than the tool group itself: wrap the tools
    rather than let them escape the group's box. `min-width: 0` is what allows the
@@ -80,36 +102,118 @@
 .studio-align-menu > summary::-webkit-details-marker, .studio-insert-menu > summary::-webkit-details-marker { display: none; }
 .studio-mode-button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: var(--accent-soft); color: var(--text); }
 .studio-mode-button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 650; }
-.studio-device-ribbon { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; margin: 0 3px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+.studio-device-ribbon { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; margin: 0 3px; border-left: 1px solid var(--line-2); border-right: 1px solid var(--line-2); }
 .studio-device-ribbon .ribbon-label { font-size: 11px; color: var(--text-3); margin-right: 2px; user-select: none; }
-.studio-device-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; height: 26px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 11px; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
-.studio-device-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
-.studio-device-chip.is-active { background: var(--accent); border-color: var(--accent); color: #ffffff; font-weight: 650; box-shadow: 0 0 0 2px rgb(22 131 123 / 25%); }
+.studio-device-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  height: 28px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-6);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 550;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: all var(--dur-2) var(--ease);
+  white-space: nowrap;
+}
+
+.studio-device-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-2);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+.studio-device-chip.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 650;
+  box-shadow: 0 2px 8px var(--lz-primary-glow);
+  transform: none;
+}
+
 .studio-device-chip .device-chip-img { width: 15px; height: 15px; object-fit: contain; flex-shrink: 0; }
 .studio-device-chip.is-active .device-chip-img { filter: brightness(1.2); }
 .studio-align-menu { position: relative; }
-.studio-align-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(3, max-content); gap: 4px; min-width: 230px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: 0 12px 26px #1e344426; }
+.studio-align-menu > div {
+  position: absolute;
+  top: 31px;
+  left: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  gap: 4px;
+  min-width: 230px;
+  padding: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-float);
+}
+
 .studio-align-menu > div button { padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 11px; cursor: pointer; text-align: left; }
 .studio-align-menu > div button:hover { background: var(--accent-soft); color: var(--accent); }
 .studio-insert-menu { position: relative; }
-.studio-insert-menu > div { position: absolute; top: 31px; left: 0; z-index: 30; display: grid; min-width: 128px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: 0 12px 26px #1e344426; }
+.studio-insert-menu > div {
+  position: absolute;
+  top: 31px;
+  left: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 128px;
+  padding: 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-float);
+}
+
 .studio-insert-menu > div button { padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; text-align: left; white-space: nowrap; }
 .studio-insert-menu > div button:hover { background: var(--accent-soft); color: var(--accent); }
 .studio-more { position: relative; font-size: 12px; }
 .studio-more > summary { padding: 7px 8px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
-.studio-more > div { position: absolute; right: 0; top: 34px; display: grid; gap: 4px; padding: 8px; width: 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #0002; z-index: 20; }
+.studio-more > div {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  width: 150px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  box-shadow: var(--shadow-float);
+  z-index: 20;
+}
+
 .topology-studio .topology-observation-card {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 14px;
+  left: 14px;
   z-index: 25;
-  width: min(300px, calc(100% - 24px));
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-8);
-  background: var(--surface);
+  width: min(320px, calc(100% - 28px));
+  padding: 14px 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-12);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   color: var(--text);
-  box-shadow: var(--shadow-menu);
+  box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--line) 30%, transparent);
   font-size: var(--fs-12);
 }
 .topology-studio .topology-observation-card header {
@@ -164,9 +268,9 @@
 .topology-studio .netops-canvas-wrap { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: #ffffff; }
 .topology-studio .netops-canvas-wrap.grid-on { background-color: #ffffff; }
 
-[data-theme="dark"] .topology-studio .netops-canvas-wrap { background-color: #0f1519; }
-[data-theme="dark"] .topology-studio .netops-canvas-wrap.grid-on { background-color: #0f1519; }
-[data-theme="dark"] .topology-studio .topology-canvas-area { background: #0f1519; }
+[data-theme="dark"] .topology-studio .netops-canvas-wrap { background-color: var(--surface); }
+[data-theme="dark"] .topology-studio .netops-canvas-wrap.grid-on { background-color: var(--surface); }
+[data-theme="dark"] .topology-studio .topology-canvas-area { background: var(--surface); }
 [data-theme="dark"] .topology-studio .canvas-legend { background: #1a2129ee; border-color: #2c353e; color: #a9bac7; }
 .topology-studio .netops-world-grid { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
 .topology-studio .netops-cytoscape { position: absolute; inset: 0; width: 100%; height: 100%; outline: 0; z-index: 1; }
@@ -182,29 +286,184 @@
 /* A picked palette type leaves the canvas waiting for a click. */
 .topology-studio .netops-canvas-wrap.placing-armed .netops-cytoscape { cursor: copy; }
 .topology-studio .netops-placing-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 10px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-size: 11px; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-.topology-studio .netops-selection-marquee { position: absolute; z-index: 13; pointer-events: none; border: 1.5px dashed var(--accent); background: rgba(15, 119, 115, 0.08); }
+.topology-studio .netops-selection-marquee { position: absolute; z-index: 13; pointer-events: none; border: 1.5px dashed var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .topology-studio .netops-marquee-hud { position: absolute; right: 0; bottom: -24px; padding: 1px 7px; border-radius: 4px; background: #0f172a; color: #ffffff; font-size: 10px; font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 600; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
 .topology-studio .netops-link-preview { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
 .topology-studio .netops-link-preview line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 .topology-studio .netops-link-preview circle { fill: var(--accent); }
 .topology-studio .netops-align-guides { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
 .topology-studio .netops-align-guides line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
-.topology-studio .netops-viewport-controls { position: absolute; right: 14px; bottom: 14px; z-index: 8; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: 0 8px 24px #273c4a1c; }
-.topology-studio .netops-viewport-controls button { min-width: 32px; height: 31px; padding: 0 8px; border: 0; border-right: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 13px; font-weight: 650; cursor: pointer; }
-.topology-studio .netops-viewport-controls button:last-child { border-right: 0; font-size: 11px; }
-.topology-studio .netops-viewport-controls button:hover { background: var(--accent-soft); color: var(--accent); }
-.topology-studio .netops-viewport-controls .netops-zoom-readout { min-width: 48px; color: var(--text-3); font-size: 10px; font-weight: 600; }
-.topology-studio .netops-viewport-controls button.is-active { background: var(--accent-soft); color: var(--accent); }
-.topology-studio .netops-viewport-controls button:last-child { font-size: 11px; }
+.topology-studio .netops-viewport-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-md);
+}
+
+.topology-studio .netops-viewport-controls button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--dur-2) var(--ease);
+}
+
+.topology-studio .netops-viewport-controls button:last-child {
+  font-size: 11px;
+}
+
+.topology-studio .netops-viewport-controls button:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.topology-studio .netops-viewport-controls .netops-zoom-readout {
+  min-width: 44px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-align: center;
+  background: transparent;
+}
+
+.topology-studio .netops-viewport-controls button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
 .topology-studio .netops-canvas-accessibility { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
-.studio-canvas-caption { position: absolute; top: 14px; left: 16px; z-index: 5; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; max-width: calc(100% - 36px); font-size: 11px; color: var(--text-3); pointer-events: none; }
-.studio-canvas-caption strong { color: var(--text); font-weight: 650; }
-.topology-canvas-viewport.mode-select .canvas-mode-hint { color: var(--accent); font-weight: 600; }
-.canvas-mode-hint.is-view-mode { color: var(--accent); font-weight: 600; background: var(--accent-soft); padding: 2px 8px; border-radius: 4px; border: 1px solid var(--accent); }
-.canvas-selection-chip { pointer-events: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; height: 22px; border: 1px solid var(--accent); border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 600; cursor: pointer; transition: background var(--t-fast, 140ms), color var(--t-fast, 140ms); }
-.canvas-selection-chip:hover { background: var(--accent); color: #ffffff; }
-.studio-canvas-caption label { pointer-events: auto; margin-left: auto; display: flex; align-items: center; gap: 4px; background: var(--surface); padding: 4px 7px; border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 2px 5px #1025360d; }
-.studio-canvas-caption input { margin: 0; width: 12px; height: 12px; }
+
+.studio-canvas-caption {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: calc(100% - 36px);
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--text-3);
+  pointer-events: none;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-10);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.studio-canvas-caption strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.topology-canvas-viewport.mode-select .canvas-mode-hint {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.canvas-mode-hint.is-view-mode {
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--accent-soft);
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--accent);
+}
+
+.canvas-selection-chip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  height: 22px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+
+.canvas-selection-chip:hover,
+.canvas-selection-chip:focus-visible {
+  background: var(--accent);
+  color: var(--accent-text);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.studio-canvas-caption label {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--dur-2) var(--ease);
+}
+
+.studio-canvas-caption label:first-of-type {
+  margin-left: auto;
+}
+
+.studio-canvas-caption label:hover {
+  background: var(--surface-hover);
+  border-color: var(--line);
+  color: var(--text-1);
+}
+
+.studio-canvas-caption label:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.studio-canvas-caption input {
+  accent-color: var(--accent);
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+}
 .studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--surface); color: var(--text-3); font-size: 10px; }
 .studio-statusbar button { margin-left: auto; padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--text-2); cursor: pointer; white-space: nowrap; }
 /* Legend: colour only means something if the reader is told what. */
@@ -1134,11 +1393,11 @@
   background: var(--surface-3, rgba(0, 0, 0, 0.06));
   border-color: var(--accent);
   color: var(--accent);
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .topology-studio .batch-type-chip:active {
-  transform: translateY(0);
+  transform: none;
 }
 
 .topology-studio .batch-type-chip-icon {

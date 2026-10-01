@@ -1,6 +1,26 @@
 import { createPortal } from "react-dom";
 import { useToastStore } from "../stores/toast";
-import { IconClose } from "./Icon";
+import {
+  IconClose,
+  IconCheckCircle,
+  IconXCircle,
+  IconWarningCircle,
+  IconInfo,
+} from "./Icon";
+
+function getToastIcon(kind: string) {
+  switch (kind) {
+    case "success":
+      return <IconCheckCircle size={18} weight="fill" className="toast-status-icon" />;
+    case "error":
+      return <IconXCircle size={18} weight="fill" className="toast-status-icon" />;
+    case "warning":
+      return <IconWarningCircle size={18} weight="fill" className="toast-status-icon" />;
+    case "info":
+    default:
+      return <IconInfo size={18} weight="fill" className="toast-status-icon" />;
+  }
+}
 
 export function ToastHost() {
   const { messages, dismiss } = useToastStore();
@@ -12,6 +32,9 @@ export function ToastHost() {
     >
       {messages.map((m) => (
         <div key={m.id} className={`toast ${m.kind}`} role="alert" aria-live="assertive">
+          <div className="toast-icon-wrap" aria-hidden="true">
+            {getToastIcon(m.kind)}
+          </div>
           <div className="toast-content">
             <div className="toast-title">{m.title}</div>
             {m.body && <div className="toast-body">{m.body}</div>}

@@ -173,9 +173,10 @@
 .markdown-body .code-block-wrap {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
   background: var(--surface-2);
+  box-shadow: var(--shadow-xs);
 }
 .markdown-body .code-block-wrap pre { margin: 0; overflow-x: auto; }
 
@@ -211,6 +212,13 @@
   gap: 2px;
   min-height: 68px;
   padding: var(--flow-base) var(--flow-loose);
+  border-radius: var(--r-8);
+  box-shadow: var(--shadow-xs);
+  transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.kl-stats .stat-card:hover {
+  transform: none;
+  box-shadow: var(--shadow-sm);
 }
 .kl-stats .stat-value {
   font-size: var(--fs-24);
@@ -252,5 +260,138 @@
   min-width: 100px;
   justify-content: center;
   font-weight: 680;
+}
+
+/* Shared finish. Pages inherit the same surface, focus and type rhythm. */
+.page-header,
+.page-header.ui-page-header {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-bottom-color: var(--line-2);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.page-header h1 {
+  letter-spacing: -0.02em;
+}
+
+.login-page {
+  background:
+    radial-gradient(900px 420px at 50% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+    var(--bg);
+}
+
+.login-panel {
+  padding: 28px 28px 24px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-16);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.login-form input {
+  height: 42px;
+  border-radius: var(--r-8);
+  border-color: var(--line-2);
+  background: var(--field);
+  box-shadow: var(--shadow-xs);
+}
+
+.login-form input:focus {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--focus-ring-shadow);
+}
+
+.login-submit {
+  border-radius: var(--r-8);
+  box-shadow: var(--shadow-xs);
+}
+
+.login-submit:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-page .settings-form-card,
+.settings-page .provider-sidebar,
+.memory-page .memory-list,
+.data-center .data-summary-panel,
+.data-center .data-main-panel,
+.data-center .data-governance-panel,
+.capability-directory,
+.diag-section,
+.empty-onboarding {
+  border-color: var(--line-2);
+  box-shadow: var(--shadow-card);
+}
+
+.memory-page .memory-card {
+  transition: background var(--dur-2) var(--ease);
+}
+
+.memory-page .memory-card-row:hover,
+.data-center .data-row:hover,
+.data-center .data-recent-row:hover,
+.data-center .data-archive-row:hover {
+  background: var(--surface-hover);
+}
+
+.settings-page .provider-sidebar button:focus-visible,
+.operations-page .operations-tabs .tab:focus-visible,
+.network-admin .network-tabs .net-tab:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: var(--r-12);
+}
+
+.wb-empty .empty-mark {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
+.stat-value,
+.metric-val,
+.tc-duration-pill,
+.rt-dur,
+.brand-text small,
+.task-phase-index {
+  font-variant-numeric: tabular-nums;
+}
+
+.tbl thead th {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sidebar-content .list-item,
+.app-nav-item,
+.stage-output > summary,
+.tool-call-card-header {
+  transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+
+.desktop-dialog {
+  border-radius: var(--r-16);
+  box-shadow: var(--shadow-float);
+}
+
+.desktop-dialog-body section {
+  border-bottom-color: var(--line-2);
 }
 }

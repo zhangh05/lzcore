@@ -230,8 +230,8 @@
   color: var(--text-2);
   line-height: var(--lh-body);
   background: var(--surface-2);
-  border-inline-start: 2px solid var(--line-3);
-  border-radius: 0 var(--r-6) var(--r-6) 0;
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 0 var(--r-8) var(--r-8) 0;
 }
 
 .markdown-body blockquote > :first-child {
@@ -249,10 +249,14 @@
 }
 
 .markdown-body :not(pre) > code {
-  padding: 1px 5px;
-  font-size: 0.9em;
+  padding: 2px 6px;
+  font-size: 0.88em;
+  font-family: var(--font-mono);
   line-height: inherit;
   border-radius: var(--r-4);
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  color: var(--text-1);
 }
 
 .markdown-body pre,
