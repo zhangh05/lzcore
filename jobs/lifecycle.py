@@ -285,6 +285,12 @@ def _claim_session_turn_request(
                 request_id[:32],
                 exc_info=True,
             )
+        try:
+            from agent.runtime.turn_replay import touch_turn_log
+            from storage.principal import current_storage_principal
+            touch_turn_log(ws_id, session_id, request_id, username=current_storage_principal())
+        except Exception:
+            _log.warning("unable to open turn log session=%s", session_id, exc_info=True)
         _write_request_record(path, {
             "client_request_id": request_id,
             "input_sha256": _request_input_sha256(user_input),

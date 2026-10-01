@@ -61,6 +61,46 @@ def _get_log(workspace_id: str, session_id: str, client_request_id: str, usernam
         return existing
 
 
+def touch_turn_log(workspace_id: str, session_id: str, client_request_id: str, *, username: str = "") -> None:
+    """Create the log before the first frame so resume can wait instead of missing it."""
+    with _principal(username):
+        path = _log_path(workspace_id, session_id, client_request_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.touch()
+
+
+def resume_disposition(workspace_id: str, session_id: str, client_request_id: str, *, username: str = "") -> str:
+    """Distinguish a starting producer from an unknown or already interrupted request."""
+    with _principal(username):
+        try:
+            path = _log_path(workspace_id, session_id, client_request_id)
+        except ValueError:
+            return "not_found"
+        from jobs.lifecycle import _request_registry_path
+        registry = _request_registry_path(workspace_id, session_id, client_request_id)
+        try:
+            record = json.loads(registry.read_text(encoding="utf-8")) if registry.is_file() else {}
+        except (OSError, ValueError):
+            return "not_found"
+        if record.get("replay_expired"):
+            return "not_found"
+        frames = frames_after(workspace_id, session_id, client_request_id, 0, username=username) if path.is_file() else []
+        if frames and frames[-1].get("type") in {"done", "error"}:
+            return "ready"
+        status = str(record.get("status") or "")
+        if status in {"failed", "cancelled", "succeeded"}:
+            return "interrupted"
+        if status == "running":
+            from jobs.store import get_job
+            job = get_job(workspace_id, str(record.get("job_id") or ""))
+            active = dict((getattr(job, "metadata", {}) or {}).get("active_turn") or {}) if job else {}
+            if not job or active.get("client_request_id") != client_request_id or job.status != "running":
+                return "interrupted"
+            return "ready" if frames else "pending"
+        return "ready" if frames else "not_found"
+
+
 def turn_exists(workspace_id: str, session_id: str, client_request_id: str, *, username: str = "") -> bool:
     """A resume may follow accepted work, but must not create an unknown turn."""
     with _principal(username):
@@ -69,6 +109,60 @@ def turn_exists(workspace_id: str, session_id: str, client_request_id: str, *, u
             return True
         from jobs.lifecycle import _request_registry_path
         return _request_registry_path(workspace_id, session_id, client_request_id).is_file()
+
+
+def prune_expired_logs(max_age_seconds: int = 7 * 24 * 3600) -> int:
+    """Remove terminal replay only after its session message is durable."""
+    import time
+    from contextlib import nullcontext
+    from storage.principal import known_storage_principals, storage_principal
+    from storage.workspace_store import list_workspace_ids
+    from storage.locking import FileLock
+    from storage.message_store import SessionMessageStore
+    from storage.atomic_io import atomic_write_json
+    from jobs.lifecycle import _request_registry_path
+    from storage.paths import workspace_root
+    from storage.session_store import _session_lock
+
+    removed = 0
+    cutoff = time.time() - max_age_seconds
+    for username in ["", *known_storage_principals()]:
+        with storage_principal(username) if username else nullcontext():
+            for ws_id in list_workspace_ids():
+                for path in (workspace_root(ws_id) / "sessions").glob("*/turn_logs/*.jsonl"):
+                    with _session_lock(path.parent.parent.name, ws_id), FileLock(path.with_suffix(".closeout.lock")), FileLock(path.with_suffix(".lock")):
+                        if not path.is_file() or path.stat().st_mtime >= cutoff:
+                            continue
+                        log = TurnLog(path)
+                        log._load_locked()
+                        if not log.frames or log.frames[-1].get("type") not in {"done", "error"}:
+                            continue
+                        terminal = log.frames[-1]
+                        sid, request_id = terminal["session_id"], terminal["client_request_id"]
+                        messages = SessionMessageStore(sid, ws_id).get_messages()
+                        if not any(m.get("role") == "assistant" and (
+                            (m.get("metadata") or {}).get("client_request_id") == request_id
+                            or (terminal.get("turn_id") and m.get("run_id") == terminal["turn_id"])
+                        ) for m in messages):
+                            continue
+                        registry = _request_registry_path(ws_id, sid, request_id)
+                        if registry.is_file():
+                            record = json.loads(registry.read_text(encoding="utf-8"))
+                            record["replay_expired"] = True
+                            atomic_write_json(registry, record)
+                        path.unlink()
+                        with _logs_lock:
+                            stale = [key for key, cached in _logs.items() if cached.path == path]
+                            for key in stale:
+                                cached = _logs.pop(key)
+                                with cached.lock:
+                                    for sub in cached.subscribers:
+                                        sub.closed = True
+                                        sub.wake.set()
+                                cached.frames = []
+                                cached._offset = 0
+                        removed += 1
+    return removed
 
 
 def append_frame(
@@ -144,14 +238,21 @@ class TurnLog:
     def append(self, frame: dict, *, session_id: str, client_request_id: str) -> dict:
         from storage.locking import FileLock
 
+        from storage.redaction import redact_value
         stamped = {
-            **frame,
+            **redact_value(frame),
             "session_id": session_id,
             "client_request_id": client_request_id,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(self.path.with_suffix(".lock")):
             self._load_locked()
+            if self.frames and self.frames[-1].get("type") in {"done", "error"}:
+                if frame.get("type") not in {"done", "error"}:
+                    raise ValueError("turn already terminal")
+                with self.path.open("rb") as handle:
+                    os.fsync(handle.fileno())
+                return self.frames[-1]
             seq = int(self.frames[-1]["seq"]) + 1 if self.frames else 1
             stamped["seq"] = seq
             stamped["stream_seq"] = seq

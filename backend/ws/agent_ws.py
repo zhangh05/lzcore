@@ -24,6 +24,7 @@ import os
 import queue
 import threading
 import time
+import uuid
 from flask import request
 from flask_sock import Sock
 from simple_websocket.errors import ConnectionClosed
@@ -724,25 +725,42 @@ def _attach_turn_replay(msg, username, role, workspaces, outbox, unsubscribers, 
     except (TypeError, ValueError):
         cursor = 0
     if not workspace_id or not session_id or not client_request_id:
-        emit({"type": "error", "message": "resume_target_required"})
+        emit({"type": "error", "message": "resume_target_required", "session_id": session_id, "client_request_id": client_request_id})
         return False
     try:
         from storage.ids import validate_session_id, validate_workspace_id
         workspace_id = validate_workspace_id(workspace_id)
         session_id = validate_session_id(session_id)
     except ValueError:
-        emit({"type": "error", "message": "Invalid session_id or workspace_id"})
+        emit({"type": "error", "message": "Invalid session_id or workspace_id", "session_id": session_id, "client_request_id": client_request_id})
         return False
     if not _ws_workspace_allowed(username, role, workspaces, workspace_id, write=False):
-        emit({"type": "error", "message": "workspace_forbidden"})
+        emit({"type": "error", "message": "workspace_forbidden", "session_id": session_id, "client_request_id": client_request_id})
         return False
-    from agent.runtime.turn_replay import subscribe_turn, turn_exists
-    try:
-        known = turn_exists(workspace_id, session_id, client_request_id, username=username)
-    except ValueError:
-        known = False
-    if not known:
+    from agent.runtime.turn_replay import resume_disposition, subscribe_turn
+    disposition = "not_found"
+    deadline = time.monotonic() + 2.0
+    while True:
+        try:
+            disposition = resume_disposition(
+                workspace_id, session_id, client_request_id, username=username,
+            )
+        except ValueError:
+            disposition = "not_found"
+        if disposition != "not_found" or time.monotonic() >= deadline:
+            break
+        time.sleep(0.05)
+    if disposition == "not_found":
         emit({"type": "error", "message": "resume_not_found", "session_id": session_id, "client_request_id": client_request_id})
+        return False
+    if disposition in {"interrupted", "pending"}:
+        emit({
+            "type": "error",
+            "error_code": "replay_interrupted" if disposition == "interrupted" else "resume_pending",
+            "message": "replay_interrupted" if disposition == "interrupted" else "resume_pending",
+            "session_id": session_id,
+            "client_request_id": client_request_id,
+        })
         return False
     key = (workspace_id, session_id, client_request_id)
     previous = unsubscribers.pop(key, None)
@@ -758,6 +776,10 @@ def _attach_turn_replay(msg, username, role, workspaces, outbox, unsubscribers, 
         on_terminal=outbox.detach_turn,
     )
     return True
+
+
+class ReplayPersistError(RuntimeError):
+    """A replay frame was not durable, so it must not be sent."""
 
 
 def _stamp_replay_frame(
@@ -783,18 +805,17 @@ def _stamp_replay_frame(
                 workspace_id, session_id, client_request_id, stamped, username=username,
             )
             seq = int(stored.get("seq") or 0)
-            if seq:
-                with stats_lock:
-                    stats["event_seq"] = seq
-                return stored
-        except Exception:
+            if not seq:
+                raise ReplayPersistError("replay sequence missing")
+            with stats_lock:
+                stats["event_seq"] = seq
+            return stored
+        except ReplayPersistError:
+            raise
+        except Exception as exc:
             _log.exception("turn replay append failed session=%s", session_id)
-    with stats_lock:
-        seq = int(stats.get("event_seq", 0)) + 1
-        stats["event_seq"] = seq
-    stamped["seq"] = seq
-    stamped["stream_seq"] = seq
-    return stamped
+            raise ReplayPersistError("replay persist failed") from exc
+    raise ReplayPersistError("replay identity missing")
 
 
 def _run_agent_thread(
@@ -807,9 +828,12 @@ def _run_agent_thread(
     stats_lock = threading.Lock()
     # `asyncio.to_thread()` propagates ContextVars. A provider call that has
     # timed out can therefore retain this callback after the turn emits done.
+    from storage.redaction import TokenSecretBuffer
     emission_lock = threading.Lock()
     emissions_open = threading.Event()
     emissions_open.set()
+    persist_failed = threading.Event()
+    secret_buffer = TokenSecretBuffer()
     transport_closed = transport_closed or threading.Event()
 
     def enqueue_live(event: dict | None) -> bool:
@@ -828,16 +852,46 @@ def _run_agent_thread(
                 continue
         return False
 
+    def emit_persist_fault() -> None:
+        if persist_failed.is_set():
+            return
+        persist_failed.set()
+        emissions_open.clear()
+        enqueue_live({
+            "type": "error",
+            "error_code": "replay_persist_failed",
+            "message": "replay_persist_failed",
+            "session_id": session_id,
+            "client_request_id": client_request_id,
+        })
+
+    def stamp_or_fault(frame: dict) -> dict | None:
+        try:
+            return _stamp_replay_frame(
+                workspace_id, session_id, client_request_id, username,
+                stats, stats_lock, frame,
+            )
+        except ReplayPersistError:
+            emit_persist_fault()
+            return None
+
     def put_terminal(event) -> None:
         # Serialize terminal delivery with provider callbacks and permanently
         # reject callbacks copied into a late `asyncio.to_thread()` worker.
         with emission_lock:
             emissions_open.clear()
-            stamped = _stamp_replay_frame(
-                workspace_id, session_id, client_request_id, username,
-                stats, stats_lock, event if isinstance(event, dict) else {"type": "event"},
-            )
-            enqueue_live(stamped)
+            if persist_failed.is_set():
+                return
+            flushed = secret_buffer.flush()
+            if flushed:
+                stamped_flush = stamp_or_fault({"type": "token", "content": flushed})
+                if stamped_flush:
+                    enqueue_live(stamped_flush)
+                if persist_failed.is_set():
+                    return
+            stamped = stamp_or_fault(event if isinstance(event, dict) else {"type": "event"})
+            if stamped:
+                enqueue_live(stamped)
 
     def realtime_callback(event):
         emission_lock.acquire()
@@ -847,11 +901,12 @@ def _run_agent_thread(
             with stats_lock:
                 stats["live_events"] = int(stats.get("live_events", 0)) + 1
             if isinstance(event, dict) and event.get("type") == "token":
-                enqueue_live(_stamp_replay_frame(
-                    workspace_id, session_id, client_request_id, username,
-                    stats, stats_lock,
-                    {"type": "token", "content": event.get("content", "")},
-                ))
+                visible = secret_buffer.push(str(event.get("content") or ""))
+                if not visible:
+                    return
+                stamped = stamp_or_fault({"type": "token", "content": visible})
+                if stamped:
+                    enqueue_live(stamped)
             elif isinstance(event, dict) and event.get("type") == "heartbeat":
                 enqueue_live({"type": "event", "name": "heartbeat", "data": event})
             else:
@@ -888,11 +943,9 @@ def _run_agent_thread(
                         )
                     except Exception:
                         _log.exception("unable to persist live stage job=%s stage=%s", job_id_for_event, name)
-                enqueue_live(_stamp_replay_frame(
-                    workspace_id, session_id, client_request_id, username,
-                    stats, stats_lock,
-                    {"type": "event", "name": name, "data": data},
-                ))
+                stamped = stamp_or_fault({"type": "event", "name": name, "data": data})
+                if stamped:
+                    enqueue_live(stamped)
         except Exception:
             _log.warning("realtime_callback event push failed seq=%s", stats.get("event_seq"), exc_info=True)
         finally:
@@ -901,10 +954,14 @@ def _run_agent_thread(
     from storage.principal import storage_principal
     job_id = ""
     principal_scope = None
-    client_request_id = str((metadata or {}).get("client_request_id") or "")
+    client_request_id = str((metadata or {}).get("client_request_id") or uuid.uuid4().hex)
+    metadata = {**(metadata or {}), "client_request_id": client_request_id}
     try:
         principal_scope = storage_principal(username)
         principal_scope.__enter__()
+        if not session_id:
+            from storage.session_store import create_session
+            session_id = create_session(workspace_id)["session_id"]
         try:
             from jobs.lifecycle import claim_session_turn
             turn_claim = claim_session_turn(
@@ -1058,10 +1115,10 @@ def _run_agent_thread(
         # older runtime paths still produce observable progress data.
         if int(stats.get("live_events", 0)) == 0:
             for ev in result_payload.get("events", []):
-                if not enqueue_live(_stamp_replay_frame(
-                    workspace_id, session_id, client_request_id, username, stats, stats_lock,
-                    {"type": "event", "name": ev.get("type", "event"), "data": ev},
-                )):
+                stamped = stamp_or_fault({
+                    "type": "event", "name": ev.get("type", "event"), "data": ev,
+                })
+                if not stamped or not enqueue_live(stamped):
                     break
 
         tool_calls = result_payload.get("tool_calls", [])
@@ -1093,6 +1150,15 @@ def _run_agent_thread(
             "capability": result_payload.get("capability", ""),
             "error_type": result_payload.get("error_type", ""),
         })
+        if persist_failed.is_set() and effective_session_id and client_request_id:
+            try:
+                from agent.runtime.turn_closeout import ensure_turn_terminal
+                ensure_turn_terminal(workspace_id=workspace_id, session_id=effective_session_id,
+                    client_request_id=client_request_id, username=username,
+                    outcome="succeeded" if result_payload.get("ok") else "failed",
+                    run_id=str(result_payload.get("turn_id") or ""))
+            except Exception:
+                _log.warning("turn terminal repair deferred session=%s", effective_session_id, exc_info=True)
 
     except Exception as e:
         _log.exception("agent websocket turn failed")

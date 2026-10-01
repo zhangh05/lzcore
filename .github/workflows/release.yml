@@ -64,7 +64,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & $python -c "import flask, flask_sock, yaml, bs4, lxml, pdfplumber, paramiko"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            & $python -m pytest -q harness/test_windows_runtime_contract.py harness/test_session_management.py harness/test_storage_filestore_foundation.py harness/test_turn_replay.py harness/test_ws_agent_contract.py harness/test_ws_system_broadcast.py
+            & $python -m pytest -q harness/test_windows_runtime_contract.py harness/test_session_management.py harness/test_storage_filestore_foundation.py harness/test_turn_replay.py harness/test_turn_closeout.py harness/test_replay_persist_fault.py harness/test_stream_secret_buffer.py harness/test_ws_agent_contract.py harness/test_ws_system_broadcast.py
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 

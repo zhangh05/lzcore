@@ -137,6 +137,7 @@ def persist_run_record(session, turn, result, context) -> bool:
             if assistant_text:
                 history_tools = _history_tool_context(result)
                 message_metadata = {
+                    "client_request_id": client_request_id,
                     "created_at": now_iso(),
                     "intent": state.intent,
                     "trace_id": result.trace_id if result else "",

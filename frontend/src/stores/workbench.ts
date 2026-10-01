@@ -13,6 +13,7 @@
  *  - localStorage key: "lzcore_workbench"
  */
 import { create } from "zustand";
+import { notifyTurnTerminal } from "../realtime/turnOwnership";
 import { persist } from "zustand/middleware";
 import type { PersistStorage, StorageValue } from "zustand/middleware";
 import type { AgentResult, SessionMessage, MessageStatus, InlineToolCall, RuntimeEvent, StageOutput } from "../types";
@@ -665,7 +666,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(
             : undefined,
           role: m.role,
           text: m.role === "assistant" ? sanitizeAssistantText(m.content) : m.content,
-          status: m.metadata?.status === "error" ? "error" : "ready",
+          status: ["error", "failed", "cancelled", "interrupted", "unknown"].includes(String(m.metadata?.status || "")) ? "error" : "ready",
           error: typeof m.metadata?.error === "string" ? m.metadata.error : undefined,
           stageOutputs: Array.isArray(m.metadata?.stage_outputs)
             ? normalizeStageOutputs(m.metadata.stage_outputs) : undefined,
@@ -704,7 +705,8 @@ export const useWorkbenchStore = create<WorkbenchState>()(
                   message_id: serverMsg.message_id ?? localMatch.message_id,
                   run_id: serverMsg.run_id ?? localMatch.run_id,
                   created_at: serverMsg.created_at || localMatch.created_at,
-                  status: localMatch.status === "streaming" ? "ready" : localMatch.status,
+                  status: serverMsg.status,
+                  error: serverMsg.error,
                   text:
                     serverMsg.role === "assistant" && serverMsg.text.trim()
                       ? serverMsg.text
@@ -716,6 +718,10 @@ export const useWorkbenchStore = create<WorkbenchState>()(
               : serverMsg;
             combined.push(nextMsg);
             seenKeys.add(stable);
+            if (localMatch?.status === "streaming" && localMatch.client_request_id && serverMsg.role === "assistant") {
+              const requestId = localMatch.client_request_id;
+              queueMicrotask(() => notifyTurnTerminal(session_id, requestId));
+            }
             if (localMatch) {
               matchedIds.add(localMatch.id);
               seenKeys.add(messageKey(localMatch));

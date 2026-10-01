@@ -165,6 +165,8 @@ export interface AgentResult {
   cognitive?: CognitiveSummary;
   cognitive_events?: CognitiveEvent[];
   metadata: {
+    reconciliation?: boolean;
+    transport_fault?: string;
     ssot_runtime?: Record<string, unknown>;
     selected_capabilities?: string[];
     visible_tools?: string[];

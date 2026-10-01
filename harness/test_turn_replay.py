@@ -135,7 +135,65 @@ def test_interrupted_json_line_is_removed_before_next_append(tmp_path):
     assert [item["seq"] for item in TurnLog(path).after(0)] == [1, 2]
 
 
+def test_prune_removes_old_terminal_logs_but_not_the_request_registry(temp_dirs):
+    import os
+    from agent.runtime.turn_replay import append_frame, prune_expired_logs, _log_path
+    from jobs.lifecycle import claim_session_turn, _request_registry_path
+    claim_session_turn("default", "sess1", "hello", client_request_id="req-old")
+    append_frame("default", "sess1", "req-old", {"type": "done", "final_response": "old"}, username="")
+    from storage.message_store import SessionMessageStore
+    SessionMessageStore("sess1", "default").write_message("run-old", "assistant", "old", metadata={"client_request_id": "req-old"})
+    path = _log_path("default", "sess1", "req-old")
+    old = path.stat().st_mtime - 8 * 24 * 3600
+    os.utime(path, (old, old))
+    assert prune_expired_logs() >= 1
+    assert not path.exists()
+    assert _request_registry_path("default", "sess1", "req-old").is_file()
+    from agent.runtime.turn_replay import resume_disposition
+    assert resume_disposition("default", "sess1", "req-old") == "not_found"
+
+
+def test_accepted_request_opens_a_log_before_the_first_frame(temp_dirs):
+    from jobs.lifecycle import claim_session_turn
+    from agent.runtime.turn_replay import resume_disposition
+    claim_session_turn("default", "sess1", "hello", client_request_id="req-pending")
+    assert resume_disposition("default", "sess1", "req-pending", username="") == "pending"
+
+
 def test_unknown_resume_target_does_not_create_log_or_registry(temp_dirs):
     from agent.runtime.turn_replay import _log_path, turn_exists
     assert not turn_exists("default", "sess-unknown", "unknown")
     assert not _log_path("default", "sess-unknown", "unknown").parent.exists()
+
+
+def test_acceptance_keeps_the_owning_principal(temp_dirs, monkeypatch):
+    from storage.principal import storage_principal
+    from jobs.lifecycle import claim_session_turn
+    from agent.runtime.turn_replay import _log_path
+    monkeypatch.setattr("backend.core.identity.resolve_user_storage_id", lambda u: "review-user")
+    with storage_principal("review-user"):
+        claim_session_turn("default", "sess1", "question", client_request_id="req-user")
+        assert _log_path("default", "sess1", "req-user").is_file()
+    assert not _log_path("default", "sess1", "req-user").is_file()
+
+
+def test_terminal_append_is_atomic_and_rejects_late_tokens(tmp_path):
+    import pytest
+    from agent.runtime.turn_replay import TurnLog
+    first, second = TurnLog(tmp_path / "turn.jsonl"), TurnLog(tmp_path / "turn.jsonl")
+    a = first.append({"type": "done", "final_response": "answer"}, session_id="s", client_request_id="r")
+    b = second.append({"type": "error", "message": "late"}, session_id="s", client_request_id="r")
+    assert a == b and len(first.after(0)) == 1
+    with pytest.raises(ValueError):
+        second.append({"type": "token", "content": "late"}, session_id="s", client_request_id="r")
+
+
+def test_prune_keeps_replay_until_assistant_is_durable(temp_dirs):
+    import os
+    from agent.runtime.turn_replay import _log_path, prune_expired_logs
+    append_frame("default", "sess1", "req-unpersisted", {"type": "done", "final_response": "answer"})
+    p = _log_path("default", "sess1", "req-unpersisted")
+    old = p.stat().st_mtime - 8 * 24 * 3600
+    os.utime(p, (old, old))
+    assert prune_expired_logs() == 0
+    assert p.is_file()

@@ -15,6 +15,7 @@ import { nextStreamRevealLength } from "../utils/streamReveal";
 import { decideStreamFrame } from "../utils/streamSequence";
 import { progressPatchForStreamStage, stageElapsedSince } from "../utils/streamStage";
 import { agentResultFromWsDone } from "../utils/wsResult";
+import { onTurnTerminal } from "./turnOwnership";
 
 export type ChatStreamAttachment = {
   file_id: string;
@@ -58,6 +59,11 @@ type LiveTurn = {
   handle: (msg: Record<string, unknown>) => void;
   finish: () => void;
   stopRequested: boolean;
+  persistFault?: boolean;
+  needsHistory?: boolean;
+  historyDeadline?: number;
+  resumePending?: boolean;
+  completeFromHistory: () => void;
 };
 
 const subscribers = new Set<Subscriber>();
@@ -65,6 +71,14 @@ const topologyListeners = new Set<TopologyListener>();
 const resumedListeners = new Set<() => void>();
 const turns = new Map<string, LiveTurn>();
 const cancellationClaims = new Set<string>();
+
+onTurnTerminal((sessionId, requestId) => {
+  const turn = turns.get(requestId);
+  if (!turn || turn.sessionId !== sessionId || turn.terminal) return;
+  const current = useWorkbenchStore.getState().bySession[sessionId]?.find((m) => m.id === turn.streamingMsgId);
+  if (!current || current.status === "streaming") return;
+  turn.completeFromHistory();
+});
 
 let socket: WebSocket | null = null;
 let connecting: Promise<WebSocket> | null = null;
@@ -222,6 +236,14 @@ function onSocketMessage(event: MessageEvent): void {
     return;
   }
   if (msg.type === "pong") return;
+  if (msg.type === "error" && !msg.client_request_id && !(msg.data as { client_request_id?: string } | undefined)?.client_request_id) {
+    const code = String(msg.error_code || msg.message || "");
+    if (code === "unauthorized" || code === "local_token_required" || code === "csrf_origin_denied") {
+      subscriptionEnabled = false;
+    }
+    for (const turn of turns.values()) turn.handle({ ...msg, type: "transport_error", error_code: code || "transport_error" });
+    return;
+  }
   if (msg.type === "event" && msg.name === "heartbeat" && !msg.client_request_id) {
     for (const turn of turns.values()) turn.handle(msg);
     return;
@@ -254,7 +276,7 @@ async function reconnectOpenTurns(): Promise<void> {
     const auth = await authFrame();
     if (epoch !== generation) return;
     for (const turn of turns.values()) {
-      if (turn.terminal) continue;
+      if (turn.terminal || turn.persistFault || (turn.needsHistory && !turn.resumePending)) continue;
       next.send(JSON.stringify({
         type: "resume", workspace_id: turn.workspaceId, session_id: turn.sessionId,
         client_request_id: turn.clientRequestId, stream_seq: turn.cursor, ...auth,
@@ -266,6 +288,32 @@ async function reconnectOpenTurns(): Promise<void> {
   }
 }
 
+function applyHistoryTerminal(turn: LiveTurn, message: import("../types").SessionMessage): void {
+  const meta = message.metadata || {};
+  const failed = ["error", "failed", "cancelled", "interrupted", "unknown"].includes(String(meta.status || ""));
+  const store = useWorkbenchStore.getState();
+  store.updateAssistant(turn.streamingMsgId, {
+    status: failed ? "error" : "ready", text: sanitizeAssistantText(message.content),
+    run_id: message.run_id, error: failed ? String(meta.error || message.content) : undefined,
+    stageOutputs: Array.isArray(meta.stage_outputs) ? normalizeStageOutputs(meta.stage_outputs) : undefined,
+  }, turn.sessionId);
+  turn.completeFromHistory();
+}
+
+async function reconcileTurnHistory(turn: LiveTurn): Promise<boolean> {
+  const epoch = generation;
+  try {
+    const history = await sessionsApi.messages(turn.sessionId, turn.workspaceId);
+    if (epoch !== generation || turn.terminal || turns.get(turn.clientRequestId) !== turn) return false;
+    const current = useWorkbenchStore.getState().bySession[turn.sessionId]?.find((m) => m.id === turn.streamingMsgId);
+    const terminal = [...history.messages].reverse().find((m) => m.role === "assistant"
+      && (m.metadata?.client_request_id === turn.clientRequestId || (current?.run_id && m.run_id === current.run_id)));
+    if (!terminal) return false;
+    applyHistoryTerminal(turn, terminal);
+    return true;
+  } catch { return false; }
+}
+
 async function reconcileFinishedTurns(): Promise<void> {
   if (reconciling || !subscriptionEnabled || !workspaceId || !turns.size) return;
   const epoch = generation;
@@ -274,7 +322,21 @@ async function reconcileFinishedTurns(): Promise<void> {
     const response = await jobsApi.list(workspaceId);
     if (epoch !== generation) return;
     for (const turn of [...turns.values()]) {
+      if (turn.needsHistory && await reconcileTurnHistory(turn)) continue;
+      if (epoch !== generation || turn.terminal) continue;
+      if (turn.resumePending) {
+        const auth = await authFrame();
+        if (epoch !== generation) return;
+        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "resume",
+          workspace_id: turn.workspaceId, session_id: turn.sessionId,
+          client_request_id: turn.clientRequestId, stream_seq: turn.cursor, ...auth }));
+      }
       const active = response.jobs.find((job) => job.metadata?.active_turn?.client_request_id === turn.clientRequestId)?.metadata?.active_turn;
+      if (turn.needsHistory && Date.now() > (turn.historyDeadline || Infinity)
+          && (!active || ["succeeded", "failed", "cancelled"].includes(active.status || ""))) {
+        turn.handle({ type: "transport_error", error_code: "history_unavailable" });
+        continue;
+      }
       if (!active || !["succeeded", "failed", "cancelled"].includes(active.status || "")) continue;
       const history = await sessionsApi.messages(turn.sessionId, turn.workspaceId);
       if (epoch !== generation || turn.terminal) return;
@@ -299,8 +361,8 @@ async function reconcileFinishedTurns(): Promise<void> {
         }
       }
       if (epoch !== generation || turn.terminal) return;
-      turn.handle({ ...(detail || {}), type: "done", session_id: turn.sessionId, client_request_id: turn.clientRequestId,
-        final_response: detail?.final_response || terminal.content, turn_id: terminal.run_id || active.run_id, trace_id: terminal.trace_id || active.trace_id,
+      turn.handle({ ...(detail || {}), type: "done", reconciliation: true, session_id: turn.sessionId, client_request_id: turn.clientRequestId,
+        final_response: terminal.content, turn_id: terminal.run_id || active.run_id, trace_id: terminal.trace_id || active.trace_id,
         events: detail?.events || active.events || [], tool_calls: detail?.tool_calls || [],
         metadata: detail?.metadata || terminal.metadata || {}, errors: detail?.errors || (active.error ? [active.error] : []),
       });
@@ -461,6 +523,8 @@ async function runTurn(input: {
   let resolvedSid = input.activeSessionId || input.effectiveSessionId;
   let stageStartedAt: number | null = null;
   let terminalFrameReceived = false;
+  let transportFault = "";
+  let historyFinalized = false;
   let lastStreamSequence = input.recovered?.streamSeq || 0;
   let interruptionReason = "";
   const streamClockNow = () => performance.now();
@@ -554,11 +618,11 @@ async function runTurn(input: {
       currentStore.updateAssistant(input.streamingMsgId, { text: "", streamDraft: "", streamSeq: lastStreamSequence, streamFilterState: { ...thinkFilter } }, scratch);
     };
     let finished = false;
-    const finish = () => {
+    const finish = (preserveHistory = false) => {
       if (finished) return;
       finished = true;
       watchdog.stop();
-      flushAllTokenBuffer();
+      if (!preserveHistory) flushAllTokenBuffer();
       streamRender.cancel();
       resolve();
     };
@@ -588,10 +652,39 @@ async function runTurn(input: {
       cursor: lastStreamSequence,
       terminal: false,
       stopRequested: false,
+      completeFromHistory: () => {
+        historyFinalized = true;
+        turn.terminal = true;
+        finish(true);
+        turns.delete(input.clientRequestId);
+        useWorkbenchStore.getState().endTurn(scratch, input.clientRequestId);
+        notifyRunCompleted();
+        for (const listener of resumedListeners) listener();
+      },
       finish,
       handle: (msg) => {
         if (epoch !== generation) return;
+        if (turn.terminal) return;
         watchdog.touch();
+        const code = String(msg.error_code || msg.message || "");
+        if (msg.type === "transport_error") {
+          transportFault = code;
+          turn.terminal = true;
+          finish();
+          return;
+        }
+        if (msg.type === "error" && ["resume_not_found", "replay_interrupted", "replay_persist_failed", "resume_unavailable", "resume_pending"].includes(code)) {
+          turn.needsHistory = true;
+          turn.resumePending = code === "resume_pending";
+          turn.historyDeadline ??= Date.now() + 60_000;
+          turn.persistFault = code === "replay_persist_failed";
+          watchdog.stop();
+          useWorkbenchStore.getState().updateAssistant(input.streamingMsgId, {
+            progressText: "实时记录暂不可续接，正在核对服务端结果…",
+          }, scratch);
+          void reconcileTurnHistory(turn);
+          return;
+        }
         const redirect = (msg.metadata as { idempotent_redirect?: { job_id?: string; status?: string; client_request_id?: string } } | undefined)?.idempotent_redirect;
         if (msg.type === "done" && redirect?.job_id && ["running", "conflict"].includes(redirect.status || "")
             && !(Array.isArray(msg.errors) && msg.errors.includes("client_request_payload_mismatch"))) {
@@ -621,6 +714,11 @@ async function runTurn(input: {
           const sequence = Number(msg.seq ?? msg.stream_seq);
           if (!terminalFrameReceived && Number.isSafeInteger(sequence) && sequence > lastStreamSequence + 1) socket?.close();
           return;
+        }
+        if (Number.isSafeInteger(Number(msg.seq ?? msg.stream_seq))) {
+          turn.needsHistory = false;
+          turn.resumePending = false;
+          turn.historyDeadline = undefined;
         }
         if (msg.type !== "token") flushAllTokenBuffer();
         lastStreamSequence = sequenceDecision.nextSequence;
@@ -758,6 +856,15 @@ async function runTurn(input: {
   turns.delete(input.clientRequestId);
   useWorkbenchStore.getState().endTurn(input.effectiveSessionId, input.clientRequestId);
   const scratch = input.effectiveSessionId;
+  if (historyFinalized) return;
+  if (transportFault) {
+    useWorkbenchStore.getState().updateAssistant(input.streamingMsgId, {
+      status: "error",
+      error: "实时连接不可用，未确认本轮结果；请恢复连接后刷新会话。",
+      progressText: "",
+    }, scratch);
+    return;
+  }
   if (!terminalFrameReceived) {
     const interruption = interruptionReason || "实时连接已中断，未收到本轮完成消息。请重试。";
     streamingResult.errors = [interruption];
@@ -904,6 +1011,18 @@ export async function recoverStreamingTurns(nextWorkspaceId: string): Promise<vo
       && item.status === "streaming" && item.client_request_id && typeof item.streamSeq === "number");
     if (!message?.client_request_id || turns.has(message.client_request_id)) continue;
     const requestId = message.client_request_id;
+    const history = await sessionsApi.messages(sessionId, nextWorkspaceId).catch(() => ({ messages: [] as import("../types").SessionMessage[] }));
+    if (epoch !== generation) return;
+    const terminal = [...(history.messages || [])].reverse().find((item) => item.role === "assistant"
+      && (item.metadata?.client_request_id === requestId || (message.run_id && item.run_id === message.run_id))
+      && String(item.content || "").trim());
+    if (terminal) {
+      const failed = ["error", "failed", "cancelled", "interrupted", "unknown"].includes(String(terminal.metadata?.status || ""));
+      store.updateAssistant(message.id, { status: failed ? "error" : "ready", error: failed ? String(terminal.metadata?.error || terminal.content) : undefined,
+        text: sanitizeAssistantText(terminal.content), run_id: terminal.run_id || message.run_id }, sessionId);
+      store.endTurn(sessionId, requestId);
+      continue;
+    }
     store.beginTurn(sessionId, requestId);
     // Same reducer and finalization path as a newly submitted turn.
     void runTurn({ clientRequestId: requestId, effectiveSessionId: sessionId,

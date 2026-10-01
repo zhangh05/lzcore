@@ -414,7 +414,10 @@ def test_terminal_stamp_is_serialized_with_inflight_token(monkeypatch, temp_dirs
     for thread in callbacks:
         thread.join(2)
     frames = [item for item in list(events.queue) if isinstance(item, dict)]
-    assert [(item["type"], item["seq"]) for item in frames] == [("token", 1), ("done", 2)]
+    assert [item["seq"] for item in frames] == list(range(1, len(frames) + 1))
+    assert frames[-1]["type"] == "done"
+    assert all(item["type"] == "token" for item in frames[:-1])
+    assert "".join(item["content"] for item in frames[:-1]) == "hi"
 
 
 def test_running_redirect_does_not_write_a_terminal_to_real_turn_log(monkeypatch, temp_dirs):

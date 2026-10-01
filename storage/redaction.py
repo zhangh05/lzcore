@@ -99,6 +99,55 @@ def redact_dict(data: dict) -> dict:
     return result
 
 
+_SECRET_PREFIXES = (
+    "sk-", "password", "secret", "token", "api_key", "api-key", "apikey",
+    "authorization", "community", "pre-shared-key", "key", "ipsec",
+    "private_key", "private-key", "openai_api_key", "deepseek_api_key", "minimax_api_key",
+)
+
+_HOLD_TAILS = [
+    re.compile(r"(?i)(?:^|[\s\"'`])authorization\s*:\s*(?:bearer\s*)?\S*$"),
+    re.compile(r"(?i)sk-[A-Za-z0-9_-]*$"),
+    re.compile(r"(?i)\bipsec(?:\s+\S*)?(?:\s+\S*)?$"),
+    re.compile(
+        r"(?i)(?:^|[\s\"'`])(?:password|secret|key|token|api[_-]?key|openai_api_key|deepseek_api_key|minimax_api_key|authorization|community|pre-shared-key)\b[\s:=]*\S*$"
+    ),
+]
+
+
+class TokenSecretBuffer:
+    """Hold a secret split across tokens until it can be redacted whole."""
+
+    def __init__(self):
+        self._held = ""
+
+    def push(self, text: str) -> str:
+        combined = self._held + (text or "")
+        release, self._held = _split_secret_hold(combined)
+        return redact_text(release)
+
+    def flush(self) -> str:
+        released = redact_text(self._held)
+        self._held = ""
+        return released
+
+
+def _split_secret_hold(text: str) -> tuple[str, str]:
+    hold_at = len(text)
+    for pattern in _HOLD_TAILS:
+        match = pattern.search(text)
+        if match:
+            hold_at = min(hold_at, match.start())
+    # Do not release a suffix that may become a sensitive prefix next token.
+    lowered = text.lower()
+    for length in range(1, min(len(text), max(map(len, _SECRET_PREFIXES))) + 1):
+        if any(prefix.startswith(lowered[-length:]) for prefix in _SECRET_PREFIXES):
+            hold_at = min(hold_at, len(text) - length)
+    if hold_at >= len(text):
+        return text, ""
+    return text[:hold_at], text[hold_at:]
+
+
 def contains_secret(text: str) -> bool:
     if not text:
         return False

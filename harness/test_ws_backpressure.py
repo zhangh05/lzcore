@@ -62,7 +62,7 @@ def test_connected_slow_consumer_does_not_drop_stream_tokens(monkeypatch):
     worker.join(timeout=3)
     assert not worker.is_alive()
     assert errors["error"] is None
-    assert [item["content"] for item in received if item["type"] == "token"] == ["A", "B", "C"]
+    assert "".join(item["content"] for item in received if item["type"] == "token") == "ABC"
     assert any(item["type"] == "done" for item in received)
 
 

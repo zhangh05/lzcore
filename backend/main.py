@@ -336,6 +336,10 @@ def create_app():
                     "[job startup] marked interrupted jobs failed: %s",
                     reconciled_jobs,
                 )
+            from agent.runtime.turn_closeout import close_restarted_turns
+            close_restarted_turns()
+            from agent.runtime.turn_replay import prune_expired_logs
+            prune_expired_logs()
         except Exception as exc:
             import logging as _job_log
             _job_log.getLogger(__name__).warning(
@@ -427,6 +431,27 @@ def create_app():
         daemon=True,
     )
     _recon_t.start()
+
+    from storage.paths import get_workspace_root as _maintenance_workspace_root
+    _maintenance_root = _maintenance_workspace_root()
+
+    def _maintain_turn_records() -> None:
+        import time
+        _recon_t.join()
+        while True:
+            time.sleep(30)
+            if _maintenance_workspace_root() != _maintenance_root:
+                return
+            try:
+                from agent.runtime.turn_closeout import close_restarted_turns
+                from agent.runtime.turn_replay import prune_expired_logs
+                close_restarted_turns()
+                prune_expired_logs()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning("turn maintenance deferred", exc_info=True)
+
+    _threading.Thread(target=_maintain_turn_records, name="turn-maintenance", daemon=True).start()
 
     # ── WebSocket routes (real-time streaming) ──
     from backend.ws.agent_ws import register_ws_routes

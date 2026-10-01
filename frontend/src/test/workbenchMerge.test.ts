@@ -330,7 +330,7 @@ describe("workbench backend message merge", () => {
     expect(messages).toHaveLength(4);
     expect(messages.find((message) => message.id === oldUser)?.run_id).toBe("run-old");
     expect(messages.find((message) => message.id === oldAssistant)).toMatchObject({
-      run_id: "run-old", text: "旧请求的最终结果", status: "error",
+      run_id: "run-old", text: "旧请求的最终结果", status: "ready",
     });
     expect(messages.find((message) => message.id === nextUser)?.client_request_id).toBe("request-new");
     expect(messages.find((message) => message.id === nextAssistant)).toMatchObject({

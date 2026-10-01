@@ -9,8 +9,11 @@ vi.mock('../api/client.ts', () => ({
 }));
 vi.mock('../stores/workbench.ts', () => ({ useWorkbenchStore: { getState: () => fixture.state } }));
 vi.mock('../stores/session.ts', () => ({ useSessionStore: { getState: () => ({ setCurrentSession() {} }) } }));
+import { notifyTurnTerminal } from "../realtime/turnOwnership";
 import { recoverStreamingTurns, disconnectTurnTransport, resetTurnTransport, sendTurn } from '../realtime/turnTransport.ts';
-beforeEach(() => {
+beforeEach(async () => {
+  const { sessionsApi } = await import("../api");
+  vi.mocked(sessionsApi.messages).mockReset().mockResolvedValue({ messages: [] } as any);
   fixture.sockets.length = 0;
   fixture.state = {
     bySession: { session: [{ id: 'bubble', role: 'assistant', text: 'before', status: 'streaming', client_request_id: 'request', streamSeq: 0, toolCalls: [] }] },
@@ -134,14 +137,61 @@ it('restores the complete applied buffer rather than partially revealed text', a
   expect(fixture.state.bySession.session[0].text).toBe('partial full buffer suffix');
 });
 
+it('does not resume when the matching assistant message is already terminal', async () => {
+  const { sessionsApi } = await import('../api');
+  vi.mocked(sessionsApi.messages).mockResolvedValueOnce({ ok: true, count: 1, messages: [
+    { role: 'user', content: 'question', created_at: '', metadata: { client_request_id: 'request' } },
+    { role: 'assistant', content: 'finished answer', created_at: '', run_id: 'run-1', metadata: { client_request_id: 'request' } },
+  ] });
+  await recoverStreamingTurns('default');
+  expect(fixture.state.bySession.session[0].status).toBe('ready');
+  expect(fixture.state.bySession.session[0].text).toBe('finished answer');
+  expect(fixture.sockets[0].sent.filter((item: any) => item.type === 'resume')).toHaveLength(0);
+});
 it('reconciles a missed terminal from the matching durable job and messages', async () => {
   vi.useFakeTimers();
   const { jobsApi, sessionsApi } = await import('../api');
   vi.mocked(jobsApi.list).mockResolvedValueOnce({ jobs: [{ job_id: 'job', status: 'succeeded', metadata: { active_turn: { client_request_id: 'request', session_id: 'session', status: 'succeeded' } } } as any] });
-  vi.mocked(sessionsApi.messages).mockResolvedValueOnce({ ok: true, count: 1, messages: [{ role: 'assistant', content: 'durable answer', created_at: '', metadata: { client_request_id: 'request' } }] });
+  vi.mocked(sessionsApi.messages).mockResolvedValueOnce({ messages: [] } as any).mockResolvedValueOnce({ ok: true, count: 1, messages: [{ role: 'assistant', content: 'durable answer', created_at: '', metadata: { client_request_id: 'request' } }] });
   await recoverStreamingTurns('default');
   await vi.advanceTimersByTimeAsync(2500);
   expect(fixture.state.bySession.session[0].status).toBe('ready');
   expect(fixture.state.bySession.session[0].text).toBe('durable answer');
   vi.useRealTimers();
+});
+
+it('preserves server history when transport ownership is released', async () => {
+  await recoverStreamingTurns('default');
+  Object.assign(fixture.state.bySession.session[0], { status: 'ready', text: 'authoritative answer', run_id: 'run-complete' });
+  notifyTurnTerminal('session', 'request');
+  await Promise.resolve(); await Promise.resolve();
+  expect(fixture.state.bySession.session[0].status).toBe('ready');
+  expect(fixture.state.bySession.session[0].text).toBe('authoritative answer');
+  expect(fixture.state.activeTurns).toEqual({});
+});
+it('reads durable history after resume_not_found', async () => {
+  const { sessionsApi } = await import('../api');
+  await recoverStreamingTurns('default');
+  vi.mocked(sessionsApi.messages).mockClear().mockResolvedValue({ messages: [{ role: 'assistant', content: 'durable answer', created_at: '', metadata: { client_request_id: 'request' } }] } as any);
+  fixture.sockets[0].frame({ type: 'error', message: 'resume_not_found', session_id: 'session', client_request_id: 'request' });
+  await vi.waitFor(() => expect(fixture.state.bySession.session[0].text).toBe('durable answer'));
+  expect(sessionsApi.messages).toHaveBeenCalled();
+  expect(fixture.state.bySession.session[0].status).toBe('ready');
+});
+it('keeps failed history failed without resuming', async () => {
+  const { sessionsApi } = await import('../api');
+  vi.mocked(sessionsApi.messages).mockResolvedValueOnce({ messages: [{ role: 'assistant', content: 'interrupted', created_at: '', metadata: { client_request_id: 'request', status: 'interrupted', error: 'interrupted' } }] } as any);
+  await recoverStreamingTurns('default');
+  expect(fixture.state.bySession.session[0].status).toBe('error');
+  expect(fixture.sockets[0].sent.filter((m: any) => m.type === 'resume')).toHaveLength(0);
+});
+it('allows four successful reconnects during one turn', async () => {
+  await recoverStreamingTurns('default');
+  for (let i = 1; i <= 4; i++) {
+    fixture.sockets.at(-1).close();
+    await vi.waitFor(() => expect(fixture.sockets.length).toBe(i + 1));
+    fixture.sockets.at(-1).frame({ type: 'token', session_id: 'session', client_request_id: 'request', seq: i, content: 'progress ' });
+    await Promise.resolve();
+  }
+  expect(fixture.state.bySession.session[0].status).toBe('streaming');
 });
