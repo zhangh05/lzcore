@@ -325,7 +325,7 @@ class DesktopApi:
         if not safe_name or len(str(data_base64)) > 96 * 1024 * 1024:
             raise ValueError("导出文件无效或超过大小上限")
         raw = base64.b64decode(str(data_base64).split(",", 1)[-1], validate=True)
-        result = self._controller.dialog(webview.SAVE_DIALOG, save_filename=safe_name)
+        result = self._controller.dialog(webview.FileDialog.SAVE, save_filename=safe_name)
         if not result:
             return {"ok": False, "error": "cancelled"}
         target = Path(result if isinstance(result, str) else result[0])
@@ -339,7 +339,7 @@ class DesktopApi:
         c = self._controller
         c.idle_pause()
         try:
-            result = c.dialog(webview.SAVE_DIALOG, save_filename="lzcore-backup.lzbackup" if password else "lzcore-backup.zip")
+            result = c.dialog(webview.FileDialog.SAVE, save_filename="lzcore-backup.lzbackup" if password else "lzcore-backup.zip")
             if not result:
                 return {"ok": False, "error": "cancelled"}
             return backup.create_backup(c.paths.data, Path(result if isinstance(result, str) else result[0]), password=password, include_credentials=bool(include_credentials))
@@ -352,7 +352,7 @@ class DesktopApi:
         c = self._controller
         c.idle_pause()
         try:
-            result = c.dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=("联智中枢备份 (*.zip;*.lzbackup)",))
+            result = c.dialog(webview.FileDialog.OPEN, allow_multiple=False, file_types=("联智中枢备份 (*.zip;*.lzbackup)",))
             if not result:
                 return {"ok": False, "error": "cancelled"}
             response = backup.stage_restore(c.paths.data, Path(result[0] if not isinstance(result, str) else result), password=password)
@@ -367,7 +367,7 @@ class DesktopApi:
         c = self._controller
         c.idle_pause()
         try:
-            result = c.dialog(webview.FOLDER_DIALOG)
+            result = c.dialog(webview.FileDialog.FOLDER)
             if not result:
                 return {"ok": False, "error": "cancelled"}
             response = backup.stage_migration(c.paths.data, Path(result[0] if not isinstance(result, str) else result))
@@ -395,7 +395,7 @@ class DesktopApi:
         import webview
         from storage.redaction import redact_text
         c = self._controller
-        result = c.dialog(webview.SAVE_DIALOG, save_filename="lzcore-diagnostics.zip")
+        result = c.dialog(webview.FileDialog.SAVE, save_filename="lzcore-diagnostics.zip")
         if not result:
             return {"ok": False, "error": "cancelled"}
         path = Path(result if isinstance(result, str) else result[0])
