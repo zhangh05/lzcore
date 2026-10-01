@@ -119,8 +119,19 @@ class DesktopController:
         if self.state.snapshot().get("close_to_tray") and self.tray:
             threading.Thread(target=self.hide, daemon=True).start()
         else:
-            threading.Thread(target=self.emit, args=("close",), daemon=True).start()
+            threading.Thread(target=self._request_close, daemon=True).start()
         return False
+
+    def _request_close(self):
+        # Closing an idle native window must also work if the page failed to
+        # load. Only the decisions needing confirmation depend on the UI.
+        try:
+            if not self.dirty and self.shutdown['status'] == 'idle' and not active_jobs():
+                self.quit()
+                return
+        except Exception:
+            log.info('Native close requires UI confirmation')
+        self.emit('close')
 
     def show(self):
         self.hidden = False
@@ -212,7 +223,8 @@ class DesktopController:
                 raise ValueError("请先保存或确认放弃未保存的图纸改动")
             if self.shutdown["status"] == "stopping" and not force:
                 return {"ok": True, **self.shutdown}
-            self.gate.pause(require_idle=False)
+            if self.shutdown['status'] == 'idle' and not self.gate.pause(require_idle=False):
+                raise ValueError('正在备份、恢复或准备更新，请等待当前操作完成后退出')
             self.shutdown = {"status": "stopping"}
             self._shutdown_attempt += 1
             attempt = self._shutdown_attempt
@@ -246,12 +258,15 @@ class DesktopController:
                         self.window.destroy()
                     return
                 time.sleep(.2)
-            if attempt != self._shutdown_attempt:
-                return
-            self.shutdown = {"status": "waiting", "message": "任务尚未完成收尾。可继续等待、返回应用，或确认中断并退出；未知写入不会自动重试。"}
+            with self.lock:
+                if attempt != self._shutdown_attempt:
+                    return
+                self.shutdown = {"status": "waiting", "message": "任务尚未完成收尾。可继续等待、返回应用，或确认中断并退出；未知写入不会自动重试。"}
         except Exception:
             log.exception("Desktop shutdown deferred")
-            self.shutdown = {"status": "waiting", "message": "无法确认任务已安全结束，请返回应用核对或确认中断退出。"}
+            with self.lock:
+                if attempt == self._shutdown_attempt:
+                    self.shutdown = {"status": "waiting", "message": "无法确认任务已安全结束，请返回应用核对或确认中断退出。"}
 
     def cleanup(self):
         self._stop.set()
@@ -437,13 +452,14 @@ class DesktopApi:
     @native_method
     def request_exit(self, action="exit", discard=False):
         c = self._controller
-        if action == "background":
-            c.hide()
-        elif action == "return":
+        if action in {"background", "return"}:
             with c.lock:
-                c._shutdown_attempt += 1
-                c.shutdown = {"status": "idle"}
-                c.gate.resume()
+                if c.shutdown['status'] != 'idle':
+                    c._shutdown_attempt += 1
+                    c.shutdown = {"status": "idle"}
+                    c.gate.resume()
+            if action == 'background':
+                c.hide()
         elif action in {"exit", "force"}:
             return c.quit(force=action == "force", discard=bool(discard))
         else:

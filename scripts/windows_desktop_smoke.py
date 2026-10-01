@@ -96,7 +96,9 @@ def run(exe: Path, mode: str, output: Path):
             assert result
             assert not errors, errors
             (data/'sentinel.txt').write_text('卸载保留',encoding='utf-8')
-            page.evaluate("void window.pywebview.api.request_exit('exit')")
+            # Exercise the real Windows Close action, including the native
+            # lifecycle path rather than asking the JS bridge to terminate.
+            assert user32.PostMessageW(hwnd, 0x0010, 0, 0)
             assert proc.wait(timeout=40)==0
     finally:
         if proc.poll() is None:

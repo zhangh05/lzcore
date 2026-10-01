@@ -28,7 +28,7 @@ class LocalLifecycle:
 
     def pause(self, *, require_idle=True) -> bool:
         with self._lock:
-            if require_idle and self.active:
+            if not self.accepting or (require_idle and self.active):
                 return False
             self.accepting = False
             return True

@@ -168,13 +168,42 @@ def test_return_abandons_previous_shutdown_attempt(monkeypatch, tmp_path):
     c=controller.DesktopController(paths,'3.3.0',LocalLifecycle(),'http://localhost')
     destroyed=[]
     c.window=SimpleNamespace(evaluate_js=lambda _:c.origin,destroy=lambda:destroyed.append(True))
-    c._shutdown_attempt=1; c.gate.reserve(); c.gate.pause(require_idle=False)
+    c._shutdown_attempt=1; c.shutdown={'status':'stopping'}; c.gate.reserve(); c.gate.pause(require_idle=False)
     monkeypatch.setattr(controller,'active_jobs',lambda:[])
     thread=threading.Thread(target=c._stop_jobs,args=(1,)); thread.start()
     assert controller.DesktopApi(c).request_exit('return')['ok']
     thread.join(timeout=2)
     assert not thread.is_alive() and not destroyed and c.gate.accepting
     c.gate.release()
+
+
+def test_maintenance_barrier_cannot_be_reentered_or_released_by_close(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from desktop_app import controller
+    from desktop_app.environment import DesktopPaths
+    c = controller.DesktopController(DesktopPaths(tmp_path,tmp_path,tmp_path,'development'),
+        '3.3.0', LocalLifecycle(), 'http://localhost')
+    c.window=SimpleNamespace(evaluate_js=lambda _:c.origin)
+    monkeypatch.setattr(controller, 'active_jobs', lambda: [])
+    c.idle_pause()
+    with pytest.raises(ValueError): c.idle_pause()
+    with pytest.raises(ValueError): c.quit(force=True)
+    assert controller.DesktopApi(c).request_exit('return')['ok']
+    assert not c.gate.accepting
+    c.gate.resume()
+
+
+def test_native_close_of_idle_window_does_not_need_frontend(monkeypatch, tmp_path):
+    from desktop_app import controller
+    from desktop_app.environment import DesktopPaths
+    c = controller.DesktopController(DesktopPaths(tmp_path,tmp_path,tmp_path,'development'),
+        '3.3.0', LocalLifecycle(), 'http://localhost')
+    calls=[]
+    monkeypatch.setattr(controller, 'active_jobs', lambda: [])
+    monkeypatch.setattr(c, 'quit', lambda: calls.append('quit'))
+    monkeypatch.setattr(c, 'emit', lambda *args, **kwargs: pytest.fail('idle close must not depend on page'))
+    c._request_close()
+    assert calls == ['quit']
 
 
 def test_native_data_access_cannot_trust_reported_username(monkeypatch, tmp_path):
