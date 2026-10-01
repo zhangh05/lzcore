@@ -67,12 +67,13 @@ def run(exe: Path, mode: str, output: Path):
             page.get_by_role('button', name='完成', exact=True).click()
             # The JS bridge is origin-checked even before navigation guards.
             assert page.evaluate("window.pywebview.api.report_state({dirty:false,title:'窗口测试'})")['ok']
-            # Native file dialog: drive the filename field via Windows UI Automation.
+            # Native file dialog: enter text as real keyboard input.
             exported = output/'中文 导出.txt'
-            page.evaluate("void window.pywebview.api.save_file('测试.txt', '" + base64.b64encode('真实原生导出'.encode()).decode() + "', 'text/plain')")
+            page.evaluate("window.__exportResult=null; void window.pywebview.api.save_file('测试.txt', '" + base64.b64encode('真实原生导出'.encode()).decode() + "', 'text/plain').then(r=>window.__exportResult=r)")
             script = Path(__file__).with_name('windows_dialog_smoke.ps1')
             subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),'-ParentPid',str(proc.pid),'-FileName',str(exported.resolve())], check=True, timeout=35)
-            wait_until(exported.exists, timeout=20)
+            page.wait_for_function('window.__exportResult !== null', timeout=20000)
+            assert exported.exists(), page.evaluate('window.__exportResult')
             assert exported.read_text(encoding='utf-8')=='真实原生导出'
             # Background does not stop the local server or detach the durable transport.
             page.evaluate("window.pywebview.api.request_exit('background')")

@@ -79,12 +79,14 @@ jobs:
           )
           if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
           .\start.ps1 -NoBrowser -ValidateOnly
-          $tokens = $null
-          $errors = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path "stop.ps1"), [ref]$tokens, [ref]$errors
-          )
-          if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
+          foreach ($script in @('stop.ps1','scripts/windows_update.ps1','scripts/windows_dialog_smoke.ps1','scripts/download_webview2.ps1','scripts/sign_windows.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script), [ref]$tokens, [ref]$errors
+            )
+            if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
+          }
 
       - name: Assemble Windows package
         shell: pwsh
@@ -140,7 +142,7 @@ jobs:
         run: |
           & "${{ steps.python312.outputs.python-path }}" -m pip install --disable-pip-version-check -r requirements-desktop.lock
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & "${{ steps.python312.outputs.python-path }}" -m pytest -q harness/test_desktop_app.py
+          & "${{ steps.python312.outputs.python-path }}" -m pytest -q harness/test_desktop_app.py harness/test_windows_desktop_update.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Download and verify Microsoft WebView2
@@ -194,13 +196,13 @@ jobs:
           $version = & "${{ steps.python312.outputs.python-path }}" -c "from agent import __version__; print(__version__)"
           $setup = (Resolve-Path "release/lzcore-v$version-windows-setup.exe").Path
           $target = Join-Path $env:RUNNER_TEMP '中文 安装目录/LZCore'
-          $args = @('/CURRENTUSER','/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART', ('/DIR="' + $target + '"'),'/TASKS=')
-          $install = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          $installArguments = @('/CURRENTUSER','/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART', ('/DIR="' + $target + '"'),'/TASKS=')
+          $install = Start-Process -FilePath $setup -ArgumentList $installArguments -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Installation failed" }
           if (Test-Path (Join-Path $target 'portable.json')) { throw 'Installed mode marker is wrong' }
           & "${{ steps.python312.outputs.python-path }}" scripts/windows_desktop_smoke.py --exe "$target/lzcore.exe" --mode installed --output "$env:RUNNER_TEMP/desktop-qa/installed"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $upgrade = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          $upgrade = Start-Process -FilePath $setup -ArgumentList $installArguments -Wait -PassThru
           if ($upgrade.ExitCode -ne 0) { throw 'Upgrade failed' }
           $sentinel = Join-Path $env:RUNNER_TEMP 'desktop-qa/installed/中文 用户数据/sentinel.txt'
           if (-not (Test-Path $sentinel)) { throw 'Upgrade removed data' }

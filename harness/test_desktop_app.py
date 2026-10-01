@@ -99,6 +99,20 @@ def test_desktop_origin_guard_blocks_native_methods(tmp_path):
     assert DesktopApi(c).open_folder()['error'] == 'native_origin_denied'
 
 
+def test_tray_data_action_requires_current_session_authorization():
+    from types import SimpleNamespace
+    from desktop_app.tray import NativeTray
+    events = []
+    tray = NativeTray.__new__(NativeTray)
+    tray.controller = SimpleNamespace(
+        window=SimpleNamespace(evaluate_js=lambda code: 'http://127.0.0.1:8011'),
+        origin='http://127.0.0.1:8011', admin_allowed=lambda: False,
+        open_directory=lambda path: pytest.fail('tray must not bypass authorization'),
+        show=lambda: None, emit=lambda action, **detail: events.append(action))
+    tray.open_data()
+    assert events == ['settings']
+
+
 def test_versioned_annotations_do_not_change_topology_geometry(monkeypatch, tmp_path):
     from extensions.network_operations import topology_service as drawings, annotations
     monkeypatch.setenv('LZCORE_WORKSPACE_ROOT', str(tmp_path))

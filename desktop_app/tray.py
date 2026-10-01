@@ -18,7 +18,7 @@ class NativeTray:
             self.icon.Icon = Icon(str(source)) if source.is_file() else SystemIcons.Application
             self.icon.Text = '联智中枢'
             menu = ContextMenuStrip()
-            for title, action in [('打开联智中枢', self.open), ('桌面设置', lambda: self.open('settings')), ('打开数据目录', lambda: controller.open_directory(controller.paths.data)), ('退出', lambda: self.open('close'))]:
+            for title, action in [('打开联智中枢', self.open), ('桌面设置', lambda: self.open('settings')), ('打开数据目录', self.open_data), ('退出', lambda: self.open('close'))]:
                 item = ToolStripMenuItem(title)
                 def callback(_sender, _event, handler=action):
                     threading.Thread(target=handler, daemon=True).start()
@@ -40,6 +40,12 @@ class NativeTray:
         self.controller.show()
         if action:
             self.controller.emit(action, **detail)
+
+    def open_data(self):
+        from desktop_app.controller import DesktopApi
+        # Tray actions share the bridge's current-session authorization.
+        if not DesktopApi(self.controller).open_folder('data')['ok']:
+            self.open('settings')
 
     @property
     def title(self):
