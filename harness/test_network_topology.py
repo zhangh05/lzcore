@@ -628,17 +628,16 @@ def test_topology_patch_checks_explicit_version_and_allows_omission(workspace):
     assert p2["version"] == 3
     assert len(p2["nodes"]) == 3
 
-    # 3. Patch with dangling link endpoint does not crash, but skips the invalid link
-    p3 = drawings.patch_topology(workspace, topo["topology_id"], {
-        "link_updates": [
-            {"source_node_id": "core1", "target_node_id": "core2", "label": "Valid Link"},
-            {"source_node_id": "core1", "target_node_id": "nonexistent_node", "label": "Bad Link"},
-        ],
-    })
-    assert p3["version"] == 4
-    # The valid link is preserved, the bad link is skipped without crashing
-    assert len(p3["links"]) == 1
-    assert p3["links"][0]["target_node_id"] == "core2"
+    # Unknown endpoints must not produce a success receipt for a partial edit.
+    with pytest.raises(ValueError, match="topology_link_endpoint_not_found"):
+        drawings.patch_topology(workspace, topo["topology_id"], {
+            "link_updates": [
+                {"source_node_id": "core1", "target_node_id": "core2", "label": "Valid Link"},
+                {"source_node_id": "core1", "target_node_id": "nonexistent_node", "label": "Bad Link"},
+            ],
+        })
+    current = drawings.get_topology(workspace, topo["topology_id"])
+    assert current["version"] == 3 and current["links"] == []
 
 
 def test_topology_patch_alias_and_schema_fault_tolerance(workspace):
@@ -824,6 +823,5 @@ def test_topology_gateway_rejects_malformed_arguments_before_handler(workspace, 
     )])
     assert prepared["ok"] is False
     assert prepared["error"] == "semantic_validation_failed"
-
 
 

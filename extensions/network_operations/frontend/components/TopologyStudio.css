@@ -1866,3 +1866,29 @@
   box-sizing: border-box;
 }
 
+
+.topology-agent-activity {
+  padding: 8px 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+.topology-agent-change {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  font-size: 12px;
+}
+.topology-agent-change + .topology-agent-change { border-top: 1px solid var(--line); }
+.topology-agent-change small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topology-agent-change > div { display: flex; gap: 8px; }
+.topology-agent-change button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.topology-agent-change button:disabled { opacity: 0.5; cursor: default; }

@@ -249,7 +249,7 @@ test("dedicated topology route is a drawing workspace without the device catalog
   expect(screen.getByRole("checkbox", { name: "接口标签" })).toBeInTheDocument();
 });
 
-test("a concurrent edit is offered as a merge instead of a dead-end error", async () => {
+test("non-overlapping concurrent edits are merged and saved without another click", async () => {
   // Someone else renamed the drawing and bumped it to version 7 while we were
   // removing a node locally. My removal and their rename must both survive, and
   // the resolution must write on top of their version — not retry the stale one.
@@ -262,7 +262,7 @@ test("a concurrent edit is offered as a merge instead of a dead-end error", asyn
       if (putPayloads.length === 1) throw new Error("topology_version_conflict");
       return { ok: true, topology: { ...theirs, version: 8 } } as never;
     }
-    if (request.url?.endsWith("/topologies/t1")) return { topology: theirs } as never;
+    if (request.url?.endsWith("/topologies/t1")) return { topology: putPayloads.length ? theirs : sampleTopology } as never;
     return passthrough(request);
   });
 
@@ -272,11 +272,7 @@ test("a concurrent edit is offered as a merge instead of a dead-end error", asyn
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
   fireEvent.click(await screen.findByRole("button", { name: "保存" }));
 
-  const dialog = await screen.findByRole("dialog", { name: "编辑冲突" }, { timeout: 4000 });
-  expect(within(dialog).getByText(/服务端已是版本 7/)).toBeInTheDocument();
-  expect(within(dialog).getByRole("button", { name: "合并双方改动并保存" })).toBeInTheDocument();
-
-  fireEvent.click(within(dialog).getByRole("button", { name: "合并双方改动并保存" }));
+  expect(screen.queryByRole("dialog", { name: "编辑冲突" })).not.toBeInTheDocument();
 
   await waitFor(() => expect(putPayloads).toHaveLength(2), { timeout: 4000 });
   expect(putPayloads[1].version).toBe(7);                              // writes on top of their version
@@ -285,7 +281,8 @@ test("a concurrent edit is offered as a merge instead of a dead-end error", asyn
 });
 
 test("edits made while a conflict is deferred are included in its eventual merge", async () => {
-  const theirs = { ...sampleTopology, description: "对方补充的说明", version: 7 };
+  const theirs = { ...sampleTopology, description: "对方补充的说明", version: 7,
+    nodes: sampleTopology.nodes.map(node => ({...node, display_name: "对方编辑了将被删除的节点"})) };
   const putPayloads: Array<Record<string, unknown>> = [];
   const passthrough = vi.mocked(apiRequest).getMockImplementation()!;
   vi.mocked(apiRequest).mockImplementation(async (request) => {
@@ -294,7 +291,7 @@ test("edits made while a conflict is deferred are included in its eventual merge
       if (putPayloads.length === 1) throw new Error("topology_version_conflict");
       return { ok: true, topology: { ...theirs, version: 8 } } as never;
     }
-    if (request.url?.endsWith("/topologies/t1")) return { topology: theirs } as never;
+    if (request.url?.endsWith("/topologies/t1")) return { topology: putPayloads.length ? theirs : sampleTopology } as never;
     return passthrough(request);
   });
 
@@ -324,7 +321,8 @@ test("edits made while a conflict is deferred are included in its eventual merge
 });
 
 test("edits made while the conflict snapshot loads survive resolution", async () => {
-  const theirs = { ...sampleTopology, description: "远端说明", version: 7 };
+  const theirs = { ...sampleTopology, description: "远端说明", version: 7,
+    nodes: sampleTopology.nodes.map(node => ({...node, display_name: "对方编辑了将被删除的节点"})) };
   let releaseSnapshot!: (value: unknown) => void;
   const snapshot = new Promise((resolve) => { releaseSnapshot = resolve; });
   const putPayloads: Array<Record<string, unknown>> = [];
@@ -335,7 +333,7 @@ test("edits made while the conflict snapshot loads survive resolution", async ()
       if (putPayloads.length === 1) throw new Error("topology_version_conflict");
       return { topology: { ...theirs, ...request.data, version: 8 } } as never;
     }
-    if (request.url?.endsWith("/topologies/t1")) return await snapshot as never;
+    if (request.url?.endsWith("/topologies/t1")) return putPayloads.length ? await snapshot as never : {topology: sampleTopology} as never;
     return passthrough(request);
   });
   renderWithRouter(<><TopologyPage /><ConfirmHost /></>);
@@ -343,7 +341,7 @@ test("edits made while the conflict snapshot loads survive resolution", async ()
   fireEvent.click(screen.getByRole("button", { name: "从拓扑中移除节点" }));
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
   fireEvent.click(await screen.findByRole("button", { name: "保存" }));
-  await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({ method: "GET", url: "/extensions/network.operations/topologies/t1" })), { timeout: 3000 });
+  await waitFor(() => expect(putPayloads).toHaveLength(1), { timeout: 3000 });
   fireEvent.click(screen.getByText("更多"));
   fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
   fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "等待期间修改" } });
@@ -367,7 +365,7 @@ test("a field both sides changed is listed for review, not decided silently", as
       if (putPayloads.length === 1) throw new Error("topology_version_conflict");
       return { ok: true, topology: { ...theirs, version: 8 } } as never;
     }
-    if (request.url?.endsWith("/topologies/t1")) return { topology: theirs } as never;
+    if (request.url?.endsWith("/topologies/t1")) return { topology: putPayloads.length ? theirs : sampleTopology } as never;
     return passthrough(request);
   });
 

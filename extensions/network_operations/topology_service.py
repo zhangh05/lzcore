@@ -330,6 +330,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             "node_id": node_id,
             "device_type": str(raw.get("device_type") or "switch").strip()[:48],
             "display_name": str(raw.get("display_name") or "").strip()[:80],
+            "labels": list(dict.fromkeys(str(label).strip()[:80] for label in (raw.get("labels") or []) if str(label).strip())) if isinstance(raw.get("labels", []), list) else [],
             "group_id": str(raw.get("group_id") or raw.get("zone") or "").strip() or None,
             "zone": str(raw.get("zone") or raw.get("group_id") or "").strip() or None,
             "lock_group": str(raw.get("lock_group") or "").strip() or None,
@@ -625,6 +626,22 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         str(item.get("node_id") or ""): dict(item)
         for item in existing.get("nodes") or []
     }
+    translate = payload.get("translate")
+    if translate is not None:
+        if not isinstance(translate, dict):
+            raise ValueError("translate_invalid")
+        ids = translate.get("node_ids")
+        if not isinstance(ids, list) or not ids or any(not isinstance(value, str) or value not in nodes_by_id for value in ids):
+            raise ValueError("translate_nodes_not_found")
+        try:
+            dx, dy = float(translate.get("dx", 0)), float(translate.get("dy", 0))
+        except (TypeError, ValueError):
+            raise ValueError("translate_invalid") from None
+        if not math.isfinite(dx) or not math.isfinite(dy):
+            raise ValueError("translate_invalid")
+        explicit = {str(item.get("node_id") or item.get("id") or "") for item in node_updates if "x" in item or "y" in item}
+        node_updates = [{"node_id": node_id, "x": nodes_by_id[node_id]["x"] + dx,
+                         "y": nodes_by_id[node_id]["y"] + dy} for node_id in dict.fromkeys(ids) if node_id not in explicit] + node_updates
     for update in node_updates:
         node_id = str(update.get("node_id") or update.get("id") or "").strip()
         if not node_id:
@@ -645,14 +662,43 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
                 update["ip"] = None
         nodes_by_id[node_id] = {**nodes_by_id.get(node_id, {}), **update, "node_id": node_id}
 
+    # A fixed-link group has the same displacement semantics as a manual drag.
+    # Explicit coordinates take precedence; clearing lock_group detaches a node.
+    originals = {node["node_id"]: node for node in existing.get("nodes") or []}
+    direct = {item["node_id"] for item in node_updates if "x" in item or "y" in item}
+    deltas = {}
+    for node_id, original in originals.items():
+        updated = nodes_by_id[node_id]
+        group = updated.get("lock_group")
+        if node_id in direct and group and group not in deltas:
+            try:
+                dx, dy = float(updated["x"]) - original["x"], float(updated["y"]) - original["y"]
+            except (TypeError, ValueError):
+                raise ValueError("node_position_invalid") from None
+            if not math.isfinite(dx) or not math.isfinite(dy):
+                raise ValueError("node_position_invalid")
+            deltas[group] = (dx, dy)
+    for node_id, node in nodes_by_id.items():
+        if node_id not in direct and node_id in originals and node.get("lock_group") in deltas:
+            dx, dy = deltas[node["lock_group"]]
+            node["x"], node["y"] = originals[node_id]["x"] + dx, originals[node_id]["y"] + dy
+
     for node_id in remove_node_ids:
         nodes_by_id.pop(node_id, None)
+    if remove_node_ids or any("lock_group" in item for item in node_updates):
+        group_counts = {}
+        for node in nodes_by_id.values():
+            if node.get("lock_group"):
+                group_counts[node["lock_group"]] = group_counts.get(node["lock_group"], 0) + 1
+        for node in nodes_by_id.values():
+            if node.get("lock_group") and group_counts[node["lock_group"]] < 2:
+                node["lock_group"] = None
 
     if payload.get("layout") is not None:
         from .drawing_feedback import apply_optional_layout
         apply_optional_layout(nodes_by_id, payload["layout"], {
             item["node_id"] for item in node_updates if "x" in item or "y" in item
-        })
+        } | {node_id for node_id, node in nodes_by_id.items() if node.get("lock_group") in deltas})
 
     groups_by_id = {
         str(item.get("group_id") or ""): dict(item)
@@ -716,7 +762,9 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         source_node_id = str(link.get("source_node_id") or "")
         target_node_id = str(link.get("target_node_id") or "")
         if source_node_id not in surviving_nodes or target_node_id not in surviving_nodes:
-            # If endpoints do not exist in surviving nodes, omit dangling link rather than failing entire patch
+            if source_node_id not in remove_node_ids and target_node_id not in remove_node_ids:
+                raise ValueError("topology_link_endpoint_not_found")
+            # Deliberate node deletion removes its incident links atomically.
             continue
         links.append(link)
     items_by_id = {item["item_id"]: dict(item) for item in existing.get("canvas_items") or []}

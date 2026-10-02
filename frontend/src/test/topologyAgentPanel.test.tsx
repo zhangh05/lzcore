@@ -62,6 +62,35 @@ const mockSelection = {
 describe("TopologyAgentPanel and buildTopologyRequest", () => {
   beforeEach(() => {
     localStorage.clear();
+    mockSend.mockClear();
+    mockActiveTurnState.loaded = true;
+    mockActiveTurnState.job = null;
+  });
+
+  it("waits for saved drawing and sends its version with the captured selection", async () => {
+    let resolve!: (value: typeof mockTopology) => void;
+    const prepareDrawing = vi.fn(() => new Promise<typeof mockTopology>(done => { resolve = done; }));
+    render(<TopologyAgentPanel workspaceId="default" topology={mockTopology as never}
+      selection={{...mockSelection, node_ids:["n1"]}} onCompleted={() => {}} prepareDrawing={prepareDrawing as never} />);
+    fireEvent.change(screen.getByLabelText("拓扑协作指令"), {target:{value:"移动这个设备"}});
+    fireEvent.submit(screen.getByLabelText("拓扑协作指令").closest("form")!);
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(screen.getByText("正在确认图纸版本…")).toBeInTheDocument();
+    resolve({...mockTopology, version: 4});
+    await vi.waitFor(() => expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+      text:"移动这个设备", turnMetadata:{workbench_selection:expect.objectContaining({drawing_version:4, canvas_selection:expect.objectContaining({node_ids:["n1"]})})},
+    })));
+  });
+
+  it("retains the instruction and does not send if baseline saving fails", async () => {
+    render(<TopologyAgentPanel workspaceId="default" topology={mockTopology as never} selection={mockSelection}
+      onCompleted={() => {}} prepareDrawing={vi.fn().mockRejectedValue(new Error("图纸保存失败，请重试"))} />);
+    const input = screen.getByLabelText("拓扑协作指令");
+    fireEvent.change(input, {target:{value:"添加一台设备"}});
+    fireEvent.submit(input.closest("form")!);
+    await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("图纸保存失败"));
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(input).toHaveValue("添加一台设备");
   });
 
   describe("separate user text and drawing selection", () => {

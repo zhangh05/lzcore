@@ -117,6 +117,7 @@ type Props = {
    * "what am I not looking at".
    */
   dimmedNodeIds?: string[];
+  highlightedIds?: string[];
 };
 
 type CyCollection<T> = {
@@ -402,6 +403,7 @@ function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: stri
   const desired = new Map(elements.map((element) => [String(element.data.id), element]));
   const stale: CyElement[] = [];
   const fresh: CanvasElementSpec[] = [];
+  const dragActive = cy.$("node:grabbed").length > 0;
   cy.batch(() => {
     cy.elements().forEach((existing) => {
       const next = desired.get(existing.id());
@@ -426,7 +428,6 @@ function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: stri
       // position back mid-gesture springs the node to wherever the last save put
       // it, and the drag the user is in the middle of is then thrown away. The
       // pointer owns the node until it lets go.
-      const dragActive = cy.$("node:grabbed").length > 0;
       if (syncPositions && existing.isNode() && next.position && !(existing as CyNode).grabbed() && !(dragActive && (existing as CyNode).selected())) {
         const current = (existing as CyNode).position();
         if (Math.abs(current.x - next.position.x) > 0.5 || Math.abs(current.y - next.position.y) > 0.5) {
@@ -436,7 +437,12 @@ function applyElements(cy: Cy, elements: CanvasElementSpec[], connectingId: stri
     });
     stale.forEach((element) => element.remove());
     elements.forEach((element) => {
-      if (!cy.getElementById(String(element.data.id)).length) fresh.push(element);
+      if (!cy.getElementById(String(element.data.id)).length) {
+        // Initialise display mappings before Cytoscape styles new elements.
+        // Reconciliation leaves existing label data to the LOD effects below.
+        const defaults = element.group === "edges" ? { label: "", srcPort: "", tgtPort: "", visible: 1 } : { labelOpacity: 1 };
+        fresh.push({ ...element, data: { ...defaults, ...element.data } });
+      }
     });
     if (fresh.length) cy.add(fresh);
   });
@@ -762,7 +768,7 @@ export default function NetOpsCanvas(props: Props) {
           minZoom: 0.15,
           maxZoom: 4,
           boxSelectionEnabled: false,
-          pixelRatio: typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 3) : 1,
+          pixelRatio: typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1,
           style: [
             {
               selector: "node",
@@ -1770,6 +1776,7 @@ export default function NetOpsCanvas(props: Props) {
     const statusPalette = nodeStatusColors(theme === "dark");
     const linkColors = { ok: statusPalette.ok, danger: statusPalette.error, unknown: statusPalette.unknown };
     const dimmed = new Set(props.dimmedNodeIds || []);
+    const nodeIds = new Set(props.topology.nodes.map(node => node.node_id));
     const dimClass = (id: string, base: string) => (dimmed.has(id) ? `${base} filtered-out`.trim() : base);
     const elements: CanvasElementSpec[] = [
       ...props.topology.groups.map((group) => ({ group: "nodes", classes: "lz-group", data: { id: `group-${group.group_id}`, label: group.name, width: group.width, height: group.height }, position: { x: group.x + group.width / 2, y: group.y + group.height / 2 }, locked: true })),
@@ -1845,7 +1852,7 @@ export default function NetOpsCanvas(props: Props) {
       // next zoom. Measured: idling on the page, the labels vanished on their
       // own after 6.4s and never returned.
       ...props.topology.links
-        .filter((link) => props.topology.nodes.some((node) => node.node_id === link.source_node_id) && props.topology.nodes.some((node) => node.node_id === link.target_node_id))
+        .filter((link) => nodeIds.has(link.source_node_id) && nodeIds.has(link.target_node_id))
         .map((link) => {
           const defaultEdgeColor = link.status === "down" ? linkColors.danger : link.status === "up" ? linkColors.ok : linkColors.unknown;
           const defaultEdgeStyle = link.status === "down" ? "dotted" : link.kind === "logical" ? "dashed" : "solid";
@@ -1890,28 +1897,47 @@ export default function NetOpsCanvas(props: Props) {
     }
   }, [rendererReady, props.topology, props.dimmedNodeIds, props.nodeObservationStatus, props.nodeOverlayLines, props.compactMode, theme]);
 
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.batch(() => {
+      cy.$(".collaboration-change").forEach(element => element.removeClass("collaboration-change"));
+      for (const id of props.highlightedIds || []) cy.getElementById(id).addClass("collaboration-change");
+    });
+  }, [rendererReady, props.highlightedIds, props.topology]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.style().selector("node.collaboration-change").style({
+      "underlay-color": CANVAS_ACCENT[theme === "dark" ? "dark" : "light"], "underlay-opacity": 0.22, "underlay-padding": 10,
+    }).selector("edge.collaboration-change").style({
+      "underlay-color": CANVAS_ACCENT[theme === "dark" ? "dark" : "light"], "underlay-opacity": 0.25, "underlay-padding": 5,
+    }).update();
+  }, [rendererReady, theme]);
+
 
 
   // Interface labels are display-only controls. Updating edge data in place
   // keeps positions, selection, and the fixed sheet intact.
+  const portsVisible = props.showInterfaces && viewport.zoom >= 0.55;
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
     const linksById = new Map(props.topology.links.map((link) => [link.link_id, link]));
     // Zoomed far out, interface names are noise: they overlap and hide the
     // shape of the network. Level of detail is driven by the viewport.
-    const showPorts = props.showInterfaces && viewport.zoom >= 0.55;
     cy.batch(() => {
       cy.$("edge").forEach((edge) => {
         const link = linksById.get(edge.id());
         if (!link) return;
-        edge.data("label", canvasLinkDescription(link));
-        edge.data("srcPort", showPorts && link.source_interface ? compactInterfaceLabel(link.source_interface) : "");
-        edge.data("tgtPort", showPorts && link.target_interface ? compactInterfaceLabel(link.target_interface) : "");
-        edge.data("visible", 1);
+        const values = { label: canvasLinkDescription(link),
+          srcPort: portsVisible && link.source_interface ? compactInterfaceLabel(link.source_interface) : "",
+          tgtPort: portsVisible && link.target_interface ? compactInterfaceLabel(link.target_interface) : "", visible: 1 };
+        for (const [key, value] of Object.entries(values)) if (edge.data(key) !== value) edge.data(key, value);
       });
     });
-  }, [rendererReady, props.topology.links, props.showInterfaces, viewport.zoom]);
+  }, [rendererReady, props.topology.links, portsVisible]);
 
   // Level of detail: past a zoom-out threshold, labels stop being readable
   // and start being the reason the diagram looks like a mess.
@@ -1921,16 +1947,17 @@ export default function NetOpsCanvas(props: Props) {
   // every reconciliation — otherwise a reconcile that happens to run while the
   // view is zoomed out puts the labels straight back on. It is declared after
   // the elements effect, so within one commit it has the last word.
+  const labelsVisible = viewport.zoom >= 0.32;
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || !rendererReady) return;
-    const opacity = viewport.zoom < 0.32 ? 0 : 1;
+    const opacity = labelsVisible ? 1 : 0;
     cy.batch(() => {
       cy.$("node").forEach((node) => {
         if (node.data("labelOpacity") !== opacity) node.data("labelOpacity", opacity);
       });
     });
-  }, [rendererReady, viewport.zoom, props.topology]);
+  }, [rendererReady, labelsVisible, props.topology]);
 
   useEffect(() => {
     if (props.mode === "connect") return;

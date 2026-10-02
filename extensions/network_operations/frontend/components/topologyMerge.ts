@@ -208,6 +208,8 @@ export function mergeTopologies<T extends Record<string, unknown>>(base: T, mine
   // Scalar fields merge the same way object fields do.
   for (const field of new Set([...Object.keys(mine), ...Object.keys(theirs)])) {
     if (COLLECTIONS.some((collection) => collection.field === field)) continue;
+    // Persistence metadata belongs to the current server baseline, not an edit.
+    if (["version", "created_at", "updated_at"].includes(field)) continue;
     const mineValue = mine[field];
     const theirsValue = theirs[field];
     if (same(mineValue, theirsValue)) continue;
@@ -241,7 +243,15 @@ export function mergeTopologies<T extends Record<string, unknown>>(base: T, mine
   const nodeIds = new Set(((merged.nodes as MergeEntity[]) || []).map((node) => String(node.node_id)));
   const keptLinks = ((merged.links as MergeEntity[]) || []).filter((link) => {
     const keep = nodeIds.has(String(link.source_node_id)) && nodeIds.has(String(link.target_node_id));
-    if (!keep) stats.orphanedLinks += 1;
+    if (!keep) {
+      stats.orphanedLinks += 1;
+      // Do not silently accept a node deletion that invalidates a link added
+      // or changed independently by the other editor (or after an undo entry).
+      const original = ((base.links as MergeEntity[]) || []).find(item => item.link_id === link.link_id);
+      if (!original || !same(original, link)) {
+        conflicts.push({ collection: "链路", id: String(link.link_id), field: "端点已删除", mine: null, theirs: link });
+      }
+    }
     return keep;
   });
   merged.links = keptLinks;

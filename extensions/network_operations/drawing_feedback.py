@@ -47,7 +47,17 @@ def apply_optional_layout(nodes: dict, layout: dict, explicit_positions: set[str
     if any(identity not in nodes for identity in [*ids, *preserve]):
         raise ValueError("drawing_layout_node_not_found")
     protected = set(preserve) | explicit_positions
-    selected = list(dict.fromkeys(identity for identity in ids if identity not in protected))
+    protected_groups = {nodes[identity].get("lock_group") for identity in protected if nodes[identity].get("lock_group")}
+    protected.update(identity for identity, node in nodes.items() if node.get("lock_group") in protected_groups)
+    selected = []
+    seen_groups = set()
+    for identity in dict.fromkeys(ids):
+        group = nodes[identity].get("lock_group")
+        if identity in protected or (group and group in seen_groups):
+            continue
+        selected.append(identity)
+        if group:
+            seen_groups.add(group)
     try:
         origin = layout.get("origin") or {}
         x, y = float(origin.get("x", 0)), float(origin.get("y", 0))
@@ -64,4 +74,8 @@ def apply_optional_layout(nodes: dict, layout: dict, explicit_positions: set[str
         else:
             angle = 2 * math.pi * index / max(1, len(selected)) - math.pi / 2
             dx, dy = radius * math.cos(angle), radius * math.sin(angle)
-        nodes[identity].update(x=round(x + dx), y=round(y + dy))
+        anchor = nodes[identity]
+        tx, ty = round(x + dx) - anchor["x"], round(y + dy) - anchor["y"]
+        members = [node for node in nodes.values() if anchor.get("lock_group") and node.get("lock_group") == anchor["lock_group"]] or [anchor]
+        for member in members:
+            member.update(x=member["x"] + tx, y=member["y"] + ty)

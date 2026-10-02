@@ -715,7 +715,7 @@ def topology_tool(invocation):
     if not action:
         if any(args.get(k) for k in (
             "node_updates", "nodes", "link_updates", "links", "group_updates", "groups", "zones",
-            "canvas_item_updates", "canvas_items", "layout", "remove_node_ids", "remove_link_ids",
+            "canvas_item_updates", "canvas_items", "layout", "translate", "remove_node_ids", "remove_link_ids",
             "remove_group_ids", "remove_canvas_item_ids",
         )) or any(k in args for k in ("name", "description")):
             action = "patch"
@@ -727,6 +727,26 @@ def topology_tool(invocation):
     try:
         if action == "read":
             from extensions.network_operations.drawing_feedback import geometry_feedback
+            if "query" in args:
+                query = str(args["query"]).strip().casefold()
+                if not query:
+                    raise ValueError("drawing_query_required")
+                for field, collection, id_key, caption in (("node_ids", "nodes", "node_id", "display_name"),
+                        ("link_ids", "links", "link_id", "label"), ("canvas_item_ids", "canvas_items", "item_id", "text"),
+                        ("group_ids", "groups", "group_id", "name")):
+                    supplied = args.get(field, [])
+                    if not isinstance(supplied, list) or any(not isinstance(value, str) for value in supplied):
+                        raise ValueError("canvas_selection_invalid")
+                    matches = [item[id_key] for item in topology.get(collection, [])
+                               if query in str(item.get(caption) or "").casefold() or query in item[id_key].casefold()]
+                    args[field] = list(dict.fromkeys([*supplied, *matches]))
+            if any(key in args for key in ("node_ids", "link_ids", "canvas_item_ids", "group_ids")):
+                from .drawing_context import drawing_subset
+                subset, unavailable = drawing_subset(topology, args, args.get("include_neighbors", True))
+                return {"ok": True, "action": "read", "topology": subset, "topology_id": topology_id,
+                        "version": topology["version"], "snapshot_complete": False, "unavailable_ids": unavailable,
+                        "node_count": len(topology["nodes"]), "link_count": len(topology["links"]),
+                        "feedback": geometry_feedback(subset)}
             return {"ok": True, "action": "read", "topology": topology, "version": topology["version"],
                     "snapshot_complete": True, "feedback": geometry_feedback(topology)}
         if action == "patch":
@@ -950,6 +970,7 @@ def register():
             **{key: {"type": "string"} for key in ("node_id", "id", "display_name", "device_type", "name", "type")},
             **{key: {"type": ["string", "null"]} for key in ("group_id", "zone", "lock_group", "ip", "role", "vendor", "model", "vlan", "location")},
             "x": {"type": "number"}, "y": {"type": "number"},
+            "labels": {"type": "array", "items": {"type": "string"}},
         },
     }
     link_schema = {
@@ -1124,7 +1145,7 @@ def register():
                     "patch": {"action_class": "write", "risk_level": "medium", "side_effects": "workspace_write", "idempotency": "unsafe_to_retry", "read_only": False},
                 },
                 "bindable_inputs": {"read": ["topology_id"], "patch": ["topology_id", "version"]},
-                "referenceable_outputs": {"read": ["topology", "version", "feedback"], "patch": ["changes", "version", "changed", "feedback", "topology"]},
+                "referenceable_outputs": {"read": ["topology", "version", "feedback", "snapshot_complete", "unavailable_ids", "node_count", "link_count"], "patch": ["changes", "version", "changed", "feedback", "topology"]},
                 "action_requirements": {},
                 "handler": topology_tool, "timeout_seconds": 60,
                 "input_schema": {
@@ -1136,7 +1157,13 @@ def register():
                         "version": {"oneOf": [{"type": "integer"}, {"type": "string"}], "description": "read 返回的版本号；提供旧版本会拒绝写入，须先 read 核对差异"},
                         "name": {"type": "string", "description": "图纸名称"},
                         "description": {"type": "string", "description": "图纸描述"},
-                        "response_detail": {"enum": ["changes", "full"], "description": "patch 默认返回完整实际变更对象及版本，避免反复回传整图；full 返回完整图纸。read 始终返回完整图纸"},
+                        "response_detail": {"enum": ["changes", "full"], "description": "patch 默认返回完整实际变更对象及版本；full 返回完整图纸。read 可按对象 ID 获取局部图纸"},
+                        **{key: {"type": "array", "items": {"type": "string"}, "description": "read 的局部对象范围；省略所有范围时返回整图"} for key in ("node_ids", "link_ids", "canvas_item_ids", "group_ids")},
+                        "include_neighbors": {"type": "boolean", "description": "局部 read 默认包含邻接节点、连线、联动成员和所属区域"},
+                        "query": {"type": "string", "minLength": 1, "maxLength": 160, "description": "read 按名称、标注或对象 ID 包含匹配，不区分大小写；返回所有匹配对象供核对，重名时不要猜测"},
+                        "translate": {"type": "object", "additionalProperties": False, "required": ["node_ids", "dx", "dy"],
+                            "description": "按中心坐标整体平移设备，固定联动成员同步移动；本次显式坐标优先",
+                            "properties": {"node_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1}, "dx": {"type": "number"}, "dy": {"type": "number"}}},
                         "layout": {"type": "object", "additionalProperties": False,
                             "description": "可选辅助布局。省略时保留直接坐标编辑；node_ids 可限定局部，preserve_node_ids 保留指定位置；本次显式 x/y 优先",
                             "properties": {"algorithm": {"enum": ["grid", "radial"]},

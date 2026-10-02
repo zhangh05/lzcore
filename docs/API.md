@@ -169,13 +169,48 @@ Drawing Skill selection accepts `canvas_selection` containing `node_ids`,
 the selected drawing; missing IDs are reported as `canvas_selection_unavailable`
 and client labels are not copied into the Skill prompt. User text stays separate.
 The `network.operations.topology` tool keeps `read` and `patch`: read returns the
-complete topology; patch defaults to `changes` (upserted objects, removed IDs and
+complete topology when no object scope is specified. Optional `node_ids`,
+`link_ids`, `canvas_item_ids` and `group_ids` select a subgraph; `include_neighbors`
+defaults to true and includes neighbours, fixed-link members and region geometry.
+Scoped reads return `snapshot_complete=false`, missing IDs, and whole-drawing
+counts; partial drawings must not replace a canvas snapshot. Read `query`
+optionally finds all case-insensitive name/label/ID substring matches
+within the selected drawing, retaining explicit ID selections; ambiguous names
+must be resolved before editing. Patch defaults to
+`changes` (upserted objects, removed IDs and
 changed name/description), version, counts, `changed` and estimated geometry
 `feedback`. `snapshot_complete=false` marks a partial receipt; explicitly setting
 `response_detail=full` also returns the complete topology. REST drawing responses
 are unchanged. Optional patch `layout` supports `algorithm=grid|radial`, `node_ids`,
 `preserve_node_ids`, `origin` and `spacing_x/spacing_y` (minimum 140). Explicit node
 x/y take precedence. Permission and optimistic version checks still apply.
+Patch `translate={node_ids,dx,dy}` moves existing nodes by a relative displacement.
+Direct coordinate edits and translation move other fixed-link members by the
+same displacement; explicitly supplied member coordinates take precedence and
+clearing `lock_group` detaches a member. Deletion/detachment clears orphaned
+fixed-link groups. Auxiliary layout moves fixed-link groups as rigid objects;
+preserving one member preserves its group. Manual automatic layout also preserves
+relative group positions and explicitly fixed region geometry.
+Node `labels` survive save/read/patch.
+Links with unknown endpoints reject the patch atomically; deliberate node
+deletion still removes incident links. No real device operations are introduced.
+
+The topology sidebar confirms pending local saves before sending a turn and
+includes `drawing_version` with the selection captured when Send was pressed.
+A lost save response blocks automatic retries: the next save or send first reads
+back the drawing, adopts an already committed result, and preserves unresolved
+local edits for explicit confirmation.
+The server derives selected-object and neighbourhood context from persisted
+objects, reports baseline changes, and bounds extra automatic-context neighbours
+to 40 nodes and 80 links. Selected objects and linked members are retained;
+scoped/full reads remain available without that automatic-context bound.
+Version broadcasts continue to carry only IDs and version. The workspace merges
+non-overlapping local edits over its last confirmed server baseline; overlapping
+fields and delete-vs-edit/dependent-link conflicts require resolution. Drawing
+change cards report displayed/pending state, counts, removed object names, and
+provide explicit focus and delta-based undo. Undo/redo preserves later edits to
+unrelated fields and refuses overlapping changes. These records are bounded,
+in-memory history for the current drawing; they are not durable revision history.
 
 Provider save and activate accept optional `top_p` (null or 0 < value <= 1) and
 `thinking=provider_default|adaptive|disabled`. Top P null omits the provider field;

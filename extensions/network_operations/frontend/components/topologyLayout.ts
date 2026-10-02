@@ -1,4 +1,5 @@
 import type { Topology } from "./TopologyWorkspace";
+import { moveDrawingNodes } from "./topologyCollaboration";
 
 type PositionedNode = { device_id: string; x: number; y: number };
 
@@ -170,7 +171,14 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
     }
   }
 
-  const nodes = topology.nodes.map((node) => ({ ...node, x: positioned.get(node.node_id)?.x ?? node.x, y: positioned.get(node.node_id)?.y ?? node.y }));
+  const anchoredGroups = new Set<string>();
+  const positions = topology.nodes.flatMap(node => {
+    const position = positioned.get(node.node_id);
+    if (!position || (node.lock_group && anchoredGroups.has(node.lock_group))) return [];
+    if (node.lock_group) anchoredGroups.add(node.lock_group);
+    return [{element_id: node.node_id, x: position.x, y: position.y}];
+  });
+  const nodes = moveDrawingNodes(topology.nodes, positions);
   const groups = topology.groups.map((group) => {
     const members = nodes.filter((node) => node.group_id === group.group_id);
     if (!members.length) return group;
@@ -180,7 +188,7 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
   });
 
   const canvas_items = (topology.canvas_items || []).map((item) => {
-    if (item.kind !== "rectangle") return item;
+    if (item.kind !== "rectangle" || item.auto_fit === false) return item;
     const halfW = (item.width || 200) / 2;
     const halfH = (item.height || 100) / 2;
     const pad = 24;

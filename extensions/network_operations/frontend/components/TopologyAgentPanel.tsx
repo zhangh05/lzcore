@@ -11,6 +11,7 @@ import { IconSparkle, IconSend, IconStop, IconPlus } from "../../../../frontend/
 import type { Topology} from "./TopologyWorkspace";
 import type { CanvasSelection } from "./canvasSelection";
 import { resolveTopologySession } from "./TopologySessionResolver";
+import type { DrawingActivity } from "./topologyCollaboration";
 import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
 
 const EMPTY: ChatMsg[] = [];
@@ -20,11 +21,15 @@ export function buildTopologyRequest(request: string) { return request.trim(); }
 
 export function buildTopologySelection(topology: Topology, selection: CanvasSelection, allowEdit = true) {
   return { extension_id: "network.operations", skill_id: `drawing:${topology.topology_id}${allowEdit ? "" : ":ro"}`,
-    resource_ids: [topology.topology_id], allow_edit: allowEdit, canvas_selection: selection };
+    resource_ids: [topology.topology_id], allow_edit: allowEdit, drawing_version: topology.version, canvas_selection: selection };
 }
 
-export function TopologyAgentPanel({ workspaceId, topology, selection, onCompleted }: {
+export function TopologyAgentPanel({ workspaceId, topology, selection, onCompleted, prepareDrawing, activities = [], onLocate, onUndoChange }: {
   workspaceId: string; topology: Topology; selection: CanvasSelection; onCompleted: () => void;
+  prepareDrawing?: () => Promise<Topology>;
+  activities?: DrawingActivity[];
+  onLocate?: (ids: string[]) => void;
+  onUndoChange?: (version: number) => void;
 }) {
   const storageKey = scopedLocalStorageKey(`drawing_session_v2:${workspaceId}:${topology.topology_id}`);
   const [sessionId, setSessionId] = useState<string | null>(() => {
@@ -129,7 +134,10 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     if (!request.trim() || running || preparing || submittingRef.current) return;
     submittingRef.current = true;
     setPreparing(true); setError("");
+    const capturedSelection = { ...selection, node_ids: [...selection.node_ids], link_ids: [...selection.link_ids],
+      canvas_item_ids: [...selection.canvas_item_ids], group_ids: [...selection.group_ids] };
     try {
+      const baseline = prepareDrawing ? await prepareDrawing() : topology;
       let id = sessionId;
       if (!id) {
         id = await resolveTopologySession(workspaceId, topology, true);
@@ -148,10 +156,10 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
       }
       setInput(""); pinnedRef.current = true;
       await send({ text: buildTopologyRequest(request), attachments: [], effectiveSessionId: id,
-        turnMetadata: { workbench_selection: buildTopologySelection(topology, selection, allowEdit) },
+        turnMetadata: { workbench_selection: buildTopologySelection(baseline, capturedSelection, allowEdit) },
       });
       await refresh();
-    } catch { setError("发送失败，请检查服务连接后重试。"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "发送失败，请检查服务连接后重试。"); }
     finally { setPreparing(false); submittingRef.current = false; }
   };
   const cancel = async () => {
@@ -184,6 +192,17 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
         <small>{allowEdit ? "可修改当前图纸" : "只读模式，不可修改"}</small>
       </div>
     </div>
+    {activities.length > 0 && <div className="topology-agent-activity" aria-label="图纸变化">
+      {activities.slice(-5).map(activity => <div key={activity.version} className="topology-agent-change">
+        <strong>图纸 v{activity.version} · {activity.status === "displayed" ? "已保存并显示" : "已保存 · 待合并"}</strong>
+        <span>新增 {activity.added} · 修改 {activity.modified} · 删除 {activity.removed}</span>
+        {activity.removedLabels.length > 0 && <small title={activity.removedLabels.join("、")}>已删除：{activity.removedLabels.slice(0, 3).join("、")}{activity.removedLabels.length > 3 ? "…" : ""}</small>}
+        <div>
+          <button type="button" disabled={activity.status !== "displayed" || !activity.ids.length} onClick={() => onLocate?.(activity.ids)}>定位变化</button>
+          {activity.status === "displayed" && <button type="button" onClick={() => onUndoChange?.(activity.version)}>撤销这次变化</button>}
+        </div>
+      </div>)}
+    </div>}
     <div className="topology-agent-messages" ref={scrollRef} onScroll={(event) => { const el = event.currentTarget; pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50; }}>
       {!messages.length && <div className="topology-agent-intro"><IconSparkle size={28} /><h3>把想法画出来</h3><p>描述设备、连线与布局，或选中图纸对象让 Skill 修改。不连接真实设备。</p>{[
         ["绘制结构", "在当前图纸中添加两台交换机与一台路由器，分别命名并连线，排列整齐。"],
@@ -217,11 +236,11 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
               type="checkbox"
               checked={allowEdit}
               onChange={(event) => setAllowEdit(event.target.checked)}
-              disabled={running}
+              disabled={running || preparing}
             />
             <span>允许修改拓扑</span>
           </label>
-          <small>{`上下文：${selection.label}`}</small>
+          <small>{preparing ? "正在确认图纸版本…" : `上下文：${selection.label}`}</small>
         </div>
         {running ? (
           <button type="button" className="topology-agent-stop-btn" onClick={() => void cancel()} title="停止当前生成任务">

@@ -96,3 +96,16 @@ test("layoutTopology automatically resizes canvas item rectangle zones enclosing
   }
 });
 
+
+test("automatic layout preserves fixed-link geometry and manually fixed region bounds", async () => {
+  const topology: Topology = {topology_id:"rigid", name:"联动", description:"", version:1, created_at:"", updated_at:"",
+    nodes:[{node_id:"a", x:100, y:100, lock_group:"rigid"}, {node_id:"b", x:420, y:230, lock_group:"rigid"}, {node_id:"c", x:500, y:500}],
+    links:[], groups:[], canvas_items:[{item_id:"manual", kind:"rectangle", text:"手工框", x:250, y:250, width:600, height:500, auto_fit:false}]};
+  for (const algorithm of ["grid", "radial", "hierarchy-h"] as const) {
+    const result = await layoutTopology(topology, algorithm);
+    expect(result.nodes[1].x-result.nodes[0].x).toBe(320);
+    expect(result.nodes[1].y-result.nodes[0].y).toBe(130);
+    expect(result.canvas_items).toEqual(topology.canvas_items);
+    expect(result.nodes.map(node=>node.node_id)).toEqual(["a", "b", "c"]);
+  }
+});

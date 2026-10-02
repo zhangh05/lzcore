@@ -52,9 +52,7 @@ import {
 } from "../../../../frontend/src/components/Icon";
 import { Link, useNavigate } from "../../../../frontend/src/router";
 import { useSessionStore } from "../../../../frontend/src/stores/session";
-import { useWorkbenchStore } from "../../../../frontend/src/stores/workbench";
 import { apiRequest } from "../../../../frontend/src/api/client";
-import { shouldAdoptRemoteTopology } from "../../../../frontend/src/realtime/adoptTopology";
 import { onTopologyUpdated, onTransportResumed } from "../../../../frontend/src/realtime/turnTransport";
 import { overlayBorderStatus, overlayCanvasLine, overlayCaption, type NodeOverlay } from "./nodeOverlay";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
@@ -66,6 +64,7 @@ import NetOpsCanvas, { type CanvasApi, type CanvasContextTarget, type ElementPos
 import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
 import { mergeTopologies, type MergeConflict, type MergeStats } from "./topologyMerge";
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
+import { applyDrawingEdit, drawingActivity, hasDrawingChanges, moveDrawingNodes, type DrawingActivity, type DrawingEdit } from "./topologyCollaboration";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import { TopologyWhiteboard } from "./TopologyWhiteboard";
 import { exportTopologyToSvg, svgToPngDataUrl, svgToPngBlob, nativeSaveBlob } from "./topologyExport";
@@ -575,6 +574,18 @@ export default function TopologyWorkspace({
    */
   const serverTopologyRef = useRef(new Map<string, Topology>());
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const saveFailureRef = useRef<string | null>(null);
+  const baselineWorkspaceRef = useRef(workspaceId);
+  useEffect(() => {
+    if (baselineWorkspaceRef.current === workspaceId) return;
+    baselineWorkspaceRef.current = workspaceId;
+    serverTopologyRef.current.clear();
+    serverVersionsRef.current.clear();
+    saveChainRef.current = Promise.resolve();
+    saveFailureRef.current = null;
+    saveStatusRef.current = "saved";
+    setSaveStatus("saved");
+  }, [workspaceId]);
   useEffect(() => {
     if (saveStatusRef.current !== "saved") return;
     if (currentTopology) {
@@ -588,7 +599,7 @@ export default function TopologyWorkspace({
       // tell the two apart. Measured before this check: a list reply released
       // one edit late moved a node 74px back to its previous resting place.
       const known = serverVersionsRef.current.get(currentTopology.topology_id);
-      if (known !== undefined && currentTopology.version < known) return;
+      if (known !== undefined && currentTopology.version !== known && activeTopologyRef.current?.topology_id === currentTopology.topology_id) return;
     }
     setActiveTopology(currentTopology);
     if (currentTopology) {
@@ -598,8 +609,10 @@ export default function TopologyWorkspace({
   }, [currentTopology]);
 
   // Undo / Redo history
-  const [history, setHistory] = useState<Topology[]>([]);
-  const [future, setFuture] = useState<Topology[]>([]);
+  const [history, setHistory] = useState<DrawingEdit[]>([]);
+  const [future, setFuture] = useState<DrawingEdit[]>([]);
+  const [drawingActivities, setDrawingActivities] = useState<DrawingActivity[]>([]);
+  const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "conflict">("saved");
   useEffect(() => {
     desktopDirty("topology", saveStatus !== "saved");
@@ -614,7 +627,7 @@ export default function TopologyWorkspace({
   const conflictRef = useRef(conflict);
   conflictRef.current = conflict;
   const saveTimerRef = useRef<number | null>(null);
-  useEffect(() => { setHistory([]); setFuture([]); setSelectedElement(null); }, [selectedTopologyId]);
+  useEffect(() => { setHistory([]); setFuture([]); setDrawingActivities([]); setHighlightedIds([]); setSelectedElement(null); }, [selectedTopologyId, workspaceId]);
 
   /**
    * Adopt a drawing the server has already written.
@@ -628,6 +641,7 @@ export default function TopologyWorkspace({
     revisionRef.current += 1;
     serverVersionsRef.current.set(next.topology_id, next.version);
     serverTopologyRef.current.set(next.topology_id, next);
+    activeTopologyRef.current = next;
     setActiveTopology(next);
     saveStatusRef.current = "saved";
     setSaveStatus("saved");
@@ -1054,6 +1068,56 @@ export default function TopologyWorkspace({
     [activeTopology, canvasSelectedElementIds, selectedElement],
   );
 
+  const integrateRemoteDrawing = useCallback((remote: Topology) => {
+    const current = activeTopologyRef.current;
+    if (!current || remote.topology_id !== current.topology_id) return false;
+    const confirmed = serverTopologyRef.current.get(remote.topology_id) || current;
+    if (remote.version <= confirmed.version) return false;
+    const result = mergeTopologies(confirmed, current, remote);
+    const pending = result.conflicts.length > 0;
+    const activity = drawingActivity(confirmed, remote, pending ? "pending" : "displayed");
+    if (activity.added + activity.modified + activity.removed > 0) {
+      setDrawingActivities(previous => [...previous.filter(item => item.version !== remote.version), activity].slice(-20));
+    }
+    serverVersionsRef.current.set(remote.topology_id, remote.version);
+    if (pending) {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      saveStatusRef.current = "conflict";
+      setSaveStatus("conflict");
+      setConflict({ base: confirmed, mine: current, theirs: remote, merged: result.topology, conflicts: result.conflicts, stats: result.stats });
+      setShowConflict(true);
+      setNotice("协作修改与本地编辑有冲突，请核对具体对象；你的编辑仍保留", false);
+      return false;
+    }
+    if (hasDrawingChanges(current, result.topology)) {
+      setHistory(previous => [...previous.slice(-20), { before: current, after: result.topology, source: "collaboration" }]);
+      setFuture([]);
+      setHighlightedIds(activity.ids);
+    }
+    serverTopologyRef.current.set(remote.topology_id, remote);
+    setConflict(null);
+    setShowConflict(false);
+    if (hasDrawingChanges(remote, result.topology)) {
+      // Keep the local overlay dirty on top of the new confirmed server base.
+      revisionRef.current += 1;
+      activeTopologyRef.current = result.topology;
+      setActiveTopology(result.topology);
+      saveStatusRef.current = "unsaved";
+      setSaveStatus("unsaved");
+      setNotice("协作修改已显示，互不冲突的本地编辑已保留；可继续编辑或保存", true);
+    } else {
+      adoptServerTopology(remote);
+      setNotice(`协作修改已写入画板（v${remote.version}），可定位或撤销这次变化`, true);
+    }
+    return true;
+  }, [adoptServerTopology, setNotice]);
+
+  useEffect(() => {
+    if (!highlightedIds.length) return;
+    const timer = window.setTimeout(() => setHighlightedIds([]), 6000);
+    return () => window.clearTimeout(timer);
+  }, [highlightedIds]);
+
 
 
   // Modals
@@ -1138,90 +1202,120 @@ export default function TopologyWorkspace({
    * merge it against the last confirmed base, and let the user decide.
    */
   const resolveConflict = useCallback(async (mine: Topology) => {
-    // Freeze queued saves before the conflict GET, not after it. The user can
-    // still edit locally while it loads; those edits must join the resolution.
     saveStatusRef.current = "conflict";
     setSaveStatus("conflict");
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    // Not named `base`: that is the module-level API prefix, and shadowing it
-    // silently turned the request URL into "[object Object]/topologies/...".
-    const lastConfirmed = serverTopologyRef.current.get(mine.topology_id) || mine;
+    const requestedWorkspaceId = workspaceId;
     try {
       const res = await apiRequest<{ topology: Topology }>({
-        method: "GET",
-        url: `${base}/topologies/${mine.topology_id}`,
-        params: { workspace_id: workspaceId },
+        method: "GET", url: `${base}/topologies/${mine.topology_id}`,
+        params: { workspace_id: requestedWorkspaceId },
       });
-      const theirs = res.topology;
-      if (!theirs) throw new Error("topology_not_found");
-      const latestMine = activeTopologyRef.current?.topology_id === mine.topology_id
-        ? activeTopologyRef.current : mine;
-      const result = mergeTopologies(lastConfirmed, latestMine, theirs);
-      // Any resolution writes on top of their version, so the next save is
-      // accepted instead of conflicting again.
-      serverVersionsRef.current.set(mine.topology_id, theirs.version);
-      setConflict({ base: lastConfirmed, mine: latestMine, theirs, merged: result.topology, conflicts: result.conflicts, stats: result.stats });
-      setShowConflict(true);
-      saveStatusRef.current = "conflict";
-      setSaveStatus("conflict");
-      setNotice("这张图纸在你编辑期间被其他人保存过，请选择如何处理", false);
+      if (requestedWorkspaceId !== workspaceIdRef.current || activeTopologyRef.current?.topology_id !== mine.topology_id) return;
+      if (!res.topology) throw new Error("topology_not_found");
+      return integrateRemoteDrawing(res.topology);
     } catch {
+      if (requestedWorkspaceId !== workspaceIdRef.current || activeTopologyRef.current?.topology_id !== mine.topology_id) return false;
       saveStatusRef.current = "unsaved";
       setSaveStatus("unsaved");
       setNotice("拓扑版本冲突：已被其他操作修改，当前未保存编辑仍保留", false);
+      return false;
     }
-  }, [workspaceId, setNotice]);
+  }, [workspaceId, setNotice, integrateRemoteDrawing]);
 
   // Execute Save
   const executeSave = useCallback(
     (topo: Topology) => {
-      const revision = revisionRef.current;
+      const requestedWorkspaceId = workspaceId;
       const work = async () => {
-      // A conflict is an explicit decision point. Saves queued before it was
-      // detected are stale by definition; sending them would only create more
-      // 409s and could replace the snapshot the user is reviewing.
-      if (saveStatusRef.current === "conflict") return;
-      saveStatusRef.current = "saving"; setSaveStatus("saving");
-      try {
-        const res = await apiRequest<{ topology: Topology }>({
-          method: "PUT",
-          url: `${base}/topologies/${topo.topology_id}`,
-          data: {
-            workspace_id: workspaceId,
-            name: topo.name,
-            description: topo.description,
-            version: serverVersionsRef.current.get(topo.topology_id) ?? topo.version,
-            nodes: topo.nodes,
-            links: topo.links,
-            groups: topo.groups,
-            canvas_items: topo.canvas_items || [],
-          },
-        });
-        serverVersionsRef.current.set(topo.topology_id, res.topology.version);
-        serverTopologyRef.current.set(topo.topology_id, res.topology);
-        if (revision === revisionRef.current) {
-          setActiveTopology(res.topology);
-          saveStatusRef.current = "saved"; setSaveStatus("saved");
-          void onReload();
-          setNotice("拓扑保存成功", true);
-        } else {
-          setActiveTopology((current) => current?.topology_id === topo.topology_id ? { ...current, version: res.topology.version } : current);
+      if (workspaceIdRef.current !== requestedWorkspaceId || activeTopologyRef.current?.topology_id !== topo.topology_id) return;
+      if (saveFailureRef.current) {
+        // The previous write may have committed. A queued/clicked save first
+        // reconciles that result and never replays the uncertain write.
+        try {
+          const response = await apiRequest<{ topology: Topology }>({
+            method: "GET", url: `${base}/topologies/${topo.topology_id}`, params: {workspace_id: requestedWorkspaceId},
+          });
+          if (workspaceIdRef.current !== requestedWorkspaceId || activeTopologyRef.current?.topology_id !== topo.topology_id) return;
+          if (!response.topology) throw new Error("无法确认保存结果，请检查连接后重试");
+          integrateRemoteDrawing(response.topology);
+          if (!hasDrawingChanges(response.topology, activeTopologyRef.current)) {
+            adoptServerTopology(response.topology);
+            setNotice("已核对服务端，图纸已保存", true);
+          } else if (saveStatusRef.current !== "conflict") {
+            setNotice("已核对上次保存结果，本地编辑仍保留；请确认后再次保存", false);
+          }
+          saveFailureRef.current = null;
+        } catch (error) {
+          if (workspaceIdRef.current !== requestedWorkspaceId || activeTopologyRef.current?.topology_id !== topo.topology_id) return;
+          setNotice((error as Error).message || "无法确认上次保存结果", false);
+        }
+        return;
+      }
+      if (saveStatusRef.current === "saved") return;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const revision = revisionRef.current;
+        const snapshot: Topology | null = activeTopologyRef.current;
+        if (!snapshot) return;
+        // A conflict is an explicit decision point. Saves queued before it was
+        // detected are stale by definition; sending them would only create more
+        // 409s and could replace the snapshot the user is reviewing.
+        if (saveStatusRef.current === "conflict") return;
+        saveFailureRef.current = null;
+        saveStatusRef.current = "saving"; setSaveStatus("saving");
+        try {
+          const res: {topology: Topology} = await apiRequest<{ topology: Topology }>({
+            method: "PUT",
+            url: `${base}/topologies/${topo.topology_id}`,
+            data: {
+              workspace_id: workspaceId,
+              name: snapshot.name,
+              description: snapshot.description,
+              version: serverVersionsRef.current.get(topo.topology_id) ?? topo.version,
+              nodes: snapshot.nodes,
+              links: snapshot.links,
+              groups: snapshot.groups,
+              canvas_items: snapshot.canvas_items || [],
+            },
+          });
+          if (requestedWorkspaceId !== workspaceIdRef.current || activeTopologyRef.current?.topology_id !== topo.topology_id) return;
+          serverVersionsRef.current.set(topo.topology_id, res.topology.version);
+          serverTopologyRef.current.set(topo.topology_id, res.topology);
+          if (revision === revisionRef.current) {
+            activeTopologyRef.current = res.topology;
+            setActiveTopology(res.topology);
+            saveStatusRef.current = "saved"; setSaveStatus("saved");
+            void onReload();
+            setNotice("拓扑保存成功", true);
+          } else {
+            const latest: Topology | null = activeTopologyRef.current;
+            if (latest?.topology_id === topo.topology_id) {
+              activeTopologyRef.current = { ...latest, version: res.topology.version };
+              setActiveTopology(activeTopologyRef.current);
+            }
+            saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
+          }
+        } catch (err: unknown) {
+          if (requestedWorkspaceId !== workspaceIdRef.current || activeTopologyRef.current?.topology_id !== topo.topology_id) return;
+          const errMsg = (err as { message?: string })?.message || "保存拓扑失败";
+          if (errMsg.includes("version_conflict") || errMsg.includes("version conflict")) {
+            const merged = await resolveConflict(snapshot);
+            // A rejected version performed no write. After a conflict-free
+            // read/merge, finish the user's save once against the confirmed base.
+            if (merged && !saveFailureRef.current && attempt === 0) continue;
+            return;
+          }
           saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
+          saveFailureRef.current = errMsg;
+          setNotice(errMsg, false);
         }
-      } catch (err: unknown) {
-        const errMsg = (err as { message?: string })?.message || "保存拓扑失败";
-        if (errMsg.includes("version_conflict") || errMsg.includes("version conflict")) {
-          await resolveConflict(topo);
-          return;
-        }
-        saveStatusRef.current = "unsaved"; setSaveStatus("unsaved");
-        setNotice(errMsg, false);
+        return;
       }
       };
       saveChainRef.current = saveChainRef.current.then(work, work);
       return saveChainRef.current;
     },
-    [workspaceId, onReload, setNotice, resolveConflict]
+    [workspaceId, onReload, setNotice, resolveConflict, integrateRemoteDrawing, adoptServerTopology]
   );
 
   // Push state for undo/redo history tracking (manual save)
@@ -1229,7 +1323,7 @@ export default function TopologyWorkspace({
     (next: Topology) => {
       if (!activeTopology) return;
       const conflictPending = saveStatusRef.current === "conflict";
-      setHistory((prev) => [...prev.slice(-20), activeTopology]);
+      setHistory((prev) => [...prev.slice(-20), { before: activeTopologyRef.current || activeTopology, after: next, source: "manual" }]);
       setFuture([]);
       revisionRef.current += 1;
       activeTopologyRef.current = next;
@@ -1265,6 +1359,9 @@ export default function TopologyWorkspace({
     setShowConflict(false);
     setConflict(null);
     if (choice === "theirs") {
+      if (activeTopology) setHistory(previous => [...previous.slice(-20), { before: activeTopology, after: conflict.theirs, source: "collaboration" }]);
+      setFuture([]);
+      setDrawingActivities(previous => previous.map(item => item.version === conflict.theirs.version ? { ...item, status: "displayed" } : item));
       adoptServerTopology(conflict.theirs);
       setNotice("已采用服务端版本，本地未保存改动已放弃", true);
       return;
@@ -1272,11 +1369,14 @@ export default function TopologyWorkspace({
     const target = choice === "merged" ? conflict.merged : conflict.mine;
     const nextTopology = { ...target, version: conflict.theirs.version };
     if (activeTopology) {
-      setHistory((prev) => [...prev.slice(-20), activeTopology]);
+      setHistory((prev) => [...prev.slice(-20), { before: activeTopology, after: nextTopology, source: choice === "mine" ? "manual" : "collaboration" }]);
     }
     setFuture([]);
     revisionRef.current += 1;
     activeTopologyRef.current = nextTopology;
+    serverTopologyRef.current.set(nextTopology.topology_id, conflict.theirs);
+    setDrawingActivities(previous => choice === "mine" ? previous.filter(item => item.version !== conflict.theirs.version)
+      : previous.map(item => item.version === conflict.theirs.version ? { ...item, status: "displayed" } : item));
     setActiveTopology(nextTopology);
     saveStatusRef.current = "unsaved";
     setSaveStatus("unsaved");
@@ -1289,35 +1389,82 @@ export default function TopologyWorkspace({
     );
   }, [conflict, activeTopology, adoptServerTopology, executeSave, setNotice]);
 
-  const handleUndo = useCallback(() => {
-    if (!history.length || !activeTopology || saveStatusRef.current === "conflict") return;
-    const previous = history[history.length - 1];
-    setHistory((prev) => prev.slice(0, -1));
-    setFuture((prev) => [activeTopology, ...prev]);
-    setActiveTopology(previous);
+  const applyHistoryEntry = useCallback((entry: DrawingEdit, undo: boolean) => {
+    const current = activeTopologyRef.current;
+    if (!current || saveStatusRef.current === "conflict") return false;
+    const result = applyDrawingEdit(current, entry, undo);
+    if (result.conflicts.length) {
+      setNotice("这些对象在此后又被修改，无法直接撤销或恢复；请先核对相关对象", false);
+      return false;
+    }
+    activeTopologyRef.current = result.topology;
+    setActiveTopology(result.topology);
     revisionRef.current += 1;
     saveStatusRef.current = "unsaved";
     setSaveStatus("unsaved");
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-  }, [history, activeTopology]);
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    return true;
+  }, [setNotice]);
+
+  const handleUndo = useCallback(() => {
+    const entry = history[history.length - 1];
+    if (!entry || !applyHistoryEntry(entry, true)) return;
+    setHistory(previous => previous.slice(0, -1));
+    setFuture(previous => [entry, ...previous]);
+  }, [history, applyHistoryEntry]);
 
   const handleRedo = useCallback(() => {
-    if (!future.length || !activeTopology || saveStatusRef.current === "conflict") return;
-    const next = future[0];
-    setFuture((prev) => prev.slice(1));
-    setHistory((prev) => [...prev, activeTopology]);
-    setActiveTopology(next);
-    revisionRef.current += 1;
-    saveStatusRef.current = "unsaved";
-    setSaveStatus("unsaved");
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
+    const entry = future[0];
+    if (!entry || !applyHistoryEntry(entry, false)) return;
+    setFuture(previous => previous.slice(1));
+    setHistory(previous => [...previous, entry]);
+  }, [future, applyHistoryEntry]);
+
+  const undoDrawingChange = useCallback((version: number) => {
+    const index = history.map(entry => entry.source === "collaboration" && entry.after.version === version).lastIndexOf(true);
+    const entry = history[index];
+    if (!entry) { setNotice("这次变化已撤销或不在当前撤销记录中", false); return; }
+    if (!applyHistoryEntry(entry, true)) return;
+    setHistory(previous => previous.filter((_, itemIndex) => itemIndex !== index));
+    setFuture([]);
+    setDrawingActivities(previous => previous.filter(item => item.version !== version));
+    setNotice("已撤销这次协作变化，其他编辑已保留；保存后同步到服务端", true);
+  }, [history, applyHistoryEntry, setNotice]);
+
+  const prepareDrawing = useCallback(async () => {
+    const targetId = activeTopologyRef.current?.topology_id;
+    const targetWorkspace = workspaceId;
+    if (saveTimerRef.current) { window.clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    await saveChainRef.current;
+    if (saveFailureRef.current && targetId) {
+      // A failed response may hide a committed write. Read back before any retry.
+      const response = await apiRequest<{ topology: Topology }>({
+        method: "GET", url: `${base}/topologies/${targetId}`, params: {workspace_id: targetWorkspace},
+      });
+      if (workspaceIdRef.current !== targetWorkspace || activeTopologyRef.current?.topology_id !== targetId) {
+        throw new Error("图纸或工作区已切换，请在当前画板重新发送。");
+      }
+      if (!response.topology) throw new Error("无法确认保存结果，请检查连接后重试；指令尚未发送。");
+      integrateRemoteDrawing(response.topology);
+      if (activeTopologyRef.current && !hasDrawingChanges(response.topology, activeTopologyRef.current)) adoptServerTopology(response.topology);
+      saveFailureRef.current = null;
     }
-  }, [future, activeTopology]);
+    for (let attempt = 0; attempt <= 3; attempt += 1) {
+      const current = activeTopologyRef.current;
+      if (!current || current.topology_id !== targetId || workspaceIdRef.current !== targetWorkspace) {
+        throw new Error("图纸或工作区已切换，请在当前画板重新发送。");
+      }
+      if (saveStatusRef.current === "conflict") throw new Error("请先处理图纸冲突，再让 Agent 编辑。");
+      if (saveStatusRef.current === "saved") {
+        return serverTopologyRef.current.get(current.topology_id) || current;
+      }
+      if (attempt < 3) {
+        await executeSave(current);
+        if (saveFailureRef.current) throw new Error(`图纸保存未确认：${saveFailureRef.current}。请检查保存状态后重试；指令尚未发送。`);
+      }
+    }
+    throw new Error("图纸尚未保存完成，请检查保存状态或稍停编辑后重试；指令尚未发送。");
+  }, [workspaceId, executeSave, integrateRemoteDrawing, adoptServerTopology]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -1662,31 +1809,9 @@ export default function TopologyWorkspace({
   const handleNetOpsMove = useCallback((positions: Array<{ element_id: string; x: number; y: number }>) => {
     const current = activeTopologyRef.current;
     if (!current || !positions.length) return;
-    const byId = new Map(positions.map((position) => [position.element_id, position]));
-
-    // Synchronize displacement for all nodes in the same lock group
-    const groupDeltas = new Map<string, { dx: number; dy: number }>();
-    for (const node of current.nodes) {
-      const direct = byId.get(node.node_id);
-      if (direct && node.lock_group && !groupDeltas.has(node.lock_group)) {
-        groupDeltas.set(node.lock_group, {
-          dx: Math.round(direct.x - node.x),
-          dy: Math.round(direct.y - node.y),
-        });
-      }
-    }
-
-    const nextNodes = current.nodes.map((node) => {
-      const direct = byId.get(node.node_id);
-      if (direct) {
-        return { ...node, x: Math.round(direct.x), y: Math.round(direct.y) };
-      }
-      if (node.lock_group && groupDeltas.has(node.lock_group)) {
-        const delta = groupDeltas.get(node.lock_group)!;
-        return { ...node, x: Math.round(node.x + delta.dx), y: Math.round(node.y + delta.dy) };
-      }
-      return node;
-    });
+    const rounded = positions.map(position => ({ ...position, x: Math.round(position.x), y: Math.round(position.y) }));
+    const byId = new Map(rounded.map(position => [position.element_id, position]));
+    const nextNodes = moveDrawingNodes(current.nodes, rounded);
 
     const nextCanvasItems = (current.canvas_items || []).map((item) => {
       const direct = byId.get(`canvas-${item.item_id}`);
@@ -2613,45 +2738,50 @@ export default function TopologyWorkspace({
   }, [activeTopology, workspaceId, setNotice]);
 
   /**
-   * Agent conclusions land on the server, not in the canvas component.  After a
-   * turn finishes we reconcile: adopt the server drawing when the local canvas
-   * has nothing unsaved, and never silently overwrite pending local edits.
+   * Version notices, reconnects and completed turns share one coalesced read.
+   * Merge over the confirmed baseline; preserve the local overlay and report
+   * overlapping changes instead of replacing the drawing with an old snapshot.
    */
-  const reconcileServerTopology = useCallback(async (topologyId: string) => {
+  const reconcileRequestsRef = useRef(new Map<string, Promise<void>>());
+  const pendingReconcilesRef = useRef(new Set<string>());
+  const reconcileServerTopology = useCallback((topologyId: string): Promise<void> => {
     const requestedWorkspaceId = workspaceId;
-    try {
-      const res = await apiRequest<{ topology: Topology }>({
-        method: "GET",
-        url: `${base}/topologies/${topologyId}`,
-        params: { workspace_id: requestedWorkspaceId },
-      });
-      if (requestedWorkspaceId !== workspaceIdRef.current) return;
-      const remote = res.topology;
-      const current = activeTopologyRef.current;
-      const adopt = shouldAdoptRemoteTopology({
-        requestedWorkspaceId,
-        requestedTopologyId: topologyId,
-        currentWorkspaceId: workspaceIdRef.current,
-        currentTopologyId: current?.topology_id ?? null,
-        saveStatus: saveStatusRef.current,
-        currentVersion: current?.version ?? null,
-        remote,
-      });
-      if (!adopt || !remote) {
-        if (remote && saveStatusRef.current !== "saved" && remote.topology_id === current?.topology_id && remote.version > (current?.version ?? 0)) {
-          setNotice("Agent 已更新服务端图纸；本地还有未保存改动，保存后即可看到结论", false);
-        }
-        return;
-      }
-      const previous = current?.version ?? remote.version;
-      adoptServerTopology(remote);
-      if (remote.version !== previous) {
-        setNotice(`Agent 已把结论写回画布（版本 ${previous} → ${remote.version}）`, true);
-      }
-    } catch {
-      // A failed reconciliation must not disturb the canvas the user is on.
+    const key = JSON.stringify([requestedWorkspaceId, topologyId]);
+    const inFlight = reconcileRequestsRef.current.get(key);
+    if (inFlight) {
+      pendingReconcilesRef.current.add(key);
+      return inFlight;
     }
-  }, [workspaceId, adoptServerTopology, setNotice]);
+    const work = async () => {
+      do {
+        pendingReconcilesRef.current.delete(key);
+        try {
+          const res = await apiRequest<{ topology: Topology }>({
+            method: "GET", url: `${base}/topologies/${topologyId}`,
+            params: { workspace_id: requestedWorkspaceId },
+          });
+          if (requestedWorkspaceId !== workspaceIdRef.current || activeTopologyRef.current?.topology_id !== topologyId) return;
+          if (!res.topology || res.topology.topology_id !== topologyId) return;
+          if (saveStatusRef.current === "saving") {
+            await saveChainRef.current;
+            pendingReconcilesRef.current.add(key);
+          } else {
+            integrateRemoteDrawing(res.topology);
+          }
+        } catch {
+          // Preserve the current drawing; a later broadcast/resume retries reads.
+          return;
+        }
+      } while (pendingReconcilesRef.current.has(key)
+        && requestedWorkspaceId === workspaceIdRef.current && activeTopologyRef.current?.topology_id === topologyId);
+    };
+    const request = work().finally(() => {
+      reconcileRequestsRef.current.delete(key);
+      pendingReconcilesRef.current.delete(key);
+    });
+    reconcileRequestsRef.current.set(key, request);
+    return request;
+  }, [workspaceId, integrateRemoteDrawing]);
 
   const handleAgentCompleted = useCallback(async () => {
     const topologyId = activeTopologyRef.current?.topology_id;
@@ -2676,11 +2806,9 @@ export default function TopologyWorkspace({
   }, [reconcileServerTopology]);
 
   useEffect(() => {
-    const active = useWorkbenchStore.getState().activeTurns;
-    if (!active || Object.keys(active).length === 0) return;
     const topologyId = activeTopologyRef.current?.topology_id || selectedTopologyId;
     if (topologyId) void reconcileServerTopology(topologyId);
-  }, [selectedTopologyId, workspaceId, reconcileServerTopology]);
+  }, [selectedTopologyId, workspaceId, currentTopology?.version, reconcileServerTopology]);
 
   const [restoreLayout, setRestoreLayout] = useState(true);
 
@@ -2697,7 +2825,7 @@ export default function TopologyWorkspace({
       if (res.topology) {
         // Keep the pre-restore drawing on the undo stack, but treat the
         // restored one as already saved — it is, the server just wrote it.
-        setHistory((prev) => [...prev.slice(-20), activeTopology]);
+        setHistory((prev) => [...prev.slice(-20), { before: activeTopology, after: res.topology, source: "manual" }]);
         setFuture([]);
         adoptServerTopology(res.topology);
         const restoredVersion = revisions.find((item) => item.revision_id === revisionId)?.version;
@@ -3376,7 +3504,7 @@ export default function TopologyWorkspace({
                   <button
                     type="button"
                     className="canvas-selection-chip canvas-selection-count"
-                    onClick={() => setIsInspectorOpen(true)}
+                    onClick={() => { setShowAgent(false); setIsInspectorOpen(true); }}
                     title="点击查看选中对象操作面板"
                   >
                     已选 {canvasSelectedElementIds.length} 个对象 · 查看操作
@@ -3423,17 +3551,17 @@ export default function TopologyWorkspace({
               }
               setViewOverlayNodeId("");
               setSelectedElement({ type: "node", nodeId });
-              setIsInspectorOpen(true);
+              setIsInspectorOpen(!showAgent);
             }}
             onSelectCanvasItem={(itemId) => {
               if (workspaceMode === "view") return;
               setSelectedElement({ type: "canvas_item", itemId });
-              setIsInspectorOpen(true);
+              setIsInspectorOpen(!showAgent);
             }}
             onSelectLink={(linkId) => {
               if (workspaceMode === "view") return;
               setSelectedElement({ type: "link", linkId });
-              setIsInspectorOpen(true);
+              setIsInspectorOpen(!showAgent);
             }}
             onClearSelection={() => {
               setViewOverlayNodeId("");
@@ -3447,14 +3575,15 @@ export default function TopologyWorkspace({
                 const id = ids[0];
                 if (id.startsWith("canvas-")) setSelectedElement({ type: "canvas_item", itemId: id.slice(7) });
                 else setSelectedElement({ type: "node", nodeId: id });
-                setIsInspectorOpen(true);
+                setIsInspectorOpen(!showAgent);
               } else if (!ids.length) {
                 setSelectedElement((prev) => (prev?.type === "link" ? prev : null));
               } else {
                 setSelectedElement(null);
-                setIsInspectorOpen(true);
+                setIsInspectorOpen(!showAgent);
               }
             }}
+            highlightedIds={highlightedIds}
             onMoveElements={handleNetOpsMove}
             onConnect={handleFastConnect}
             armedNodeType={workspaceMode === "view" ? null : armedNodeType}
@@ -3467,6 +3596,7 @@ export default function TopologyWorkspace({
             }}
             onOpenInspector={() => {
               if (workspaceMode === "view") return;
+              setShowAgent(false);
               setIsInspectorOpen(true);
             }}
             onViewportChange={updatePopoverAnchor}
@@ -3503,7 +3633,7 @@ export default function TopologyWorkspace({
           {/* 3. Right: Inspector */}
       <aside
         ref={inspectorRef}
-        className={`topology-inspector ${isInspectorOpen && workspaceMode === "edit" ? "is-open" : ""} ${isDragged ? "is-dragged" : (popoverPlacement ? `placement-${popoverPlacement}` : "")} ${isDragging ? "is-dragging" : ""}`}
+        className={`topology-inspector ${isInspectorOpen && !showAgent && workspaceMode === "edit" ? "is-open" : ""} ${isDragged ? "is-dragged" : (popoverPlacement ? `placement-${popoverPlacement}` : "")} ${isDragging ? "is-dragging" : ""}`}
         style={popoverStyle}
         aria-label="拓扑详情"
         onMouseDown={(event) => event.stopPropagation()}
@@ -4834,7 +4964,7 @@ export default function TopologyWorkspace({
         </footer>
       </main>
 
-      {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} selection={canvasSelection} onCompleted={() => { void handleAgentCompleted(); }} /></aside>}
+      {activeTopology && <aside className="studio-agent-dock" aria-hidden={!showAgent}><TopologyAgentPanel key={`${workspaceId}:${activeTopology.topology_id}`} workspaceId={workspaceId} topology={activeTopology} selection={canvasSelection} prepareDrawing={prepareDrawing} activities={drawingActivities} onLocate={(ids) => { setHighlightedIds(ids); canvasApiRef.current?.focusIds(ids); }} onUndoChange={undoDrawingChange} onCompleted={() => { void handleAgentCompleted(); }} /></aside>}
 
       {contextMenu && (
         <div
@@ -4893,14 +5023,14 @@ export default function TopologyWorkspace({
                     </button>
                   </>
                 ) : null}
-                <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>打开设备详情</button>
+                <button type="button" onClick={() => { setSelectedElement({ type: "node", nodeId: contextMenu.id }); setShowAgent(false); setIsInspectorOpen(true); setContextMenu(null); }}>打开设备详情</button>
                 <button type="button" className="danger" onClick={() => { void handleRemoveNode(contextMenu.id); setContextMenu(null); }}>从拓扑移除</button>
               </>
             );
           })()}
           {contextMenu.kind === "link" && (
             <>
-              <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑链路</button>
+              <button type="button" onClick={() => { setSelectedElement({ type: "link", linkId: contextMenu.id }); setShowAgent(false); setIsInspectorOpen(true); setContextMenu(null); }}>编辑链路</button>
               <button type="button" className="danger" onClick={() => { void handleRemoveLink(contextMenu.id); setContextMenu(null); }}>删除链路</button>
             </>
           )}
@@ -4908,7 +5038,7 @@ export default function TopologyWorkspace({
             const rawId = contextMenu.id.replace(/^canvas-/, "");
             return (
               <>
-                <button type="button" onClick={() => { setSelectedElement({ type: "canvas_item", itemId: rawId }); setIsInspectorOpen(true); setContextMenu(null); }}>编辑图元</button>
+                <button type="button" onClick={() => { setSelectedElement({ type: "canvas_item", itemId: rawId }); setShowAgent(false); setIsInspectorOpen(true); setContextMenu(null); }}>编辑图元</button>
                 <button type="button" onClick={() => { handleAutoFitCanvasItem(rawId); setContextMenu(null); }}>自动包住区域节点</button>
                 <button type="button" onClick={() => { handleSendCanvasItemToBack(rawId); setContextMenu(null); }}>置于底层</button>
                 <button type="button" onClick={() => { handleBringCanvasItemToFront(rawId); setContextMenu(null); }}>置于顶层</button>
