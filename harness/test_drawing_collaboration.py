@@ -108,3 +108,16 @@ def test_selected_link_keeps_all_rigid_endpoint_members_in_prompt(temp_dirs):
         'skill_id': f"drawing:{topo['topology_id']}", 'canvas_selection': {'link_ids': ['selected']}})
     assert len(context['drawing_context']['nodes']) == 61
     assert context['drawing_context']['context_complete'] is True
+
+
+def test_missing_optional_labels_do_not_turn_local_edits_into_whole_drawing_changes(temp_dirs):
+    topo, invoke, _ = drawing_gateway()
+    store = drawings._store('optimize')
+    record = store.get('topologies', topo['topology_id'])
+    for node in record['nodes']:
+        node.pop('labels', None)
+    store.save('topologies', topo['topology_id'], record)
+    unchanged = invoke({'action': 'patch', 'node_updates': [{'node_id': 'a', 'x': 0}]}).output
+    assert unchanged['changed'] is False and unchanged['changes']['nodes']['upserted'] == []
+    changed = invoke({'action': 'patch', 'node_updates': [{'node_id': 'a', 'x': 10}]}).output
+    assert [node['node_id'] for node in changed['changes']['nodes']['upserted']] == ['a']
