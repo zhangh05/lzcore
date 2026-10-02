@@ -133,7 +133,12 @@ def run(exe: Path, mode: str, output: Path):
             # Exercise the real Windows Close action, including the native
             # lifecycle path rather than asking the JS bridge to terminate.
             assert user32.PostMessageW(hwnd, 0x0010, 0, 0)
-            assert proc.wait(timeout=40)==0
+            exit_code = proc.wait(timeout=40)
+            (output/'result.json').write_text(json.dumps({
+                'ok': exit_code == 0, 'mode': mode, 'stage': 'native_close',
+                'exit_code': exit_code, 'exit_hex': f'0x{exit_code & 0xffffffff:08X}',
+            }), encoding='utf-8')
+            assert exit_code == 0, f'Native close failed: exit={exit_code} (0x{exit_code & 0xffffffff:08X})'
     finally:
         if proc.poll() is None:
             # Only the isolated CI process, on test failure.
