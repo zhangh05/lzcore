@@ -1,160 +1,67 @@
-# 前端架构与 Design System
+# 前端：状态、画布与交互
 
-联智中枢前端位于 `frontend/`，使用 React 18、TypeScript、Vite、Zustand 和 Phosphor Icons。前端负责呈现业务状态、收集用户输入和调用后端 API；运行时决策、权限判定、Skill 授权、任务状态与审计事实始终以后端为准。
+React 18、TypeScript、Vite、Zustand 和 Phosphor Icons。入口 frontend/src/app/App.tsx，导航 frontend/src/config/nav.ts；frontend 收集用户意图并投影服务端事实，不能复制授权或把本地 sending 判成服务端终态。
 
-## 信息架构
+## 页面与归属
 
-顶层导航由 `frontend/src/config/nav.ts` 定义，路由装配位于 `frontend/src/app/App.tsx`：
+| 页面 | 路由 | 主要内容 |
+| --- | --- | --- |
+| 工作台 | /workbench | 会话、Skill、工具、公开阶段、答复和进度 |
+| 任务 | /runs | 运行列表、事件、证据和终态操作 |
+| 资料 | /data、/knowledge、/memory | 文件、知识与长期记忆 |
+| 设备 | /extensions/network.operations/manage?tab=devices | 注册设备、连接；tab=context 查看观测/基准 |
+| Skill | /extensions/network.operations/manage?tab=skills | 发布 Skill 的资源与工具范围 |
+| 图纸 | /topology | 画布、节点、链路、图元、版本和绘图对话 |
+| 系统 | /diagnostics、/settings、/users | 健康、模型、身份和设置 |
 
-| 导航域 | 路由 | 主要职责 | 页面结构 |
-| --- | --- | --- | --- |
-| 工作台 | `/workbench` | 会话、Skill 与设备选择、工具过程、最终答复 | 左侧会话导航、中部对话、右侧窄进度轨 |
-| 任务 | `/runs` | 任务记录、运行事件、证据与终态删除 | 左侧任务列表、右侧详情 |
-| 资料中心 | `/data`、`/knowledge`、`/memory` | 文件、任务产出、知识源和长期记忆 | 2:1 概览或连续内容分区 |
-| 网络设备 | `/extensions/network.operations/manage?tab=devices` | 网络设备身份、管理地址、厂商角色与连接凭据；环境与证据（`?tab=context`） | 双二级视图；管理对象紧凑列表与表单 |
-| Skill | `/extensions/network.operations/manage?tab=skills` | 工作台技能配置、设备/连接授权与工具边界 | 技能卡片列表与主从编辑器 |
-| 网络拓扑 | `/topology` | 设备、链路、图元与图纸版本 | 画布工作区 |
-| 功能描述 | 顶栏抽屉（设置旁） | 平台业务能力、风险边界与底层可调用工具目录 | 抽屉面板；能力卡片与工具索引 |
-| 系统管理 | `/diagnostics`、`/settings`、`/users` | 系统健康、模型服务、用户权限 | 异常优先状态列表或主从编辑器 |
+功能描述是顶栏抽屉；/capabilities 重定向至工作台。设备与 Skill 使用带 tab 的独立 routeKey；筛选、弹窗和 URL 状态不互相泄漏。扩展路由由 frontend_routes 注册，视觉和交互复用平台组件。
 
-视觉对照见仓库根目录 `design-qa.md`。
+## 传输与会话
 
-网络拓扑的接口编号使用 Cytoscape 原生端点标签，居中贴合各自线路，不再统一向下偏移。平行链路控制点间距为 144 个图纸单位；两端标签分别位于裁剪后曲线参数的 22% / 78% 处，通过弧长换算为端点偏移。设备拖动、自动布局以及增删链路后按渲染几何重新计算，缩放和平移不改变图纸中的相对位置。单线、双线及多线共用此规则；自环保留原生端点偏移。接口标签开关、缩放隐藏规则和图片导出仍使用原生标签，不引入独立 HTML 覆盖层或修改接口数据。
+应用级 turnTransport 持有 /ws/agent，页面只订阅。切页保持回合及缓冲；退出登录或切换用户/工作区释放旧所有权，后台任务不因路由切换取消。帧按 workspace/session/client_request_id 路由，旧身份回调不能回写新 store。
 
-扩展前端由扩展清单的 `frontend_routes` 注册。网络设备与 Skill 已独立为一级顶级导航，与网络拓扑处于同层级。网络设备与 Skill 在前端由 `extensions/network_operations/frontend/NetworkOperations.tsx` 实现，但在路由层（`frontend/src/app/App.tsx`）通过带有 tab 标识的 `routeKey` 隔离为两个完全独立的页面实例，确保跨导航切换时搜索词、区域筛选和编辑弹窗不互相泄漏。网络设备包含“设备与连接”（`?tab=devices`）与“环境与证据”（`?tab=context`）两个二级视图，视图切换实时同步至 URL search params，刷新与分享链接准确还原；其“环境与证据”视图分别呈现可用来源、时点观察、候选/已确认 Reference 和仅供参考的命令反馈；确认或失效 Reference 必须是显式操作。平台能力与底层工具目录统一收拢至顶栏设置旁的“功能描述”抽屉，原 `/capabilities` 路由安全重定向至工作台。扩展页面必须复用平台 Token 与共享组件，不能建立独立配色或重复交互契约。
+streamSeq 与完整 streamDraft、过滤状态一起持久化；游标不能越过尚未缓存的字符。新回合与恢复共用 reducer。恢复先 mergeFromBackend：服务端终态消息优先于本地 streaming，确认终态后退出传输所有权；未终态才 resume。2.5 秒查询是断线终态兜底，不是正文或图纸主通道。
 
-## 数据与状态边界
+工具/模型阶段切换前提交显示缓冲，避免串字或丢字。stage_outputs 保留公开阶段，旧阶段可折叠；末尾与最终答复相同只省略重复显示，不删记录。公开阶段不含隐藏推理，旧版本缺失内容无法从最终答复恢复。
 
-```text
-route state + Zustand store
-  -> API client / WebSocket / SSE
-  -> backend API
-  -> AgentResult / runtime event / workspace resource
-  -> UI projection
-```
+TaskProgressPanel 使用当前活跃回合与服务端终态投影，不能被旧 result 或缓存事件提前结束。toolCallState.ts 区分成功、失败和未知；未给调用标识时不猜哪条写入未知。
 
-- 登录态使用 HttpOnly Cookie。受控 token 流只允许从 `sessionStorage` 读取，不得写入 URL、`localStorage`、构建变量或日志。
-- 分离部署时，`VITE_API_BASE` 同时决定 HTTP、WebSocket 和 SSE 的 API origin。
-- 本地令牌探测共享并发请求；服务端明确返回 `local_token_unused` 时，同一页面不再重复探测，临时网络故障仍可重试。fetch SSE 解析支持跨网络分片的 CRLF 换行，保留事件名、多行内容与事件 ID。
-- 前端显示服务端给出的 `execution_outcome`、`tool_execution_outcome`、恢复目标和结构化错误，不自行推断或改写任务事实。
-- 单个工具失败不能渲染成整个任务失败。外部操作结果未知时，界面必须如实呈现完整结果与不确定性，不把模型仍在运行的会话误显示为完成。
-- 浏览器不能自行扩大 `workspace_id`、设备范围、连接范围或 Skill 工具范围；网络 Skill 的配置能力由已发布 Skill 的服务端范围决定，不是浏览器可传入的开关。
-- 任务与 trace 等异步详情必须以请求序号和当前资源 ID 双重校验，旧请求不得覆盖后来选择；URL 深链恢复选择是幂等操作，不能复用“再次点击关闭”的交互语义。
-- 附件上传失败时保留输入草稿、自动元数据和失败附件；部分成功只移除已上传附件，允许用户重试剩余项。
+## 画布与 Agent 协作
 
-## Design System
+绘图输入保留用户原话，选区和发送时 drawing_version 单独传递。发送前确认本地保存，响应丢失先对账；不能自动重放不确定保存。
 
-### 视觉原则
+服务器校验 ID 并提供局部对象、联动组、邻接和完整度。LLM 可以直接增删/移动/编辑节点、连线、标签和图元；局部 read、query 与差量收据减小重复上下文，不限制完整读取和合法大批次。
 
-当前界面采用克制的石墨灰与深青绿色体系。正常信息保持安静，颜色主要用于当前选择、可执行主操作和语义状态。页面优先通过间距、文字层级和背景层区分信息；只有需要建立边界或表达交互区域时才使用描边，浮层之外不依赖阴影。
+topology_updated 只携资源 ID/version。画布以最后确认版本对账：已保存则采纳；非重叠本地编辑三方合并；同字段、删除/编辑和依赖链路冲突要明确解决。snapshot_complete=false 不能替换完整画布。变更卡标明已显示/待处理、差量和移除对象，可聚焦及撤销；撤销拒绝覆盖后来的重叠改动。
 
-禁止在业务页面中引入第二套品牌色、蓝紫渐变、装饰性毛玻璃、大面积胶囊组件或无意义卡片墙。图标统一来自 `@phosphor-icons/react`，通过 `frontend/src/components/Icon.tsx` 暴露稳定名称；不要用 emoji、文本符号、CSS 图形或手写 SVG 代替产品图标。
+固定联动组按整体移动；明确成员坐标优先，解除 lock_group 才独立。布局保护组内相对位置与固定区域。区域 auto_fit 和手工几何有不同职责；批注独立版本保存。工具保存成功和几何 feedback 不能代替视觉验收。
 
-### Token 来源
+接口使用 Cytoscape 原生端点标签：平行线控制点间距 144，裁剪曲线 22%/78% 位置按弧长换算偏移；拖动、布局或链路变化更新几何，平移缩放不改变图纸位置，自环保留原生端点偏移。性能策略减少拖动重复计算；大图流畅度仍需目标硬件评测。
 
-全局 Token 的唯一来源是 `frontend/src/styles/global.css`：
+## 身份与异步
 
-- 间距：`--space-1/2/3/4/6/8/12/16`，对应 4、8、12、16、24、32、48、64px。
-- 全局密度：`--ui-scale` 是页面、Portal、图标、字号与既有像素规则的唯一视觉比例边界；当前为 `0.8`。不得使用 `transform: scale()` 实现页面缩放，以免破坏滚动、固定定位与点击命中区域；所有固定视口壳须以 `calc(100vh / var(--ui-scale))` 保持物理视口高度。
-- 圆角：`--r-8`、`--r-12`、`--r-16`，对应 8、12、16px；胶囊只用于状态标签。
-- 字体：正文 14px；标题按 16、18、20、24px 建立层级；10–12px 只用于辅助信息、时间和机器标识。
-- 布局：Header 56px、Sidebar 176px、工作台进度轨 192px、管理页面铺满侧栏右侧可用空间、不设置居中宽度上限，均尊重 `--ui-scale: 0.8`。工作台的助手消息、工具调用卡片和输入框使用中间对话列可用宽度（消息为头像保留 44px），不设置固定阅读宽度上限；`--w-reading: 1120px` 仅约束空状态内容。收起进度轨时中央列继续扩展，窄屏保留时间线入口。
-- 视觉别名、控件高度、物理 2px 焦点轮廓及移动端 44px 触摸目标统一定义在 `global.css`。业务页面与扩展只消费语义 Token；保持 `global.css` → `product-shell.css` → `console-system.css` → `AgentWorkbench.css` 的级联顺序。
-- 动效：交互过渡使用 110–240ms；340ms 仅用于较大的视图切换。`prefers-reduced-motion` 下必须关闭非必要动画。
-- 语义色：`--ok`、`--warn`、`--danger`、`--info` 只表达对应业务语义，不能作为装饰色。
+登录采用 HttpOnly Cookie；临时 token 只用 sessionStorage，不进 URL/localStorage/日志/构建变量。VITE_API_BASE 决定 API 与实时 origin；本地 token 探测合并并发并缓存 local_token_unused，临时故障可重试。fetch SSE 保留跨分片 CRLF、事件名、多行数据和 ID；Agent 会话 SSE 未接入生产者。
 
-深色模式通过同一组语义 Token 重映射，不允许页面组件硬编码另一套主题。
+异步详情核对请求序号和资源 ID，旧返回不能覆盖新选择。附件失败保留草稿和失败项，仅移除成功上传项。删除保留各资源原有硬删除及确认语义。
 
-### CSS 层级
+## 视觉和可访问性
 
-入口 `frontend/src/main.tsx` 按以下顺序加载样式：
+Token 在 frontend/src/styles/global.css。深浅主题复用语义色；--ui-scale=0.8 是统一比例边界，不能另用 transform:scale 改命中区。间距、字号、圆角、控件、焦点、移动触摸目标消费共享 Token，不硬编码第二品牌色。
 
-1. `styles/global.css`：Token、基础元素和历史兼容选择器。
-2. `styles/product-shell.css`：Header、导航、Sidebar 等应用外壳。
-3. `styles/console-system.css`：共享页面构图与管理台页面规范。
-4. `pages/AgentWorkbench/AgentWorkbench.css`：工作台专用两栏构图，必须最后加载，防止兼容选择器改变工作台 Grid 生命周期。
+样式顺序：global.css → product-shell.css → console-system.css → AgentWorkbench.css。工作台消息与输入填满中间列，管理页使用可用空间；--w-reading 只约束空状态，不再要求固定正文宽度。历史 design-qa.md 只描述当时截图。
 
-新增页面应优先复用前三层，不得在组件中复制 Token。页面专用规则只处理该页面独有的构图，不重新定义颜色、按钮、输入框或通用状态。
+主从页用于选择/详情，连续行用于数据索引；颜色表达选择或业务状态，避免装饰卡片。Button 图标提供可访问名称，DataTable 行支持 Enter/Space，ModalShell/PortalModal 限制焦点、支持 Escape 并恢复触发器焦点。异步覆盖加载、空、错误、成功、警告与未知状态。
 
-## 页面构图规范
-
-- 普通页面使用 `.page`、`.page-header` 和 `.page-body`。主体在可用空间内居中，最大宽度为 1440px，不挤压左侧导航。
-- 工作台以对话为 Primary Content，执行进度为窄 Supporting Content。消息正文限制阅读宽度，输入区与消息列对齐。
-- 任务、能力、设置和用户管理优先使用主从布局：左侧用于选择对象，右侧用于查看或编辑，避免跳页丢失上下文。
-- Dashboard 不默认使用等宽卡片矩阵。汇总与治理信息优先使用 2fr/1fr 等非对称 Grid。
-- 数据列表、设备列表和服务商列表采用连续行与分隔线；只有独立任务、表单、对话或空状态需要完整容器。
-- Primary Content 使用最高文字对比度；Secondary Content 使用 `--text-2`；说明和辅助状态使用 `--text-3`；时间、标识和元数据使用 `--text-4`。
-
-## 共享组件契约
-
-共享组件位于 `frontend/src/components/ui/`：
-
-- `Button`：支持 default、primary、ghost、danger 和 danger-ghost。图标按钮必须提供 `aria-label` 或 `aria-labelledby`。
-- `Input`、`Select`、`Textarea`、`FormField`：输入区域必须具有可见描边、标签和统一 focus ring。
-- `DataTable`：可点击行同时支持 Enter 与 Space，并暴露键盘焦点；空数据使用统一 `EmptyState`。
-- `ModalShell` 与 `PortalModal`：打开后移动焦点、限制 Tab 循环、支持 Escape 关闭，并在关闭后恢复触发器焦点。
-- `PageHeader`、`FilterBar`、`DetailPanel`：建立标题、筛选和详情的统一层级，页面不重复创建近似组件。
-
-## 状态与反馈
-
-每个异步界面都必须覆盖以下状态：
-
-| 状态 | 表达规则 |
-| --- | --- |
-| Loading | 保持布局稳定，使用共享骨架或明确加载文本；禁止空白闪烁 |
-| Empty | 说明为什么为空，并在存在下一步时提供一个明确操作 |
-| Error | 显示可理解原因和可恢复操作；危险色只用于真实错误 |
-| Hover | 轻微背景变化，不能造成位移抖动 |
-| Focus | 2px 可见 focus ring，键盘路径与鼠标路径等价 |
-| Active/Selected | 使用深青色文字、浅色背景或左侧 3px 指示线，不叠加多重强调 |
-| Disabled | 保留可读标签，降低对比度并取消交互反馈 |
-| Success/Warning/Danger | 由业务结果驱动；不能把局部工具结果提升为任务终态 |
-
-删除设备、连接、Skill、会话和终态任务时，界面保持各自既有的硬删除语义与确认流程，不得用视觉重构改成归档或软删除。
-
-## 响应式与可访问性
-
-- 900px 及以下，Sidebar 变为可关闭抽屉；主从布局改为单列，工作台进度轨隐藏但完整时间线仍可访问。
-- 760px 及以下，页面边距和表格密度收紧，横向表格保留滚动容器，不裁切操作列。
-- 交互元素使用原生 `button`、`a`、`input`、`select` 和 `dialog` 语义；非原生可点击元素必须补齐角色、焦点和键盘事件。
-- 路由切换后焦点进入 `#main`；移动导航与模态框都必须支持焦点闭环和焦点恢复。
-- 所有图标按钮、状态图标和表单字段必须具有可访问名称。颜色不能成为唯一状态线索。
-- 长文件名、设备名、模型名和机器标识必须在布局中截断或换行，不能覆盖大小、时间和操作控件。
-
-## 工作台组件边界
-
-`frontend/src/pages/AgentWorkbench/AgentWorkbench.tsx` 负责工作台数据与发送生命周期。以下组件分别负责独立视图职责：
-
-- `WorkbenchHeader`：当前会话、模型状态、视图切换和导出。
-- `WorkbenchComposer`：Skill、设备、附件和输入发送。
-- `WorkbenchEmptyState`：无会话内容时的起始引导。
-- `TaskProgressPanel`：实时阶段与证据摘要。它以工作台聚合的回合活跃状态（本地流式发送或服务端 durable job 为 `running`）作为终态门槛：已有消息 `result`、缓存事件或旧快照都不能在回合仍活跃时把“形成建议”或整轮状态投影为完成。只有回合不再活跃且服务端/最终结果明确终态时，才显示完成或失败。
-- `ResultInline`：服务端结果与执行详情投影。
-- `StageOutputs`：保留模型各轮公开输出，已结束阶段默认折叠，当前输出默认展开且可收起。最终答复独立展示，只省略末尾与最终答复相同的阶段展示，不删除存储内容。
-- `ThinkingBlock`：受控推理内容展示。
-
-组件不能复制服务端状态判定。异步操作只有在真实成功后才显示成功反馈，连接失败、工具失败和恢复过程必须保留其原始业务范围。
-
-实时连接归应用级 `turnTransport`，页面只订阅。登录后的应用保持一条系统订阅，即使没有活跃回合也会重连并接收图纸版本提示；退出登录或切换用户/工作区时显式解除传输所有权，旧回调不得写入新身份的 store。接收帧按工作区、会话和请求 ID 分发；刷新恢复与新回合共用同一套工具卡、认知事件、阶段输出和终态处理。`streamSeq` 与对应的完整公开缓冲 `streamDraft`、推理标签过滤状态一起持久化，渐进显示文本可以滞后，但续流游标不会跳过尚未缓存的内容。2.5 秒任务状态查询只做终态兜底，对照同一请求的持久化会话消息和运行详情收敛，再核对当前图纸；画布的主更新入口仍是 `topology_updated` 版本广播。切走页面不关闭 `/ws/agent`，也不清掉该会话的发送状态。`useChatStream` 在模型和工具阶段切换前先完整提交待显示字符，再保存阶段输出，避免缓冲字符丢失或串入下一阶段。运行时将每次模型返回的公开文本保存到 `metadata.stage_outputs`，会话消息接口返回同名字段；刷新或重新加载会话时由服务端记录恢复。字段只承载公开答复，不包含模型隐藏推理。旧版本未保存的阶段无法从最终答复还原。
-
-`typography.css` 统一正文、标题、列表与表格排版；整体缩放保持 `--ui-scale: 0.8`。工具卡与时间线通过 `toolCallState.ts` 区分执行中、成功、失败和结果未知；回合未知而具体调用标识缺失时，仅展示回合级未知状态，不猜测是哪次调用。
+900px 以下 Sidebar 为抽屉，工作台进度有时间线入口；760px 以下收紧密度并保留表格横向操作。路由焦点进入 #main；长文本换行或省略，不覆盖元数据。
 
 ## 验证
 
 ```bash
-cd frontend
-npm run typecheck
-npm run lint:tokens
-npm test -- --run
-npm run build
+npm --prefix frontend run typecheck
+npm --prefix frontend run lint:tokens
+npm --prefix frontend test -- --run
+npm --prefix frontend run build
+npm --prefix frontend run e2e
 ```
 
-涉及布局或交互的变更还必须在真实浏览器中验证：
-
-- 工作台、任务、资料、能力、系统状态和设置主路径；
-- 桌面与窄屏布局；
-- 空、加载、错误、选中、禁用和弹窗状态；
-- 键盘导航、焦点闭环和长文本溢出；
-- 浏览器实际请求、代理、认证和服务端响应。
-
-截图只能证明某一时刻的视觉结果，不能替代真实交互、接口响应或服务端运行验证。
+涉及 UI 还要检查实际请求、认证、主路径、窄屏、键盘、弹窗、长文本和错误。截图只证明当时视觉，自动化不是所有机器的帧率或原生窗口验收。

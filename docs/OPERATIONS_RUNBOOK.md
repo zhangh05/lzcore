@@ -1,25 +1,31 @@
-# 运维处置手册
+# 故障排查与恢复
+
+先定位环境、提交、工作区和请求 ID，再区分接入、模型、工具、任务与外部写入。保留脱敏证据；HTTP 错误、工具失败或超时不能单独决定是否可重试。
 
 ## 服务不可达
 
-1. 确认目标提交和工作树：`git rev-parse HEAD && git status --short`。
-2. 查看 Compose 状态：`docker compose -f deployment/compose.server.yml ps`。
-3. 验证 backend：`curl -fsS http://127.0.0.1:8011/api/health`。
-4. 验证真实前端入口：`curl -fsSI http://127.0.0.1:5273/` 与 `curl -fsS http://127.0.0.1:5273/api/health`。
-5. 需要重建时执行 `bash scripts/deploy_server_compose.sh`，不要只重启其中一个服务。
+1. 读取 git rev-parse HEAD 和 git status --short。
+2. 查看 docker compose -f deployment/compose.server.yml ps。
+3. 检查 http://127.0.0.1:8011/api/health 与 /api/ready。
+4. 从实际前端入口检查 http://127.0.0.1:5273/ 与 /api/health。
+5. 已授权部署时执行 bash scripts/deploy_server_compose.sh，统一更新 backend/worker/frontend，检查同一镜像与就绪状态。
 
-## 错误率或工具失败上升
+容器 liveness 不能替代前端代理或关键业务读路径。
 
-先查看 runtime summary、trace、作业事件与工具结构化错误，区分参数/连接/策略/授权/外部服务故障。不要把单次工具失败直接归类为任务失败，也不要通过重启或重试重放未知外部写入。
+## 回合卡住或重复调用
 
-## 作业与 worker
+按 workspace/session/client_request_id 核对 session job、会话消息和 turn_logs 的同一回合。日志查询只证明已落盘；resume 不重跑工具。先确认终态消息，再续未终态日志；控制错误不当作模型失败。
 
-检查 `/api/jobs/<job_id>`、事件、日志和 worker status。运行中或排队作业必须先取消并等待终态；终态作业才能按 API 的确认值永久删除。队列是 at-least-once，外部写 handler 必须依赖幂等键。
+检查 model_completed 的 finish_reason/output_truncated、原生函数名、JSON 参数和实际工具收据。重复 changed=false、同参数失败和未知写入需要不同处理，不能靠隐藏阶段输出解决。容量错误不通过反复提交同一请求恢复。
 
-## 外部写入结果未知
+## 设备与画布
 
-保持原操作冻结，检查操作账本与目标系统的只读证据。只在 read-back/reconcile 确认事实后关闭记录；不得让模型、worker 或人工“再试一次”盲目重放。
+设备错误看最新 command_results、dispatch 和 model_recovery_guidance，厂商文档只修正语法。未知写入先只读对账；不让模型/worker/人工原样重放。
 
-## 备份恢复
+图纸看 topology_id/version、changes/feedback 和本地 dirty 状态。服务器已保存但页面有冲突时处理差量，不重复 patch 刷新。局部 snapshot 不替换整图，估算几何不证明视觉正确。
 
-先 `python3 scripts/backup_cli.py verify <archive>`，再使用明确确认值执行 restore。恢复会保留可回退的旧数据根；恢复后重新检查 ready、worker、前端代理与关键业务读路径。
+## Worker、备份与桌面
+
+作业检查 /api/jobs/<job_id>、事件和 worker status；排队/运行先取消并等终态，永久删除要显式确认。队列 at-least-once，外部写入需要幂等。
+
+恢复先 python3 scripts/backup_cli.py verify <archive>，再明确 restore；检查回退根、ready、worker 和业务路径。Windows 导出/退出/更新检查原生 bridge、实际任务及未保存编辑，不仅检查按钮文案；见 [WINDOWS](WINDOWS.md)。

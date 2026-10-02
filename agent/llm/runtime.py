@@ -522,7 +522,14 @@ def _build_metadata(
 
 
 def _messages_from_rendered_prompt(rendered_text: str, user_input: str, task: str) -> List[LLMMessage]:
-    """Use the rendered template as the authoritative system instruction."""
+    """Keep authored instructions in system and contextual data in user."""
+    instructions, boundary, payload = rendered_text.partition('\n<provided_context data_only="true">')
+    if boundary:
+        return [
+            LLMMessage(role="system", content=instructions.strip()),
+            LLMMessage(role="user", content=(boundary + payload).strip()),
+        ]
+    # Structured reflection/probes supply their payload separately.
     user_content = (user_input or "").strip() or f"Task: {task}"
     return [
         LLMMessage(role="system", content=rendered_text),

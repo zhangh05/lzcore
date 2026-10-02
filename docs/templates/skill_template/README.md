@@ -1,26 +1,17 @@
-# Skill 模板
+# Skill 编写模板
 
-Skill 是面向模型与 UI 的说明和范围元数据，不绕过 canonical runtime 的资源范围和服务端授权。
+先区分通用说明型 Skill 与网络工作台的发布 Skill。说明指导模型如何工作；网络 Skill 还绑定服务端注册资源。二者都不能越过运行时授权。
 
-```text
-agent/skills/<name>/
-  SKILL.md
-  skill.yaml
-```
+## 写作顺序
 
-`SKILL.md` 应说明适用任务、所需输入、证据策略和输出边界；不要在其中嵌入密钥、固定设备状态或未经授权的写操作指令。
+1. 适用任务：说明用户要获得的结果，不重复全局身份和安全规则。
+2. 输入与权威：区分用户意图、对象 ID、当前观测、历史和知识。
+3. 工具契约：引用真实 canonical ID/动作，需要字段查发布 schema，不复制一份易过时的参数表。
+4. 决策：足够证据时完成；缺口时读/改/核验；参数错误改参数；未知写入先对账。
+5. 输出：结果、范围、证据和缺口，不强制空章节或工具日志。
 
-```yaml
-skill_id: my_feature
-name: My Feature
-version: "1.0.0"
-status: enabled
-description: "当前业务能力的说明层。"
-related_tools:
-  - workspace.file
-  - text.analyze
-evidence_rules:
-  - cite_sources_when_using_retrieval
-```
+通用 Skill 的发现/加载由 skill.manage 及其配置决定，不假定新建 agent/skills/ 即可自动注册。网络 Skill 通过扩展 API 创建并发布；每次调用服务端重核设备、连接和工具范围，选择不建立连接。
 
-`related_tools` 必须是 canonical ID。每个已发布网络 Skill 默认可配置其已登记设备；服务端在调用时重新验证发布状态、设备/连接和工具范围，设备账号决定实际命令权限。
+绘图 Skill 自动按图纸生成，单图 read/patch，保留属性、坐标、连线与图元能力。Skill 自有说明不得嵌入密钥、固定当前状态或声称扩大设备权限。
+
+装配与版本见 [提示词架构](../../SKILL_PROMPT_ARCHITECTURE.md)，业务入口见 [API](../../API.md)。

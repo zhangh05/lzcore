@@ -1,25 +1,16 @@
-# 工具模板
+# 工具接入模板
 
-优先在现有 canonical tool 中增加动作。只有确实需要新的公共工具时，才在 `core/tools/tool_namespace_data.py` 新增 ID。
+优先扩展已有 canonical 工具动作。新业务工具使用扩展命名空间；确需新平台工具时更新 core/tools/tool_namespace_data.py、canonical registry 与 manifest。
 
-## 接入顺序
+## 合同先行
 
-1. 更新 tool namespace、manifest registry 与 canonical registry。
-2. 定义 JSON schema、调用方范围、风险等级、side effect 与输出敏感性。
-3. 保持执行经 `ToolRuntimeClient.invoke()`。
-4. 添加 namespace、manifest、policy、handler、脱敏和 API/前端路径测试。
-5. 更新 API、架构和用户文档。
+- 发布完整输入 JSON schema，明确动作的必需参数、结果字段和安全绑定。
+- manifest 声明调用方、权限动作、风险、副作用、dry_run 和输出敏感性。
+- handler 返回可序列化的事实、状态、引用和安全错误；未知写入保留 unknown，不能标成可重试失败。
+- 模型经 ToolRuntime.execute_node，外部/审批经 ToolRuntimeClient.invoke；测试使用治理执行器，不能直接调用 handler 来证明授权正确。
 
-```python
-CapabilityManifest(
-    tool_id="text.analyze",
-    action_class="read",
-    risk_level="low",
-    destructive=False,
-    side_effects=False,
-    allowed_callers=("turn_runner", "rest_api", "job_runner", "subagent"),
-    output_sensitivity="internal",
-)
-```
+## 验收
 
-handler 返回可序列化字典，由 `ToolExecutor` 包装为 `ToolResult`。返回 summary、结构化字段和可引用证据；绝不返回原始密钥或把外部写入未知伪装为失败后可重试。
+核对 namespace/manifest/schema/caller/policy/脱敏，以及资源创建、读取、写入、删除和恢复。存在外部副作用时核对幂等与未知结果。API/前端接入时同步调用与文档；模型提示只解释选择，不实现权限。
+
+工具身份以注册表和 /api/tools/catalog 为准，不增加别名或旁路注册表。扩展打包见 [EXTENSIONS](../../EXTENSIONS.md)。

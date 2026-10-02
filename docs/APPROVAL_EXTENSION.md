@@ -1,47 +1,32 @@
-# 可选操作审批扩展
+# 网络配置的可选审批
 
-## 作用与边界
+extensions/approval/ 仅在当前发布 Skill 的 approval_enabled=true 时拦截 configure。默认关闭；审批不代替设备账号权限，也不定义另一套危险命令分类。
 
-`extensions/approval/` 为网络 Skill 的 `configure` 调用提供可选的外部决定步骤。它默认关闭；只有已发布 Skill 的 `approval_enabled` 被显式设为 `true` 时才生效。
-
-它不是权限系统，也不判断命令是否“危险”。网络设备账号仍是实际命令权限的最终来源；Skill 和连接选择仍由网络扩展在服务端实时校验。
-
-拦截时读取 Skill 当前的 `approval_enabled`，不使用工作台选择时保存的开关快照。连接短 ID 先解析为完整 ID，再与当前 Skill 范围和工作台已选连接核对。拦截器发现或执行失败时，运行时返回 `EXECUTION_INTERCEPTOR_FAILED`、`executed: false`，不会继续执行该写入。
-
-## 生命周期
+## 冻结、决定、恢复
 
 ```text
-模型提出 configure
-  -> execution_interceptor 冻结精确操作
-  -> pending（未连接设备）
-  -> 用户 approve / reject / cancel
-  -> approve 时重新核验 digest、Skill、设备与连接版本
-  -> ToolRuntimeClient 执行原始参数（仅 approve）
-  -> executed / unknown / invalidated / rejected / cancelled
-  -> 同一决策集全部终态后，服务端自动恢复原 QueryLoop checkpoint
-  -> 原 tool call id 的完整实际结果回注，模型继续原目标
+configure 提案 -> 拦截并保存精确调用 -> pending（未接触设备）
+  -> approve/reject/cancel
+  -> 重新核验 digest、Skill、设备、连接及范围
+  -> 仅批准时经 ToolRuntimeClient 执行
+  -> executed/unknown/invalidated/rejected/cancelled
+  -> 同一决策集终态 -> 原 checkpoint 恢复
 ```
 
-一次 prepared operation 包含目标设备、连接公开元数据和 revision、Skill 的 `updated_at` 与连接范围、命令数组的原始顺序和 UTF-8 文本、超时和执行模型。digest 覆盖这些冻结字段；任何 digest 不匹配、Skill 修改、连接修改、设备修改或连接脱离 Skill 范围都会使批准记录失效，且不会打开设备连接。
+拦截读取当前 Skill 开关，不用工作台旧快照。连接短 ID 先解析 canonical ID，再核对 Skill 和已选连接。拦截失败返回 EXECUTION_INTERCEPTOR_FAILED、executed=false，不继续发送写入。
 
-## 持久恢复
+digest 覆盖设备、连接公开元数据/revision、Skill updated_at/范围、命令顺序与 UTF-8 文本、超时和执行模型。内容或资源版本变化使批准失效，不能打开连接执行旧调用。
 
-审批不会占用 LLM 请求、HTTP 请求或设备会话等待用户。暂停时扩展保存完整的模型消息、原始工具调用、此前工具结果和本轮结果边界到 `approval_continuation` checkpoint；不做摘要、截断或浏览器端重组。每项审批可独立决定，但同一轮的全部待决定调用必须进入终态，服务端才原子认领 checkpoint 并自动恢复原逻辑循环。批准的真实结果、拒绝/取消/失效的结构化结果都按原 `call_id` 回填给模型。浏览器不会发送“继续处理”这类伪造用户消息。
+暂停保留完整模型消息、原 call_id、调用及结果边界到 approval_continuation；不摘要、不截断，不占住 LLM 或设备连接。checkpoint 无 TTL；决策集全部终态后，服务端原子认领并将实际结果按 call_id 回注同一循环。前端不发送伪造“继续”请求。
 
-checkpoint 没有 TTL；等待十分钟或更久不会使其过期。若等待期间 Skill、设备或连接范围发生变化，调用会以 `invalidated` 结果回注原循环，不会执行冻结命令。
+## 批量与未知结果
 
-## 批量命令
+命令意图以 extensions/network_operations/command_semantics.py 为准：满足只读语法条件的 display/show/ping 归只读，其余归配置。含配置的批次进入审批，不是事务。明确 CLI 失败仍记录每条 command_results 并按驱动合同继续；传输断开后无法发送的标 not_sent。未知写入不重放，先 read-back/reconcile。
 
-批准后的批量配置不是隐式事务。服务端只将首词为 `display`、`show` 或 `ping` 的命令视为只读；其他任意命令会使整批进入审批路径。设备明确返回某条命令失败时，驱动继续发送后续命令并在 `command_results` 中保留每一条结果。仅当传输已经断开、后续命令无法客观发送时，剩余命令才标为 `not_sent`，同时完整返回模型。写入结果不确定时不会自动重放；模型可依据完整记录决定 read-back 或后续操作。
+## 接口
 
-## UI 与 API
+- GET /api/extensions/approval/operations
+- GET /api/extensions/approval/operations/{operation_id}
+- POST /api/extensions/approval/operations/{operation_id}/decision
 
-工作台在等待时展示目标、完整命令和 digest，并提供批准、拒绝、取消。记录 API 均位于：
-
-- `GET /api/extensions/approval/operations`
-- `GET /api/extensions/approval/operations/{operation_id}`
-- `POST /api/extensions/approval/operations/{operation_id}/decision`
-
-所有 API 均要求 `workspace_id`。扩展记录不会存储设备明文凭据。
-
-决定记录的 `decided_by` 来自服务端认证主体，不接受请求正文声明的身份；无认证主体的本地模式记录为 `user`。
+均要求 workspace_id；decided_by 来自服务端主体，本地无主体记 user，不接受正文伪造身份。记录不含明文设备凭据。验收覆盖开关变化、短 ID、版本失效、拒绝、取消、未知写入和恢复完整性。

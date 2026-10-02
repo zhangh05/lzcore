@@ -1,9 +1,9 @@
-# 组织与工作区隔离
+# 身份、组织与工作区
 
-组织、用户、成员关系与工作区授权由 identity 和 workspace API 管理。每个资源访问都以服务端验证的 `workspace_id` 为边界；UI 路由、会话参数或客户端缓存不能跨越这一边界。
+组织、用户、成员关系由 /api/identity/* 管理，工作区由 /api/workspaces/* 管理。每次资源访问使用服务端验证的 workspace_id 和认证主体，UI 路由或可猜测资源 ID 不授权访问。
 
-HTTP 中间件统一读取 path、query、JSON 与 multipart form 的工作区字段。多个来源同时存在时必须一致，否则请求以 `workspace_id_conflict` 终止。WebSocket 在解析工作台 Skill 和读取数据前绑定已认证 storage principal，并在每次 workspace 操作时重新读取用户的 enabled、role 与 workspace 列表；禁用或删除账号立即失去已有长连接的访问权。平台 API token 使用独立的 `api-token` principal，不能落入匿名存储。
+HTTP 从 path、query、JSON、multipart 统一解析工作区字段；重复来源不一致返回 workspace_id_conflict。WebSocket 在读取数据和解析 Skill 前绑定 storage principal，每次工作区操作重新读取用户 enabled/role/工作区列表。禁用或删除账号不能保留旧长连接权限。
 
-在 identity 模式下，用户、组织、成员关系和角色通过 `/api/identity/*` 管理；工作区通过 `/api/workspaces/*` 管理。角色控制读取、执行、编辑和管理能力，具体工具仍执行自身的 caller、policy 与产品授权检查。
+API token 使用独立 api-token principal，不落入匿名存储。角色与 workspace 可见性只是一层；工具仍检查 caller、policy 和扩展资源范围。可见工作区不等于可写设备，网络写入需要当前发布 Skill 范围及设备账号权限。
 
-不要把“工作区可见”理解为“设备、外部系统或写配置可操作”。网络设备写入还必须满足发布 Skill 的实时服务端授权范围。
+客户端切换用户/工作区时释放旧传输所有权，旧回调不得写进新身份 store。服务端任务不因页面离开而取消。详见 [API](API.md) 和 [前端](FRONTEND.md)。

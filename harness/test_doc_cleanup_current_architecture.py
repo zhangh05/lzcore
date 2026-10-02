@@ -56,11 +56,7 @@ def test_docs_match_current_stack():
     assert "Python 3.12+" in combined
     assert "/api/tools/catalog" in combined
     assert "/api/tools/invoke" not in combined
-    # v3.9.13: tool count is dynamic — assert it appears as a number
-    # anywhere in the docs.
+    # Verify named tools, not a coincidental/stale count elsewhere in prose.
     from core.tools.tool_namespace import TOOL_NAMESPACE
-    expected_count = len(TOOL_NAMESPACE)
-    assert str(expected_count) in combined, (
-        f"docs should reference current canonical tool count "
-        f"({expected_count}) but found no occurrence in {len(DOCS)} docs"
-    )
+    for tool_id in TOOL_NAMESPACE:
+        assert tool_id in combined, f"Undocumented canonical tool: {tool_id}"

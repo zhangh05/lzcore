@@ -1,27 +1,19 @@
-# 联智中枢前端
+# 前端开发入口
 
-前端使用 React 18、TypeScript、Vite 8、Zustand、Axios、Vitest 与 Playwright，源码位于 `frontend/src/`。
-
-## 开发与验证
+源码在 src/；使用 React、TypeScript、Vite、Zustand、Axios，测试使用 Vitest 和 Playwright。业务状态、授权和终态来自后端。
 
 ```bash
-cd frontend
+npm ci
 npm run dev -- --host 127.0.0.1
 npm run typecheck
+npm run lint:tokens
 npm test -- --run
 npm run build
 npm run e2e
 ```
 
-开发服务器默认端口为 `5273`，`/api` 代理到 `VITE_DEV_API_TARGET`（默认 `http://127.0.0.1:8011`）。
+在 frontend/ 执行。开发端口 5273，/api 代理由 VITE_DEV_API_TARGET 设置，默认 http://127.0.0.1:8011。分离部署用 VITE_API_BASE；不要将凭据编译到环境变量。
 
-## 代码导航
+app/App.tsx 装配路由，api/ 处理资源与实时通道，stores/ 保留视图状态，pages/layouts/components 实现界面，types/ 描述 API，test/ 和 e2e/ 验证。
 
-- `src/app/App.tsx`：顶层应用与导航路由。
-- `src/api/`：API 客户端与资源模块。
-- `src/pages/`、`src/layouts/`、`src/components/`：页面、布局与组件。
-- `src/stores/`：Zustand 视图状态。
-- `src/types/`：API 面向的类型。
-- `src/test/`、`e2e/`：单元和浏览器测试。
-
-前端只呈现服务端事实：不得在浏览器补充 `workspace_id`、Skill 权限、任务终态或恢复目标。登录使用 HttpOnly 会话；临时 token 仅可存于 sessionStorage，不能写入 URL、localStorage、日志或构建变量。
+页面不持有回合连接、不合成权限；发送用户原话和独立选区。详见 [前端合同](../docs/FRONTEND.md) 和 [API](../docs/API.md)。

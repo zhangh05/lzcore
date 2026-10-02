@@ -1,6 +1,6 @@
-# 工作流
+# 工作流：确定性 DAG
 
-工作流是工作区范围内的 DAG。节点引用 canonical platform tool 或已安装扩展工具，不能直接调用扩展 handler，因此每个节点仍受 `ToolRuntimeClient` 的 schema、策略、授权、脱敏和审计保护。
+工作流属于工作区，节点引用 canonical 或已安装扩展工具，经 ToolRuntimeClient 的 schema、policy、范围、脱敏和审计执行。工作流不拥有另一套 LLM 循环。
 
 ## 定义
 
@@ -17,14 +17,12 @@
 }
 ```
 
-节点 ID 唯一，依赖必须存在且无环；引用只能读取传递依赖的输出。节点数量不设运行时终止上限；单节点解析后的输入上限为 1 MiB。密码、token、私钥和授权字段不得作为持久化定义的一部分。
+node_id 唯一，依赖存在且无环；输出引用只能来自传递依赖。节点数量不作为任务终止上限，解析后单节点输入上限 1 MiB。定义中不得持久化凭据或授权秘密。
 
-## 执行语义
+## 执行与失败
 
-独立只读节点在并发上限内执行；写入和其他有副作用节点形成顺序屏障。某个节点失败只写入该节点的完整结果；没有依赖该结果的后续节点仍会执行，声明依赖失败结果的节点则标记为依赖不可用。结果按稳定的节点顺序记录。`POST /api/workflows/<workflow_id>/runs` 默认同步执行，设置 `enqueue: true` 后创建 durable `workflow_run` 作业。
+独立只读节点按并发上限执行；有副作用节点形成顺序屏障。失败记录在对应节点，不阻断无依赖节点；依赖失败输出的节点标记依赖不可用。结果按稳定节点顺序保存，failure_policy 固定采用 continue 语义。
 
-worker 队列是 at-least-once。涉及外部写入的 handler 必须使用作业 ID 与节点 ID 构造幂等键。工作流固定使用 `continue` 语义，不创建第二套 LLM 失败恢复机制，也不会自动重放写操作。
+POST /api/workflows/<workflow_id>/runs 默认同步；enqueue=true 创建 durable workflow_run 作业。worker 是 at-least-once，外部写入 handler 需要以作业和节点 ID 建幂等键，不能自动重放未知写入。
 
-## 与对话运行时的关系
-
-QueryLoop 的只读证据恢复和工作流节点失败是两种不同语义。只有工具结果处于对话回合中时，QueryLoop 才可能消费其安全恢复指令；普通工作流会记录结果，由工作流所有者决定后续操作。
+QueryLoop 的恢复目标只在对话循环消费相应工具结果时生效；普通工作流保存节点事实，由所有者决定后续。端点见 [API](API.md)，任务语义见 [Loop](LOOP_ENGINEERING.md)。

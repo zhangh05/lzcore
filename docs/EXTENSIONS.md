@@ -1,37 +1,33 @@
-# 扩展开发
+# 扩展：业务实现与接入
 
-扩展用于承载领域对象、领域工具、专属 API 和工作台页面。平台发现 bundled `extensions/*/extension.json` 与本地 `plugins/*/extension.json` 中的扩展。
-
-## 创建与校验
+bundled 扩展由 extensions/*/extension.json 发现，本地安装包由 plugins/*/extension.json 发现。行业对象、厂商驱动、工具、路由和 UI 留在扩展；内核只接收通用执行/证据/恢复合同。
 
 ```bash
 python3 scripts/extension_cli.py create acme.insights --name "洞察工具"
 python3 scripts/extension_cli.py validate plugins/acme_insights
 ```
 
-工具 ID 必须以 `<extension_id>.` 开头；后端路由必须以 `/api/extensions/<extension_id>` 开头；前端路由必须以 `/extensions/<extension_id>` 开头。实现与入口均留在扩展目录中。
+工具前缀 <extension_id>.，后端 /api/extensions/<extension_id>，扩展前端 /extensions/<extension_id>。清单发布兼容版本、工具和贡献；不兼容清单不注册。模型经 ToolRuntime，外部接入经 ToolRuntimeClient，不能直接调 handler。
 
-## 平台合同
+## 网络设备与独立绘图
 
-扩展工具不直接执行 handler，而是进入 `ToolRuntimeClient`。平台负责 schema、caller、workspace、资源范围、脱敏、配额、trace 与 audit；不根据命令内容施加危险策略。扩展的 manifest 声明 API 兼容版本、工具、路由和前端贡献；不兼容清单不得注册。
+network.operations 拥有区域、设备、连接、发布 Skill、Observation、Reference 和命令反馈。选择仅传资源意向；调用前重新读取发布 Skill 范围，不预连。配置是否被接受最终取决于设备账号，不能靠模型 action 冒充只读。独立目标失败不阻断其他设备。
 
-## 业务对象与网络扩展
+drawing:<topology_id> 只暴露当前图 read/patch。图纸节点不是真实资产；用户绑定设备属于外部关联，只读最近测试/观测，不进入绘图 Skill。LLM 保留节点属性、坐标、连线、图元、标签和布局控制，不以默认模板限制规模。
 
-业务扩展不仅是工具面板，还要拥有对象模型和完整生命周期。bundled `network.operations` 管理区域、设备、加密的 SSH/Telnet 连接、已发布 Skill、时点 Observation、Reference 生命周期和命令反馈。工作台选择只传达候选 Skill；服务端每次调用重新解析 Skill 的设备、连接和允许工具范围。已发布网络 Skill 内建读取与配置能力，设备账号决定设备最终接受哪些命令。选择本身不建立网络连接，也不扩大资源范围。
+增量编辑基于当前版本并保留未点名对象；已有基线足够可复用，否则 read 补齐。显式旧版本冲突，省略版本按锁内当前状态提交；直接保存仍校验版本。发布 schema 递归核验所有嵌套对象，自然别名不免检。action 补全和 title/summary/comment 映射不改变 canonical 字段优先权。
 
-模型可以选择 Skill 内的一部分设备。单台连接失败必须以该设备的工具结果返回，不能阻断其他独立设备。网络图纸是独立对象：每张图有一个 `drawing:<topology_id>` Skill，只允许 `network.operations.topology` 的 `read`/`patch`，不连接、不发现、不推断真实设备。图纸节点是符号，不是登记资产。人可以在节点上点选一台已登记设备，形成图纸之外的绑定；画布只读显示该设备最近一次连接测试和最近一条观测的时间与完整度。绑定不进入图纸保存、设备 Skill 或图纸 Skill 的提示词。Agent 必须先 `read` 再带当前 `version` 做 `patch`；未点名的对象由服务端保留。
+成功 patch 返回实际 changes、版本、数量和估算 feedback；需要全图 read 或 response_detail=full。局部 snapshot_complete=false 不是整图；合法增删、移动和联动规则见 [API](API.md)。
 
-可选的 configure 审批见 [审批扩展](APPROVAL_EXTENSION.md)。
+## 恢复和审批
 
-拓扑工具按 schema 校验参数类型；支持的自然别名不会豁免校验。编排层与执行网关对数组元素共用递归 schema 校验，包含对象及其嵌套字段。模型编排在校验前补全遗漏的 `action`，仅删除分组或图元、修改标题或描述也识别为 `patch`。`title` 对应 `name`，`summary` / `comment` 对应 `description`，显式 canonical 字段优先，包括清空描述。成功结果包含实际 `action`，用于工作台绘图完成判定。工具增量 patch 在服务端对齐当前版本并保留未点名对象；直接保存图纸仍使用版本冲突校验。
+扩展不自建模型循环。runtime_recoveries 经过通用合同核验；网络 CLI 拒绝返回 model_recovery_guidance，模型可调整命令或检索文档，平台不盲选替代命令。Observation 是时点事实，Reference 有候选/确认/替代/失效生命周期。
 
-## 恢复集成
+可选 configure 审批默认关闭，当前 Skill 开关决定；详见 [审批](APPROVAL_EXTENSION.md)。未知写入只对账，不能自动重放。
 
-扩展不维护自己的 LLM 循环。平台可接受经过合同校验的领域无关 `runtime_recoveries`，但 `network.operations` 对厂商 CLI 拒绝只返回模型可读的结构化反馈，不自动选择替代命令、语义模板或文档检索。厂商命令模板和语义映射留在驱动内，平台内核只保存 Observation / Reference 的通用来源与生命周期，不固化网络协议或厂商 CLI。
+## 分发与验证
 
-## 分发
-
-`.apx` 包对所有文件计算 SHA-256 并使用 Ed25519 签名。私钥仅在发布端保存；安装端只持有公钥。安装拒绝未签名、篡改、超限、重复路径、路径穿越与链接载荷；升级失败时恢复前一版本，卸载移动扩展包而不删除工作区数据。
+.apx 对文件计算 SHA-256 并用 Ed25519 签名。安装拒绝未签名/篡改/超限/重复路径/穿越/链接，失败回退前版；卸载不删工作区。
 
 ```bash
 python3 scripts/extension_cli.py pack plugins/acme_insights --output dist/acme-insights-0.1.0.apx
@@ -39,3 +35,5 @@ python3 scripts/extension_cli.py verify dist/acme-insights-0.1.0.apx
 python3 scripts/extension_cli.py publish dist/acme-insights-0.1.0.apx
 python3 scripts/extension_cli.py install dist/acme-insights-0.1.0.apx
 ```
+
+按对象生命周期、范围、caller、脱敏、失败、未知写入和 UI 核验，不把清单验证通过当业务成功。工具/Skill 写作模板在 docs/templates/。

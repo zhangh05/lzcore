@@ -1,12 +1,10 @@
-# 领域模块模板
+# 模块接入模板
 
-模块封装确定性的领域逻辑，不直接暴露公共工具 ID。
+新增行业对象、驱动和业务 UI 放在 extensions/<id>/；内核只接收通用工具、证据和恢复合同。现有 agent/modules/knowledge/ 与 browser/ 是通用实现，不作为新行业模块目录模板。
 
-```text
-agent/modules/<name>/
-  __init__.py
-  service.py       # 确定性领域逻辑
-  tools.py         # 可选内部适配器
-```
+1. 确定对象和生命周期、workspace 范围、数据来源与错误语义。
+2. 实现扩展服务，再通过已有工具动作或扩展命名空间暴露。
+3. 工具经治理网关，避免模块自建执行入口或 LLM 循环。
+4. 验证创建、读取、修改、取消、终态、删除和恢复；涉及 UI 同步验证。
 
-将模块接入已有 canonical handler；如需新的公共工具，按工具模板完成 namespace、manifest、registry、policy 与测试。需要用户可见能力时再更新 `agent/capabilities/catalog.py`。不要创建模块专属的旁路工具执行入口。
+公共工具接入见 [工具模板](../tool_template/README.md)，扩展结构见 [扩展开发](../../EXTENSIONS.md)。目录结构只是组织方式，不提供授权。

@@ -66,6 +66,26 @@ def main() -> int:
     for path in required_docs:
         check((ROOT / path).is_file(), f"{path} exists")
 
+    # Check the whole first-party documentation surface, not just README links.
+    doc_paths = [*ROOT.glob("*.md"), *ROOT.joinpath("docs").rglob("*.md"),
+                 ROOT / "frontend/README.md", ROOT / "packaging/inno/README.md"]
+    broken_links = []
+    for path in doc_paths:
+        for target in markdown_links(path.read_text(encoding="utf-8")):
+            relative = target.split("#", 1)[0].split("?", 1)[0]
+            if relative and not (path.parent / relative).exists():
+                broken_links.append(f"{path.relative_to(ROOT)} -> {target}")
+    check(not broken_links, f"all documentation links resolve: {broken_links}")
+
+    from prompts.loader import load_prompt_registry
+    from prompts.renderer import render_prompt
+
+    prompt_docs = read("docs/SKILL_PROMPT_ARCHITECTURE.md")
+    for spec in load_prompt_registry():
+        if spec.status == "enabled":
+            check(spec.task in prompt_docs, f"documents prompt task: {spec.task}")
+            check(bool(render_prompt(spec.task).text), f"prompt template renders: {spec.task}")
+
     readme = read("README.md")
     for target in markdown_links(readme):
         check((ROOT / target).exists(), f"README link exists: {target}")

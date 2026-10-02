@@ -1,17 +1,25 @@
-# 存储边界
+# 存储：数据归属与生命周期
 
-## 数据根
+storage/ 提供工作区、会话、记录、文件、密钥、记忆和运行记录接口。默认工作区根是 workspaces/，应用状态在 workspaces/_runtime/，Provider 配置在 config/providers/；它们是环境数据，不进入 Git。Windows 数据根见 [WINDOWS](../WINDOWS.md)。
 
-`storage/` 提供记录、会话、工作区、文件、密钥、记忆和运行记录的持久化边界。工作区数据位于 `workspaces/`；应用级运行状态位于 `workspaces/_runtime/`；provider 配置位于 `config/providers/`。这些均为环境数据，不提交到 Git。
+## 使用规则
 
-## 规则
+- 通过对应 store 读写，不在业务层自行拼用户路径或散落写 JSON。
+- workspace_id 与 storage principal 一起确定可见性；不能仅凭可猜测 ID 访问资源。
+- 文件写入使用相应 store 的原子写/锁；生产记录和对象适配器按各自合同持久化。
+- 密钥由 storage/secret_store.py 接管；系统凭据库优先，Fernet 回退，不放在普通记录、日志或 trace。
+- FileStore、artifact、knowledge、report 保留来源关系；删除、归档、恢复和 retention 使用对应生命周期，不通过清目录伪造删除完成。
 
-- 业务代码使用对应 store，不自行拼接工作区路径或散落读写 JSON。
-- 所有存取操作验证 workspace 边界，并使用原子写入和受限文件名。
-- 密钥使用 `storage/secret_store.py` 的加密存储，不能写入普通记录、日志、trace 或文档。
-- FileStore、制品、知识源和报告保留来源关系；删除、归档、恢复和 retention 走对应 runtime/API 生命周期。
-- 备份和恢复使用 `scripts/backup_cli.py`，恢复前验证归档完整性与路径安全。
+## 不同记录的权威
 
-## 运行时状态
+| 记录 | 证明什么 | 不证明什么 |
+| --- | --- | --- |
+| TaskState/runtime_state_store | 任务控制和结果状态 | 当前外部设备状态 |
+| session job | 阶段和生命周期快照 | 每个正文 token |
+| turn_logs | 已持久化有序帧 | 客户端已接收/整轮已成功 |
+| 会话消息/run | 保存的答复、工具与证据 | 实时续流缺口 |
+| artifact/knowledge/memory | 记录内容、来源和范围 | 自动获得当前事实权威 |
 
-`agent/runtime/task_state.py` 与 `storage/runtime_state_store.py` 管理可信任务状态；会话消息、run、job、artifact 和 audit 各有自己的 store。不要引入第二套“镜像状态”以同步这些事实。
+终态收尾幂等补齐任务、消息和日志；中断不补造成功。终态日志保留及幂等窗口见 [API](../API.md)，未知外部写入见 [Loop](../LOOP_ENGINEERING.md)。
+
+备份用 scripts/backup_cli.py，先验证完整性与路径，再明确恢复；桌面备份使用原生数据生命周期。恢复保留回退根，不能直接覆盖现用文件。

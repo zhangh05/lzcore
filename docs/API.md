@@ -1,12 +1,10 @@
-# 联智中枢 API 参考
+# API：入口、资源和续流合同
 
-服务基地址：`http://127.0.0.1:8011`（本地默认）。生产环境由反向代理提供同源 `/api`、`/ws/agent` 与 SSE 路径。
+本地默认 http://127.0.0.1:8011；生产代理同源 /api 与 /ws/agent。公开方法由 backend.main.create_app() 注册，内部 handler 不作为 API。下表是资源导航，详细字段以路由/schema 为准。
 
-本文档以 `backend.main.create_app()` 当前注册的 Flask 路由为准，只描述公开 HTTP 与 WebSocket 面，不把内部 handler 当作 API。工作区数据接口必须携带服务端验证的 `workspace_id`；它可能位于 path、query、JSON 或 multipart form，具体请求 schema 以对应路由实现为准。同一请求若在多个位置重复携带该字段，值必须完全一致，否则返回 `workspace_id_conflict`，路由不会执行。identity 模式下还需要有效登录会话或服务凭据。
+工作区字段可位于 path/query/JSON/multipart，统一服务端核验；多处值冲突返回 workspace_id_conflict，不执行路由。identity 下还需有效主体。结构化结果与操作账本决定重试安全，不能只看 HTTP 状态。
 
-除健康检查外，调用方应处理结构化错误与资源生命周期，不能从 HTTP 状态码推断写入是否可安全重试。运行时结果以 `AgentResult` 投影及其 `execution_outcome`、`tool_execution_outcome` 为准。
-
-## Service, authentication and agent
+## 服务、认证与 Agent
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -25,9 +23,25 @@
 | `POST` | `/api/agent/llm/activate`, `/api/agent/llm/test` | Activate or test an LLM configuration. |
 | `GET` | `/api/agent/llm/status` | Safe LLM availability projection. |
 
-Agent session SSE (`/api/agent/sse/stream/<session_id>`) is registered but not fed by the live runtime. Other SSE routes are unaffected. `/ws/agent` frames are `ping`, `message`, and `resume`. A replay frame is sent only after it is appended to the turn log. If that append fails, the socket receives `replay_persist_failed` and no invented sequence. `resume` carries `workspace_id`, `session_id`, `client_request_id` and the last applied `stream_seq`; it reads the turn log and does not submit the message again. Every replayable frame, including `done` and `error`, has its own `seq`. `topology_updated` is a version hint (`workspace_id`, `topology_id`, `version`), not a drawing payload. `job_updated` remains a coalesced snapshot. Turn logs are stored beneath the owning principal's session directory, keyed by a SHA-256 digest of the complete request ID. Readers and writers refresh the shared log tail under the cross-platform file lock before assigning sequences. A socket control response for an idempotent redirect is never appended as the existing turn's terminal; its redirect metadata names the existing request to resume. Unknown or expired resume targets return `resume_not_found` without starting a worker or executing a tool. Accepted requests awaiting their first frame return the correlated control response `resume_pending`; terminal producers with incomplete replay return `replay_interrupted`. These controls do not consume a log sequence. The frontend reconciles session history before resuming and preserves terminal messages over local streaming buffers. Terminal repair runs at startup and every 30 seconds, is serialized per request, and never re-executes a tool. Terminal logs are eligible for removal after seven days only when their assistant message is durable; cleanup evicts cached frames and marks a retained request registry record as replay-expired. The registry retains its existing bounded idempotency window. Streaming redaction buffers partial secret prefixes before publishing or persisting tokens. Redis notification envelopes preserve the owning username and use a process-instance identifier rather than PID; `LZCORE_EVENT_BUS_MODE` / `LZCORE_EVENT_BUS_URL` select the existing event bus, with queue settings as a compatibility fallback.
+### WebSocket 与持久回合
 
-## Runtime, context and prompts
+/ws/agent 接受 ping、message、resume。message 发起一次请求，resume 带 workspace_id/session_id/client_request_id/stream_seq，只读取 seq 大于游标的日志帧，不重新提交消息或执行工具。done/error 也占正文序号，心跳不入日志。
+
+可重放帧先写 turn log，再发送。失败返回 replay_persist_failed，不制造内存序号。日志按认证主体的会话目录保存，请求完整 ID 的 SHA-256 为文件键；读写在跨平台锁下刷新共享尾部。
+
+- 幂等重定向指向原 client_request_id，只是控制，不是新回合终态、不占正文序号。
+- 请求已接受但首帧未出：resume_pending，保留关联并等待。
+- 未知/过期目标：resume_not_found，不开 worker，不重跑工具。
+- 终态生产者日志不完整：replay_interrupted，按会话消息/终态对账。
+- 恢复先确认服务端消息；已终态覆盖本地 streaming，未终态才按游标补缺口。
+
+启动及每 30 秒幂等修复缺失终态，按请求串行，不重执行工具。终态日志在答复消息已持久化后可七天清理，内存缓存同步清除，登记标记 replay-expired；幂等登记仍有既有有界窗口。
+
+流式脱敏缓冲未完整秘密前缀，再公开/落盘。Redis 通知保留 username，用进程实例 ID 区分来源；LZCORE_EVENT_BUS_MODE/URL 控制既有事件总线，队列设置是兼容回退。
+
+topology_updated 仅带 workspace_id/topology_id/version；job_updated 合并最新快照。前者提示读资源，不把整图塞进帧；后者不作为正文。Agent 会话 /api/agent/sse/stream/<session_id> 已注册但未接运行时生产者，其他 SSE 不受影响。
+
+## 运行时、上下文与辅助模板
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -41,7 +55,7 @@ Agent session SSE (`/api/agent/sse/stream/<session_id>`) is registered but not f
 | `POST` | `/api/context/build`, `/api/context/resolve`, `/api/prompts/render` | Governed context/prompt operations. |
 | `GET` | `/api/context/status`, `/api/prompts`, `/api/prompts/<prompt_id>`, `/api/harness/status` | Context, prompt and harness projections. |
 
-### Result and recovery lifecycle
+### 任务结果与恢复
 
 Agent, SSE, WebSocket and task-detail projections can contain server-generated
 metadata. `execution_outcome` is the user-task result (`complete`, `partial`,
@@ -54,7 +68,7 @@ means some coverage is verified but required coverage remains blocked; `unknown`
 means an external write or long-running work cannot yet be confirmed. Clients
 must display these server values, not synthesize them.
 
-## Sessions, runs and workspace state
+## 会话、运行与工作区
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -80,7 +94,7 @@ Archive/retention routes are also workspace-scoped: `GET /api/workspaces/<ws_id>
 `GET /retention/preview`, `/retention/audits`, `/retention/audits/<audit_id>`
 and `POST /retention/apply` routes.
 
-## Artifacts, files, knowledge, memory, reports and reviews
+## 制品、知识、记忆与复核
 
 Agent result metadata and persisted assistant-message metadata may include
 `stage_outputs`: an ordered list of `{id, label, text}` containing public model
@@ -112,7 +126,7 @@ can be detached with `storage.run_artifact_store.remove_artifact_from_all_runs`
 after verifying the artifact is absent and backing up the affected run records;
 selfcheck continues to report other missing references.
 
-## Jobs
+## 作业
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -127,7 +141,7 @@ Job deletion is hard deletion. The JSON body must contain the explicit
 `workspace_id` and `confirmation: "DELETE <job_id>"`. Queued or running jobs
 return conflict; cancel and wait for a terminal state first.
 
-## Tools, capabilities and extensions
+## 工具与扩展
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -164,62 +178,29 @@ history, references and advisory syntax outcomes; it performs no network I/O.
 Inspection completion creates an Observation and may create a candidate
 Reference. Only a complete candidate can be explicitly confirmed.
 
-Drawing Skill selection accepts `canvas_selection` containing `node_ids`,
-`link_ids`, `group_ids` and `canvas_item_ids`. The server validates them against
-the selected drawing; missing IDs are reported as `canvas_selection_unavailable`
-and client labels are not copied into the Skill prompt. User text stays separate.
-The `network.operations.topology` tool keeps `read` and `patch`: read returns the
-complete topology when no object scope is specified. Optional `node_ids`,
-`link_ids`, `canvas_item_ids` and `group_ids` select a subgraph; `include_neighbors`
-defaults to true and includes neighbours, fixed-link members and region geometry.
-Scoped reads return `snapshot_complete=false`, missing IDs, and whole-drawing
-counts; partial drawings must not replace a canvas snapshot. Read `query`
-optionally finds all case-insensitive name/label/ID substring matches
-within the selected drawing, retaining explicit ID selections; ambiguous names
-must be resolved before editing. Patch defaults to
-`changes` (upserted objects, removed IDs and
-changed name/description), version, counts, `changed` and estimated geometry
-`feedback`. `snapshot_complete=false` marks a partial receipt; explicitly setting
-`response_detail=full` also returns the complete topology. REST drawing responses
-are unchanged. Optional patch `layout` supports `algorithm=grid|radial`, `node_ids`,
-`preserve_node_ids`, `origin` and `spacing_x/spacing_y` (minimum 140). Explicit node
-x/y take precedence. Permission and optimistic version checks still apply.
-Patch `translate={node_ids,dx,dy}` moves existing nodes by a relative displacement.
-Direct coordinate edits and translation move other fixed-link members by the
-same displacement; explicitly supplied member coordinates take precedence and
-clearing `lock_group` detaches a member. Deletion/detachment clears orphaned
-fixed-link groups. Auxiliary layout moves fixed-link groups as rigid objects;
-preserving one member preserves its group. Manual automatic layout also preserves
-relative group positions and explicitly fixed region geometry.
-Node `labels` survive save/read/patch.
-Links with unknown endpoints reject the patch atomically; deliberate node
-deletion still removes incident links. No real device operations are introduced.
+### 图纸选择、读取与修改
 
-The topology sidebar confirms pending local saves before sending a turn and
-includes `drawing_version` with the selection captured when Send was pressed.
-A lost save response blocks automatic retries: the next save or send first reads
-back the drawing, adopts an already committed result, and preserves unresolved
-local edits for explicit confirmation.
-The server derives selected-object and neighbourhood context from persisted
-objects, reports baseline changes, and bounds extra automatic-context neighbours
-to 40 nodes and 80 links. Selected objects and linked members are retained;
-scoped/full reads remain available without that automatic-context bound.
-Version broadcasts continue to carry only IDs and version. The workspace merges
-non-overlapping local edits over its last confirmed server baseline; overlapping
-fields and delete-vs-edit/dependent-link conflicts require resolution. Drawing
-change cards report displayed/pending state, counts, removed object names, and
-provide explicit focus and delta-based undo. Undo/redo preserves later edits to
-unrelated fields and refuses overlapping changes. These records are bounded,
-in-memory history for the current drawing; they are not durable revision history.
+canvas_selection 含 node_ids/link_ids/group_ids/canvas_item_ids，服务端核对存在性，失效 ID 在 canvas_selection_unavailable，不复制客户端标签。用户原话单独传递。发送前确认本地保存，带发送时 drawing_version；保存响应丢失先读回，已提交则采纳，不确定则保留编辑并要求确认，不自动重放。
 
-Provider save and activate accept optional `top_p` (null or 0 < value <= 1) and
-`thinking=provider_default|adaptive|disabled`. Top P null omits the provider field;
-MiniMax-M3 uses Anthropic Messages thinking configuration when explicitly selected,
-and MiniMax-M3.1 rejects disabled thinking. Existing explicit temperature and output
-limits are preserved. Newly initialized MiniMax profiles default to 1/8192;
-other profiles retain 0.2/4096. QueryLoop uses the resolved provider settings.
+network.operations.topology 仅 read/patch。read 无范围返回全图；指定对象 ID/group_ids 或 query 返回匹配子图，query 是名称/标签/ID 大小写不敏感子串，保留显式 ID。同名需确认后编辑。include_neighbors 默认 true，包含邻接、固定联动成员及区域。局部结果 snapshot_complete=false、缺失 ID 和全图 counts，不能替换完整画布。
 
-## Workflows, identity and administration
+自动选区上下文额外邻居最多 40 节点/80 链路；选中和联动成员保留。这只是自动上下文边界，显式局部/完整读取不受该限制。
+
+patch 使用稳定 ID，保留未点名对象；旧显式 version 冲突，省略版本按锁内当前状态提交。未知链路端点原子拒绝；显式删节点同时删关联链路。默认收据含实际 changes（upsert/removed IDs/名称描述差量）、version/counts/changed/估算 feedback，snapshot_complete=false；response_detail=full 或 read 才取完整图。无变化保留版本且不广播。
+
+- node_updates 控制属性/x/y，canvas_item_updates 控制位置/尺寸/内容，link 更新控制端点、接口和样式；节点 labels 保留。
+- translate={node_ids,dx,dy} 相对移动，固定联动组同步平移；显式成员坐标优先，清 lock_group 分离，删除/脱离清孤立组。
+- layout 可选 grid/radial，支持 node_ids/preserve_node_ids/origin/spacing_x/spacing_y，间距至少 140。显式坐标优先，保护成员等于保护其联动组，组按刚体移动；前端自动布局也保留组相对位置和固定区域。
+- zone 生成稳定区域框；改名保留 item_id。手工几何关闭 auto_fit，可显式恢复；删除框解除成员归属。
+- feedback 采用估算节点几何和有限重叠样本，完整度明确；不是视觉或真实网络验收。
+
+页面基于最后确认基线三方合并。非重叠本地编辑可合并，同字段/删改/依赖链路冲突需解决。变更卡标显示/待处理、移除对象和差量，可聚焦/撤销；撤销保留后来无关字段，重叠则拒绝。卡片是当前图有界内存历史，不代替持久 revision。
+
+### Provider 配置
+
+保存/激活支持 top_p=null 或 0<值<=1，null 省略请求字段；thinking=provider_default|adaptive|disabled。MiniMax-M3 使用 Anthropic Messages 思考配置，M3.1 拒绝 disabled。新 MiniMax 默认 temperature=1/max_tokens=8192，其他初始值 0.2/4096；既有显式值保留，QueryLoop 不另覆盖。配置改写不暗中开启思考或扩大模型窗口。
+
+## 工作流、身份与管理
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -239,7 +220,7 @@ record from the previous process without a durable linked resource becomes the
 terminal `indeterminate` state. This preserves uncertainty for audit without
 reporting the record as actively pending forever.
 
-## Error shape
+## 错误投影
 
 应用定义的 API 错误返回 JSON，通常含 `ok: false` 和稳定错误标识；个别路由还会
 附带安全的校验详情。调用方不应依赖未记录的错误详情字段。
@@ -248,14 +229,11 @@ reporting the record as actively pending forever.
 { "ok": false, "error": "invalid_workspace_id" }
 ```
 
-Do not infer retry safety from HTTP status alone. For Agent/runtime work, use
-the server result lifecycle and the canonical tool/operation-ledger evidence.
+重试先核对执行状态、幂等和未知写入；不要把错误响应当作操作未发生。
 
-## Exact route inventory
+## 补充路由清单
 
-The grouped sections above explain the surface. This inventory keeps every
-currently registered route pattern explicit; methods separated by `|` are
-registered on the same pattern.
+以下补充清单用于定位分组表中省略的路径；不是第二套 API 定义。methods 中 | 表示同一路径注册的方法。
 
 ```text
 POST        /api/ecosystem/import/apply

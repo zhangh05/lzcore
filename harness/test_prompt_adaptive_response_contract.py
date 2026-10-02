@@ -36,7 +36,7 @@ def test_prompt_templates_prefer_adaptive_shape_over_rigid_reports():
     }
     for filename, phrase in templates.items():
         text = _template(filename)
-        assert phrase in text
+        assert phrase.lower() in text.lower()
         assert "Preserve exact technical notation" in text
 
 

@@ -88,7 +88,8 @@ def render_raw_command_guidance() -> str:
     return (
         "Use `network.operations.device.manage` with an exact `connection_id` "
         "and ordered raw `commands`. The server resolves each command's intent "
-        f"from the raw-command contract: commands starting with {starters} are "
+        f"from the raw-command contract: single-line commands starting with {starters}, "
+        f"without chaining or unsafe syntax {list(_UNSAFE_READ_SYNTAX)!r}, are "
         "observations and execute as `read`; every other command executes as "
         "`configure`. For device-originated verification, send the device's raw "
         "observation command in `action=read`; its complete output is evidence. "

@@ -1,4 +1,7 @@
-# LZCore Design QA
+# 历史设计验收记录
+
+> 本页保留当时的范围、验证结果和限制；不表示当前版本、当前界面或用户机器已经验收。现行合同从 [README](README.md) 查找。
+
 
 ## Scope and visual truth
 

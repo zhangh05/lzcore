@@ -61,7 +61,7 @@ class TestRenderer:
 
         r = render_prompt(
             "assistant_chat",
-            {"result": {"status": "ok", "summary": "done", "secret": "hidden"}},
+            {"result": {"status": "ok", "summary": "done", "secret": "secret-fixture-not-to-render"}},
             "你好",
         )
 
@@ -71,9 +71,9 @@ class TestRenderer:
         assert "<current_user_request>\n你好" in r.text
         assert '<provided_context data_only="true">' in r.text
         assert "Last safe result: done" in r.text
-        assert "hidden" not in r.text
+        assert "secret-fixture-not-to-render" not in r.text
 
-    def test_build_prompt_messages_uses_template_as_system_message(self):
+    def test_build_prompt_messages_separates_instructions_and_data(self):
         from agent.llm.runtime import _build_prompt_messages
 
         messages = _build_prompt_messages("assistant_chat", safe_context={}, user_input="你好")
@@ -83,7 +83,9 @@ class TestRenderer:
         assert "without the production tool loop" in messages[0].content
         assert "LZCore explanation layer. Follow prompt exactly" not in messages[0].content
         assert messages[1].role == "user"
-        assert messages[1].content == "你好"
+        assert "<current_user_request>\n你好\n</current_user_request>" in messages[1].content
+        assert "<provided_context" in messages[1].content
+        assert "你好" not in messages[0].content
 
 class TestSafeGenerateWiring:
     def test_safe_gen_imports_renderer(self):

@@ -1,51 +1,53 @@
-# Windows 桌面版
+# Windows 桌面发行与数据
 
-联智中枢提供两种桌面发行包，使用同一套 `lzcore.exe`、本地 Flask 后端和 pywebview / WebView2 窗口。最低环境为 Windows 10 2004 x64、.NET Framework 4.8；支持 Windows 11 x64。界面沿用网页版本，Windows 拥有标题栏、拖动、缩放、最大化、任务栏和 Snap。首次窗口按当前显示器工作区定位；窗口位置、大小和最大化状态按显示器和 DPI 保存，移除显示器后会重新限制到可见区域。
+便携版和安装版使用同一 lzcore.exe、本地 Flask 与 pywebview/WebView2。最低 Windows 10 2004 x64、.NET Framework 4.8，支持 Windows 11 x64。窗口使用原生标题栏、缩放、最大化、任务栏和 Snap；位置/大小/最大化按显示器和 DPI 保存，移除显示器后限制在可见工作区。
 
-## 选择发行包
+## 两种原生包
 
-| 包 | 使用方法 | 用户数据 | 系统集成 |
+| 附件 | 启动 | 默认数据 | 集成 |
 | --- | --- | --- | --- |
-| `lzcore-v3.3.1-windows-portable.zip` | 解压到可写的本地目录，双击 `lzcore/lzcore.exe` | 程序旁 `data/` | 默认不创建快捷方式、注册表项或自启动 |
-| `lzcore-v3.3.1-windows-setup.exe` | 运行安装向导，默认无需管理员权限 | `%LOCALAPPDATA%\LZCore` | 开始菜单、可选桌面快捷方式、卸载项；自启动在应用内单独开启 |
+| lzcore-v3.3.1-windows-portable.zip | 解压后 lzcore/lzcore.exe | 程序旁 data/ | 默认无快捷方式/注册表/自启动 |
+| lzcore-v3.3.1-windows-setup.exe | 每用户安装向导 | %LOCALAPPDATA%/LZCore | 开始菜单、可选桌面快捷方式、卸载项 |
 
-两个包都附带固定版本 WebView2，离线启动无需下载 Python、Node 或浏览器运行时。运行时版本和官方 Microsoft 下载地址锁在 `packaging/webview2.json`；构建时验证 Microsoft 数字签名。固定运行时随应用发行更新，不采用 Evergreen 的自动更新。Windows 10 首次启动会为这一运行时目录授予 App Container 读取和执行权限；它不能从 UNC 网络目录运行。[Microsoft 部署说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)
+固定版本 WebView2 随包附带，不需另装 Python/Node 或在线下载运行时。版本与 Microsoft URL 在 packaging/webview2.json，构建验证 Microsoft 签名；固定运行时随应用更新，不采用 Evergreen 自动更新。Windows 10 启动会为运行时授予 App Container 读取/执行权限，不从 UNC 目录运行。平台限制见 [Microsoft 部署文档](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。
 
-安装器拒绝安装到带有 `portable.json` 标记的便携版目录，避免混用发行方式导致数据位置变化。转换为安装版时请选择独立目录，再通过桌面设置迁移便携版的 `data/`。
+安装器拒绝带 portable.json 的目录，迁移时选独立安装目录。另一个 windows-x64.zip 是 start.bat 源码/浏览器包，带 `runtime\python\python.exe` 和 `runtime\node\node.exe`，不要求用户另行安装开发环境；不是原生桌面包。
 
-另外保留 `windows-x64.zip` 作为带源码的浏览器运行包，启动入口为 `start.bat`。它不属于上述两种原生桌面发行方式。该包自带 `runtime\python\python.exe` 和 `runtime\node\node.exe`，不要求用户另行安装开发环境。
+## 数据和单实例
 
-可用 `lzcore.exe --data-dir "D:\联智数据"` 显式选数据目录。两种发行方式的数据布局和格式相同：`workspaces/` 保存业务数据和按用户隔离的数据，`config/` 保存用户配置，`.runtime/` 保存窗口偏好、WebView 缓存、恢复暂存和更新文件，`logs/` 保存脱敏桌面日志。程序文件和用户数据分开。启动时持有数据目录锁；同一数据目录第二次启动唤醒已有窗口。
+--data-dir 可指定目录，例如 lzcore.exe --data-dir "D:\联智数据"。workspaces/ 放业务和按用户数据，config/ 放配置，.runtime/ 放窗口偏好、WebView 缓存、恢复/更新，logs/ 放脱敏桌面日志。数据格式一致，程序与数据分开；相同数据目录第二次启动唤醒原窗口。
 
-## 关闭和后台运行
+旧程序旁 workspaces/config 在新数据目录为空时复制校验并保留源，中断可续；已有目标不自动覆盖。桌面设置也可选旧目录迁移，先退出旧程序。DPAPI 凭据绑定 Windows 用户和机器，跨机迁移用原用户创建的加密备份。
 
-普通最小化进入任务栏。点击关闭，空闲且没有未保存编辑时退出；任务仍在运行或有未保存编辑时提供返回应用、后台运行、停止任务并退出。桌面设置可开启「关闭窗口时进入托盘」。托盘提供打开窗口、设置、数据目录和退出；隐藏窗口不停止后端任务。后台任务完成显示简短通知，点击通知返回对应工作区和会话，正常认证与授权仍有效。
+## 关闭、后台与导出
 
-退出、备份、恢复或更新前，应用通过 `LocalLifecycle` 停止接受新操作。退出请求通过已有取消机制停止任务并等待收尾；无法确认结束时提示继续等待、返回或明确中断。中断后的任务由已有启动恢复机制记录为中断，不补造成功，不重跑结果未知的网络写入。
+最小化进任务栏；空闲且无未保存编辑时一次关闭退出。有任务/编辑时提供返回、后台、停止任务并退出。可设置关闭进托盘；隐藏不取消任务，托盘提供窗口、设置、数据目录和退出。任务通知定位到原工作区/会话，授权仍照常检查。
 
-窗口和主题偏好保存在数据目录，内嵌浏览器关闭私密模式并使用明确的用户数据目录。主题支持浅色、深色和跟随 Windows。工作台在窄窗口仍可打开任务进度抽屉；网络图纸批注通过扩展后端保存，独立版本控制，不改变拓扑布局或拓扑版本。
+LocalLifecycle 在退出/备份/恢复/更新前停止新操作，取消通过已有机制并等收尾；无法确认时显示等待、返回或显式中断，不能把终态历史当活跃任务。停止操作立即反馈，异常提供恢复路径。重启将中断记录为中断，不重跑未知写入。
 
-## 数据迁移、备份和恢复
+工作台会话、图纸 SVG/PNG/PDF 和批注用原生保存对话框；取消不触发浏览器下载，失败在页面显示。可打开最近导出目录。诊断 ZIP 仅程序身份和脱敏桌面日志，不复制会话正文或 Provider 配置。
 
-旧桌面目录旁的 `workspaces/`、`config/` 在新数据目录为空时自动复制校验，保留源目录，并用日志使中断迁移可继续。已存在的目标数据不会自动合并覆盖。也可在桌面设置选择旧程序或数据目录进行迁移；先退出旧程序。DPAPI 凭据依赖原 Windows 用户和机器；跨用户或跨机器迁移请在原用户下生成带凭据的加密备份。
+主题浅色/深色/跟随 Windows 保存在用户数据。批注走独立资源版本，不改变拓扑版本；窄窗口仍可打开任务进度。
 
-启用应用认证后，数据目录、备份、恢复、迁移、诊断导出和应用更新要求已登录默认组织的管理员；原生桥接使用真实 HttpOnly 会话核验身份，不把前端报告的用户名当权限。备份只允许空闲且编辑已保存时创建。普通 ZIP 包含工作区和脱敏后的配置，不包含密钥存储。可选加密备份使用用户口令、Scrypt 和 Fernet；至少 12 个字符的口令，可显式包含凭据。带凭据备份在内存中解密后加密打包，恢复时重新用当前 Windows 用户的 DPAPI 保存，不把明文凭据写入暂存目录。请保存口令，应用不保存口令。
+## 备份和恢复
 
-恢复先检查格式版本、大小、文件路径和每个文件的 SHA-256，然后暂存；确认后在重启时切换数据目录。原工作区与配置保留在 `.runtime/before-restore/`，恢复动作有可重试日志。普通备份缺少凭据时保留已有本地密钥存储。图纸、会话、批注随工作区备份。
+认证启用时，数据目录/诊断/备份/恢复/迁移/更新要求真实 HttpOnly 会话核验的默认组织管理员，不能信任前端声明用户名。备份要求空闲且编辑已保存。
 
-工作台会话、拓扑 SVG/PNG/PDF 与批注画板导出统一使用原生文件选择对话框；取消不触发浏览器下载，保存失败在页面显示错误。桌面设置可打开最近导出目录。诊断 ZIP 只包含程序身份和脱敏桌面日志，不复制工作区正文、环境变量和供应商配置。
+普通 ZIP 保存工作区及脱敏配置，不含密钥。加密备份使用至少 12 字符口令、Scrypt 和 Fernet，可显式带凭据；口令不保存，凭据在内存加密，恢复重新用当前用户 DPAPI 保存，不写明文暂存。
 
-## 更新和回退
+恢复检查格式、大小、路径和每文件 SHA-256，暂存后确认并在重启切换；旧数据留 .runtime/before-restore，恢复日志可续。普通备份不覆盖已有本地密钥库，图纸/会话/批注随工作区保存。
 
-桌面设置从固定的 `zhangh05/lzcore` GitHub Releases 检查更新。`windows-update.json` 提供两种包的名称、数据格式、大小和 SHA-256；下载包经过校验后才可应用。带签名的发行包还校验 Windows 签名。用户保存编辑并结束任务后确认更新，外部 PowerShell 助手等待主程序自行退出后替换程序并重启。更新不修改工作区和配置；程序替换失败时保留数据，并尝试恢复已备份的程序文件。
+## 更新、回退与同版本重建
 
-更新助手报告失败后，重启的应用会在桌面设置中显示固定的失败提示和当前版本，不向界面转发原始异常内容。
+更新来源固定 GitHub zhangh05/lzcore。windows-update.json 声明包名、数据格式、大小、SHA-256 与 source_commit；下载验证后才应用，签名包另验 Windows 签名。任务结束、编辑保存后，PowerShell 助手等主程序退出再替换重启；失败尽量恢复前版程序并保留数据。重启显示安全失败摘要，不转发原异常。
 
-更新后记录上一程序版本；「检查可回退版本」只接受同一数据格式且有更新清单的已发布版本。回退只替换程序，不能用来撤销用户数据。3.2.x 没有桌面更新清单，不能通过这一入口回退；旧版数据仍可迁移。发布提供 `SHA256SUMS.txt`，便于手动核对。
+回退只接受同数据格式且有清单的已发布版本，只换程序、不撤销数据。3.2.x 没有该清单；旧数据仍可迁移。SHA256SUMS.txt 可用于手工核验。
 
-代码签名是可配置能力：GitHub Secrets `LZCORE_SIGNING_PFX`（PFX 的 Base64）与 `LZCORE_SIGNING_PASSWORD` 用于签主程序、安装器和卸载器；未配置时明确标记未签名，不宣称签名或 SmartScreen 信誉。
+已有版本修复可从 main 手动运行 Release，release_tag 填 v3.3.1：流程核对版本、验证后替换附件，**不移动 tag**。以 windows-update.json.source_commit 判断实际构建来源。应用内按版本号检测，同版本重建不会自动提示升级，需要重新下载安装器或便携包，保留数据目录。
 
-## 构建和验证
+GitHub Secrets LZCORE_SIGNING_PFX（Base64 PFX）和 LZCORE_SIGNING_PASSWORD 可签主程序/安装器/卸载器；未配置时标明未签名，不能宣称 SmartScreen 信誉。
+
+## 构建和验收
 
 ```powershell
 python -m pip install -r requirements-desktop.lock
@@ -55,12 +57,6 @@ npm --prefix frontend run build
 python scripts/build_windows_exe.py --webview2-runtime $env:LZCORE_WEBVIEW2_DIR
 ```
 
-发行工作流使用锁定的 Windows/Python 3.12 依赖。Inno Setup 生成每用户安装器，卸载保留用户数据，升级要求先退出程序。`scripts/windows_desktop_smoke.py` 启动真实 EXE，通过 WebView2 CDP 验证页面、桥接、主题、窗口缩放、托盘、第二次启动、原生导出对话框和 WebSocket；工作流同时验证安装、升级和卸载后数据保留。截图与启动报告在 `windows-desktop-validation` 构建产物中。
+Release workflow 使用锁定 Windows/Python 依赖、Inno Setup，每用户安装、升级前退出，卸载保留数据。windows_desktop_smoke.py 启动真实 EXE，经 CDP 验证页面、bridge、主题、缩放、托盘、第二次启动、原生导出、WebSocket 和带终态历史的关闭；安装/升级/卸载数据保留也单独验证。报告/截图在 windows-desktop-validation 产物。
 
-修复后保留版本号和已有 tag 时，可以从修复提交手动运行 Release 工作流，并在 `release_tag` 填已有的同版本 Release。工作流核对版本与目标 Release、完成 Windows 验证后替换附件，不移动 Git tag。更新清单的 `source_commit` 标明附件对应的真实构建提交。同版本附件重建不会触发按版本号判断的应用内升级，需要重新下载安装器或便携包；保留原用户数据。
-
-自动化 Windows runner 的结果不等同于 Windows 10/11 实体机、多个显示器及所有 DPI 的人工验收；这些场景仍需要目标机器复核。
-
-## 退出与回合修复
-
-退出按实际任务存储字典读取历史任务，空闲时一次关闭即可结束程序。存在未保存编辑或任务时保留确认步骤；停止请求立即显示收尾进度，收尾异常主动显示恢复选项，不需要再次点击窗口关闭。原生冒烟验证保留一个已完成历史任务再关闭窗口，避免只验证全新空数据。
+runner 自动化不证明所有实体机/DPI/多显示器或大图帧率。此前有一次安装版关闭退出非零，随后完整重建通过；退出报告已记录 exit_code/exit_hex，根因未确认，不能仅靠一次通过宣称已消除所有关闭问题。

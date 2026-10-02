@@ -1,22 +1,18 @@
-# 能力目录模板
+# 能力目录条目模板
 
-能力是面向用户的结果说明、推荐工具和安全提示，不是工具注册表，也不分发 handler。
-
-1. 在 `agent/capabilities/catalog.py` 增加或更新条目。
-2. `recommended_tool_ids` 只能引用 `core/tools/tool_namespace_data.py` 中的 canonical tool ID。
-3. 先实现运行时路径与测试，再暴露能力目录。
+能力目录面向用户解释结果和推荐工具，不注册 handler，也不授予权限。实现位于 agent/capabilities/catalog.py。
 
 ```python
 {
     "capability_id": "my_feature",
     "display_name": "My Feature",
-    "description": "说明用户可获得的结果。",
+    "description": "用户可获得的具体结果及其范围。",
     "module_ids": ("my_feature",),
     "recommended_tool_ids": ("workspace.file", "text.analyze"),
-    "prompt_hints": ("先读取证据，再给出结论。",),
-    "safety_notes": ("不要把未验证结果表述为生产事实。",),
+    "prompt_hints": ("依据实际来源核对结论。",),
+    "safety_notes": ("文档记录不等于实时观测。",),
     "status": "enabled",
 }
 ```
 
-禁止增加工具别名、第二套 capability registry 或把能力目录作为授权依据。
+先完成受治理的执行和证据路径，再展示条目。recommended_tool_ids 使用实际 canonical ID；prompt_hints 只补能力特有的决策信息，不复制全局提示或暗示执行成功。避免第二套工具注册、固定设备状态、假制品和授权声明。

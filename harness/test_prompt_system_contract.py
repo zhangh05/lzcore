@@ -131,7 +131,7 @@ def test_enabled_prompt_registry_is_latest_only():
     from prompts.loader import load_prompt_registry
 
     for spec in load_prompt_registry():
-        assert spec.version in {"v2", "v3"}
+        assert spec.version == "v4"
         assert not spec.prompt_id.endswith(".v1")
 
 

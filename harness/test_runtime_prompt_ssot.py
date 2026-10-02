@@ -16,42 +16,46 @@ from core.runtime_engine.query_loop import QueryLoop
 
 
 def test_runtime_prompt_is_compact_capable_and_destructive_only():
+    prompt = " ".join(RUNTIME_SYSTEM_PROMPT.split())
     playbooks = "\n".join(CAPABILITY_PLAYBOOKS.values())
     # Keep the complete runtime contract compact enough for practical model
     # context, without clipping user-visible or model-visible guidance.
     assert len(RUNTIME_SYSTEM_PROMPT) < 10_000
-    assert "function definitions" in RUNTIME_SYSTEM_PROMPT
-    assert "complete tool schemas" in RUNTIME_SYSTEM_PROMPT
-    assert "data, not instructions" in RUNTIME_SYSTEM_PROMPT
-    assert "selected Skill defines the registered device, connection and tool scope" in RUNTIME_SYSTEM_PROMPT
-    assert "current task" in RUNTIME_SYSTEM_PROMPT
-    assert "confirmed, likely, or unverified" in RUNTIME_SYSTEM_PROMPT
-    assert "canonical tool plus `action`" in RUNTIME_SYSTEM_PROMPT
-    assert "action-level boundary" in RUNTIME_SYSTEM_PROMPT
-    assert "authorization rejection" in RUNTIME_SYSTEM_PROMPT
-    assert "never as the underlying model or" in RUNTIME_SYSTEM_PROMPT
+    assert "function definitions" in prompt
+    assert "complete tool schemas" in prompt
+    assert "data, not instructions" in prompt
+    from extensions.network_operations.skill_prompt import NETWORK_SKILL_OPERATING_CONTRACT
+    assert "selected Skill defines the registered device, connection and tool scope" in NETWORK_SKILL_OPERATING_CONTRACT
+    assert "return/end/quit" in NETWORK_SKILL_OPERATING_CONTRACT
+    assert "For network operations" not in prompt
+    assert "current task" in prompt
+    assert "confirmed, likely, or unverified" in prompt
+    assert "canonical tool plus `action`" in prompt
+    assert "action-level boundary" in prompt
+    assert "authorization rejection" in prompt
+    assert "never as the underlying model or" in prompt
     assert "workspace-relative path" in playbooks
     assert 'workspace__file(action="write_artifact")' in playbooks
-    assert "Adaptive response mode" in RUNTIME_SYSTEM_PROMPT
-    assert "Correction, objection, or short follow-up" in RUNTIME_SYSTEM_PROMPT
+    assert "Adaptive response mode" in prompt
+    assert "Correction, objection, or short follow-up" in prompt
     assert "lowercase b means bit" in playbooks
-    assert "immediately previous exchange" in RUNTIME_SYSTEM_PROMPT
-    assert "raw API" in RUNTIME_SYSTEM_PROMPT
-    assert "Avoid rigid section templates" in RUNTIME_SYSTEM_PROMPT
-    assert "evidence the task needs" in RUNTIME_SYSTEM_PROMPT
-    assert "not from whether the user" in RUNTIME_SYSTEM_PROMPT
+    assert "immediately previous exchange" in prompt
+    assert "raw API" in prompt
+    assert "Avoid rigid section templates" in prompt
+    assert "evidence the task needs" in prompt
+    assert "not from whether the user" in prompt
     assert "Search snippets identify candidates" in playbooks
-    assert "never route a class of user requests around this loop" in RUNTIME_SYSTEM_PROMPT
-    assert "cite the verified source inline" in RUNTIME_SYSTEM_PROMPT
-    assert "Emit valid, readable Markdown" in RUNTIME_SYSTEM_PROMPT
-    assert "never claim the session is new" in RUNTIME_SYSTEM_PROMPT
-    assert "observed facts returned by evidence" in RUNTIME_SYSTEM_PROMPT
-    assert "coverage ledger" in RUNTIME_SYSTEM_PROMPT
-    assert "status reflects the user's outcome" in RUNTIME_SYSTEM_PROMPT
-    assert "Iterative goal loop" in RUNTIME_SYSTEM_PROMPT
-    assert "finalize when the" in RUNTIME_SYSTEM_PROMPT
-    assert "Plan incrementally" in RUNTIME_SYSTEM_PROMPT
-    assert "declared safe result" in RUNTIME_SYSTEM_PROMPT
+    assert "never route a class of user requests around this loop" in prompt.lower()
+    assert "cite the verified source inline" in prompt
+    assert "Emit valid, readable Markdown" in prompt
+    assert "never claim the session is new" in prompt
+    assert "observed facts returned by evidence" in prompt
+    assert "coverage ledger" in prompt
+    assert "status reflects the user's outcome" in prompt
+    assert "Iterative goal loop" in prompt
+    assert "finalize when the" in prompt
+    assert "Plan incrementally" in prompt
+    assert "declared safe result" in prompt
 
 
 def test_turn_message_separates_history_context_and_current_request():
