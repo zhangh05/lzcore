@@ -197,7 +197,8 @@ def test_drawing_loop_continues_with_progress_but_stops_noops(temp_dirs, limit, 
         current=drawings.get_topology(workspace,topo['topology_id'])
         return LLMResponse(tool_calls=[LLMToolCall(id=f'call-{index}',name=TOOL_NAME,arguments={
             'action':'patch','version':current['version'],
-            'nodes':[] if noop else [{'node_id':f'n{index}','x':index*200,'y':100,'zone':'核心区'}]})])
+            'nodes':[] if noop else [{'node_id':f'n{index}','x':index*200,'y':100,'region_id':'core'}],
+            'canvas_items': [] if noop or index else [{'item_id':'core','kind':'rectangle','text':'核心区','auto_fit':True}]})])
     cfg=SSOTRuntimeConfig(max_query_loop_iterations=limit)
     ctx=StatelessContext(workspace_id=workspace,session_id='s',request_id='r',user_input='绘制20批设备',
         extras={'workbench_context':{'extension_id':'network.operations','skill_id':f"drawing:{topo['topology_id']}"}})

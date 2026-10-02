@@ -1,3 +1,4 @@
+import { fitRegions, regionBounds, regionContains } from "./topologyRegions";
 import type { Topology } from "./TopologyWorkspace";
 import { moveDrawingNodes } from "./topologyCollaboration";
 
@@ -108,6 +109,9 @@ function nodeTierScore(node?: Topology["nodes"][number]): number {
  * routing without making the available browser height part of persisted data.
  */
 export async function layoutTopology(topology: Topology, algorithm: LayoutAlgorithm = "hierarchy-h"): Promise<Topology> {
+  if ((topology.canvas_items || []).some(item => item.kind !== "text")) {
+    return layoutRegions(topology, algorithm);
+  }
   const positioned = new Map<string, PositionedNode>();
 
   if (algorithm === "radial" || algorithm === "grid") {
@@ -179,53 +183,65 @@ export async function layoutTopology(topology: Topology, algorithm: LayoutAlgori
     return [{element_id: node.node_id, x: position.x, y: position.y}];
   });
   const nodes = moveDrawingNodes(topology.nodes, positions);
-  const groups = topology.groups.map((group) => {
-    const members = nodes.filter((node) => node.group_id === group.group_id);
-    if (!members.length) return group;
-    const x = Math.min(...members.map((node) => node.x)) - 35;
-    const y = Math.min(...members.map((node) => node.y)) - 60;
-    return { ...group, x, y, width: Math.max(...members.map((node) => node.x)) - x + 195, height: Math.max(...members.map((node) => node.y)) - y + 165 };
-  });
+  return fitRegions({ ...topology, nodes });
+}
 
-  const canvas_items = (topology.canvas_items || []).map((item) => {
-    if (item.kind !== "rectangle" || item.auto_fit === false) return item;
-    const halfW = (item.width || 200) / 2;
-    const halfH = (item.height || 100) / 2;
-    const pad = 24;
-    const memberIds = topology.nodes
-      .filter((n) => {
-        const isGeo =
-          n.x >= item.x - halfW - pad &&
-          n.x <= item.x + halfW + pad &&
-          n.y >= item.y - halfH - pad &&
-          n.y <= item.y + halfH + pad;
-        const isGroup = Boolean(n.group_id) && n.group_id === item.item_id;
-        return isGeo || isGroup;
-      })
-      .map((n) => n.node_id);
-    if (memberIds.length === 0) return item;
-    const laidOutMembers = nodes.filter((n) => memberIds.includes(n.node_id));
-    if (laidOutMembers.length === 0) return item;
-
-    const xs = laidOutMembers.map((n) => n.x);
-    const ys = laidOutMembers.map((n) => n.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
-    const padX = 50;
-    const padY = 40;
-    return {
-      ...item,
-      x: Math.round((minX + maxX) / 2),
-      y: Math.round((minY + maxY) / 2),
-      width: Math.max(160, Math.round(maxX - minX + padX * 2)),
-      height: Math.max(100, Math.round(maxY - minY + padY * 2)),
-    };
-  });
-
-  return { ...topology, nodes, groups, canvas_items };
+/** Region constraints are applied before global packing, never inferred from proximity. */
+async function layoutRegions(topology: Topology, algorithm: LayoutAlgorithm): Promise<Topology> {
+  const items = (topology.canvas_items || []).filter(item => item.kind !== "text");
+  const itemById = new Map(items.map(item => [item.item_id, item]));
+  const buckets = new Map<string, Topology["nodes"]>();
+  const crossLocks = new Set<string>();
+  const lockRegions = new Map<string, Set<string>>();
+  for (const n of topology.nodes) {
+    const key = n.region_id && itemById.has(n.region_id) ? n.region_id : "";
+    const list = buckets.get(key) || []; list.push(n); buckets.set(key, list);
+    if (n.lock_group) {
+      const regions = lockRegions.get(n.lock_group) || new Set<string>(); regions.add(key); lockRegions.set(n.lock_group, regions);
+    }
+  }
+  for (const [lock, regions] of lockRegions) if (regions.size > 1) crossLocks.add(lock);
+  const placed = new Map(topology.nodes.map(n => [n.node_id, n]));
+  type Box = { x: number; y: number; width: number; height: number };
+  const occupied: Box[] = items.filter(item => item.auto_fit !== true || (buckets.get(item.item_id) || []).some(n => n.lock_group && crossLocks.has(n.lock_group)));
+  const unassigned = buckets.get("") || [];
+  if (unassigned.some(n => n.lock_group && crossLocks.has(n.lock_group))) occupied.push(regionBounds(unassigned));
+  const issues: string[] = [];
+  let cursorX = 70, cursorY = 70, rowHeight = 0;
+  for (const [key, members] of buckets) {
+    const item = itemById.get(key);
+    if (members.some(n => n.lock_group && crossLocks.has(n.lock_group))) {
+      issues.push(`区域 ${item?.text || key || "未归属"} 的跨区域联动位置已保留`); continue;
+    }
+    const ids = new Set(members.map(n => n.node_id));
+    const local = await layoutTopology({...topology, nodes: members, links: topology.links.filter(l => ids.has(l.source_node_id) && ids.has(l.target_node_id)), groups: [], canvas_items: []}, algorithm);
+    const bounds = regionBounds(local.nodes, item?.kind);
+    let dx: number, dy: number;
+    if (item && item.auto_fit !== true) {
+      dx = item.x - bounds.x; dy = item.y - bounds.y;
+      const candidates = local.nodes.map(n => ({...n, x:n.x + dx, y:n.y + dy}));
+      if (!candidates.every(n => regionContains(item, n))) {
+        issues.push(`区域 ${item.text || key} 的固定边框空间不足，已保留原位置`); continue;
+      }
+    } else {
+      if (cursorX > 70 && cursorX + bounds.width > 1400) { cursorX = 70; cursorY += rowHeight + 80; rowHeight = 0; }
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const box of occupied) {
+          if (cursorX < box.x + box.width / 2 + 80 && cursorX + bounds.width + 80 > box.x - box.width / 2 &&
+              cursorY < box.y + box.height / 2 + 80 && cursorY + bounds.height + 80 > box.y - box.height / 2) {
+            cursorX = box.x + box.width / 2 + 80; changed = true;
+          }
+        }
+      }
+      dx = cursorX + bounds.width / 2 - bounds.x; dy = cursorY + bounds.height / 2 - bounds.y;
+      occupied.push({x:bounds.x + dx, y:bounds.y + dy, width:bounds.width, height:bounds.height});
+      cursorX += bounds.width + 80; rowHeight = Math.max(rowHeight, bounds.height);
+    }
+    for (const n of local.nodes) placed.set(n.node_id, {...n, x:n.x + dx, y:n.y + dy});
+  }
+  return fitRegions({...topology, nodes: topology.nodes.map(n => placed.get(n.node_id)!), layout_issues: issues});
 }
 
 export function linkHandles(source: { x: number; y: number }, target: { x: number; y: number }) {

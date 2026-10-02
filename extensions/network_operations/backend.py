@@ -702,15 +702,14 @@ def topology_tool(invocation):
     if not topology:
         return {"ok": False, "error": "topology_not_found"}
 
+    if any(key in args for key in ("groups", "group_updates", "zones", "remove_group_ids")):
+        return {"ok": False, "error": "topology_legacy_regions_removed_use_canvas_items"}
+
     # Automatically map natural aliases
     if "nodes" in args and not args.get("node_updates"):
         args["node_updates"] = args.get("nodes")
     if "links" in args and not args.get("link_updates"):
         args["link_updates"] = args.get("links")
-    if "groups" in args and not args.get("group_updates"):
-        args["group_updates"] = args.get("groups")
-    if "zones" in args and not args.get("group_updates"):
-        args["group_updates"] = args.get("zones")
     if "canvas_items" in args and not args.get("canvas_item_updates"):
         args["canvas_item_updates"] = args.get("canvas_items")
     if "name" not in args and "title" in args:
@@ -724,9 +723,9 @@ def topology_tool(invocation):
     action = str(args.get("action") or "").strip().lower()
     if not action:
         if any(args.get(k) for k in (
-            "node_updates", "nodes", "link_updates", "links", "group_updates", "groups", "zones",
+            "node_updates", "nodes", "link_updates", "links",
             "canvas_item_updates", "canvas_items", "layout", "translate", "remove_node_ids", "remove_link_ids",
-            "remove_group_ids", "remove_canvas_item_ids",
+            "remove_canvas_item_ids",
         )) or any(k in args for k in ("name", "description")):
             action = "patch"
         else:
@@ -750,7 +749,7 @@ def topology_tool(invocation):
                     matches = [item[id_key] for item in topology.get(collection, [])
                                if query in str(item.get(caption) or "").casefold() or query in item[id_key].casefold()]
                     args[field] = list(dict.fromkeys([*supplied, *matches]))
-            if any(key in args for key in ("node_ids", "link_ids", "canvas_item_ids", "group_ids")):
+            if any(key in args for key in ("node_ids", "link_ids", "canvas_item_ids")):
                 from .drawing_context import drawing_subset
                 subset, unavailable = drawing_subset(topology, args, args.get("include_neighbors", True))
                 return {"ok": True, "action": "read", "topology": subset, "topology_id": topology_id,
@@ -975,11 +974,11 @@ def _inspection_in_scope(task: dict[str, Any], scope: dict[str, Any] | None) -> 
 
 def register():
     node_schema = {
-        "type": "object", "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
+        "type": "object", "additionalProperties": False, "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
         "properties": {
             **{key: {"type": "string"} for key in ("node_id", "id", "display_name", "device_type", "name", "type")},
-            **{key: {"type": ["string", "null"]} for key in ("group_id", "zone", "lock_group", "ip", "role", "vendor", "model", "vlan", "location")},
-            "x": {"type": "number"}, "y": {"type": "number"},
+            **{key: {"type": ["string", "null"]} for key in ("region_id", "lock_group", "ip", "role", "vendor", "model", "vlan", "location")},
+            "x": {"type": "number", "description": "画布中心横坐标"}, "y": {"type": "number", "description": "画布中心纵坐标"},
             "labels": {"type": "array", "items": {"type": "string"}},
         },
     }
@@ -997,8 +996,8 @@ def register():
         "properties": {
             "item_id": {"type": "string", "minLength": 1}, "id": {"type": "string", "minLength": 1},
             "kind": {"enum": ["rectangle", "ellipse", "text"]}, "text": {"type": "string", "maxLength": 240},
-            "zone": {"type": "string"}, "auto_fit": {"type": "boolean"},
-            "x": {"type": "number"}, "y": {"type": "number"},
+            "auto_fit": {"type": "boolean"},
+            "x": {"type": "number", "description": "画布中心横坐标"}, "y": {"type": "number", "description": "画布中心纵坐标"},
             "width": {"type": "number", "minimum": 40, "maximum": 10000},
             "height": {"type": "number", "minimum": 24, "maximum": 10000},
             "style": {"type": "object", "additionalProperties": False, "properties": {
@@ -1168,7 +1167,7 @@ def register():
                         "name": {"type": "string", "description": "图纸名称"},
                         "description": {"type": "string", "description": "图纸描述"},
                         "response_detail": {"enum": ["changes", "full"], "description": "patch 默认返回完整实际变更对象及版本；full 返回完整图纸。read 可按对象 ID 获取局部图纸"},
-                        **{key: {"type": "array", "items": {"type": "string"}, "description": "read 的局部对象范围；省略所有范围时返回整图"} for key in ("node_ids", "link_ids", "canvas_item_ids", "group_ids")},
+                        **{key: {"type": "array", "items": {"type": "string"}, "description": "read 的局部对象范围；省略所有范围时返回整图"} for key in ("node_ids", "link_ids", "canvas_item_ids")},
                         "include_neighbors": {"type": "boolean", "description": "局部 read 默认包含邻接节点、连线、联动成员和所属区域"},
                         "query": {"type": "string", "minLength": 1, "maxLength": 160, "description": "read 按名称、标注或对象 ID 包含匹配，不区分大小写；返回所有匹配对象供核对，重名时不要猜测"},
                         "translate": {"type": "object", "additionalProperties": False, "required": ["dx", "dy"],
@@ -1184,7 +1183,7 @@ def register():
                             "required": ["algorithm"]},
                         "node_updates": {
                             "type": "array",
-                            "description": "要添加或更新的节点对象列表，包含 node_id, display_name, device_type, x, y, zone, ip, role, vendor, model",
+                            "description": "要添加或更新的节点对象列表，包含 node_id, display_name, device_type, x, y, region_id（所属容器 item_id，可为 null 解除绑定）, ip, role, vendor, model",
                             "items": node_schema,
                         },
                         "nodes": {
@@ -1202,15 +1201,12 @@ def register():
                             "description": "要添加或更新的链路对象列表（link_updates 的自然别名）",
                             "items": link_schema,
                         },
-                        "group_updates": {"type": "array", "description": "逻辑分组列表", "items": {"type": "object"}},
-                        "groups": {"type": "array", "description": "逻辑分组列表（group_updates 的自然别名）", "items": {"type": "object"}},
-                        "zones": {"type": "array", "description": "区域分组列表（group_updates 的自然别名）", "items": {"type": "object"}},
                         "canvas_item_updates": {"type": "array", "description": "按 item_id 更新或创建图元。改名保留 ID；手动坐标关闭 auto_fit，设 auto_fit=true 恢复按成员包围", "items": canvas_schema},
                         "canvas_items": {"type": "array", "description": "按 item_id 更新或创建图元。改名保留 ID；手动坐标关闭 auto_fit，设 auto_fit=true 恢复按成员包围（canvas_item_updates 的自然别名）", "items": canvas_schema},
                         "title": {"type": "string", "description": "图纸标题或名称"},
                         "summary": {"type": "string", "description": "拓扑说明"},
                         "comment": {"type": "string", "description": "设计说明"},
-                        **{key: {"type": "array", "items": {"type": "string"}, "description": description} for key, description in {"remove_node_ids": "删除指定设备节点及其关联连线", "remove_link_ids": "只删除指定连线", "remove_group_ids": "删除逻辑分组，保留成员设备", "remove_canvas_item_ids": "删除容器边框/文字/图元，解除成员区域关联，保留设备和连线；ID 来自 canvas_items.item_id"}.items()},
+                        **{key: {"type": "array", "items": {"type": "string"}, "description": description} for key, description in {"remove_node_ids": "删除指定设备节点及其关联连线", "remove_link_ids": "只删除指定连线", "remove_canvas_item_ids": "删除容器边框/文字/图元，解除成员区域关联，保留设备和连线；ID 来自 canvas_items.item_id"}.items()},
                     },
                     "required": ["action"],
                 },

@@ -147,3 +147,21 @@ describe("topology three-way merge", () => {
     expect(stats).toMatchObject({ added: 0, removed: 0, orphanedLinks: 0 });
   });
 });
+
+it("region deletion clears existing membership while preserving an independent node move", () => {
+  const base = { ...drawing(), nodes: [{node_id:"n1",x:100,y:100,region_id:"A" as string|null}], links:[], canvas_items:[{item_id:"A",kind:"rectangle"}] };
+  const mine = {...base, nodes:[{...base.nodes[0],x:200}]};
+  const theirs = {...base, nodes:[{...base.nodes[0],region_id:null}], canvas_items:[]};
+  const result=mergeTopologies(base,mine,theirs);
+  expect(result.conflicts).toEqual([]);
+  expect(result.topology.nodes[0]).toMatchObject({x:200,region_id:null});
+});
+
+it("a new binding to a concurrently deleted frame requires a conflict decision", () => {
+  const base = { ...drawing(), nodes: [{node_id:"n1",x:100,y:100,region_id:null as string|null}], links:[], canvas_items:[{item_id:"A",kind:"rectangle"}] };
+  const mine = {...base, nodes:[{...base.nodes[0],region_id:"A"}]};
+  const theirs = {...base, canvas_items:[]};
+  const result=mergeTopologies(base,mine,theirs);
+  expect(result.conflicts).toContainEqual(expect.objectContaining({id:"n1",field:"所属区域已删除"}));
+  expect(result.topology.nodes[0].region_id).toBeNull();
+});

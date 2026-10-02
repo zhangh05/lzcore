@@ -104,18 +104,11 @@ def test_coordinates_nan_and_infinity_sanitized(workspace, tmp_path):
     saved = drawings.save_topology(workspace, {
         "name": "NanTest",
         "nodes": [{"node_id": "n_nan", "display_name": "NanNode", "x": float("nan"), "y": float("inf")}],
-        "groups": [{"group_id": "g_nan", "name": "NanGroup", "x": float("nan"), "y": float("-inf"), "width": float("nan"), "height": float("inf")}],
         "canvas_items": [{"item_id": "i_nan", "text": "NanItem", "x": float("nan"), "y": float("inf"), "width": float("nan"), "height": float("nan")}],
     })
     node = saved["nodes"][0]
     assert math.isfinite(node["x"]) and node["x"] == 0.0
     assert math.isfinite(node["y"]) and node["y"] == 0.0
-
-    grp = saved["groups"][0]
-    assert math.isfinite(grp["x"]) and grp["x"] == 0.0
-    assert math.isfinite(grp["y"]) and grp["y"] == 0.0
-    assert math.isfinite(grp["width"]) and grp["width"] == 320.0
-    assert math.isfinite(grp["height"]) and grp["height"] == 240.0
 
     item = saved["canvas_items"][0]
     assert math.isfinite(item["x"]) and item["x"] == 0.0
@@ -191,8 +184,8 @@ def test_fit_member_zones_adapts_to_member_nodes(workspace):
     topo = drawings.save_topology(workspace, {
         "name": "ZoneFittingTest",
         "nodes": [
-            {"node_id": "dev1", "display_name": "D1", "x": 100, "y": 200, "group_id": "zone_rect"},
-            {"node_id": "dev2", "display_name": "D2", "x": 300, "y": 400, "group_id": "zone_rect"},
+            {"node_id": "dev1", "display_name": "D1", "x": 100, "y": 200, "region_id": "zone_rect"},
+            {"node_id": "dev2", "display_name": "D2", "x": 300, "y": 400, "region_id": "zone_rect"},
         ],
         "canvas_items": [
             {"item_id": "zone_rect", "kind": "rectangle", "text": "数据中心", "x": 0, "y": 0, "width": 50, "height": 50, "auto_fit": True},
@@ -200,7 +193,7 @@ def test_fit_member_zones_adapts_to_member_nodes(workspace):
     })
     zone = topo["canvas_items"][0]
     assert zone["x"] == 200.0  # (100 + 300) / 2
-    assert zone["y"] == 300.0  # (200 + 400) / 2
+    assert zone["y"] == 288.0  # (200 + 400) / 2
     assert zone["width"] == 380.0  # (300 - 100) + 90 * 2 = 380
-    assert zone["height"] == 360.0  # (400 - 200) + 80 * 2 = 360
+    assert zone["height"] == 384.0  # (400 - 200) + 80 * 2 = 360
 

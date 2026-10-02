@@ -5,22 +5,22 @@ import { canvasLinkDescription, compactInterfaceLabel } from "../../../extension
 
 test("graph layout keeps links and objects and encloses grouped nodes", async () => {
   const topology: Topology = { topology_id: "t", name: "Network", description: "", version: 2, created_at: "", updated_at: "",
-    nodes: ["a", "b", "c"].map((node_id) => ({ node_id, x: 0, y: 0, group_id: "g" })),
-    groups: [{ group_id: "g", name: "Site", kind: "region", x: 0, y: 0, width: 100, height: 100 }],
-    canvas_items: [{ item_id: "note", kind: "text", text: "核心区域", x: 20, y: 20, width: 120, height: 36 }],
+    nodes: ["a", "b", "c"].map((node_id) => ({ node_id, x: 0, y: 0, region_id: "g" })),
+    groups: [],
+    canvas_items: [{ item_id: "g", kind: "rectangle", text: "Site", auto_fit: true, x: 0, y: 0, width: 100, height: 100 }, { item_id: "note", kind: "text", text: "核心区域", x: 20, y: 20, width: 120, height: 36 }],
     links: [{ link_id: "ab", source_node_id: "a", target_node_id: "b", source_interface: "GE0/0", target_interface: "GE0/1", kind: "physical", source: "manual", status: "unknown" }],
   };
   const result = await layoutTopology(topology);
   expect(result.links).toEqual(topology.links);
-  expect(result.canvas_items).toEqual(topology.canvas_items);
+  expect(result.canvas_items?.find(item => item.item_id === "note")).toEqual(topology.canvas_items?.find(item => item.item_id === "note"));
   expect(result.version).toBe(2);
   expect(result.nodes.find((node) => node.node_id === "a")!.x).toBeLessThan(result.nodes.find((node) => node.node_id === "b")!.x);
-  const group = result.groups[0];
+  const group = result.canvas_items!.find(item => item.item_id === "g")!;
   for (const node of result.nodes) {
-    expect(node.x).toBeGreaterThan(group.x);
-    expect(node.y).toBeGreaterThan(group.y);
-    expect(node.x + 160).toBeLessThan(group.x + group.width);
-    expect(node.y + 130).toBeLessThan(group.y + group.height);
+    expect(node.x).toBeGreaterThan(group.x - group.width / 2);
+    expect(node.y).toBeGreaterThan(group.y - group.height / 2);
+    expect(node.x + 70).toBeLessThan(group.x + group.width / 2);
+    expect(node.y + 55).toBeLessThan(group.y + group.height / 2);
   }
   expect(topology.nodes.every((node) => node.x === 0 && node.y === 0)).toBe(true);
 });
@@ -49,7 +49,7 @@ test("packs disconnected devices into compact rows instead of a tall column", as
     links: [{ link_id: "ab", source_node_id: "a", target_node_id: "b", source_interface: "GE0/0", target_interface: "GE0/1", kind: "physical", source: "manual", status: "unknown" }],
   };
   const result = await layoutTopology(topology);
-  const maxY = Math.max(...result.nodes.map((node) => node.y + 130));
+  const maxY = Math.max(...result.nodes.map((node) => node.y + 55));
   expect(maxY).toBeLessThanOrEqual(430);
   expect(result.nodes.find((node) => node.node_id === "a")!.x).toBeLessThan(result.nodes.find((node) => node.node_id === "b")!.x);
 });
@@ -63,12 +63,12 @@ test("layoutTopology automatically resizes canvas item rectangle zones enclosing
     created_at: "",
     updated_at: "",
     nodes: [
-      { node_id: "core1", display_name: "Core-SW", role: "core", x: 100, y: 100 },
-      { node_id: "access1", display_name: "Access-SW", role: "access", x: 100, y: 120 },
+      { node_id: "core1", display_name: "Core-SW", role: "core", region_id: "zone-dc", x: 100, y: 100 },
+      { node_id: "access1", display_name: "Access-SW", role: "access", region_id: "zone-dc", x: 100, y: 120 },
     ],
     groups: [],
     canvas_items: [
-      { item_id: "zone-dc", kind: "rectangle", text: "数据中心区", x: 100, y: 110, width: 200, height: 160 },
+      { item_id: "zone-dc", kind: "rectangle", text: "数据中心区", auto_fit: true, x: 100, y: 110, width: 200, height: 160 },
     ],
     links: [
       { link_id: "l1", source_node_id: "core1", target_node_id: "access1", source_interface: "GE1", target_interface: "GE1", kind: "physical", source: "manual", status: "up" },

@@ -126,7 +126,7 @@ def test_missing_optional_labels_do_not_turn_local_edits_into_whole_drawing_chan
 def test_container_translate_and_delete_through_governed_tool_preserve_devices(temp_dirs):
     topo, invoke, _ = drawing_gateway()
     grouped = invoke({'action': 'patch', 'node_updates': [
-        {'node_id': key, 'zone': '核心区', 'group_id': 'box'} for key in 'ab'],
+        {'node_id': key, 'region_id': 'box'} for key in 'ab'],
         'canvas_item_updates': [{'item_id': 'box', 'kind': 'rectangle', 'text': '核心区',
                                  'x': 150, 'y': 0, 'width': 500, 'height': 200, 'auto_fit': False}]}).output
     moved = invoke({'action': 'patch', 'version': grouped['version'], 'response_detail': 'full',
@@ -141,7 +141,7 @@ def test_container_translate_and_delete_through_governed_tool_preserve_devices(t
                       'remove_canvas_item_ids': ['box']}).output
     assert removed['topology']['canvas_items'] == []
     assert len(removed['topology']['nodes']) == 3 and len(removed['topology']['links']) == 1
-    assert all(n['group_id'] is None and n['zone'] is None for n in removed['topology']['nodes'])
+    assert all(n['region_id'] is None for n in removed['topology']['nodes'])
     revision = drawings.list_topology_revisions('optimize', topo['topology_id'])[0]
     assert revision['source'] == 'agent' and revision['activity']['removed'] == 1
     assert drawings.get_topology_revision('optimize', topo['topology_id'], revision['revision_id'])['edit']['before']['canvas_items'][0]['item_id'] == 'box'

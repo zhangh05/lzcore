@@ -183,7 +183,7 @@ Reference. Only a complete candidate can be explicitly confirmed.
 
 canvas_selection 含 node_ids/link_ids/group_ids/canvas_item_ids，服务端核对存在性，失效 ID 在 canvas_selection_unavailable，不复制客户端标签。用户原话单独传递。发送前确认本地保存，带发送时 drawing_version；保存响应丢失先读回，已提交则采纳，不确定则保留编辑并要求确认，不自动重放。
 
-network.operations.topology 仅 read/patch。read 无范围返回全图；指定对象 ID/group_ids 或 query 返回匹配子图，query 是名称/标签/ID 大小写不敏感子串，保留显式 ID。同名需确认后编辑。include_neighbors 默认 true，包含邻接、固定联动成员及区域。局部结果 snapshot_complete=false、缺失 ID 和全图 counts，不能替换完整画布。
+network.operations.topology 仅 read/patch。read 无范围返回全图；指定 node_ids/link_ids/canvas_item_ids 或 query 返回匹配子图，query 是名称/标签/ID 大小写不敏感子串，保留显式 ID。同名需确认后编辑。include_neighbors 默认 true，包含邻接、固定联动成员及区域。局部结果 snapshot_complete=false、缺失 ID 和全图 counts，不能替换完整画布。
 
 自动选区上下文额外邻居最多 40 节点/80 链路；选中和联动成员保留。这只是自动上下文边界，显式局部/完整读取不受该限制。
 
@@ -192,12 +192,12 @@ patch 使用稳定 ID，保留未点名对象；旧显式 version 冲突，省�
 - node_updates 控制属性/x/y，canvas_item_updates 控制位置/尺寸/内容，link 更新控制端点、接口和样式；节点 labels 保留。
 - translate={node_ids?,canvas_item_ids?,dx,dy,include_members?} 相对移动；至少指定节点或图元。include_members=true 连同容器成员移动，默认只移动边框且关闭 auto_fit；固定联动组同步平移；显式成员坐标优先，清 lock_group 分离，删除/脱离清孤立组。
 - layout 可选 grid/radial，支持 node_ids/preserve_node_ids/origin/spacing_x/spacing_y，间距至少 140。显式坐标优先，保护成员等于保护其联动组，组按刚体移动；前端自动布局也保留组相对位置和固定区域。
-- zone 生成稳定区域框；改名保留 item_id。手工几何关闭 auto_fit，可显式恢复；删除框解除成员归属。
+- 区域唯一身份是 canvas_items.item_id，节点 region_id 引用它，null 解除归属。名称仅用于展示，zone/group_id/group_updates/groups/zones/remove_group_ids 区域写入路径已移除；未知引用报错，不自动生成框。节点和图元 x/y 均为中心坐标。auto_fit=true 才按绑定成员包围；手工几何关闭 auto_fit，删除框解除成员归属。
 - feedback 采用估算节点几何和有限重叠样本，完整度明确；不是视觉或真实网络验收。
 
 页面基于最后确认基线三方合并。非重叠本地编辑可合并，同字段/删改/依赖链路冲突需解决。变更卡标显示/待处理、移除对象和差量，可聚焦/撤销；撤销保留后来无关字段，重叠则拒绝。卡片默认折叠，与对话分区；从后端有界 revision 恢复，保存结构与几何变化，保留最近 40 个版本。列表 activity 返回差量摘要、来源与时间；edit 只读接口按需返回 changed objects 的 before/after，供前端安全撤销，不替换整图。旧版本仅有快照的历史继续可读取/恢复，新增变化才有撤销差量。
 
-容器/图元删除使用 remove_canvas_item_ids；保留设备和连线、解除成员区域关联。remove_group_ids 删逻辑分组，remove_node_ids 删设备及其关联连线。显式区域几何默认固定；auto_fit=true 才随成员包围，同名容器以 ID 区分。图纸改名同步绑定会话的资源元数据与自动生成标题，用户自定义标题保留。
+容器/图元删除使用 remove_canvas_item_ids；保留设备和连线、解除成员区域关联。remove_node_ids 删设备及其关联连线。显式区域几何默认固定；auto_fit=true 才随成员包围，同名容器以 ID 区分。图纸改名同步绑定会话的资源元数据与自动生成标题，用户自定义标题保留。
 
 ### Provider 配置
 
@@ -320,3 +320,9 @@ GET         /api/workspaces/<ws_id>/traces
 ### 图纸批注
 
 `GET /api/extensions/network.operations/topologies/<topology_id>/annotations?workspace_id=...` 返回 `{ok, annotations: {version, strokes, notes}}`。`PUT` 使用相同路径，JSON 中显式传 `workspace_id`、上次读取的 `version`、`strokes` 和 `notes`；成功后批注版本加一。版本冲突返回 409，缺少图纸返回 404，非法坐标、形状或过大内容返回 400。批注按用户和工作区隔离，独立于图纸版本；图纸硬删除时同时删除其批注。
+
+区域存储 schema_version=3：旧 v1/v2 记录首次读取或启动迁移时先保存 topology_region_backups 原始备份，再把唯一可解析的旧归属转成 region_id。旧逻辑分组框转换为同 ID 的 canvas_items，旧左上角坐标转换为中心坐标。同名歧义或不存在的归属保持未归属，region_migration_issues 提示人工确认。只在迁移阶段解析旧名称；新写入不使用兼容身份。历史快照恢复也先迁移；旧差量撤销用完整快照补足区域上下文后转换，不把未变框的成员误判成无归属。groups 在旧响应结构中保留为空数组。并发删框与新增成员归属会提示依赖冲突；既有归属解除时保留独立的节点位置编辑。
+
+feedback.regions 提供 members、unassigned_node_ids、missing_region_refs、outside_members、empty_region_ids、overlapping_region_pairs 和 identical_region_pairs；区域重叠和未归属可能是用户意图，不能自动当错误修改。所有几何反馈基于保守 140×110 节点范围，标题预留 24；真实文字宽度、连线路由和视口仍需渲染验收。区域感知布局保持固定边框与显式坐标，不足以容纳成员时不挤压节点。
+
+区域重叠/相同几何 pairs 最多返回 50 对，同时返回 overlapping_region_count、identical_region_count 和 region_pairs_complete；计数不截断。

@@ -1,3 +1,4 @@
+import { fitRegions, regionBounds, regionContains, moveRegionElements } from "./topologyRegions";
 import { desktopDirty } from "../../../../frontend/src/desktop/bridge";
 import {
   useCallback,
@@ -22,7 +23,6 @@ import {
   IconCopy,
   IconEdit,
   IconEye,
-  IconFolder,
   IconGrid,
   IconLayers,
   IconLink,
@@ -64,7 +64,7 @@ import NetOpsCanvas, { type CanvasApi, type CanvasContextTarget, type ElementPos
 import { buildImagePdf, rgbFromRgba, type RgbImage } from "./topologyPdf";
 import { mergeTopologies, type MergeConflict, type MergeStats } from "./topologyMerge";
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
-import { applyDrawingEdit, drawingActivity, hasDrawingChanges, moveDrawingNodes, type DrawingActivity, type DrawingEdit } from "./topologyCollaboration";
+import { applyDrawingEdit, drawingActivity, hasDrawingChanges, type DrawingActivity, type DrawingEdit } from "./topologyCollaboration";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import { TopologyWhiteboard } from "./TopologyWhiteboard";
 import { exportTopologyToSvg, svgToPngDataUrl, svgToPngBlob, nativeSaveBlob } from "./topologyExport";
@@ -79,8 +79,7 @@ export type TopologyNode = {
   device_type?: string;
   display_name?: string;
   labels?: string[];
-  group_id?: string;
-  zone?: string;
+  region_id?: string | null;
   lock_group?: string;
   ip?: string;
   vendor?: string;
@@ -125,7 +124,6 @@ export type TopologyLink = {
 /** User-authored visual context.  It is deliberately separate from devices. */
 export type TopologyCanvasItem = {
   item_id: string;
-  zone?: string;
   auto_fit?: boolean;
   kind: "rectangle" | "ellipse" | "text";
   text: string;
@@ -145,29 +143,7 @@ export const ZONE_COLOR_PRESETS = [
   { key: "slate", name: "典雅灰", fill: "#f8fafc", border: "#cbd5e1", color: "#334155" },
 ] as const;
 
-export function calculateZoneBounds(nodes: TopologyNode[]): { x: number; y: number; width: number; height: number } {
-  if (!nodes.length) {
-    return { x: 300, y: 200, width: 320, height: 220 };
-  }
-  const xs = nodes.map((n) => n.x);
-  const ys = nodes.map((n) => n.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  const PAD_X = 90;
-  const PAD_Y = 80;
-  const MIN_W = 240;
-  const MIN_H = 180;
-
-  const w = Math.max(MIN_W, Math.round((maxX - minX) + PAD_X * 2));
-  const h = Math.max(MIN_H, Math.round((maxY - minY) + PAD_Y * 2));
-  const cx = Math.round((minX + maxX) / 2);
-  const cy = Math.round((minY + maxY) / 2);
-
-  return { x: cx, y: cy, width: w, height: h };
-}
+export const calculateZoneBounds = regionBounds;
 
 export type TopologyGroup = {
   group_id: string;
@@ -188,6 +164,8 @@ export type Topology = {
   nodes: TopologyNode[];
   links: TopologyLink[];
   groups: TopologyGroup[];
+  region_migration_issues?: Array<{node_id: string; reason: string}>;
+  layout_issues?: string[];
   canvas_items?: TopologyCanvasItem[];
   created_at: string;
   updated_at: string;
@@ -337,7 +315,7 @@ type RevisionDiff = {
 const DIFF_FIELD_LABELS: Record<string, string> = {
   device_type: "设备类型",
   display_name: "显示名",
-  group_id: "所属分组",
+  region_id: "所属区域",
   source_interface: "本端接口",
   target_interface: "对端接口",
   kind: "链路类型",
@@ -602,11 +580,12 @@ export default function TopologyWorkspace({
       if (known !== undefined && currentTopology.version !== known && activeTopologyRef.current?.topology_id === currentTopology.topology_id) return;
     }
     setActiveTopology(currentTopology);
+    if (currentTopology?.region_migration_issues?.length) setNotice(`有 ${currentTopology.region_migration_issues.length} 台设备区域归属待确认，请在设备详情中指定区域`, false);
     if (currentTopology) {
       serverVersionsRef.current.set(currentTopology.topology_id, currentTopology.version);
       serverTopologyRef.current.set(currentTopology.topology_id, currentTopology);
     }
-  }, [currentTopology]);
+  }, [currentTopology, setNotice]);
 
   // Undo / Redo history
   const [history, setHistory] = useState<DrawingEdit[]>([]);
@@ -660,9 +639,10 @@ export default function TopologyWorkspace({
     serverTopologyRef.current.set(next.topology_id, next);
     activeTopologyRef.current = next;
     setActiveTopology(next);
+    if (next.region_migration_issues?.length) setNotice(`区域迁移完成，有 ${next.region_migration_issues.length} 台设备归属待确认，请在设备详情中指定区域`, false);
     saveStatusRef.current = "saved";
     setSaveStatus("saved");
-  }, []);
+  }, [setNotice]);
 
   // Inspector & selection
   const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
@@ -1142,9 +1122,6 @@ export default function TopologyWorkspace({
   const [topologyNameInput, setTopologyNameInput] = useState("");
   const [topologyDescInput, setTopologyDescInput] = useState("");
 
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [groupNameInput, setGroupNameInput] = useState("");
-  const [groupKindInput, setGroupKindInput] = useState<"as" | "region" | "datacenter" | "tenant" | "custom">("datacenter");
   const [showCreateZoneModal, setShowCreateZoneModal] = useState(false);
   const [zoneNameInput, setZoneNameInput] = useState("");
   const [zoneColorIndex, setZoneColorIndex] = useState(0);
@@ -1339,6 +1316,7 @@ export default function TopologyWorkspace({
   const pushState = useCallback(
     (next: Topology) => {
       if (!activeTopology) return;
+      next = fitRegions(next);
       const conflictPending = saveStatusRef.current === "conflict";
       setHistory((prev) => [...prev.slice(-20), { before: activeTopologyRef.current || activeTopology, after: next, source: "manual" }]);
       setFuture([]);
@@ -1648,36 +1626,6 @@ export default function TopologyWorkspace({
     [activeTopology, pushState, setNotice]
   );
 
-  // Delete group from topology
-  const handleRemoveGroup = useCallback(
-    async (groupId: string) => {
-      if (!activeTopology) return;
-      const confirmed = await confirm({
-        title: "删除拓扑分组",
-        body: "删除分组后，该分组下的节点将保留在拓扑中，分组标记将被清除。",
-        confirmLabel: "删除分组",
-        destructive: true,
-      });
-      if (!confirmed) return;
-
-      const nextGroups = activeTopology.groups.filter((g) => g.group_id !== groupId);
-      const nextNodes = activeTopology.nodes.map((n) =>
-        n.group_id === groupId ? { ...n, group_id: undefined } : n
-      );
-
-      pushState({
-        ...activeTopology,
-        groups: nextGroups,
-        nodes: nextNodes,
-      });
-      setSelectedElement(null);
-      setNotice("分组已删除");
-    },
-    [activeTopology, pushState, setNotice]
-  );
-
-
-
   const handleAddManualNode = useCallback((event: FormEvent) => {
     event.preventDefault();
     if (!activeTopology) return;
@@ -1834,21 +1782,13 @@ export default function TopologyWorkspace({
 
 
 
+  const [regionMoveMode, setRegionMoveMode] = useState<"region" | "frame">("region");
   const handleNetOpsMove = useCallback((positions: Array<{ element_id: string; x: number; y: number }>) => {
     const current = activeTopologyRef.current;
     if (!current || !positions.length) return;
-    const rounded = positions.map(position => ({ ...position, x: Math.round(position.x), y: Math.round(position.y) }));
-    const byId = new Map(rounded.map(position => [position.element_id, position]));
-    const nextNodes = moveDrawingNodes(current.nodes, rounded);
-
-    const nextCanvasItems = (current.canvas_items || []).map((item) => {
-      const direct = byId.get(`canvas-${item.item_id}`);
-      return direct ? { ...item, auto_fit: false, x: Math.round(direct.x), y: Math.round(direct.y) } : item;
-    });
-
-    pushState({ ...current, nodes: nextNodes, canvas_items: nextCanvasItems });
+    pushState(moveRegionElements(current, positions, regionMoveMode === "region"));
     requestAnimationFrame(() => updatePopoverAnchor());
-  }, [pushState, updatePopoverAnchor]);
+  }, [pushState, updatePopoverAnchor, regionMoveMode]);
 
   const handleAlignSelectedNodes = useCallback((direction: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
     if (!activeTopology) return;
@@ -1875,7 +1815,7 @@ export default function TopologyWorkspace({
     if (!activeTopology) return;
     const confirmed = await confirm({ title: "删除图纸图元", body: "确定删除这个图纸图元吗？", confirmLabel: "删除图元", destructive: true });
     if (!confirmed) return;
-    pushState({ ...activeTopology, canvas_items: (activeTopology.canvas_items || []).filter((item) => item.item_id !== itemId) });
+    pushState({ ...activeTopology, nodes: activeTopology.nodes.map(n => n.region_id === itemId ? { ...n, region_id: null } : n), canvas_items: (activeTopology.canvas_items || []).filter((item) => item.item_id !== itemId) });
     setSelectedElement(null);
     setNotice("图纸图元已删除");
   }, [activeTopology, pushState, setNotice]);
@@ -1885,45 +1825,17 @@ export default function TopologyWorkspace({
     const item = activeTopology.canvas_items.find((i) => i.item_id === itemId);
     if (!item) return;
 
-    // 1. Match member nodes by group_id, zone, or text
-    const itemText = (item.text || "").trim();
-    let memberNodes = activeTopology.nodes.filter(
-      (n) =>
-        (n.group_id && n.group_id === itemId) ||
-        (n.zone && n.zone === itemId) ||
-        (itemText && n.zone && n.zone === itemText) ||
-        (itemText && n.group_id && n.group_id === itemText)
-    );
-
-    // 2. Fall back to bounding box intersection
+    const memberNodes = activeTopology.nodes.filter(n => n.region_id === itemId);
     if (memberNodes.length === 0) {
-      const halfW = (item.width || 200) / 2;
-      const halfH = (item.height || 100) / 2;
-      const left = item.x - halfW;
-      const right = item.x + halfW;
-      const top = item.y - halfH;
-      const bottom = item.y + halfH;
-      memberNodes = activeTopology.nodes.filter(
-        (n) => n.x + 38 >= left && n.x - 38 <= right && n.y + 50 >= top && n.y - 30 <= bottom
-      );
-    }
-
-    // 3. Fall back to currently selected nodes if any
-    if (memberNodes.length === 0 && canvasSelectedElementIds.length > 0) {
-      const selectedIds = new Set(canvasSelectedElementIds);
-      memberNodes = activeTopology.nodes.filter((n) => selectedIds.has(n.node_id));
-    }
-
-    if (memberNodes.length === 0) {
-      setNotice("未检测到关联设备节点，请先在画布上选择要包裹的设备", false);
+      setNotice("未检测到关联设备节点，请先将设备加入此区域", false);
       return;
     }
 
-    const bounds = calculateZoneBounds(memberNodes);
+    const bounds = regionBounds(memberNodes, item.kind);
     const memberIds = new Set(memberNodes.map((n) => n.node_id));
 
     const nextNodes = activeTopology.nodes.map((n) =>
-      memberIds.has(n.node_id) ? { ...n, zone: item.text || n.zone, group_id: itemId } : n
+      memberIds.has(n.node_id) ? { ...n, region_id: itemId } : n
     );
 
     pushState({
@@ -1933,7 +1845,7 @@ export default function TopologyWorkspace({
         ci.item_id === itemId ? { ...ci, auto_fit: true, x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : ci
       ),
     });
-    setNotice(`已自适应贴合【${item.text || "区域"}】，完美包裹 ${memberNodes.length} 台设备`);
+    setNotice(`已按绑定成员调整【${item.text || "区域"}】，包含 ${memberNodes.length} 台设备`);
   }, [activeTopology, canvasSelectedElementIds, pushState, setNotice]);
 
   const handleOpenCreateZone = useCallback(() => {
@@ -1965,7 +1877,6 @@ export default function TopologyWorkspace({
     const newZoneItem: TopologyCanvasItem = {
       item_id: zoneId,
       auto_fit: true,
-      zone: zoneName,
       kind: "rectangle",
       text: zoneName,
       x: bounds.x,
@@ -1981,7 +1892,7 @@ export default function TopologyWorkspace({
     };
 
     const nextNodes = activeTopology.nodes.map((n) =>
-      selectedIds.has(n.node_id) ? { ...n, zone: zoneName, group_id: zoneId } : n
+      selectedIds.has(n.node_id) ? { ...n, region_id: zoneId } : n
     );
 
     pushState({
@@ -1998,21 +1909,21 @@ export default function TopologyWorkspace({
     if (!activeTopology) return;
     const target = activeTopology.nodes.find((n) => n.node_id === nodeId);
     if (!target) return;
-    const zoneKey = target.zone || target.group_id;
+    const zoneKey = target.region_id;
     if (!zoneKey) return;
     const peers = activeTopology.nodes
-      .filter((n) => n.zone === zoneKey || n.group_id === zoneKey)
+      .filter((n) => n.region_id === zoneKey)
       .map((n) => n.node_id);
     if (peers.length > 0) {
       canvasApiRef.current?.selectElements?.(peers);
-      setNotice(`已选中同区域【${target.zone || "未命名区域"}】的 ${peers.length} 台设备`);
+      setNotice(`已选中同区域【${activeTopology.canvas_items?.find(item => item.item_id === zoneKey)?.text || "未命名区域"}】的 ${peers.length} 台设备`);
     }
   }, [activeTopology, setNotice]);
 
   const handleLeaveZone = useCallback((nodeId: string) => {
     if (!activeTopology) return;
     const nextNodes = activeTopology.nodes.map((n) =>
-      n.node_id === nodeId ? { ...n, zone: undefined, group_id: undefined } : n
+      n.node_id === nodeId ? { ...n, region_id: null } : n
     );
     pushState({ ...activeTopology, nodes: nextNodes });
     setNotice("已将设备移出所属区域");
@@ -2023,7 +1934,7 @@ export default function TopologyWorkspace({
     const zoneItem = (activeTopology.canvas_items || []).find((ci) => ci.item_id === zoneItemId);
     const zoneName = zoneItem?.text || "区域";
     const nextNodes = activeTopology.nodes.map((n) =>
-      n.node_id === nodeId ? { ...n, zone: zoneName, group_id: zoneItemId } : n
+      n.node_id === nodeId ? { ...n, region_id: zoneItemId } : n
     );
     pushState({ ...activeTopology, nodes: nextNodes });
     setNotice(`已将设备加入区域【${zoneName}】`);
@@ -2260,12 +2171,12 @@ export default function TopologyWorkspace({
         }
       }
     }
-    pushState({
-      ...current,
-      nodes: current.nodes.map((node) => (ids.has(node.node_id) ? { ...node, x: node.x + dx, y: node.y + dy } : node)),
-      canvas_items: (current.canvas_items || []).map((item) => (ids.has(`canvas-${item.item_id}`) ? { ...item, auto_fit: false, x: item.x + dx, y: item.y + dy } : item)),
-    });
-  }, [canvasSelectedElementIds, pushState]);
+    const positions = [
+      ...current.nodes.filter(node => ids.has(node.node_id)).map(node => ({element_id: node.node_id, x: node.x + dx, y: node.y + dy})),
+      ...(current.canvas_items || []).filter(item => ids.has(`canvas-${item.item_id}`)).map(item => ({element_id: `canvas-${item.item_id}`, x: item.x + dx, y: item.y + dy})),
+    ];
+    pushState(moveRegionElements(current, positions, regionMoveMode === "region"));
+  }, [canvasSelectedElementIds, pushState, regionMoveMode]);
 
   const handleLockSelectedNodes = useCallback(() => {
     const current = activeTopologyRef.current;
@@ -2406,7 +2317,7 @@ export default function TopologyWorkspace({
     );
     pushState({
       ...activeTopology,
-      nodes: cleanedNodes,
+      nodes: cleanedNodes.map(n => n.region_id && itemSet.has(n.region_id) ? {...n, region_id: null} : n),
       links: activeTopology.links.filter((link) => !nodeSet.has(link.source_node_id) && !nodeSet.has(link.target_node_id)),
       canvas_items: (activeTopology.canvas_items || []).filter((item) => !itemSet.has(item.item_id)),
     });
@@ -2630,34 +2541,10 @@ export default function TopologyWorkspace({
       if (activeTopologyRef.current !== activeTopology) { setNotice("图纸已变化，请重新排布", false); return; }
       pushState(result);
       const preset = LAYOUT_PRESETS.find((item) => item.id === algorithm);
-      setNotice(`已按「${preset?.label || "分层"}」排布；已有分组随成员调整`);
+      setNotice(result.layout_issues?.length ? result.layout_issues.join("；") : `已按「${preset?.label || "分层"}」排布，区域按绑定成员布局`);
     } catch { setNotice("自动排布失败，原图保持不变", false); }
     finally { setLayoutBusy(false); }
   }, [activeTopology, pushState, setNotice]);
-
-  // Add group
-  const handleCreateGroup = (e: FormEvent) => {
-    e.preventDefault();
-    if (!activeTopology || !groupNameInput.trim()) return;
-
-    const newGroup: TopologyGroup = {
-      group_id: `grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      name: groupNameInput.trim(),
-      kind: groupKindInput,
-      x: 80,
-      y: 80,
-      width: 420,
-      height: 300,
-    };
-
-    pushState({
-      ...activeTopology,
-      groups: [...activeTopology.groups, newGroup],
-    });
-    setShowGroupModal(false);
-    setGroupNameInput("");
-    setNotice("拓扑分组已创建");
-  };
 
   // Create / Edit topology
   const handleSaveTopologyMeta = async (e: FormEvent) => {
@@ -2896,12 +2783,6 @@ export default function TopologyWorkspace({
     return activeTopology.links.find((l) => l.link_id === selectedElement.linkId) || null;
   }, [selectedElement, activeTopology]);
 
-  // Group selection inspector helpers
-  const selectedGroup = useMemo(() => {
-    if (selectedElement?.type !== "group" || !activeTopology) return null;
-    return activeTopology.groups.find((g) => g.group_id === selectedElement.groupId) || null;
-  }, [selectedElement, activeTopology]);
-
   const selectedCanvasItem = useMemo(() => {
     if (selectedElement?.type !== "canvas_item" || !activeTopology) return null;
     return (activeTopology.canvas_items || []).find((item) => item.item_id === selectedElement.itemId) || null;
@@ -3121,7 +3002,7 @@ export default function TopologyWorkspace({
           <div className="palette-group-list">
             {(activeTopology?.canvas_items || []).filter((ci) => ci.kind === "rectangle" || ci.kind === "ellipse").length ? (
               (activeTopology?.canvas_items || []).filter((ci) => ci.kind === "rectangle" || ci.kind === "ellipse").map((ci) => {
-                const memberCount = (activeTopology?.nodes || []).filter((n) => n.group_id === ci.item_id || n.zone === ci.text).length;
+                const memberCount = (activeTopology?.nodes || []).filter((n) => n.region_id === ci.item_id).length;
                 const isSelected = selectedElement?.type === "canvas_item" && selectedElement.itemId === ci.item_id;
                 const tagColor = ci.style?.border || "var(--accent)";
                 return (
@@ -3570,6 +3451,7 @@ export default function TopologyWorkspace({
             mode={canvasMode}
             interactionMode={workspaceMode}
             gridEnabled={gridEnabled}
+            moveRegionMembers={regionMoveMode === "region"}
             showInterfaces={showInterfaces}
             compactMode={compactMode}
             onSelectNode={(nodeId) => {
@@ -3872,22 +3754,22 @@ export default function TopologyWorkspace({
                 </label>
 
                 <label className="inspector-field">
-                  所属分组
+                  所属区域
                   <select
-                    value={selectedNode.group_id || ""}
+                    value={selectedNode.region_id || ""}
                     onChange={(e) => {
                       if (!activeTopology) return;
                       const val = e.target.value || undefined;
                       const updated = activeTopology.nodes.map((n) =>
-                        n.node_id === selectedNode.node_id ? { ...n, group_id: val } : n
+                        n.node_id === selectedNode.node_id ? { ...n, region_id: val || null } : n
                       );
                       pushState({ ...activeTopology, nodes: updated });
                     }}
                   >
-                    <option value="">未指定分组</option>
-                    {(activeTopology?.groups || []).map((g) => (
-                      <option key={g.group_id} value={g.group_id}>
-                        {g.name} ({g.kind})
+                    <option value="">未指定区域</option>
+                    {(activeTopology?.canvas_items || []).filter(item => item.kind !== "text").map((g) => (
+                      <option key={g.item_id} value={g.item_id}>
+                        {g.text || g.item_id}
                       </option>
                     ))}
                   </select>
@@ -4024,10 +3906,10 @@ export default function TopologyWorkspace({
 
               <div className="inspector-section">
                 <span className="inspector-label">所属区域</span>
-                {selectedNode.zone || selectedNode.group_id ? (
+                {selectedNode.region_id ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                      当前归属：<strong>{selectedNode.zone || (activeTopology?.canvas_items || []).find((ci) => ci.item_id === selectedNode.group_id)?.text || "未命名区域"}</strong>
+                      当前归属：<strong>{(activeTopology?.canvas_items || []).find((ci) => ci.item_id === selectedNode.region_id)?.text || "未命名区域"}</strong>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <Button
@@ -4701,6 +4583,7 @@ export default function TopologyWorkspace({
                       const kind = e.target.value as TopologyCanvasItem["kind"];
                       pushState({
                         ...activeTopology,
+                        nodes: kind === "text" ? activeTopology.nodes.map(node => node.region_id === selectedCanvasItem.item_id ? {...node, region_id: null} : node) : activeTopology.nodes,
                         canvas_items: (activeTopology.canvas_items || []).map((item) =>
                           item.item_id === selectedCanvasItem.item_id ? { ...item, kind } : item
                         ),
@@ -4789,9 +4672,17 @@ export default function TopologyWorkspace({
                     ))}
                   </div>
 
-                  {selectedCanvasItem.kind === "rectangle" && (
+                  {selectedCanvasItem.kind !== "text" && (
                     <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed var(--line, #e2e8f0)" }}>
                       <span className="inspector-label" style={{ fontWeight: 600, display: "block", marginBottom: "6px" }}>区域排版与层级</span>
+                      <label className="inspector-field">拖动与键盘移动
+                        <select value={regionMoveMode} onChange={event => setRegionMoveMode(event.target.value as "region" | "frame")}>
+                          <option value="region">整体移动区域与成员</option><option value="frame">只移动边框（固定尺寸）</option>
+                        </select>
+                      </label>
+                      <p className="inspector-label">尺寸模式：{selectedCanvasItem.auto_fit === true ? "随绑定成员自动包围" : "固定边框"} · 成员按 ID 绑定</p>
+
+                      <p className="inspector-label">绑定 {(activeTopology?.nodes || []).filter(n => n.region_id === selectedCanvasItem.item_id).length} 台设备 · 估算越界 {(activeTopology?.nodes || []).filter(n => n.region_id === selectedCanvasItem.item_id && !regionContains(selectedCanvasItem, n)).length} 台（图标与标签需视觉核对）</p>
                       <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                         <Button
                           size="sm"
@@ -4823,97 +4714,6 @@ export default function TopologyWorkspace({
               <div className="inspector-actions">
                 <Button variant="danger" icon={<IconTrash size={13} />} onClick={() => void handleRemoveCanvasItem(selectedCanvasItem.item_id)}>
                   删除图纸图元
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : selectedElement?.type === "group" && selectedGroup ? (
-          <div className="inspector-panel">
-            <div className="inspector-header" onMouseDown={handleHeaderMouseDown}>
-              <div className="inspector-header-left">
-                <span className="inspector-drag-grip" title="按住拖拽移动弹窗">⋮⋮</span>
-                <div className="inspector-icon-wrap">
-                  <IconFolder size={16} style={{ color: "var(--accent)" }} />
-                </div>
-                <div className="inspector-header-titles">
-                  <h4>分组属性</h4>
-                  <span className="inspector-badge">{selectedGroup.name}</span>
-                </div>
-              </div>
-              <div className="inspector-header-actions">
-                {pinButton}
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setSelectedElement(null);
-                    setIsInspectorOpen(false);
-                  }}
-                  aria-label="收起分组详情"
-                >
-                  <IconClose size={13} />
-                </Button>
-              </div>
-            </div>
-
-            <div className="inspector-body">
-              <div className="inspector-section">
-                <label className="inspector-field">
-                  分组名称
-                  <input
-                    value={selectedGroup.name}
-                    onChange={(e) => {
-                      if (!activeTopology) return;
-                      const val = e.target.value;
-                      const updated = activeTopology.groups.map((g) =>
-                        g.group_id === selectedGroup.group_id ? { ...g, name: val } : g
-                      );
-                      pushState({ ...activeTopology, groups: updated });
-                    }}
-                  />
-                </label>
-
-                <label className="inspector-field">
-                  分组类型
-                  <select
-                    value={selectedGroup.kind}
-                    onChange={(e) => {
-                      if (!activeTopology) return;
-                      const val = e.target.value as "as" | "region" | "datacenter" | "tenant" | "custom";
-                      const updated = activeTopology.groups.map((g) =>
-                        g.group_id === selectedGroup.group_id ? { ...g, kind: val } : g
-                      );
-                      pushState({ ...activeTopology, groups: updated });
-                    }}
-                  >
-                    <option value="as">自治系统 (AS)</option>
-                    <option value="region">地理区域 (Region)</option>
-                    <option value="datacenter">数据中心 (Datacenter)</option>
-                    <option value="tenant">业务租户 (Tenant)</option>
-                    <option value="custom">自定义分组</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="inspector-section">
-                <span className="inspector-label">属于此分组的节点</span>
-                <div className="inspector-group-members">
-                  {activeTopology?.nodes
-                    ?.filter((n) => n.group_id === selectedGroup.group_id)
-                    .map((n) => (
-                      <div key={n.node_id} className="group-member-item">
-                        {n.display_name || n.node_id}
-                      </div>
-                    )) || null}
-                </div>
-              </div>
-
-              <div className="inspector-actions">
-                <Button
-                  variant="danger"
-                  icon={<IconTrash size={13} />}
-                  onClick={() => handleRemoveGroup(selectedGroup.group_id)}
-                >
-                  删除此分组
                 </Button>
               </div>
             </div>
@@ -4954,8 +4754,8 @@ export default function TopologyWorkspace({
                   <span className="stat-lbl">拓扑链路</span>
                 </div>
                 <div className="stat-card">
-                  <span className="stat-num">{activeTopology?.groups?.length || 0}</span>
-                  <span className="stat-lbl">拓扑分组</span>
+                  <span className="stat-num">{(activeTopology?.canvas_items || []).filter(item => item.kind !== "text").length}</span>
+                  <span className="stat-lbl">区域容器</span>
                 </div>
               </div>
 
@@ -5395,53 +5195,6 @@ export default function TopologyWorkspace({
         </dialog>
       )}
 
-      {/* MODAL 3: Create Group */}
-      {showGroupModal && (
-        <dialog open role="dialog" aria-modal="true" className="network-dialog-modal">
-          <form onSubmit={handleCreateGroup} className="network-panel modal-panel">
-            <div className="modal-header">
-              <h3>新建拓扑分组</h3>
-              <Button size="sm" onClick={() => setShowGroupModal(false)}>
-                <IconClose size={14} />
-              </Button>
-            </div>
-            <div className="form-grid">
-              <label className="full-field">
-                分组名称
-                <input
-                  required
-                  placeholder="如：AS65001 或 华东数据中心"
-                  value={groupNameInput}
-                  onChange={(e) => setGroupNameInput(e.target.value)}
-                />
-              </label>
-              <label className="full-field">
-                分组性质
-                <select
-                  value={groupKindInput}
-                  onChange={(e) =>
-                    setGroupKindInput(e.target.value as "as" | "region" | "datacenter" | "tenant" | "custom")
-                  }
-                >
-                  <option value="as">自治系统 (AS)</option>
-                  <option value="region">区域 (Region)</option>
-                  <option value="datacenter">数据中心 (Datacenter)</option>
-                  <option value="tenant">业务租户 (Tenant)</option>
-                  <option value="custom">自定义分组</option>
-                </select>
-              </label>
-            </div>
-            <div className="modal-actions">
-              <Button type="button" onClick={() => setShowGroupModal(false)}>
-                取消
-              </Button>
-              <Button variant="primary" type="submit">
-                创建分组
-              </Button>
-            </div>
-          </form>
-        </dialog>
-      )}
 
 
 

@@ -19,10 +19,8 @@ def drawing_subset(topology, selection, include_neighbors=True):
     node_ids = {item["node_id"] for item in selected["nodes"]}
     for link in selected["links"]:
         node_ids.update((link["source_node_id"], link["target_node_id"]))
-    zones = {item.get("zone") for item in selected["canvas_items"] if item.get("zone")}
-    group_ids = {item["group_id"] for item in selected["groups"]}
-    node_ids.update(item["node_id"] for item in topology.get("nodes", [])
-                    if item.get("zone") in zones or item.get("group_id") in group_ids)
+    region_ids = {item["item_id"] for item in selected["canvas_items"]}
+    node_ids.update(item["node_id"] for item in topology.get("nodes", []) if item.get("region_id") in region_ids)
     lock_groups = {item.get("lock_group") for item in topology.get("nodes", []) if item["node_id"] in node_ids and item.get("lock_group")}
     node_ids.update(item["node_id"] for item in topology.get("nodes", []) if item.get("lock_group") in lock_groups)
     if include_neighbors:
@@ -33,12 +31,10 @@ def drawing_subset(topology, selection, include_neighbors=True):
     selected_link_ids = {item["link_id"] for item in selected["links"]}
     selected["links"] = [link for link in topology.get("links", []) if link["link_id"] in selected_link_ids
                          or (include_neighbors and link["source_node_id"] in node_ids and link["target_node_id"] in node_ids)]
-    member_zones = {item.get("zone") for item in selected["nodes"] if item.get("zone")}
     item_ids = {item["item_id"] for item in selected["canvas_items"]}
-    selected["canvas_items"] = [item for item in topology.get("canvas_items", [])
-                                if item["item_id"] in item_ids or item.get("zone") in member_zones]
-    member_groups = {item.get("group_id") for item in selected["nodes"] if item.get("group_id")}
-    selected["groups"] = [item for item in topology.get("groups", []) if item["group_id"] in group_ids | member_groups]
+    item_ids.update(item["region_id"] for item in selected["nodes"] if item.get("region_id"))
+    selected["canvas_items"] = [item for item in topology.get("canvas_items", []) if item["item_id"] in item_ids]
+    selected["groups"] = []
     return {**{key: topology.get(key) for key in ("topology_id", "name", "description", "version")}, **selected}, unavailable
 
 
@@ -51,9 +47,8 @@ def selection_context(topology, selection):
     for link in subset["links"]:
         if link["link_id"] in direct_links:
             direct.update((link["source_node_id"], link["target_node_id"]))
-    zones = {item.get("zone") for item in subset["canvas_items"] if item["item_id"] in set(selection.get("canvas_item_ids", [])) and item.get("zone")}
-    groups = set(selection.get("group_ids", []))
-    direct.update(item["node_id"] for item in subset["nodes"] if item.get("zone") in zones or item.get("group_id") in groups)
+    regions = set(selection.get("canvas_item_ids", []))
+    direct.update(item["node_id"] for item in subset["nodes"] if item.get("region_id") in regions)
     locks = {item.get("lock_group") for item in subset["nodes"] if item["node_id"] in direct and item.get("lock_group")}
     required = [item for item in subset["nodes"] if item["node_id"] in direct or item.get("lock_group") in locks]
     required_ids = {item["node_id"] for item in required}

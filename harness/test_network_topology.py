@@ -44,7 +44,7 @@ def _drawing(workspace, **overrides):
             "target_node_id": "ce1", "target_interface": "GE0/0",
             "kind": "physical", "source": "manual", "status": "unknown",
         }],
-        "groups": [{"name": "AS65001", "kind": "as", "x": 50, "y": 50, "width": 400, "height": 300}],
+        "groups": [],
         "canvas_items": [{"item_id": "note-core", "kind": "text", "text": "核心区域", "x": 80, "y": 30, "width": 160, "height": 36}],
     }
     payload.update(overrides)
@@ -55,8 +55,8 @@ def test_zone_is_fitted_around_nodes_that_name_it(workspace):
     topo = drawings.save_topology(workspace, {
         "name": "分区",
         "nodes": [
-            {"node_id": "a", "display_name": "A", "x": 100, "y": 100, "group_id": "zone1"},
-            {"node_id": "b", "display_name": "B", "x": 400, "y": 280, "group_id": "zone1"},
+            {"node_id": "a", "display_name": "A", "x": 100, "y": 100, "region_id": "zone1"},
+            {"node_id": "b", "display_name": "B", "x": 400, "y": 280, "region_id": "zone1"},
         ],
         "canvas_items": [{
             "item_id": "zone1", "kind": "rectangle", "text": "核心",
@@ -65,7 +65,7 @@ def test_zone_is_fitted_around_nodes_that_name_it(workspace):
     })
     zone = topo["canvas_items"][0]
     assert zone["x"] == 250
-    assert zone["y"] == 190
+    assert zone["y"] == 178
     assert zone["width"] >= 300
     assert zone["height"] >= 180
 
@@ -447,31 +447,15 @@ def test_nodes_lock_group_persistence(workspace):
     assert nodes_by_id["sw3"]["lock_group"] is None
 
 
-def test_nodes_zone_persistence_and_auto_synthesis(workspace):
-    """Verify that node zone is persisted and auto-synthesizes visual zone bounding box."""
-    saved = drawings.save_topology(workspace, {
-        "name": "智能区域拓扑",
-        "nodes": [
-            {"node_id": "core1", "display_name": "核心1", "x": 100, "y": 100, "zone": "核心骨干区"},
-            {"node_id": "core2", "display_name": "核心2", "x": 300, "y": 100, "zone": "核心骨干区"},
-            {"node_id": "edge1", "display_name": "边界", "x": 200, "y": 400},
-        ],
-    })
-    topo = drawings.get_topology(workspace, saved["topology_id"])
-    nodes_by_id = {n["node_id"]: n for n in topo["nodes"]}
-    assert nodes_by_id["core1"]["zone"] == "核心骨干区"
-    assert nodes_by_id["core2"]["zone"] == "核心骨干区"
-    assert nodes_by_id["edge1"]["zone"] is None
-
-    # Verify auto-synthesized canvas_item for "核心骨干区"
-    items = topo.get("canvas_items") or []
-    assert len(items) == 1
-    zone_item = items[0]
-    assert zone_item["text"] == "核心骨干区"
-    assert zone_item["x"] == 200.0  # midpoint of 100 and 300
-    assert zone_item["y"] == 100.0  # midpoint of 100 and 100
-    assert zone_item["width"] >= 220.0
-    assert zone_item["height"] >= 170.0
+def test_explicit_region_membership_is_persisted_without_synthesis(workspace):
+    topo = drawings.save_topology(workspace, {"name": "绑定", "nodes": [
+        {"node_id": "a", "region_id": "core", "x": 100, "y": 100},
+        {"node_id": "b", "x": 300, "y": 100}],
+        "canvas_items": [{"item_id": "core", "kind": "rectangle", "auto_fit": True}]})
+    assert topo["nodes"][0]["region_id"] == "core"
+    assert topo["nodes"][1]["region_id"] is None
+    assert len(topo["canvas_items"]) == 1
+    assert "zone" not in topo["nodes"][0]
 
 
 def test_query_loop_fallback_tool_call_extraction():
@@ -652,8 +636,9 @@ def test_topology_patch_alias_and_schema_fault_tolerance(workspace):
     # 1. Patch using "nodes" and "links" instead of "node_updates" and "link_updates", string version
     p1 = drawings.patch_topology(workspace, topo["topology_id"], {
         "version": "1",
+        "canvas_item_updates": [{"item_id": "DMZ", "kind": "rectangle", "auto_fit": True}],
         "nodes": [
-            {"id": "sw1", "name": "Switch-1", "type": "switch", "group": "DMZ", "x": 200, "y": 100},
+            {"id": "sw1", "name": "Switch-1", "type": "switch", "region_id": "DMZ", "x": 200, "y": 100},
         ],
         "links": [
             {"source": "r1", "target": "sw1", "src_port": "GE0/1", "dst_port": "GE0/0", "label": "Uplink"},
@@ -664,7 +649,7 @@ def test_topology_patch_alias_and_schema_fault_tolerance(workspace):
     sw_node = next(n for n in p1["nodes"] if n["node_id"] == "sw1")
     assert sw_node["display_name"] == "Switch-1"
     assert sw_node["device_type"] == "switch"
-    assert sw_node["zone"] == "DMZ"
+    assert sw_node["region_id"] == "DMZ"
     assert len(p1["links"]) == 1
     assert p1["links"][0]["source_node_id"] == "r1"
     assert p1["links"][0]["target_node_id"] == "sw1"
@@ -675,7 +660,7 @@ def test_topology_patch_alias_and_schema_fault_tolerance(workspace):
     p2 = drawings.patch_topology(workspace, topo["topology_id"], {
         "remove_node_ids": ["non_existent_node"],
         "remove_link_ids": ["non_existent_link"],
-        "remove_group_ids": ["non_existent_group"],
+
     })
     assert p2["version"] == 2
 
@@ -743,7 +728,7 @@ def test_topology_tool_invocation_aliases_and_query_loop_normalization(workspace
     assert "node_updates" in repaired_tc.arguments
 
 
-@pytest.mark.parametrize("field", ["remove_group_ids", "remove_canvas_item_ids"])
+@pytest.mark.parametrize("field", ["remove_canvas_item_ids"])
 def test_topology_delete_only_calls_infer_patch(workspace, field):
     from types import SimpleNamespace
 

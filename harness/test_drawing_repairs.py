@@ -5,9 +5,9 @@ from extensions.network_operations import topology_service as drawings
 
 def _zone():
     return drawings.save_topology("default", {"name": "区域测试", "nodes": [
-        {"node_id": "a", "zone": "核心区", "x": 100, "y": 100},
-        {"node_id": "b", "zone": "核心区", "x": 300, "y": 200},
-    ], "links": []})
+        {"node_id": "a", "region_id": "core", "x": 100, "y": 100},
+        {"node_id": "b", "region_id": "core", "x": 300, "y": 200},
+    ], "links": [], "canvas_items": [{"item_id": "core", "kind": "rectangle", "text": "核心区", "auto_fit": True}]})
 
 
 def test_zone_rename_keeps_identity_without_duplicate_or_growth(temp_dirs):
@@ -28,7 +28,7 @@ def test_removed_zone_does_not_reappear_on_later_save(temp_dirs, full_save):
     else:
         topo = drawings.patch_topology("default", topo["topology_id"], {"remove_canvas_item_ids": [item_id]})
     assert topo["canvas_items"] == []
-    assert all(not n.get("zone") and not n.get("group_id") for n in topo["nodes"])
+    assert all(not n.get("region_id") for n in topo["nodes"])
     topo = drawings.patch_topology("default", topo["topology_id"], {"node_updates": [{"node_id": "a", "x": 400}]})
     assert topo["canvas_items"] == []
 
@@ -52,13 +52,13 @@ def test_legacy_duplicate_ids_are_repaired_without_new_objects(temp_dirs):
     assert topo["canvas_items"][0]["text"] == "改名"
 
 
-def test_old_generated_zone_copies_merge_but_manual_boxes_survive(temp_dirs):
+def test_distinct_runtime_items_are_not_deleted_by_matching_caption(temp_dirs):
     topo = _zone(); item = topo['canvas_items'][0]
     saved = drawings.save_topology('default', {**topo, 'canvas_items': [item,
         {**item, 'item_id':'zone-legacy-copy'},
         {**item, 'item_id':'manual-note', 'auto_fit':False, 'x':900},
     ]})
-    assert {i['item_id'] for i in saved['canvas_items']} == {item['item_id'], 'manual-note'}
+    assert {i['item_id'] for i in saved['canvas_items']} == {item['item_id'], 'zone-legacy-copy', 'manual-note'}
 
 
 def test_noop_patch_does_not_increment_version_or_broadcast(temp_dirs, monkeypatch):
@@ -75,18 +75,18 @@ def test_noop_patch_does_not_increment_version_or_broadcast(temp_dirs, monkeypat
 
 def test_explicit_container_geometry_and_equal_labels_keep_separate_memberships(temp_dirs):
     topo = drawings.save_topology('default', {'name': 'fixed frames', 'nodes': [
-        {'node_id': 'a', 'x': 100, 'y': 100, 'zone': '同名', 'group_id': 'first'},
-        {'node_id': 'b', 'x': 800, 'y': 100, 'zone': '同名', 'group_id': 'second'},
+        {'node_id': 'a', 'x': 100, 'y': 100, 'region_id': 'first'},
+        {'node_id': 'b', 'x': 800, 'y': 100, 'region_id': 'second'},
     ], 'canvas_items': [
         {'item_id': key, 'kind': 'rectangle', 'text': '同名', 'x': x, 'y': 0, 'width': 400, 'height': 250}
         for key, x in [('first', 0), ('second', 700)]]})
     assert [(item['item_id'], item['x']) for item in topo['canvas_items']] == [('first', 0), ('second', 700)]
-    assert [n['group_id'] for n in topo['nodes']] == ['first', 'second']
-    assert all(item['auto_fit'] is False for item in topo['canvas_items'])
+    assert [n['region_id'] for n in topo['nodes']] == ['first', 'second']
+    assert all(item.get('auto_fit', False) is False for item in topo['canvas_items'])
     removed = drawings.patch_topology('default', topo['topology_id'], {
         'version': topo['version'], 'remove_canvas_item_ids': ['first']})
-    assert removed['nodes'][0]['group_id'] is None and removed['nodes'][0]['zone'] is None
-    assert removed['nodes'][1]['group_id'] == 'second'
+    assert removed['nodes'][0]['region_id'] is None
+    assert removed['nodes'][1]['region_id'] == 'second'
     assert [item['item_id'] for item in removed['canvas_items']] == ['second']
 
 

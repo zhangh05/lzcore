@@ -87,6 +87,7 @@ type Props = {
   mode: CanvasMode;
   interactionMode?: "view" | "edit";
   gridEnabled: boolean;
+  moveRegionMembers?: boolean;
   showInterfaces: boolean;
   compactMode?: boolean;
   onSelectNode: (nodeId: string) => void;
@@ -1283,6 +1284,12 @@ export default function NetOpsCanvas(props: Props) {
         const currentNodes = propsRef.current.topology.nodes;
         const activeLockGroups = new Set<string>();
 
+        const movingRegions = new Set<string>();
+        if (propsRef.current.moveRegionMembers) {
+          if (grabbedId.startsWith("canvas-")) movingRegions.add(grabbedId.slice(7));
+          cy.$("node:selected").forEach(sel => { if (sel.id().startsWith("canvas-")) movingRegions.add(sel.id().slice(7)); });
+          currentNodes.forEach(n => { if (n.region_id && movingRegions.has(n.region_id) && n.lock_group) activeLockGroups.add(n.lock_group); });
+        }
         const grabbedNodeData = currentNodes.find((n) => n.node_id === grabbedId);
         if (grabbedNodeData?.lock_group) {
           activeLockGroups.add(grabbedNodeData.lock_group);
@@ -1293,9 +1300,9 @@ export default function NetOpsCanvas(props: Props) {
         });
 
         const initMap = new Map<string, { x: number; y: number }>();
-        if (activeLockGroups.size > 0) {
+        if (activeLockGroups.size > 0 || movingRegions.size > 0) {
           currentNodes.forEach((n) => {
-            if (n.lock_group && activeLockGroups.has(n.lock_group)) {
+            if ((n.lock_group && activeLockGroups.has(n.lock_group)) || (n.region_id && movingRegions.has(n.region_id))) {
               const cyElem = cy.getElementById(n.node_id) as CyNode;
               if (cyElem && cyElem.length) {
                 const pos = cyElem.position();
@@ -1321,6 +1328,12 @@ export default function NetOpsCanvas(props: Props) {
           const grabbedId = node.id();
           const currentNodes = propsRef.current.topology.nodes;
           const activeLockGroups = new Set<string>();
+          const movingRegions = new Set<string>();
+          if (propsRef.current.moveRegionMembers) {
+            if (grabbedId.startsWith("canvas-")) movingRegions.add(grabbedId.slice(7));
+            cy.$("node:selected").forEach(sel => { if (sel.id().startsWith("canvas-")) movingRegions.add(sel.id().slice(7)); });
+            currentNodes.forEach(n => { if (n.region_id && movingRegions.has(n.region_id) && n.lock_group) activeLockGroups.add(n.lock_group); });
+          }
           const grabbedNodeData = currentNodes.find((n) => n.node_id === grabbedId);
           if (grabbedNodeData?.lock_group) activeLockGroups.add(grabbedNodeData.lock_group);
           cy.$("node:selected").forEach((sel) => {
@@ -1328,9 +1341,9 @@ export default function NetOpsCanvas(props: Props) {
             if (d?.lock_group) activeLockGroups.add(d.lock_group);
           });
           const initMap = new Map<string, { x: number; y: number }>();
-          if (activeLockGroups.size > 0) {
+          if (activeLockGroups.size > 0 || movingRegions.size > 0) {
             currentNodes.forEach((n) => {
-              if (n.lock_group && activeLockGroups.has(n.lock_group)) {
+              if ((n.lock_group && activeLockGroups.has(n.lock_group)) || (n.region_id && movingRegions.has(n.region_id))) {
                 const cyElem = cy.getElementById(n.node_id) as CyNode;
                 if (cyElem && cyElem.length) {
                   initMap.set(n.node_id, { ...cyElem.position() });
@@ -1405,8 +1418,8 @@ export default function NetOpsCanvas(props: Props) {
               const peerCyNode = cy.getElementById(peerId) as CyNode;
               if (peerCyNode && peerCyNode.length) {
                 peerCyNode.position({
-                  x: Math.round(initPos.x + dx),
-                  y: Math.round(initPos.y + dy),
+                  x: initPos.x + dx,
+                  y: initPos.y + dy,
                 });
               }
             });
@@ -1451,6 +1464,10 @@ export default function NetOpsCanvas(props: Props) {
         const ids = new Set(cy.$("node:selected").map((node) => node.id()));
         if (dragged) ids.add(dragged);
 
+        if (propsRef.current.moveRegionMembers) {
+          const regions = new Set([...ids].filter(id => id.startsWith("canvas-")).map(id => id.slice(7)));
+          for (const n of propsRef.current.topology.nodes) if (n.region_id && regions.has(n.region_id)) ids.add(n.node_id);
+        }
         // Include all peer nodes from any active lock groups
         const lockGroups = new Set<string>();
         for (const id of ids) {
@@ -1467,11 +1484,13 @@ export default function NetOpsCanvas(props: Props) {
 
         const shouldSnap = propsRef.current.gridEnabled;
         const snap = (v: number) => shouldSnap ? Math.round(v / 32) * 32 : Math.round(v);
+        const anchorPosition = (cy.getElementById(dragged) as CyNode).position();
+        const correction = anchorPosition ? {x: snap(anchorPosition.x) - anchorPosition.x, y: snap(anchorPosition.y) - anchorPosition.y} : {x: 0, y: 0};
         const positions = cy.nodes()
           .filter((node) => ids.has(node.id()) && !node.id().startsWith("group-"))
           .map((node) => {
             const raw = node.position();
-            const snapped = { x: snap(raw.x), y: snap(raw.y) };
+            const snapped = {x: raw.x + correction.x, y: raw.y + correction.y};
             if (shouldSnap) {
               node.position(snapped);
             }
@@ -1779,7 +1798,6 @@ export default function NetOpsCanvas(props: Props) {
     const nodeIds = new Set(props.topology.nodes.map(node => node.node_id));
     const dimClass = (id: string, base: string) => (dimmed.has(id) ? `${base} filtered-out`.trim() : base);
     const elements: CanvasElementSpec[] = [
-      ...props.topology.groups.map((group) => ({ group: "nodes", classes: "lz-group", data: { id: `group-${group.group_id}`, label: group.name, width: group.width, height: group.height }, position: { x: group.x + group.width / 2, y: group.y + group.height / 2 }, locked: true })),
       ...props.topology.nodes.map((node) => {
         const type = node.device_type || "switch";
         // The border carries operational state because that is what an

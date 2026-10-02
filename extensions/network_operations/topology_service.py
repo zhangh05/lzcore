@@ -89,14 +89,21 @@ def _detached_snapshot(workspace_id: str, record: dict) -> dict:
 def migrate_topology(workspace_id: str, topology_id: str) -> dict | None:
     store = _store(workspace_id)
     record = store.get("topologies", topology_id)
-    if not record or int(record.get("schema_version") or 1) >= 2:
+    if not record or int(record.get("schema_version") or 1) >= 3:
         return record
-    if not store.get("topology_asset_backups", topology_id):
-        store.save("topology_asset_backups", topology_id, record)
-    detached = _detached_snapshot(workspace_id, record)
-    detached["version"] = int(record.get("version") or 1) + 1
-    detached["updated_at"] = now_iso()
-    return store.save("topologies", topology_id, detached)
+    if not store.get("topology_region_backups", topology_id):
+        store.save("topology_region_backups", topology_id, record)
+    from .region_geometry import migrate_regions
+    migrated = migrate_regions(record)
+    if int(record.get("schema_version") or 1) < 2:
+        if not store.get("topology_asset_backups", topology_id):
+            store.save("topology_asset_backups", topology_id, record)
+        migrated = _detached_snapshot(workspace_id, migrated)
+        migrated["schema_version"] = 3
+    migrated["version"] = int(record.get("version") or 1) + 1
+    migrated["updated_at"] = now_iso()
+    store.save("topologies", topology_id, migrated)
+    return migrated
 
 
 def migrate_drawings(store: ExtensionDataStore) -> None:
@@ -127,8 +134,7 @@ def _topology_graph_for_read(record: dict[str, Any]) -> tuple[list[dict[str, Any
             "device_type": str(raw.get("device_type") or "switch"),
             "display_name": str(raw.get("display_name") or ""),
             "labels": list(raw.get("labels") or []),
-            "group_id": raw.get("group_id") or raw.get("zone") or None,
-            "zone": str(raw.get("zone") or raw.get("group_id") or "").strip() or None,
+            "region_id": raw.get("region_id") or None,
             "lock_group": str(raw.get("lock_group") or "").strip() or None,
             "x": raw.get("x", 0.0),
             "y": raw.get("y", 0.0),
@@ -164,12 +170,16 @@ def _topology_graph_for_read(record: dict[str, Any]) -> tuple[list[dict[str, Any
 
 
 def _public_topology(record: dict[str, Any]) -> dict[str, Any]:
+    if int(record.get("schema_version") or 1) < 3:
+        from .region_geometry import migrate_regions
+        record = migrate_regions(record)
     nodes, links = _topology_graph_for_read(record)
     return {
         "topology_id": str(record.get("topology_id") or ""),
         "name": str(record.get("name") or ""),
         "description": str(record.get("description") or ""),
         "version": int(record.get("version") or 1),
+        "region_migration_issues": list(record.get("region_migration_issues") or []),
         "nodes": nodes,
         "links": links,
         "groups": list(record.get("groups") or []),
@@ -191,95 +201,9 @@ def get_topology(workspace_id: str, topology_id: str) -> dict[str, Any] | None:
         record = _store(workspace_id).get("topologies", topology_id)
     except ValueError:
         return None
-    if record and int(record.get("schema_version") or 1) < 2:
+    if record and int(record.get("schema_version") or 1) < 3:
         record = migrate_topology(workspace_id, topology_id)
     return _public_topology(record) if record else None
-
-
-def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Place a zone around nodes that belong to it, using Visual Hull calculation."""
-    fitted: list[dict[str, Any]] = []
-
-    PAD_X = 90.0
-    PAD_Y = 80.0
-    MIN_WIDTH = 220.0
-    MIN_HEIGHT = 170.0
-
-    def _calc_box(member_nodes: list[dict[str, Any]]) -> dict[str, float]:
-        xs = [float(n.get("x") or 0.0) for n in member_nodes]
-        ys = [float(n.get("y") or 0.0) for n in member_nodes]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-
-        w = max(MIN_WIDTH, round(max_x - min_x + PAD_X * 2, 1))
-        h = max(MIN_HEIGHT, round(max_y - min_y + PAD_Y * 2, 1))
-        cx = round((min_x + max_x) / 2.0, 1)
-        cy = round((min_y + max_y) / 2.0, 1)
-        return {
-            "x": cx,
-            "y": cy,
-            "width": w,
-            "height": h,
-        }
-
-    # Legacy versions could contain two entries with the same id. Keep the
-    # last authored entry, and never allocate a second identity for that id.
-    by_id = {str(item["item_id"]): dict(item) for item in items}
-    zones: dict[str, list[dict[str, Any]]] = {}
-    for node in nodes:
-        zone = str(node.get("group_id") or node.get("zone") or "").strip()
-        if zone:
-            zones.setdefault(zone, []).append(node)
-
-    palette = [
-        {"fill": "#eff6ff", "border": "#93c5fd", "color": "#1e40af"},
-        {"fill": "#f0fdf4", "border": "#86efac", "color": "#166534"},
-        {"fill": "#fffbeb", "border": "#fcd34d", "color": "#92400e"},
-        {"fill": "#faf5ff", "border": "#d8b4fe", "color": "#6b21a8"},
-        {"fill": "#f0fdfa", "border": "#5eead4", "color": "#115e59"},
-        {"fill": "#f8fafc", "border": "#cbd5e1", "color": "#334155"},
-    ]
-    members_by_item: dict[str, list[dict[str, Any]]] = {}
-    for zone, members in zones.items():
-        label = str(members[0].get("zone") or zone)
-        # Membership wins over display text: renaming a box never creates a
-        # new zone or changes its stable identity (including legacy ids).
-        item_id = next((str(n.get("group_id")) for n in members
-                        if str(n.get("group_id")) in by_id), "")
-        if not item_id:
-            item_id = next((key for key, item in by_id.items()
-                            if key == zone or (not members[0].get("group_id") and (item.get("zone") == zone or item.get("text") == zone))), "")
-        if not item_id:
-            item_id = "zone-" + hashlib.sha256(zone.encode("utf-8")).hexdigest()[:16]
-            by_id[item_id] = {"item_id": item_id, "kind": "rectangle", "text": label,
-                              "zone": label, "auto_fit": True, **_calc_box(members),
-                              "style": dict(palette[len(by_id) % len(palette)])}
-        # Earlier auto-synthesis could leave another generated box for the
-        # same zone. Membership owns the identity; preserve manual decorations
-        # and explicitly positioned boxes instead of deleting them by label.
-        for duplicate_id, duplicate in list(by_id.items()):
-            if (duplicate_id != item_id and duplicate_id.startswith("zone-")
-                    and duplicate.get("kind") in {"rectangle", "ellipse"}
-                    and duplicate.get("auto_fit") is not False
-                    and not any(node.get("group_id") == duplicate_id for node in nodes)
-                    and {zone, label} & {duplicate.get("zone"), duplicate.get("text")}):
-                if not by_id[item_id].get("text"):
-                    by_id[item_id]["text"] = str(duplicate.get("text") or zone)
-                del by_id[duplicate_id]
-        members_by_item.setdefault(item_id, []).extend(members)
-        for node in members:
-            node["group_id"] = item_id
-        by_id[item_id].setdefault("zone", zone)
-
-    for item_id, item in by_id.items():
-        members = members_by_item.get(item_id, [])
-        if members and item.get("kind") in {"rectangle", "ellipse"}:
-            item.setdefault("auto_fit", False)
-            if item["auto_fit"]:
-                item.update(_calc_box(members))
-        fitted.append(item)
-
-    return fitted
 
 
 def _normalize_node_ip(value: Any) -> str | None:
@@ -346,13 +270,14 @@ def save_topology(workspace_id: str, payload: dict[str, Any], *, edit_source: st
             x = 0.0
         if not math.isfinite(y):
             y = 0.0
+        if any(key in raw for key in ("zone", "group_id", "group")):
+            raise ValueError("topology_legacy_region_fields_use_region_id")
         normalized_nodes.append({
             "node_id": node_id,
             "device_type": str(raw.get("device_type") or "switch").strip()[:48],
             "display_name": str(raw.get("display_name") or "").strip()[:80],
             "labels": list(dict.fromkeys(str(label).strip()[:80] for label in (raw.get("labels") or []) if str(label).strip())) if isinstance(raw.get("labels", []), list) else [],
-            "group_id": str(raw.get("group_id") or raw.get("zone") or "").strip() or None,
-            "zone": str(raw.get("zone") or raw.get("group_id") or "").strip() or None,
+            "region_id": str(raw.get("region_id") or "").strip() or None,
             "lock_group": str(raw.get("lock_group") or "").strip() or None,
             "x": x,
             "y": y,
@@ -364,48 +289,9 @@ def save_topology(workspace_id: str, payload: dict[str, Any], *, edit_source: st
             "location": str(raw.get("location") or "").strip()[:64] or None,
         })
 
-    raw_groups = payload.get("groups") if "groups" in payload else (existing.get("groups") if existing else [])
-    if not isinstance(raw_groups, list):
-        raise ValueError("groups must be a list")
-
+    if payload.get("groups"):
+        raise ValueError("topology_legacy_regions_removed_use_canvas_items")
     normalized_groups: list[dict[str, Any]] = []
-    seen_groups: set[str] = set()
-    for raw in raw_groups:
-        if not isinstance(raw, dict):
-            continue
-        group_id = str(raw.get("group_id") or _id("grp")).strip()
-        if group_id in seen_groups:
-            continue
-        seen_groups.add(group_id)
-        try:
-            gx = float(raw.get("x", 0.0))
-            gy = float(raw.get("y", 0.0))
-            gw = float(raw.get("width", 320.0))
-            gh = float(raw.get("height", 240.0))
-        except (TypeError, ValueError):
-            gx, gy, gw, gh = 0.0, 0.0, 320.0, 240.0
-        if not math.isfinite(gx):
-            gx = 0.0
-        if not math.isfinite(gy):
-            gy = 0.0
-        if not math.isfinite(gw) or gw <= 0:
-            gw = 320.0
-        if not math.isfinite(gh) or gh <= 0:
-            gh = 240.0
-        kind = str(raw.get("kind") or "datacenter").strip().lower()
-        if kind not in {"as", "region", "datacenter", "tenant", "custom"}:
-            kind = "custom"
-        normalized_groups.append({
-            "group_id": group_id,
-            "name": str(raw.get("name") or "未命名分组").strip()[:80],
-            "description": str(raw.get("description") or "").strip()[:200],
-            "kind": kind,
-            "x": gx,
-            "y": gy,
-            "width": max(100.0, gw),
-            "height": max(80.0, gh),
-            "style": dict(raw.get("style") or {}) if isinstance(raw.get("style"), dict) else {},
-        })
 
     raw_canvas_items = payload.get("canvas_items") if "canvas_items" in payload else (existing.get("canvas_items") if existing else [])
     if not isinstance(raw_canvas_items, list):
@@ -415,6 +301,10 @@ def save_topology(workspace_id: str, payload: dict[str, Any], *, edit_source: st
     for raw in raw_canvas_items:
         if not isinstance(raw, dict):
             continue
+        if "auto_fit" in raw and not isinstance(raw["auto_fit"], bool):
+            raise ValueError("topology_auto_fit_invalid")
+        if "zone" in raw:
+            raise ValueError("topology_legacy_region_fields_use_item_id")
         item_id = str(raw.get("item_id") or _id("canvas")).strip()
         if item_id in seen_canvas_item_ids:
             normalized_canvas_items = [item for item in normalized_canvas_items if item["item_id"] != item_id]
@@ -465,7 +355,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any], *, edit_source: st
             "width": min(10000.0, max(40.0, width)),
             "height": min(10000.0, max(24.0, height)),
             "style": safe_style,
-            **({"zone": str(raw["zone"]).strip()[:80]} if raw.get("zone") else {}),
+
             **({"auto_fit": bool(raw["auto_fit"])} if "auto_fit" in raw else {}),
         })
 
@@ -540,13 +430,19 @@ def save_topology(workspace_id: str, payload: dict[str, Any], *, edit_source: st
     removed_items = {item["item_id"]: item for item in (existing or {}).get("canvas_items", [])
                      if item["item_id"] not in remaining_items}
     for node in normalized_nodes:
-        removed = removed_items.get(node.get("group_id"))
+        removed = removed_items.get(node.get("region_id"))
         if removed:
-            node["group_id"] = None
-            node["zone"] = None
-    normalized_canvas_items = _fit_member_zones(normalized_nodes, normalized_canvas_items)
+            node["region_id"] = None
+    for node in normalized_nodes:
+        region_id = node.get("region_id")
+        if region_id and (region_id not in remaining_items or remaining_items[region_id]["kind"] not in {"rectangle", "ellipse"}):
+            raise ValueError("topology_region_not_found:" + region_id)
+    from .region_geometry import fit_regions
+    normalized_canvas_items = fit_regions(normalized_nodes, normalized_canvas_items)
     record = {
-        "schema_version": 2,
+        "schema_version": 3,
+        "region_migration_issues": [issue for issue in (existing or {}).get("region_migration_issues", [])
+                                    if any(n["node_id"] == issue["node_id"] and not n.get("region_id") for n in normalized_nodes)],
         "topology_id": topology_id,
         "name": name,
         "description": str(payload.get("description") or "").strip()[:500],
@@ -620,26 +516,21 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
 
     raw_node_updates = payload.get("node_updates") if payload.get("node_updates") is not None else payload.get("nodes")
     raw_link_updates = payload.get("link_updates") if payload.get("link_updates") is not None else payload.get("links")
-    raw_group_updates = payload.get("group_updates") if payload.get("group_updates") is not None else (payload.get("groups") if payload.get("groups") is not None else payload.get("zones"))
+    if any(key in payload for key in ("group_updates", "groups", "zones", "remove_group_ids")):
+        raise ValueError("topology_legacy_regions_removed_use_canvas_items")
     raw_item_updates = payload.get("canvas_item_updates") if payload.get("canvas_item_updates") is not None else payload.get("canvas_items")
 
     node_updates = records(raw_node_updates, "node_updates")
     link_updates = records(raw_link_updates, "link_updates")
-    group_updates = records(raw_group_updates, "group_updates")
     item_updates = records(raw_item_updates, "canvas_item_updates")
     remove_node_ids = {str(item).strip() for item in (payload.get("remove_node_ids") or []) if str(item).strip()}
     remove_link_ids = {
         str(item).strip() for item in (payload.get("remove_link_ids") or []) if str(item).strip()
     }
-    remove_group_ids = {
-        str(item).strip() for item in (payload.get("remove_group_ids") or []) if str(item).strip()
-    }
     if any(not isinstance(item, str) for item in (payload.get("remove_node_ids") or [])):
         raise ValueError("remove_node_ids must be a list of strings")
     if any(not isinstance(item, str) for item in (payload.get("remove_link_ids") or [])):
         raise ValueError("remove_link_ids must be a list of strings")
-    if any(not isinstance(item, str) for item in (payload.get("remove_group_ids") or [])):
-        raise ValueError("remove_group_ids must be a list of strings")
 
     nodes_by_id = {
         str(item.get("node_id") or ""): dict(item)
@@ -662,9 +553,11 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
             raise ValueError("translate_invalid") from None
         if not math.isfinite(dx) or not math.isfinite(dy):
             raise ValueError("translate_invalid")
+        if "include_members" in translate and not isinstance(translate["include_members"], bool):
+            raise ValueError("translate_invalid")
         if translate.get("include_members"):
             ids = list(dict.fromkeys([*ids, *(node_id for node_id, node in nodes_by_id.items()
-                                            if node.get("group_id") in item_ids)]))
+                                            if node.get("region_id") in item_ids)]))
         explicit_items = {str(item.get("item_id") or item.get("id") or "") for item in item_updates
                           if "x" in item or "y" in item}
         item_updates = [{"item_id": item_id, "x": existing_items[item_id]["x"] + dx,
@@ -683,10 +576,8 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
             update["display_name"] = str(update.get("name") or update.get("label")).strip()
         if not update.get("device_type") and (update.get("type") or update.get("role")):
             update["device_type"] = str(update.get("type") or update.get("role")).strip()
-        if not update.get("zone") and (update.get("group") or update.get("group_id")):
-            update["zone"] = str(update.get("group") or update.get("group_id")).strip()
-        if not update.get("group_id") and update.get("zone"):
-            update["group_id"] = update["zone"]
+        if any(key in update for key in ("zone", "group_id", "group")):
+            raise ValueError("topology_legacy_region_fields_use_region_id")
         if "ip" in update and update["ip"] is not None:
             try:
                 _normalize_node_ip(update["ip"])
@@ -725,25 +616,6 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         for node in nodes_by_id.values():
             if node.get("lock_group") and group_counts[node["lock_group"]] < 2:
                 node["lock_group"] = None
-
-    if payload.get("layout") is not None:
-        from .drawing_feedback import apply_optional_layout
-        apply_optional_layout(nodes_by_id, payload["layout"], {
-            item["node_id"] for item in node_updates if "x" in item or "y" in item
-        } | {node_id for node_id, node in nodes_by_id.items() if node.get("lock_group") in deltas})
-
-    groups_by_id = {
-        str(item.get("group_id") or ""): dict(item)
-        for item in existing.get("groups") or []
-    }
-    for update in group_updates:
-        group_id = str(update.get("group_id") or update.get("id") or update.get("name") or "").strip()
-        if not group_id:
-            group_id = _id("group")
-        update["group_id"] = group_id
-        groups_by_id[group_id] = {**groups_by_id.get(group_id, {}), **update, "group_id": group_id}
-    for group_id in remove_group_ids:
-        groups_by_id.pop(group_id, None)
 
     links_by_id = {
         str(item.get("link_id") or ""): dict(item)
@@ -815,6 +687,12 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         for item_id in remove_items:
             items_by_id.pop(str(item_id).strip(), None)
 
+    if payload.get("layout") is not None:
+        from .drawing_feedback import apply_optional_layout
+        apply_optional_layout(nodes_by_id, payload["layout"], {
+            item["node_id"] for item in node_updates if "x" in item or "y" in item
+        } | {node_id for node_id, node in nodes_by_id.items() if node.get("lock_group") in deltas}, list(items_by_id.values()))
+
     # save_topology remains the single normalizer/validator for every graph
     # write.  It also keeps the stored representation and API representation
     # identical to manual canvas saves.
@@ -824,7 +702,7 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         "version": expected_version,
         "nodes": list(nodes_by_id.values()),
         "links": links,
-        "groups": list(groups_by_id.values()),
+        "groups": [],
         "canvas_items": list(items_by_id.values()),
         "name": payload.get("name", existing["name"]),
         "description": payload.get("description", existing["description"]),
@@ -876,7 +754,7 @@ def _topology_structure_signature(topology: dict[str, Any]) -> str:
                     str(node.get("node_id") or ""),
                     str(node.get("device_type") or ""),
                     str(node.get("display_name") or ""),
-                    str(node.get("group_id") or ""),
+                    str(node.get("region_id") or ""),
                     str(node.get("ip") or ""),
                     str(node.get("vendor") or ""),
                     str(node.get("model") or ""),
@@ -1062,6 +940,24 @@ def get_topology_revision(workspace_id: str, topology_id: str, revision_id: str)
         return None
     if str(record.get("topology_id") or "") != topology_id:
         return None
+    # Old persisted inverse edits also need the full regional context. Migrating
+    # the sparse delta alone would lose references to unchanged frames.
+    snapshot = record.get("snapshot") or {}
+    if record.get("edit") and int(snapshot.get("schema_version") or 1) < 3:
+        from copy import deepcopy
+        before = deepcopy(snapshot)
+        edit = record["edit"]
+        for collection, key in (("nodes", "node_id"), ("links", "link_id"),
+                                ("groups", "group_id"), ("canvas_items", "item_id")):
+            items = {item[key]: item for item in before.get(collection, [])}
+            for item in edit["after"].get(collection, []):
+                items.pop(item[key], None)
+            items.update({item[key]: item for item in edit["before"].get(collection, [])})
+            before[collection] = list(items.values())
+        for key in ("version", "name", "description"):
+            if key in edit["before"]:
+                before[key] = edit["before"][key]
+        record = {**record, "edit": _revision_edit(_public_topology(before), _public_topology(snapshot))}
     return record
 
 
@@ -1087,8 +983,7 @@ def _node_facts(node: dict[str, Any]) -> dict[str, Any]:
     return {
         "device_type": str(node.get("device_type") or ""),
         "display_name": str(node.get("display_name") or ""),
-        "group_id": str(node.get("group_id") or node.get("zone") or ""),
-        "zone": str(node.get("zone") or node.get("group_id") or ""),
+        "region_id": str(node.get("region_id") or ""),
         "lock_group": str(node.get("lock_group") or ""),
         "ip": str(node.get("ip") or ""),
         "vendor": str(node.get("vendor") or ""),
@@ -1227,7 +1122,7 @@ def compare_topology_revision(workspace_id: str, topology_id: str, revision_id: 
     record = get_topology_revision(workspace_id, topology_id, revision_id)
     if not record:
         raise ValueError("topology_revision_not_found")
-    snapshot = record.get("snapshot") or {}
+    snapshot = _public_topology(record.get("snapshot") or {})
     current = get_topology(workspace_id, topology_id)
     if not current:
         raise ValueError("topology_not_found")
@@ -1257,7 +1152,9 @@ def restore_topology_revision(
     record = get_topology_revision(workspace_id, topology_id, revision_id)
     if not record:
         raise ValueError("topology_revision_not_found")
-    snapshot = _detached_snapshot(workspace_id, json.loads(json.dumps(record.get("snapshot") or {})))
+    from .region_geometry import migrate_regions
+    snapshot = _detached_snapshot(workspace_id, migrate_regions(json.loads(json.dumps(record.get("snapshot") or {}))))
+    snapshot["schema_version"] = 3
     topology_id = str(record.get("topology_id") or "")
     current = get_topology(workspace_id, topology_id)
     if not current:

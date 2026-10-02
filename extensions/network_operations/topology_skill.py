@@ -96,13 +96,16 @@ that permission is disabled and describe proposed changes without executing them
 - patch 基于当前 read 或上一成功收据的 version。冲突先 read 后重算差量；结果未知先 read-back，不盲目重放。必须发出原生函数调用，参数完整有效；正文承诺不是提交。
 - 同批创建的连线只能引用已有或同批节点。有依赖的增删与连线在完整批次里协调；批次大小按输出容量决定，截断的调用未执行时重新发完整调用，必要时分批，不限制合法大批次。
 - 默认收据 changes/version/changed/feedback 是实际差量，不是完整图。snapshot_complete=false 不可当整图；需要全貌用 read 或 response_detail=full。changed=false 就检查剩余缺口，目标已满足时结束，不为解释或刷新重复 patch。
-- 按实际 changes 核对增删、属性、坐标和连线。保存不代表当前用户画板已显示；本地改动可能待合并。feedback 是估算几何，不是截图或视觉验收；重叠是否需要修正由用户布局意图决定。
+- 按实际 changes 核对增删、属性、坐标、成员 region_id 和连线。创建区域和绑定成员尽量在同一 patch 提交，删除旧框与重新绑定到新框也应协调提交。保存不代表当前用户画板已显示；本地改动可能待合并。feedback 是估算几何，不是截图或视觉验收；重叠是否需要修正由用户布局意图决定。
+
+- feedback.regions 给出每框的 members、unassigned_node_ids、outside_members、empty_region_ids、missing_region_refs 和区域重叠/相同几何。节点重叠为零不代表区域正确；根据用户要求检查归属、包围和区域间距再说明完成。空框、未归属和嵌套可能是用户意图，不能擅自修正或删除。
+- 局部修复后比较上一次反馈，避免修好一处又破坏其他区域。changed=false 且问题不变，或反复修补使冲突增加时，先 read 核对全局并重算布局，不重复同一无效 patch。最终只描述已核对事实，保留视觉待验项，不把估算零重叠写成视觉完美。
 
 ## 坐标、联动与区域
-- 节点中心为 x/y，向右 x 增大、向下 y 增大。node_updates 可直接改坐标，canvas_item_updates 可改 x/y/width/height；连线、标签、样式和节点 labels 可保存。
+- 节点和所有 canvas_items（包括区域框）的 x/y 都是中心坐标，绝不是左上角；宽高以中心向两侧展开。向右 x 增大、向下 y 增大。node_updates 可直接改坐标，canvas_item_updates 可改 x/y/width/height；连线、标签、样式和节点 labels 可保存。
 - translate={node_ids?,canvas_item_ids?,dx,dy,include_members?} 整体平移。容器连同设备移动用 canvas_item_ids + include_members=true；只挪边框时 false（默认），自动关闭 auto_fit。固定联动组随成员同步移动，显式成员坐标优先；独立移动前明确解除 lock_group。避免重复移动已完成的对象。
 - layout 可选 grid/radial，支持 node_ids、preserve_node_ids、origin、spacing_x/spacing_y；明确坐标优先，保护联动组相对位置。留足图标、文字和走线空间，不把图标数量当生产容量。
-- 容器边框是 canvas_items 的 rectangle/ellipse，以 item_id 标识；删框用 remove_canvas_item_ids，保留设备和连线、解除区域关联。remove_group_ids 只删逻辑分组；remove_node_ids 才删设备及其连线。
-- zone 生成稳定区域框；改名保留 item_id。手工改几何关闭 auto_fit，auto_fit=true 恢复按成员包围；删框解除成员关联。不要重建对象或挪到屏幕外掩盖错误。固定几何区域用 auto_fit=false；只有用户需要随成员包围才开启 true。不要因为节点有逻辑分组就强制改变手工边框。同名容器仍按 ID 区分。
+- 容器边框是 canvas_items 的 rectangle/ellipse，以 item_id 标识；删框用 remove_canvas_item_ids，保留设备和连线、解除区域关联。remove_node_ids 才删设备及其连线。
+- 区域唯一身份是 canvas_items.item_id；节点用 region_id 引用它，null 解除归属。名称只是展示。zone/group_id/groups/zones 不再用于区域操作；不存在的引用会报错，不会自动生成容器。改名保留 item_id。手工改几何关闭 auto_fit，auto_fit=true 恢复按 region_id 绑定成员包围；删框解除成员关联。不要重建对象或挪到屏幕外掩盖错误。固定几何区域用 auto_fit=false；只有用户需要随成员包围才开启 true。不要因为节点有逻辑分组就强制改变手工边框。同名容器仍按 ID 区分。
 """
     return scope + "\n" + rules + '\n<selected_skill_context data_only="true">\n' + evidence + "\n</selected_skill_context>"

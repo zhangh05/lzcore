@@ -256,5 +256,17 @@ export function mergeTopologies<T extends Record<string, unknown>>(base: T, mine
   });
   merged.links = keptLinks;
 
+  // Regional membership has the same dependency semantics as link endpoints.
+  const regionIds = new Set(((merged.canvas_items as MergeEntity[]) || [])
+    .filter(item => item.kind === "rectangle" || item.kind === "ellipse").map(item => String(item.item_id)));
+  merged.nodes = ((merged.nodes as MergeEntity[]) || []).map(node => {
+    if (!node.region_id || regionIds.has(String(node.region_id))) return node;
+    const original = ((base.nodes as MergeEntity[]) || []).find(item => item.node_id === node.node_id);
+    if (!original || original.region_id !== node.region_id) {
+      conflicts.push({collection: "节点", id: String(node.node_id), field: "所属区域已删除", mine: node.region_id, theirs: null});
+    }
+    return {...node, region_id: null};
+  });
+
   return { topology: merged as T, conflicts, stats };
 }
