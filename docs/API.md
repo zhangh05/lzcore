@@ -163,6 +163,7 @@ return conflict; cancel and wait for a terminal state first.
 | `PUT/DELETE` | `/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>/binding` |
 | `DELETE` | `/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>` |
 | `GET` | `/api/extensions/network.operations/topologies/<topology_id>/revisions` |
+| `GET` | `/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/edit` |
 | `GET` | `/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/diff` |
 | `POST` | `/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/restore` |
 | `POST` | `/connections/<connection_id>/test`, `/inspections/<task_id>/cancel`, `/inspections/<task_id>/retry` |
@@ -189,12 +190,14 @@ network.operations.topology 仅 read/patch。read 无范围返回全图；指定
 patch 使用稳定 ID，保留未点名对象；旧显式 version 冲突，省略版本按锁内当前状态提交。未知链路端点原子拒绝；显式删节点同时删关联链路。默认收据含实际 changes（upsert/removed IDs/名称描述差量）、version/counts/changed/估算 feedback，snapshot_complete=false；response_detail=full 或 read 才取完整图。无变化保留版本且不广播。
 
 - node_updates 控制属性/x/y，canvas_item_updates 控制位置/尺寸/内容，link 更新控制端点、接口和样式；节点 labels 保留。
-- translate={node_ids,dx,dy} 相对移动，固定联动组同步平移；显式成员坐标优先，清 lock_group 分离，删除/脱离清孤立组。
+- translate={node_ids?,canvas_item_ids?,dx,dy,include_members?} 相对移动；至少指定节点或图元。include_members=true 连同容器成员移动，默认只移动边框且关闭 auto_fit；固定联动组同步平移；显式成员坐标优先，清 lock_group 分离，删除/脱离清孤立组。
 - layout 可选 grid/radial，支持 node_ids/preserve_node_ids/origin/spacing_x/spacing_y，间距至少 140。显式坐标优先，保护成员等于保护其联动组，组按刚体移动；前端自动布局也保留组相对位置和固定区域。
 - zone 生成稳定区域框；改名保留 item_id。手工几何关闭 auto_fit，可显式恢复；删除框解除成员归属。
 - feedback 采用估算节点几何和有限重叠样本，完整度明确；不是视觉或真实网络验收。
 
-页面基于最后确认基线三方合并。非重叠本地编辑可合并，同字段/删改/依赖链路冲突需解决。变更卡标显示/待处理、移除对象和差量，可聚焦/撤销；撤销保留后来无关字段，重叠则拒绝。卡片是当前图有界内存历史，不代替持久 revision。
+页面基于最后确认基线三方合并。非重叠本地编辑可合并，同字段/删改/依赖链路冲突需解决。变更卡标显示/待处理、移除对象和差量，可聚焦/撤销；撤销保留后来无关字段，重叠则拒绝。卡片默认折叠，与对话分区；从后端有界 revision 恢复，保存结构与几何变化，保留最近 40 个版本。列表 activity 返回差量摘要、来源与时间；edit 只读接口按需返回 changed objects 的 before/after，供前端安全撤销，不替换整图。旧版本仅有快照的历史继续可读取/恢复，新增变化才有撤销差量。
+
+容器/图元删除使用 remove_canvas_item_ids；保留设备和连线、解除成员区域关联。remove_group_ids 删逻辑分组，remove_node_ids 删设备及其关联连线。显式区域几何默认固定；auto_fit=true 才随成员包围，同名容器以 ID 区分。图纸改名同步绑定会话的资源元数据与自动生成标题，用户自定义标题保留。
 
 ### Provider 配置
 
@@ -262,6 +265,7 @@ GET|POST    /api/extensions/network.operations/topologies
 DELETE|GET|PUT /api/extensions/network.operations/topologies/<topology_id>
 DELETE      /api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>
 GET         /api/extensions/network.operations/topologies/<topology_id>/revisions
+GET         /api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/edit
 GET         /api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/diff
 POST        /api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/restore
 POST        /api/extensions/repository/<extension_id>/<version>/install

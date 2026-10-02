@@ -1,4 +1,3 @@
-import { ModalShell } from "../../components/ui/ModalShell";
 import React, { lazy, Suspense, useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { jobsApi, sessionsApi, settingsApi } from "../../api";
 import { apiRequest } from "../../api/client";
@@ -64,6 +63,7 @@ export function TaskWorkbench() {
   const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>([]);
   const [selectionSessionId, setSelectionSessionId] = useState("");
   const [isSkillLocked, setIsSkillLocked] = useState(false);
+  const [drawingSessionTitle, setDrawingSessionTitle] = useState<{ id: string; workspace: string; title: string } | null>(null);
   const selectedSkill = useMemo(() => {
     const found = workbenchSkills.find((item) => `${item.extension_id}:${item.skill_id}` === selectedSkillKey);
     if (found) return found;
@@ -94,6 +94,7 @@ export function TaskWorkbench() {
     return workbenchSkills.filter((s) => !s.skill_id.startsWith("drawing:"));
   }, [isSkillLocked, selectedSkill, workbenchSkills]);
   const sending = useWorkbenchStore((s) => Boolean(currentSessionId && s.activeTurns?.[currentSessionId]));
+  const sessionListVersion = useSessionStore(s => s.sessionListVersion);
   const lastUserInput = useWorkbenchStore((s) => s.lastUserInput);
   const visibleHistory = useWorkbenchStore(
     (s) => s.bySession?.[currentSessionId ?? "_scratch"] ?? EMPTY_CHAT_MESSAGES,
@@ -127,7 +128,7 @@ export function TaskWorkbench() {
       })
       .catch(() => setWorkbenchSkills([]))
       .finally(() => setSkillCatalogLoaded(true));
-  }, [currentWorkspaceId]);
+  }, [currentWorkspaceId, sessionListVersion]);
 
   useEffect(() => {
     if (!currentSessionId) {
@@ -172,6 +173,7 @@ export function TaskWorkbench() {
         }
 
         if (topoId) {
+          setDrawingSessionTitle({ id: currentSessionId, workspace: currentWorkspaceId, title: sess.title || "" });
           // Authoritative topology session: skill is strictly locked to this topology
           const skillKey = `network.operations:drawing:${topoId}`;
           setSelectedSkillKey(skillKey);
@@ -231,16 +233,7 @@ export function TaskWorkbench() {
   const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const taskProgressOpen = useUIStore((s) => s.taskProgressOpen);
   const toggleTaskProgress = useUIStore((s) => s.toggleTaskProgress);
-  const [narrow, setNarrow] = useState(() => window.matchMedia?.("(max-width: 900px)").matches ?? false);
-  const [progressDrawerOpen, setProgressDrawerOpen] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia?.("(max-width: 900px)");
-    if (!media) return;
-    const update = () => setNarrow(media.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  const progressPanelCollapsed = narrow || !taskProgressOpen;
+  const progressPanelCollapsed = !taskProgressOpen;
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
@@ -466,7 +459,10 @@ export function TaskWorkbench() {
   const handleToggleProgressPanel = toggleTaskProgress;
 
   const latestUser = [...visibleHistory].reverse().find((message) => message.role === "user");
-  const sessionTitle = latestUser?.text.trim().split("\n")[0].slice(0, 32) || "新会话";
+  const sessionTitle = isSkillLocked && selectedSkill?.skill_id.startsWith("drawing:")
+    ? (drawingSessionTitle?.id === currentSessionId && drawingSessionTitle.workspace === currentWorkspaceId
+      ? drawingSessionTitle.title : selectedSkill.name.replace(/^拓扑绘图 · /, "拓扑 · "))
+    : latestUser?.text.trim().split("\n")[0].slice(0, 32) || "新会话";
   const terminalJobRef = useRef<string>("");
 
   useEffect(() => {
@@ -630,8 +626,8 @@ export function TaskWorkbench() {
           llmHealth={llmHealth}
           currentSessionId={currentSessionId}
           visibleHistory={visibleHistory}
-          taskProgressOpen={narrow ? progressDrawerOpen : taskProgressOpen}
-          onToggleTaskProgress={narrow ? () => setProgressDrawerOpen(v => !v) : toggleTaskProgress}
+          taskProgressOpen={taskProgressOpen}
+          onToggleTaskProgress={toggleTaskProgress}
         />
 
         <div className="wb-chat" data-testid="chat-stream">
@@ -726,17 +722,14 @@ export function TaskWorkbench() {
         />
       </section>
 
-      {!narrow && <TaskProgressPanel
+      <TaskProgressPanel
         latestAssistant={progressAssistant}
         snapshot={durableTurn}
         turnRunning={turnRunning}
         onShowTimeline={handleShowTimeline}
         collapsed={progressPanelCollapsed}
         onToggleCollapsed={handleToggleProgressPanel}
-      />}
-      <ModalShell open={narrow && progressDrawerOpen} onClose={() => setProgressDrawerOpen(false)} title="任务进度" size="sheet" className="progress-drawer">
-        <TaskProgressPanel latestAssistant={progressAssistant} snapshot={durableTurn} turnRunning={turnRunning} onShowTimeline={handleShowTimeline} collapsed={false} onToggleCollapsed={() => setProgressDrawerOpen(false)} />
-      </ModalShell>
+      />
     </div>
   );
 }

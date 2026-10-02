@@ -71,3 +71,37 @@ def test_noop_patch_does_not_increment_version_or_broadcast(temp_dirs, monkeypat
     with pytest.raises(ValueError, match="topology_version_conflict"):
         drawings.patch_topology("default", topo["topology_id"], {"version": 0, "node_updates": [{"node_id": "a", "x": 999}]})
     assert drawings.get_topology("default", topo["topology_id"])["nodes"][0]["x"] == 100
+
+
+def test_explicit_container_geometry_and_equal_labels_keep_separate_memberships(temp_dirs):
+    topo = drawings.save_topology('default', {'name': 'fixed frames', 'nodes': [
+        {'node_id': 'a', 'x': 100, 'y': 100, 'zone': '同名', 'group_id': 'first'},
+        {'node_id': 'b', 'x': 800, 'y': 100, 'zone': '同名', 'group_id': 'second'},
+    ], 'canvas_items': [
+        {'item_id': key, 'kind': 'rectangle', 'text': '同名', 'x': x, 'y': 0, 'width': 400, 'height': 250}
+        for key, x in [('first', 0), ('second', 700)]]})
+    assert [(item['item_id'], item['x']) for item in topo['canvas_items']] == [('first', 0), ('second', 700)]
+    assert [n['group_id'] for n in topo['nodes']] == ['first', 'second']
+    assert all(item['auto_fit'] is False for item in topo['canvas_items'])
+    removed = drawings.patch_topology('default', topo['topology_id'], {
+        'version': topo['version'], 'remove_canvas_item_ids': ['first']})
+    assert removed['nodes'][0]['group_id'] is None and removed['nodes'][0]['zone'] is None
+    assert removed['nodes'][1]['group_id'] == 'second'
+    assert [item['item_id'] for item in removed['canvas_items']] == ['second']
+
+
+
+def test_topology_rename_synchronizes_managed_sessions_but_keeps_custom_titles(temp_dirs):
+    from storage.session_store import create_session, get_session
+    topo = _zone()
+    metadata = {'topology_id': topo['topology_id'], 'topology_name': topo['name'],
+                'workbench_selection': {'skill_id': f"drawing:{topo['topology_id']}", 'allow_edit': False}}
+    create_session('default', title='其他会话', metadata={'workbench_selection': 'legacy-text'})
+    managed = create_session('default', title='拓扑 · old', metadata=metadata)
+    custom = create_session('default', title='用户自定义会话', metadata=metadata)
+    drawings.patch_topology('default', topo['topology_id'], {'version': topo['version'], 'name': '新名称'})
+    updated = get_session(managed['session_id'], 'default')
+    assert updated['title'] == '拓扑 · 新名称'
+    assert updated['metadata']['topology_name'] == '新名称'
+    assert updated['metadata']['workbench_selection']['allow_edit'] is False
+    assert get_session(custom['session_id'], 'default')['title'] == '用户自定义会话'

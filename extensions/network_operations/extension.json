@@ -33,6 +33,7 @@
     "/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>/binding",
     "/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>",
     "/api/extensions/network.operations/topologies/<topology_id>/revisions",
+    "/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/edit",
     "/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/diff",
     "/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/restore",
     "/api/extensions/network.operations/inspections",

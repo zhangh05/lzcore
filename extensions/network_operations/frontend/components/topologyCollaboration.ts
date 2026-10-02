@@ -2,7 +2,8 @@ import type { Topology, TopologyNode } from "./TopologyWorkspace";
 import { mergeTopologies } from "./topologyMerge";
 
 export type DrawingEdit = { before: Topology; after: Topology; source: "manual" | "collaboration" };
-export type DrawingActivity = DrawingEdit & {
+export type DrawingActivity = {
+  before?: Topology; after?: Topology; source?: "manual" | "collaboration"; revision_id?: string; saved_at?: string;
   version: number; ids: string[]; added: number; modified: number; removed: number;
   status: "displayed" | "pending"; removedLabels: string[];
 };

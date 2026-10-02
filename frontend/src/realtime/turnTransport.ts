@@ -250,6 +250,7 @@ function onSocketMessage(event: MessageEvent): void {
   }
   if (msg.type === "event" && msg.name === "topology_updated") {
     const data = (msg.data && typeof msg.data === "object" ? msg.data : {}) as TopologyListener extends (arg: infer T) => void ? T : never;
+    if (data.workspace_id === useSessionStore.getState().currentWorkspaceId) useSessionStore.getState().bumpSessionList();
     for (const listener of topologyListeners) listener(data);
     return;
   }

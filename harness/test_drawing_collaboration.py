@@ -121,3 +121,37 @@ def test_missing_optional_labels_do_not_turn_local_edits_into_whole_drawing_chan
     assert unchanged['changed'] is False and unchanged['changes']['nodes']['upserted'] == []
     changed = invoke({'action': 'patch', 'node_updates': [{'node_id': 'a', 'x': 10}]}).output
     assert [node['node_id'] for node in changed['changes']['nodes']['upserted']] == ['a']
+
+
+def test_container_translate_and_delete_through_governed_tool_preserve_devices(temp_dirs):
+    topo, invoke, _ = drawing_gateway()
+    grouped = invoke({'action': 'patch', 'node_updates': [
+        {'node_id': key, 'zone': '核心区', 'group_id': 'box'} for key in 'ab'],
+        'canvas_item_updates': [{'item_id': 'box', 'kind': 'rectangle', 'text': '核心区',
+                                 'x': 150, 'y': 0, 'width': 500, 'height': 200, 'auto_fit': False}]}).output
+    moved = invoke({'action': 'patch', 'version': grouped['version'], 'response_detail': 'full',
+                    'translate': {'canvas_item_ids': ['box'], 'dx': 100, 'dy': 50, 'include_members': True}}).output
+    graph = moved['topology']
+    assert [(n['x'], n['y']) for n in graph['nodes']] == [(100, 150), (400, 150), (600, 100)]
+    assert graph['canvas_items'][0]['x'] == 250 and graph['canvas_items'][0]['auto_fit'] is False
+    border = invoke({'action': 'patch', 'version': moved['version'], 'response_detail': 'full',
+                     'translate': {'canvas_item_ids': ['box'], 'dx': 60, 'dy': 0}}).output
+    assert border['topology']['nodes'] == graph['nodes']
+    removed = invoke({'action': 'patch', 'version': border['version'], 'response_detail': 'full',
+                      'remove_canvas_item_ids': ['box']}).output
+    assert removed['topology']['canvas_items'] == []
+    assert len(removed['topology']['nodes']) == 3 and len(removed['topology']['links']) == 1
+    assert all(n['group_id'] is None and n['zone'] is None for n in removed['topology']['nodes'])
+    revision = drawings.list_topology_revisions('optimize', topo['topology_id'])[0]
+    assert revision['source'] == 'agent' and revision['activity']['removed'] == 1
+    assert drawings.get_topology_revision('optimize', topo['topology_id'], revision['revision_id'])['edit']['before']['canvas_items'][0]['item_id'] == 'box'
+    denied = invoke({'action': 'patch', 'remove_canvas_item_ids': ['box']}, readonly=True)
+    assert denied.output['error'] == 'topology_edit_not_permitted'
+
+
+def test_invalid_annotation_translation_is_atomic(temp_dirs):
+    topo, invoke, _ = drawing_gateway()
+    result = invoke({'action': 'patch', 'node_updates': [{'node_id': 'a', 'x': 999}],
+                     'translate': {'canvas_item_ids': ['missing'], 'dx': 1, 'dy': 0}})
+    assert result.output['ok'] is False
+    assert drawings.get_topology('optimize', topo['topology_id'])['version'] == topo['version']

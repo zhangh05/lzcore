@@ -181,3 +181,22 @@ describe("workspace collaboration", () => {
     expect(vi.mocked(apiRequest).mock.calls.filter(([request]) => request.method === "PUT")).toHaveLength(1);
   });
 });
+
+
+it("loads persisted history on reopen and undoes only that delta", async () => {
+  const original = vi.mocked(apiRequest).getMockImplementation()!;
+  vi.mocked(apiRequest).mockImplementation(async request => {
+    if (request.url?.endsWith("/revisions")) return {revisions: [{revision_id: "persisted", version: 1, source: "agent", activity: {
+      ids: ["a"], added: 0, modified: 1, removed: 0, removedLabels: []}}]} as never;
+    if (request.url?.endsWith("/persisted/edit")) return {edit: {
+      before: {...sheet, nodes: [{...sheet.nodes[0], x: -100}]},
+      after: {...sheet, nodes: [sheet.nodes[0]]},
+    }} as never;
+    return original(request);
+  });
+  setup();
+  await screen.findByText("撤销协作1 displayed");
+  fireEvent.click(screen.getByText("移动B"));
+  fireEvent.click(screen.getByText("撤销协作1 displayed"));
+  await waitFor(() => expect(snapshot().nodes.map(node => node.x)).toEqual([-100, 500]));
+});

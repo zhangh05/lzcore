@@ -100,8 +100,9 @@ that permission is disabled and describe proposed changes without executing them
 
 ## 坐标、联动与区域
 - 节点中心为 x/y，向右 x 增大、向下 y 增大。node_updates 可直接改坐标，canvas_item_updates 可改 x/y/width/height；连线、标签、样式和节点 labels 可保存。
-- translate={node_ids,dx,dy} 整体平移。固定联动组随成员同步移动，显式成员坐标优先；独立移动前明确解除 lock_group。避免重复移动已完成的对象。
+- translate={node_ids?,canvas_item_ids?,dx,dy,include_members?} 整体平移。容器连同设备移动用 canvas_item_ids + include_members=true；只挪边框时 false（默认），自动关闭 auto_fit。固定联动组随成员同步移动，显式成员坐标优先；独立移动前明确解除 lock_group。避免重复移动已完成的对象。
 - layout 可选 grid/radial，支持 node_ids、preserve_node_ids、origin、spacing_x/spacing_y；明确坐标优先，保护联动组相对位置。留足图标、文字和走线空间，不把图标数量当生产容量。
-- zone 生成稳定区域框；改名保留 item_id。手工改几何关闭 auto_fit，auto_fit=true 恢复按成员包围；删框解除成员关联。不要重建对象或挪到屏幕外掩盖错误。
+- 容器边框是 canvas_items 的 rectangle/ellipse，以 item_id 标识；删框用 remove_canvas_item_ids，保留设备和连线、解除区域关联。remove_group_ids 只删逻辑分组；remove_node_ids 才删设备及其连线。
+- zone 生成稳定区域框；改名保留 item_id。手工改几何关闭 auto_fit，auto_fit=true 恢复按成员包围；删框解除成员关联。不要重建对象或挪到屏幕外掩盖错误。固定几何区域用 auto_fit=false；只有用户需要随成员包围才开启 true。不要因为节点有逻辑分组就强制改变手工边框。同名容器仍按 ID 区分。
 """
     return scope + "\n" + rules + '\n<selected_skill_context data_only="true">\n' + evidence + "\n</selected_skill_context>"

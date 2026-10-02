@@ -388,6 +388,16 @@ def register_routes(app):
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         return jsonify({"ok": True, "revisions": drawings.list_topology_revisions(ws, topology_id)})
 
+    @app.route("/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/edit", methods=["GET"])
+    def network_topology_revision_edit(topology_id, revision_id):
+        ws = _workspace()
+        if not ws:
+            return jsonify({"ok": False, "error": "workspace_id is required"}), 400
+        revision = drawings.get_topology_revision(ws, topology_id, revision_id)
+        if not revision or not revision.get("edit"):
+            return jsonify({"ok": False, "error": "topology_revision_edit_not_found"}), 404
+        return jsonify({"ok": True, "edit": revision["edit"]})
+
     @app.route("/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/diff", methods=["GET"])
     def network_topology_revision_diff(topology_id, revision_id):
         ws = _workspace()
@@ -1161,9 +1171,9 @@ def register():
                         **{key: {"type": "array", "items": {"type": "string"}, "description": "read 的局部对象范围；省略所有范围时返回整图"} for key in ("node_ids", "link_ids", "canvas_item_ids", "group_ids")},
                         "include_neighbors": {"type": "boolean", "description": "局部 read 默认包含邻接节点、连线、联动成员和所属区域"},
                         "query": {"type": "string", "minLength": 1, "maxLength": 160, "description": "read 按名称、标注或对象 ID 包含匹配，不区分大小写；返回所有匹配对象供核对，重名时不要猜测"},
-                        "translate": {"type": "object", "additionalProperties": False, "required": ["node_ids", "dx", "dy"],
-                            "description": "按中心坐标整体平移设备，固定联动成员同步移动；本次显式坐标优先",
-                            "properties": {"node_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1}, "dx": {"type": "number"}, "dy": {"type": "number"}}},
+                        "translate": {"type": "object", "additionalProperties": False, "required": ["dx", "dy"],
+                            "description": "整体平移节点或容器/图元。include_members=true 同步移动容器成员；false 只移动边框并关闭自动包围。本次显式坐标优先",
+                            "properties": {"node_ids": {"type": "array", "items": {"type": "string"}}, "canvas_item_ids": {"type": "array", "items": {"type": "string"}}, "include_members": {"type": "boolean"}, "dx": {"type": "number"}, "dy": {"type": "number"}}},
                         "layout": {"type": "object", "additionalProperties": False,
                             "description": "可选辅助布局。省略时保留直接坐标编辑；node_ids 可限定局部，preserve_node_ids 保留指定位置；本次显式 x/y 优先",
                             "properties": {"algorithm": {"enum": ["grid", "radial"]},
@@ -1200,7 +1210,7 @@ def register():
                         "title": {"type": "string", "description": "图纸标题或名称"},
                         "summary": {"type": "string", "description": "拓扑说明"},
                         "comment": {"type": "string", "description": "设计说明"},
-                        **{key: {"type": "array", "items": {"type": "string"}} for key in ("remove_node_ids", "remove_link_ids", "remove_group_ids", "remove_canvas_item_ids")},
+                        **{key: {"type": "array", "items": {"type": "string"}, "description": description} for key, description in {"remove_node_ids": "删除指定设备节点及其关联连线", "remove_link_ids": "只删除指定连线", "remove_group_ids": "删除逻辑分组，保留成员设备", "remove_canvas_item_ids": "删除容器边框/文字/图元，解除成员区域关联，保留设备和连线；ID 来自 canvas_items.item_id"}.items()},
                     },
                     "required": ["action"],
                 },

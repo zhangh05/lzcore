@@ -11,6 +11,7 @@ import { IconSparkle, IconSend, IconStop, IconPlus } from "../../../../frontend/
 import type { Topology} from "./TopologyWorkspace";
 import type { CanvasSelection } from "./canvasSelection";
 import { resolveTopologySession } from "./TopologySessionResolver";
+import { formatDate } from "../../../../frontend/src/utils/format";
 import type { DrawingActivity } from "./topologyCollaboration";
 import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
 
@@ -192,17 +193,21 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
         <small>{allowEdit ? "可修改当前图纸" : "只读模式，不可修改"}</small>
       </div>
     </div>
-    {activities.length > 0 && <div className="topology-agent-activity" aria-label="图纸变化">
-      {activities.slice(-5).map(activity => <div key={activity.version} className="topology-agent-change">
-        <strong>图纸 v{activity.version} · {activity.status === "displayed" ? "已保存并显示" : "已保存 · 待合并"}</strong>
+    {activities.length > 0 && <details className="topology-agent-activity" aria-label="图纸变化">
+      <summary><strong>图纸变化记录</strong><span>{activities.length} 条 · 最新 v{activities[activities.length - 1].version}</span></summary>
+      <div className="topology-agent-activity-list">
+      {[...activities].reverse().map(activity => <div key={activity.version} className="topology-agent-change">
+        <strong>图纸 v{activity.version} · {activity.source === "manual" ? "手动编辑 · " : "Agent · "}{activity.status === "displayed" ? "已保存并显示" : "已保存 · 待合并"}</strong>
+        {activity.saved_at && <time dateTime={activity.saved_at}>{formatDate(activity.saved_at)}</time>}
         <span>新增 {activity.added} · 修改 {activity.modified} · 删除 {activity.removed}</span>
         {activity.removedLabels.length > 0 && <small title={activity.removedLabels.join("、")}>已删除：{activity.removedLabels.slice(0, 3).join("、")}{activity.removedLabels.length > 3 ? "…" : ""}</small>}
         <div>
           <button type="button" disabled={activity.status !== "displayed" || !activity.ids.length} onClick={() => onLocate?.(activity.ids)}>定位变化</button>
-          {activity.status === "displayed" && <button type="button" onClick={() => onUndoChange?.(activity.version)}>撤销这次变化</button>}
+          {activity.status === "displayed" && (activity.revision_id || activity.before) && <button type="button" onClick={() => onUndoChange?.(activity.version)}>撤销这次变化</button>}
         </div>
       </div>)}
-    </div>}
+      </div>
+    </details>}
     <div className="topology-agent-messages" ref={scrollRef} onScroll={(event) => { const el = event.currentTarget; pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50; }}>
       {!messages.length && <div className="topology-agent-intro"><IconSparkle size={28} /><h3>把想法画出来</h3><p>描述设备、连线与布局，或选中图纸对象让 Skill 修改。不连接真实设备。</p>{[
         ["绘制结构", "在当前图纸中添加两台交换机与一台路由器，分别命名并连线，排列整齐。"],

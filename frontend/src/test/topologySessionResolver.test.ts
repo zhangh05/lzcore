@@ -108,3 +108,30 @@ describe("TopologySessionResolver", () => {
     expect(localStorage.getItem(storageKey)).toBe("sess_new_created");
   });
 });
+
+
+it("reconciles a cached drawing session name and keeps user-authored titles", async () => {
+  vi.clearAllMocks();
+  localStorage.clear();
+  const topology = {topology_id: "title-sheet", name: "新图名"};
+  localStorage.setItem(scopedLocalStorageKey("drawing_session_v2:default:title-sheet"), "cached-title");
+  vi.mocked(sessionsApi.get).mockResolvedValueOnce({session: {session_id: "cached-title", status: "active", title: "拓扑 · 旧图名"}} as never);
+  await resolveTopologySession("default", topology);
+  expect(sessionsApi.rename).toHaveBeenCalledWith("cached-title", "default", "拓扑 · 新图名");
+  vi.mocked(sessionsApi.rename).mockClear();
+  vi.mocked(sessionsApi.get).mockResolvedValueOnce({session: {session_id: "cached-title", status: "active", title: "用户的分析会话"}} as never);
+  await resolveTopologySession("default", topology);
+  expect(sessionsApi.rename).not.toHaveBeenCalled();
+});
+
+
+it("keeps a valid cached session when title reconciliation is temporarily unavailable", async () => {
+  vi.clearAllMocks();
+  localStorage.clear();
+  localStorage.setItem(scopedLocalStorageKey("drawing_session_v2:default:retry-title"), "valid-session");
+  vi.mocked(sessionsApi.get).mockResolvedValueOnce({session: {session_id: "valid-session", status: "active", title: "拓扑 · old"}} as never);
+  vi.mocked(sessionsApi.rename).mockRejectedValueOnce(new Error("network interruption"));
+  const resolved = await resolveTopologySession("default", {topology_id: "retry-title", name: "new"});
+  expect(resolved).toBe("valid-session");
+  expect(sessionsApi.create).not.toHaveBeenCalled();
+});

@@ -270,3 +270,15 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
     });
   });
 });
+
+
+it("keeps persisted drawing activity collapsed and separate from messages", async () => {
+  render(<TopologyAgentPanel workspaceId="default" topology={mockTopology as never} selection={mockSelection}
+    onCompleted={() => {}} activities={[{version: 3, revision_id: "revision", source: "collaboration",
+      status: "displayed", ids: ["n1"], added: 1, modified: 0, removed: 0, removedLabels: []}]} />);
+  const record = screen.getByLabelText("图纸变化");
+  expect(record.tagName).toBe("DETAILS");
+  expect(record).not.toHaveAttribute("open");
+  expect(screen.getByText("图纸变化记录")).toBeInTheDocument();
+  expect(document.querySelector(".topology-agent-messages")?.contains(record)).toBe(false);
+});

@@ -1,7 +1,6 @@
 """Topology revision history: snapshot, diff and restore.
 
-The canvas saves on every drag, so the behaviour that matters is *what does not
-become a revision*.  History is only useful when it holds structural edits.
+Saved structural and geometry edits share a bounded persistent timeline; no-op saves do not create revisions.
 """
 
 from __future__ import annotations
@@ -49,7 +48,7 @@ def _two_node_topology(workspace: str) -> dict:
     })
 
 
-def test_layout_only_edits_do_not_create_revisions(workspace):
+def test_layout_edits_are_persisted_without_duplicate_noop_revisions(workspace):
     topo = _two_node_topology(workspace)
     assert len(drawings.list_topology_revisions(workspace, topo["topology_id"])) == 1
 
@@ -65,7 +64,11 @@ def test_layout_only_edits_do_not_create_revisions(workspace):
         drawings.save_topology(workspace, moved)
 
     revisions = drawings.list_topology_revisions(workspace, topo["topology_id"])
-    assert len(revisions) == 1
+    assert len(revisions) == 4
+    assert revisions[0]["activity"]["modified"] == 1
+    edit = drawings.get_topology_revision(workspace, topo["topology_id"], revisions[0]["revision_id"])["edit"]
+    assert edit["before"]["nodes"][0]["x"] == 116
+    assert edit["after"]["nodes"][0]["x"] == 124
     # cheap listing: metadata only, never the whole snapshot
     assert "snapshot" not in revisions[0]
     assert revisions[0]["summary"] == {"nodes": 2, "links": 0, "groups": 0, "canvas_items": 0}

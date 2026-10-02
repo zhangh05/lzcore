@@ -38,6 +38,24 @@ def _notify_topology_saved(workspace_id: str, saved: dict[str, Any]) -> None:
         pass
 
 
+def _sync_drawing_sessions(workspace_id: str, topology: dict) -> None:
+    """Keep resource metadata and managed titles current, including offline clients."""
+    from storage.session_store import list_sessions, update_session
+    topology_id = topology["topology_id"]
+    for session in list_sessions(workspace_id, limit=5000):
+        metadata = dict(session.get("metadata") or {})
+        raw_selection = metadata.get("workbench_selection")
+        selection = dict(raw_selection) if isinstance(raw_selection, dict) else {}
+        if metadata.get("topology_id") != topology_id and selection.get("skill_id") not in {
+                f"drawing:{topology_id}", f"drawing:{topology_id}:ro"}:
+            continue
+        selection["skill_name"] = f"拓扑绘图 · {topology['name']}"
+        title = session.get("title") or ""
+        update_session(session["session_id"], workspace_id,
+                       title=f"拓扑 · {topology['name']}" if title.startswith("拓扑 · ") else None,
+                       metadata={"topology_name": topology["name"], "workbench_selection": selection})
+
+
 def _drawing_transaction(func):
     @wraps(func)
     def mutate(workspace_id, *args, **kwargs):
@@ -209,7 +227,7 @@ def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) 
     by_id = {str(item["item_id"]): dict(item) for item in items}
     zones: dict[str, list[dict[str, Any]]] = {}
     for node in nodes:
-        zone = str(node.get("zone") or node.get("group_id") or "").strip()
+        zone = str(node.get("group_id") or node.get("zone") or "").strip()
         if zone:
             zones.setdefault(zone, []).append(node)
 
@@ -223,17 +241,18 @@ def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) 
     ]
     members_by_item: dict[str, list[dict[str, Any]]] = {}
     for zone, members in zones.items():
+        label = str(members[0].get("zone") or zone)
         # Membership wins over display text: renaming a box never creates a
         # new zone or changes its stable identity (including legacy ids).
         item_id = next((str(n.get("group_id")) for n in members
                         if str(n.get("group_id")) in by_id), "")
         if not item_id:
             item_id = next((key for key, item in by_id.items()
-                            if item.get("zone") == zone or item.get("text") == zone or key == zone), "")
+                            if key == zone or (not members[0].get("group_id") and (item.get("zone") == zone or item.get("text") == zone))), "")
         if not item_id:
             item_id = "zone-" + hashlib.sha256(zone.encode("utf-8")).hexdigest()[:16]
-            by_id[item_id] = {"item_id": item_id, "kind": "rectangle", "text": zone,
-                              "zone": zone, "auto_fit": True, **_calc_box(members),
+            by_id[item_id] = {"item_id": item_id, "kind": "rectangle", "text": label,
+                              "zone": label, "auto_fit": True, **_calc_box(members),
                               "style": dict(palette[len(by_id) % len(palette)])}
         # Earlier auto-synthesis could leave another generated box for the
         # same zone. Membership owns the identity; preserve manual decorations
@@ -242,7 +261,8 @@ def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) 
             if (duplicate_id != item_id and duplicate_id.startswith("zone-")
                     and duplicate.get("kind") in {"rectangle", "ellipse"}
                     and duplicate.get("auto_fit") is not False
-                    and zone in {duplicate.get("zone"), duplicate.get("text")}):
+                    and not any(node.get("group_id") == duplicate_id for node in nodes)
+                    and {zone, label} & {duplicate.get("zone"), duplicate.get("text")}):
                 if not by_id[item_id].get("text"):
                     by_id[item_id]["text"] = str(duplicate.get("text") or zone)
                 del by_id[duplicate_id]
@@ -254,7 +274,7 @@ def _fit_member_zones(nodes: list[dict[str, Any]], items: list[dict[str, Any]]) 
     for item_id, item in by_id.items():
         members = members_by_item.get(item_id, [])
         if members and item.get("kind") in {"rectangle", "ellipse"}:
-            item.setdefault("auto_fit", True)
+            item.setdefault("auto_fit", False)
             if item["auto_fit"]:
                 item.update(_calc_box(members))
         fitted.append(item)
@@ -277,7 +297,7 @@ def _normalize_node_ip(value: Any) -> str | None:
 
 
 @_drawing_transaction
-def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def save_topology(workspace_id: str, payload: dict[str, Any], *, edit_source: str = "manual") -> dict[str, Any]:
     topology_id = str(payload.get("topology_id") or _id("topo")).strip()
     existing = get_topology(workspace_id, topology_id)
     name = str(payload.get("name") or "").strip()
@@ -522,11 +542,8 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     for node in normalized_nodes:
         removed = removed_items.get(node.get("group_id"))
         if removed:
-            replacement = next((item for item in remaining_items.values()
-                                if node.get("zone") and node["zone"] in {item.get("zone"), item.get("text")}), None)
-            node["group_id"] = replacement["item_id"] if replacement else None
-            if not replacement:
-                node["zone"] = None
+            node["group_id"] = None
+            node["zone"] = None
     normalized_canvas_items = _fit_member_zones(normalized_nodes, normalized_canvas_items)
     record = {
         "schema_version": 2,
@@ -547,7 +564,7 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return existing
     _store(workspace_id).save("topologies", topology_id, record)
     try:
-        _record_topology_revision(workspace_id, record)
+        _record_topology_revision(workspace_id, record, before=existing, source=edit_source)
     except Exception:  # history is a convenience, never a reason to lose a save
         pass
     from .node_bindings import prune_node_bindings
@@ -557,6 +574,8 @@ def save_topology(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         {str(node.get("node_id") or "") for node in normalized_nodes},
     )
     saved = _public_topology(record)
+    if not existing or existing.get("name") != saved["name"]:
+        _sync_drawing_sessions(workspace_id, saved)
     _notify_topology_saved(workspace_id, saved)
     return saved
 
@@ -630,8 +649,12 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
     if translate is not None:
         if not isinstance(translate, dict):
             raise ValueError("translate_invalid")
-        ids = translate.get("node_ids")
-        if not isinstance(ids, list) or not ids or any(not isinstance(value, str) or value not in nodes_by_id for value in ids):
+        ids = translate.get("node_ids", [])
+        item_ids = translate.get("canvas_item_ids", [])
+        existing_items = {item["item_id"]: item for item in existing.get("canvas_items") or []}
+        if not isinstance(item_ids, list) or any(not isinstance(value, str) or value not in existing_items for value in item_ids):
+            raise ValueError("translate_canvas_items_not_found")
+        if not isinstance(ids, list) or not (ids or item_ids) or any(not isinstance(value, str) or value not in nodes_by_id for value in ids):
             raise ValueError("translate_nodes_not_found")
         try:
             dx, dy = float(translate.get("dx", 0)), float(translate.get("dy", 0))
@@ -639,6 +662,15 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
             raise ValueError("translate_invalid") from None
         if not math.isfinite(dx) or not math.isfinite(dy):
             raise ValueError("translate_invalid")
+        if translate.get("include_members"):
+            ids = list(dict.fromkeys([*ids, *(node_id for node_id, node in nodes_by_id.items()
+                                            if node.get("group_id") in item_ids)]))
+        explicit_items = {str(item.get("item_id") or item.get("id") or "") for item in item_updates
+                          if "x" in item or "y" in item}
+        item_updates = [{"item_id": item_id, "x": existing_items[item_id]["x"] + dx,
+                         "y": existing_items[item_id]["y"] + dy,
+                         "auto_fit": bool(existing_items[item_id].get("auto_fit")) if translate.get("include_members") else False}
+                        for item_id in dict.fromkeys(item_ids) if item_id not in explicit_items] + item_updates
         explicit = {str(item.get("node_id") or item.get("id") or "") for item in node_updates if "x" in item or "y" in item}
         node_updates = [{"node_id": node_id, "x": nodes_by_id[node_id]["x"] + dx,
                          "y": nodes_by_id[node_id]["y"] + dy} for node_id in dict.fromkeys(ids) if node_id not in explicit] + node_updates
@@ -777,6 +809,8 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
             update["auto_fit"] = False
         items_by_id[item_id] = {**items_by_id.get(item_id, {}), **update, "item_id": item_id}
     remove_items = payload.get("remove_canvas_item_ids") or []
+    if not isinstance(remove_items, list) or any(not isinstance(value, str) for value in remove_items):
+        raise ValueError("remove_canvas_item_ids must be a list of strings")
     if isinstance(remove_items, list):
         for item_id in remove_items:
             items_by_id.pop(str(item_id).strip(), None)
@@ -794,7 +828,7 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
         "canvas_items": list(items_by_id.values()),
         "name": payload.get("name", existing["name"]),
         "description": payload.get("description", existing["description"]),
-    })
+    }, edit_source="agent")
 
 
 @_drawing_transaction
@@ -827,7 +861,7 @@ def remove_topology_node(workspace_id: str, topology_id: str, node_id: str, *, e
 # mouse-up.  Versioning every one of those saves would bury the few edits a
 # human actually wants to get back, so a revision is recorded only when the
 # *structure* of the diagram changes — which objects exist and how they are
-# connected.  Pure layout movement is deliberately not a revision.
+# connected. Saved geometry edits also receive persistent change records.
 # ---------------------------------------------------------------------------
 
 TOPOLOGY_REVISION_LIMIT = 40
@@ -933,9 +967,36 @@ def _topology_revisions(workspace_id: str, topology_id: str) -> list[dict[str, A
     return revisions
 
 
-def _record_topology_revision(workspace_id: str, record: dict[str, Any]) -> None:
-    """Snapshot a topology when its structure, not just its layout, changed."""
-    signature = _topology_structure_signature(record)
+def _revision_edit(before: dict, after: dict) -> dict:
+    """Store only changed objects for a conflict-aware inverse, never another full graph."""
+    old = {key: before.get(key) for key in ("topology_id", "version", "name", "description")}
+    new = {key: after.get(key) for key in old}
+    activity = {"ids": [], "added": 0, "modified": 0, "removed": 0, "removedLabels": []}
+    for collection, key, prefix in (("nodes", "node_id", ""), ("links", "link_id", ""),
+                                  ("groups", "group_id", "group-"), ("canvas_items", "item_id", "canvas-")):
+        previous = {item[key]: item for item in before.get(collection, [])}
+        current = {item[key]: item for item in after.get(collection, [])}
+        identities = {identity for identity in previous.keys() | current.keys()
+                      if previous.get(identity) != current.get(identity)}
+        old[collection] = [item for item in before.get(collection, []) if item[key] in identities]
+        new[collection] = [item for item in after.get(collection, []) if item[key] in identities]
+        for identity in sorted(identities):
+            if identity not in current:
+                item = previous[identity]
+                activity["removed"] += 1
+                activity["removedLabels"].append(str(item.get("display_name") or item.get("text") or item.get("name") or identity))
+            else:
+                activity["ids"].append(prefix + identity)
+                activity["modified" if identity in previous else "added"] += 1
+    if any(before.get(key) != after.get(key) for key in ("name", "description")):
+        activity["modified"] += 1
+    return {"before": old, "after": new, "activity": activity}
+
+
+def _record_topology_revision(workspace_id: str, record: dict[str, Any], *, before: dict | None = None, source: str = "manual") -> None:
+    """Persist saved drawing edits, including geometry, in the existing bounded history."""
+    signature = hashlib.sha256(json.dumps({key: record.get(key) for key in
+        ("name", "description", "nodes", "links", "groups", "canvas_items")}, sort_keys=True).encode()).hexdigest()
     store = _store(workspace_id)
     revisions = _topology_revisions(workspace_id, str(record.get("topology_id") or ""))
     if revisions and str(revisions[-1].get("signature") or "") == signature:
@@ -947,6 +1008,8 @@ def _record_topology_revision(workspace_id: str, record: dict[str, Any]) -> None
         "topology_id": str(record.get("topology_id") or ""),
         "version": int(record.get("version") or 1),
         "signature": signature,
+        "source": source,
+        "edit": _revision_edit(before, _public_topology(record)) if before else None,
         "saved_at": str(record.get("updated_at") or now_iso()),
         "name": str(record.get("name") or ""),
         "summary": {
@@ -963,6 +1026,7 @@ def _record_topology_revision(workspace_id: str, record: dict[str, Any]) -> None
         store.delete(collection, str(stale.get("revision_id") or ""))
 
 
+@_drawing_transaction
 def list_topology_revisions(workspace_id: str, topology_id: str) -> list[dict[str, Any]]:
     """Revisions, newest first, without the snapshots (a list stays cheap).
 
@@ -983,6 +1047,8 @@ def list_topology_revisions(workspace_id: str, topology_id: str) -> list[dict[st
             "saved_at": item.get("saved_at"),
             "name": item.get("name"),
             "summary": item.get("summary") or {},
+            "source": item.get("source", "manual"),
+            "activity": (item.get("edit") or {}).get("activity"),
         }
         for item in reversed(revisions)
     ]

@@ -26,6 +26,7 @@ export async function resolveTopologySession(
       const res = await sessionsApi.get(cachedId, workspaceId);
       if (res?.session && res.session.status === "active") {
         syncLocalStorageSkill(cachedId, topoId);
+        await syncManagedTitle(cachedId, workspaceId, res.session.title, topology.name);
         return cachedId;
       }
     }
@@ -57,10 +58,7 @@ export async function resolveTopologySession(
 
       // 若历史会话标题陈旧（如“拓扑 · 2”），自动同步最新图纸名
       const expectedTitle = `拓扑 · ${topology.name}`;
-      if (matched.title !== expectedTitle) {
-        void sessionsApi.rename(existingId, workspaceId, expectedTitle).catch(() => {});
-        useSessionStore.getState().bumpSessionList();
-      }
+      if (matched.title !== expectedTitle) await syncManagedTitle(existingId, workspaceId, matched.title, topology.name);
       return existingId;
     }
   } catch (err) {
@@ -104,4 +102,15 @@ function syncLocalStorageSkill(sessionId: string, topologyId: string) {
       }),
     );
   } catch { /* noop */ }
+}
+
+async function syncManagedTitle(sessionId: string, workspaceId: string, title: string | undefined, name: string) {
+  const expected = `拓扑 · ${name}`;
+  if (!title?.startsWith("拓扑 · ") || title === expected) return;
+  try {
+    await sessionsApi.rename(sessionId, workspaceId, expected);
+    useSessionStore.getState().bumpSessionList();
+  } catch {
+    // A title reconciliation failure must not create a second drawing session.
+  }
 }

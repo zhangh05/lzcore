@@ -60,7 +60,7 @@ def test_zone_is_fitted_around_nodes_that_name_it(workspace):
         ],
         "canvas_items": [{
             "item_id": "zone1", "kind": "rectangle", "text": "核心",
-            "x": 0, "y": 0, "width": 40, "height": 40,
+            "x": 0, "y": 0, "width": 40, "height": 40, "auto_fit": True,
         }],
     })
     zone = topo["canvas_items"][0]

@@ -195,7 +195,7 @@ def test_fit_member_zones_adapts_to_member_nodes(workspace):
             {"node_id": "dev2", "display_name": "D2", "x": 300, "y": 400, "group_id": "zone_rect"},
         ],
         "canvas_items": [
-            {"item_id": "zone_rect", "kind": "rectangle", "text": "数据中心", "x": 0, "y": 0, "width": 50, "height": 50},
+            {"item_id": "zone_rect", "kind": "rectangle", "text": "数据中心", "x": 0, "y": 0, "width": 50, "height": 50, "auto_fit": True},
         ],
     })
     zone = topo["canvas_items"][0]

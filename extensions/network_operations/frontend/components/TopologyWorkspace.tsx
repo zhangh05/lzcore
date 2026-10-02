@@ -612,6 +612,23 @@ export default function TopologyWorkspace({
   const [history, setHistory] = useState<DrawingEdit[]>([]);
   const [future, setFuture] = useState<DrawingEdit[]>([]);
   const [drawingActivities, setDrawingActivities] = useState<DrawingActivity[]>([]);
+  useEffect(() => {
+    if (!activeTopology) return;
+    let cancelled = false;
+    void apiRequest<{ revisions: Array<{ revision_id: string; version: number; saved_at: string; source: string; activity?: Pick<DrawingActivity, "ids" | "added" | "modified" | "removed" | "removedLabels"> }> }>({
+      url: `/extensions/network.operations/topologies/${activeTopology.topology_id}/revisions`, params: { workspace_id: workspaceId },
+    }).then(response => {
+      if (cancelled) return;
+      if (!Array.isArray(response.revisions)) throw new Error("invalid_revision_response");
+      setDrawingActivities(previous => [...previous.filter(local => !response.revisions.some(item => item.version === local.version && item.activity)),
+        ...response.revisions.filter(item => item.activity).map(item => ({
+        ...item.activity!, version: item.version, revision_id: item.revision_id, saved_at: item.saved_at,
+        source: item.source === "agent" ? "collaboration" : "manual",
+        status: previous.find(activity => activity.version === item.version)?.status || "displayed",
+      } as DrawingActivity))].sort((a, b) => a.version - b.version).slice(-20));
+    }).catch(() => { if (!cancelled) setNotice("图纸变化记录暂未加载，画布与对话仍保留", false); });
+    return () => { cancelled = true; };
+  }, [workspaceId, activeTopology?.topology_id, activeTopology?.version, setNotice]);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "conflict">("saved");
   useEffect(() => {
@@ -1420,16 +1437,27 @@ export default function TopologyWorkspace({
     setHistory(previous => [...previous, entry]);
   }, [future, applyHistoryEntry]);
 
-  const undoDrawingChange = useCallback((version: number) => {
+  const undoDrawingChange = useCallback(async (version: number) => {
     const index = history.map(entry => entry.source === "collaboration" && entry.after.version === version).lastIndexOf(true);
-    const entry = history[index];
-    if (!entry) { setNotice("这次变化已撤销或不在当前撤销记录中", false); return; }
+    let entry = history[index];
+    if (!entry) {
+      const activity = drawingActivities.find(item => item.version === version);
+      const topology = activeTopologyRef.current;
+      if (!activity?.revision_id || !topology) { setNotice("这次变化不在保留的记录中", false); return; }
+      try {
+        const response = await apiRequest<{ edit: { before: Topology; after: Topology } }>({
+          url: `/extensions/network.operations/topologies/${topology.topology_id}/revisions/${activity.revision_id}/edit`, params: { workspace_id: workspaceId },
+        });
+        if (activeTopologyRef.current?.topology_id !== topology.topology_id || workspaceIdRef.current !== workspaceId) return;
+        entry = { ...response.edit, source: "collaboration" };
+      } catch { setNotice("无法读取这次变化，请重试", false); return; }
+    }
     if (!applyHistoryEntry(entry, true)) return;
     setHistory(previous => previous.filter((_, itemIndex) => itemIndex !== index));
     setFuture([]);
     setDrawingActivities(previous => previous.filter(item => item.version !== version));
     setNotice("已撤销这次协作变化，其他编辑已保留；保存后同步到服务端", true);
-  }, [history, applyHistoryEntry, setNotice]);
+  }, [history, drawingActivities, workspaceId, applyHistoryEntry, setNotice]);
 
   const prepareDrawing = useCallback(async () => {
     const targetId = activeTopologyRef.current?.topology_id;

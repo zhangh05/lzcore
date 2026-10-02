@@ -1538,8 +1538,8 @@ details[open] .task-phase-caret {
 }
 
 @media (max-width: 900px) {
-  .wb-shell { grid-template-columns: minmax(0, 1fr); }
-  .task-progress-panel { display: none; }
+  .wb-shell { grid-template-columns: minmax(0, 1fr) minmax(240px, 30%); }
+  .task-progress-panel { display: grid; }
   .wb-conversation-column { border-right: 0; }
   .wb-chat-list { padding-inline: 12px; }
   .wb-header { gap: 10px; }
@@ -2373,4 +2373,14 @@ details[open] .task-phase-caret {
   transform: rotate(-135deg);
 }
 
+/* Scroll cards instead of compressing their contents as a window gets shorter. */
+.task-progress-body > * { flex-shrink: 0; }
+.task-in-flight-header { flex-wrap: wrap; gap: var(--space-2); align-items: flex-start; }
+.task-in-flight-note, .in-flight-info { overflow-wrap: anywhere; }
+@media (max-width: 620px) {
+  .wb-shell { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .wb-conversation-column { min-height: 65vh; }
+  .task-progress-panel { min-height: 280px; border-left: 0; border-top: 1px solid var(--line-2); }
+  .wb-shell.is-progress-collapsed { grid-template-columns: minmax(0, 1fr) 40px; }
+}
 }
