@@ -24,7 +24,7 @@ const TOPOLOGY = {
 };
 
 /** Serve a fixed drawing and record every save the UI attempts. */
-async function stubTopology(page: import("@playwright/test").Page) {
+async function stubTopology(page: import("@playwright/test").Page, source = TOPOLOGY) {
   const saves: Array<Record<string, unknown>> = [];
   await page.route("**/api/extensions/network.operations/topologies**", async route => {
     const request = route.request();
@@ -32,11 +32,11 @@ async function stubTopology(page: import("@playwright/test").Page) {
     if (request.method() === "PUT") {
       const body = JSON.parse(request.postData() || "{}");
       saves.push(body);
-      return route.fulfill({ json: { ok: true, topology: { ...TOPOLOGY, ...body, version: (body.version || 1) + 1 } } });
+      return route.fulfill({ json: { ok: true, topology: { ...source, ...body, version: (body.version || 1) + 1 } } });
     }
     if (url.pathname.endsWith("/revisions")) return route.fulfill({ json: { revisions: [] } });
-    if (url.pathname.endsWith(`/${TOPOLOGY.topology_id}`)) return route.fulfill({ json: { topology: TOPOLOGY } });
-    return route.fulfill({ json: { topologies: [TOPOLOGY] } });
+    if (url.pathname.endsWith(`/${source.topology_id}`)) return route.fulfill({ json: { topology: source } });
+    return route.fulfill({ json: { topologies: [source] } });
   });
   return saves;
 }
@@ -195,5 +195,71 @@ for (const scenario of ['node', 'region', 'free', 'selection', 'lock'] as const)
     expect(stored.x).toBeCloseTo(anchor.x, 4); expect(stored.y).toBeCloseTo(anchor.y, 4);
     await page.reload();
     await expect.poll(positions).toEqual(preview);
+  });
+}
+
+for (const compact of [false, true]) for (const zoom of [0.6, 1.3]) for (const edge of ['top', 'bottom', 'left', 'right'] as const) {
+  test(`23e. ${edge} guide uses actual icon edges at zoom ${zoom}, compact ${compact}`, async ({ page }, testInfo) => {
+    const saves = await stubTopology(page, { ...TOPOLOGY, canvas_items: [] });
+    await page.goto(`/topology?topology=${TOPOLOGY.topology_id}`);
+    const host = page.locator('.netops-cytoscape').first();
+    await expect.poll(() => host.evaluate((el: any) => el._cyreg?.cy?.nodes().length)).toBe(2);
+    await page.getByRole('checkbox', { name: '网格', exact: true }).uncheck();
+    await page.getByRole('checkbox', { name: '紧凑模式', exact: true }).setChecked(compact);
+    await host.evaluate((el: any) => { el._cyreg.cy.getElementById('edit-a').select(); });
+    await expect(page.locator('.topology-inspector')).toBeVisible();
+    await host.evaluate((el: any, zoom) => { const cy = el._cyreg.cy; cy.stop(); cy.zoom(zoom); cy.pan({ x: 30, y: 30 }); }, zoom);
+    const geometry = () => host.evaluate((el: any) => {
+      const cy = el._cyreg.cy;
+      return ['edit-a', 'edit-b'].map(id => { const n = cy.getElementById(id); return { ...n.position(), width: n.width(), height: n.height() }; });
+    });
+    const [moving, reference] = await geometry();
+    expect(reference.width).toBe(compact ? 52 : 76);
+    expect(reference.height).toBe(compact ? 42 : 60);
+    const horizontal = edge === 'top' || edge === 'bottom';
+    const direction = edge === 'top' || edge === 'left' ? -1 : 1;
+    const half = horizontal ? moving.height / 2 : moving.width / 2;
+    const legacyHalf = horizontal ? 38 : 47;
+    const ref = horizontal ? reference.y : reference.x;
+    const point = (axis: number) => horizontal ? { x: 240, y: axis } : { x: axis, y: 240 };
+    const box = (await host.boundingBox())!;
+    const moveTo = async (target: { x: number; y: number }, steps = 1) => {
+      const p = await host.evaluate((el: any, target) => { const cy = el._cyreg.cy; return { x: target.x * cy.zoom() + cy.pan().x, y: target.y * cy.zoom() + cy.pan().y }; }, target);
+      await page.mouse.move(box.x + p.x, box.y + p.y, { steps });
+    };
+    await moveTo(moving);
+    await page.mouse.down();
+    // This position used to snap to a fictional 94x76 target edge, producing
+    // exactly the guide-through-an-icon shown in the user's screenshot.
+    await moveTo(point(ref + direction * (legacyHalf - half)), 12);
+    const verifyVisibleGuides = async () => {
+      const [a, b] = await geometry();
+      const lines = await page.locator('.netops-align-guides line').evaluateAll(lines => lines.map(line => ({ x1: Number(line.getAttribute('x1')), x2: Number(line.getAttribute('x2')), y1: Number(line.getAttribute('y1')), y2: Number(line.getAttribute('y2')) })));
+      for (const line of lines) {
+        const isHorizontal = line.y1 === line.y2;
+        const coordinate = ((isHorizontal ? line.y1 : line.x1) - 30) / zoom;
+        for (const node of [a, b]) {
+          const centre = isHorizontal ? node.y : node.x;
+          const half = (isHorizontal ? node.height : node.width) / 2;
+          expect(Math.min(...[centre - half, centre, centre + half].map(v => Math.abs(v - coordinate)))).toBeLessThan(0.001);
+        }
+      }
+      return lines;
+    };
+    await verifyVisibleGuides();
+    // Now approach the real edge from within two screen pixels. The line,
+    // both icon bodies, mouse-up position and saved coordinates must agree.
+    await moveTo(point(ref + direction * 2 / zoom), 12);
+    const lines = await verifyVisibleGuides();
+    expect(lines.some(line => horizontal ? line.y1 === line.y2 : line.x1 === line.x2)).toBe(true);
+    if (edge === 'top' && zoom === 1.3) await host.screenshot({ path: testInfo.outputPath('actual-edge-alignment.png') });
+    const [preview] = await geometry();
+    expect(horizontal ? preview.y : preview.x).toBeCloseTo(ref, 4);
+    await page.mouse.up();
+    await expect.poll(geometry).toEqual([preview, reference]);
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await expect.poll(() => saves.length).toBe(1);
+    const saved = (saves[0].nodes as any[]).find(n => n.node_id === 'edit-a');
+    expect(saved.x).toBeCloseTo(preview.x, 4); expect(saved.y).toBeCloseTo(preview.y, 4);
   });
 }

@@ -152,7 +152,20 @@ def run(exe: Path, mode: str, output: Path):
             point = host.evaluate("el => el._cyreg.cy.getElementById('a').renderedPosition()")
             page.mouse.move(box['x']+point['x'], box['y']+point['y'])
             page.mouse.down()
-            page.mouse.move(box['x']+point['x']+80, box['y']+point['y'], steps=16)
+            # Approach the obsolete 94x76 edge first. Any displayed horizontal
+            # guide must meet the real 76x60 bodies, not the old imaginary edge.
+            page.mouse.move(box['x']+point['x']+80, box['y']+point['y']-8, steps=16)
+            assert host.evaluate("""el => {
+              const cy=el._cyreg.cy, pan=cy.pan(), zoom=cy.zoom();
+              const bodies=['a','b'].map(id => {const n=cy.getElementById(id); return {y:n.position().y,h:n.height()};});
+              return [...document.querySelectorAll('.netops-align-guides line')].every(line => {
+                const y1=Number(line.getAttribute('y1')),y2=Number(line.getAttribute('y2'));
+                if(y1!==y2) return true;
+                const y=(y1-pan.y)/zoom;
+                return bodies.every(n => Math.min(...[n.y-n.h/2,n.y,n.y+n.h/2].map(v=>Math.abs(v-y)))<.001);
+              });
+            }"""), 'Guide does not meet actual icon boundaries'
+            page.mouse.move(box['x']+point['x']+80, box['y']+point['y'], steps=8)
             preview = host.evaluate("el => el._cyreg.cy.getElementById('a').position()")
             assert abs(preview['y']-160.5) < .001, preview
             page.mouse.up()

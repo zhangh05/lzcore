@@ -1218,9 +1218,7 @@ export default function NetOpsCanvas(props: Props) {
       // Smart guides. Aligning by eye is the slowest part of tidying a
       // diagram, so a dragged node snaps to the edges and centres of its
       // neighbours and shows why.
-      const NODE_HALF_W = 47;
-      const NODE_HALF_H = 38;
-      const SNAP = 5;
+      const SNAP_SCREEN_PX = 5;
       cy.on("grab", "node", (event) => {
         const node = event.target as CyNode | undefined;
         if (!node || node.id().startsWith("group-") || grabAnchorRef.current) return;
@@ -1267,8 +1265,8 @@ export default function NetOpsCanvas(props: Props) {
         if (grabAnchorRef.current && grabAnchorRef.current.id !== node.id()) return;
         setViewport({ ...cy.pan(), zoom: cy.zoom() });
         const selectedIds = new Set(cy.$("node:selected").map((item) => item.id()));
-        const halfW = Math.max(8, ((node as CyNode).width?.() || 94) / 2);
-        const halfH = Math.max(8, ((node as CyNode).height?.() || 76) / 2);
+        const halfW = node.width() / 2;
+        const halfH = node.height() / 2;
 
         if (!grabAnchorRef.current) {
           const grabbedId = node.id();
@@ -1302,14 +1300,19 @@ export default function NetOpsCanvas(props: Props) {
         }
 
         const lockedPeerIds = new Set(lockGroupInitialPositionsRef.current.keys());
-        const others = [
-          ...propsRef.current.topology.nodes
-            .filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id) && !lockedPeerIds.has(item.node_id))
-            .map((item) => ({ x: item.x, y: item.y, halfW: NODE_HALF_W, halfH: NODE_HALF_H })),
-          ...(propsRef.current.topology.canvas_items || [])
-            .filter((item) => `canvas-${item.item_id}` !== node.id() && !selectedIds.has(`canvas-${item.item_id}`))
-            .map((item) => ({ x: item.x, y: item.y, halfW: item.width / 2, halfH: item.height / 2 })),
-        ];
+        // Both ends of a guide use the live renderer's body geometry. Fixed
+        // 94x76 target sizes produced guides inside the actual 76x60 icons,
+        // and diverged further in compact mode. Labels are not body edges.
+        const otherIds = [
+          ...propsRef.current.topology.nodes.map(item => item.node_id),
+          ...(propsRef.current.topology.canvas_items || []).map(item => `canvas-${item.item_id}`),
+        ].filter(id => id !== node.id() && !selectedIds.has(id) && !lockedPeerIds.has(id));
+        const others = otherIds.flatMap(id => {
+          const other = cy.getElementById(id) as CyNode;
+          if (!other.length) return [];
+          return [{ ...other.position(), halfW: other.width() / 2, halfH: other.height() / 2 }];
+        });
+        const snapDistance = SNAP_SCREEN_PX / cy.zoom();
         const position = node.position();
         // A guide pairs one of this node's three lines (near edge, centre, far
         // edge) with one of a neighbour's. What a pairing gives you is the
@@ -1324,7 +1327,7 @@ export default function NetOpsCanvas(props: Props) {
           candidates.forEach((candidate) => {
             targets.forEach((target) => {
               const diff = Math.abs(target - candidate);
-              if (diff <= SNAP && (!best || diff < best.diff)) {
+              if (diff <= snapDistance && (!best || diff < best.diff)) {
                 best = { diff, shift: target - candidate, line: target };
               }
             });
@@ -1390,15 +1393,15 @@ export default function NetOpsCanvas(props: Props) {
 
         const lines: AlignGuide[] = [];
         if (snappedX) {
-          const near = others.filter((other) => Math.abs(other.x - nextX) <= NODE_HALF_W * 2 + 60);
-          const top = Math.min(nextY, ...near.map((other) => other.y)) - NODE_HALF_H - 12;
-          const bottom = Math.max(nextY, ...near.map((other) => other.y)) + NODE_HALF_H + 12;
+          const near = others.filter((other) => Math.abs(other.x - nextX) <= halfW + other.halfW + 60);
+          const top = Math.min(nextY - halfH, ...near.map((other) => other.y - other.halfH)) - 12;
+          const bottom = Math.max(nextY + halfH, ...near.map((other) => other.y + other.halfH)) + 12;
           lines.push({ x1: snappedX.line, y1: top, x2: snappedX.line, y2: bottom });
         }
         if (snappedY) {
-          const near = others.filter((other) => Math.abs(other.y - nextY) <= NODE_HALF_H * 2 + 60);
-          const leftEdge = Math.min(nextX, ...near.map((other) => other.x)) - NODE_HALF_W - 12;
-          const rightEdge = Math.max(nextX, ...near.map((other) => other.x)) + NODE_HALF_W + 12;
+          const near = others.filter((other) => Math.abs(other.y - nextY) <= halfH + other.halfH + 60);
+          const leftEdge = Math.min(nextX - halfW, ...near.map((other) => other.x - other.halfW)) - 12;
+          const rightEdge = Math.max(nextX + halfW, ...near.map((other) => other.x + other.halfW)) + 12;
           lines.push({ x1: leftEdge, y1: snappedY.line, x2: rightEdge, y2: snappedY.line });
         }
         const signature = lines.map((line) => `${Math.round(line.x1)}:${Math.round(line.y1)}:${Math.round(line.x2)}:${Math.round(line.y2)}`).join("|");
