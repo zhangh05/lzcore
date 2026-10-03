@@ -37,4 +37,3 @@ export const CANVAS_GROUP = {
   light: { fill: "#f8f9f9", border: "#d7dee1", text: "#566368" },
   dark: { fill: "#15191c", border: "#2b333a", text: "#abb5bd" },
 };
-
