@@ -54,7 +54,7 @@ import { Link, useNavigate } from "../../../../frontend/src/router";
 import { useSessionStore } from "../../../../frontend/src/stores/session";
 import { apiRequest } from "../../../../frontend/src/api/client";
 import { onTopologyUpdated, onTransportResumed } from "../../../../frontend/src/realtime/turnTransport";
-import { overlayBorderStatus, overlayCanvasLine, overlayCaption, type NodeOverlay } from "./nodeOverlay";
+import { overlayObservationStatus, overlayCanvasLine, overlayCaption, type NodeOverlay } from "./nodeOverlay";
 import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import { Button } from "../../../../frontend/src/components/ui";
 import { LAYOUT_PRESETS, layoutTopology, type LayoutAlgorithm } from "./topologyLayout";
@@ -66,6 +66,7 @@ import { mergeTopologies, type MergeConflict, type MergeStats } from "./topology
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
 import { applyDrawingEdit, drawingActivity, hasDrawingChanges, type DrawingActivity, type DrawingEdit } from "./topologyCollaboration";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
+import { LinkColorControl } from "./LinkColorControl";
 import { TopologyWhiteboard } from "./TopologyWhiteboard";
 import { exportTopologyToSvg, svgToPngDataUrl, svgToPngBlob, nativeSaveBlob } from "./topologyExport";
 import "./TopologyStudio.css";
@@ -1039,6 +1040,7 @@ export default function TopologyWorkspace({
   const [gridEnabled, setGridEnabled] = useState(true);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);
+  const [showObservation, setShowObservation] = useState(true);
   // Filters dim rather than hide, so the diagram never turns into a different
   // drawing than the one being discussed.
   // Imperative canvas handle (export / focus / viewport) and transient canvas
@@ -3428,6 +3430,7 @@ export default function TopologyWorkspace({
                 </span>
                 <label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label>
                 <label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label>
+                <label title="只显示最近证据标记，不代表当前健康，也不修改图纸"><input type="checkbox" checked={showObservation} onChange={event => setShowObservation(event.target.checked)} />最近观测</label>
                 <label title="紧凑模式缩小节点尺寸，避免密集拓扑中标签重叠"><input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />紧凑模式</label>
               </>
             )}
@@ -3446,8 +3449,8 @@ export default function TopologyWorkspace({
           )}
           <NetOpsCanvas
             topology={activeTopology}
-            nodeObservationStatus={Object.fromEntries(nodeOverlays.map((item) => [item.node_id, overlayBorderStatus(item)]))}
-            nodeOverlayLines={Object.fromEntries(nodeOverlays.map((item) => [item.node_id, overlayCanvasLine(item)]))}
+            nodeObservationStatus={showObservation ? Object.fromEntries(nodeOverlays.map((item) => [item.node_id, overlayObservationStatus(item)])) : {}}
+            nodeOverlayLines={showObservation ? Object.fromEntries(nodeOverlays.map((item) => [item.node_id, overlayCanvasLine(item)])) : {}}
             mode={canvasMode}
             interactionMode={workspaceMode}
             gridEnabled={gridEnabled}
@@ -4352,96 +4355,17 @@ export default function TopologyWorkspace({
                 </div>
               </div>
 
-              <div className="inspector-field">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span>连线颜色</span>
-                  {selectedLink.style?.color && (
-                    <button
-                      type="button"
-                      className="link-style-reset-btn"
-                      onClick={() => {
-                        if (!activeTopology) return;
-                        const updated = activeTopology.links.map((l) => {
-                          if (l.link_id !== selectedLink.link_id) return l;
-                          const nextStyle = { ...l.style };
-                          delete nextStyle.color;
-                          return { ...l, style: Object.keys(nextStyle).length ? nextStyle : undefined };
-                        });
-                        pushState({ ...activeTopology, links: updated });
-                      }}
-                    >
-                      恢复状态色
-                    </button>
-                  )}
-                </div>
-                <div className="link-color-grid">
-                  {[
-                    { label: "Cisco蓝", color: "#1262aa" },
-                    { label: "科技蓝", color: "#2563eb" },
-                    { label: "运行绿", color: "#10b981" },
-                    { label: "告警橙", color: "#f59e0b" },
-                    { label: "故障红", color: "#ef4444" },
-                    { label: "深石灰", color: "#64748b" },
-                    { label: "关键紫", color: "#8b5cf6" },
-                    { label: "专网青", color: "#06b6d4" },
-                  ].map((preset) => {
-                    const isSelected = selectedLink.style?.color?.toLowerCase() === preset.color.toLowerCase();
-                    return (
-                      <button
-                        key={preset.color}
-                        type="button"
-                        className={`link-color-swatch ${isSelected ? "active" : ""}`}
-                        style={{ backgroundColor: preset.color }}
-                        title={`${preset.label} (${preset.color})`}
-                        aria-label={preset.label}
-                        onClick={() => {
-                          if (!activeTopology) return;
-                          const updated = activeTopology.links.map((l) =>
-                            l.link_id === selectedLink.link_id
-                              ? { ...l, style: { ...l.style, color: preset.color } }
-                              : l
-                          );
-                          pushState({ ...activeTopology, links: updated });
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-                <div className="link-custom-color-row">
-                  <input
-                    type="color"
-                    className="link-color-picker"
-                    value={selectedLink.style?.color || "#1262aa"}
-                    aria-label="自定义拾色器"
-                    onChange={(e) => {
-                      if (!activeTopology) return;
-                      const val = e.target.value;
-                      const updated = activeTopology.links.map((l) =>
-                        l.link_id === selectedLink.link_id
-                          ? { ...l, style: { ...l.style, color: val } }
-                          : l
-                      );
-                      pushState({ ...activeTopology, links: updated });
-                    }}
-                  />
-                  <input
-                    type="text"
-                    className="link-color-text"
-                    placeholder="Hex 颜色如 #2563eb"
-                    value={selectedLink.style?.color || ""}
-                    onChange={(e) => {
-                      if (!activeTopology) return;
-                      const val = e.target.value.trim();
-                      const updated = activeTopology.links.map((l) =>
-                        l.link_id === selectedLink.link_id
-                          ? { ...l, style: { ...l.style, color: val || undefined } }
-                          : l
-                      );
-                      pushState({ ...activeTopology, links: updated });
-                    }}
-                  />
-                </div>
-              </div>
+              <LinkColorControl link={selectedLink} onChange={(color) => {
+                if (!activeTopology) return;
+                const links = activeTopology.links.map(link => {
+                  if (link.link_id !== selectedLink.link_id) return link;
+                  const style = { ...link.style };
+                  if (color) style.color = color;
+                  else delete style.color;
+                  return { ...link, style: Object.keys(style).length ? style : undefined };
+                });
+                pushState({ ...activeTopology, links });
+              }} />
 
               {(selectedLink.style?.color || selectedLink.style?.width || selectedLink.style?.line_style || selectedLink.style?.curve_style) && (
                 <button

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import type { Topology, TopologyCanvasItem, TopologyLink } from "./TopologyWorkspace";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
+import { DRAWING_DEFAULTS, drawingContrastUnderlay, linkDrawingAppearance } from "./topologyDrawingAppearance";
 import { portLabelOffsets } from "./topologyPortLabels";
 
 /** Selecting information must never mutate the drawing by accident. */
@@ -45,7 +46,7 @@ export type { NodeRuntimeStatus } from "./topologyPalette";
 
 type Props = {
   topology: Topology;
-  nodeObservationStatus?: Record<string, NodeRuntimeStatus>;
+  nodeObservationStatus?: Record<string, NodeRuntimeStatus | null>;
   nodeOverlayLines?: Record<string, string>;
   mode: CanvasMode;
   interactionMode?: "view" | "edit";
@@ -483,7 +484,10 @@ function renderMotionOverlay(
   viewport: { x: number; y: number; zoom: number },
   topology: Topology,
   alignGuides: AlignGuide[],
-  timeMs: number
+  observationStatus: Record<string, NodeRuntimeStatus | null>,
+  dark: boolean,
+  compact: boolean,
+  dimmedIds: string[]
 ): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -503,33 +507,36 @@ function renderMotionOverlay(
 
   const { x: panX, y: panY, zoom } = viewport;
 
-  // 1. Alert Pulsing Halos only for abnormal nodes (when actual hardware/link error is flagged)
+  // Recent evidence is a separate corner marker, never the drawing border.
+  const palette = nodeStatusColors(dark);
+  const dimmed = new Set(dimmedIds);
   for (const node of topology.nodes) {
-    const isAlert = (node as any).status === "down" || (node as any).status === "failed";
-    if (!isAlert) continue;
-
-    const cx = node.x * zoom + panX;
-    const cy = node.y * zoom + panY;
-    if (cx < -100 || cy < -100 || cx > w + 100 || cy > h + 100) continue;
-
-    const baseR = 48 * zoom;
-    const wave = (timeMs / 1000) % 1;
-    const waveR = baseR + wave * 22 * zoom;
+    const status = observationStatus[node.node_id];
+    if (!status) continue;
+    const cx = (node.x + (compact ? 26 : 38)) * zoom + panX;
+    const cy = (node.y - (compact ? 26 : 30)) * zoom + panY;
+    if (cx < -20 || cy < -20 || cx > w + 20 || cy > h + 20) continue;
+    ctx.globalAlpha = dimmed.has(node.node_id) ? 0.16 : 1;
+    const radius = Math.max(4, Math.min(8, 7 * zoom));
     ctx.beginPath();
-    ctx.arc(cx, cy, waveR, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(239, 68, 68, ${0.45 * (1 - wave)})`;
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = palette[status];
+    ctx.fill();
+    ctx.strokeStyle = dark ? "#181c1f" : "#ffffff";
     ctx.lineWidth = 2;
     ctx.stroke();
-
-    const pulse = (Math.sin(timeMs / 250) + 1) / 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, baseR + pulse * 6, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(239, 68, 68, ${0.6 + pulse * 0.3})`;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.font = `600 ${radius * 1.5}px system-ui`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = dark ? "#111416" : "#ffffff";
+    ctx.fillText(status === "ok" ? "✓" : status === "unknown" ? "?" : "!", cx, cy);
   }
 
-  // 3. Item 6: CAD-grade Smart Magnetic Alignment Guides
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+
+  // CAD alignment guides share the overlay without inheriting marker text alignment.
   if (alignGuides.length > 0) {
     ctx.save();
     for (const guide of alignGuides) {
@@ -652,39 +659,16 @@ export default function NetOpsCanvas(props: Props) {
     };
   }, [viewport, theme, props.gridEnabled]);
 
-  // Motion/vector overlay for alert halos and smart guides (runs loop only when active alerts exist)
+  // Static evidence markers and alignment guides. No inferred status animation.
   useEffect(() => {
-    let animId: number;
-    let disposed = false;
-    const hasAlert = props.topology.nodes.some((n: any) => n.status === "down" || n.status === "failed");
-
-    const renderOnce = (now: number) => {
-      if (disposed || !overlayCanvasRef.current) return;
-      renderMotionOverlay(
-        overlayCanvasRef.current,
-        viewport,
-        props.topology,
-        alignGuides,
-        now
-      );
-    };
-
-    if (hasAlert) {
-      const tick = (now: number) => {
-        if (disposed) return;
-        renderOnce(now);
-        animId = requestAnimationFrame(tick);
-      };
-      animId = requestAnimationFrame(tick);
-    } else {
-      renderOnce(performance.now());
-    }
-
-    return () => {
-      disposed = true;
-      if (animId) cancelAnimationFrame(animId);
-    };
-  }, [viewport, props.topology, alignGuides, theme]);
+    if (!overlayCanvasRef.current) return;
+    const topology = { ...props.topology, nodes: props.topology.nodes.map(node => {
+      const position = (cyRef.current?.getElementById(node.node_id) as CyNode | undefined)?.position();
+      return position ? { ...node, ...position } : node;
+    }) };
+    renderMotionOverlay(overlayCanvasRef.current, viewport, topology, alignGuides,
+      props.nodeObservationStatus || {}, theme === "dark", Boolean(props.compactMode), props.dimmedNodeIds || []);
+  }, [viewport, props.topology, alignGuides, theme, props.nodeObservationStatus, props.compactMode, props.dimmedNodeIds]);
   // How far the last alignment snap moved the node away from where the pointer
   // had put it. Cytoscape drags a node incrementally — new position = current
   // position + pointer delta — so a snap silently swallows that much of the
@@ -751,8 +735,8 @@ export default function NetOpsCanvas(props: Props) {
                 width: 76,
                 height: 60,
                 shape: "roundrectangle",
-                "border-width": "data(statusWidth)",
-                "border-color": "data(statusColor)",
+                "border-width": DRAWING_DEFAULTS.nodeBorderWidth,
+                "border-color": DRAWING_DEFAULTS.nodeBorder,
                 "text-opacity": "data(labelOpacity)",
                 "z-index": 10,
               },
@@ -785,6 +769,9 @@ export default function NetOpsCanvas(props: Props) {
               "line-style": "data(edgeStyle)",
               "line-cap": "round",
               "line-opacity": 1,
+              "underlay-color": "data(contrastColor)",
+              "underlay-opacity": "data(contrastOpacity)",
+              "underlay-padding": "data(contrastPadding)",
               "curve-style": "bezier",
               "control-point-step-size": 144,
               // Port connection terminal socket points (RJ45 modular socket block)
@@ -928,9 +915,7 @@ export default function NetOpsCanvas(props: Props) {
               "border-opacity": 1,
             },
           },
-          // Selection adds a halo instead of repainting the border: the border
-          // carries operational state, and a selected node must still show
-          // whether it is reachable.
+          // Selection is transient; the neutral drawing border keeps its own colour.
           { selector: "node:selected", style: { "border-width": 3, "underlay-color": CANVAS_ACCENT.light, "underlay-opacity": 0.16, "underlay-padding": 7 } },
           { selector: ".node-connecting", style: { "border-width": 3, "border-color": CANVAS_ACCENT.light } },
           // Filtered-out elements stay visible but recede, so the filtered view
@@ -943,6 +928,7 @@ export default function NetOpsCanvas(props: Props) {
             selector: "edge:selected",
             style: {
               width: "data(selectedEdgeWidth)",
+              "underlay-padding": "data(selectedContrastPadding)",
               "z-index": 20,
             },
           },
@@ -1278,6 +1264,7 @@ export default function NetOpsCanvas(props: Props) {
         // *click* does, not whether the canvas is editable — a drag that snaps
         // back on release is worse than no drag at all.
         if (!node || node.id().startsWith("group-")) return;
+        setViewport({ ...cy.pan(), zoom: cy.zoom() });
         const selectedIds = new Set(cy.$("node:selected").map((item) => item.id()));
         const halfW = Math.max(8, ((node as CyNode).width?.() || 94) / 2);
         const halfH = Math.max(8, ((node as CyNode).height?.() || 76) / 2);
@@ -1745,18 +1732,13 @@ export default function NetOpsCanvas(props: Props) {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
-    const statusPalette = nodeStatusColors(theme === "dark");
     const dimmed = new Set(props.dimmedNodeIds || []);
     const nodeIds = new Set(props.topology.nodes.map(node => node.node_id));
     const dimClass = (id: string, base: string) => (dimmed.has(id) ? `${base} filtered-out`.trim() : base);
     const elements: CanvasElementSpec[] = [
       ...props.topology.nodes.map((node) => {
         const type = node.device_type || "switch";
-        // The border carries operational state because that is what an
-        // operator scans for; vendor stays as a background tint so neither
-        // signal is lost.
-        const status: NodeRuntimeStatus = props.nodeObservationStatus?.[node.node_id] || "unknown";
-        const statusColor = statusPalette[status];
+        const observationStatus = props.nodeObservationStatus?.[node.node_id] || null;
         const vendorTint = "#fbfcfd";
         const caption = props.nodeOverlayLines?.[node.node_id] || "";
         const name = node.display_name || "未命名设备";
@@ -1775,9 +1757,7 @@ export default function NetOpsCanvas(props: Props) {
           data: {
             id: node.node_id,
             label,
-            status,
-            statusColor,
-            statusWidth: status === "unknown" ? 1.5 : 2.5,
+            observationStatus,
             vendorTint,
             icon: netOpsIconForDeviceType(type),
             lock_group: node.lock_group,
@@ -1824,9 +1804,9 @@ export default function NetOpsCanvas(props: Props) {
       ...props.topology.links
         .filter((link) => nodeIds.has(link.source_node_id) && nodeIds.has(link.target_node_id))
         .map((link) => {
-          const defaultEdgeStyle = link.status === "down" ? "dotted" : link.kind === "logical" ? "dashed" : "solid";
-          const defaultEdgeWidth = link.status === "down" ? 3 : 2.5;
-          const edgeWidth = typeof link.style?.width === "number" && !Number.isNaN(link.style.width) ? link.style.width : defaultEdgeWidth;
+          const appearance = linkDrawingAppearance(link);
+          const contrast = drawingContrastUnderlay(appearance.color, theme === "dark");
+          const edgeWidth = appearance.width;
           return {
             group: "edges",
             // A link is only as visible as its endpoints; dimming one end and
@@ -1837,11 +1817,15 @@ export default function NetOpsCanvas(props: Props) {
               source: link.source_node_id,
               target: link.target_node_id,
               visible: 1,
-              edgeColor: topologyLinkColor(link),
+              edgeColor: appearance.color,
+              contrastColor: contrast.color,
+              contrastOpacity: contrast.opacity,
+              contrastPadding: edgeWidth / 2 + 1,
+              selectedContrastPadding: Math.max(4, edgeWidth + 1.5) / 2 + 1,
               // The state is carried by shape and weight as well as colour, so a
               // down link is still identifiable when the red is not — colour-blind
               // readers, greyscale prints, and screenshots pasted into a report.
-              edgeStyle: link.style?.line_style || defaultEdgeStyle,
+              edgeStyle: appearance.lineStyle,
               edgeWidth,
               curveStyle: link.style?.curve_style || "auto",
               bezierDist: link.style?.curve_reverse ? -45 : 45,
@@ -2135,17 +2119,21 @@ export default function NetOpsCanvas(props: Props) {
     });
 
     // Draw links
-    ctx.strokeStyle = isDark ? "#475569" : "#cbd5e1";
     ctx.lineWidth = 1;
     const byId = new Map(props.topology.nodes.map((node) => [node.node_id, node]));
     props.topology.links.forEach((link) => {
       const source = byId.get(link.source_node_id);
       const target = byId.get(link.target_node_id);
       if (!source || !target) return;
+      const color = topologyLinkColor(link);
+      const contrast = drawingContrastUnderlay(color, isDark);
       ctx.beginPath();
       ctx.moveTo(tx(source.x), ty(source.y));
       ctx.lineTo(tx(target.x), ty(target.y));
-      ctx.stroke();
+      if (contrast.opacity) {
+        ctx.strokeStyle = contrast.color; ctx.lineWidth = 3; ctx.globalAlpha = contrast.opacity; ctx.stroke();
+      }
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.globalAlpha = 1; ctx.stroke();
     });
 
     // Draw nodes
@@ -2456,7 +2444,7 @@ export default function NetOpsCanvas(props: Props) {
       <button type="button" className={miniOpen ? "is-active" : ""} aria-pressed={miniOpen} onClick={() => setMiniOpen((value) => !value)} title="全景导航视图">全景导航</button>
     </div>
     <div className="netops-canvas-accessibility" aria-label="画布设备快捷选择">
-      {props.topology.nodes.map((node) => <button key={node.node_id} type="button" data-testid={`topo-node-${node.node_id}`} onClick={() => props.onSelectNode(node.node_id)}>{node.display_name || node.node_id}</button>)}
+      {props.topology.nodes.map((node) => <button key={node.node_id} type="button" data-testid={`topo-node-${node.node_id}`} onClick={() => props.onSelectNode(node.node_id)}>{node.display_name || node.node_id}{props.nodeOverlayLines?.[node.node_id] ? ` · ${props.nodeOverlayLines[node.node_id]}` : ""}</button>)}
       {(props.topology.canvas_items || []).map((item) => <button key={item.item_id} type="button" data-testid={`topo-item-${item.item_id}`} onClick={() => props.onSelectCanvasItem(item.item_id)}>{item.text || item.kind}</button>)}
       <button
         type="button"

@@ -35,33 +35,40 @@ export function formatObservationTime(value: string): string {
   });
 }
 
-export function overlayBorderStatus(item: NodeOverlay | undefined): OverlayBorderStatus {
-  if (!item) return "unknown";
-  if (item.device_state === "missing") return "error";
-  const status = item.connection?.status || "";
-  if (status === "failed") return "error";
-  if (status === "trust_required") return "warning";
-  return "unknown";
+function recentEvidence(item: NodeOverlay) {
+  const test = item.connection?.last_tested_at && Number.isFinite(Date.parse(item.connection.last_tested_at)) ? item.connection : null;
+  const observation = item.observation?.observed_at && Number.isFinite(Date.parse(item.observation.observed_at)) ? item.observation : null;
+  if (item.connection?.status === "trust_required") return { status: "warning" as const, label: CONNECTION_LABELS.trust_required, time: item.connection.last_tested_at };
+  if (observation?.observed_at && (!test?.last_tested_at || test.status === "untested"
+    || Date.parse(observation.observed_at) >= Date.parse(test.last_tested_at))) {
+    const state = observation.completeness;
+    return { status: (state === "complete" ? "ok" : state === "partial" ? "warning" : state === "failed" ? "error" : "unknown") as OverlayBorderStatus,
+      label: `最近观测${COMPLETENESS_LABELS[state] || "结果无法确认"}`, time: observation.observed_at };
+  }
+  if (test?.last_tested_at && test.status !== "untested") {
+    return { status: (test.status === "connected" ? "ok" : test.status === "failed" ? "error" : "unknown") as OverlayBorderStatus,
+      label: CONNECTION_LABELS[test.status] || "测试结果无法确认", time: test.last_tested_at };
+  }
+  return null;
+}
+
+/** A recent evidence marker, never the drawing border or current device health. */
+export function overlayObservationStatus(item: NodeOverlay | undefined): OverlayBorderStatus | null {
+  if (!item) return null;
+  if (item.device_state === "missing") return "warning";
+  return recentEvidence(item)?.status || null;
 }
 
 export function overlayCanvasLine(item: NodeOverlay): string {
-  if (item.device_state === "missing") return "设备已不存在";
-  if (item.observation?.observed_at) return `观测于 ${formatObservationTime(item.observation.observed_at)}`;
-  if (item.connection?.status === "failed") return "最近测试失败";
-  if (item.connection?.last_tested_at) return CONNECTION_LABELS[item.connection.status] || "已有测试记录";
-  return "尚无观测";
+  if (item.device_state === "missing") return "绑定设备已不存在";
+  const evidence = recentEvidence(item);
+  if (!evidence) return "尚无观测";
+  const time = formatObservationTime(evidence.time);
+  return `${evidence.label}${time ? ` · ${time}` : ""}`;
 }
 
 export function overlayCaption(item: NodeOverlay): string {
-  if (item.device_state === "missing") return "设备已不存在。节点仍是图纸符号。";
+  if (item.device_state === "missing") return "绑定设备已不存在。节点仍是图纸符号，不代表设备故障。";
   const name = item.device?.name || "已绑定设备";
-  if (item.observation?.observed_at) {
-    const completeness = COMPLETENESS_LABELS[item.observation.completeness] || "未知";
-    return `${name} · 观测于 ${formatObservationTime(item.observation.observed_at)} · ${completeness}。这不是当前正常。`;
-  }
-  if (item.connection?.last_tested_at) {
-    const label = CONNECTION_LABELS[item.connection.status] || "已有测试记录";
-    return `${name} · ${label} · ${formatObservationTime(item.connection.last_tested_at)}。这不是当前正常。`;
-  }
-  return `${name} · 尚无观测。`;
+  return `${name} · ${overlayCanvasLine(item)}。${recentEvidence(item) ? "这是最近记录，不表示当前健康。" : ""}`;
 }

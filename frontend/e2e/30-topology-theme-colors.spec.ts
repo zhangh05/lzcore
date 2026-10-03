@@ -14,7 +14,7 @@ const drawing = {
   ].map(link => ({ ...link, source_node_id: 'a', target_node_id: 'b', source_interface: '', target_interface: '', kind: 'physical' })),
   groups: [], canvas_items: [],
 };
-const expected = ['rgb(36,115,59)', 'rgb(189,48,64)', 'rgb(126,34,206)', 'rgb(37,99,235)'];
+const expected = ['rgb(102,113,122)', 'rgb(102,113,122)', 'rgb(102,113,122)', 'rgb(37,99,235)'];
 
 for (const initial of ['light', 'dark']) {
   test(`30. topology link colours survive theme switches and selection from ${initial}`, async ({ page }, testInfo) => {

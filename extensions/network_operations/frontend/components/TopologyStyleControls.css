@@ -262,4 +262,8 @@
   background: var(--surface-3, rgba(0, 0, 0, 0.05));
 }
 
+
+.link-color-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.link-color-error { color: var(--danger); font-size: 12px; }
+
 }

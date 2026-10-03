@@ -106,6 +106,45 @@ def run(exe: Path, mode: str, output: Path):
             subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),'-ParentPid',str(proc.pid),'-FileName',str(conversation.resolve())],check=True,timeout=35)
             wait_until(lambda: conversation.exists())
             assert '真实工作台中文导出' in conversation.read_text(encoding='utf-8')
+            # Actual packaged topology renderer: neutral defaults and black ink
+            # survive native theme changes without touching persistent drawing data.
+            assert user32.MoveWindow(hwnd, 40, 40, 1280, 800, True)
+            topology_id = page.evaluate("""async () => {
+              const token = (await (await fetch('/api/local-token')).json()).token;
+              const response = await fetch('/api/extensions/network.operations/topologies?workspace_id=default', {
+                method:'POST', headers:{'Content-Type':'application/json','X-LZCore-Local-Token':token},
+                body:JSON.stringify({name:'原生图纸颜色验证',nodes:[
+                  {node_id:'a',display_name:'核心交换机',device_type:'switch',x:100,y:100},
+                  {node_id:'b',display_name:'接入交换机',device_type:'switch',x:400,y:100}],
+                  links:[{link_id:'neutral',source_node_id:'a',target_node_id:'b',status:'unknown'},
+                    {link_id:'black',source_node_id:'a',target_node_id:'b',status:'up',style:{color:'#000000'}}]})
+              });
+              if(!response.ok) throw new Error('Topology fixture failed: '+response.status);
+              return (await response.json()).topology.topology_id;
+            }""")
+            page.goto(start['origin']+'/topology?topology='+topology_id)
+            page.wait_for_function("document.querySelector('.netops-cytoscape')?._cyreg?.cy?.edges().length === 2")
+            for theme in ('light', 'dark'):
+                if page.locator('html').get_attribute('data-theme') != theme:
+                    page.get_by_role('button', name='切换主题', exact=True).click()
+                page.wait_for_function("document.documentElement.dataset.theme === '"+theme+"'")
+                appearance = page.evaluate("""() => {
+                  const cy=document.querySelector('.netops-cytoscape')._cyreg.cy;
+                  return {neutral:cy.getElementById('neutral').style('line-color'),
+                    black:cy.getElementById('black').style('line-color'),
+                    border:cy.getElementById('a').style('border-color'),
+                    observation:cy.getElementById('a').data('observationStatus'),
+                    contrast:Number(cy.getElementById('black').style('underlay-opacity'))};
+                }""")
+                assert appearance['neutral'] == 'rgb(102,113,122)', appearance
+                assert appearance['black'] == 'rgb(0,0,0)', appearance
+                assert appearance['border'] == 'rgb(138,148,158)', appearance
+                assert appearance['observation'] is None, appearance
+                wait_until(lambda theme=theme: page.evaluate("Number(document.querySelector('.netops-cytoscape')._cyreg.cy.getElementById('black').style('underlay-opacity'))") == (.8 if theme == 'dark' else 0))
+                page.wait_for_timeout(250)
+                page.screenshot(path=str(output/('topology-'+theme+'.png')), full_page=True)
+            page.evaluate("() => {document.querySelector('.netops-cytoscape')._cyreg.cy.getElementById('black').emit('tap');}")
+            assert page.get_by_label('自定义拾色器').input_value() == '#000000'
             # Background does not stop the local server or detach the durable transport.
             page.evaluate("window.pywebview.api.request_exit('background')")
             assert not user32.IsWindowVisible(hwnd)

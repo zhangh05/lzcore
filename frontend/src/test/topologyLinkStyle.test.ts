@@ -39,10 +39,10 @@ function resolveLinkVisuals(link: TopologyLink) {
 }
 
 describe("TopologyLink styling and routing resolution", () => {
-  it("uses semantic status and kind defaults when no custom style is set", () => {
+  it("uses neutral drawing colour and preserves kind defaults when no custom style is set", () => {
     const upPhysical = createLink({ status: "up", kind: "physical" });
     const visualsUp = resolveLinkVisuals(upPhysical);
-    expect(visualsUp.edgeColor).toBe("#24733b");
+    expect(visualsUp.edgeColor).toBe("#66717a");
     expect(visualsUp.edgeStyle).toBe("solid");
     expect(visualsUp.edgeWidth).toBe(2.5);
     expect(visualsUp.curveStyle).toBe("auto");
@@ -54,7 +54,7 @@ describe("TopologyLink styling and routing resolution", () => {
 
     const downLink = createLink({ status: "down", kind: "physical" });
     const visualsDown = resolveLinkVisuals(downLink);
-    expect(visualsDown.edgeColor).toBe("#bd3040");
+    expect(visualsDown.edgeColor).toBe("#66717a");
     expect(visualsDown.edgeStyle).toBe("dotted");
     expect(visualsDown.edgeWidth).toBe(3);
   });

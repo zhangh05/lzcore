@@ -1,4 +1,4 @@
-import { NODE_STATUS_COLORS, topologyLinkColor } from "./topologyPalette";
+import { DRAWING_DEFAULTS, linkDrawingAppearance } from "./topologyDrawingAppearance";
 import type { Topology, TopologyNode } from "./TopologyWorkspace";
 
 export interface WhiteboardStrokeExport {
@@ -194,10 +194,10 @@ export function exportTopologyToSvg(
   // Defs for arrowheads and markers
   svgParts.push(`  <defs>
     <marker id="arrow-start" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-      <rect x="2" y="2" width="6" height="6" fill="${NODE_STATUS_COLORS.ok}"/>
+      <rect x="2" y="2" width="6" height="6" fill="${DRAWING_DEFAULTS.link}"/>
     </marker>
     <marker id="arrow-end" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-      <rect x="2" y="2" width="6" height="6" fill="${NODE_STATUS_COLORS.ok}"/>
+      <rect x="2" y="2" width="6" height="6" fill="${DRAWING_DEFAULTS.link}"/>
     </marker>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
@@ -246,9 +246,10 @@ export function exportTopologyToSvg(
     const t = nodeMap.get(link.target_node_id);
     if (!s || !t) return;
 
-    const strokeColor = sanitizeColor(topologyLinkColor(link), NODE_STATUS_COLORS.unknown);
-    const strokeWidth = link.style?.width || (link.status === "down" ? 3 : 2.5);
-    const strokeDash = link.status === "down" ? "stroke-dasharray=\"2,4\"" : link.kind === "logical" ? "stroke-dasharray=\"6,4\"" : "";
+    const appearance = linkDrawingAppearance(link);
+    const strokeColor = sanitizeColor(appearance.color, DRAWING_DEFAULTS.link);
+    const strokeWidth = appearance.width;
+    const strokeDash = appearance.lineStyle === "dotted" ? "stroke-dasharray=\"2,4\"" : appearance.lineStyle === "dashed" ? "stroke-dasharray=\"6,4\"" : "";
 
     svgParts.push(
       `  <line x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round" ${strokeDash}/>`
@@ -303,7 +304,7 @@ export function exportTopologyToSvg(
 
     // Node body
     svgParts.push(
-      `  <rect x="${x}" y="${y}" width="${nodeW}" height="${nodeH}" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" filter="url(#shadow)"/>`
+      `  <rect x="${x}" y="${y}" width="${nodeW}" height="${nodeH}" rx="8" fill="#f8fafc" stroke="${DRAWING_DEFAULTS.nodeBorder}" stroke-width="${DRAWING_DEFAULTS.nodeBorderWidth}" filter="url(#shadow)"/>`
     );
 
     // Inner icon badge
