@@ -1223,7 +1223,7 @@ export default function NetOpsCanvas(props: Props) {
       const SNAP = 5;
       cy.on("grab", "node", (event) => {
         const node = event.target as CyNode | undefined;
-        if (!node || node.id().startsWith("group-")) return;
+        if (!node || node.id().startsWith("group-") || grabAnchorRef.current) return;
         const grabbedId = node.id();
         const currentNodes = propsRef.current.topology.nodes;
         const activeLockGroups = new Set<string>();
@@ -1264,6 +1264,7 @@ export default function NetOpsCanvas(props: Props) {
         // *click* does, not whether the canvas is editable — a drag that snaps
         // back on release is worse than no drag at all.
         if (!node || node.id().startsWith("group-")) return;
+        if (grabAnchorRef.current && grabAnchorRef.current.id !== node.id()) return;
         setViewport({ ...cy.pan(), zoom: cy.zoom() });
         const selectedIds = new Set(cy.$("node:selected").map((item) => item.id()));
         const halfW = Math.max(8, ((node as CyNode).width?.() || 94) / 2);
@@ -1306,7 +1307,7 @@ export default function NetOpsCanvas(props: Props) {
             .filter((item) => item.node_id !== node.id() && !selectedIds.has(item.node_id) && !lockedPeerIds.has(item.node_id))
             .map((item) => ({ x: item.x, y: item.y, halfW: NODE_HALF_W, halfH: NODE_HALF_H })),
           ...(propsRef.current.topology.canvas_items || [])
-            .filter((item) => !selectedIds.has(`canvas-${item.item_id}`))
+            .filter((item) => `canvas-${item.item_id}` !== node.id() && !selectedIds.has(`canvas-${item.item_id}`))
             .map((item) => ({ x: item.x, y: item.y, halfW: item.width / 2, halfH: item.height / 2 })),
         ];
         const position = node.position();
@@ -1349,8 +1350,24 @@ export default function NetOpsCanvas(props: Props) {
           nextX = rawX + (snappedX?.shift ?? 0);
           nextY = rawY + (snappedY?.shift ?? 0);
         }
+        // Preview the final landing position. Smart guides take precedence over
+        // grid snapping on each axis; release must not apply a second correction.
+        if (propsRef.current.gridEnabled) {
+          if (!snappedX) nextX = Math.round(rawX / 32) * 32;
+          if (!snappedY) nextY = Math.round(rawY / 32) * 32;
+        }
+        const correctionX = nextX - position.x;
+        const correctionY = nextY - position.y;
         snapResidualRef.current = { x: nextX - rawX, y: nextY - rawY };
         if (nextX !== position.x || nextY !== position.y) node.position({ x: nextX, y: nextY });
+
+        // Cytoscape moves selected peers by the pointer delta. Apply the same
+        // preview correction so their spacing stays unchanged before release.
+        cy.$("node:selected").forEach(peer => {
+          if (peer.id() === node.id() || lockedPeerIds.has(peer.id())) return;
+          const pos = (peer as CyNode).position();
+          (peer as CyNode).position({ x: pos.x + correctionX, y: pos.y + correctionY });
+        });
 
         // Synchronize all peer nodes in the same lock group with the anchor node's displacement
         if (grabAnchorRef.current && grabAnchorRef.current.id === node.id()) {
@@ -1427,20 +1444,11 @@ export default function NetOpsCanvas(props: Props) {
           }
         }
 
-        const shouldSnap = propsRef.current.gridEnabled;
-        const snap = (v: number) => shouldSnap ? Math.round(v / 32) * 32 : Math.round(v);
-        const anchorPosition = (cy.getElementById(dragged) as CyNode).position();
-        const correction = anchorPosition ? {x: snap(anchorPosition.x) - anchorPosition.x, y: snap(anchorPosition.y) - anchorPosition.y} : {x: 0, y: 0};
+        // Persist the visible preview verbatim, including fractional positions.
+        // Re-snapping here used to shift an already aligned object on mouse-up.
         const positions = cy.nodes()
           .filter((node) => ids.has(node.id()) && !node.id().startsWith("group-"))
-          .map((node) => {
-            const raw = node.position();
-            const snapped = {x: raw.x + correction.x, y: raw.y + correction.y};
-            if (shouldSnap) {
-              node.position(snapped);
-            }
-            return { element_id: node.id(), ...snapped };
-          });
+          .map((node) => ({ element_id: node.id(), ...node.position() }));
 
         grabAnchorRef.current = null;
         lockGroupInitialPositionsRef.current.clear();

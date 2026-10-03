@@ -54,7 +54,7 @@ jobs:
           E2E_PRODUCTION: "1"
         run: |
           npm --prefix frontend run build
-          npm --prefix frontend run e2e -- 21-management-width 25-workbench-hierarchy 26-visual-system 27-compact-chat 28-login-cascade 29-neutral-hierarchy 30-topology-theme-colors 31-topology-drawing-semantics
+          npm --prefix frontend run e2e -- 23-topology-editing 21-management-width 25-workbench-hierarchy 26-visual-system 27-compact-chat 28-login-cascade 29-neutral-hierarchy 30-topology-theme-colors 31-topology-drawing-semantics
       - name: Preserve browser visual evidence
         if: always()
         uses: actions/upload-artifact@v4

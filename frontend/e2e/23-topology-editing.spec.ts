@@ -121,3 +121,79 @@ test("23c. locating an object leaves it under the cursor", async ({ page }) => {
   await page.mouse.click(centre.x, centre.y);
   await expect(page.locator(".topology-inspector")).toContainText("节点A");
 });
+
+for (const scenario of ['node', 'region', 'free', 'selection', 'lock'] as const) {
+  test(`23d. ${scenario} drag retains the visible landing position on release and reload`, async ({ page }) => {
+    const region = scenario === 'region';
+    let drawing: any = {
+      topology_id: 'release-alignment', name: '松手落点验收', version: 1, groups: [], links: [],
+      nodes: region ? [{ node_id: 'member', display_name: '成员', device_type: 'switch', region_id: 'moving', x: 200, y: 350 }]
+        : [
+          { node_id: 'moving', display_name: '移动设备', device_type: 'switch', x: 200, y: 310 },
+          { node_id: 'reference', display_name: '参考设备', device_type: 'switch', x: 650, y: 113.5 },
+        ],
+      canvas_items: region ? [
+        { item_id: 'moving', kind: 'rect', text: '移动区域', x: 200, y: 300, width: 240, height: 180 },
+        { item_id: 'reference', kind: 'rect', text: '参考区域', x: 650, y: 173.5, width: 240, height: 180 },
+      ] : [],
+    };
+    if (scenario === 'selection' || scenario === 'lock') {
+      drawing.nodes.push({ node_id: 'peer', display_name: '同步设备', device_type: 'switch', x: 200, y: 430 });
+      if (scenario === 'lock') for (const n of drawing.nodes) if (n.node_id !== 'reference') n.lock_group = 'locked-pair';
+    }
+    const saves: any[] = [];
+    await page.route('**/api/extensions/network.operations/topologies**', route => {
+      const req = route.request(); const url = new URL(req.url());
+      if (req.method() === 'PUT') { drawing = { ...drawing, ...JSON.parse(req.postData() || '{}') }; saves.push(drawing); return route.fulfill({ json: { ok: true, topology: drawing } }); }
+      return route.fulfill({ json: url.pathname.endsWith('/overlay') ? { overlays: [] } : url.pathname.endsWith('/revisions') ? { revisions: [] }
+        : url.pathname.endsWith('/release-alignment') ? { topology: drawing } : { topologies: [drawing] } });
+    });
+    await page.goto('/topology?topology=release-alignment');
+    const host = page.locator('.netops-cytoscape').first();
+    const id = region ? 'canvas-moving' : 'moving';
+    await expect.poll(() => host.evaluate((el: any) => Boolean(el._cyreg?.cy?.nodes().length))).toBe(true);
+    if (scenario === 'free') await page.getByRole('checkbox', { name: '网格', exact: true }).uncheck();
+    await host.evaluate((el: any, id) => {
+      const cy = el._cyreg.cy; cy.stop(); cy.zoom(1); cy.pan({ x: 20, y: 30 });
+      cy.elements().unselect(); cy.getElementById(id).select();
+    }, id);
+    if (scenario === 'selection') await host.evaluate((el: any) => { el._cyreg.cy.getElementById('peer').select(); });
+    // Selection can open the inspector and resize the canvas. Read the actual
+    // rendered coordinates after that, then drive native pointer events.
+    await expect(page.locator('.topology-inspector')).toBeVisible();
+    const box = (await host.boundingBox())!;
+    const from = await host.evaluate((el: any, id) => el._cyreg.cy.getElementById(id).renderedPosition(), id);
+    const target = scenario === 'free' ? { x: 363.25, y: 237.75 } : { x: 352, y: region ? 173.5 : 113.5 };
+    const to = await host.evaluate((el: any, point) => {
+      const cy = el._cyreg.cy; return { x: point.x * cy.zoom() + cy.pan().x, y: point.y * cy.zoom() + cy.pan().y };
+    }, target);
+    await page.mouse.move(box.x + from.x, box.y + from.y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + to.x, box.y + to.y, { steps: 18 });
+    const positions = () => host.evaluate((el: any) => el._cyreg.cy.nodes().map((n: any) => ({ id: n.id(), ...n.position() })));
+    const preview = await positions();
+    const anchor = preview.find((p: any) => p.id === id)!;
+    if (scenario !== 'free') {
+      expect(anchor.y).toBeCloseTo(target.y, 4);
+      await expect(page.locator('.netops-align-guides')).toBeVisible();
+    }
+    if (region) {
+      const member = preview.find((p: any) => p.id === 'member')!;
+      expect(member.x - anchor.x).toBeCloseTo(0, 4);
+      expect(member.y - anchor.y).toBeCloseTo(50, 4);
+    }
+    if (scenario === 'selection' || scenario === 'lock') {
+      const peer = preview.find((p: any) => p.id === 'peer')!;
+      expect(peer.x - anchor.x).toBeCloseTo(0, 4);
+      expect(peer.y - anchor.y).toBeCloseTo(120, 4);
+    }
+    await page.mouse.up();
+    await expect.poll(positions).toEqual(preview);
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await expect.poll(() => saves.length).toBe(1);
+    const stored = region ? saves[0].canvas_items.find((item: any) => item.item_id === 'moving') : saves[0].nodes.find((n: any) => n.node_id === 'moving');
+    expect(stored.x).toBeCloseTo(anchor.x, 4); expect(stored.y).toBeCloseTo(anchor.y, 4);
+    await page.reload();
+    await expect.poll(positions).toEqual(preview);
+  });
+}

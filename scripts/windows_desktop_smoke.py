@@ -114,8 +114,8 @@ def run(exe: Path, mode: str, output: Path):
               const response = await fetch('/api/extensions/network.operations/topologies?workspace_id=default', {
                 method:'POST', headers:{'Content-Type':'application/json','X-LZCore-Local-Token':token},
                 body:JSON.stringify({name:'原生图纸颜色验证',nodes:[
-                  {node_id:'a',display_name:'核心交换机',device_type:'switch',x:100,y:100},
-                  {node_id:'b',display_name:'接入交换机',device_type:'switch',x:400,y:100}],
+                  {node_id:'a',display_name:'核心交换机',device_type:'switch',x:100,y:160.5},
+                  {node_id:'b',display_name:'接入交换机',device_type:'switch',x:400,y:160.5}],
                   links:[{link_id:'neutral',source_node_id:'a',target_node_id:'b',status:'unknown'},
                     {link_id:'black',source_node_id:'a',target_node_id:'b',status:'up',style:{color:'#000000'}}]})
               });
@@ -143,6 +143,26 @@ def run(exe: Path, mode: str, output: Path):
                 wait_until(lambda theme=theme: page.evaluate("Number(document.querySelector('.netops-cytoscape')._cyreg.cy.getElementById('black').style('underlay-opacity'))") == (.8 if theme == 'dark' else 0))
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(output/('topology-'+theme+'.png')), full_page=True)
+            # Native pointer drag: an off-grid smart alignment must survive
+            # mouse-up, backend save and reopening the packaged drawing.
+            host = page.locator('.netops-cytoscape')
+            host.evaluate("el => {const cy=el._cyreg.cy; cy.stop(); cy.zoom(1); cy.pan({x:30,y:30}); cy.elements().unselect(); cy.getElementById('a').select();}")
+            page.locator('.topology-inspector').wait_for(state='visible')
+            box = host.bounding_box()
+            point = host.evaluate("el => el._cyreg.cy.getElementById('a').renderedPosition()")
+            page.mouse.move(box['x']+point['x'], box['y']+point['y'])
+            page.mouse.down()
+            page.mouse.move(box['x']+point['x']+80, box['y']+point['y'], steps=16)
+            preview = host.evaluate("el => el._cyreg.cy.getElementById('a').position()")
+            assert abs(preview['y']-160.5) < .001, preview
+            page.mouse.up()
+            wait_until(lambda: host.evaluate("el => el._cyreg.cy.getElementById('a').position()") == preview)
+            page.get_by_role('button', name='保存', exact=True).click()
+            page.get_by_text('已保存', exact=True).wait_for(state='visible')
+            page.reload()
+            page.wait_for_function("document.querySelector('.netops-cytoscape')?._cyreg?.cy?.edges().length === 2")
+            assert host.evaluate("el => el._cyreg.cy.getElementById('a').position()") == preview
+            page.screenshot(path=str(output/'topology-drag-released.png'), full_page=True)
             page.evaluate("() => {document.querySelector('.netops-cytoscape')._cyreg.cy.getElementById('black').emit('tap');}")
             assert page.get_by_label('自定义拾色器').input_value() == '#000000'
             # Background does not stop the local server or detach the durable transport.
