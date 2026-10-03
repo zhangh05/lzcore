@@ -308,7 +308,7 @@ test("edits made while a conflict is deferred are included in its eventual merge
   expect(screen.getByRole("button", { name: "撤销" })).toBeDisabled();
   fireEvent.keyDown(window, { key: "z", ctrlKey: true });
   expect(screen.getByRole("button", { name: "有冲突待处理" })).toBeInTheDocument();
-  fireEvent.click(screen.getByText("更多"));
+  fireEvent.click(screen.getByText("图纸", { selector: "summary" }));
   fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
   fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "我在冲突期间补充的名字" } });
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "保存" }));
@@ -342,7 +342,7 @@ test("edits made while the conflict snapshot loads survive resolution", async ()
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "从拓扑移除" }));
   fireEvent.click(await screen.findByRole("button", { name: "保存" }));
   await waitFor(() => expect(putPayloads).toHaveLength(1), { timeout: 3000 });
-  fireEvent.click(screen.getByText("更多"));
+  fireEvent.click(screen.getByText("图纸", { selector: "summary" }));
   fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
   fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "等待期间修改" } });
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "保存" }));
@@ -371,7 +371,7 @@ test("a field both sides changed is listed for review, not decided silently", as
 
   render(<><TopologyPage /><ConfirmHost /></>);
   await screen.findByTestId("topo-node-node-d1");
-  fireEvent.click(screen.getByText("更多"));
+  fireEvent.click(screen.getByText("图纸", { selector: "summary" }));
   fireEvent.click(screen.getByRole("button", { name: "编辑信息" }));
   fireEvent.change(screen.getByLabelText("拓扑名称"), { target: { value: "我改的名字" } });
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "保存" }));

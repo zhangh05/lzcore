@@ -71,9 +71,9 @@ test("22b. topology page is a drawing canvas and does not load device state", as
       document.body.append(probe);
       const expected = getComputedStyle(probe).backgroundColor;
       probe.remove();
-      return { expected, actual: [".topology-canvas-toolbar", ".topology-editbar", ".studio-statusbar", ".canvas-search-wrap"].map(selector => getComputedStyle(document.querySelector(selector)!).backgroundColor) };
+      return { expected, actual: [".topology-canvas-toolbar", ".topology-editbar", ".studio-statusbar"].map(selector => getComputedStyle(document.querySelector(selector)!).backgroundColor) };
     });
-    expect(surfaces.actual).toEqual(Array(4).fill(surfaces.expected));
+    expect(surfaces.actual).toEqual(Array(3).fill(surfaces.expected));
     await page.screenshot({ path: testInfo.outputPath(`topology-drawing-${theme}.png`) });
   }
 });

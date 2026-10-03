@@ -165,8 +165,11 @@ test('26c. populated conversation, device directory and drawing inspector share 
     await page.screenshot({ path: testInfo.outputPath(`devices-${theme}.png`) });
     await page.goto('/topology?topology=visual-drawing');
     await expect(page.locator('.netops-cytoscape')).toBeVisible();
-    await page.locator('.canvas-search-wrap input').first().fill('核心交换机');
-    await page.locator('.canvas-search-results button').first().click();
+    const host = page.locator('.netops-cytoscape');
+    await expect.poll(() => host.evaluate((el: any) => el._cyreg?.cy?.getElementById('core').length)).toBe(1);
+    await page.waitForTimeout(1200); // wait for initial canvas fit before reading the painted location
+    const point = await host.evaluate((el: any) => el._cyreg.cy.getElementById('core').renderedPosition());
+    await host.click({ position: point });
     await expect(page.locator('.topology-inspector')).toBeVisible();
     await expect(page.locator('.topology-inspector')).toContainText('核心交换机');
     await page.waitForTimeout(1200); // canvas centring animation is independent of CSS motion

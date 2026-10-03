@@ -41,17 +41,14 @@ async function stubTopology(page: import("@playwright/test").Page, source = TOPO
   return saves;
 }
 
-/** Locating an object centres it at a fixed 1.1 zoom, which anchors the maths. */
-async function locate(page: import("@playwright/test").Page, name: string) {
-  await page.locator(".canvas-search-wrap input").first().fill(name);
-  await page.locator(".canvas-search-results button").first().click();
-  await page.waitForTimeout(1400);
-}
-
-async function canvasCentre(page: import("@playwright/test").Page) {
-  const box = await page.locator(".netops-cytoscape").first().boundingBox();
+/** Read the painted node location; interactions use actual mouse input. */
+async function nodeScreenPoint(page: import("@playwright/test").Page, id: string) {
+  const host = page.locator(".netops-cytoscape").first();
+  await expect.poll(() => host.evaluate((el: any, id) => el._cyreg?.cy?.getElementById(id).length, id)).toBe(1);
+  const box = await host.boundingBox();
   if (!box) throw new Error("canvas not laid out");
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2, box };
+  const point = await host.evaluate((el: any, id) => el._cyreg.cy.getElementById(id).renderedPosition(), id);
+  return { x: box.x + point.x, y: box.y + point.y };
 }
 
 test("23a. dragging an object in the default mode moves and persists it", async ({ page }) => {
@@ -62,8 +59,7 @@ test("23a. dragging an object in the default mode moves and persists it", async 
 
   // Select mode is the default; it used to forbid grabbing outright.
   await expect(page.getByRole("button", { name: "选择" })).toHaveAttribute("aria-pressed", "true");
-  await locate(page, "节点A");
-  const centre = await canvasCentre(page);
+  const centre = await nodeScreenPoint(page, "edit-a");
   await page.mouse.move(centre.x, centre.y);
   await page.mouse.down();
   await page.mouse.move(centre.x + 90, centre.y + 50, { steps: 14 });
@@ -107,19 +103,18 @@ test("23b. a multi-selection opens the batch panel, and Delete removes all of it
   expect(cleared.canvas_items).toHaveLength(0);
 });
 
-test("23c. locating an object leaves it under the cursor", async ({ page }) => {
+test("23c. selecting a painted node opens its inspector without moving it", async ({ page }) => {
   await stubTopology(page);
   await page.goto(`/topology?topology=${TOPOLOGY.topology_id}`);
   await expect(page.locator(".netops-cytoscape")).toBeVisible();
   await page.waitForTimeout(1500);
 
-  // The inspector opens asynchronously and narrows the canvas; a single centring
-  // pass used to leave the located node about 150px off centre, so the next
-  // click missed it.
-  await locate(page, "节点A");
-  const centre = await canvasCentre(page);
+  const centre = await nodeScreenPoint(page, "edit-a");
   await page.mouse.click(centre.x, centre.y);
   await expect(page.locator(".topology-inspector")).toContainText("节点A");
+  const after = await nodeScreenPoint(page, "edit-a");
+  expect(after.x).toBeCloseTo(centre.x, 1);
+  expect(after.y).toBeCloseTo(centre.y, 1);
 });
 
 for (const scenario of ['node', 'region', 'free', 'selection', 'lock'] as const) {
@@ -152,7 +147,7 @@ for (const scenario of ['node', 'region', 'free', 'selection', 'lock'] as const)
     const host = page.locator('.netops-cytoscape').first();
     const id = region ? 'canvas-moving' : 'moving';
     await expect.poll(() => host.evaluate((el: any) => Boolean(el._cyreg?.cy?.nodes().length))).toBe(true);
-    if (scenario === 'free') await page.getByRole('checkbox', { name: '网格', exact: true }).uncheck();
+    if (scenario === 'free') { await page.locator('.studio-display-menu summary').click(); await page.getByRole('checkbox', { name: '网格', exact: true }).uncheck(); }
     await host.evaluate((el: any, id) => {
       const cy = el._cyreg.cy; cy.stop(); cy.zoom(1); cy.pan({ x: 20, y: 30 });
       cy.elements().unselect(); cy.getElementById(id).select();
@@ -204,6 +199,7 @@ for (const compact of [false, true]) for (const zoom of [0.6, 1.3]) for (const e
     await page.goto(`/topology?topology=${TOPOLOGY.topology_id}`);
     const host = page.locator('.netops-cytoscape').first();
     await expect.poll(() => host.evaluate((el: any) => el._cyreg?.cy?.nodes().length)).toBe(2);
+    await page.locator('.studio-display-menu summary').click();
     await page.getByRole('checkbox', { name: '网格', exact: true }).uncheck();
     await page.getByRole('checkbox', { name: '紧凑模式', exact: true }).setChecked(compact);
     await host.evaluate((el: any) => { el._cyreg.cy.getElementById('edit-a').select(); });

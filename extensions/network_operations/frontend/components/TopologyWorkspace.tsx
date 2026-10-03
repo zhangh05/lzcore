@@ -1,3 +1,6 @@
+import { alignBodies } from './topologyAlignment';
+import { TopologyDisplayTools } from './TopologyDisplayTools';
+import type { ReferenceLine } from './TopologyReferenceLines';
 import { resolveDragAxis } from './topologyDragSnap';
 import { fitRegions, regionBounds, regionContains, moveRegionElements } from "./topologyRegions";
 import { desktopDirty } from "../../../../frontend/src/desktop/bridge";
@@ -34,7 +37,6 @@ import {
   IconRedo,
   IconRefresh,
   IconSave,
-  IconSearch,
   IconServer,
   IconShield,
   IconSplit,
@@ -45,10 +47,9 @@ import {
   IconExpand,
   IconArrowsIn,
   IconPencil,
-  IconChevronUp,
+  IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
-  IconWrench,
   IconChat,
 } from "../../../../frontend/src/components/Icon";
 import { Link, useNavigate } from "../../../../frontend/src/router";
@@ -1040,20 +1041,35 @@ export default function TopologyWorkspace({
   }, [showEditbar, focusMode, showLibrary, showAgent, workspaceMode]);
   const [gridEnabled, setGridEnabled] = useState(true);
   const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
+  const [smartGuidesEnabled, setSmartGuidesEnabled] = useState(true);
+  const [alignmentReferenceId, setAlignmentReferenceId] = useState<string | null>(null);
+  const referenceKey = activeTopology ? `lzcore_reference_lines:${workspaceId}:${activeTopology.topology_id}` : '';
+  const [referenceByKey, setReferenceByKey] = useState<Record<string, ReferenceLine[]>>({});
+  useEffect(() => {
+    setAlignmentReferenceId(null);
+    if (!referenceKey) return;
+    try {
+      const raw: unknown = JSON.parse(localStorage.getItem(referenceKey) || '[]');
+      const lines = Array.isArray(raw) ? raw.filter((line): line is ReferenceLine => line && typeof line.id === 'string' && ['x','y'].includes(line.axis) && Number.isFinite(line.position) && typeof line.locked === 'boolean').slice(0,100) : [];
+      setReferenceByKey(value => ({ ...value, [referenceKey]: lines }));
+    } catch { setReferenceByKey(value => ({ ...value, [referenceKey]: [] })); }
+  }, [referenceKey]);
+  const referenceLines = referenceByKey[referenceKey] || [];
+  const changeReferenceLines = (lines: ReferenceLine[]) => {
+    if (!referenceKey) return;
+    setReferenceByKey(value => ({ ...value, [referenceKey]: lines }));
+    try { localStorage.setItem(referenceKey, JSON.stringify(lines)); } catch { setNotice('参考线已调整，但当前环境无法保存本机编辑偏好', false); }
+  };
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);
   const [showObservation, setShowObservation] = useState(true);
   // Filters dim rather than hide, so the diagram never turns into a different
   // drawing than the one being discussed.
   // Imperative canvas handle (export / focus / viewport) and transient canvas
-  // UI: right-click menu, keyboard help, and in-canvas search.
+  // UI: right-click menu and keyboard help.
   const canvasApiRef = useRef<CanvasApi | null>(null);
   const [contextMenu, setContextMenu] = useState<CanvasContextTarget | null>(null);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
-  const [canvasQuery, setCanvasQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  /** The object a locate action is still trying to centre, if any. */
-  const pendingFocusRef = useRef<string>("");
   const [layoutBusy, setLayoutBusy] = useState(false);
   const workspaceIdRef = useRef(workspaceId);
   workspaceIdRef.current = workspaceId;
@@ -1799,16 +1815,10 @@ export default function TopologyWorkspace({
       setNotice("请先框选至少两台设备，再执行对齐", false);
       return;
     }
-    const xValues = selected.map((node) => node.x);
-    const yValues = selected.map((node) => node.y);
-    const x = direction === "left" ? Math.min(...xValues) : direction === "right" ? Math.max(...xValues) : Math.round(xValues.reduce((sum, value) => sum + value, 0) / selected.length);
-    const y = direction === "top" ? Math.min(...yValues) : direction === "bottom" ? Math.max(...yValues) : Math.round(yValues.reduce((sum, value) => sum + value, 0) / selected.length);
-    pushState({
-      ...activeTopology,
-      nodes: activeTopology.nodes.map((node) => selectedIds.has(node.node_id)
-        ? { ...node, ...(direction === "left" || direction === "center" || direction === "right" ? { x } : { y }) }
-        : node),
-    });
+    const bodies = canvasApiRef.current?.getBodies(selected.map(node => node.node_id)) || [];
+    if (bodies.length !== selected.length) return;
+    const positions = alignBodies(bodies, direction);
+    pushState(moveRegionElements(activeTopology, positions, false));
     setNotice(`已对齐 ${selected.length} 台设备`);
   }, [activeTopology, canvasSelectedElementIds, pushState, setNotice]);
 
@@ -2120,41 +2130,6 @@ export default function TopologyWorkspace({
     };
   }, [contextMenu]);
 
-  const canvasMatches = useMemo(() => {
-    const query = canvasQuery.trim().toLowerCase();
-    if (!query || !activeTopology) return [];
-    const nodes = activeTopology.nodes
-      .filter((node) => {
-        return [node.display_name, node.device_type].some((value) => String(value || "").toLowerCase().includes(query));
-      })
-      .map((node) => ({ id: node.node_id, kind: "node" as const, label: node.display_name || node.node_id, detail: "图纸设备" }));
-    const items = (activeTopology.canvas_items || [])
-      .filter((item) => (item.text || "").toLowerCase().includes(query))
-      .map((item) => ({ id: `canvas-${item.item_id}`, kind: "canvas_item" as const, label: item.text || item.kind, detail: "图纸图元" }));
-    return [...nodes, ...items].slice(0, 8);
-  }, [canvasQuery, activeTopology]);
-
-  const focusCanvasObject = useCallback((id: string, kind: "node" | "canvas_item") => {
-    setSelectedElement(kind === "node" ? { type: "node", nodeId: id } : { type: "canvas_item", itemId: id.replace(/^canvas-/, "") });
-    setCanvasQuery("");
-    // Release focus, otherwise the shortcut guard keeps swallowing keys and
-    // the user has to click the canvas before V/M/C work again.
-    searchInputRef.current?.blur();
-    // Selecting an object opens the inspector, which resizes the canvas. A
-    // single centring pass therefore lands the object off-centre: the focus
-    // runs first, then the container shrinks underneath it. Centre once so the
-    // object is immediately visible, then again after the inspector's
-    // transition has finished so it ends up where the user expects — which is
-    // also what makes "locate, then click the object" work.
-    pendingFocusRef.current = id;
-    window.setTimeout(() => {
-      if (pendingFocusRef.current === id) canvasApiRef.current?.focusIds([id], 1.1);
-    }, 260);
-    window.setTimeout(() => {
-      if (pendingFocusRef.current === id) canvasApiRef.current?.focusIds([id], 1.1);
-    }, 620);
-  }, []);
-
   const nudgeSelected = useCallback((dx: number, dy: number) => {
     const current = activeTopologyRef.current;
     if (!current || !canvasSelectedElementIds.length) return;
@@ -2335,14 +2310,12 @@ export default function TopologyWorkspace({
   }, [selectedElement, handleRemoveNode, handleRemoveLink, handleRemoveCanvasItem]);
 
   /**
-   * Auto-close dropdown menus (.studio-*-menu) on:
-   * 1. Clicking outside the menu (anywhere on canvas, toolbar, etc.)
-   * 2. Clicking an action button inside the menu (e.g. 矩形区域, 左对齐, 导出 PNG)
-   * 3. Opening another menu (mutual exclusion so menus never stack/overlap)
+   * Grouped menus close outside, on completed actions or Escape; settings
+   * and reference editing remain open. Opening a peer menu closes the old one.
    */
   useEffect(() => {
     const selector =
-      ".topology-studio .studio-views-menu[open], .topology-studio .studio-insert-menu[open], .topology-studio .studio-align-menu[open], .topology-studio .studio-layout-menu[open], .topology-studio .studio-more[open]";
+      ".topology-studio details[data-toolbar-menu][open]";
 
     const onPointerDown = (event: PointerEvent | MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -2368,32 +2341,57 @@ export default function TopologyWorkspace({
       openMenus.forEach((menu) => {
         const content = menu.querySelector("div");
         if (content && content.contains(target)) {
-          if (!target.closest(".view-remove")) {
+          if (target.closest("button") && !target.closest(".view-remove") && !menu.hasAttribute("data-keep-open")) {
             window.setTimeout(() => menu.removeAttribute("open"), 0);
           }
         }
       });
     };
 
+    const positionMenu = (menu: HTMLDetailsElement) => {
+      const content = menu.querySelector<HTMLElement>(':scope > div');
+      const area = menu.closest('.topology-canvas-area');
+      if (!content || !area) return;
+      menu.style.setProperty('--menu-offset', '0px');
+      const rect = content.getBoundingClientRect(), bounds = area.getBoundingClientRect();
+      const left = Math.max(8, bounds.left + 8), right = Math.min(window.innerWidth - 8, bounds.right - 8);
+      const scale = content.offsetWidth ? rect.width / content.offsetWidth : 1;
+      const offset = Math.max(left - rect.left, Math.min(0, right - rect.right));
+      menu.style.setProperty('--menu-offset', `${offset / scale}px`);
+    };
+    const positionOpenMenus = () => document.querySelectorAll<HTMLDetailsElement>(selector).forEach(positionMenu);
     const onToggle = (event: Event) => {
       const target = event.target as HTMLDetailsElement;
       if (!target || target.tagName !== "DETAILS" || !target.open) return;
       if (!target.matches?.(selector)) return;
+      positionMenu(target);
 
       const openMenus = document.querySelectorAll<HTMLDetailsElement>(selector);
       openMenus.forEach((other) => {
-        if (other !== target) other.removeAttribute("open");
+        if (other !== target && !other.contains(target) && !target.contains(other)) other.removeAttribute("open");
       });
     };
 
+    const onMenuEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const menu = document.querySelector<HTMLDetailsElement>(selector);
+      if (!menu) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      menu.removeAttribute('open');
+      menu.querySelector<HTMLElement>('summary')?.focus();
+    };
+    document.addEventListener('keydown', onMenuEscape, true);
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("click", onClick, true);
     document.addEventListener("toggle", onToggle, true);
+    window.addEventListener("resize", positionOpenMenus);
 
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("click", onClick, true);
       document.removeEventListener("toggle", onToggle, true);
+      window.removeEventListener("resize", positionOpenMenus);
+      document.removeEventListener("keydown", onMenuEscape, true);
     };
   }, []);
 
@@ -2460,7 +2458,7 @@ export default function TopologyWorkspace({
           setCanvasMode("select");
           document
             .querySelectorAll<HTMLDetailsElement>(
-              ".topology-studio .studio-views-menu[open], .topology-studio .studio-insert-menu[open], .topology-studio .studio-align-menu[open], .topology-studio .studio-layout-menu[open], .topology-studio .studio-more[open]"
+              ".topology-studio details[data-toolbar-menu][open]"
             )
             .forEach((d) => d.removeAttribute("open"));
           return;
@@ -2489,10 +2487,6 @@ export default function TopologyWorkspace({
           else nudgeSelected(0, step);
           return;
         }
-        case "/":
-          e.preventDefault();
-          searchInputRef.current?.focus();
-          return;
         case "?":
           e.preventDefault();
           setShowShortcutHelp((value) => !value);
@@ -3099,237 +3093,11 @@ export default function TopologyWorkspace({
                 <span>编辑模式</span>
               </button>
             </div>
-            {workspaceMode === "edit" && !showEditbar && (
-              <div className="studio-mini-mode-switch" role="group" aria-label="快捷绘图模式">
-                <button
-                  type="button"
-                  className={canvasMode === "select" ? "is-active" : ""}
-                  aria-pressed={canvasMode === "select"}
-                  onClick={() => setCanvasMode("select")}
-                  title="选择模式 (快捷键 V)"
-                >
-                  <IconMenu size={12} />
-                  <span>选择</span>
-                </button>
-                <button
-                  type="button"
-                  className={canvasMode === "connect" ? "is-active" : ""}
-                  aria-pressed={canvasMode === "connect"}
-                  onClick={() => setCanvasMode("connect")}
-                  title="连线模式 (快捷键 C)"
-                >
-                  <IconLink size={12} />
-                  <span>连线</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => canvasApiRef.current?.fit()}
-                  title="适配视图到画布中央 (快捷键 F)"
-                >
-                  <IconExpand size={12} />
-                  <span>适配</span>
-                </button>
-              </div>
-            )}
-            {workspaceMode === "view" && (
-              <button
-                type="button"
-                className="studio-mode-button"
-                onClick={() => canvasApiRef.current?.fit()}
-                title="适配视图到画布中央 (快捷键 F)"
-              >
-                <IconExpand size={13} />
-                <span>适配</span>
-              </button>
-            )}
-            <button
-              type="button"
-              className="studio-mode-button"
-              onClick={handleOpenWorkbenchChat}
-              title="前往工作台对话，支持大窗口、历史记录与全屏交互"
-            >
-              <IconChat size={13} />
-              <span>工作台对话</span>
-            </button>
+
           </div>
 
           <div className="toolbar-right">
-            <div className="canvas-search-wrap">
-              <IconSearch size={13} />
-              <input
-                ref={searchInputRef}
-                value={canvasQuery}
-                placeholder="搜索设备"
-                aria-label="在画布中搜索设备"
-                onChange={(event) => setCanvasQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    setCanvasQuery("");
-                    searchInputRef.current?.blur();
-                  } else if (event.key === "Enter" && canvasMatches.length > 0) {
-                    focusCanvasObject(canvasMatches[0].id, canvasMatches[0].kind);
-                    setCanvasQuery("");
-                    searchInputRef.current?.blur();
-                  }
-                }}
-                onBlur={() => window.setTimeout(() => setCanvasQuery(""), 180)}
-              />
-              {canvasQuery && (
-                <button
-                  type="button"
-                  className="canvas-search-clear"
-                  aria-label="清空搜索"
-                  title="清空搜索"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    setCanvasQuery("");
-                    searchInputRef.current?.focus();
-                  }}
-                >
-                  ✕
-                </button>
-              )}
-              {canvasQuery && canvasMatches.length > 0 && (
-                <div className="canvas-search-results">
-                  {canvasMatches.map((match) => (
-                    <button key={match.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => focusCanvasObject(match.id, match.kind)}>
-                      <span>{match.label}</span>
-                      <small>{match.detail}</small>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {canvasQuery && canvasMatches.length === 0 && (
-                <div className="canvas-search-results">
-                  <div className="canvas-search-empty">未找到匹配设备</div>
-                </div>
-              )}
-            </div>
-            <details className="studio-views-menu">
-              <summary>视图</summary>
-              <div>
-                <button type="button" onClick={saveBookmark}>保存当前视图…</button>
-                {bookmarks.length === 0 && <small>尚未保存视图</small>}
-                {bookmarks.map((bookmark) => (
-                  <span key={bookmark.name} className="view-row">
-                    <button type="button" onClick={() => applyBookmark(bookmark)}>{bookmark.name}</button>
-                    <button type="button" className="view-remove" aria-label={`删除视图 ${bookmark.name}`} onClick={() => removeBookmark(bookmark.name)}>×</button>
-                  </span>
-                ))}
-              </div>
-            </details>
-            {workspaceMode === "edit" && (
-              <Button
-                size="sm"
-                icon={showEditbar ? <IconChevronUp size={13} /> : <IconWrench size={13} />}
-                variant={showEditbar ? "default" : "ghost"}
-                onClick={() => setShowEditbar((v) => !v)}
-                title={showEditbar ? "收起编辑工具条 (快捷键 T)" : "展开编辑工具条 (快捷键 T)"}
-                aria-expanded={showEditbar}
-              >
-                {showEditbar ? "收起工具" : "展开工具"}
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant={whiteboardActive ? "primary" : "default"}
-              icon={<IconPencil size={13} />}
-              onClick={handleToggleWhiteboard}
-              title={whiteboardActive ? "关闭画板批注" : "开启画板批注：在拓扑上自由画笔、荧光笔、箭头与便签标注"}
-              aria-pressed={whiteboardActive}
-            >
-              {whiteboardActive ? "关闭画板" : "画板批注"}
-            </Button>
-            <Button
-              size="sm"
-              variant={isFullscreen ? "primary" : "default"}
-              icon={isFullscreen ? <IconArrowsIn size={13} /> : <IconExpand size={13} />}
-              onClick={handleToggleFullscreen}
-              title={isFullscreen ? "退出全屏展示 (Esc / F11)" : "全屏展示拓扑图 (快捷键 F11 / 点击体验沉浸大屏)"}
-              aria-pressed={isFullscreen}
-            >
-              {isFullscreen ? "退出全屏" : "全屏展示"}
-            </Button>
-            <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>绘图对话</Button>
-          </div>
-        </div>
-        {workspaceMode === "edit" && showEditbar && !isFullscreen && (
-          <div className="topology-editbar">
-          <div className="studio-edit-tools" role="group" aria-label="画布工具">
-            <button className="studio-mode-button" aria-label="选择" aria-pressed={canvasMode === "select" && !armedNodeType} onClick={() => { setCanvasMode("select"); setArmedNodeType(null); }} title="选择模式 (快捷键 V)"><IconMenu size={13} />选择</button>
-            <button className="studio-mode-button" aria-label="连线" aria-pressed={canvasMode === "connect"} onClick={() => { setCanvasMode("connect"); setArmedNodeType(null); }} title="极速连线模式 (快捷键 C)"><IconLink size={13} />连线</button>
-            <button className="studio-mode-button" type="button" onClick={() => canvasApiRef.current?.fit()} title="适配视图到画布中央 (快捷键 F)"><IconExpand size={13} />适配</button>
-            <details className="studio-insert-menu"><summary><IconBox size={13} />插入</summary><div>
-              <button type="button" onClick={() => handleAddCanvasItem("rectangle")}>矩形区域</button>
-              <button type="button" onClick={() => handleAddCanvasItem("ellipse")}>椭圆标注</button>
-              <button type="button" onClick={() => handleAddCanvasItem("text")}>文本框</button>
-            </div></details>
-            <details className="studio-align-menu"><summary><IconArrowsX size={13} />对齐</summary><div>
-              <button onClick={() => handleAlignSelectedNodes("left")}>左对齐</button><button onClick={() => handleAlignSelectedNodes("center")}>水平居中</button><button onClick={() => handleAlignSelectedNodes("right")}>右对齐</button>
-              <button onClick={() => handleAlignSelectedNodes("top")}>顶对齐</button><button onClick={() => handleAlignSelectedNodes("middle")}>垂直居中</button><button onClick={() => handleAlignSelectedNodes("bottom")}>底对齐</button>
-            </div></details>
-            {selectedNodes.length >= 1 && (
-              <button
-                className="studio-mode-button"
-                type="button"
-                onClick={handleOpenCreateZone}
-                title="将选中设备自动生成自适应区域底框 (完美包裹，留足间距)"
-              >
-                <IconBox size={13} />编为区域
-              </button>
-            )}
-            {selectedNodes.length >= 2 && (
-              <button
-                className="studio-mode-button"
-                type="button"
-                onClick={handleLockSelectedNodes}
-                title="固定选中设备相对位置 (拖动其中任意一台时其他设备跟随同样轨迹移动)"
-              >
-                <IconLock size={13} />固定
-              </button>
-            )}
-            {selectedNodes.length > 0 && selectedNodes.some((n) => Boolean(n.lock_group)) && (
-              <button
-                className="studio-mode-button"
-                type="button"
-                onClick={handleUnlockSelectedNodes}
-                title="解除选中设备的固定联动"
-              >
-                <IconUnlock size={13} />解除固定
-              </button>
-            )}
-          </div>
-          <div className="toolbar-right">
-            <Button
-              size="sm"
-              icon={<IconUndo size={13} />}
-              disabled={!history.length || saveStatus === "conflict"}
-              onClick={handleUndo}
-              title="撤销 (Ctrl+Z / Cmd+Z)"
-            >
-              撤销
-            </Button>
-            <Button
-              size="sm"
-              icon={<IconRedo size={13} />}
-              disabled={!future.length || saveStatus === "conflict"}
-              onClick={handleRedo}
-              title="恢复已撤销的操作 (Ctrl+Y / Cmd+Shift+Z)"
-            >
-              恢复
-            </Button>
-            <details className="studio-layout-menu">
-              <summary className={layoutBusy || (activeTopology?.nodes?.length || 0) < 2 ? "is-disabled" : ""}><IconGrid size={13} />{layoutBusy ? "排布中" : "自动排布"}</summary>
-              <div>
-                {LAYOUT_PRESETS.map((preset) => (
-                  <button key={preset.id} type="button" title={preset.hint} onClick={() => void handleAutoLayout(preset.id)}>
-                    <strong>{preset.label}</strong>
-                    <small>{preset.hint}</small>
-                  </button>
-                ))}
-              </div>
-            </details>
-
+            <details className="studio-file-menu" data-toolbar-menu><summary>图纸</summary><div>
             <Button
               size="sm"
               icon={<IconClock size={13} />}
@@ -3339,7 +3107,7 @@ export default function TopologyWorkspace({
             >
               {revisionsLoading ? "读取中…" : "版本历史"}
             </Button>
-            <details className="studio-more"><summary>更多</summary><div>
+
             <Button
               size="sm"
               icon={<IconSave size={13} />}
@@ -3385,15 +3153,167 @@ export default function TopologyWorkspace({
             >
               删除拓扑
             </Button>
+</div></details>
+
             <Button
               size="sm"
               icon={<IconEye size={13} />}
+              iconOnly
+              aria-label={isInspectorOpen ? "收起详情" : "查看详情"}
               onClick={() => { setIsInspectorOpen((open) => !open); setShowAgent(false); }}
               aria-pressed={isInspectorOpen}
             >
-              {isInspectorOpen ? "收起详情" : "查看详情"}
+              <span className="tool-action-label">{isInspectorOpen ? "收起详情" : "查看详情"}</span>
             </Button>
+            <div className="topology-chat-actions" role="group" aria-label="图纸对话">
+            <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>绘图对话</Button>
+            <details className="studio-chat-menu" data-toolbar-menu><summary aria-label="对话选项" title="对话选项"><IconChevronDown size={13} /></summary><div>
+            <button
+              type="button"
+              className="studio-mode-button"
+              onClick={handleOpenWorkbenchChat}
+              title="前往工作台对话，支持大窗口、历史记录与全屏交互"
+            >
+              <IconChat size={13} />
+              <span>工作台对话</span>
+            </button>
+            </div></details></div>
+          </div>
+        </div>
+        {!isFullscreen && (
+          <div className="topology-editbar" role="toolbar" aria-label="拓扑操作">
+          {workspaceMode === "edit" && showEditbar ? <div className="studio-edit-tools" role="group" aria-label="画布工具">
+            <button className="studio-mode-button" aria-label="选择" aria-pressed={canvasMode === "select" && !armedNodeType} onClick={() => { setCanvasMode("select"); setArmedNodeType(null); }} title="选择模式 (快捷键 V)"><IconMenu size={13} />选择</button>
+            <button className="studio-mode-button" aria-label="连线" aria-pressed={canvasMode === "connect"} onClick={() => { setCanvasMode("connect"); setArmedNodeType(null); }} title="极速连线模式 (快捷键 C)"><IconLink size={13} />连线</button>
+
+            <details className="studio-insert-menu" data-toolbar-menu><summary><IconBox size={13} />插入</summary><div>
+              <button type="button" onClick={() => handleAddCanvasItem("rectangle")}>矩形区域</button>
+              <button type="button" onClick={() => handleAddCanvasItem("ellipse")}>椭圆标注</button>
+              <button type="button" onClick={() => handleAddCanvasItem("text")}>文本框</button>
             </div></details>
+          </div> : <div className="studio-edit-tools"><span className="canvas-mode-hint">{workspaceMode === "view" ? "查看模式" : "编辑工具已收起"}</span></div>}
+          <div className="toolbar-right">
+            {workspaceMode === "edit" && showEditbar && <div className="studio-secondary-tools" role="group" aria-label="画板与排列">
+            <Button
+              size="sm"
+              variant={whiteboardActive ? "primary" : "default"}
+              icon={<IconPencil size={13} />}
+              className="annotation-action"
+              aria-label={whiteboardActive ? "关闭画板" : "画板批注"}
+              onClick={handleToggleWhiteboard}
+              title={whiteboardActive ? "关闭画板批注" : "开启画板批注：在拓扑上自由画笔、荧光笔、箭头与便签标注"}
+              aria-pressed={whiteboardActive}
+            >
+              <span className="annotation-label">{whiteboardActive ? "关闭画板" : "画板批注"}</span>
+            </Button>
+            <details className="studio-arrange-menu" data-toolbar-menu><summary><IconArrowsX size={13} />排列</summary><div>
+            <section className="arrange-align"><strong>对齐</strong><div>
+              <button disabled={selectedNodes.length < 2} onClick={() => handleAlignSelectedNodes("left")}>左对齐</button><button disabled={selectedNodes.length < 2} onClick={() => handleAlignSelectedNodes("center")}>水平居中</button><button disabled={selectedNodes.length < 2} onClick={() => handleAlignSelectedNodes("right")}>右对齐</button>
+              <button disabled={selectedNodes.length < 2} onClick={() => handleAlignSelectedNodes("top")}>顶对齐</button><button disabled={selectedNodes.length < 2} onClick={() => handleAlignSelectedNodes("middle")}>垂直居中</button><button disabled={selectedNodes.length < 2} onClick={() => handleAlignSelectedNodes("bottom")}>底对齐</button>
+            </div></section>
+            {selectedNodes.length >= 1 && (
+              <button
+                className="studio-mode-button"
+                type="button"
+                onClick={handleOpenCreateZone}
+                title="根据选中设备边界创建区域"
+              >
+                <IconBox size={13} />编为区域
+              </button>
+            )}
+            {selectedNodes.length >= 2 && (
+              <button
+                className="studio-mode-button"
+                type="button"
+                onClick={handleLockSelectedNodes}
+                title="固定选中设备相对位置 (拖动其中任意一台时其他设备跟随同样轨迹移动)"
+              >
+                <IconLock size={13} />固定
+              </button>
+            )}
+            {selectedNodes.length > 0 && selectedNodes.some((n) => Boolean(n.lock_group)) && (
+              <button
+                className="studio-mode-button"
+                type="button"
+                onClick={handleUnlockSelectedNodes}
+                title="解除选中设备的固定联动"
+              >
+                <IconUnlock size={13} />解除固定
+              </button>
+            )}
+            <section className="studio-layout-options">
+              <strong><IconGrid size={13} />{layoutBusy ? "排布中" : "自动排布"}</strong>
+              <div>
+                {LAYOUT_PRESETS.map((preset) => (
+                  <button key={preset.id} type="button" title={preset.hint} disabled={layoutBusy || (activeTopology?.nodes.length || 0) < 2} onClick={() => void handleAutoLayout(preset.id)}>
+                    <strong>{preset.label}</strong>
+                    <small>{preset.hint}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+            </div></details>
+            </div>}
+            <Button
+              size="sm"
+              icon={<IconUndo size={13} />}
+              iconOnly aria-label="撤销"
+              disabled={!history.length || saveStatus === "conflict"}
+              onClick={handleUndo}
+              title="撤销 (Ctrl+Z / Cmd+Z)"
+            >
+              <span className="tool-action-label">撤销</span>
+            </Button>
+            <Button
+              size="sm"
+              icon={<IconRedo size={13} />}
+              iconOnly aria-label="恢复"
+              disabled={!future.length || saveStatus === "conflict"}
+              onClick={handleRedo}
+              title="恢复已撤销的操作 (Ctrl+Y / Cmd+Shift+Z)"
+            >
+              <span className="tool-action-label">恢复</span>
+            </Button>
+
+
+
+            <TopologyDisplayTools toolsVisible={showEditbar} setToolsVisible={setShowEditbar} grid={gridEnabled} setGrid={setGridEnabled} gridSnap={gridSnapEnabled} setGridSnap={setGridSnapEnabled}
+              smartGuides={smartGuidesEnabled} setSmartGuides={setSmartGuidesEnabled} interfaces={showInterfaces} setInterfaces={setShowInterfaces}
+              compact={compactMode} setCompact={setCompactMode} observation={showObservation} setObservation={setShowObservation}
+              observationCount={nodeOverlays.filter(item => overlayObservationStatus(item) !== null).length}
+              editable={workspaceMode === 'edit'} referenceLines={referenceLines} onChange={changeReferenceLines}
+              referenceId={alignmentReferenceId} referenceName={activeTopology?.nodes.find(node => node.node_id === alignmentReferenceId)?.display_name}
+              onClearReference={() => setAlignmentReferenceId(null)}
+              onSetReference={() => { const ids = canvasSelectedElementIds.filter(id => activeTopology?.nodes.some(node => node.node_id === id)); if (ids.length === 1) setAlignmentReferenceId(ids[0]); else setNotice('请选中一台设备作为对齐基准', false); }}
+              canSetReference={canvasSelectedElementIds.filter(id => activeTopology?.nodes.some(node => node.node_id === id)).length === 1}
+              onAddReference={axis => { const view = canvasApiRef.current?.getViewport(); const host = viewportRef.current; if (!view || !host) return;
+                changeReferenceLines([...referenceLines, { id: crypto.randomUUID(), axis, position: ((axis === 'x' ? host.clientWidth : host.clientHeight)/2 - view[axis])/view.zoom, locked: false }]); }}
+              onFit={() => canvasApiRef.current?.fit()}>
+            <section className="studio-view-options">
+              <strong>视图书签</strong>
+              <div>
+                <button type="button" onClick={saveBookmark}>保存当前视图…</button>
+                {bookmarks.length === 0 && <small>尚未保存视图</small>}
+                {bookmarks.map((bookmark) => (
+                  <span key={bookmark.name} className="view-row">
+                    <button type="button" onClick={() => applyBookmark(bookmark)}>{bookmark.name}</button>
+                    <button type="button" className="view-remove" aria-label={`删除视图 ${bookmark.name}`} onClick={() => removeBookmark(bookmark.name)}>×</button>
+                  </span>
+                ))}
+              </div>
+            </section>
+            <Button
+              size="sm"
+              variant={isFullscreen ? "primary" : "default"}
+              icon={isFullscreen ? <IconArrowsIn size={13} /> : <IconExpand size={13} />}
+              onClick={handleToggleFullscreen}
+              title={isFullscreen ? "退出全屏展示 (Esc / F11)" : "全屏展示拓扑图 (快捷键 F11 / 点击体验沉浸大屏)"}
+              aria-pressed={isFullscreen}
+            >
+              {isFullscreen ? "退出全屏" : "全屏展示"}
+            </Button>
+            </TopologyDisplayTools>
+
           </div>
         </div>
         )}
@@ -3427,11 +3347,6 @@ export default function TopologyWorkspace({
                       ? "点击空白处连续放置设备 (Esc 或右键退出)"
                       : "空白处左键拖拽框选 · 拖动设备移动 · 空格/中键平移 · C 连线"}
                 </span>
-                <label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label>
-                <label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label>
-                <label title="仅在靠近网格点时轻微吸附；Shift + G 切换"><input type="checkbox" checked={gridSnapEnabled} onChange={event => setGridSnapEnabled(event.target.checked)} />网格吸附</label>
-                <label title="只显示最近证据标记，不代表当前健康，也不修改图纸"><input type="checkbox" checked={showObservation} onChange={event => setShowObservation(event.target.checked)} />最近观测</label>
-                <label title="紧凑模式缩小节点尺寸，避免密集拓扑中标签重叠"><input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />紧凑模式</label>
               </>
             )}
           </div>
@@ -3455,6 +3370,10 @@ export default function TopologyWorkspace({
             interactionMode={workspaceMode}
             gridEnabled={gridEnabled}
             gridSnapEnabled={gridSnapEnabled}
+            smartGuidesEnabled={smartGuidesEnabled}
+            alignmentReferenceId={alignmentReferenceId}
+            referenceLines={referenceLines}
+            onReferenceLinesChange={changeReferenceLines}
             moveRegionMembers={regionMoveMode === "region"}
             showInterfaces={showInterfaces}
             compactMode={compactMode}
@@ -4834,7 +4753,6 @@ export default function TopologyWorkspace({
               <div><dt>Ctrl/⌘ + A</dt><dd>全选</dd></div>
               <div><dt>方向键</dt><dd>微移选中对象 1 单位（Shift 为 8 单位）</dd></div>
               <div><dt>F / Shift + F</dt><dd>适配全部 / 缩放至选中对象</dd></div>
-              <div><dt>/</dt><dd>搜索设备并定位</dd></div>
               <div><dt>I</dt><dd>切换接口标签</dd></div>
               <div><dt>T</dt><dd>展开 / 收起编辑工具条</dd></div>
               <div><dt>Shift + G</dt><dd>切换网格吸附</dd></div>

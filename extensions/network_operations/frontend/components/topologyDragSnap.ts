@@ -11,13 +11,13 @@ export function attractToLine(raw: number, destination: number, zoom: number) {
   return { position: raw + (destination - raw) * weight, aligned: false };
 }
 
-export function nearbySnapTargets(axis: 'x' | 'y', moving: SnapBody, others: SnapBody[], zoom: number): SnapTarget[] {
+export function nearbySnapTargets(axis: 'x' | 'y', moving: SnapBody, others: SnapBody[], zoom: number, longRange = false): SnapTarget[] {
   const half = axis === 'x' ? moving.halfW : moving.halfH;
   const cross = axis === 'x' ? 'y' : 'x';
   const crossHalf = axis === 'x' ? 'halfH' : 'halfW';
   return others.flatMap(other => {
     const gap = Math.max(0, Math.abs(other[cross] - moving[cross]) - other[crossHalf] - moving[crossHalf]) * zoom;
-    if (gap > 180) return [];
+    if (!longRange && gap > 180) return [];
     const otherHalf = axis === 'x' ? other.halfW : other.halfH;
     const priority = moving.region && moving.region === other.region ? 0 : 1;
     const result = [-1, 0, 1].map(edge => ({ key: `${other.id}:${axis}:${edge}:${edge}`, source: other.id,
@@ -34,11 +34,15 @@ export function nearbySnapTargets(axis: 'x' | 'y', moving: SnapBody, others: Sna
   });
 }
 
-export function resolveDragAxis(raw: number, zoom: number, targets: SnapTarget[], previousKey: string | null, grid: boolean) {
-  const candidates = targets.filter(target => Math.abs(target.line - target.offset - raw) * zoom < 5);
+export function alignmentPreviewTarget(raw: number, zoom: number, targets: SnapTarget[], previousKey: string | null, radius = 12) {
+  const candidates = targets.filter(target => Math.abs(target.line - target.offset - raw) * zoom < radius);
   const held = candidates.find(target => target.key === previousKey);
-  const target = held || candidates.sort((a, b) => Math.abs(a.line - a.offset - raw) - Math.abs(b.line - b.offset - raw)
+  return held || candidates.sort((a, b) => Math.abs(a.line - a.offset - raw) - Math.abs(b.line - b.offset - raw)
     || a.priority - b.priority || a.key.localeCompare(b.key))[0];
+}
+
+export function resolveDragAxis(raw: number, zoom: number, targets: SnapTarget[], previousKey: string | null, grid: boolean) {
+  const target = alignmentPreviewTarget(raw, zoom, targets, previousKey, 5);
   const nearestGridLine = Math.round(raw / 32) * 32;
   const previousGridLine = previousKey?.startsWith('grid:') ? Number(previousKey.slice(5)) : nearestGridLine;
   const gridLine = Math.abs(previousGridLine - raw) * zoom < 5 ? previousGridLine : nearestGridLine;

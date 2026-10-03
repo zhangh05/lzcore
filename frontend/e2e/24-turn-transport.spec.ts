@@ -77,8 +77,8 @@ test('24b. an idle application adopts a topology version broadcast before any tu
   await expect.poll(() => Boolean(socket)).toBe(true);
   version = 2;
   socket!.send(JSON.stringify({ type: 'event', name: 'topology_updated', data: { workspace_id: workspaceId, topology_id: topologyId, version } }));
-  await page.locator('.canvas-search-wrap input').first().fill('服务端新增节点');
-  await expect(page.locator('.canvas-search-results button').first()).toContainText('服务端新增节点');
+  await expect(page.getByTestId('topo-node-broadcast-node')).toContainText('服务端新增节点');
+  await expect.poll(() => page.locator('.netops-cytoscape').evaluate((el: any) => el._cyreg?.cy?.getElementById('broadcast-node').length)).toBe(1);
   const updatedReads = reads;
   socket!.send(JSON.stringify({ type: 'event', name: 'topology_updated', data: { workspace_id: workspaceId, topology_id: topologyId, version } }));
   await page.waitForTimeout(100);

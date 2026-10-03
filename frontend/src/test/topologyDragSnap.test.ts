@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attractToLine, nearbySnapTargets, resolveDragAxis, type SnapBody, type SnapTarget } from '../../../extensions/network_operations/frontend/components/topologyDragSnap';
+import { alignmentPreviewTarget, attractToLine, nearbySnapTargets, resolveDragAxis, type SnapBody, type SnapTarget } from '../../../extensions/network_operations/frontend/components/topologyDragSnap';
 
 const moving: SnapBody = { id: 'a', x: 200, y: 100, halfW: 38, halfH: 30, region: 'r' };
 const target: SnapTarget = { key: 'reference', line: 100, offset: 0, source: 'b', priority: 0 };
@@ -19,6 +19,14 @@ describe('gentle pointer attraction', () => {
         previous = shown;
       }
       expect(attractToLine(100 + 5 / zoom, 100, zoom).position).toBeCloseTo(100 + 5 / zoom, 10);
+    }
+  });
+  it('previews a nearby alignment without widening the attraction radius', () => {
+    for (const zoom of [.15, .6, 1.3, 4]) {
+      const raw = 100 + 8 / zoom;
+      expect(alignmentPreviewTarget(raw, zoom, [target], null)).toBe(target);
+      expect(resolveDragAxis(raw, zoom, [target], null, false)).toMatchObject({ position: raw, target: null });
+      expect(alignmentPreviewTarget(100 + 13 / zoom, zoom, [target], null)).toBeUndefined();
     }
   });
   it('keeps the acquired target through competition and releases it outside the five-pixel radius', () => {

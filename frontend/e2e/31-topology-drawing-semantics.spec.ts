@@ -40,10 +40,11 @@ test('31. drawing colours, inspector, contrast and observation markers remain in
     return canvas.getContext('2d')!.getImageData(Math.round((position.x + 38 * zoom) * dpr), Math.round((position.y - 30 * zoom - 3) * dpr), 1, 1).data[3];
   });
   await expect.poll(markerAlpha).toBeGreaterThan(0);
-  await page.getByRole('checkbox', { name: '最近观测', exact: true }).uncheck();
+  await page.locator('.studio-display-menu summary').click();
+  await page.getByRole('checkbox', { name: '最近检测结果', exact: true }).uncheck();
   await expect.poll(async () => (await appearances()).states).toEqual([null, null, null, null, null, null]);
   await expect.poll(markerAlpha).toBe(0);
-  await page.getByRole('checkbox', { name: '最近观测', exact: true }).check();
+  await page.getByRole('checkbox', { name: '最近检测结果', exact: true }).check();
   for (const theme of ['light', 'dark', 'light', 'dark']) {
     if (await page.locator('html').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: '切换主题', exact: true }).click();
     await expect.poll(async () => (await appearances()).colours).toEqual(['rgb(102,113,122)', 'rgb(0,0,0)', 'rgb(139,92,246)']);
@@ -98,7 +99,7 @@ test('31. drawing colours, inspector, contrast and observation markers remain in
   await expect(picker).toHaveValue('#000000');
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await expect.poll(() => saves.length).toBe(3);
-  await page.locator('.studio-more summary').click();
+  await page.locator('.studio-file-menu summary').click();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出 SVG', exact: true }).click();
   const svg = await fs.readFile((await (await download).path())!, 'utf8');
@@ -106,7 +107,7 @@ test('31. drawing colours, inspector, contrast and observation markers remain in
   expect(svg).toContain('stroke="#1262aa"'); expect(svg).toContain('stroke="#8b5cf6"');
   expect(svg).not.toContain('最近连接'); expect(svg).not.toContain('underlay');
   for (const format of ['PNG', 'PDF']) {
-    await page.locator('.studio-more summary').click();
+    await page.locator('.studio-file-menu summary').click();
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: `导出 ${format}`, exact: true }).click();
     const bytes = await fs.readFile((await (await pending).path())!);

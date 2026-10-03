@@ -1,4 +1,5 @@
-import { nearbySnapTargets, resolveDragAxis } from './topologyDragSnap';
+import { TopologyReferenceLines, referenceTargets, type ReferenceLine } from './TopologyReferenceLines';
+import { alignmentPreviewTarget, nearbySnapTargets, resolveDragAxis } from './topologyDragSnap';
 // React 的合成事件类型与 DOM 原生事件同名，这里显式区分：画布上的原生
 // window 监听必须拿到 DOM MouseEvent（带 clientX/clientY 且可用于
 // addEventListener），React 回调才用合成事件类型。
@@ -33,6 +34,7 @@ export type CanvasApi = {
   selectAll: () => string[];
   selectElements?: (ids: string[]) => void;
   clearSelection: () => void;
+  getBodies: (ids: string[]) => import("./topologyDragSnap").SnapBody[];
   getViewport: () => { x: number; y: number; zoom: number };
   setViewport: (view: { x: number; y: number; zoom: number }) => void;
   startConnectFrom?: (nodeId: string) => void;
@@ -53,6 +55,10 @@ type Props = {
   interactionMode?: "view" | "edit";
   gridEnabled: boolean;
   gridSnapEnabled?: boolean;
+  smartGuidesEnabled?: boolean;
+  alignmentReferenceId?: string | null;
+  referenceLines?: ReferenceLine[];
+  onReferenceLinesChange?: (lines: ReferenceLine[]) => void;
   moveRegionMembers?: boolean;
   showInterfaces: boolean;
   compactMode?: boolean;
@@ -353,7 +359,7 @@ const canvasItemDefaults: Record<TopologyCanvasItem["kind"], Required<TopologyCa
 };
 
 type CanvasElementSpec = { group?: string; classes?: string; data: Record<string, unknown>; position?: { x: number; y: number } };
-type AlignGuide = { x1: number; y1: number; x2: number; y2: number; aligned?: boolean };
+type AlignGuide = { x1: number; y1: number; x2: number; y2: number; aligned?: boolean; hint?: string; source?: 'device'; referenceId?: string };
 
 const SKIPPED_DATA_KEYS = new Set(["id", "source", "target"]);
 
@@ -547,40 +553,41 @@ function renderMotionOverlay(
       const gx2 = guide.x2 * zoom + panX;
       const gy2 = guide.y2 * zoom + panY;
 
-      ctx.globalAlpha = guide.aligned === false ? .35 : 1;
-      ctx.strokeStyle = guide.aligned === false ? (dark ? "#8a949e" : "#566368") : "#f59e0b";
+      ctx.globalAlpha = guide.aligned === false ? .8 : 1;
+      ctx.strokeStyle = dark ? "#e2ad4d" : "#925b08";
       ctx.lineWidth = 1.2;
-      ctx.setLineDash([5, 3]);
+      ctx.setLineDash(guide.aligned === false ? [6, 4] : []);
       ctx.beginPath();
       ctx.moveTo(gx1, gy1);
       ctx.lineTo(gx2, gy2);
       ctx.stroke();
 
-      if (guide.aligned === false) continue;
-      ctx.setLineDash([]);
-      ctx.lineWidth = 1.5;
-      const crossSize = 4;
-      ctx.beginPath();
-      ctx.moveTo(gx1 - crossSize, gy1); ctx.lineTo(gx1 + crossSize, gy1);
-      ctx.moveTo(gx1, gy1 - crossSize); ctx.lineTo(gx1, gy1 + crossSize);
-      ctx.moveTo(gx2 - crossSize, gy2); ctx.lineTo(gx2 + crossSize, gy2);
-      ctx.moveTo(gx2, gy2 - crossSize); ctx.lineTo(gx2, gy2 + crossSize);
-      ctx.stroke();
+      if (guide.aligned !== false) {
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1.5;
+        const crossSize = 4;
+        ctx.beginPath();
+        ctx.moveTo(gx1 - crossSize, gy1); ctx.lineTo(gx1 + crossSize, gy1);
+        ctx.moveTo(gx1, gy1 - crossSize); ctx.lineTo(gx1, gy1 + crossSize);
+        ctx.moveTo(gx2 - crossSize, gy2); ctx.lineTo(gx2 + crossSize, gy2);
+        ctx.moveTo(gx2, gy2 - crossSize); ctx.lineTo(gx2, gy2 + crossSize);
+        ctx.stroke();
+      }
 
       const dist = Math.round(Math.hypot(guide.x2 - guide.x1, guide.y2 - guide.y1));
       if (dist > 40) {
         const mx = (gx1 + gx2) / 2;
         const my = (gy1 + gy2) / 2;
-        const tagText = `${dist}px`;
+        const tagText = guide.hint ? `${guide.hint} · ${guide.aligned === false ? '接近' : '已对齐'}` : `${dist}px`;
         ctx.font = '600 10px ui-monospace, SFMono-Regular, monospace';
         const tagW = ctx.measureText(tagText).width + 8;
         const tagH = 14;
-        ctx.fillStyle = "rgba(245, 158, 11, 0.92)";
+        ctx.fillStyle = dark ? "#e2ad4d" : "#925b08";
         ctx.beginPath();
         if ((ctx as any).roundRect) (ctx as any).roundRect(mx - tagW / 2, my - tagH / 2, tagW, tagH, 3);
         else ctx.rect(mx - tagW / 2, my - tagH / 2, tagW, tagH);
         ctx.fill();
-        ctx.fillStyle = "#ffffff";
+        ctx.fillStyle = dark ? "#1c1206" : "#ffffff";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(tagText, mx, my);
@@ -1325,8 +1332,20 @@ export default function NetOpsCanvas(props: Props) {
         const rawY = position.y - residual.y;
         const moving = { id: node.id(), x: rawX, y: rawY, halfW, halfH,
           region: regionById.get(node.id()) };
-        const snappedX = resolveDragAxis(rawX, cy.zoom(), nearbySnapTargets('x', moving, others, cy.zoom()), snapTargetRef.current.x, Boolean(propsRef.current.gridSnapEnabled));
-        const snappedY = resolveDragAxis(rawY, cy.zoom(), nearbySnapTargets('y', moving, others, cy.zoom()), snapTargetRef.current.y, Boolean(propsRef.current.gridSnapEnabled));
+        const visibleOthers = others.filter(other => {
+          const x = other.x * cy.zoom() + cy.pan().x, y = other.y * cy.zoom() + cy.pan().y;
+          return x >= 0 && x <= (host?.clientWidth || 0) && y >= 0 && y <= (host?.clientHeight || 0);
+        });
+        const referenceId = propsRef.current.alignmentReferenceId;
+        const candidates = referenceId ? others.filter(other => other.id === referenceId) : visibleOthers;
+        const deviceTargets = (axis: 'x' | 'y') => propsRef.current.smartGuidesEnabled === false ? [] : nearbySnapTargets(axis, moving, candidates, cy.zoom(), true);
+        const devicesX = deviceTargets('x'), devicesY = deviceTargets('y');
+        const targets = (axis: 'x' | 'y') => [
+          ...referenceTargets(propsRef.current.referenceLines || [], axis, axis === 'x' ? halfW : halfH),
+          ...(axis === 'x' ? devicesX : devicesY),
+        ];
+        const snappedX = resolveDragAxis(rawX, cy.zoom(), targets('x'), snapTargetRef.current.x, Boolean(propsRef.current.gridSnapEnabled));
+        const snappedY = resolveDragAxis(rawY, cy.zoom(), targets('y'), snapTargetRef.current.y, Boolean(propsRef.current.gridSnapEnabled));
         snapTargetRef.current = { x: snappedX.target?.key || null, y: snappedY.target?.key || null };
         const nextX = snappedX.position;
         const nextY = snappedY.position;
@@ -1363,19 +1382,30 @@ export default function NetOpsCanvas(props: Props) {
         }
 
         const lines: AlignGuide[] = [];
-        if (snappedX.target && snappedX.target.source !== null) {
-          const near = others.filter(other => other.id === snappedX.target!.source);
+        // Manual references and grid attraction need visible feedback too.
+        if (snappedX.target?.source === null) lines.push({ x1: snappedX.target.line, x2: snappedX.target.line,
+          y1: -cy.pan().y/cy.zoom(), y2: ((host?.clientHeight || 0)-cy.pan().y)/cy.zoom(), aligned: snappedX.aligned });
+        if (snappedY.target?.source === null) lines.push({ y1: snappedY.target.line, y2: snappedY.target.line,
+          x1: -cy.pan().x/cy.zoom(), x2: ((host?.clientWidth || 0)-cy.pan().x)/cy.zoom(), aligned: snappedY.aligned });
+        const previewX = snappedX.target?.source ? snappedX.target : alignmentPreviewTarget(rawX, cy.zoom(), devicesX, null);
+        const previewY = snappedY.target?.source ? snappedY.target : alignmentPreviewTarget(rawY, cy.zoom(), devicesY, null);
+        if (previewX) {
+          const near = others.filter(other => other.id === previewX.source);
           const top = Math.min(nextY - halfH, ...near.map((other) => other.y - other.halfH)) - 12;
           const bottom = Math.max(nextY + halfH, ...near.map((other) => other.y + other.halfH)) + 12;
-          lines.push({ x1: snappedX.target.line, y1: top, x2: snappedX.target.line, y2: bottom, aligned: snappedX.aligned });
+          lines.push({ x1: previewX.line, y1: top, x2: previewX.line, y2: bottom,
+            aligned: snappedX.target?.key === previewX.key && snappedX.aligned, source: 'device', referenceId: previewX.source || undefined,
+            hint: previewX.offset === 0 ? '中心线' : previewX.offset < 0 ? '左边缘' : '右边缘' });
         }
-        if (snappedY.target && snappedY.target.source !== null) {
-          const near = others.filter(other => other.id === snappedY.target!.source);
+        if (previewY) {
+          const near = others.filter(other => other.id === previewY.source);
           const leftEdge = Math.min(nextX - halfW, ...near.map((other) => other.x - other.halfW)) - 12;
           const rightEdge = Math.max(nextX + halfW, ...near.map((other) => other.x + other.halfW)) + 12;
-          lines.push({ x1: leftEdge, y1: snappedY.target.line, x2: rightEdge, y2: snappedY.target.line, aligned: snappedY.aligned });
+          lines.push({ x1: leftEdge, y1: previewY.line, x2: rightEdge, y2: previewY.line,
+            aligned: snappedY.target?.key === previewY.key && snappedY.aligned, source: 'device', referenceId: previewY.source || undefined,
+            hint: previewY.offset === 0 ? '中心线' : previewY.offset < 0 ? '上边缘' : '下边缘' });
         }
-        const signature = lines.map((line) => `${Math.round(line.x1)}:${Math.round(line.y1)}:${Math.round(line.x2)}:${Math.round(line.y2)}:${line.aligned}`).join("|");
+        const signature = lines.map((line) => `${Math.round(line.x1)}:${Math.round(line.y1)}:${Math.round(line.x2)}:${Math.round(line.y2)}:${line.aligned}:${line.hint}`).join("|");
         if (signature !== guideSignatureRef.current) {
           guideSignatureRef.current = signature;
           setAlignGuides(lines);
@@ -1557,6 +1587,10 @@ export default function NetOpsCanvas(props: Props) {
         propsRef.current.onSelectionChange([]);
         propsRef.current.onClearSelection();
       },
+      getBodies: (ids) => ids.flatMap(id => {
+        const node = cy.getElementById(id) as CyNode;
+        return node.length ? [{ id, ...node.position(), halfW: node.width()/2, halfH: node.height()/2 }] : [];
+      }),
       getViewport: () => ({ ...cy.pan(), zoom: cy.zoom() }),
       setViewport: (view) => {
         cy.zoom(view.zoom);
@@ -2375,6 +2409,7 @@ export default function NetOpsCanvas(props: Props) {
         </span>
       </div>
     )}
+    <TopologyReferenceLines lines={props.referenceLines || []} viewport={viewport} editable={!isViewMode} onChange={props.onReferenceLinesChange} />
     {linkPreview && (
       <svg className="netops-link-preview" aria-hidden="true">
         <line x1={linkPreview.x1} y1={linkPreview.y1} x2={linkPreview.x2} y2={linkPreview.y2} />
@@ -2384,7 +2419,7 @@ export default function NetOpsCanvas(props: Props) {
     {alignGuides.length > 0 && (
       <svg className="netops-align-guides" aria-hidden="true">
         {alignGuides.map((line, index) => (
-          <line key={index} data-aligned={line.aligned !== false} className={line.aligned === false ? "attracting" : undefined} x1={line.x1 * viewport.zoom + viewport.x} y1={line.y1 * viewport.zoom + viewport.y} x2={line.x2 * viewport.zoom + viewport.x} y2={line.y2 * viewport.zoom + viewport.y} />
+          <line key={index} data-source={line.source} data-reference={line.referenceId} data-aligned={line.aligned !== false} className={line.aligned === false ? "attracting" : undefined} x1={line.x1 * viewport.zoom + viewport.x} y1={line.y1 * viewport.zoom + viewport.y} x2={line.x2 * viewport.zoom + viewport.x} y2={line.y2 * viewport.zoom + viewport.y} />
         ))}
       </svg>
     )}

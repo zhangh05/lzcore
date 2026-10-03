@@ -151,8 +151,12 @@ def run(exe: Path, mode: str, output: Path):
             box = host.bounding_box()
             point = host.evaluate("el => el._cyreg.cy.getElementById('a').renderedPosition()")
             page.mouse.move(box['x']+point['x'], box['y']+point['y'])
+            page.locator('.studio-display-menu summary').click()
             assert page.get_by_role('checkbox', name='网格', exact=True).is_checked()
+            page.locator('.studio-guides-menu summary').click()
             assert not page.get_by_role('checkbox', name='网格吸附', exact=True).is_checked()
+            page.keyboard.press('Escape')
+            page.mouse.move(box['x']+point['x'], box['y']+point['y'])
             page.mouse.down()
             previous = None
             for step in range(6, 41):
@@ -186,6 +190,54 @@ def run(exe: Path, mode: str, output: Path):
             page.wait_for_function("document.querySelector('.netops-cytoscape')?._cyreg?.cy?.edges().length === 2")
             assert host.evaluate("el => el._cyreg.cy.getElementById('a').position()") == preview
             page.screenshot(path=str(output/'topology-drag-released.png'), full_page=True)
+            # Native smart-guide feedback differs on/off, without enlarging
+            # attraction. Returning near the grab start stays responsive.
+            host.evaluate("el => {const cy=el._cyreg.cy; cy.stop(); cy.zoom(1); cy.pan({x:30,y:30}); cy.getElementById('a').select();}")
+            page.locator('.topology-inspector').wait_for(state='visible')
+            for enabled in (False, True):
+                page.locator('.studio-guides-menu summary').click()
+                page.get_by_role('checkbox', name='智能参考线', exact=True).set_checked(enabled)
+                page.keyboard.press('Escape')
+                box = host.bounding_box()
+                point = host.evaluate("el => el._cyreg.cy.getElementById('a').renderedPosition()")
+                origin_y = host.evaluate("el => el._cyreg.cy.getElementById('a').position().y")
+                page.mouse.move(box['x']+point['x'], box['y']+point['y'])
+                page.mouse.down()
+                page.mouse.move(box['x']+point['x'], box['y']+point['y']+8)
+                wait_until(lambda: abs(host.evaluate("el => el._cyreg.cy.getElementById('a').position().y")-origin_y-8) < .8)
+                device_guides = page.locator('.netops-align-guides line[data-source="device"]')
+                wait_until(lambda: bool(device_guides.count()) == enabled)
+                page.mouse.move(box['x']+point['x'], box['y']+point['y']+2)
+                def position_matches_attraction():
+                    distance = host.evaluate("el => el._cyreg.cy.getElementById('a').position().y")-origin_y
+                    return abs(distance) < 1 if enabled else abs(distance-2) < .8
+                wait_until(position_matches_attraction)
+                page.mouse.move(box['x']+point['x'], box['y']+point['y'])
+                if enabled:
+                    wait_until(lambda: page.locator('.netops-align-guides line[data-source="device"][data-aligned="true"]').count() > 0)
+                page.screenshot(path=str(output/('topology-smart-guides-'+('on' if enabled else 'off')+'.png')), full_page=True)
+                shown = host.evaluate("el => el._cyreg.cy.getElementById('a').position()")
+                page.mouse.up()
+                wait_until(lambda: host.evaluate("el => el._cyreg.cy.getElementById('a').position()") == shown)
+                wait_until(lambda: page.locator('.netops-align-guides').count() == 0)
+            page.get_by_role('button', name='保存', exact=True).click()
+            page.get_by_text('已保存', exact=True).wait_for(state='visible')
+            # Grouped controls and local reference aids work in native WebView2.
+            page.locator('.studio-display-menu summary').click()
+            assert page.get_by_text('暂无可显示的检测记录', exact=True).is_visible()
+            page.locator('.studio-guides-menu summary').click()
+            page.get_by_role('button', name='添加水平参考线', exact=True).click()
+            page.get_by_role('spinbutton', name='参考线 1 坐标').fill('300')
+            page.get_by_role('checkbox', name='锁定参考线 1').check()
+            assert page.get_by_role('spinbutton', name='参考线 1 坐标').is_disabled()
+            page.keyboard.press('Escape')
+            page.reload()
+            page.wait_for_function("document.querySelector('.netops-cytoscape')?._cyreg?.cy?.edges().length === 2")
+            assert page.get_by_role('button', name='水平参考线 300 已锁定', exact=True).is_visible()
+            page.screenshot(path=str(output/'topology-reference-lines.png'), full_page=True)
+            page.locator('.studio-guides-menu summary').click()
+            page.get_by_role('button', name='删除参考线 1', exact=True).click()
+            page.keyboard.press('Escape')
             page.evaluate("() => {document.querySelector('.netops-cytoscape')._cyreg.cy.getElementById('black').emit('tap');}")
             assert page.get_by_label('自定义拾色器').input_value() == '#000000'
             # Background does not stop the local server or detach the durable transport.

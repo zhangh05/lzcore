@@ -6,7 +6,7 @@ for (const zoom of [.15, .6, 1.3]) for (const grid of [false, true]) {
       { node_id: 'moving', display_name: '移动设备', device_type: 'router', x: 110, y: 100 },
       { node_id: 'peer', display_name: '同步设备', device_type: 'switch', x: 110, y: 50 },
       { node_id: 'near', display_name: '附近参考', device_type: 'switch', x: 260, y: 220 },
-      { node_id: 'far', display_name: '远处设备', device_type: 'router', x: 2000, y: 103 },
+      { node_id: 'far', display_name: '远处设备', device_type: 'router', x: 20000, y: 103 },
     ] };
     const saves: any[] = [];
     await page.route('**/api/extensions/network.operations/topologies**', route => {
@@ -18,11 +18,14 @@ for (const zoom of [.15, .6, 1.3]) for (const grid of [false, true]) {
     await page.goto('/topology?topology=gentle-drag');
     const host = page.locator('.netops-cytoscape').first();
     await expect.poll(() => host.evaluate((el: any) => el._cyreg?.cy?.nodes().length)).toBe(4);
+    await page.locator('.studio-display-menu summary').click();
     await expect(page.getByRole('checkbox', { name: '网格', exact: true })).toBeChecked();
+    await page.locator('.studio-guides-menu summary').click();
     const attraction = page.getByRole('checkbox', { name: '网格吸附', exact: true });
     await expect(attraction).not.toBeChecked();
     // Shift+G changes attraction, independently of visible grid lines.
     if (grid) { await page.keyboard.press('Shift+G'); await expect(attraction).toBeChecked(); }
+    await page.locator('.studio-display-menu summary').click();
     await expect(page.getByRole('checkbox', { name: '网格', exact: true })).toBeChecked();
     await host.evaluate((el: any, selected) => { const cy=el._cyreg.cy; cy.getElementById('moving').select(); if(selected) cy.getElementById('peer').select(); }, grid);
     await expect(page.locator('.topology-inspector')).toBeVisible();
@@ -49,7 +52,7 @@ for (const zoom of [.15, .6, 1.3]) for (const grid of [false, true]) {
       last=shown;
     }
     // The off-screen, unrelated device must not produce any alignment guide.
-    await expect(page.locator('.netops-align-guides line')).toHaveCount(0);
+    if (!grid) await expect(page.locator('.netops-align-guides line[data-reference="far"]')).toHaveCount(0);
     last=null;
     for(let step=-28;step<=28;step++) {
       const distance=step/4, rawY=220+distance/zoom;

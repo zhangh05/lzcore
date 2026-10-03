@@ -5,6 +5,8 @@
 .topology-studio.library-open .topology-sidebar { display: flex; }
 .topology-studio .topology-canvas-area { display: flex; flex-direction: column; min-height: 0; height: 100%; width: 100%; overflow: hidden; grid-column: 1; background: var(--bg); }
 .topology-studio.library-open .topology-canvas-area { grid-column: 2; }
+/* Canvas overlays share a local stacking context below the toolbar menus. */
+.topology-studio .topology-canvas-viewport { isolation: isolate; z-index: 0; }
 .topology-studio .topology-canvas-title { max-width: none; font-size: var(--fs-16); letter-spacing: 0; color: var(--text); }
 
 .topology-studio .topology-observation-card {
@@ -93,8 +95,8 @@
 .topology-studio .netops-link-preview line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 .topology-studio .netops-link-preview circle { fill: var(--accent); }
 .topology-studio .netops-align-guides { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
-.topology-studio .netops-align-guides line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
-.topology-studio .netops-align-guides line.attracting { stroke: var(--text-3); opacity: .4; stroke-dasharray: 2 6; }
+.topology-studio .netops-align-guides line { stroke: var(--warn); stroke-width: 1.5; }
+.topology-studio .netops-align-guides line.attracting { opacity: .8; stroke-dasharray: 6 4; }
 .topology-studio .netops-viewport-controls {
   position: absolute;
   right: 16px;
