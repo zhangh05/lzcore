@@ -98,8 +98,10 @@ for(const zoom of [.6,1.3]) test(`33b. long real-edge alignment and release at z
   expect(preview.y).toBeCloseTo(180,1);
   await page.mouse.up();
   await expect.poll(()=>host.evaluate((el:any)=>({...el._cyreg.cy.getElementById('b').position()}))).toEqual(preview);
-  await page.getByRole('button',{name:'保存',exact:true}).click();await page.reload();
-  await expect.poll(()=>host.evaluate((el:any)=>el._cyreg?.cy?.getElementById('b').position().y)).toBeCloseTo(180,1);
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect(page.getByRole('button',{name:'已保存',exact:true})).toBeVisible();
+  await page.reload();
+  await expect.poll(()=>host.evaluate((el:any)=>el._cyreg?.cy?.getElementById('b').position()?.y)).toBeCloseTo(180,1);
 });
 
 test('33c. manual guides edit, drag, lock, persist and stay outside SVG export',async({page})=>{
