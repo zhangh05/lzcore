@@ -22,6 +22,19 @@ def test_web_only_spa_does_not_advertise_an_unavailable_native_bridge(tmp_path):
         assert ('window.__LZCORE_DESKTOP__' in html) is (bootstrap is not None)
 
 
+def test_native_runtime_unloads_explicitly_without_loading_it(monkeypatch):
+    import desktop
+    from types import SimpleNamespace
+    calls = []
+    monkeypatch.setattr(desktop.sys, 'platform', 'win32')
+    monkeypatch.delitem(desktop.sys.modules, 'pythonnet', raising=False)
+    desktop.shutdown_native_runtime()
+    assert 'pythonnet' not in desktop.sys.modules
+    monkeypatch.setitem(desktop.sys.modules, 'pythonnet', SimpleNamespace(unload=lambda: calls.append('unload')))
+    desktop.shutdown_native_runtime()
+    assert calls == ['unload']
+
+
 def test_distribution_data_paths(tmp_path):
     app = tmp_path / '中文 程序'; app.mkdir()
     bundle = app / '_internal'; bundle.mkdir()

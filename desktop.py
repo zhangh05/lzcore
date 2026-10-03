@@ -95,6 +95,16 @@ def configure_logging(paths):
         sys.stderr = LogStream()
 
 
+def shutdown_native_runtime():
+    # Python.NET normally unloads in atexit. Complete it while Python and its
+    # exception types are still alive, after all application threads stop.
+    runtime = sys.modules.get('pythonnet') if sys.platform == 'win32' else None
+    if runtime is not None:
+        logging.getLogger('lzcore.desktop').info('Unloading native runtime')
+        runtime.unload()
+        logging.getLogger('lzcore.desktop').info('Native runtime unloaded')
+
+
 def main():
     os.environ['PYTHONUTF8'] = '1'
     os.environ['PYTHONIOENCODING'] = 'utf-8'
@@ -201,9 +211,12 @@ def main():
     finally:
         if controller:
             controller.cleanup()
+            logging.getLogger('lzcore.desktop').info('Desktop controller cleaned up')
         if server:
             server.stop()
+            logging.getLogger('lzcore.desktop').info('Desktop server stopped')
         guard.__exit__(None, None, None)
+        shutdown_native_runtime()
     if controller and controller.restart:
         command = [sys.executable] if frozen else [sys.executable, str(app_dir / 'desktop.py')]
         subprocess.Popen([*command, '--data-dir', str(paths.data)])
