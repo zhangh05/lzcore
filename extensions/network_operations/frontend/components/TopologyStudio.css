@@ -29,21 +29,21 @@
 .topology-studio .topology-canvas-toolbar { position: relative; z-index: 30; flex: 0 0 auto; min-height: 54px; height: auto; box-sizing: border-box; padding: 8px 16px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .topology-studio .toolbar-left { flex: 1 1 auto; min-width: 0; gap: 10px; }
 .topology-studio .toolbar-right { flex: 1 1 280px; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 6px; align-items: center; }
-.topology-studio .topology-canvas-title { max-width: none; font-size: 14px; letter-spacing: -.2px; color: var(--text); }
+.topology-studio .topology-canvas-title { max-width: none; font-size: var(--fs-16); letter-spacing: 0; color: var(--text); }
 .topology-studio .topology-save-btn { white-space: nowrap; font-size: 12px; height: 26px; padding: 0 10px; gap: 5px; font-weight: 500; transition: all var(--t-fast, 140ms); }
 .topology-studio .topology-save-btn.status-saved { color: var(--ok); background: transparent; border-color: transparent; }
 .topology-studio .topology-save-btn.status-saved:disabled { opacity: 0.85; cursor: default; }
 .topology-studio .topology-save-btn.status-unsaved { font-weight: 600; box-shadow: 0 1px 3px rgba(15, 119, 120, 0.25); }
 .topology-studio .topology-save-btn.status-conflict { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); cursor: pointer; }
 .topology-studio .topology-save-btn.status-conflict:hover { background: var(--warn-soft); opacity: 0.9; }
-.conflict-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--text-2); font-size: 11.5px; }
+.conflict-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--text-2); font-size: var(--fs-13); }
 .studio-workspace-mode-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm, 6px); background: var(--bg); margin-left: 8px; }
-.studio-workspace-mode-switch .mode-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 11.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background var(--t-fast, 140ms), color var(--t-fast, 140ms); }
+.studio-workspace-mode-switch .mode-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; height: var(--h-control-compact); border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: var(--fs-13); font-weight: 500; cursor: pointer; white-space: nowrap; transition: background var(--t-fast, 140ms), color var(--t-fast, 140ms); }
 .studio-workspace-mode-switch .mode-pill:hover { background: var(--surface); color: var(--text); }
 .studio-workspace-mode-switch .mode-pill.is-active { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
 [data-theme="dark"] .studio-workspace-mode-switch .mode-pill.is-active { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
 .studio-mini-mode-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm, 6px); background: var(--bg); margin-left: 6px; }
-.studio-mini-mode-switch button { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 11.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background var(--t-fast, 140ms), color var(--t-fast, 140ms); }
+.studio-mini-mode-switch button { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; height: var(--h-control-compact); border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: var(--fs-13); font-weight: 500; cursor: pointer; white-space: nowrap; transition: background var(--t-fast, 140ms), color var(--t-fast, 140ms); }
 .studio-mini-mode-switch button:hover { background: var(--surface); color: var(--text); }
 .studio-mini-mode-switch button.is-active, .studio-mini-mode-switch button[aria-pressed=true] { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
 /* The bar holds two groups: canvas tools on the left, actions on the right. They
@@ -118,7 +118,7 @@
   border-radius: var(--r-6);
   background: var(--surface);
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: var(--fs-13);
   font-weight: 550;
   cursor: pointer;
   box-shadow: var(--shadow-xs);
@@ -862,7 +862,7 @@
 
 .topology-studio .topology-inspector .inspector-header-titles h4 {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-13);
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;

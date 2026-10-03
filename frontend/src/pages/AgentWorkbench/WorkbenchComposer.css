@@ -1,0 +1,172 @@
+/* Composer owns input, scope disclosure and actions. It never owns turn state. */
+@layer workbench {
+.wb-input-bar {
+  min-width: 0;
+  padding: var(--space-3) var(--space-6) var(--space-4);
+  background: var(--bg);
+}
+.wb-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-16);
+  box-shadow: var(--shadow-composer);
+  transition: border-color var(--dur-2) var(--ease);
+}
+.wb-input-row:focus-within { border-color: var(--accent); box-shadow: var(--shadow-focus), var(--shadow-composer); }
+.wb-input {
+  width: 100%;
+  resize: none;
+  min-height: 44px;
+  max-height: 140px;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
+}
+.wb-input::placeholder { color: var(--text-3); }
+.wb-input:disabled, .wb-attach-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.wb-input:focus-visible { outline: none; box-shadow: none; }
+.wb-composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.wb-skill-picker {
+  display: flex;
+  align-items: center;
+  flex: 1 1 180px;
+  gap: var(--space-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.wb-skill-picker label { display: flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; color: var(--text-3); font-size: var(--fs-13); }
+.wb-skill-picker select {
+  min-width: 0;
+  max-width: 240px;
+  height: var(--h-control);
+  padding: 0 var(--space-2);
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  font-size: var(--fs-13);
+}
+.wb-resource-toggle, .wb-skill-locked-badge { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; color: var(--text-2); font-size: var(--fs-13); }
+.wb-skill-locked-badge { padding-block: var(--space-1); }
+.wb-skill-lock-icon { color: var(--accent); flex-shrink: 0; }
+.wb-skill-lock-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-resource-toggle {
+  min-height: var(--h-control);
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-8);
+  text-align: left;
+}
+.wb-resource-toggle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-resource-toggle svg { flex-shrink: 0; }
+.wb-resource-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.wb-resource-toggle:hover { background: var(--surface-hover); }
+.wb-resource-toggle:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 2px; }
+.wb-resource-panel { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--line-2); min-width: 0; }
+.wb-resource-panel-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); font-size: var(--fs-13); }
+.wb-resource-panel-heading span, .wb-resource-empty { color: var(--text-3); font-size: var(--fs-12); }
+.wb-skill-devices { display: flex; flex-wrap: wrap; gap: var(--space-2); max-height: min(180px, 22vh); overflow-y: auto; min-width: 0; padding: var(--space-1); }
+.wb-skill-devices button, .wb-skill-device-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--h-control);
+  max-width: 100%;
+  padding: var(--space-1) var(--space-3);
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-8);
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.wb-skill-devices button.active, .wb-skill-device-chip.is-locked { color: var(--accent-2); background: var(--accent-soft); border-color: var(--accent); }
+.wb-skill-devices button:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 2px; }
+.wb-composer-actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; flex-shrink: 0; }
+.wb-send, .wb-stop, .wb-attach-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border-radius: var(--r-10); }
+.wb-attach-btn { color: var(--text-3); background: transparent; border: 0; }
+.wb-attach-btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--accent); }
+.wb-send { color: var(--accent-text); background: var(--accent); border: 1px solid var(--accent); }
+.wb-send:hover:not(:disabled) { background: var(--accent-2); }
+.wb-send:disabled { color: var(--text-3); background: var(--surface-3); border-color: var(--line-2); cursor: not-allowed; }
+.wb-stop { color: var(--danger); background: var(--danger-soft); border: 1px solid var(--danger); }
+.wb-stop:hover { color: var(--danger-text); background: var(--danger); }
+.wb-send:focus-visible, .wb-stop:focus-visible, .wb-attach-btn:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 2px; }
+.wb-composer-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-1) var(--space-3); margin-top: var(--space-2); color: var(--text-3); font-size: var(--fs-12); }
+.wb-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-2);
+}
+
+.wb-attachment-tag {
+  gap: 4px;
+  font-size: var(--fs-12);
+}
+
+.wb-attachment-preview {
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--line, #d8e2ef);
+}
+
+.wb-attachment-spinner {
+  width: 10px;
+  height: 10px;
+  border-width: 1px;
+}
+
+.wb-attachment-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-attachment-remove {
+  padding: 0;
+  margin-left: 1px;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.wb-file-input {
+  display: none;
+}
+
+.wb-input-content {
+  field-sizing: content;
+}
+
+@media (max-width: 760px) {
+  .wb-input-bar { padding: var(--space-2) var(--space-3) var(--space-3); }
+  .wb-input-row { padding: var(--space-3); }
+  .wb-send, .wb-stop, .wb-attach-btn, .wb-resource-toggle, .wb-skill-picker select, .wb-skill-devices button { min-width: var(--h-touch); min-height: var(--h-touch); }
+  .wb-skill-picker select { max-width: 100%; }
+}
+}

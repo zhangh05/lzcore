@@ -10,8 +10,10 @@
 }
 
 .wb-conversation-column {
+  container-type: inline-size;
+  container-name: conversation;
   display: grid;
-  grid-template-rows: var(--h-context) minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -19,34 +21,31 @@
   border-right: 1px solid var(--line-2);
 }
 
-/* Context bar — 44px, deliberately lighter than the 56px global header.
-   It states which session and which model the conversation belongs to and
-   otherwise stays out of the way; the identifiers are technical metadata, not
-   status copy. Horizontal padding matches `.wb-chat-list` so the title sits on
-   the same left edge as the messages it labels (it used to sit 8px further in,
-   which read as a misalignment rather than as a hierarchy). */
+/* Task title leads; model availability stays visible, identifiers live in disclosure. */
 .wb-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
   min-width: 0;
-  padding: 0 var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  min-height: var(--h-context);
   background: var(--surface);
   border-bottom: 1px solid var(--line-2);
 }
 
 .wb-header-context {
   display: flex;
-  align-items: baseline;
-  gap: var(--space-4);
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
 }
 
 .wb-header h1 {
   overflow: hidden;
   color: var(--text);
-  font-size: 15px;
+  font-size: var(--fs-18);
   font-weight: var(--weight-subhead);
   /* CJK titles take no negative tracking; only Latin display type does. */
   letter-spacing: var(--tracking-cjk);
@@ -54,29 +53,31 @@
   white-space: nowrap;
 }
 
-.wb-header-fact {
-  flex: 0 0 auto;
-  max-width: 220px;
-  align-items: center;
-  gap: 5px;
-}
-
-.wb-header-fact .dot {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  background: var(--ok);
-  border-radius: 50%;
-}
-
-.wb-header-fact .dot.warn { background: var(--warn); }
-.wb-header-fact .dot.err { background: var(--danger); }
-
+.wb-header-model { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; color: var(--text-3); font-size: var(--fs-12); overflow-wrap: anywhere; }
+.wb-header-model .dot { width: 6px; height: 6px; flex: 0 0 auto; background: var(--ok); border-radius: 50%; }
+.wb-header-model .dot.warn { background: var(--warn); }
+.wb-header-model .dot.err { background: var(--danger); }
+.wb-session-details { position: relative; flex-shrink: 0; }
+.wb-session-details summary { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--text-3); border-radius: var(--r-8); cursor: pointer; list-style: none; }
+.wb-session-details summary::-webkit-details-marker { display: none; }
+.wb-session-details summary:hover { background: var(--surface-hover); }
+.wb-session-details summary:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 2px; }
+.wb-session-details-content { position: absolute; z-index: 45; right: 0; top: calc(100% + 8px); display: grid; gap: var(--space-2); width: min(280px, calc(100vw - 48px)); padding: var(--space-4); color: var(--text-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-12); box-shadow: var(--shadow-menu); font-size: var(--fs-13); overflow-wrap: anywhere; }
 .wb-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+@container conversation (max-width: 600px) {
+  .wb-header { padding-inline: var(--space-4); }
+  .wb-mode-btn span { display: none; }
+  .wb-mode-btn { width: 32px; padding: 0; justify-content: center; }
+}
+@container conversation (max-width: 380px) {
+  .wb-header { flex-wrap: wrap; }
+  .wb-header-context { flex-basis: 100%; }
 }
 
 .wb-mode-btn,
@@ -91,7 +92,7 @@
   border: 1px solid transparent;
   border-radius: var(--r-8);
   font-size: var(--fs-12);
-  font-weight: 650;
+  font-weight: 550;
 }
 
 .wb-mode-btn svg.is-right {
@@ -118,7 +119,7 @@
 .wb-chat-list {
   height: 100%;
   min-height: 0;
-  padding: var(--space-6) var(--space-4) var(--space-8);
+  padding: var(--space-6) var(--space-6) var(--space-8);
   overflow-y: auto;
   scroll-behavior: auto;
 }
@@ -423,191 +424,12 @@
   gap: 5px;
 }
 
-.wb-input-bar {
-  padding: var(--space-3) var(--space-4) var(--space-3);
-  min-width: 0;
-  background: color-mix(in srgb, var(--surface) 86%, transparent);
-  border-top: 1px solid var(--line-2);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-}
-
-.wb-input-row {
-  /* textarea + 底栏纵向排列：把 Skill/附件/发送从原来的 grid 第二行
-     收进 textarea 内的底部工具栏，空状态 composer 高度从 ~149px 压到 ~70-80px。
-     textarea 增长时整张卡跟着长，工具栏始终紧贴 textarea 底边。 */
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: 100%;
-  /* The composer shares the full middle column with conversation results. */
-  max-width: none;
-  margin: 0 auto;
-  padding: var(--space-2) var(--space-3);
-  box-sizing: border-box;
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-16);
-  box-shadow: var(--shadow-md);
-  transform: none;
-  transition:
-    border-color var(--dur-2) var(--ease),
-    box-shadow var(--dur-2) var(--ease);
-}
-
-.wb-composer-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  min-height: 0;
-}
-
-/* 在工具栏里 picker 跟 actions 同一行：去掉原 grid 全宽行为，
-   让 Skill 选择器按内容收缩，多 resource 时换行也不要 100% 占满。 */
-.wb-composer-toolbar > .wb-skill-picker {
-  width: auto;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.wb-input-row:focus-within {
-  border-color: var(--lz-primary);
-  box-shadow: 0 0 0 4px var(--focus-ring-shadow), var(--shadow-md);
-  outline: var(--focus-width) solid var(--focus-ring);
-  outline-offset: 3px;
-  transform: none;
-}
-
-.wb-input {
-  width: 100%;
-  min-height: 32px;
-  max-height: 140px;
-  padding: 2px 4px 4px;
-  color: var(--text);
-  background: transparent;
-  border: 0;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.wb-input::placeholder { color: var(--text-4); }
-
-.wb-composer-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.wb-attach-btn,
-.wb-stop {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  margin: 0;
-  color: var(--text-3);
-  background: transparent;
-  border: 0;
-  border-radius: 7px;
-  font-size: 12px;
-}
-
-.wb-attach-btn {
-  width: 32px;
-  padding: 0;
-}
-
-.wb-attach-btn:hover:not(:disabled) {
-  color: var(--accent-2);
-  background: var(--surface-hover);
-}
-
-.wb-attach-btn:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.wb-stop {
-  width: 32px;
-  padding: 0;
-  margin-left: auto;
-  cursor: pointer;
-  flex: 0 0 auto;
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger-soft) 78%, transparent);
-  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--line));
-  border-radius: 9px;
-  box-shadow: none;
-  transition: color 140ms ease, background 140ms ease, border-color 140ms ease, transform 140ms ease;
-}
-.wb-stop:hover:not(:disabled) {
-  color: var(--accent-text);
-  background: var(--danger);
-  border-color: var(--danger);
-}
-.wb-stop:active:not(:disabled) { transform: none; }
-.wb-stop:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-.wb-send {
-  display: inline-flex;
-  width: 36px;
-  height: 34px;
-  align-items: center;
-  justify-content: center;
-  margin: 0 0 0 auto;
-  color: var(--accent-text);
-  background: var(--lz-primary);
-  border: 0;
-  border-radius: 9px;
-  box-shadow: var(--shadow-xs);
-  cursor: pointer;
-  transition: background var(--dur-2) var(--ease), transform var(--dur-1) var(--ease), box-shadow var(--dur-2) var(--ease);
-}
-
-.wb-send:hover:not(:disabled) {
-  color: var(--accent-text);
-  background: var(--lz-primary-hover);
-  box-shadow: var(--shadow-sm);
-  transform: none;
-}
-
-.wb-send:active:not(:disabled) { transform: none; }
-.wb-send:focus-visible {
-  outline: var(--focus-width) solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.wb-send:disabled {
-  color: var(--text-4);
-  background: var(--surface-3);
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-.wb-composer-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  max-width: none;
-  margin: 2px auto 0;
-  color: var(--text-4);
-  font-size: var(--fs-11);
-}
-
-.wb-attachments {
-  max-width: none;
-  margin: 0 auto 8px;
-}
-
 .scroll-bottom-btn {
   right: 24px;
   bottom: 20px;
 }
+
+.task-copy-error { color: var(--danger); font-size: var(--fs-13); padding: var(--space-2); }
 
 .task-progress-panel {
   display: grid;
@@ -1533,7 +1355,6 @@ details[open] .task-phase-caret {
   .wb-shell { grid-template-columns: minmax(0, 1fr) var(--w-progress); }
   .wb-header { padding-inline: 18px; }
   /* The model stays visible; the session id is the first thing to go. */
-  .wb-header-session { display: none; }
   .task-progress-header, .task-phase-list, .task-progress-footer { padding-inline: 16px; }
 }
 
@@ -1542,19 +1363,16 @@ details[open] .task-phase-caret {
   .task-progress-panel { display: grid; }
   .wb-conversation-column { border-right: 0; }
   .wb-chat-list { padding-inline: 12px; }
-  .wb-header { gap: 10px; }
+  .wb-header { gap: 10px; flex-wrap: wrap; }
   .wb-mode-btn { padding-inline: 8px; }
   .wb-mode-btn span { display: none; }
   .wb-export-btn { display: none; }
-  .wb-input-bar { padding-inline: 12px; }
 }
 
 @media (max-width: 560px) {
-  .wb-header-fact { display: none; }
   .wb-mode-btn { width: 32px; justify-content: center; padding: 0; font-size: 0; }
   .message-stack,
   .message-row.assistant .message-stack { max-width: calc(100% - 38px); width: calc(100% - 38px); }
-  .wb-composer-meta span:last-child { display: none; }
 }
 
 /* Right-hand realtime status can collapse to a narrow, always-recoverable rail. */
@@ -1668,7 +1486,6 @@ details[open] .task-phase-caret {
   justify-content: flex-end;
   padding: 0 14px;
 }
-.wb-shell.is-header-collapsed .wb-header-fact,
 .wb-shell.is-header-collapsed .wb-header-context,
 .wb-shell.is-header-collapsed .wb-export-btn {
   display: none;
@@ -1684,107 +1501,6 @@ details[open] .task-phase-caret {
 .chat-bubble.assistant {
   box-shadow: none;
 }
-.wb-skill-picker {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-  flex-wrap: wrap;
-  padding: 0;
-  margin: 0;
-  border: 0;
-}
-
-.wb-skill-picker label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--text-3);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.wb-skill-picker select {
-  padding: 7px 28px 7px 9px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: 8px;
-}
-
-.wb-skill-devices {
-  display: flex;
-  min-width: 0;
-  gap: 6px;
-  overflow-x: auto;
-}
-
-.wb-skill-devices button {
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  color: var(--text-3);
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-8);
-  font-size: 12px;
-}
-
-.wb-skill-devices button.active {
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  font-weight: 700;
-}
-
-.wb-skill-picker.is-locked {
-  gap: 8px;
-}
-
-.wb-skill-locked-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-8);
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 600;
-  user-select: none;
-}
-
-.wb-skill-locked-badge .wb-skill-lock-icon {
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
-.wb-skill-lock-label {
-  white-space: nowrap;
-}
-
-.wb-skill-devices.is-locked {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.wb-skill-device-chip.is-locked {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  border-radius: var(--r-8);
-  font-size: 12px;
-  font-weight: 600;
-  user-select: none;
-  cursor: default;
-  white-space: nowrap;
-}
-
 /* Component-specific workbench refinements. */
 .thinking-block {
   margin: var(--space-2) 0;
@@ -2209,22 +1925,15 @@ details[open] .task-phase-caret {
    （badge 去背景、kicker 改灰、h2 降字重），和上面 144 行起的正式定义打架，
    实测把胶囊压成了 padding:0 的裸文字。正式定义已上移，这两行重复定义删除。 */
 .wb-empty h2 { font-weight: var(--weight-heading); }
-.wb-composer-actions { grid-column: 2; align-self: end; }
-.wb-skill-picker label { min-width: 0; max-width: 100%; font-weight: var(--weight-label); }
-.wb-skill-picker select { min-width: 0; max-width: 100%; height: var(--h-control); font-size: var(--fs-12); }
-.wb-skill-devices { flex-basis: 100%; }
-.wb-skill-devices button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; min-height: var(--h-control-compact); }
-.wb-send, .wb-stop, .wb-attach-btn { width: var(--h-control); height: var(--h-control); border-radius: var(--r-6); }
-.wb-send:disabled { opacity: 1; }
 .wb-header-actions { flex-shrink: 0; }
 .wb-header-collapse { position: static; width: var(--h-control-compact); height: var(--h-control-compact); border: 0; border-radius: var(--r-6); box-shadow: none; transform: none; }
 .wb-restored-run { width: calc(100% - 44px); border-radius: var(--r-6); }
 @media (max-width: 760px) {
   .wb-header { padding-inline: var(--space-3); min-height: var(--h-touch); }
-  .wb-header-context { flex: 1; }
-  .wb-header :is(.wb-mode-btn, .wb-header-collapse), .wb-send, .wb-stop, .wb-attach-btn { min-width: var(--h-touch); min-height: var(--h-touch); }
+  .wb-header-context { flex: 1 1 100%; }
+  .wb-header :is(.wb-mode-btn, .wb-header-collapse, .wb-session-details summary) { min-width: var(--h-touch); min-height: var(--h-touch); }
   .wb-conversation-column, .wb-shell.is-header-collapsed .wb-conversation-column { grid-template-rows: auto minmax(0, 1fr) auto auto; }
-  .wb-skill-picker select, .wb-skill-devices button, .wb-input-chip { min-height: var(--h-touch); }
+  .wb-input-chip { min-height: var(--h-touch); }
   .chat-bubble.assistant { padding-inline: var(--space-2); }
   .wb-empty { padding: var(--space-6) var(--space-4); }
 }

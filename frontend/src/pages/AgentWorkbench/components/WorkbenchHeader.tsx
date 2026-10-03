@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import { saveBlob } from "../../../utils/saveBlob";
 import type { ChatMsg } from "../../../stores/workbench";
-import { IconChat, IconChevronDown, IconHistory, IconSidebarSimple } from "../../../components/Icon";
+import { IconChat, IconChevronDown, IconHistory, IconMore, IconSidebarSimple } from "../../../components/Icon";
 
 export interface WorkbenchHeaderProps {
   sessionTitle: string;
@@ -55,26 +55,11 @@ export const WorkbenchHeader = memo(function WorkbenchHeader({
 
   return (
     <header className="wb-header" id="workbench-session-header">
-      {/*
-        A context bar, not a second application header. It answers "which
-        session, which model" and gets out of the way: the title is context
-        weight (15px), and the identifiers beside it are set as technical
-        metadata rather than as status copy competing with the conversation.
-      */}
       <div className="wb-header-context">
         <h1 title={sessionTitle}>{viewMode === "chat" ? sessionTitle : "完整时间线"}</h1>
-        {currentSessionId ? (
-          <span className="meta-fact wb-header-fact wb-header-session" title={`会话 ${currentSessionId}`}>
-            <span className="meta-label">session</span>
-            <span className="meta">{currentSessionId.slice(0, 8)}</span>
-          </span>
-        ) : null}
-        <span className="meta-fact wb-header-fact" title={llmStatusLabel}>
+        <span className="wb-header-model" title={llmStatusLabel}>
           <span className={"dot " + (llmHealth.connected ? (llmHealth.recentFailure ? "warn" : "ok") : "err")} />
-          <span className="meta-label">model</span>
-          <span className="meta">
-            {llmHealth.connected ? llmHealth.model || llmHealth.provider || "在线" : "不可用"}
-          </span>
+          {llmHealth.connected ? llmHealth.recentFailure ? "模型可用 · 最近请求超时" : llmHealth.model || llmHealth.provider || "模型在线" : "模型不可用"}
         </span>
       </div>
       <div className="wb-header-actions">
@@ -126,12 +111,25 @@ export const WorkbenchHeader = memo(function WorkbenchHeader({
             <span>进度</span>
           </button>
         ) : null}
-        {currentSessionId && visibleHistory.length > 0 ? (
-          <button className="wb-export-btn" title="导出对话" disabled={exporting} onClick={() => { void handleExport(); }}>
-            {exporting ? '保存中…' : '导出'}
-          </button>
-        ) : null}
-        {exportError && <span role="alert">{exportError}</span>}
+        <details className="wb-session-details" onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.currentTarget.removeAttribute("open");
+            event.currentTarget.querySelector("summary")?.focus();
+          }
+        }}>
+          <summary role="button" aria-label="会话信息与导出" title="会话信息与导出"><IconMore size={18} aria-hidden="true" /></summary>
+          <div className="wb-session-details-content">
+            <strong>会话信息</strong>
+            <span className="meta">{currentSessionId || "未创建会话"}</span>
+            <span>{llmStatusLabel}</span>
+            {currentSessionId && visibleHistory.length > 0 ? (
+              <button className="wb-export-btn" title="导出对话" disabled={exporting} onClick={() => { void handleExport(); }}>
+                {exporting ? '保存中…' : '导出'}
+              </button>
+            ) : null}
+            {exportError && <span role="alert">{exportError}</span>}
+          </div>
+        </details>
       </div>
     </header>
   );

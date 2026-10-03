@@ -36,30 +36,14 @@ describe("Session switch", () => {
     await waitFor(() => expect(useSessionStore.getState().currentSessionId).toBe("sess-B"));
   });
 
-  it("loads recent runs for the active session", async () => {
-    enqueue("/workspaces", { status: 200, data: { workspaces: [{ workspace_id: "default", name: "Default", created_at: "", is_default: true, stats: { session_count: 2, artifact_count: 0, knowledge_source_count: 0 } }] } });
-    enqueue("/sessions", {
-      status: 200,
-      data: {
-        sessions: [
-          { session_id: "sess-A", workspace_id: "default", title: "Session A", status: "active", created_at: "2026-06-11T09:00:00Z", updated_at: "2026-06-11T09:00:00Z", message_count: 3 },
-          { session_id: "sess-B", workspace_id: "default", title: "Session B", status: "active", created_at: "2026-06-11T09:30:00Z", updated_at: "2026-06-11T09:30:00Z", message_count: 1 },
-        ],
-      },
-    });
-    enqueue("/runs/recent", { status: 200, data: { runs: [] } });
-    enqueue("/runs/recent", { status: 200, data: { runs: [{ run_id: "run-B", session_id: "sess-B", status: "ok", user_input_summary: "B run" }] } });
-
+  it("opens task history without fetching a duplicate run feed in the sidebar", async () => {
+    enqueue("/sessions", { status: 200, data: { sessions: [] } });
     render(<Sidebar />);
-    const sessB = await screen.findByTestId("sess-btn-sess-B");
-    fireEvent.click(sessB);
-
-    await screen.findByText("B run");
-    const recentRunRequests = getRequests().filter((r) => r.url === "/runs/recent");
-    expect(recentRunRequests.at(-1)?.params).toMatchObject({
-      workspace_id: "default",
-      session_id: "sess-B",
-    });
+    await screen.findByText("暂无活跃会话");
+    fireEvent.click(screen.getByRole("button", { name: "任务与运行记录" }));
+    expect(window.location.pathname).toBe("/runs");
+    expect(getRequests().filter((request) => request.url === "/runs/recent")).toHaveLength(0);
+    window.history.replaceState({}, "", "/");
   });
 
   it("clears a stale session restored after an empty list has loaded", async () => {

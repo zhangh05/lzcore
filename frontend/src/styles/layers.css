@@ -15,13 +15,11 @@
  * separate change, and one the layout probe can measure.
  *
  *   1. runtime      runtime event timeline — imported first, so weakest
- *   2. base         foundation: tokens, resets, element defaults
- *   3. shell        the application shell
- *   4. console      Design System 3.0 primitives and page compositions
- *   5. workbench    the agent workbench
- *   6. typography   element-level type scale. It has to beat the component
- *                   layers, because `.page-header h1` here is the one that
- *                   wins over console-system.css's copy.
+ *   2. base         tokens.css themes + global.css resets and legacy patterns
+ *   3. shell        product-shell.css application navigation
+ *   4. console      primitives.css controls + console-system.css page patterns
+ *   5. workbench    conversation/progress + WorkbenchComposer.css input and scope
+ *   6. typography   content rhythm, below page/extension refinements
  *   7. pages        page-specific refinements. A page refines the design
  *                   system, and it used to do that by *selector weight* — so
  *                   `.kl-stats .stat-card` out-weighed the design system's

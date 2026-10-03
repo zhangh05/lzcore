@@ -1,4 +1,4 @@
-import React, { memo, type ChangeEvent, type DragEvent, type RefObject } from "react";
+import React, { memo, useEffect, useId, useRef, useState, type ChangeEvent, type DragEvent, type RefObject } from "react";
 import type { PendingAttachment } from "../../../hooks/useWorkbenchSend";
 import {
   IconAttachment,
@@ -7,6 +7,7 @@ import {
   IconLock,
   IconSend,
   IconStop,
+  IconChevronDown,
 } from "../../../components/Icon";
 
 export interface WorkbenchSkill {
@@ -67,6 +68,18 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
   isSkillLocked = false,
 }: WorkbenchComposerProps) {
   const canSend = Boolean(currentSessionId && (input.trim() || attachments.length > 0));
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [resourceQuery, setResourceQuery] = useState("");
+  const resourcePanelId = useId();
+  const resourceToggleRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    setResourcesOpen(false);
+    setResourceQuery("");
+  }, [currentSessionId, selectedSkillKey]);
+  const selectedResources = selectedSkill?.resources.filter((resource) => selectedResourceIds.includes(resource.resource_id)) ?? [];
+  const resourceSummary = isSkillLocked
+    ? selectedResources.map((resource) => resource.name).join("、") || "已绑定图纸"
+    : selectedResources.length > 0 ? `已选 ${selectedResources.length} 个资源` : "选择资源";
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -76,7 +89,14 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
   };
 
   return (
-    <div className="wb-input-bar wb-composer-dock" onDragOver={onDragOver} onDrop={onDrop}>
+    <div className="wb-input-bar wb-composer-dock" onDragOver={onDragOver} onDrop={onDrop}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && resourcesOpen) {
+          event.stopPropagation();
+          setResourcesOpen(false);
+          resourceToggleRef.current?.focus();
+        }
+      }}>
       {/* 附件托盘 */}
       {attachments.length > 0 ? (
         <div className="wb-attachments">
@@ -140,6 +160,7 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
                   <span>Skill</span>
                   <select
                     value={selectedSkillKey}
+                    disabled={turnRunning}
                     onChange={(event) => onSelectSkillKey(event.target.value)}
                   >
                     <option value="">通用对话</option>
@@ -152,46 +173,13 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
                 </label>
               )}
 
-              {selectedSkill ? (
-                <div
-                  className={`wb-skill-devices ${isSkillLocked ? "is-locked" : ""}`}
-                  aria-label={isSkillLocked ? "已绑定图纸资源" : "选择 Skill 资源"}
-                >
-                  {selectedSkill.resources.map((resource) => {
-                    const active = selectedResourceIds.includes(resource.resource_id);
-                    if (isSkillLocked) {
-                      return (
-                        <span
-                          key={resource.resource_id}
-                          className="wb-skill-device-chip is-locked"
-                          title={resource.description || resource.name}
-                        >
-                          {resource.name}
-                        </span>
-                      );
-                    }
-                    return (
-                      <button
-                        key={resource.resource_id}
-                        type="button"
-                        className={active ? "active" : ""}
-                        aria-pressed={active}
-                        title={resource.description}
-                        onClick={() =>
-                          onSelectResourceIds((items) =>
-                            active
-                              ? items.filter((item) => item !== resource.resource_id)
-                              : selectedSkill.selection_mode === "single"
-                              ? [resource.resource_id]
-                              : [...items, resource.resource_id]
-                          )
-                        }
-                      >
-                        {resource.name}
-                      </button>
-                    );
-                  })}
-                </div>
+              {selectedSkill && selectedSkill.resources.length > 0 ? (
+                <button ref={resourceToggleRef} type="button" className="wb-resource-toggle"
+                  aria-expanded={resourcesOpen} aria-controls={resourcePanelId}
+                  onClick={() => setResourcesOpen((open) => !open)}
+                  title={resourceSummary}>
+                  <span>{resourceSummary}</span><IconChevronDown size={13} aria-hidden="true" />
+                </button>
               ) : null}
             </div>
           ) : null}
@@ -244,12 +232,41 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
             )}
           </div>
         </div>
+        {resourcesOpen && selectedSkill ? (
+          <section id={resourcePanelId} className="wb-resource-panel" aria-label={isSkillLocked ? "已绑定图纸资源" : "选择 Skill 资源"}>
+            <div className="wb-resource-panel-heading">
+              <strong>{isSkillLocked ? "会话绑定的图纸" : "本次任务的资源范围"}</strong>
+              <span>{isSkillLocked ? "绑定范围不可切换" : selectedSkill.selection_mode === "single" ? "单选" : "多选"}</span>
+            </div>
+            {selectedSkill.resources.length > 8 && !isSkillLocked ? (
+              <input className="input" type="search" aria-label="搜索 Skill 资源" placeholder="按名称查找资源"
+                value={resourceQuery} onChange={(event) => setResourceQuery(event.target.value)} />
+            ) : null}
+            <div className={`wb-skill-devices ${isSkillLocked ? "is-locked" : ""}`}>
+              {(isSkillLocked ? selectedResources : selectedSkill.resources.filter((resource) => resource.name.toLocaleLowerCase().includes(resourceQuery.trim().toLocaleLowerCase()))).map((resource) => {
+                const active = selectedResourceIds.includes(resource.resource_id);
+                return isSkillLocked ? (
+                  <span key={resource.resource_id} className="wb-skill-device-chip is-locked" title={resource.description || resource.name}>{resource.name}</span>
+                ) : (
+                  <button key={resource.resource_id} type="button" className={active ? "active" : ""}
+                    aria-pressed={active} title={resource.description} disabled={turnRunning}
+                    onClick={() => onSelectResourceIds((items) => items.includes(resource.resource_id)
+                      ? items.filter((item) => item !== resource.resource_id)
+                      : selectedSkill.selection_mode === "single" ? [resource.resource_id] : [...items, resource.resource_id])}>
+                    {resource.name}
+                  </button>
+                );
+              })}
+            </div>
+            {!isSkillLocked && !selectedSkill.resources.some((resource) => resource.name.toLocaleLowerCase().includes(resourceQuery.trim().toLocaleLowerCase())) ? <p className="wb-resource-empty">没有匹配的资源</p> : null}
+          </section>
+        ) : null}
       </div>
 
       <div className="wb-composer-meta">
         <span className="wb-meta-hint">Enter 发送 · Shift + Enter 换行</span>
         <span className="wb-meta-security">
-          {attachments.length > 0 ? `已添加 ${attachments.length}/8 个文件` : "操作会经过权限与安全检查"}
+          {turnRunning ? "任务正在运行 · 可随时停止" : attachments.length > 0 ? `已添加 ${attachments.length}/8 个文件` : "操作会经过权限与安全检查"}
         </span>
       </div>
     </div>

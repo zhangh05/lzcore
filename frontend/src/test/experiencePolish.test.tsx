@@ -170,6 +170,7 @@ describe("Experience polish", () => {
     const select = await screen.findByRole("combobox", { name: "Skill" });
     await screen.findByRole("option", { name: "范围测试" });
     fireEvent.change(select, { target: { value: "network.operations:scope-test" } });
+    fireEvent.click(await screen.findByRole("button", { name: "已选 2 个资源" }));
     const first = await screen.findByRole("button", { name: "范围设备一" });
     const second = screen.getByRole("button", { name: "范围设备二" });
     expect(first).toHaveClass("active");
@@ -220,8 +221,8 @@ describe("Experience polish", () => {
     expect(screen.queryByText("Session 12")).not.toBeInTheDocument();
     expect(screen.getByText("另有 3 个活跃会话")).toBeInTheDocument();
     const sessionPanel = screen.getByText("最近会话").closest(".sidebar-panel");
-    const runPanel = screen.getByText("最近任务").closest(".sidebar-panel");
-    expect(sessionPanel?.nextElementSibling).toBe(runPanel);
+    expect(sessionPanel?.nextElementSibling).toBe(screen.getByRole("button", { name: "任务与运行记录" }));
+    expect(screen.queryByTestId("runs-list")).not.toBeInTheDocument();
   });
 
   it("keeps session actions in one accessible menu", async () => {

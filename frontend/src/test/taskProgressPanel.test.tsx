@@ -58,6 +58,15 @@ describe("TaskProgressPanel Component", () => {
     });
   });
 
+  it("reports a rejected clipboard write and leaves summary copying retryable", async () => {
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("permission denied"));
+    render(<TaskProgressPanel latestAssistant={mockAssistant()} turnRunning={false}
+      onShowTimeline={vi.fn()} collapsed={false} onToggleCollapsed={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "复制摘要" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("复制失败");
+    expect(screen.getByRole("button", { name: "复制摘要" })).toBeEnabled();
+  });
+
   it("renders 4 phases and execution footprint cards in succeeded state", () => {
     const onShowTimeline = vi.fn();
     const onToggleCollapsed = vi.fn();

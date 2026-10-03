@@ -95,6 +95,7 @@ def run(exe: Path, mode: str, output: Path):
             page.goto(start['origin']+'/workbench')
             page.get_by_text('桌面业务导出验证', exact=True).first.click()
             page.get_by_text('真实工作台中文导出', exact=True).wait_for()
+            page.get_by_role('button', name='会话信息与导出', exact=True).click()
             page.get_by_role('button', name='导出', exact=True).click()
             conversation = output/'中文 会话.md'
             subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),'-ParentPid',str(proc.pid),'-FileName',str(conversation.resolve())],check=True,timeout=35)

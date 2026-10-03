@@ -265,15 +265,13 @@
 /* Shared finish. Pages inherit the same surface, focus and type rhythm. */
 .page-header,
 .page-header.ui-page-header {
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  background: var(--surface);
   border-bottom-color: var(--line-2);
-  box-shadow: var(--shadow-xs);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  box-shadow: none;
 }
 
 .page-header h1 {
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-cjk);
 }
 
 .login-page {
@@ -326,7 +324,7 @@
 .diag-section,
 .empty-onboarding {
   border-color: var(--line-2);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 .memory-page .memory-card {

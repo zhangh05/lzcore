@@ -32,7 +32,7 @@ function statusLabel(status: string, toolCount: number): string {
   if (status === "running") return toolCount > 0 ? `已调用 ${toolCount} 个工具` : "实时处理中";
   if (status === "succeeded") return toolCount > 0 ? `${toolCount} 次工具调用已完成` : "纯模型分析，无外部调用";
   if (status === "failed") return "本轮需要排查";
-  return "等待任务";
+  return "从对话开始，执行过程会显示在这里";
 }
 
 function EvidenceIcon({ title }: { title: string }) {
@@ -61,21 +61,30 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
   const visibleEvidence = model.evidence.slice(0, 8);
   const [copiedRunId, setCopiedRunId] = useState(false);
   const [copiedSummary, setCopiedSummary] = useState(false);
+  const [copyError, setCopyError] = useState("");
 
-  const handleCopyRunId = useCallback(() => {
+  const handleCopyRunId = useCallback(async () => {
     if (!model.runId) return;
-    navigator.clipboard.writeText(model.runId).then(() => {
+    setCopyError("");
+    try {
+      await navigator.clipboard.writeText(model.runId);
       setCopiedRunId(true);
       setTimeout(() => setCopiedRunId(false), 2000);
-    });
+    } catch {
+      setCopyError("复制失败，请检查剪贴板权限后重试");
+    }
   }, [model.runId]);
 
-  const handleCopySummary = useCallback(() => {
+  const handleCopySummary = useCallback(async () => {
     const summary = formatRunSummaryMarkdown(model);
-    navigator.clipboard.writeText(summary).then(() => {
+    setCopyError("");
+    try {
+      await navigator.clipboard.writeText(summary);
       setCopiedSummary(true);
       setTimeout(() => setCopiedSummary(false), 2000);
-    });
+    } catch {
+      setCopyError("复制失败，请检查剪贴板权限后重试");
+    }
   }, [model]);
 
   const handleLocateTool = useCallback((callOrToolId: string) => {
@@ -224,6 +233,7 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
 
       {/* ── 滚动内容主区 ─────────────────────────────── */}
       <div className="task-progress-body">
+        {copyError ? <p role="alert" className="task-copy-error">{copyError}</p> : null}
         {/* 运行态实时动态反馈横幅 */}
         {model.status === "running" && (
           <div className="task-in-flight-card" data-testid="task-in-flight">

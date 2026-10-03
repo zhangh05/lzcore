@@ -12,9 +12,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); delete window.__LZCORE_DESKTOP__; Object.assign(window,{pywebview:undefined}); vi.resetAllMocks(); });
 function header() {
-  return render(<WorkbenchHeader sessionTitle="测试会话" currentSessionId="session-test" visibleHistory={[
+  const view = render(<WorkbenchHeader sessionTitle="测试会话" currentSessionId="session-test" visibleHistory={[
     {role:'user',text:'中文测试'} as ChatMsg,
   ]} viewMode="chat" onViewModeChange={() => {}} headerCollapsed={false} onToggleHeaderCollapsed={() => {}} llmHealth={{connected:true}}/>);
+  fireEvent.click(screen.getByLabelText("会话信息与导出"));
+  return view;
 }
 describe('desktop business export', () => {
   it('the actual workbench button opens native save with Unicode content', async () => {

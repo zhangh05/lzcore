@@ -208,8 +208,7 @@ declare global {
 /**
  * The ratio between the container's visual pixels and its own layout pixels.
  *
- * The sheet sits under a `zoom` on <body> (the app's `--ui-scale`, 0.95), so
- * the two spaces are not the same size: `getBoundingClientRect()` reports
+ * Browser or container scaling can make the two spaces differ: `getBoundingClientRect()` reports
  * **visual** pixels, while everything Cytoscape reports — `pan()`, `zoom()`,
  * `renderedPosition()`, `width()` — is in the container's **layout** pixels.
  *

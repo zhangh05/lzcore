@@ -11,10 +11,13 @@ import "./styles/layers.css";
 // module imports the component first: a page deciding the cascade position of a
 // shared stylesheet is how the order became accidental in the first place.
 import "./components/RuntimeEventTimeline.css";
+import "./styles/tokens.css";
 import "./styles/global.css";
 import "./styles/product-shell.css";
+import "./styles/primitives.css";
 import "./styles/console-system.css";
 import "./pages/AgentWorkbench/AgentWorkbench.css";
+import "./pages/AgentWorkbench/WorkbenchComposer.css";
 import "./styles/typography.css";
 // Page refinements come last: they exist to outrank the design system above.
 // See styles/pages.css.
