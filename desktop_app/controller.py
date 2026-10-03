@@ -74,6 +74,8 @@ class DesktopController:
         self.prepared_update = None
         self._dialog_lock = threading.Lock()
         self._shutdown_attempt = 0
+        self._shutdown_thread = None
+        self._monitor_thread = None
 
     def admin_allowed(self):
         # Verify the real HttpOnly session cookie with Flask. A username
@@ -114,7 +116,10 @@ class DesktopController:
 
     def on_closing(self):
         if self.allow_exit:
+            self._stop.set()
             self.native.save()
+            if self.tray:
+                self.tray.stop()
             return True
         if self.state.snapshot().get("close_to_tray") and self.tray:
             threading.Thread(target=self.hide, daemon=True).start()
@@ -160,7 +165,8 @@ class DesktopController:
             return
         from desktop_app.tray import NativeTray
         self.tray = NativeTray(self)
-        threading.Thread(target=self._monitor, daemon=True, name="desktop-status").start()
+        self._monitor_thread = threading.Thread(target=self._monitor, daemon=True, name="desktop-status")
+        self._monitor_thread.start()
 
     def _monitor(self):
         while not self._stop.wait(2):
@@ -233,7 +239,10 @@ class DesktopController:
             self.allow_exit = True
             self.window.destroy()
             return {"ok": True, "status": "exiting"}
-        threading.Thread(target=self._stop_jobs, args=(attempt,), daemon=True, name="desktop-shutdown").start()
+        # WinForms Invoke can still be returning after its GUI loop exits.
+        # Keep Python/.NET alive until the shutdown caller has returned too.
+        self._shutdown_thread = threading.Thread(target=self._stop_jobs, args=(attempt,), daemon=False, name="desktop-shutdown")
+        self._shutdown_thread.start()
         return {"ok": True, **self.shutdown}
 
     def _stop_jobs(self, attempt):
@@ -279,6 +288,9 @@ class DesktopController:
 
     def cleanup(self):
         self._stop.set()
+        for thread in (self._shutdown_thread, self._monitor_thread):
+            if thread and thread is not threading.current_thread():
+                thread.join()
         try:
             if self.native:
                 self.native.save()

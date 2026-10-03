@@ -238,6 +238,48 @@ def test_native_close_of_idle_window_does_not_need_frontend(monkeypatch, tmp_pat
     assert calls == ['quit']
 
 
+def test_cleanup_waits_for_native_destroy_to_return(monkeypatch, tmp_path):
+    from desktop_app import controller
+    from desktop_app.environment import DesktopPaths
+    from types import SimpleNamespace
+    c = controller.DesktopController(DesktopPaths(tmp_path,tmp_path,tmp_path,'development'), '3.3.11', LocalLifecycle(), 'http://localhost')
+    entered, release, cleaned = threading.Event(), threading.Event(), threading.Event()
+    def destroy():
+        entered.set()
+        assert release.wait(3)
+    c.window = SimpleNamespace(destroy=destroy)
+    monkeypatch.setattr(c, 'emit', lambda *args, **kwargs: None)
+    monkeypatch.setattr(controller, 'active_jobs', lambda: [])
+    monkeypatch.setattr('agent.runtime.turn_closeout.close_restarted_turns', lambda: None)
+    c.quit()
+    assert entered.wait(3)
+    assert not c._shutdown_thread.daemon
+    cleanup = threading.Thread(target=lambda: (c.cleanup(), cleaned.set()))
+    cleanup.start()
+    try:
+        assert not cleaned.wait(.05)
+    finally:
+        release.set()
+        cleanup.join(3)
+    assert cleaned.is_set() and not c._shutdown_thread.is_alive()
+
+
+def test_native_tray_disposes_once_on_owning_ui_thread():
+    from desktop_app.tray import NativeTray
+    from types import SimpleNamespace
+    calls = []
+    tray = NativeTray.__new__(NativeTray)
+    tray._stopped = False
+    tray.Action = lambda action: action
+    tray.icon = SimpleNamespace(Visible=True, Dispose=lambda: calls.append('dispose'))
+    tray.form = SimpleNamespace(InvokeRequired=True, Invoke=lambda action: (calls.append('invoke'), action()))
+    tray.stop()
+    tray.stop()
+    tray.title = 'must not enqueue after disposal'
+    tray.notify('must not enqueue', 'closed')
+    assert calls == ['invoke', 'dispose'] and not tray.icon.Visible
+
+
 def test_first_native_close_with_finished_job_runs_real_closeout(monkeypatch, tmp_path):
     from desktop_app import controller
     from desktop_app.environment import DesktopPaths

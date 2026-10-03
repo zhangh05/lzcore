@@ -12,6 +12,7 @@ class NativeTray:
         self.controller = controller
         self.target = None
         self._callbacks = []
+        self._stopped = False
         def create():
             self.icon = NotifyIcon()
             source = controller.paths.bundle / 'lzcore.ico'
@@ -53,9 +54,13 @@ class NativeTray:
 
     @title.setter
     def title(self, value):
+        if self._stopped:
+            return
         self.form.BeginInvoke(self.Action(lambda: setattr(self.icon, 'Text', value[:63])))
 
     def notify(self, message, title, target=None):
+        if self._stopped:
+            return
         self.target = target
         def display():
             self.icon.BalloonTipTitle = title
@@ -64,6 +69,14 @@ class NativeTray:
         self.form.BeginInvoke(self.Action(display))
 
     def stop(self):
-        # The form may already be disposed after the event loop exits.
-        self.icon.Visible = False
-        self.icon.Dispose()
+        if self._stopped:
+            return
+        def dispose():
+            self._stopped = True
+            self.icon.Visible = False
+            self.icon.Dispose()
+        # Dispose on the owning UI thread before the form is destroyed.
+        if self.form.InvokeRequired:
+            self.form.Invoke(self.Action(dispose))
+        else:
+            dispose()
