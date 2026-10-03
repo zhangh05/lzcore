@@ -272,12 +272,18 @@ def test_native_tray_disposes_once_on_owning_ui_thread():
     tray._stopped = False
     tray.Action = lambda action: action
     tray.icon = SimpleNamespace(Visible=True, Dispose=lambda: calls.append('dispose'))
-    tray.form = SimpleNamespace(InvokeRequired=True, Invoke=lambda action: (calls.append('invoke'), action()))
+    queued = []
+    tray.form = SimpleNamespace(InvokeRequired=True, Invoke=lambda action: (calls.append('invoke'), action()), BeginInvoke=queued.append)
+    tray.title = 'pending status'
+    tray.notify('pending notification', 'closing')
     tray.stop()
+    for action in queued:
+        action()
     tray.stop()
     tray.title = 'must not enqueue after disposal'
     tray.notify('must not enqueue', 'closed')
     assert calls == ['invoke', 'dispose'] and not tray.icon.Visible
+    assert not hasattr(tray.icon, 'Text') and not hasattr(tray.icon, 'BalloonTipText')
 
 
 def test_first_native_close_with_finished_job_runs_real_closeout(monkeypatch, tmp_path):

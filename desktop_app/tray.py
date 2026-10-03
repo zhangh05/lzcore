@@ -56,13 +56,18 @@ class NativeTray:
     def title(self, value):
         if self._stopped:
             return
-        self.form.BeginInvoke(self.Action(lambda: setattr(self.icon, 'Text', value[:63])))
+        def update():
+            if not self._stopped:
+                self.icon.Text = value[:63]
+        self.form.BeginInvoke(self.Action(update))
 
     def notify(self, message, title, target=None):
         if self._stopped:
             return
         self.target = target
         def display():
+            if self._stopped:
+                return
             self.icon.BalloonTipTitle = title
             self.icon.BalloonTipText = message
             self.icon.ShowBalloonTip(5000)
