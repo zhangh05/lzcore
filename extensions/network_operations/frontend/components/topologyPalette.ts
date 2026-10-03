@@ -1,3 +1,5 @@
+import type { TopologyLink } from "./TopologyWorkspace";
+
 /**
  * Operational state, as opposed to the hand-drawn `status` on a link.
  * A topology an operator cannot read at a glance is just a picture, so this
@@ -37,3 +39,9 @@ export const CANVAS_GROUP = {
   light: { fill: "#f8f9f9", border: "#d7dee1", text: "#566368" },
   dark: { fill: "#15191c", border: "#2b333a", text: "#abb5bd" },
 };
+
+/** Drawing link colours are stable across UI themes; explicit styles take priority. */
+export function topologyLinkColor(link: Pick<TopologyLink, "status" | "style">): string {
+  return link.style?.color || (link.status === "down" ? NODE_STATUS_COLORS.error
+    : link.status === "up" ? NODE_STATUS_COLORS.ok : NODE_STATUS_COLORS.unknown);
+}

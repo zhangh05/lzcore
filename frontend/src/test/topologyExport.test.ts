@@ -139,4 +139,9 @@ describe("topologyExport", () => {
     expect(svg).toContain("#10b981");
     expect(svg).toContain("rgba(0, 0, 0, 0.8)");
   });
+  it("preserves explicit link colour in SVG export", () => {
+    const topology = { ...sampleTopology, links: sampleTopology.links.map(link => ({ ...link, style: { color: "#2563eb" } })) };
+    expect(exportTopologyToSvg(topology)).toContain('stroke="#2563eb"');
+  });
+
 });

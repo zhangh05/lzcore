@@ -1,4 +1,4 @@
-import { NODE_STATUS_COLORS } from "./topologyPalette";
+import { NODE_STATUS_COLORS, topologyLinkColor } from "./topologyPalette";
 import type { Topology, TopologyNode } from "./TopologyWorkspace";
 
 export interface WhiteboardStrokeExport {
@@ -246,7 +246,7 @@ export function exportTopologyToSvg(
     const t = nodeMap.get(link.target_node_id);
     if (!s || !t) return;
 
-    const strokeColor = link.status === "down" ? NODE_STATUS_COLORS.error : link.status === "up" ? NODE_STATUS_COLORS.ok : NODE_STATUS_COLORS.unknown;
+    const strokeColor = sanitizeColor(topologyLinkColor(link), NODE_STATUS_COLORS.unknown);
     const strokeWidth = link.style?.width || (link.status === "down" ? 3 : 2.5);
     const strokeDash = link.status === "down" ? "stroke-dasharray=\"2,4\"" : link.kind === "logical" ? "stroke-dasharray=\"6,4\"" : "";
 

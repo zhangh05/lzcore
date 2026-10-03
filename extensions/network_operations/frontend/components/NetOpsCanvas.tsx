@@ -39,7 +39,7 @@ export type CanvasApi = {
 
 export type CanvasContextTarget = { x: number; y: number; kind: "node" | "link" | "canvas_item" | "canvas"; id: string };
 
-import { nodeStatusColors, CANVAS_ACCENT, CANVAS_GROUP, type NodeRuntimeStatus } from "./topologyPalette";
+import { nodeStatusColors, topologyLinkColor, CANVAS_ACCENT, CANVAS_GROUP, type NodeRuntimeStatus } from "./topologyPalette";
 export { NODE_STATUS_COLORS, NODE_STATUS_COLORS_DARK, nodeStatusColors, CANVAS_ACCENT, CANVAS_GROUP } from "./topologyPalette";
 export type { NodeRuntimeStatus } from "./topologyPalette";
 
@@ -938,15 +938,11 @@ export default function NetOpsCanvas(props: Props) {
           // One opacity value only — stacking a second one on the item fill
           // would make a filtered rectangle indistinguishable from empty space.
           { selector: ".filtered-out", style: { opacity: 0.16, "text-opacity": 0.16 } },
-          // Selection is a wider stroke plus the accent colour, not a glow: the
-          // link stays the same object, it just comes forward.
+          // Selection increases width without hiding status or custom link colours.
           {
             selector: "edge:selected",
             style: {
               width: "data(selectedEdgeWidth)",
-              "line-color": CANVAS_ACCENT.light,
-              "source-arrow-color": CANVAS_ACCENT.light,
-              "target-arrow-color": CANVAS_ACCENT.light,
               "z-index": 20,
             },
           },
@@ -1703,11 +1699,6 @@ export default function NetOpsCanvas(props: Props) {
     const dark = theme === "dark";
     cy.style().selector("node:selected").style({ "underlay-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
     cy.style().selector(".node-connecting").style({ "border-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light }).update();
-    cy.style().selector("edge:selected").style({
-      "line-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light,
-      "source-arrow-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light,
-      "target-arrow-color": dark ? CANVAS_ACCENT.dark : CANVAS_ACCENT.light,
-    }).update();
     cy.style()
       .selector("node")
       .style({
@@ -1755,7 +1746,6 @@ export default function NetOpsCanvas(props: Props) {
     const cy = cyRef.current;
     if (!cy) return;
     const statusPalette = nodeStatusColors(theme === "dark");
-    const linkColors = { ok: statusPalette.ok, danger: statusPalette.error, unknown: statusPalette.unknown };
     const dimmed = new Set(props.dimmedNodeIds || []);
     const nodeIds = new Set(props.topology.nodes.map(node => node.node_id));
     const dimClass = (id: string, base: string) => (dimmed.has(id) ? `${base} filtered-out`.trim() : base);
@@ -1834,7 +1824,6 @@ export default function NetOpsCanvas(props: Props) {
       ...props.topology.links
         .filter((link) => nodeIds.has(link.source_node_id) && nodeIds.has(link.target_node_id))
         .map((link) => {
-          const defaultEdgeColor = link.status === "down" ? linkColors.danger : link.status === "up" ? linkColors.ok : linkColors.unknown;
           const defaultEdgeStyle = link.status === "down" ? "dotted" : link.kind === "logical" ? "dashed" : "solid";
           const defaultEdgeWidth = link.status === "down" ? 3 : 2.5;
           const edgeWidth = typeof link.style?.width === "number" && !Number.isNaN(link.style.width) ? link.style.width : defaultEdgeWidth;
@@ -1848,7 +1837,7 @@ export default function NetOpsCanvas(props: Props) {
               source: link.source_node_id,
               target: link.target_node_id,
               visible: 1,
-              edgeColor: link.style?.color || defaultEdgeColor,
+              edgeColor: topologyLinkColor(link),
               // The state is carried by shape and weight as well as colour, so a
               // down link is still identifiable when the red is not — colour-blind
               // readers, greyscale prints, and screenshots pasted into a report.

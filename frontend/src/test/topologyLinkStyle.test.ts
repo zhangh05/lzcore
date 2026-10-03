@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { topologyLinkColor } from "../../../extensions/network_operations/frontend/components/topologyPalette";
 import type { TopologyLink } from "../../../extensions/network_operations/frontend/components/TopologyWorkspace";
 
 function createLink(overrides: Partial<TopologyLink> = {}): TopologyLink {
@@ -15,20 +16,7 @@ function createLink(overrides: Partial<TopologyLink> = {}): TopologyLink {
   };
 }
 
-function resolveLinkVisuals(
-  link: TopologyLink,
-  linkColors: { ok: string; danger: string; unknown: string } = {
-    ok: "#147a55",
-    danger: "#bd3040",
-    unknown: "#6c7c7e",
-  }
-) {
-  const defaultEdgeColor =
-    link.status === "down"
-      ? linkColors.danger
-      : link.status === "up"
-        ? linkColors.ok
-        : linkColors.unknown;
+function resolveLinkVisuals(link: TopologyLink) {
   const defaultEdgeStyle =
     link.status === "down"
       ? "dotted"
@@ -42,7 +30,7 @@ function resolveLinkVisuals(
       : defaultEdgeWidth;
 
   return {
-    edgeColor: link.style?.color || defaultEdgeColor,
+    edgeColor: topologyLinkColor(link),
     edgeStyle: link.style?.line_style || defaultEdgeStyle,
     edgeWidth,
     curveStyle: link.style?.curve_style || "auto",
@@ -54,7 +42,7 @@ describe("TopologyLink styling and routing resolution", () => {
   it("uses semantic status and kind defaults when no custom style is set", () => {
     const upPhysical = createLink({ status: "up", kind: "physical" });
     const visualsUp = resolveLinkVisuals(upPhysical);
-    expect(visualsUp.edgeColor).toBe("#147a55");
+    expect(visualsUp.edgeColor).toBe("#24733b");
     expect(visualsUp.edgeStyle).toBe("solid");
     expect(visualsUp.edgeWidth).toBe(2.5);
     expect(visualsUp.curveStyle).toBe("auto");
