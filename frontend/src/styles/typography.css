@@ -12,6 +12,20 @@
    global.css, for the same reason in the other direction: it is the base that
    `.chat-bubble.assistant` refines, so it has to sit below the components. */
 
+/* Chat content needs normal HTML whitespace: inherited pre-wrap otherwise
+   turns newlines between rendered block elements into extra blank rows. */
+.message-row .markdown-body {
+  white-space: normal;
+  --lh-body: 1.55;
+  line-height: var(--lh-body);
+  --flow-base: 8px;
+  --flow-loose: 16px;
+  --flow-block: 20px;
+}
+.message-row .streaming-plain-text { line-height: 1.55; }
+.message-row .markdown-body li { margin-block: 4px; }
+.message-row .markdown-body li > p { margin-block: 0; }
+
 /* Paragraphs */
 .markdown-body p {
   margin: 0 0 var(--flow-base);

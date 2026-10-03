@@ -52,12 +52,13 @@
 .topology-agent .tool-call-card { max-width: 100%; }
 .topology-agent-composer { margin: 0 12px 12px; padding: 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); }
 .topology-agent-composer:focus-within { border-color: var(--accent); }
-.topology-agent-composer textarea { border: 0; outline: none; box-shadow: none; background: transparent; width: 100%; resize: vertical; min-height: 60px; max-height: 160px; font-size: 12px; padding: 0; }
+.topology-agent-input-row { display: flex; align-items: flex-end; gap: 8px; min-width: 0; }
+.topology-agent-composer textarea { border: 0; outline: none; box-shadow: none; background: transparent; flex: 1; min-width: 0; width: 0; resize: none; field-sizing: content; min-height: 36px; line-height: 1.5; max-height: 160px; font-size: 12px; padding: 0; }
 .topology-agent-composer footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .topology-agent-composer-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .topology-agent-allow-edit { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); cursor: pointer; user-select: none; }
 .topology-agent-allow-edit input { margin: 0; cursor: pointer; accent-color: var(--accent); }
-.topology-agent-composer button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 0; border-radius: 6px; font-size: 11px; font-weight: var(--weight-label); cursor: pointer; transition: all .15s ease; }
+.topology-agent-composer button { flex-shrink: 0; min-height: 36px; display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 0; border-radius: 6px; font-size: 11px; font-weight: var(--weight-label); cursor: pointer; transition: all .15s ease; }
 .topology-agent-send-btn { background: var(--accent); color: var(--accent-text); }
 .topology-agent-send-btn:hover:not(:disabled) { filter: brightness(1.08); }
 .topology-agent-send-btn:disabled { background: var(--surface-3); color: var(--text-4); opacity: 1; cursor: not-allowed; }

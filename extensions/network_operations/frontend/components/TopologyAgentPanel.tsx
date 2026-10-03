@@ -219,34 +219,22 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
     </div>
     {error && <div className="topology-agent-error" role="alert">{error}<button onClick={() => { void refreshHistory().then(() => setError("")).catch(() => {}); }}>重试加载</button></div>}
     <form className="topology-agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <textarea
-        aria-label="拓扑协作指令"
-        placeholder={allowEdit ? "描述你想画的设备、连线、分组或文字…" : "向 Agent 咨询拓扑结构、单点故障或连线分析（只读模式）…"}
-        value={input}
-        onChange={(event) => setInput(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            if (input.trim() && !running && !preparing) {
-              void submit();
+      <div className="topology-agent-input-row">
+        <textarea
+          aria-label="拓扑协作指令"
+          placeholder={allowEdit ? "描述你想画的设备、连线、分组或文字…" : "向 Agent 咨询拓扑结构、单点故障或连线分析（只读模式）…"}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              if (input.trim() && !running && !preparing) {
+                void submit();
+              }
             }
-          }
-        }}
-        rows={3}
-      />
-      <footer>
-        <div className="topology-agent-composer-meta">
-          <label className="topology-agent-allow-edit" title={allowEdit ? "已允许 Agent 修改图纸" : "已锁定为只读分析模式"}>
-            <input
-              type="checkbox"
-              checked={allowEdit}
-              onChange={(event) => setAllowEdit(event.target.checked)}
-              disabled={running || preparing}
-            />
-            <span>允许修改拓扑</span>
-          </label>
-          <small>{preparing ? "正在确认图纸版本…" : `上下文：${selection.label}`}</small>
-        </div>
+          }}
+          rows={1}
+        />
         {running ? (
           <button type="button" className="topology-agent-stop-btn" onClick={() => void cancel()} title="停止当前生成任务">
             <IconStop size={14} />
@@ -263,6 +251,20 @@ export function TopologyAgentPanel({ workspaceId, topology, selection, onComplet
             <span>{preparing ? "连接中" : "发送"}</span>
           </button>
         )}
+      </div>
+      <footer>
+        <div className="topology-agent-composer-meta">
+          <label className="topology-agent-allow-edit" title={allowEdit ? "已允许 Agent 修改图纸" : "已锁定为只读分析模式"}>
+            <input
+              type="checkbox"
+              checked={allowEdit}
+              onChange={(event) => setAllowEdit(event.target.checked)}
+              disabled={running || preparing}
+            />
+            <span>允许修改拓扑</span>
+          </label>
+          <small>{preparing ? "正在确认图纸版本…" : `上下文：${selection.label}`}</small>
+        </div>
       </footer>
     </form>
   </section>;

@@ -8,11 +8,11 @@
 .wb-input-row {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
   width: 100%;
   margin: 0 auto;
-  padding: var(--space-4);
+  padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-12);
@@ -23,7 +23,7 @@
 .wb-input {
   width: 100%;
   resize: none;
-  min-height: 44px;
+  min-height: 36px;
   max-height: 140px;
   padding: 0;
   color: var(--text);
@@ -31,11 +31,14 @@
   border: 0;
   border-radius: 0;
   font-size: var(--fs-14);
-  line-height: var(--lh-body);
+  line-height: 1.5;
 }
 .wb-input::placeholder { color: var(--text-3); }
 .wb-input:disabled, .wb-attach-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .wb-input:focus-visible { outline: none; box-shadow: none; }
+.wb-input-main { display: flex; align-items: flex-end; gap: var(--space-2); min-width: 0; }
+.wb-input-main .wb-input { flex: 1; min-width: 0; width: 0; }
+.wb-composer-toolbar:empty { display: none; }
 .wb-composer-toolbar {
   display: flex;
   align-items: center;
@@ -166,7 +169,7 @@
 
 @media (max-width: 760px) {
   .wb-input-bar { padding: var(--space-2) var(--space-3) var(--space-3); background: var(--surface); }
-  .wb-input-row { padding: var(--space-4); border-radius: var(--r-12); background: var(--surface); }
+  .wb-input-row { padding: 8px 10px; border-radius: var(--r-12); background: var(--surface); }
   .wb-send, .wb-stop, .wb-attach-btn, .wb-resource-toggle, .wb-skill-picker select, .wb-skill-devices button { min-width: var(--h-touch); min-height: var(--h-touch); }
   .wb-skill-picker select { max-width: 100%; background: transparent; border-color: var(--line-2); }
 }

@@ -48,6 +48,13 @@ jobs:
         env:
           E2E_PYTHON_BIN: python
         run: npm --prefix frontend run e2e
+      - name: Verify production CSS and visual flows
+        env:
+          E2E_PYTHON_BIN: python
+          E2E_PRODUCTION: "1"
+        run: |
+          npm --prefix frontend run build
+          npm --prefix frontend run e2e -- 21-management-width 25-workbench-hierarchy 26-visual-system 27-compact-chat 28-login-cascade
       - name: Preserve browser visual evidence
         if: always()
         uses: actions/upload-artifact@v4

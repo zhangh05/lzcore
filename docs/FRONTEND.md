@@ -48,11 +48,13 @@ topology_updated 只携资源 ID/version。画布以最后确认版本对账：�
 
 Token 在 frontend/src/styles/tokens.css。深浅主题复用语义色，正文 14px、常规操作 13px，技术元数据可用 11px。页面不再使用全局 CSS zoom；原生 DPI 与浏览器缩放按平台处理，画布仍按实际渲染比例换算指针坐标。间距、字号、圆角、控件、焦点、移动触摸目标消费共享 Token，不硬编码第二品牌色。
 
-样式所有权依次是 Token（tokens.css，含排版节奏）、基础控件（primitives.css）、共享组件基础（patterns.css）、应用壳（product-shell.css）、共享页面模式（console-system.css）和页面/扩展细化。Settings、Operations、DataCenter、MemoryPage、KnowledgeLibrary、Diagnostics、UserManagement、CapabilityCenter 各自的 CSS 管理该页样式；TraceDetailPanel.css 管理轨迹详情，AgentWorkbench.css 是工作台入口，消息、正文、结果、工具、进度外壳/阶段/证据拆到 WorkbenchMessages、WorkbenchContent、WorkbenchResults、WorkbenchTools、TaskProgressPanel、TaskProgressPhases、TaskProgressEvidence 各自文件；WorkbenchComposer.css 管理输入与资源范围。patterns.css 是共享模式入口，按 forms、overlays、feedback、status、runtime、content、lists 拆分；product-shell.css 的侧栏独立到 sidebar.css。NetworkOperations.css 拆分目录、编辑器和拓扑基础/样式控件，TopologyStudio.css 拆分画布、工具栏、菜单、检查器/字段、Agent、白板和演示。global.css 只保留元素基础、登录、通用工具类、无障碍与关键帧。所有样式从入口加载，页面切换不决定共享样式的先后。
+样式所有权依次是 Token（tokens.css，含排版节奏）、基础控件（primitives.css）、共享组件基础（patterns.css）、应用壳（product-shell.css）、共享页面模式（console-system.css）和页面/扩展细化。Settings、Operations、DataCenter、MemoryPage、KnowledgeLibrary、Diagnostics、UserManagement、CapabilityCenter 各自的 CSS 管理该页样式；TraceDetailPanel.css 管理轨迹详情，AgentWorkbench.css 是工作台入口，消息、正文、结果、工具、进度外壳/阶段/证据拆到 WorkbenchMessages、WorkbenchContent、WorkbenchResults、WorkbenchTools、TaskProgressPanel、TaskProgressPhases、TaskProgressEvidence 各自文件；WorkbenchComposer.css 管理输入与资源范围。patterns.css 是共享模式入口，按 forms、overlays、feedback、status、runtime、content、lists 拆分；product-shell.css 的侧栏独立到 sidebar.css。NetworkOperations.css 拆分目录、编辑器和拓扑基础/样式控件，TopologyStudio.css 拆分画布、工具栏、菜单、检查器/字段、Agent、白板和演示。global.css 只保留元素基础、通用工具类、无障碍与关键帧。所有样式从入口加载，页面切换不决定共享样式的先后。
 
-layers.css 保持原有优先级。迁移后的页面文件保留 base/console/pages 层，避免把低权重基础搬到高层后覆盖控件；归拢所有权不等于无边界重写全部声明。基础与细化同属其组件文件，删去无条件遮盖的旧声明，禁止新增未分层样式。所有组件入口用相对 @import 管理自己的子表，入口加载次序不变；单个 CSS 不超过 16 KiB，lint:styles 对所有产品和网络扩展样式检查大小、语法与层归属，防止拆分后再次堆大。工作台消息与输入填满中间列，管理页使用可用空间；--w-reading 只约束空状态，不再要求固定正文宽度。历史 design-qa.md 只描述当时截图。
+登录基础样式归 feedback.css，页面细化归 pages.css。layers.css 保持原有优先级，并在 main.tsx 的组件导入之前加载；生产构建的 lint:styles --built 验证产物中各层首次出现的顺序，防止基础重置覆盖登录卡片等页面样式。迁移后的页面文件保留 base/console/pages 层，避免把低权重基础搬到高层后覆盖控件；归拢所有权不等于无边界重写全部声明。基础与细化同属其组件文件，删去无条件遮盖的旧声明，禁止新增未分层样式。所有组件入口用相对 @import 管理自己的子表，单个 CSS 不超过 16 KiB，lint:styles 对所有产品和网络扩展样式检查大小、语法与层归属，防止拆分后再次堆大。工作台消息与输入填满中间列，管理页使用可用空间；--w-reading 只约束空状态，不再要求固定正文宽度。历史 design-qa.md 只描述当时截图。
 
 工作台以会话标题、消息与结果为主；模型可用性始终显示，完整会话 ID 和导出放在“会话信息与导出”中，Escape 关闭后回到触发器。侧栏只保留工作区、新会话与最近会话，任务历史从“任务与运行记录”进入 /runs，不再重复请求最近运行列表。
+
+输入区的文本与附件/发送（运行中为停止）在同一行，短输入保持紧凑，多行按内容增长到上限后滚动；Skill 与资源摘要放在下方，拓扑侧输入采用相同的文本/发送排列。对话正文使用 normal 空白规则，行高 1.55、段落间距 8px、列表项间距 4px，代码和用户原文继续保留换行与缩进。
 
 输入区默认显示 Skill 和资源摘要；展开后可搜索并选择全部资源，不会缩减工具或设备范围。资源面板有界滚动，Escape 收起并恢复焦点；窗口缩小时不改变手动展开状态。任务运行期间 Skill/资源不可改选，停止始终可操作；绘图绑定范围仍不可切换。
 
@@ -73,7 +75,7 @@ npm --prefix frontend run build
 npm --prefix frontend run e2e
 ```
 
-涉及 UI 还要检查实际请求、认证、主路径、窄屏、键盘、弹窗、长文本和错误。26-visual-system.spec.ts 检查 1440/900/390px 的深浅主题、11 个路由、功能抽屉、主文字 Token 对四种中性 Surface 的 4.5:1 对比度、输入边界的 3:1 对比度、无全局 zoom 和未分层 CSS，以及短窄桌面弹窗的焦点循环/关闭恢复；另以隔离数据和模拟消息覆盖有正文、表格的会话、设备目录与图纸检查器深浅主题。lint:styles 解析所有产品和网络扩展 CSS，lint:tokens 覆盖扩展 TSX。CI 保留 frontend-browser-validation 截图和失败轨迹 14 天。截图只证明当时视觉；桌面弹窗浏览器验收使用桥接适配器，不代替 Windows 原生 smoke，模拟流也不代替真实 LLM/网络设备验收。
+涉及 UI 还要检查实际请求、认证、主路径、窄屏、键盘、弹窗、长文本和错误。26-visual-system.spec.ts 检查 1440/900/390px 的深浅主题、11 个路由、功能抽屉、主文字 Token 对四种中性 Surface 的 4.5:1 对比度、输入边界的 3:1 对比度、无全局 zoom 和未分层 CSS，以及短窄桌面弹窗的焦点循环/关闭恢复；另以隔离数据和模拟消息覆盖有正文、表格的会话、设备目录与图纸检查器深浅主题。lint:styles 解析所有产品和网络扩展 CSS，lint:tokens 覆盖扩展 TSX。CI 保留 frontend-browser-validation 截图和失败轨迹 14 天。截图只证明当时视觉；桌面弹窗浏览器验收使用桥接适配器，不代替 Windows 原生 smoke，模拟流也不代替真实 LLM/网络设备验收。27-compact-chat.spec.ts 覆盖 1440/390px 输入高度、文本与按钮同排、多行增长、发送后清空、正文列表/标题间距和代码缩进。28-login-cascade.spec.ts 检查深浅主题、1440/390px 登录卡片内边距、控件高度、无横向溢出及键盘提交错误反馈。CI 保留完整开发服务回归，并用 E2E_PRODUCTION=1 在生产构建 preview 服务上验证管理页、工作台、视觉系统、紧凑对话和登录；同变量可用于本地生产包验收。
 
 设置中的服务商卡片保持自然高度，宽窗口列表独立纵向滚动，920px 以下横向滚动选择，保留完整配置表单；配置字段按面板可用宽度重排，保存操作与长期记忆不重叠。右侧进度卡不因窗口变短而压缩内容，按用户选择展开/收起；窄窗口仍可访问，手机宽度在对话下方展示。图纸名称变化刷新绑定会话标题、Skill 和资源名称。
 

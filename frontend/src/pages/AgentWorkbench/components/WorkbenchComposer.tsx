@@ -125,65 +125,20 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
 
       {/* 核心输入行与操作 */}
       <div className="wb-input-row">
-        <textarea
-          ref={inputRef}
-          className="wb-input wb-input-content"
-          placeholder={currentSessionId ? "输入问题或添加文件" : "请先点击左侧 + 新建会话"}
-          value={input}
-          onChange={(event) => onInputChange(event.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={!currentSessionId || turnRunning}
-          rows={1}
-          aria-label="任务描述"
-          data-testid="chat-input"
-          spellCheck={false}
-        />
-
-        {/* 底部工具栏：Skill 选择 + 附件 + 发送 —— 跟 ChatGPT/Claude 同一套形态。
-           之前它们是 grid 的第二行（独立 row），把整张 composer 卡撑高到 140+ px；
-           现在收成 textarea 内的底栏，空状态从 ~149px 压到 ~70-80px。 */}
-        <div className="wb-composer-toolbar">
-          {/* Skill 选择栏 */}
-          {currentSessionId && (isSkillLocked || workbenchSkills.length > 0) ? (
-            <div className={`wb-skill-picker ${isSkillLocked ? "is-locked" : ""}`} data-testid="workbench-skill-picker">
-              {isSkillLocked && selectedSkill ? (
-                <div
-                  className="wb-skill-locked-badge"
-                  title="该会话已绑定拓扑图纸，绘图上下文专属固定，不可切换其他 Skill"
-                  data-testid="workbench-skill-locked-badge"
-                >
-                  <IconLock size={12} className="wb-skill-lock-icon" />
-                  <span className="wb-skill-lock-label">已绑定：{selectedSkill.name}</span>
-                </div>
-              ) : (
-                <label>
-                  <span>Skill</span>
-                  <select
-                    value={selectedSkillKey}
-                    disabled={turnRunning}
-                    onChange={(event) => onSelectSkillKey(event.target.value)}
-                  >
-                    <option value="">通用对话</option>
-                    {workbenchSkills.map((skill) => (
-                      <option key={`${skill.extension_id}:${skill.skill_id}`} value={`${skill.extension_id}:${skill.skill_id}`}>
-                        {skill.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              {selectedSkill && selectedSkill.resources.length > 0 ? (
-                <button ref={resourceToggleRef} type="button" className="wb-resource-toggle"
-                  aria-expanded={resourcesOpen} aria-controls={resourcePanelId}
-                  onClick={() => setResourcesOpen((open) => !open)}
-                  title={resourceSummary}>
-                  <span>{resourceSummary}</span><IconChevronDown size={13} aria-hidden="true" />
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
+        <div className="wb-input-main">
+          <textarea
+            ref={inputRef}
+            className="wb-input wb-input-content"
+            placeholder={currentSessionId ? "输入问题或添加文件" : "请先点击左侧 + 新建会话"}
+            value={input}
+            onChange={(event) => onInputChange(event.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={!currentSessionId || turnRunning}
+            rows={1}
+            aria-label="任务描述"
+            data-testid="chat-input"
+            spellCheck={false}
+          />
           <div className="wb-composer-actions">
             <input
               ref={fileInputRef}
@@ -231,6 +186,50 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
               </button>
             )}
           </div>
+        </div>
+
+        {/* Scope controls stay below the text and action row. */}
+        <div className="wb-composer-toolbar">
+          {/* Skill 选择栏 */}
+          {currentSessionId && (isSkillLocked || workbenchSkills.length > 0) ? (
+            <div className={`wb-skill-picker ${isSkillLocked ? "is-locked" : ""}`} data-testid="workbench-skill-picker">
+              {isSkillLocked && selectedSkill ? (
+                <div
+                  className="wb-skill-locked-badge"
+                  title="该会话已绑定拓扑图纸，绘图上下文专属固定，不可切换其他 Skill"
+                  data-testid="workbench-skill-locked-badge"
+                >
+                  <IconLock size={12} className="wb-skill-lock-icon" />
+                  <span className="wb-skill-lock-label">已绑定：{selectedSkill.name}</span>
+                </div>
+              ) : (
+                <label>
+                  <span>Skill</span>
+                  <select
+                    value={selectedSkillKey}
+                    disabled={turnRunning}
+                    onChange={(event) => onSelectSkillKey(event.target.value)}
+                  >
+                    <option value="">通用对话</option>
+                    {workbenchSkills.map((skill) => (
+                      <option key={`${skill.extension_id}:${skill.skill_id}`} value={`${skill.extension_id}:${skill.skill_id}`}>
+                        {skill.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {selectedSkill && selectedSkill.resources.length > 0 ? (
+                <button ref={resourceToggleRef} type="button" className="wb-resource-toggle"
+                  aria-expanded={resourcesOpen} aria-controls={resourcePanelId}
+                  onClick={() => setResourcesOpen((open) => !open)}
+                  title={resourceSummary}>
+                  <span>{resourceSummary}</span><IconChevronDown size={13} aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {resourcesOpen && selectedSkill ? (
           <section id={resourcePanelId} className="wb-resource-panel" aria-label={isSkillLocked ? "已绑定图纸资源" : "选择 Skill 资源"}>

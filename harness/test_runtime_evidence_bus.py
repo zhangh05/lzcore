@@ -322,3 +322,36 @@ def test_observation_and_reference_contract_never_promotes_observation_to_normal
         normalize_reference_descriptor({
             **candidate, "state": "confirmed", "authority": "observed", "current": True,
         })
+
+
+def test_turn_retained_result_keeps_full_evidence_without_managed_file(monkeypatch, tmp_path):
+    from core.runtime_engine.evidence import register_tool_evidence, evidence_manifest
+    from core.runtime_engine.query_loop import StreamingToolResult
+    from storage.file_store import list_files
+
+    monkeypatch.setenv('LZCORE_WORKSPACE_ROOT', str(tmp_path))
+    result = StreamingToolResult(tool_name='network__operations.topology', call_id='draw-large', ok=True,
+        output={'topology': {'nodes': [{'node_id': f'node-{i}', 'label': '完整设备信息' * 10} for i in range(150)]}})
+    original_nodes = list(result.output['topology']['nodes'])
+    extras = {}
+    register_tool_evidence(extras, [result], workspace_id='test_ws', request_id='run_current',
+        tool_registry={'network.operations.topology': {'metadata': {'evidence_retention': 'turn'}}})
+    item = evidence_manifest(extras)[0]
+    assert item['reference']['kind'] == 'tool_result'
+    assert extras['evidence_ledger'][0]['projection']['topology']['nodes'] == original_nodes
+    assert 'artifact_ids' not in result.output
+    assert list_files('test_ws') == []
+
+
+def test_default_large_evidence_remains_durable(monkeypatch, tmp_path):
+    from core.runtime_engine.evidence import register_tool_evidence, evidence_manifest
+    from core.runtime_engine.query_loop import StreamingToolResult
+    from artifacts.store import read_artifact_content
+
+    monkeypatch.setenv('LZCORE_WORKSPACE_ROOT', str(tmp_path))
+    result = StreamingToolResult(tool_name='example.collect', call_id='large', ok=True, output={'content': '证据' * 5000})
+    extras = {}
+    register_tool_evidence(extras, [result], workspace_id='test_ws', request_id='run_current')
+    item = evidence_manifest(extras)[0]
+    assert item['reference']['kind'] == 'artifact'
+    assert '证据' in read_artifact_content('test_ws', item['reference']['artifact_id'])

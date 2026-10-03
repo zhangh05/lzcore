@@ -533,6 +533,45 @@ def update_artifact_tags(workspace_id: str, artifact_id: str, tags: list) -> boo
     return True
 
 
+def cleanup_consumed_tool_evidence(workspace_id: str, producer_id: str, *, exclude_run_id: str = "") -> list[str]:
+    """Remove legacy automatic evidence for a turn-retained producer.
+
+    Only completed runs and exclusively owned, unpromoted cache payloads qualify.
+    Explicit exports, uploads, reused evidence and active/unknown runs stay intact.
+    The existing deletion path detaches run references and preserves traces.
+    """
+    from storage.reference_index import list_references_for_file
+    from storage.run_record_store import get_run
+
+    deleted: list[str] = []
+    for rec in _records_in_index_order(workspace_id):
+        metadata = rec.metadata or {}
+        if not (
+            rec.artifact_type == "tool_evidence"
+            and rec.source == "runtime_tool_evidence"
+            and rec.lifecycle == "active"
+            and metadata.get("hidden_from_default_listing") is True
+            and metadata.get("producer_id") == producer_id
+            and rec.run_id and rec.run_id != exclude_run_id
+            and rec.file_id and not rec.references
+        ):
+            continue
+        try:
+            run = get_run(rec.run_id, workspace_id)
+        except ValueError:
+            continue
+        if not run.get("finished_at") or run.get("status") not in {"ok", "error", "partial", "cancelled", "succeeded", "failed"}:
+            continue
+        if any(
+            ref.get("owner_type") != "artifact" or ref.get("owner_id") != rec.artifact_id
+            for ref in list_references_for_file(workspace_id, rec.file_id)
+        ):
+            continue
+        if delete_artifact(workspace_id, rec.artifact_id, hard=True):
+            deleted.append(rec.artifact_id)
+    return deleted
+
+
 def delete_artifact(workspace_id: str, artifact_id: str, hard: bool = False) -> bool:
     rec = get_artifact(workspace_id, artifact_id)
     if not rec:

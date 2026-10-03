@@ -41,5 +41,24 @@ for (const file of files) {
     if (!layered) failures.push(`${file}:${rule.source.start.line}: rule outside declared layer: ${rule.selector}`);
   });
 }
+if (process.argv.includes('--built')) {
+  const dist = path.join(root, 'frontend/dist');
+  const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+  const href = html.match(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"/);
+  if (!href) throw new Error('Production entry stylesheet missing');
+  const declaration = postcss.parse(fs.readFileSync(path.join(root, 'frontend/src/styles/layers.css'), 'utf8'))
+    .nodes.find(node => node.type === 'atrule' && node.name === 'layer');
+  const expected = declaration.params.split(',').map(name => name.trim());
+  const seen = [];
+  const built = postcss.parse(fs.readFileSync(path.join(dist, href[1].replace(/^\//, '')), 'utf8'));
+  built.walkAtRules('layer', rule => {
+    for (const name of rule.params.split(',').map(value => value.trim())) {
+      if (!seen.includes(name)) seen.push(name);
+    }
+  });
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    failures.push(`Production cascade order differs from layers.css: ${seen.join(', ')}`);
+  }
+}
 if (failures.length) { console.error(failures.join('\n')); process.exitCode = 1; }
 else console.log(`CSS syntax and cascade ownership verified: ${files.length} stylesheets.`);

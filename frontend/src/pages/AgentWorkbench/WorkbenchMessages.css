@@ -273,6 +273,7 @@
 }
 
 .chat-bubble.user {
+  line-height: 1.55;
   padding: 12px 18px;
   color: var(--text);
   /* User input gets the only tinted conversation plane. */

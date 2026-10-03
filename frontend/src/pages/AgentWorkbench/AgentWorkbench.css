@@ -425,12 +425,12 @@
   .wb-empty { padding: var(--space-6) var(--space-4); justify-content: center; align-items: center; text-align: center; max-width: none; }
 }
 @media (max-width: 620px) {
-  .wb-shell { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .wb-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-content: start; overflow-y: auto; }
 }
 @media (max-width: 620px) {
   .wb-conversation-column { min-height: 65vh; }
 }
 @media (max-width: 620px) {
-  .wb-shell.is-progress-collapsed { grid-template-columns: minmax(0, 1fr) 40px; }
+  .wb-shell.is-progress-collapsed { grid-template-columns: minmax(0, 1fr) 40px; grid-template-rows: minmax(0, 1fr); }
 }
 }

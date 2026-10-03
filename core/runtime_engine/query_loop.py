@@ -1548,7 +1548,7 @@ class QueryLoop:
                 all_results.extend(resolved_round)
                 register_tool_evidence(ctx.extras, resolved_round,
                     workspace_id=ctx.workspace_id, session_id=ctx.session_id,
-                    request_id=ctx.request_id, user_input=ctx.user_input)
+                    request_id=ctx.request_id, user_input=ctx.user_input, tool_registry=self._tool_registry)
                 cognitive_state.register_tool_results(resolved_round, evidence=evidence_summary(ctx.extras))
                 cognitive_registered_results = len(all_results)
                 messages = self._append_tool_round(messages, model_calls, resolved_round)
@@ -1732,7 +1732,7 @@ class QueryLoop:
                 budget.end_execution()
                 execution_duration_ms += (time.monotonic() - execution_started) * 1000
             all_results.extend(prefetch_results)
-            register_tool_evidence(ctx.extras, prefetch_results)
+            register_tool_evidence(ctx.extras, prefetch_results, tool_registry=self._tool_registry)
             messages = self._append_tool_round(
                 messages,
                 prefetch_calls,
@@ -2277,6 +2277,7 @@ class QueryLoop:
                     session_id=ctx.session_id,
                     request_id=ctx.request_id,
                     user_input=ctx.user_input,
+                    tool_registry=self._tool_registry,
                 )
                 cognitive_state.register_tool_results(
                     results,

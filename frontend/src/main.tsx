@@ -1,3 +1,5 @@
+// Declare cascade precedence before any component can import a stylesheet.
+import "./styles/layers.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { DesktopHost } from "./desktop/DesktopHost";
@@ -6,7 +8,6 @@ import { App } from "./app/App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 // Cascade order is declared in one place, not decided by import order.
 // See styles/layers.css for the order and the rules that keep it stable.
-import "./styles/layers.css";
 // Shared component styles load from the entry rather than from whichever page
 // module imports the component first: a page deciding the cascade position of a
 // shared stylesheet is how the order became accidental in the first place.

@@ -1421,3 +1421,10 @@ def test_evidence_failure_transitions_task_to_terminal_failure(monkeypatch, tmp_
     assert "job_id" not in failed
     assert failed["status"] == "failed"
     assert failed["error"] == "inspection_evidence_persist_failed"
+
+
+def test_topology_intermediate_evidence_retention_reaches_runtime_registry():
+    from agent.runtime.ssot_runtime import _build_ssot_runtime_tool_registry
+    registry = _build_ssot_runtime_tool_registry(['network.operations.topology', 'network.operations.device.manage'])
+    assert registry['network.operations.topology']['metadata']['evidence_retention'] == 'turn'
+    assert registry['network.operations.device.manage']['metadata']['evidence_retention'] == 'durable'

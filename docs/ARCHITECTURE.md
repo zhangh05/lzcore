@@ -35,3 +35,9 @@ Agent 会话 SSE 路由已注册，但没有接入运行时生产者。其他 SS
 默认文件记录和文件锁队列；生产 profile 可使用 PostgreSQL、S3、Redis 队列及事件总线。仍使用文件的数据需要共享卷和可靠锁，不能仅增加进程就声称支持任意多节点。生产 Compose 配置 `LZCORE_EVENT_BUS_MODE: redis`。
 
 系统凭据库优先；Fernet 是回退存储方案，不代表所有环境都只靠环境主密钥。任务恢复、备份和资源删除走 store/API 生命周期，不能清目录模拟完成。配置与发布检查见 [PRODUCTION](PRODUCTION.md)。
+
+## 工具中间证据的保留
+
+扩展工具通过注册契约 evidence_retention 声明中间结果保留方式（durable 为默认，turn 为当前回合）。QueryLoop 将完整且脱敏的结果放入证据账本；turn 不额外生成 FileStore 任务产出文件，不限制工具完整读取、模型上下文或正式导出。网络拓扑工具声明 turn，图纸与修订仍由领域存储持久化。其他工具的大结果默认仍保存为 tool_evidence。
+
+再次使用 turn 工具时，按当前主体和工作区清理此前自动生成的缓存：只匹配 runtime_tool_evidence、tool_evidence、隐藏标记和相同 producer_id，且必须有已结束的运行记录、未晋升、未复用的独占文件。运行中、未知/待审批、缺失结束记录、知识引用、正式报告和用户文件均保留。沿用产出删除流程解除运行索引和文件引用，保留执行历史；不会扫描或批量删除工作区中的其他文件。

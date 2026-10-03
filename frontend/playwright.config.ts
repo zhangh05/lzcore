@@ -104,7 +104,7 @@ export default defineConfig({
       stderr: "pipe",
     },
     {
-      command: `npm run dev -- --host 127.0.0.1 --port ${FRONTEND_PORT}`,
+      command: `npm run ${process.env.E2E_PRODUCTION === "1" ? "preview" : "dev"} -- --host 127.0.0.1 --port ${FRONTEND_PORT}`,
       cwd: path.resolve(REPO_ROOT, "frontend"),
       env: { ...commonEnv, VITE_DEV_API_TARGET: BACKEND_URL },
       url: FRONTEND_URL,

@@ -67,17 +67,33 @@ def register_tool_evidence(
     session_id: str = "",
     request_id: str = "",
     user_input: str = "",
+    tool_registry: dict[str, dict[str, Any]] | None = None,
 ) -> list[str]:
     """Register every observable tool result as typed evidence.
 
     Producers may publish richer ``evidence_parts``.  A producer that does not
     do so still receives a canonical ``tool_result`` evidence
     record, which prevents task/cognitive/evidence state from disagreeing.
-    Large results are also persisted as redacted immutable artifacts. Their
-    complete content remains model-visible in the active turn.
+    Large results default to durable redacted artifacts. A producer may declare
+    turn retention in its registered contract; its complete result stays in the
+    active ledger without creating a duplicate managed file.
     """
     registered: list[str] = []
     for result in results:
+        tool_name = str(getattr(result, "tool_name", "") or "").replace("__", ".")
+        metadata = ((tool_registry or {}).get(tool_name) or {}).get("metadata") or {}
+        turn_retained = metadata.get("evidence_retention") == "turn"
+        if turn_retained and workspace_id:
+            cleaned = extras.setdefault("turn_evidence_cleanup", {})
+            if tool_name not in cleaned:
+                from artifacts.store import cleanup_consumed_tool_evidence
+                try:
+                    cleaned[tool_name] = cleanup_consumed_tool_evidence(
+                        workspace_id, tool_name, exclude_run_id=request_id,
+                    )
+                except (OSError, RuntimeError, ValueError):
+                    import logging
+                    logging.getLogger(__name__).exception("Consumed tool evidence cleanup deferred")
         output = getattr(result, "output", None)
         if not isinstance(output, dict):
             output = {}
@@ -90,6 +106,7 @@ def register_tool_evidence(
                 session_id=session_id,
                 request_id=request_id,
                 user_input=user_input,
+                persist_artifact=not turn_retained,
             )]
         registered.extend(register_evidence_parts(
             extras,
@@ -108,6 +125,7 @@ def _tool_result_evidence_part(
     session_id: str,
     request_id: str,
     user_input: str,
+    persist_artifact: bool = True,
 ) -> dict[str, Any]:
     from storage.redaction import redact_value
 
@@ -119,7 +137,7 @@ def _tool_result_evidence_part(
     call_id = str(getattr(result, "call_id", "") or "")
     tool_name = str(getattr(result, "tool_name", "") or "tool").replace("__", ".")
     artifact_id = ""
-    if workspace_id and len(serialized) >= _ARTIFACT_THRESHOLD_CHARS:
+    if persist_artifact and workspace_id and len(serialized) >= _ARTIFACT_THRESHOLD_CHARS:
         try:
             from artifacts.store import save_artifact
 

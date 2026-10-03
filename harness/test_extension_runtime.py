@@ -237,3 +237,15 @@ def test_incompatible_extension_is_rejected(tmp_path: Path):
     }), encoding="utf-8")
     with pytest.raises(ExtensionValidationError, match="requires platform"):
         load_extensions(registry=ExtensionRegistry([root]), refresh=True)
+
+
+@pytest.mark.parametrize('retention', ['temporary', {}, None])
+def test_extension_rejects_invalid_evidence_retention(retention):
+    from extensions.runtime import _build_tools
+    network = next(item for item in load_extensions(refresh=True) if item.manifest.extension_id == 'network.operations')
+    with pytest.raises(ExtensionValidationError, match='evidence_retention'):
+        _build_tools(network.manifest, {'tools': [{
+            'tool_id': 'network.operations.topology', 'name': 'retention test',
+            'handler': lambda invocation: {}, 'permission_action': 'read',
+            'evidence_retention': retention,
+        }]})

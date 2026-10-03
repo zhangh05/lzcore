@@ -1,15 +1,15 @@
 {
   "name": "lzcore-workbench",
   "private": true,
-  "version": "3.3.5",
-  "description": "联智中枢 v3.3.5",
+  "version": "3.3.6",
+  "description": "联智中枢 v3.3.6",
   "type": "module",
   "engines": {
     "node": ">=24 <25"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/check_styles.cjs --built",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint:styles": "node scripts/check_styles.cjs",

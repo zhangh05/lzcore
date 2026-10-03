@@ -113,6 +113,9 @@ def _build_tools(manifest: ExtensionManifest, contribution: dict[str, Any]) -> t
         referenceable_outputs = item.get("referenceable_outputs") or {}
         if not isinstance(referenceable_outputs, dict):
             raise ExtensionValidationError(f"referenceable_outputs must be an object: {tool_id}")
+        evidence_retention = item.get("evidence_retention", "durable")
+        if evidence_retention not in ("durable", "turn"):
+            raise ExtensionValidationError(f"invalid evidence_retention: {tool_id}")
         properties = (item.get("input_schema") or {}).get("properties") or {}
         actions = set((properties.get("action") or {}).get("enum") or [])
         action_execution_contracts = item.get("action_execution_contracts") or {}
@@ -194,6 +197,7 @@ def _build_tools(manifest: ExtensionManifest, contribution: dict[str, Any]) -> t
             metadata={
                 "extension_id": manifest.extension_id,
                 "extension_name": manifest.name,
+                "evidence_retention": evidence_retention,
                 "action_execution_contracts": {
                     str(action): dict(contract)
                     for action, contract in action_execution_contracts.items()

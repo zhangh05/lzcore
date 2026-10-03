@@ -150,3 +150,48 @@ def test_hard_delete_preserves_payload_referenced_by_non_artifact_owner(monkeypa
 
     assert artifact_store.delete_artifact("test_ws", "art_test", hard=True) is True
     assert removed_refs == ["ref_artifact"]
+
+
+def test_consumed_evidence_cleanup_removes_only_owned_finished_cache(monkeypatch, tmp_path):
+    from artifacts.store import save_artifact, cleanup_consumed_tool_evidence, get_artifact
+    from storage.atomic_io import atomic_write_json
+    from storage.records import workspace_record_file
+    from storage.file_store import get_file_record
+    from storage.reference_index import add_reference
+
+    monkeypatch.setenv('LZCORE_WORKSPACE_ROOT', str(tmp_path))
+    producer = 'network.operations.topology'
+    def cache(run_id, **changes):
+        fields = dict(workspace_id='test_ws', content='已消费的图纸中间结果', artifact_type='tool_evidence',
+            run_id=run_id, source='runtime_tool_evidence', metadata={'producer_id': producer, 'hidden_from_default_listing': True})
+        fields.update(changes)
+        record = save_artifact(**fields)
+        assert record is not None
+        return record
+    for run_id, status in [('run_done', 'ok'), ('run_active', 'running'), ('run_unknown', 'unknown')]:
+        atomic_write_json(workspace_record_file('test_ws', 'runs', f'{run_id}.json'),
+            {'run_id': run_id, 'status': status, 'finished_at': '2026-10-03T00:00:00Z'})
+    other_workspace = cache('run_done', workspace_id='other_ws')
+    removable = cache('run_done')
+    active = cache('run_active')
+    unknown = cache('run_unknown')
+    missing = cache('run_missing')
+    reused = cache('run_done')
+    add_reference('test_ws', reused.file_id, 'knowledge', 'source_retained', 'source')
+    report = cache('run_done', artifact_type='report')
+    upload = cache('run_done', source='upload')
+    other_tool = cache('run_done', metadata={'producer_id': 'example.collect', 'hidden_from_default_listing': True})
+    explicit = cache('run_done', metadata={'producer_id': producer})
+    promoted = cache('run_done')
+    from storage.artifact_metadata_store import upsert_artifact_record
+    row = promoted.__dict__.copy(); row['lifecycle'] = 'promoted'
+    upsert_artifact_record('test_ws', row)
+    assert cleanup_consumed_tool_evidence('test_ws', producer, exclude_run_id='run_done') == []
+    assert cleanup_consumed_tool_evidence('test_ws', producer) == [removable.artifact_id]
+    assert get_artifact('test_ws', removable.artifact_id) is None
+    assert get_file_record('test_ws', removable.file_id) is None
+    for record in [active, unknown, missing, reused, report, upload, other_tool, explicit, promoted]:
+        assert get_artifact('test_ws', record.artifact_id) is not None
+        assert get_file_record('test_ws', record.file_id) is not None
+    assert cleanup_consumed_tool_evidence('test_ws', producer) == []
+    assert get_file_record('other_ws', other_workspace.file_id) is not None
