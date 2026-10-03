@@ -46,7 +46,7 @@ for (const width of [1920, 1600, 1440, 1200, 1024, 900, 760, 390]) {
         expect(bounds.overflow, `${route}: document overflow`).toBeLessThanOrEqual(1);
         measurements.push({ route, theme, ...bounds });
         if (width === 1920 || width === 390) {
-          await page.screenshot({ path: testInfo.outputPath(`${route.slice(1).replaceAll("/", "-")}-${theme}.png`) });
+          await page.screenshot({ path: testInfo.outputPath(`${route.slice(1).replace(/[/?=]/g, "-")}-${theme}.png`) });
         }
       }
     }
