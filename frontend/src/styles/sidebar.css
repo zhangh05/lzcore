@@ -17,7 +17,7 @@
 }
 
 .sidebar-panel {
-  border-bottom: 1px solid var(--line-2);
+  border-bottom: 0;
 }
 
 .sidebar-panel:last-child {
@@ -45,7 +45,7 @@
 .session-item.active {
   background: var(--lz-primary-soft, var(--surface-selected));
   color: var(--text);
-  font-weight: var(--weight-heading);
+  font-weight: var(--weight-label);
 }
 
 .session-item:hover:not(.active) {
@@ -209,7 +209,7 @@
   min-height: 40px;
   border-radius: var(--r-6);
   color: var(--accent);
-  background: var(--accent-soft);
+  background: transparent;
   box-shadow: none;
   font-weight: var(--weight-label);
   cursor: pointer;
@@ -287,7 +287,7 @@
   background: var(--surface-selected);
   border-color: transparent;
   box-shadow: none;
-  font-weight: var(--weight-heading);
+  font-weight: var(--weight-label);
 }
 
 .sidebar-content .list-item.active::before {

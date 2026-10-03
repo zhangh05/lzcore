@@ -2,48 +2,49 @@
 @layer base {
 :root {
   --weight-body: 400;
-  --field-border: #7d9189;
+  --field-border: #829096;
   --scroll-thumb: color-mix(in srgb, var(--text-3) 42%, transparent);
-  --scroll-thumb-hover: var(--text-3);
+  --scroll-thumb-hover: color-mix(in srgb, var(--text-3) 65%, transparent);
   --canvas-surface: var(--surface);
-  --surface-rail: var(--surface-2);
+  --surface-rail: var(--bg);
 }
-[data-theme="dark"] { --field-border: #657b71; }
+[data-theme="dark"] { --field-border: #6b777e; }
 :root {
   color-scheme: light;
 
-  /* Product palette: neutral surfaces, one accent and distinct outcomes. */
-  --bg: #f4f7f6;
+  /* Cold neutral surfaces keep teal exclusive to interaction and AI activity.
+     Success uses green; message surfaces do not borrow selection/status fills. */
+  --bg: #f5f7f7;
   --surface: #ffffff;
-  --surface-2: #f8faf9;
-  --surface-3: #eef3f1;
+  --surface-2: #f8f9f9;
+  --surface-3: #eef1f0;
   --overlay: rgba(16, 24, 28, 0.36);
 
-  --text: #172326;
+  --text: #172124;
   --text-1: var(--text);
-  --text-2: #334348;
+  --text-2: #354249;
   /* Text levels clear 4.5:1 on the four neutral product surfaces. */
-  --text-3: #52655d;
-  --text-4: #60716a;
+  --text-3: #566368;
+  --text-4: #626e73;
 
-  --line: #d3deda;
-  --line-2: #e3ebe7;
-  --line-3: #a4b5af;
+  --line: #d7dee1;
+  --line-2: #e6eaec;
+  --line-3: #aab5bb;
 
   --accent: #0f7773;
   --accent-2: #085b59;
   --accent-soft: #e5f1ee;
   --accent-text: #ffffff;
 
-  --ok: #147a55;
-  --ok-soft: #dff1e8;
+  --ok: #24733b;
+  --ok-soft: #e6f2e4;
   /* Ink for text sitting ON a filled semantic colour. In the light theme the
      fills are dark, so the ink is white; in the dark theme every semantic
      colour flips to a light tint meant as a foreground, so the ink flips too.
      Without these, `color: #fff` on `background: var(--info)` measures 2.1:1
      in dark mode — legible in one theme and invisible in the other. */
   --ok-text: #ffffff;
-  --warn: #a16207;
+  --warn: #925b08;
   --warn-soft: #f7ebca;
   --warn-text: #ffffff;
   --danger: #bd3040;
@@ -52,15 +53,15 @@
   --info: #365f85;
   --info-soft: #e3eef6;
   --info-text: #ffffff;
-  --surface-hover: #f0f5f3;
-  --surface-selected: #e4efec;
+  --surface-hover: #f0f3f4;
+  --surface-selected: #e5f0ef;
   --field: #ffffff;
   --focus-ring: #0f7778;
   --focus-ring-shadow: rgba(15, 119, 120, 0.18);
-  --message-assistant: #fcfdfc;
-  --message-assistant-border: #e3ebe8;
-  --message-user: #eaf3f0;
-  --message-user-border: #d2e3dc;
+  --message-assistant: #fcfdfd;
+  --message-assistant-border: #e6eaec;
+  --message-user: #eef4f2;
+  --message-user-border: #dce5e3;
   --shadow-composer: 0 4px 16px rgba(28, 48, 48, 0.05);
 
   --console-canvas: var(--bg);
@@ -83,8 +84,8 @@
   --lz-surface-dock: var(--surface);
   --lz-shadow-ambient: var(--shadow-sm);
   --lz-shadow-dock: var(--shadow-menu);
-  --lz-glow-ok: rgba(20, 122, 85, 0.18);
-  --lz-glow-warn: rgba(161, 98, 7, 0.18);
+  --lz-glow-ok: rgba(36, 115, 59, 0.18);
+  --lz-glow-warn: rgba(146, 91, 8, 0.18);
   --lz-glow-err: rgba(189, 48, 64, 0.18);
 
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
@@ -218,24 +219,24 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #111719;
-  --surface: #181f22;
-  --surface-2: #141b1e;
-  --surface-3: #202a2e;
+  --bg: #111416;
+  --surface: #181c1f;
+  --surface-2: #15191c;
+  --surface-3: #202529;
   --overlay: rgba(0, 0, 0, 0.48);
-  --text: #edf3f2;
-  --text-2: #ccd8d5;
-  --text-3: #a5b5b0;
-  --text-4: #91a39d;
-  --line: #35433e;
-  --line-2: #29362f;
-  --line-3: #63766e;
+  --text: #edf1f3;
+  --text-2: #cbd3d8;
+  --text-3: #abb5bd;
+  --text-4: #96a2ad;
+  --line: #384149;
+  --line-2: #2b333a;
+  --line-3: #677782;
   --accent: #7cc9bc;
   --accent-2: #a2ded2;
-  --accent-soft: #203c35;
+  --accent-soft: #20383a;
   --accent-text: #09111a;
-  --ok: #77ca9c;
-  --ok-soft: #173526;
+  --ok: #85ce7d;
+  --ok-soft: #233522;
   --ok-text: #08160f;
   --warn: #e2ad4d;
   --warn-soft: #372913;
@@ -246,15 +247,15 @@
   --info: #80badc;
   --info-soft: #183044;
   --info-text: #09111a;
-  --surface-hover: #202b27;
-  --surface-selected: #203c35;
-  --field: #181f22;
+  --surface-hover: #22282d;
+  --surface-selected: #20383a;
+  --field: #181c1f;
   --focus-ring: #8dd1cf;
   --focus-ring-shadow: rgba(141, 209, 207, 0.22);
-  --message-assistant: #151e20;
-  --message-assistant-border: #2a3839;
-  --message-user: #203c35;
-  --message-user-border: #365a4f;
+  --message-assistant: #151a1e;
+  --message-assistant-border: #2b343b;
+  --message-user: #232d30;
+  --message-user-border: #37474c;
   --shadow-composer: 0 4px 16px rgba(0, 0, 0, 0.12);
   --region-purple: #c084fc;
   --region-purple-soft: #3b1f52;
@@ -273,7 +274,7 @@
   --lz-surface-dock: var(--surface);
   --lz-shadow-ambient: var(--shadow-sm);
   --lz-shadow-dock: var(--shadow-menu);
-  --lz-glow-ok: rgba(119, 202, 156, 0.25);
+  --lz-glow-ok: rgba(133, 206, 125, 0.25);
   --lz-glow-warn: rgba(226, 173, 77, 0.25);
   --lz-glow-err: rgba(239, 113, 128, 0.25);
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);

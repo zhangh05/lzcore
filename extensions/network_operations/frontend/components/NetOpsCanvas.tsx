@@ -39,46 +39,9 @@ export type CanvasApi = {
 
 export type CanvasContextTarget = { x: number; y: number; kind: "node" | "link" | "canvas_item" | "canvas"; id: string };
 
-/**
- * Operational state, as opposed to the hand-drawn `status` on a link.
- * A topology an operator cannot read at a glance is just a picture, so this
- * is what the node border encodes; vendor stays in the node background.
- */
-export type NodeRuntimeStatus = "ok" | "warning" | "error" | "unknown";
-/**
- * Cytoscape paints to a canvas and cannot resolve CSS custom properties, so the
- * product's semantic colours are mirrored here as literals. This is the only
- * place allowed to duplicate them — keep in sync with `styles/tokens.css`
- * (`:root` and `[data-theme="dark"]`). The values used to be a second palette
- * (Tailwind emerald/amber/red plus blue for selection), which is exactly the
- * "second brand colour" the design rules forbid.
- */
-export const NODE_STATUS_COLORS: Record<NodeRuntimeStatus, string> = {
-  ok: "#147a55",
-  warning: "#a16207",
-  error: "#bd3040",
-  unknown: "#6c7c7e",
-};
-
-export const NODE_STATUS_COLORS_DARK: Record<NodeRuntimeStatus, string> = {
-  ok: "#77ca9c",
-  warning: "#e2ad4d",
-  error: "#ef7180",
-  unknown: "#95a3b3",
-};
-
-export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, string> {
-  return dark ? NODE_STATUS_COLORS_DARK : NODE_STATUS_COLORS;
-}
-
-/** Transient canvas feedback: selection, drag-to-connect, alignment guides. */
-export const CANVAS_ACCENT = { light: "#0f7773", dark: "#7cc9bc" };
-/** Group containers are structure, not signal: accent-soft fill, hairline border. */
-export const CANVAS_GROUP = {
-  light: { fill: "#f8fafc", border: "#cbd5e1", text: "#475569" },
-  dark: { fill: "#17202a", border: "#263442", text: "#95a3b3" },
-};
-
+import { nodeStatusColors, CANVAS_ACCENT, CANVAS_GROUP, type NodeRuntimeStatus } from "./topologyPalette";
+export { NODE_STATUS_COLORS, NODE_STATUS_COLORS_DARK, nodeStatusColors, CANVAS_ACCENT, CANVAS_GROUP } from "./topologyPalette";
+export type { NodeRuntimeStatus } from "./topologyPalette";
 
 type Props = {
   topology: Topology;

@@ -71,6 +71,11 @@ def run(exe: Path, mode: str, output: Path):
             page.get_by_role('combobox').select_option('dark')
             page.wait_for_function("document.documentElement.dataset.theme === 'dark'")
             wait_until(lambda: json.loads((data/'.runtime/desktop.json').read_text(encoding='utf-8'))['ui']['theme']=='dark')
+            body = page.locator('.desktop-dialog-body')
+            assert body.evaluate("el => getComputedStyle(el, '::-webkit-scrollbar').width") == '6px'
+            assert body.evaluate("el => getComputedStyle(el, '::-webkit-scrollbar-button').display") == 'none'
+            assert body.evaluate("el => getComputedStyle(el).scrollbarWidth") == 'auto'
+            assert page.locator('.desktop-dialog').evaluate("el => getComputedStyle(el).backgroundColor") == 'rgb(24, 28, 31)'
             page.screenshot(path=str(output/'desktop-settings.png'), full_page=True)
             page.get_by_role('button', name='完成', exact=True).click()
             # Native resize uses the real HWND, so DPI and WebView layout agree.

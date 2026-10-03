@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dataUriToBlob, exportTopologyToSvg } from "../../../extensions/network_operations/frontend/components/topologyExport";
+import { NODE_STATUS_COLORS } from "../../../extensions/network_operations/frontend/components/topologyPalette";
 import type { Topology } from "../../../extensions/network_operations/frontend/components/TopologyWorkspace";
 
 describe("topologyExport", () => {
@@ -72,6 +73,7 @@ describe("topologyExport", () => {
     expect(svg).toContain("核心交换区");
     expect(svg).toContain("10GE1/0/1");
     expect(svg).toContain("40Gbps Trunk");
+    expect(svg).toContain(`stroke="${NODE_STATUS_COLORS.ok}"`);
     expect(svg).toContain("</svg>");
   });
 

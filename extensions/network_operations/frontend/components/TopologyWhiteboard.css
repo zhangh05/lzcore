@@ -161,7 +161,7 @@
 
 .wb-action-btn.highlight {
   background: var(--accent, #0284c7);
-  color: #ffffff;
+  color: var(--accent-text);
   border-color: var(--accent, #0284c7);
   padding: 5px 10px;
   font-weight: var(--weight-label);
@@ -172,8 +172,8 @@
 }
 
 .wb-action-btn.close-btn:hover {
-  background: #fee2e2;
-  color: #ef4444;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .whiteboard-sticky-note {
   position: absolute;
@@ -221,7 +221,7 @@
 }
 
 .whiteboard-sticky-note .note-remove-btn:hover {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .whiteboard-sticky-note .note-text {

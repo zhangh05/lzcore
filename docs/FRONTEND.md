@@ -46,7 +46,7 @@ topology_updated 只携资源 ID/version。画布以最后确认版本对账：�
 
 ## 视觉和可访问性
 
-Token 在 frontend/src/styles/tokens.css。深浅主题复用语义色，正文 14px、常规操作 13px，技术元数据可用 11px。页面不再使用全局 CSS zoom；原生 DPI 与浏览器缩放按平台处理，画布仍按实际渲染比例换算指针坐标。间距、字号、圆角、控件、焦点、移动触摸目标消费共享 Token，不硬编码第二品牌色。
+Token 在 frontend/src/styles/tokens.css。大面积背景、文字、边框使用冷灰/石墨中性色；品牌 Accent 保持浅色 #0f7773、深色 #7cc9bc，成功使用更明确的绿色，与警告琥珀、失败红、信息蓝、未知紫分开。用户消息使用低饱和独立 Surface，避免借用选中或成功底色。侧栏/进度使用 surface-rail，普通新会话入口无整块 Accent 底色，完成阶段保留图标和文字，仅当前执行阶段突出。深浅主题复用语义色，正文 14px、常规操作 13px，技术元数据可用 11px。页面不再使用全局 CSS zoom；原生 DPI 与浏览器缩放按平台处理，画布仍按实际渲染比例换算指针坐标。间距、字号、圆角、控件、焦点、移动触摸目标消费共享 Token，不硬编码第二品牌色。
 
 样式所有权依次是 Token（tokens.css，含排版节奏）、基础控件（primitives.css）、共享组件基础（patterns.css）、应用壳（product-shell.css）、共享页面模式（console-system.css）和页面/扩展细化。Settings、Operations、DataCenter、MemoryPage、KnowledgeLibrary、Diagnostics、UserManagement、CapabilityCenter 各自的 CSS 管理该页样式；TraceDetailPanel.css 管理轨迹详情，AgentWorkbench.css 是工作台入口，消息、正文、结果、工具、进度外壳/阶段/证据拆到 WorkbenchMessages、WorkbenchContent、WorkbenchResults、WorkbenchTools、TaskProgressPanel、TaskProgressPhases、TaskProgressEvidence 各自文件；WorkbenchComposer.css 管理输入与资源范围。patterns.css 是共享模式入口，按 forms、overlays、feedback、status、runtime、content、lists 拆分；product-shell.css 的侧栏独立到 sidebar.css。NetworkOperations.css 拆分目录、编辑器和拓扑基础/样式控件，TopologyStudio.css 拆分画布、工具栏、菜单、检查器/字段、Agent、白板和演示。global.css 只保留元素基础、通用工具类、无障碍与关键帧。所有样式从入口加载，页面切换不决定共享样式的先后。
 
@@ -75,7 +75,7 @@ npm --prefix frontend run build
 npm --prefix frontend run e2e
 ```
 
-涉及 UI 还要检查实际请求、认证、主路径、窄屏、键盘、弹窗、长文本和错误。26-visual-system.spec.ts 检查 1440/900/390px 的深浅主题、11 个路由、功能抽屉、主文字 Token 对四种中性 Surface 的 4.5:1 对比度、输入边界的 3:1 对比度、无全局 zoom 和未分层 CSS，以及短窄桌面弹窗的焦点循环/关闭恢复；另以隔离数据和模拟消息覆盖有正文、表格的会话、设备目录与图纸检查器深浅主题。lint:styles 解析所有产品和网络扩展 CSS，lint:tokens 覆盖扩展 TSX。CI 保留 frontend-browser-validation 截图和失败轨迹 14 天。截图只证明当时视觉；桌面弹窗浏览器验收使用桥接适配器，不代替 Windows 原生 smoke，模拟流也不代替真实 LLM/网络设备验收。27-compact-chat.spec.ts 覆盖 1440/390px 输入高度、文本与按钮同排、多行增长、发送后清空、正文列表/标题间距和代码缩进。28-login-cascade.spec.ts 检查深浅主题、1440/390px 登录卡片内边距、控件高度、无横向溢出及键盘提交错误反馈。CI 保留完整开发服务回归，并用 E2E_PRODUCTION=1 在生产构建 preview 服务上验证管理页、工作台、视觉系统、紧凑对话和登录；同变量可用于本地生产包验收。
+涉及 UI 还要检查实际请求、认证、主路径、窄屏、键盘、弹窗、长文本和错误。26-visual-system.spec.ts 检查 1440/900/390px 的深浅主题、11 个路由、功能抽屉、主文字 Token 对四种中性 Surface 的 4.5:1 对比度、输入边界的 3:1 对比度、无全局 zoom 和未分层 CSS，以及短窄桌面弹窗的焦点循环/关闭恢复；另以隔离数据和模拟消息覆盖有正文、表格的会话、设备目录与图纸检查器深浅主题。lint:styles 解析所有产品和网络扩展 CSS，lint:tokens 覆盖扩展 TSX。CI 保留 frontend-browser-validation 截图和失败轨迹 14 天。截图只证明当时视觉；桌面弹窗浏览器验收使用桥接适配器，不代替 Windows 原生 smoke，模拟流也不代替真实 LLM/网络设备验收。27-compact-chat.spec.ts 覆盖 1440/390px 输入高度、文本与按钮同排、多行增长、发送后清空、正文列表/标题间距和代码缩进。28-login-cascade.spec.ts 检查深浅主题、1440/390px 登录卡片内边距、控件高度、无横向溢出及键盘提交错误反馈。29-neutral-hierarchy.spec.ts 检查中性色偏色范围、品牌色保持、成功/Accent 色相区别、消息与选中底色区别，以及运行和完成的深浅主题截图与减少动效偏好。26 的对比度检查覆盖消息底色及六种语义色的实底/浅底配对。Chromium/WebView2 重置标准 scrollbar 属性以采用 6px 无箭头伪元素滚动条，Firefox 保留 thin 标准滚动条；Hover 只适度提高对比。消息与浮层使用 170ms 入场，遮罩仅淡入，只有浮层有轻微位移；减少动效偏好关闭动画与过渡。桌面弹窗次要操作使用透明底和无常驻边框，Header/Footer 无分隔线，内容靠间距分区。画布与 SVG 导出共用 topologyPalette.ts，测试约束它与 Token 的语义色一致；自定义图纸颜色保留。CI 保留完整开发服务回归，并用 E2E_PRODUCTION=1 在生产构建 preview 服务上验证管理页、工作台、视觉系统、紧凑对话和登录；同变量可用于本地生产包验收。
 
 设置中的服务商卡片保持自然高度，宽窗口列表独立纵向滚动，920px 以下横向滚动选择，保留完整配置表单；配置字段按面板可用宽度重排，保存操作与长期记忆不重叠。右侧进度卡不因窗口变短而压缩内容，按用户选择展开/收起；窄窗口仍可访问，手机宽度在对话下方展示。图纸名称变化刷新绑定会话标题、Skill 和资源名称。
 

@@ -1,7 +1,7 @@
 /** E2E 20 — User input remains visually distinct from assistant output. */
 import { test, expect } from "./fixtures";
 
-test("20. user message uses the low-saturation green tint", async ({ page, api }) => {
+test("20. user message uses the muted message surface", async ({ page, api }) => {
   const created = await api.post("/api/sessions", {
     data: { workspace_id: "default", title: "user tint regression" },
   });
@@ -45,7 +45,7 @@ test("20. user message uses the low-saturation green tint", async ({ page, api }
 
   const userBubble = page.getByTestId("chat-user").last().locator(".chat-bubble.user");
   await expect(userBubble).toBeVisible();
-  await expect(userBubble).toHaveCSS("background-color", "rgb(234, 243, 240)");
+  await expect(userBubble).toHaveCSS("background-color", "rgb(238, 244, 242)");
 
   const assistantBubble = page.getByTestId("chat-assistant").last().locator(".chat-bubble.assistant.markdown-body");
   await expect(assistantBubble).toBeVisible();

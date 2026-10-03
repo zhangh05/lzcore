@@ -2,6 +2,8 @@
 
 @layer base {
 
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -12,7 +14,7 @@
   background: color-mix(in srgb, var(--overlay) 85%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  animation: surface-in var(--dur-3) var(--ease-out) both;
+  animation: overlay-in var(--dur-2) var(--ease-out) both;
 }
 
 .modal {
@@ -246,6 +248,7 @@
 }
 
 .modal-sheet {
+  animation: surface-in var(--dur-2) var(--ease-out) both;
   width: min(760px, 100%);
   max-height: calc(100dvh - 32px);
   overflow: auto;

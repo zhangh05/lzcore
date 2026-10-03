@@ -77,7 +77,7 @@
   border: 1px solid var(--accent);
 }
 .canvas-search-wrap { position: relative; display: flex; align-items: center; gap: 5px; padding: 0 8px; height: 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
-.canvas-search-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px #0c8a7a14; }
+.canvas-search-wrap:focus-within { border-color: var(--accent); box-shadow: var(--shadow-focus); }
 .canvas-search-wrap > svg { color: var(--text-3); flex: 0 0 auto; }
 .canvas-search-wrap input { width: 128px; border: 0; outline: none; background: transparent; font-size: 12px; color: var(--text); }
 .canvas-search-results { position: absolute; top: 34px; right: 0; z-index: 40; display: grid; width: 230px; padding: 5px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow-menu); }

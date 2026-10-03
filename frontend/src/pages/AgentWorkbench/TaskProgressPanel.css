@@ -8,7 +8,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--surface-2);
+  background: var(--surface-rail);
   border-left: 0;
 }
 
@@ -18,7 +18,7 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border-bottom: 0;
-  background: var(--surface-2);
+  background: var(--surface-rail);
 }
 
 .task-progress-header-top {
@@ -38,7 +38,7 @@
 .task-progress-kicker {
   display: block;
   margin-bottom: 2px;
-  color: var(--accent);
+  color: var(--text-3);
   font-size: var(--fs-11);
   font-weight: var(--weight-heading);
   letter-spacing: var(--tracking-caps);
@@ -48,7 +48,7 @@
 .task-progress-header h2 {
   color: var(--text-2);
   font-size: var(--fs-14);
-  font-weight: var(--weight-heading);
+  font-weight: var(--weight-label);
   margin: 0;
   line-height: 1.2;
   white-space: nowrap;
@@ -221,7 +221,7 @@
   color: var(--text-4);
   border-top: 1px solid var(--line-2);
   font-size: var(--fs-11);
-  background: var(--surface-2);
+  background: var(--surface-rail);
 }
 
 .task-progress-timeline-btn {
@@ -283,7 +283,7 @@
   align-items: center;
   justify-content: flex-start;
   padding: 12px 0;
-  background: var(--surface-2);
+  background: var(--surface-rail);
   border-left: 1px solid var(--line-2);
   min-width: 40px;
 }
@@ -316,7 +316,7 @@
   font-weight: var(--weight-label);
 }
 .task-progress-panel,
-.task-progress-panel.is-collapsed { background: var(--surface-2); }
+.task-progress-panel.is-collapsed { background: var(--surface-rail); }
 .task-progress-body > * { flex-shrink: 0; }
 @media (max-width: 620px) {
   .task-progress-panel { min-height: 280px; border-left: 0; border-top: 1px solid var(--line-2); }

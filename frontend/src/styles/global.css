@@ -115,6 +115,8 @@ ol {
   height: 6px;
 }
 
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
@@ -592,6 +594,15 @@ html,
 [style*="overflow"] {
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) transparent;
+}
+/* Chromium's standard scrollbar properties supersede its pseudo-elements.
+   Reset them there so WebView2 uses the same 6px thumb without native arrows;
+   Firefox retains the standard thin scrollbar above. */
+@supports selector(::-webkit-scrollbar) {
+  html, .wb-chat-list, .modal, .sidebar-scroll, [style*="overflow"] {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
 }
 a:focus-visible,
 [role="button"]:focus-visible,

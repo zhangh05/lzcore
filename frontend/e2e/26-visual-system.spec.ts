@@ -39,12 +39,16 @@ for (const width of [1440, 900, 390]) {
             probe.style[property] = `var(${token})`; return getComputedStyle(probe)[property];
           };
           const contrast = ['--text', '--text-2', '--text-3', '--text-4'].flatMap(text =>
-            ['--bg', '--surface', '--surface-2', '--surface-3'].map(bg => ({
+            ['--bg', '--surface', '--surface-2', '--surface-3', '--message-user'].map(bg => ({
               text, bg, ratio: ratio(value(text, 'color'), value(bg, 'backgroundColor')),
             })));
+          const semantic = ['accent', 'ok', 'warn', 'danger', 'info', 'unknown'].flatMap(name => [
+            { text: `--${name}-text`, bg: `--${name}`, ratio: ratio(value(`--${name}-text`, 'color'), value(`--${name}`, 'backgroundColor')) },
+            { text: `--${name}`, bg: `--${name}-soft`, ratio: ratio(value(`--${name}`, 'color'), value(`--${name}-soft`, 'backgroundColor')) },
+          ]);
           const boundary = ratio(value('--field-border', 'color'), value('--field', 'backgroundColor'));
           probe.remove();
-          return { contrast, boundary, overflow: document.documentElement.scrollWidth - innerWidth,
+          return { contrast: [...contrast, ...semantic], boundary, overflow: document.documentElement.scrollWidth - innerWidth,
             zoom: getComputedStyle(document.body).zoom,
             unlayered: [...document.styleSheets].flatMap(sheet => [...sheet.cssRules]).filter(rule => rule.constructor.name === 'CSSStyleRule').length };
         });
@@ -86,6 +90,11 @@ test('26b. desktop modal keeps focus and actions within a short narrow window', 
     const dialog = page.getByRole('dialog', { name: '桌面设置', exact: true });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('验收数据');
+    await expect(dialog.locator('.modal-header')).toHaveCSS('border-bottom-width', '0px');
+    await expect(dialog.locator('.modal-footer')).toHaveCSS('border-top-width', '0px');
+    await expect(dialog.locator('.modal-title')).toHaveCSS('font-weight', '600');
+    expect(await dialog.locator('.desktop-dialog-body').evaluate(el => getComputedStyle(el, '::-webkit-scrollbar').width)).toBe('6px');
+    expect(await dialog.locator('.desktop-dialog-body').evaluate(el => getComputedStyle(el, '::-webkit-scrollbar-button').display)).toBe('none');
     await page.getByRole('button', { name: '完成', exact: true }).scrollIntoViewIfNeeded();
     const box = await dialog.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
