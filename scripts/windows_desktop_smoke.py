@@ -192,6 +192,9 @@ def run(exe: Path, mode: str, output: Path):
             page.screenshot(path=str(output/'topology-drag-released.png'), full_page=True)
             # Native smart-guide feedback differs on/off, without enlarging
             # attraction. Returning near the grab start stays responsive.
+            # Reload intentionally restores ?node=a. Wait for that incoming
+            # link's initial focus before establishing the test viewport.
+            page.wait_for_function("document.querySelector('.netops-cytoscape')?._cyreg?.cy?.zoom() === 1.1")
             host.evaluate("el => {const cy=el._cyreg.cy; cy.stop(); cy.zoom(1); cy.pan({x:30,y:30}); cy.getElementById('a').select();}")
             page.locator('.topology-inspector').wait_for(state='visible')
             for enabled in (False, True):
