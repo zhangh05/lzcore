@@ -1,3 +1,4 @@
+import { resolveDragAxis } from './topologyDragSnap';
 import { fitRegions, regionBounds, regionContains, moveRegionElements } from "./topologyRegions";
 import { desktopDirty } from "../../../../frontend/src/desktop/bridge";
 import {
@@ -1038,6 +1039,7 @@ export default function TopologyWorkspace({
     return () => window.clearTimeout(timer);
   }, [showEditbar, focusMode, showLibrary, showAgent, workspaceMode]);
   const [gridEnabled, setGridEnabled] = useState(true);
+  const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
   const [canvasSelectedElementIds, setCanvasSelectedElementIds] = useState<string[]>([]);
   const [showInterfaces, setShowInterfaces] = useState(true);
   const [showObservation, setShowObservation] = useState(true);
@@ -1657,15 +1659,12 @@ export default function TopologyWorkspace({
    * you are building. Renaming and linking a registered asset both live in the
    * node inspector, which opens on placement.
    *
-   * Snapping to the grid happens here rather than on the way in, because the
-   * grid belongs to the drawing and not to a particular gesture. It used to sit
-   * on the drag-and-drop path only, so dragging a type snapped to the grid while
-   * clicking the sheet did not — the same action landing two different ways,
-   * with the grid visibly on.
+   * Placement uses the same opt-in gentle grid attraction as dragging.
+   * Showing the grid alone never changes the pointer's landing coordinates.
    */
   const placeDrawingNode = useCallback((deviceType: string, position: { x: number; y: number }) => {
     if (!activeTopology) return;
-    const snap = (value: number) => gridEnabled ? Math.round(value / 32) * 32 : Math.round(value);
+    const snap = (value: number) => resolveDragAxis(value, canvasApiRef.current?.getViewport().zoom || 1, [], null, gridSnapEnabled).position;
     const label = DRAWING_DEVICE_TYPES.find((type) => type.value === deviceType)?.label || "图纸设备";
     // Highest existing index + 1, so deleting 路由器2 and adding another does
     // not produce a second 路由器2.
@@ -1689,7 +1688,7 @@ export default function TopologyWorkspace({
     pushState({ ...activeTopology, nodes: [...activeTopology.nodes, node] });
     setSelectedElement({ type: "node", nodeId: node.node_id });
     setNotice(`已放入“${node.display_name}”。可继续点击画布连续放置，按 Esc 或右键退出。`);
-  }, [activeTopology, gridEnabled, pushState, setNotice]);
+  }, [activeTopology, gridSnapEnabled, pushState, setNotice]);
 
   const handleCloneNode = useCallback((nodeId: string) => {
     if (!activeTopology) return;
@@ -1706,7 +1705,7 @@ export default function TopologyWorkspace({
     let index = 1;
     while (taken.has(index)) index += 1;
 
-    const snap = (v: number) => gridEnabled ? Math.round(v / 32) * 32 : Math.round(v);
+    const snap = (v: number) => resolveDragAxis(v, canvasApiRef.current?.getViewport().zoom || 1, [], null, gridSnapEnabled).position;
     const newNode: TopologyNode = {
       node_id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       device_type: sourceNode.device_type,
@@ -1717,7 +1716,7 @@ export default function TopologyWorkspace({
     pushState({ ...activeTopology, nodes: [...activeTopology.nodes, newNode] });
     setSelectedElement({ type: "node", nodeId: newNode.node_id });
     setNotice(`已克隆生成“${newNode.display_name}”`);
-  }, [activeTopology, gridEnabled, pushState, setNotice]);
+  }, [activeTopology, gridSnapEnabled, pushState, setNotice]);
 
   const handleFastConnect = useCallback(
     (source: string, target: string) => {
@@ -2483,7 +2482,7 @@ export default function TopologyWorkspace({
         case "ArrowDown": {
           if (workspaceMode === "view" || !canvasSelectedElementIds.length) return;
           e.preventDefault();
-          const step = e.shiftKey ? 32 : 8;
+          const step = e.shiftKey ? 8 : 1;
           if (e.key === "ArrowLeft") nudgeSelected(-step, 0);
           else if (e.key === "ArrowRight") nudgeSelected(step, 0);
           else if (e.key === "ArrowUp") nudgeSelected(0, -step);
@@ -2515,7 +2514,7 @@ export default function TopologyWorkspace({
           e.preventDefault();
           setShowEditbar((value) => !value);
           break;
-        case "g": if (e.shiftKey) setGridEnabled((value) => !value); break;
+        case "g": case "G": if (e.shiftKey) { e.preventDefault(); setGridSnapEnabled(value => !value); } break;
         case "i": setShowInterfaces((value) => !value); break;
         case "f":
           if (e.shiftKey) canvasApiRef.current?.focusIds(canvasSelectedElementIds, 1.2);
@@ -3430,6 +3429,7 @@ export default function TopologyWorkspace({
                 </span>
                 <label><input type="checkbox" checked={showInterfaces} onChange={(event) => setShowInterfaces(event.target.checked)} />接口标签</label>
                 <label><input type="checkbox" checked={gridEnabled} onChange={(event) => setGridEnabled(event.target.checked)} />网格</label>
+                <label title="仅在靠近网格点时轻微吸附；Shift + G 切换"><input type="checkbox" checked={gridSnapEnabled} onChange={event => setGridSnapEnabled(event.target.checked)} />网格吸附</label>
                 <label title="只显示最近证据标记，不代表当前健康，也不修改图纸"><input type="checkbox" checked={showObservation} onChange={event => setShowObservation(event.target.checked)} />最近观测</label>
                 <label title="紧凑模式缩小节点尺寸，避免密集拓扑中标签重叠"><input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />紧凑模式</label>
               </>
@@ -3454,6 +3454,7 @@ export default function TopologyWorkspace({
             mode={canvasMode}
             interactionMode={workspaceMode}
             gridEnabled={gridEnabled}
+            gridSnapEnabled={gridSnapEnabled}
             moveRegionMembers={regionMoveMode === "region"}
             showInterfaces={showInterfaces}
             compactMode={compactMode}
@@ -4828,10 +4829,10 @@ export default function TopologyWorkspace({
               <div><dt>设备快捷栏</dt><dd>点击设备后在画布连续点击批量放置</dd></div>
               <div><dt>Ctrl/⌘ + 单击</dt><dd>加选设备；再点一次移出选区</dd></div>
               <div><dt>Shift + 单击</dt><dd>加选设备</dd></div>
-              <div><dt>拖动已选对象</dt><dd>整组一起移动并磁吸对齐网格</dd></div>
+              <div><dt>拖动已选对象</dt><dd>整组连续移动，靠近参考线时渐进吸附</dd></div>
               <div><dt>Delete / Backspace</dt><dd>删除选中对象</dd></div>
               <div><dt>Ctrl/⌘ + A</dt><dd>全选</dd></div>
-              <div><dt>方向键</dt><dd>微移选中对象（Shift 加速）</dd></div>
+              <div><dt>方向键</dt><dd>微移选中对象 1 单位（Shift 为 8 单位）</dd></div>
               <div><dt>F / Shift + F</dt><dd>适配全部 / 缩放至选中对象</dd></div>
               <div><dt>/</dt><dd>搜索设备并定位</dd></div>
               <div><dt>I</dt><dd>切换接口标签</dd></div>

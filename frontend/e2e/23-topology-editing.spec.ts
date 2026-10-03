@@ -130,7 +130,7 @@ for (const scenario of ['node', 'region', 'free', 'selection', 'lock'] as const)
       nodes: region ? [{ node_id: 'member', display_name: '成员', device_type: 'switch', region_id: 'moving', x: 200, y: 350 }]
         : [
           { node_id: 'moving', display_name: '移动设备', device_type: 'switch', x: 200, y: 310 },
-          { node_id: 'reference', display_name: '参考设备', device_type: 'switch', x: 650, y: 113.5 },
+          { node_id: 'reference', display_name: '参考设备', device_type: 'switch', x: 480, y: 113.5 },
         ],
       canvas_items: region ? [
         { item_id: 'moving', kind: 'rect', text: '移动区域', x: 200, y: 300, width: 240, height: 180 },
@@ -170,7 +170,7 @@ for (const scenario of ['node', 'region', 'free', 'selection', 'lock'] as const)
     await page.mouse.move(box.x + from.x, box.y + from.y);
     await page.mouse.down();
     await page.mouse.move(box.x + to.x, box.y + to.y, { steps: 18 });
-    const positions = () => host.evaluate((el: any) => el._cyreg.cy.nodes().map((n: any) => ({ id: n.id(), ...n.position() })));
+    const positions = () => host.evaluate((el: any) => el._cyreg?.cy?.nodes().map((n: any) => ({ id: n.id(), ...n.position() })) || []);
     const preview = await positions();
     const anchor = preview.find((p: any) => p.id === id)!;
     if (scenario !== 'free') {
@@ -234,7 +234,7 @@ for (const compact of [false, true]) for (const zoom of [0.6, 1.3]) for (const e
     await moveTo(point(ref + direction * (legacyHalf - half)), 12);
     const verifyVisibleGuides = async () => {
       const [a, b] = await geometry();
-      const lines = await page.locator('.netops-align-guides line').evaluateAll(lines => lines.map(line => ({ x1: Number(line.getAttribute('x1')), x2: Number(line.getAttribute('x2')), y1: Number(line.getAttribute('y1')), y2: Number(line.getAttribute('y2')) })));
+      const lines = await page.locator('.netops-align-guides line[data-aligned="true"]').evaluateAll(lines => lines.map(line => ({ x1: Number(line.getAttribute('x1')), x2: Number(line.getAttribute('x2')), y1: Number(line.getAttribute('y1')), y2: Number(line.getAttribute('y2')) })));
       for (const line of lines) {
         const isHorizontal = line.y1 === line.y2;
         const coordinate = ((isHorizontal ? line.y1 : line.x1) - 30) / zoom;
@@ -249,7 +249,7 @@ for (const compact of [false, true]) for (const zoom of [0.6, 1.3]) for (const e
     await verifyVisibleGuides();
     // Now approach the real edge from within two screen pixels. The line,
     // both icon bodies, mouse-up position and saved coordinates must agree.
-    await moveTo(point(ref + direction * 2 / zoom), 12);
+    await moveTo(point(ref + direction * .5 / zoom), 12);
     const lines = await verifyVisibleGuides();
     expect(lines.some(line => horizontal ? line.y1 === line.y2 : line.x1 === line.x2)).toBe(true);
     if (edge === 'top' && zoom === 1.3) await host.screenshot({ path: testInfo.outputPath('actual-edge-alignment.png') });

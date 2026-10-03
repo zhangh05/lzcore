@@ -94,6 +94,7 @@
 .topology-studio .netops-link-preview circle { fill: var(--accent); }
 .topology-studio .netops-align-guides { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
 .topology-studio .netops-align-guides line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
+.topology-studio .netops-align-guides line.attracting { stroke: var(--text-3); opacity: .4; stroke-dasharray: 2 6; }
 .topology-studio .netops-viewport-controls {
   position: absolute;
   right: 16px;

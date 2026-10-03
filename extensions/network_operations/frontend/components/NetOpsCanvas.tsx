@@ -1,3 +1,4 @@
+import { nearbySnapTargets, resolveDragAxis } from './topologyDragSnap';
 // React 的合成事件类型与 DOM 原生事件同名，这里显式区分：画布上的原生
 // window 监听必须拿到 DOM MouseEvent（带 clientX/clientY 且可用于
 // addEventListener），React 回调才用合成事件类型。
@@ -51,6 +52,7 @@ type Props = {
   mode: CanvasMode;
   interactionMode?: "view" | "edit";
   gridEnabled: boolean;
+  gridSnapEnabled?: boolean;
   moveRegionMembers?: boolean;
   showInterfaces: boolean;
   compactMode?: boolean;
@@ -351,7 +353,7 @@ const canvasItemDefaults: Record<TopologyCanvasItem["kind"], Required<TopologyCa
 };
 
 type CanvasElementSpec = { group?: string; classes?: string; data: Record<string, unknown>; position?: { x: number; y: number } };
-type AlignGuide = { x1: number; y1: number; x2: number; y2: number };
+type AlignGuide = { x1: number; y1: number; x2: number; y2: number; aligned?: boolean };
 
 const SKIPPED_DATA_KEYS = new Set(["id", "source", "target"]);
 
@@ -545,7 +547,8 @@ function renderMotionOverlay(
       const gx2 = guide.x2 * zoom + panX;
       const gy2 = guide.y2 * zoom + panY;
 
-      ctx.strokeStyle = "#f59e0b";
+      ctx.globalAlpha = guide.aligned === false ? .35 : 1;
+      ctx.strokeStyle = guide.aligned === false ? (dark ? "#8a949e" : "#566368") : "#f59e0b";
       ctx.lineWidth = 1.2;
       ctx.setLineDash([5, 3]);
       ctx.beginPath();
@@ -553,6 +556,7 @@ function renderMotionOverlay(
       ctx.lineTo(gx2, gy2);
       ctx.stroke();
 
+      if (guide.aligned === false) continue;
       ctx.setLineDash([]);
       ctx.lineWidth = 1.5;
       const crossSize = 4;
@@ -677,6 +681,7 @@ export default function NetOpsCanvas(props: Props) {
   // following the pointer. Carrying the offset lets the next frame subtract it
   // and recover the position the pointer actually asked for.
   const snapResidualRef = useRef({ x: 0, y: 0 });
+  const snapTargetRef = useRef<{ x: string | null; y: string | null }>({ x: null, y: null });
   const grabAnchorRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const lockGroupInitialPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const [linkPreview, setLinkPreview] = useState<AlignGuide | null>(null);
@@ -1218,7 +1223,6 @@ export default function NetOpsCanvas(props: Props) {
       // Smart guides. Aligning by eye is the slowest part of tidying a
       // diagram, so a dragged node snaps to the edges and centres of its
       // neighbours and shows why.
-      const SNAP_SCREEN_PX = 5;
       cy.on("grab", "node", (event) => {
         const node = event.target as CyNode | undefined;
         if (!node || node.id().startsWith("group-") || grabAnchorRef.current) return;
@@ -1303,62 +1307,29 @@ export default function NetOpsCanvas(props: Props) {
         // Both ends of a guide use the live renderer's body geometry. Fixed
         // 94x76 target sizes produced guides inside the actual 76x60 icons,
         // and diverged further in compact mode. Labels are not body edges.
+        const regionById = new Map(propsRef.current.topology.nodes.map(n => [n.node_id, n.region_id]));
+        const dimmed = new Set(propsRef.current.dimmedNodeIds || []);
         const otherIds = [
           ...propsRef.current.topology.nodes.map(item => item.node_id),
           ...(propsRef.current.topology.canvas_items || []).map(item => `canvas-${item.item_id}`),
-        ].filter(id => id !== node.id() && !selectedIds.has(id) && !lockedPeerIds.has(id));
+        ].filter(id => id !== node.id() && !selectedIds.has(id) && !lockedPeerIds.has(id) && !dimmed.has(id));
         const others = otherIds.flatMap(id => {
           const other = cy.getElementById(id) as CyNode;
           if (!other.length) return [];
-          return [{ ...other.position(), halfW: other.width() / 2, halfH: other.height() / 2 }];
+          return [{ id, ...other.position(), halfW: other.width() / 2, halfH: other.height() / 2, region: regionById.get(id) }];
         });
-        const snapDistance = SNAP_SCREEN_PX / cy.zoom();
         const position = node.position();
-        // A guide pairs one of this node's three lines (near edge, centre, far
-        // edge) with one of a neighbour's. What a pairing gives you is the
-        // distance to travel — target - candidate — never a new centre.
-        // Assigning the target straight to the centre meant that lining a
-        // node's edge up with a neighbour's centre teleported the node by half
-        // its own height, which is what made a dragged node float away from
-        // the pointer. `line` is where the guide is drawn: the neighbour's
-        // line, not the node's centre.
-        const snapAxis = (candidates: number[], targets: number[]): { diff: number; shift: number; line: number } | null => {
-          let best: { diff: number; shift: number; line: number } | null = null;
-          candidates.forEach((candidate) => {
-            targets.forEach((target) => {
-              const diff = Math.abs(target - candidate);
-              if (diff <= snapDistance && (!best || diff < best.diff)) {
-                best = { diff, shift: target - candidate, line: target };
-              }
-            });
-          });
-          return best;
-        };
-        // Snap the position the pointer asked for, not the one the last snap
-        // left behind. Undoing the previous correction first is what stops the
-        // snap from compounding: without it a step smaller than SNAP is
-        // cancelled every frame and the node welds itself to the guide.
+        // Undo the prior view correction to recover the continuous pointer path.
         const residual = snapResidualRef.current;
         const rawX = position.x - residual.x;
         const rawY = position.y - residual.y;
-        let nextX = rawX;
-        let nextY = rawY;
-        let snappedX: ReturnType<typeof snapAxis> = null;
-        let snappedY: ReturnType<typeof snapAxis> = null;
-        if (others.length) {
-          const targetsX = others.flatMap((other) => [other.x - other.halfW, other.x, other.x + other.halfW]);
-          const targetsY = others.flatMap((other) => [other.y - other.halfH, other.y, other.y + other.halfH]);
-          snappedX = snapAxis([rawX - halfW, rawX, rawX + halfW], targetsX);
-          snappedY = snapAxis([rawY - halfH, rawY, rawY + halfH], targetsY);
-          nextX = rawX + (snappedX?.shift ?? 0);
-          nextY = rawY + (snappedY?.shift ?? 0);
-        }
-        // Preview the final landing position. Smart guides take precedence over
-        // grid snapping on each axis; release must not apply a second correction.
-        if (propsRef.current.gridEnabled) {
-          if (!snappedX) nextX = Math.round(rawX / 32) * 32;
-          if (!snappedY) nextY = Math.round(rawY / 32) * 32;
-        }
+        const moving = { id: node.id(), x: rawX, y: rawY, halfW, halfH,
+          region: regionById.get(node.id()) };
+        const snappedX = resolveDragAxis(rawX, cy.zoom(), nearbySnapTargets('x', moving, others, cy.zoom()), snapTargetRef.current.x, Boolean(propsRef.current.gridSnapEnabled));
+        const snappedY = resolveDragAxis(rawY, cy.zoom(), nearbySnapTargets('y', moving, others, cy.zoom()), snapTargetRef.current.y, Boolean(propsRef.current.gridSnapEnabled));
+        snapTargetRef.current = { x: snappedX.target?.key || null, y: snappedY.target?.key || null };
+        const nextX = snappedX.position;
+        const nextY = snappedY.position;
         const correctionX = nextX - position.x;
         const correctionY = nextY - position.y;
         snapResidualRef.current = { x: nextX - rawX, y: nextY - rawY };
@@ -1392,19 +1363,19 @@ export default function NetOpsCanvas(props: Props) {
         }
 
         const lines: AlignGuide[] = [];
-        if (snappedX) {
-          const near = others.filter((other) => Math.abs(other.x - nextX) <= halfW + other.halfW + 60);
+        if (snappedX.target && snappedX.target.source !== null) {
+          const near = others.filter(other => other.id === snappedX.target!.source);
           const top = Math.min(nextY - halfH, ...near.map((other) => other.y - other.halfH)) - 12;
           const bottom = Math.max(nextY + halfH, ...near.map((other) => other.y + other.halfH)) + 12;
-          lines.push({ x1: snappedX.line, y1: top, x2: snappedX.line, y2: bottom });
+          lines.push({ x1: snappedX.target.line, y1: top, x2: snappedX.target.line, y2: bottom, aligned: snappedX.aligned });
         }
-        if (snappedY) {
-          const near = others.filter((other) => Math.abs(other.y - nextY) <= halfH + other.halfH + 60);
+        if (snappedY.target && snappedY.target.source !== null) {
+          const near = others.filter(other => other.id === snappedY.target!.source);
           const leftEdge = Math.min(nextX - halfW, ...near.map((other) => other.x - other.halfW)) - 12;
           const rightEdge = Math.max(nextX + halfW, ...near.map((other) => other.x + other.halfW)) + 12;
-          lines.push({ x1: leftEdge, y1: snappedY.line, x2: rightEdge, y2: snappedY.line });
+          lines.push({ x1: leftEdge, y1: snappedY.target.line, x2: rightEdge, y2: snappedY.target.line, aligned: snappedY.aligned });
         }
-        const signature = lines.map((line) => `${Math.round(line.x1)}:${Math.round(line.y1)}:${Math.round(line.x2)}:${Math.round(line.y2)}`).join("|");
+        const signature = lines.map((line) => `${Math.round(line.x1)}:${Math.round(line.y1)}:${Math.round(line.x2)}:${Math.round(line.y2)}:${line.aligned}`).join("|");
         if (signature !== guideSignatureRef.current) {
           guideSignatureRef.current = signature;
           setAlignGuides(lines);
@@ -1414,6 +1385,7 @@ export default function NetOpsCanvas(props: Props) {
         // The correction only describes an in-progress drag; the next grab
         // starts from a position the pointer agrees with.
         snapResidualRef.current = { x: 0, y: 0 };
+        snapTargetRef.current = { x: null, y: null };
         grabAnchorRef.current = null;
         lockGroupInitialPositionsRef.current.clear();
         if (!guideSignatureRef.current) return;
@@ -2412,7 +2384,7 @@ export default function NetOpsCanvas(props: Props) {
     {alignGuides.length > 0 && (
       <svg className="netops-align-guides" aria-hidden="true">
         {alignGuides.map((line, index) => (
-          <line key={index} x1={line.x1 * viewport.zoom + viewport.x} y1={line.y1 * viewport.zoom + viewport.y} x2={line.x2 * viewport.zoom + viewport.x} y2={line.y2 * viewport.zoom + viewport.y} />
+          <line key={index} data-aligned={line.aligned !== false} className={line.aligned === false ? "attracting" : undefined} x1={line.x1 * viewport.zoom + viewport.x} y1={line.y1 * viewport.zoom + viewport.y} x2={line.x2 * viewport.zoom + viewport.x} y2={line.y2 * viewport.zoom + viewport.y} />
         ))}
       </svg>
     )}
