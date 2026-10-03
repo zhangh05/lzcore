@@ -1,88 +1,4 @@
-/* LZCore typography layer — the single source of truth for vertical rhythm,
-   type scale, line-height and content typography.
-
-   Why this layer exists
-   ---------------------
-   1. `.markdown-body` typography used to be defined in three places at once —
-      global.css and two separate spots in AgentWorkbench.css. The three
-      disagreed: h2 was written both as `1.16em` and `18px`, heading margins
-      were both `20px/8px` and `26px/10px`. The resolved value depended on
-      import order, not on intent, so this file was created to own those
-      properties in one place.
-
-      An earlier version of this header cited the line numbers. They have moved
-      several times since and now point at unrelated rules; grep the class
-      instead of trusting them. The `.markdown-body` *base* (font-size,
-      line-height, colour) now lives in global.css again — see the note on
-      element defaults below.
-
-   2. The `--space-*` scale was defined but barely used: a hundred-odd
-      references against well over a thousand hardcoded px values, including
-      off-grid steps (3/5/6/7/9/18/22px). There was no vertical rhythm.
-
-   3. `--lh-tight/base/loose` were referenced 3 times in total while 15 distinct
-      hardcoded line-heights were in use. Paragraphs rendered at 1.78, list items
-      at 1.65 and the document body at 1.55 — three rhythms inside one column.
-
-   Scope
-   -----
-   Typography only: font size, weight, letter-spacing, line-height, vertical
-   spacing, list markers, text alignment. Colour, radius, shadow and motion stay
-   where they are. Every value below sits on the 4px grid.
-
-   Layer, not load order
-   ---------------------
-   This sheet is in the `typography` layer, declared after the component layers
-   in styles/layers.css. That ordering is load-bearing and looks wrong at first
-   glance: a bare `h3` here outranks every component class in an earlier layer
-   that tries to refine it, because a layer beats specificity.
-
-   Which is exactly why element defaults do *not* belong here. `h1`-`h6` and the
-   `.markdown-body` type base moved to global.css's `base` layer: from a later
-   layer they were resetting 22 declarations across five routes
-   (`.task-phase-summary h3`, `.empty-text`, `.wb-header h1`). Change the order
-   in layers.css only with the layout probe running — it reads as a refactor and
-   behaves like a redesign. */
-
 @layer typography {
-:root {
-  /* ── Vertical rhythm ───────────────────────────────────────────────────
-     One 4px-based scale replaces the off-grid spacing scattered across the
-     codebase. Name by role, not by size: the role is what should be stable. */
-  --flow-hair: 4px; /* between list items, inline marker to text */
-  --flow-tight: 8px; /* elements inside one group */
-  --flow-base: 12px; /* between paragraphs */
-  --flow-loose: 20px; /* above a minor heading */
-  --flow-block: 28px; /* above a major heading, between blocks */
-  --flow-section: 40px; /* between page-level sections */
-
-  /* ── Line height ───────────────────────────────────────────────────────
-     Chinese text needs more leading than Latin: 1.72 on a 14px base gives a
-     ~24px line box, which keeps dense CJK glyphs from touching. */
-  --lh-display: 1.24; /* page title */
-  --lh-heading: 1.34; /* content heading */
-  --lh-body: 1.72; /* body copy — shared by paragraphs AND list items so the
-                      two never drift apart again */
-  --lh-compact: 1.45; /* table cells, chips, short labels */
-
-  /* ── Weight ────────────────────────────────────────────────────────────
-     The heading block, the page title and table headers used to render at
-     720 / 740 / 760 respectively. Three values, no intent behind any of them. */
-  --weight-display: 700; /* page and document titles */
-  --weight-subhead: 650; /* h3-h6, table headers */
-  --weight-minor: 620; /* kickers, meta labels */
-
-  /* ── Letter spacing ────────────────────────────────────────────────────
-     Negative tracking is a Latin display convention. Applied to CJK it pushes
-     glyphs into each other, so content tracking is explicitly zero. */
-  --tracking-cjk: 0;
-  --tracking-caps: 0.04em; /* uppercase Latin labels only */
-
-  /* ── Page gutter ───────────────────────────────────────────────────────
-     The page header used 26px and the page body 24px, so every page title sat
-     2px off the content column it was labelling. One gutter, both surfaces. */
-  --page-gutter: 24px;
-}
 
 /* ── Element level: headings ──────────────────────────────────────────────
    Moved to global.css. A bare element selector is the weakest thing in the
@@ -324,7 +240,6 @@
   font-size: var(--fs-20);
   font-weight: var(--weight-display);
   line-height: var(--lh-display);
-  letter-spacing: var(--tracking-cjk);
 }
 
 .page-header .subtitle {
@@ -348,7 +263,6 @@
   padding: var(--flow-base) var(--space-4);
   font-size: var(--fs-12);
   font-weight: var(--weight-subhead);
-  letter-spacing: var(--tracking-cjk);
   line-height: var(--lh-compact);
 }
 
@@ -369,27 +283,6 @@
 [class*="kicker"],
 .mobile-nav-section-label {
   letter-spacing: var(--tracking-caps);
-}
-
-/* ── Technical metadata ───────────────────────────────────────────────────
-   An operations product talks in identifiers: a run, a trace, a tool, a
-   duration, a source. They are the vocabulary an operator uses to say what
-   happened, so they deserve a deliberate treatment rather than whatever a
-   component happened to inherit.
-
-   The treatment is deliberately plain: mono, tabular figures so columns of
-   numbers align, small, and at the quietest text level. Evidence sits behind
-   the conclusion it supports — never beside it as decoration. No brackets, no
-   coloured terminal, no blinking cursor: this is a workspace, not a console.
-
-   Use `.meta` for a single identifier, `.meta-label` for the micro label that
-   names it, and `.meta-fact` for the label+value pair used in a row. */
-:root {
-  --meta-size: 11.5px;
-  --meta-label-size: 10px;
-  --meta-tracking: 0.02em;
-  --meta-label-tracking: 0.08em;
-  --meta-color: var(--text-4);
 }
 
 .meta {

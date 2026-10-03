@@ -25,7 +25,7 @@
 }
 .rt-card:hover {
   border-color: var(--line-3);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 .rt-card-bar {
   display: flex; align-items: center; gap: 8px; padding: 10px 14px;
@@ -37,7 +37,7 @@
 .rt-card-dot.err { background: var(--danger); }
 .rt-card-dot.unknown { background: var(--unknown); }
 .rt-card-id {
-  font-family: "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 600;
+  font-family: "SF Mono", Menlo, monospace; font-size: 13px; font-weight: var(--weight-heading);
   color: var(--text); flex-shrink: 0;
 }
 .rt-card-ws {
@@ -97,7 +97,7 @@
 
 .rt-step-line { display: flex; align-items: center; gap: 8px; }
 .rt-step-label {
-  font-size: 13px; color: var(--text-2); font-weight: 500;
+  font-size: 13px; color: var(--text-2); font-weight: var(--weight-label);
 }
 .rt-step-ts {
   font-size: 11px; color: var(--text-4); font-family: "SF Mono", Menlo, monospace;
@@ -115,9 +115,9 @@
   box-shadow: var(--shadow-xs);
   transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
-.rt-step-head:hover { border-color: var(--line-3); box-shadow: var(--shadow-sm); }
+.rt-step-head:hover { border-color: var(--line-3); box-shadow: none; }
 .rt-step-ok { font-size: 11px; color: var(--ok); flex-shrink: 0; }
-.rt-step-name { font-size: 12px; font-weight: 600; color: var(--text-2); font-family: "SF Mono", Menlo, monospace; }
+.rt-step-name { font-size: 12px; font-weight: var(--weight-heading); color: var(--text-2); font-family: "SF Mono", Menlo, monospace; }
 .rt-tag { font-size: 10px; padding: 1px 5px; border-radius: var(--r-4); color: var(--text-3); }
 .rt-dur { font-size: 11px; color: var(--text-4); font-family: "SF Mono", Menlo, monospace; }
 .rt-chev { font-size: 10px; color: var(--text-4); margin-left: auto; flex-shrink: 0; }
@@ -160,7 +160,7 @@
   padding: 6px 10px; border: 1px solid var(--line-2); border-radius: var(--r-6);
   background: var(--surface-2); box-shadow: var(--shadow-xs);
 }
-.rt-art-label { font-size: 11px; font-weight: 600; color: var(--text-3); flex-shrink: 0; }
+.rt-art-label { font-size: 11px; font-weight: var(--weight-heading); color: var(--text-3); flex-shrink: 0; }
 
 .rt-retry-summary {
   display: flex;

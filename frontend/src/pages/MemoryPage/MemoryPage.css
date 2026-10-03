@@ -1,0 +1,299 @@
+/* memory foundations. Refinements use the existing declared cascade layers. */
+@layer base {
+
+.memory-gating-box {
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 12px;
+  line-height: 1.7;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.memory-gating-box.ok {
+  background: rgba(52, 199, 89, 0.06);
+  border-color: rgba(52, 199, 89, 0.2);
+}
+
+.memory-gating-title {
+  font-weight: var(--weight-heading);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.memory-gating-body {
+  color: var(--text-2);
+  line-height: 1.7;
+}
+
+.memory-gating-body + .memory-gating-body {
+  margin-top: 2px;
+}
+
+.memory-gating-footer {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: var(--bg-soft, #f5f5f5);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-card {
+  cursor: pointer;
+  transition: all var(--dur-2) var(--ease);
+  padding: 0;
+}
+
+.memory-card:hover {
+  border-color: var(--line-3);
+}
+
+.memory-card.checked {
+  outline: 2px solid var(--accent);
+}
+
+.memory-card.inactive {
+  opacity: 0.55;
+}
+
+.memory-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.memory-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-card-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.memory-card-title strong {
+  font-size: var(--fs-14);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-card-preview {
+  font-size: var(--fs-12);
+  color: var(--text-3);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-card-delete {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  color: var(--text-4);
+}
+
+.memory-card-detail {
+  padding: 0 16px 14px;
+  border-top: 1px solid var(--line-2);
+}
+
+.memory-card-detail pre {
+  font-size: var(--fs-12);
+  line-height: 1.6;
+  color: var(--text-2);
+  background: var(--surface-2);
+  padding: 12px 14px;
+  border-radius: var(--r-6);
+  max-height: 260px;
+  overflow: auto;
+  margin-top: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--line-2);
+  font-family: var(--font-mono);
+}
+
+.memory-explain-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-6);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+}
+
+.memory-card-detail .tags {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.memory-card-detail .actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-2);
+}
+
+.memory-delete-confirm {
+  padding: 6px 16px 8px;
+  border-top: 1px solid var(--line-2);
+  background: var(--danger-soft, #fde8e8);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-delete-confirm span {
+  font-size: var(--fs-12);
+  color: var(--danger);
+  flex: 1;
+}
+
+.memory-gating-card {
+  padding: 20px 24px;
+}
+
+.memory-gating-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.memory-gating-title-text {
+  margin-bottom: 2px;
+  font-weight: var(--weight-heading);
+}
+
+.memory-gating-desc {
+  line-height: 1.5;
+}
+
+.memory-gating-status {
+  font-weight: var(--weight-heading);
+}
+
+.memory-gating-status-on { color: var(--ok); }
+.memory-gating-status-off { color: var(--ink-mute); }
+
+.memory-form-title {
+  margin-bottom: 10px;
+}
+
+.memory-form-input,
+.memory-form-textarea {
+  margin-bottom: 8px;
+}
+
+.memory-form-textarea {
+  margin-bottom: 10px;
+}
+
+.memory-form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.memory-error-card {
+  margin-bottom: 12px;
+  border-left: 3px solid var(--danger);
+}
+
+.memory-error-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--danger);
+}
+
+.memory-error-icon {
+  font-weight: var(--weight-heading);
+}
+
+.memory-error-text {
+  font-size: var(--fs-13);
+}
+
+.memory-checkbox {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+}
+
+@layer console {
+
+.memory-page .memory-list {
+  border: 1px solid var(--console-border-soft);
+  border-radius: var(--r-6);
+  overflow: hidden;
+  background: var(--console-surface);
+}
+.memory-page .memory-card {
+  border-bottom: 1px solid var(--console-border-soft);
+  background: transparent;
+  cursor: default;
+}
+.memory-page .memory-card:last-child { border-bottom: 0; }
+.memory-page .memory-card.checked { background: var(--console-action-soft); }
+.memory-page .memory-card.inactive { opacity: 0.7; }
+.memory-page .memory-card-row {
+  min-height: 58px;
+  margin: 0;
+  padding: 10px 14px;
+  border-color: var(--console-border-soft);
+  border-radius: 0;
+  box-shadow: none;
+}
+.memory-page .memory-card-row:hover { background: var(--console-action-soft); }
+.memory-detail-toggle { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; color: inherit; text-align: left; }
+.memory-detail-toggle strong { overflow-wrap: anywhere; }
+.memory-detail-toggle > span { color: var(--text-4); }
+.memory-page .memory-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  margin-top: 5px;
+}
+.memory-page .memory-card-detail,
+.memory-page .memory-explain-box,
+.memory-page .memory-error-card {
+  border-color: var(--console-border-soft);
+  border-radius: var(--r-4);
+  box-shadow: none;
+}
+.memory-page .memory-form-input,
+.memory-page .memory-form-textarea { border-color: var(--console-border); background: var(--console-surface); }
+.memory-page .memory-delete-confirm { border-color: color-mix(in srgb, var(--danger) 38%, var(--console-border)); border-radius: var(--r-4); box-shadow: none; }
+}
+
+@layer pages {
+
+.memory-page .memory-card {
+  transition: background var(--dur-2) var(--ease);
+}
+}

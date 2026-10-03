@@ -1,7 +1,7 @@
 @layer responsive {
-  .desktop-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; border-radius: var(--r-16); box-shadow: var(--shadow-float); }
-  .desktop-dialog-body { overflow-y: auto; min-height: 0; padding: 20px; display: grid; gap: 16px; }
-  .desktop-dialog-body section { display: grid; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+  .desktop-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; border-radius: var(--r-12); box-shadow: var(--shadow-menu); }
+  .desktop-dialog-body { overflow-y: auto; min-height: 0; padding: var(--space-3) var(--space-6) var(--space-6); display: grid; gap: var(--space-6); }
+  .desktop-dialog-body section { display: grid; gap: var(--space-3); border-bottom: 0; padding-bottom: 0; }
   .desktop-dialog-body label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .desktop-dialog-body :is(select, input[type="password"]) { min-height: 36px; min-width: 0; max-width: 100%; padding: 6px 10px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: var(--r-8); }
   .desktop-dialog-body select { min-width: 160px; }
@@ -19,10 +19,7 @@
     .progress-drawer .task-progress-panel { display: flex !important; width: 100%; min-width: 0; max-height: 65dvh; overflow: auto; }
     .progress-drawer { max-height: calc(100dvh - 24px); width: min(420px, calc(100vw - 24px)); }
   }
-}
-
-@layer responsive {
-  .whiteboard-persistence { position: absolute; top: 12px; left: 12px; z-index: 75; max-width: calc(100% - 24px); background: color-mix(in srgb, var(--surface) 92%, transparent); padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r-8); box-shadow: var(--shadow-sm); backdrop-filter: blur(10px); }
+  .whiteboard-persistence { position: absolute; top: 12px; left: 12px; z-index: 75; max-width: calc(100% - 24px); background: var(--surface); padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r-8); box-shadow: var(--shadow-sm); backdrop-filter: none; }
   @media (max-width: 760px) {
     .topology-whiteboard-toolbar { max-width: calc(100% - 20px); flex-wrap: wrap; justify-content: center; border-radius: 12px; }
     .studio-toolbar, .studio-statusbar, .topology-toolbar { flex-wrap: wrap; height: auto; min-height: 44px; }

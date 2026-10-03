@@ -6,8 +6,8 @@
 
 | 附件 | 启动 | 默认数据 | 集成 |
 | --- | --- | --- | --- |
-| lzcore-v3.3.4-windows-portable.zip | 解压后 lzcore/lzcore.exe | 程序旁 data/ | 默认无快捷方式/注册表/自启动 |
-| lzcore-v3.3.4-windows-setup.exe | 每用户安装向导 | %LOCALAPPDATA%/LZCore | 开始菜单、可选桌面快捷方式、卸载项 |
+| lzcore-v3.3.5-windows-portable.zip | 解压后 lzcore/lzcore.exe | 程序旁 data/ | 默认无快捷方式/注册表/自启动 |
+| lzcore-v3.3.5-windows-setup.exe | 每用户安装向导 | %LOCALAPPDATA%/LZCore | 开始菜单、可选桌面快捷方式、卸载项 |
 
 固定版本 WebView2 随包附带，不需另装 Python/Node 或在线下载运行时。版本与 Microsoft URL 在 packaging/webview2.json，构建验证 Microsoft 签名；固定运行时随应用更新，不采用 Evergreen 自动更新。Windows 10 启动会为运行时授予 App Container 读取/执行权限，不从 UNC 目录运行。平台限制见 [Microsoft 部署文档](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。
 
@@ -43,7 +43,7 @@ LocalLifecycle 在退出/备份/恢复/更新前停止新操作，取消通过�
 
 回退只接受同数据格式且有清单的已发布版本，只换程序、不撤销数据。3.2.x 没有该清单；旧数据仍可迁移。SHA256SUMS.txt 可用于手工核验。
 
-已有版本修复可从 main 手动运行 Release，release_tag 填 v3.3.4：流程核对版本、验证后替换附件，**不移动 tag**。以 windows-update.json.source_commit 判断实际构建来源。应用内按版本号检测，同版本重建不会自动提示升级，需要重新下载安装器或便携包，保留数据目录。
+已有版本修复可从 main 手动运行 Release，release_tag 填 v3.3.5：流程核对版本、验证后替换附件，**不移动 tag**。以 windows-update.json.source_commit 判断实际构建来源。应用内按版本号检测，同版本重建不会自动提示升级，需要重新下载安装器或便携包，保留数据目录。
 
 GitHub Secrets LZCORE_SIGNING_PFX（Base64 PFX）和 LZCORE_SIGNING_PASSWORD 可签主程序/安装器/卸载器；未配置时标明未签名，不能宣称 SmartScreen 信誉。
 

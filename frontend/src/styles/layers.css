@@ -1,42 +1,7 @@
-/**
- * Cascade layer order — the single place that decides which stylesheet wins.
- *
- * `product` used to be one layer covering every shared sheet, because a split
- * changes outcomes: a layer beats specificity, and the previous cascade
- * resolved conflicts by specificity first and fell back to load order. The
- * split was therefore earned one conflict at a time, each verified against the
- * layout probe, until it stopped moving a box.
- *
- * The order below is the order the bundler was already producing, declared.
- * It reads oddly — `runtime` first, `typography` after the component layers —
- * because the import order it replaces was accidental. Preserving it is the
- * whole point: a declared order that disagrees with the document order is a
- * behaviour change, not a refactor. Reordering these deliberately is a
- * separate change, and one the layout probe can measure.
- *
- *   1. runtime      runtime event timeline — imported first, so weakest
- *   2. base         tokens.css themes + global.css resets and legacy patterns
- *   3. shell        product-shell.css application navigation
- *   4. console      primitives.css controls + console-system.css page patterns
- *   5. workbench    conversation/progress + WorkbenchComposer.css input and scope
- *   6. typography   content rhythm, below page/extension refinements
- *   7. pages        page-specific refinements. A page refines the design
- *                   system, and it used to do that by *selector weight* — so
- *                   `.kl-stats .stat-card` out-weighed the design system's
- *                   `.stat-card`. A layer beats specificity, so that weight
- *                   only still works if the refinement sits in a later layer.
- *                   Without this the split moves 135 declarations.
- *   8. extension    extension pages
- *   9. responsive   narrow-width adaptations, which must outrank everything
- *
- * Rules for future work:
- *   - Never resolve a conflict by reordering imports; put the rule in the layer
- *     that owns the concern, or scope the selector.
- *   - Unlayered rules beat every layer, so a stylesheet that forgets to declare
- *     a layer silently wins over all of these. Keep every sheet layered.
- *   - Extension styles must stay scoped to the extension's own root class.
- *   - A modifier belongs in the same layer as the base it modifies. `.btn.sm`
- *     in `base` loses to `.btn` in `console` on every property both set, and
- *     loses silently — the compact buttons just quietly grow back.
- */
+/* Cascade precedence is stable. Foundations retain base when moving them would
+   outrank a component refinement; each page owns its base/console/pages rules.
+   tokens: themes and rhythm; global: element defaults and utilities;
+   patterns/primitives: shared components; shell: navigation; workbench: chat;
+   typography: content; pages/extension: refinements; responsive: window sizing.
+   Keep every stylesheet layered. Do not solve conflicts by import reordering. */
 @layer runtime, base, shell, console, workbench, typography, pages, extension, responsive;

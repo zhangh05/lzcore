@@ -1,8 +1,8 @@
 {
   "name": "lzcore-workbench",
   "private": true,
-  "version": "3.3.4",
-  "description": "联智中枢 v3.3.4",
+  "version": "3.3.5",
+  "description": "联智中枢 v3.3.5",
   "type": "module",
   "engines": {
     "node": ">=24 <25"
@@ -12,6 +12,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
+    "lint:styles": "node scripts/check_styles.cjs",
     "lint:tokens": "python3 ../scripts/check_css_tokens.py",
     "test": "vitest run",
     "test:watch": "vitest",

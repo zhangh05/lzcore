@@ -1,0 +1,151 @@
+/* NetworkEditor owns this component surface; cascade layers stay unchanged. */
+
+
+@layer extension {
+.network-editor .network-notice { margin: var(--space-3) 0 0; }
+.network-panel { background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r-12); box-shadow: var(--shadow-card); padding: 0; min-width: 0; overflow: hidden; }
+.network-panel h2 { margin: 0 0 var(--space-1); font-size: var(--fs-18); }
+.network-panel p { margin: 0; color: var(--text-3); font-size: var(--fs-13); line-height: 1.6; }
+
+.network-editor {
+  position: fixed; inset: 0 0 0 auto; margin: 0; width: min(640px, 100vw); max-width: 100vw;
+  height: 100dvh; max-height: 100dvh; padding: 0; overflow-y: auto; box-sizing: border-box;
+  background: var(--surface); color: var(--text); border: 0; border-left: 1px solid var(--line-2);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.28);
+}
+.network-editor::backdrop {
+  background: var(--overlay);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.network-editor-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--line-2); font-size: var(--fs-13); color: var(--text-3); }
+.network-editor .network-panel { border: 0; border-radius: 0; padding: var(--space-6); overflow: visible; }
+.network-editor .form-grid,
+.network-dialog-modal .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 14px; }
+.network-editor .form-grid label,
+.network-dialog-modal .form-grid label { display: grid; gap: 7px; font-size: var(--fs-13); font-weight: var(--weight-label); }
+.network-editor .full-field, .network-dialog-modal .full-field { grid-column: 1/-1; }
+.network-editor input:not([type="checkbox"]), .network-editor select, .network-editor textarea,
+.network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select, .network-dialog-modal textarea,
+.network-filters input, .network-filters select {
+  box-sizing: border-box; min-width: 0; max-width: 100%; min-height: var(--h-control);
+  border: 1px solid var(--line-3); border-radius: var(--r-8); padding: 6px 11px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-13); outline: none;
+}
+.network-editor input:focus-visible, .network-editor select:focus-visible, .network-editor textarea:focus-visible,
+.network-dialog-modal input:focus-visible, .network-dialog-modal select:focus-visible, .network-dialog-modal textarea:focus-visible,
+.network-filters input:focus-visible, .network-filters select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring-shadow);
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.network-editor textarea,
+.network-dialog-modal textarea { min-height: 80px; resize: vertical; }
+.network-editor fieldset,
+.network-dialog-modal fieldset { grid-column: 1/-1; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--r-8); min-width: 0; }
+.network-editor legend,
+.network-dialog-modal legend { padding: 0 6px; font-size: var(--fs-13); font-weight: var(--weight-heading); }
+.network-editor .form-grid .check,
+.network-dialog-modal .form-grid .check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; font-size: var(--fs-13); font-weight: normal; }
+.network-editor .check input,
+.network-dialog-modal .check input { flex-shrink: 0; margin-top: 3px; accent-color: var(--accent); }
+.network-editor .capability-check span,
+.network-dialog-modal .capability-check span { display: grid; gap: var(--space-1); }
+.network-editor .capability-check small,
+.network-dialog-modal .capability-check small { font-size: var(--fs-12); font-weight: normal; color: var(--text-3); line-height: 1.6; }
+.network-editor .intrinsic-capabilities,
+.network-dialog-modal .intrinsic-capabilities { margin: 0 0 var(--space-2); color: var(--text-3); font-size: var(--fs-12); }
+.network-editor .inline-form,
+.network-dialog-modal .inline-form { display: flex; gap: var(--space-2); margin: 18px 0 10px; }
+.network-editor .inline-form input,
+.network-dialog-modal .inline-form input { flex: 1; }
+.network-editor .region-list,
+.network-dialog-modal .region-list { display: flex; gap: var(--space-2); flex-wrap: wrap; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.network-editor .region-list > span,
+.network-dialog-modal .region-list > span { display: flex; align-items: center; gap: var(--space-2); padding: 5px 8px; background: var(--surface-2); border-radius: var(--r-8); font-size: var(--fs-12); }
+.network-editor .region-list button,
+.network-dialog-modal .region-list button { background: transparent; border: 0; color: var(--accent); cursor: pointer; }
+.network-editor .form-actions { grid-column: 1 / -1; display: flex; gap: 10px; position: sticky; bottom: 0; z-index: 2; margin: var(--space-4) calc(-1 * var(--space-6)) calc(-1 * var(--space-6)); padding: var(--space-4) var(--space-6); border-top: 1px solid var(--line); background: var(--surface); box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05); }
+@media (max-width: 760px) {
+  .network-editor .form-grid,
+  .network-dialog-modal .form-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .network-editor .network-panel { padding: var(--space-4); }
+}
+@media (max-width: 760px) {
+  .network-editor .form-actions { margin: var(--space-3) calc(-1 * var(--space-4)) calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); }
+}
+@media (max-width: 760px) {
+  .network-editor input:not([type="checkbox"]), .network-editor select,
+  .network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select,
+  .network-filters input, .network-filters select { min-height: var(--h-touch); }
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.section-title {
+  font-size: var(--fs-13);
+  font-weight: var(--weight-label);
+  color: var(--text);
+}
+
+.no-skill-ref {
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  line-height: 1.4;
+}
+.network-dialog-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 1000;
+  width: min(520px, calc(100vw - 32px));
+}
+
+.network-dialog-modal::backdrop {
+  background: var(--overlay);
+}
+
+.network-panel.modal-panel {
+  padding: var(--space-4);
+  border-radius: var(--r-12);
+  box-shadow: var(--shadow-menu);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.network-panel .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.network-panel .modal-header h3 {
+  margin: 0;
+  font-size: var(--fs-16);
+  color: var(--text);
+}
+
+.network-panel .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+}

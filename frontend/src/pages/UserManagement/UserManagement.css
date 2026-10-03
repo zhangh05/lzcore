@@ -1,0 +1,155 @@
+/* users foundations. Refinements use the existing declared cascade layers. */
+@layer base {
+.user-management-notice { padding: 10px 14px; margin-bottom: 12px; color: var(--ok); font-size: var(--fs-11); border: 1px solid color-mix(in srgb, var(--ok) 32%, var(--line-2)); border-radius: 7px; background: color-mix(in srgb, var(--ok) 8%, var(--surface)); }
+.user-access-summary { display: grid; grid-template-columns: repeat(2, minmax(105px, 145px)) minmax(280px, 1fr); overflow: hidden; }
+.user-access-summary > div, .user-access-summary article { min-height: 78px; padding: 14px 16px; background: var(--surface); }
+.user-access-summary > div { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.user-access-summary > div b { color: var(--text-1); font-size: 22px; }
+.user-access-summary > div span { color: var(--text-4); font-size: var(--fs-11); }
+.user-access-summary article { display: flex; align-items: center; gap: 11px; }
+.user-access-summary article div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.user-access-summary article b { font-size: var(--fs-12); }
+.user-access-summary article small { overflow: hidden; color: var(--text-4); font-size: var(--fs-10); text-overflow: ellipsis; white-space: nowrap; }
+.user-avatar { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; color: var(--accent-text); font-weight: var(--weight-heading); border-radius: 10px; background: var(--accent); }
+.user-avatar.admin { background: var(--accent-2); }
+.user-access-layout { display: grid; grid-template-columns: 285px minmax(0, 1fr); min-height: 620px; }
+.user-access-list { padding: 15px; border-right: 1px solid var(--line-2); }
+.user-access-list-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.user-access-list-title h2 { margin: 0; font-size: var(--fs-13); }
+.user-access-list-title span { color: var(--text-4); font-size: var(--fs-10); }
+.user-access-list > button { display: grid; grid-template-columns: 9px minmax(0, 1fr); align-items: center; gap: 10px; padding: 11px 12px; margin-bottom: 7px; color: var(--text-2); text-align: left; background: var(--surface); cursor: pointer; }
+.user-access-list > button:hover { border-color: var(--line-3); }
+.user-access-list > button.selected { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); background: var(--accent-soft); }
+.user-access-list > button > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.user-access-list b { overflow: hidden; font-size: var(--fs-12); text-overflow: ellipsis; }
+.user-access-list small { color: var(--text-4); font-size: var(--fs-10); }
+.user-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 13%, transparent); }
+.user-status-dot.disabled { background: var(--text-4); box-shadow: none; }
+.user-access-editor { min-width: 0; }
+.user-access-placeholder { display: grid; min-height: 500px; place-content: center; color: var(--text-4); text-align: center; }
+.user-access-placeholder span { font-size: 30px; filter: grayscale(1); opacity: .55; }
+.user-access-placeholder h2 { margin: 12px 0 6px; color: var(--text-2); font-size: var(--fs-16); }
+.user-access-placeholder p { margin: 0; font-size: var(--fs-11); }
+.user-access-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line-2); }
+.user-access-editor-head > div > span { font-size: var(--fs-10); font-weight: var(--weight-heading); }
+.user-access-editor-head h2 { margin: 4px 0 0; font-size: 20px; }
+.user-enabled-switch { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: var(--fs-11); cursor: pointer; }
+.user-access-section { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 22px; border-bottom: 1px solid var(--line-2); }
+.user-access-section-title h3 { margin: 0 0 6px; font-size: var(--fs-13); }
+.user-access-section-title p { margin: 0; color: var(--text-4); font-size: var(--fs-10); line-height: 1.55; }
+.user-access-fields { display: grid; grid-template-columns: repeat(2, minmax(160px, 1fr)); gap: 10px; }
+.user-access-fields label { display: flex; flex-direction: column; gap: 5px; color: var(--text-4); font-size: var(--fs-10); }
+.user-access-fields label:last-child { grid-column: 1 / -1; }
+.user-role-options, .user-workspace-options { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 9px; }
+.user-role-options label, .user-workspace-options label { display: flex; min-width: 0; gap: 9px; padding: 12px; border: 1px solid var(--line-2); border-radius: 7px; cursor: pointer; }
+.user-role-options label.selected, .user-workspace-options label.selected { border-color: var(--accent); background: var(--accent-soft); }
+.user-role-options label > span, .user-workspace-options label > span { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.user-role-options b, .user-workspace-options b { font-size: var(--fs-11); }
+.user-role-options small, .user-workspace-options small { color: var(--text-4); font-size: var(--fs-9); line-height: 1.45; }
+.user-workspace-options { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.user-workspace-options > p { color: var(--text-4); font-size: var(--fs-11); }
+.user-access-actions { display: flex; justify-content: space-between; gap: 10px; }
+.user-access-actions .btn.primary { margin-left: auto; }
+.user-access-denied { max-width: 620px; padding: 32px; border: 1px solid var(--line-2); background: var(--surface); }
+.user-access-denied h1 { margin: 0 0 8px; font-size: var(--fs-18); }
+.user-access-denied p { margin: 0; color: var(--text-3); }
+@media (max-width: 900px) { .user-access-summary { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 900px) { .user-access-summary article { grid-column: 1 / -1; min-height: auto; } }
+@media (max-width: 900px) { .user-access-layout { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .user-access-list { max-height: 260px; overflow: auto; border-right: 0; border-bottom: 1px solid var(--line-2); } }
+@media (max-width: 900px) { .user-access-section { grid-template-columns: 1fr; gap: 10px; } }
+@media (max-width: 620px) { .user-access-summary { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .user-access-summary article { grid-column: auto; } }
+@media (max-width: 620px) { .user-access-editor { padding: 12px; } }
+@media (max-width: 620px) { .user-access-fields, .user-role-options { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .user-access-editor-head { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 620px) { .user-access-fields label:last-child { grid-column: auto; } }
+}
+
+@layer console {
+.user-access-layout{
+  background: var(--console-surface);
+  border: 1px solid var(--console-border-soft);
+  border-radius: var(--r-6);
+  overflow: hidden;
+}
+.user-access-list{ background: var(--console-muted); border-right-color: var(--console-border-soft); }
+.user-access-list-title{
+  min-height: 42px;
+  padding: 10px 12px;
+  color: var(--console-muted-ink);
+  border-bottom-color: var(--console-border-soft);
+  font-size: 11px;
+  letter-spacing: 0.025em;
+}
+.user-access-list button{
+  min-height: 38px;
+  margin: 2px 6px;
+  border-radius: var(--r-4);
+}
+.user-access-list button.selected{ color: var(--console-ink); background: var(--console-action-soft); }
+.user-access-editor{ padding: 18px 20px; background: var(--console-surface); }
+.user-access-editor-head{ padding-bottom: 12px; border-bottom-color: var(--console-border-soft); }
+.user-access-editor-head > div > span{ color: var(--console-action); }
+.user-access-section{ padding: 16px 0; border-bottom-color: var(--console-border-soft); }
+.user-role-options label,
+.user-workspace-options label {
+  padding: 10px;
+  border-color: var(--console-border-soft);
+  border-radius: var(--r-4);
+  background: transparent;
+}
+.user-role-options label.selected,
+.user-workspace-options label.selected {
+  border-color: color-mix(in srgb, var(--console-action) 44%, var(--console-border));
+  background: var(--console-action-soft);
+}
+.user-access-actions{ padding-top: 14px; }
+.user-access-denied { border-color: var(--console-border-soft); border-radius: var(--r-6); box-shadow: none; }
+.user-access-summary{
+  gap: 0;
+  margin-bottom: 14px;
+  background: var(--console-surface);
+  border: 1px solid var(--console-border-soft);
+  border-radius: var(--r-6);
+}
+.user-access-summary > *{
+  min-height: 58px;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--console-border-soft);
+  border-radius: 0;
+  box-shadow: none;
+}
+.user-access-summary > *:last-child{ border-right: 0; }
+
+.user-management .page-header { padding-bottom: 12px; border-bottom: 1px solid var(--console-border-soft); }
+.user-management .user-management-notice { border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-action-soft); box-shadow: none; }
+.user-management .user-access-summary > * { color: var(--console-muted-ink); }
+.user-management .user-access-list { padding: 8px; }
+.user-management .user-access-list > button {
+  min-height: 48px;
+  margin: 2px 0;
+  padding: 8px 10px;
+  border-radius: var(--r-4);
+}
+.user-management .user-access-list > button:hover { background: color-mix(in srgb, var(--console-action-soft) 72%, transparent); }
+.user-management .user-access-empty,
+.user-management .user-access-placeholder { border-color: var(--console-border-soft); border-radius: var(--r-4); background: transparent; }
+.user-management .user-access-fields { gap: 12px; }
+.user-management .user-access-fields label > span { color: var(--console-muted-ink); font-size: 11px; font-weight: var(--weight-heading); }
+.user-management .user-enabled-switch { padding: 8px 10px; border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-muted); }
+.user-management .user-access-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--console-border-soft);
+}
+.user-management .user-access-actions .danger { margin-right: auto; }
+.user-access-list > button { width: 100%; margin-inline: 0; border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; }
+.user-access-list > button:hover { transform: none; }
+.user-access-fields label, .user-access-section-title p, .user-access-list small { font-size: var(--fs-12); color: var(--text-3); }
+.user-access-placeholder > svg { margin-inline: auto; }
+}

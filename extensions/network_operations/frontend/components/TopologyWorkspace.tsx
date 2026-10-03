@@ -3908,7 +3908,7 @@ export default function TopologyWorkspace({
                 <span className="inspector-label">所属区域</span>
                 {selectedNode.region_id ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    <div style={{ fontSize: 12, color: "var(--text-3)" }}>
                       当前归属：<strong>{(activeTopology?.canvas_items || []).find((ci) => ci.item_id === selectedNode.region_id)?.text || "未命名区域"}</strong>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
@@ -3953,7 +3953,7 @@ export default function TopologyWorkspace({
                 <span className="inspector-label">固定联动</span>
                 {selectedNode.lock_group ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    <div style={{ fontSize: 12, color: "var(--text-3)" }}>
                       已与 {(activeTopology?.nodes || []).filter((n) => n.lock_group === selectedNode.lock_group && n.node_id !== selectedNode.node_id).length} 台设备固定联动（拖动任意一台，同组设备沿相同轨迹同步移动）
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
@@ -5179,7 +5179,7 @@ export default function TopologyWorkspace({
                   ))}
                 </div>
               </div>
-              <div className="full-field" style={{ fontSize: 12, color: "var(--text-secondary)", background: "var(--surface-2, #f8fafc)", padding: "8px 12px", borderRadius: 6 }}>
+              <div className="full-field" style={{ fontSize: 12, color: "var(--text-3)", background: "var(--surface-2, #f8fafc)", padding: "8px 12px", borderRadius: 6 }}>
                 💡 提示：系统将根据已选中的 {activeTopology?.nodes.filter((n) => canvasSelectedElementIds.includes(n.node_id)).length || 0} 台设备位置，自动生成带标题的半透明彩色底框。后续在属性面板中随时可一键【自适应贴合】重新自适应包裹。
               </div>
             </div>
@@ -5248,7 +5248,7 @@ export default function TopologyWorkspace({
             <div className="modal-header"><div><h3>版本历史 · {revisions.length} 个结构版本</h3><p>只记录结构变化；拖动位置、缩放不产生版本</p></div><Button aria-label="关闭版本历史" onClick={() => setShowRevisions(false)}><IconClose size={14} /></Button></div>
             <div className="compare-notice-banner">恢复会把旧版本写成新版本并先备份当前快照，不会丢失历史；支持完整还原布局几何。</div>
             <div style={{ padding: "0 12px 8px 12px" }}>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer", color: "var(--fg, #0f172a)" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer", color: "var(--text)" }}>
                 <input
                   type="checkbox"
                   checked={restoreLayout}

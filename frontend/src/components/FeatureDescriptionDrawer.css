@@ -1,3 +1,4 @@
+@layer pages {
 .feature-drawer-overlay {
   position: fixed;
   inset: 0;
@@ -11,8 +12,8 @@
   position: absolute;
   inset: 0;
   background: var(--overlay);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .feature-drawer-panel {
@@ -22,7 +23,7 @@
   height: 100%;
   background: var(--surface);
   border-left: 1px solid var(--line-2);
-  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-menu);
   display: flex;
   flex-direction: column;
   animation: featureDrawerSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
@@ -32,9 +33,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
+  padding: var(--space-4) var(--space-6);
   background: var(--surface);
-  border-bottom: 1px solid var(--line-2);
+  border-bottom: 0;
   flex-shrink: 0;
 }
 
@@ -59,7 +60,7 @@
 .feature-drawer-title {
   margin: 0;
   font-size: 15px;
-  font-weight: 650;
+  font-weight: var(--weight-heading);
   color: var(--text);
   line-height: 1.2;
 }
@@ -94,7 +95,7 @@
 .feature-drawer-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px 32px;
+  padding: var(--space-3) var(--space-6) var(--space-8);
 }
 
 .cc-in-drawer {
@@ -138,7 +139,7 @@
   background: var(--surface-3);
   border-color: var(--accent);
   color: var(--text);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .cc-in-drawer .capability-directory {
@@ -153,4 +154,6 @@
 @keyframes featureDrawerSlideIn {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
+}
+
 }

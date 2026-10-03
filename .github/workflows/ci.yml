@@ -20,6 +20,8 @@ jobs:
         run: |
           npm --prefix frontend ci
           npm --prefix frontend audit
+          npm --prefix frontend run lint:tokens
+          npm --prefix frontend run lint:styles
           npm --prefix frontend test -- --run
           npm --prefix frontend run build
 
@@ -46,6 +48,13 @@ jobs:
         env:
           E2E_PYTHON_BIN: python
         run: npm --prefix frontend run e2e
+      - name: Preserve browser visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-browser-validation
+          path: frontend/test-results/
+          retention-days: 14
 
   test:
     runs-on: ubuntu-latest

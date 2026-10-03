@@ -1,0 +1,393 @@
+/* WorkbenchContent owns this component surface; cascade layers stay unchanged. */
+
+@layer base {
+
+.markdown-body {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  font-size: var(--fs-14);
+  line-height: 1.72;
+  color: var(--text);
+  text-wrap: pretty;
+}
+
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 20px 0 8px;
+  font-weight: var(--weight-heading);
+  line-height: 1.4;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.markdown-body h1:first-child,
+.markdown-body h2:first-child,
+.markdown-body h3:first-child {
+  margin-top: 0;
+}
+.markdown-body h5,
+.markdown-body h6 { font-size: 0.94em; color: var(--text-2); font-weight: var(--weight-heading); }
+.markdown-body :not(pre) > code {
+  font-weight: var(--weight-label);
+}
+.markdown-body .markdown-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--surface);
+  scrollbar-width: thin;
+}
+
+.markdown-body table {
+  width: 100%;
+  min-width: 520px;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.markdown-body thead {
+  border-bottom: 2px solid var(--line);
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 9px 11px;
+  text-align: left;
+  border: 0;
+  border-right: 1px solid var(--line-2);
+  border-bottom: 1px solid var(--line-2);
+  vertical-align: top;
+  line-height: 1.4;
+}
+
+.markdown-body th {
+  white-space: nowrap;
+}
+.markdown-body table:has(thead tr th:nth-child(2):last-child) {
+  table-layout: fixed;
+}
+.markdown-body table:has(thead tr th:nth-child(2):last-child) th:first-child,
+.markdown-body table:has(thead tr th:nth-child(2):last-child) td:first-child {
+  width: 120px;
+  white-space: normal;
+}
+.markdown-body table:has(thead tr th:nth-child(2):last-child) th:nth-child(2),
+.markdown-body table:has(thead tr th:nth-child(2):last-child) td:nth-child(2) {
+  width: 100%;
+}
+
+.markdown-body tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--surface-2) 58%, transparent);
+}
+
+.markdown-body tr:last-child td { border-bottom: 0; }
+.markdown-body th:last-child,
+.markdown-body td:last-child { border-right: 0; }
+.markdown-body td strong {
+  font-weight: inherit;
+  color: inherit;
+}
+
+.markdown-body .pipe-row {
+  color: var(--text-2);
+}
+
+.markdown-body .pipe-row-separator {
+  color: var(--text-4);
+  padding: 0 3px;
+}
+
+.markdown-body .pipe-card {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.7fr) minmax(82px, 0.5fr) minmax(0, 2.2fr);
+  gap: 8px 12px;
+  align-items: start;
+  margin: 8px 0;
+  padding: 9px 11px;
+  background: rgba(250, 252, 254, 0.92);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+}
+.markdown-body .pipe-card:has(.pipe-card-title + .pipe-card-body) {
+  grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+}
+.markdown-body .pipe-card:has(.pipe-card-title + .pipe-card-body) .pipe-card-body {
+  grid-column: 2;
+}
+
+.markdown-body .pipe-card-title {
+  font-weight: var(--weight-heading);
+  color: var(--text);
+}
+
+.markdown-body .pipe-card-meta {
+  color: var(--text-3);
+  font-weight: var(--weight-label);
+  white-space: nowrap;
+}
+
+.markdown-body .pipe-card-body {
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+[data-theme="dark"] .markdown-body .pipe-card {
+  background: rgba(17, 24, 39, 0.72);
+}
+
+.markdown-body .report-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.markdown-body .report-card {
+  padding: 10px 12px;
+  background: rgba(250, 252, 254, 0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+}
+
+.markdown-body .report-card-head {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.markdown-body .report-card-title {
+  font-weight: var(--weight-heading);
+  color: var(--text);
+}
+
+.markdown-body .report-card-meta {
+  justify-self: start;
+  padding: 0;
+  color: var(--text-3);
+  font-weight: var(--weight-label);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+
+.markdown-body .report-card-body {
+  color: var(--text-2);
+  line-height: 1.62;
+}
+
+.markdown-body .insight-list {
+  display: grid;
+  gap: 0;
+  margin: 10px 0 12px;
+  border-top: 1px solid var(--line-2);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.markdown-body .insight-item {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.38fr) minmax(0, 1fr);
+  gap: 8px 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.markdown-body .insight-item:last-child { border-bottom: 0; }
+
+.markdown-body .insight-label {
+  font-weight: var(--weight-heading);
+  color: var(--text);
+}
+
+.markdown-body .insight-text {
+  color: var(--text-2);
+  line-height: 1.56;
+}
+
+[data-theme="dark"] .markdown-body .report-card {
+  background: rgba(17, 24, 39, 0.72);
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin: 7px 0 12px;
+  padding-left: 24px;
+}
+
+.markdown-body li {
+  margin: 4px 0;
+  padding-left: 3px;
+}
+
+.markdown-body li p {
+  margin: 0;
+}
+
+.markdown-body ul ul,
+.markdown-body ol ol,
+.markdown-body ul ol,
+.markdown-body ol ul {
+  margin: 2px 0 2px 0;
+}
+
+.markdown-body .task-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+.markdown-body .task-list-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding-left: 0;
+}
+
+.markdown-body .task-checkbox {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--accent-text);
+  font-size: 10px;
+  font-weight: var(--weight-heading);
+}
+
+.markdown-body .task-list-item.is-complete .task-checkbox {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.markdown-body .task-list-item.is-complete > span:last-child {
+  color: var(--text-3);
+}
+.markdown-body blockquote {
+  border-left: 3px solid var(--line-3);
+}
+
+.markdown-body blockquote p {
+  margin: 0;
+}
+.markdown-body a {
+  color: var(--accent-2);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  text-underline-offset: 3px;
+}
+
+.markdown-body a:hover {
+  text-decoration-color: currentColor;
+}
+.markdown-body strong {
+  font-weight: var(--weight-heading);
+  color: var(--text);
+}
+
+.markdown-body h1 strong,
+.markdown-body h2 strong,
+.markdown-body h3 strong,
+.markdown-body h4 strong,
+.markdown-body h5 strong,
+.markdown-body h6 strong {
+  font-weight: inherit;
+}
+
+.markdown-body em {
+  font-style: italic;
+  color: var(--text-2);
+}
+
+.markdown-body s {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+
+  .markdown-body .pipe-card:has(.pipe-card-title + .pipe-card-body) .pipe-card-body {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+
+  .markdown-body .pipe-card-meta,
+  .markdown-body .report-card-meta {
+    white-space: normal;
+  }
+}
+
+.markdown-body .code-block-wrap {
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+.markdown-body .code-block-wrap:hover {
+  border-color: var(--line);
+}
+
+.markdown-body .code-block-wrap pre {
+  background: transparent;
+}
+
+.markdown-body .code-block-wrap pre > code {
+  display: block;
+  min-width: max-content;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 0 !important;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 4px 10px 4px 14px;
+  font-size: 11px;
+  font-weight: var(--weight-heading);
+  color: var(--text-3);
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--line-2);
+  font-family: var(--font-mono);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.code-block-header + pre,
+.code-block-header + pre > code {
+  border-radius: 0 !important;
+}
+}
+@layer workbench {
+
+.markdown-body table {
+  border-color: var(--line);
+  border-radius: 8px;
+}
+
+.chat-bubble.assistant.sending-line .streaming-plain-text,
+.chat-bubble.assistant.sending-line .ssot-runtime-progress-row {
+  padding: 0;
+  background: none;
+  border: 0;
+}
+.markdown-body :is(pre, table) { max-width: 100%; overflow-x: auto; }
+.code-block-wrap { border-radius: var(--r-8); box-shadow: none; }
+}

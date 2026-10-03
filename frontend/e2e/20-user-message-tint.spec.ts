@@ -10,6 +10,10 @@ test("20. user message uses the low-saturation green tint", async ({ page, api }
   const sessionId = String(createdBody.session?.session_id ?? "");
   expect(sessionId).toBeTruthy();
 
+  await page.addInitScript(() => {
+    class UnavailableWebSocket { constructor() { throw new Error("e2e websocket unavailable"); } }
+    Object.defineProperty(window, "WebSocket", { value: UnavailableWebSocket, configurable: true });
+  });
   await page.route("**/api/agent/message**", async (route) => {
     const request = JSON.parse(route.request().postData() || "{}");
     await route.fulfill({

@@ -1,0 +1,264 @@
+/* WorkbenchTools owns this component surface; cascade layers stay unchanged. */
+
+@layer base {
+.thinking-header { padding: 6px 10px;
+  cursor: pointer; user-select: none;
+}
+.thinking-header:hover { background: var(--surface-3); }
+.thinking-header .chev { transition: transform var(--dur-2); }
+.thinking-header.open .chev { transform: rotate(90deg); }
+.thinking-body { max-height: 300px; overflow: auto;
+}
+
+.tool-call-card {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: var(--fs-11);
+  user-select: none;
+  contain: layout style;
+}
+.tool-call-card.ok { border-left: 3px solid var(--ok); }
+.tool-call-card.fail { border-left: 3px solid var(--danger); }
+.tool-call-card.pending { border-left: 3px solid var(--warn); }
+.tool-call-card.unknown { border-left: 3px solid var(--unknown); }
+
+.tool-call-card-body {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line-2);
+}
+.live-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: var(--fs-11);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+}
+.live-tool-chip.running { border-color: var(--accent); animation: pulseBorder 1.5s infinite; }
+.live-tool-chip.done { border-color: var(--ok); }
+.live-tool-chip.fail { border-color: var(--danger); }
+.live-tool-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+}
+.live-tool-dot.running { background: var(--accent); animation: pulse 1s infinite; }
+.live-tool-dot.done { background: var(--ok); }
+.live-tool-dot.fail { background: var(--danger); }
+.live-tool-summary { color: var(--text-4); font-size: 10px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.wb-thinking-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wb-thinking-label {
+  margin-left: 6px;
+}
+}
+@layer workbench {
+
+.tool-calls-inline {
+  margin-bottom: 12px;
+}
+.thinking-block {
+  margin: var(--space-2) 0;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 45%, var(--line-2));
+  border-radius: var(--r-8);
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+.thinking-block:hover {
+  border-color: var(--line);
+}
+
+.thinking-block.is-expanded {
+  box-shadow: var(--shadow-sm);
+  border-color: var(--line);
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: var(--weight-label);
+  color: var(--text-2);
+  transition: background var(--dur-2) var(--ease);
+}
+
+.thinking-disclosure {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  user-select: none;
+  transition: background var(--dur-2) var(--ease);
+}
+
+.thinking-disclosure:hover {
+  background: var(--surface-hover);
+}
+
+.thinking-disclosure:focus-visible,
+.thinking-copy-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.thinking-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.thinking-header .chev,
+.thinking-header.open .chev { transform: none; }
+
+.thinking-icon {
+  color: var(--accent);
+}
+
+.thinking-header-toggle {
+  margin-left: auto;
+  color: var(--text-4);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+}
+
+.thinking-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.thinking-copy-btn:hover {
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.thinking-copy-btn.is-failed {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+
+.thinking-body {
+  padding: 12px 14px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  border-top: 1px solid var(--line-2);
+  background: var(--surface);
+}
+.tool-call-card {
+  margin: 6px 0;
+  border-radius: var(--r-8);
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--text-4);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.tool-call-card:hover {
+  border-color: var(--line);
+  box-shadow: none;
+  transform: none;
+}
+
+.tool-call-card.ok {
+  border-left-color: var(--ok);
+}
+
+.tool-call-card.fail,
+.tool-call-card.error {
+  border-left-color: var(--danger);
+}
+
+.tool-call-card.pending {
+  border-left-color: var(--warn);
+}
+
+.tool-call-card.unknown {
+  border-left-color: var(--unknown);
+}
+
+.tool-call-card.highlight-flash,
+.live-tool-chip.highlight-flash {
+  animation: tool-card-flash 1.8s ease-out;
+}
+
+.tool-call-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface);
+  transition: background var(--dur-2) var(--ease);
+}
+
+.tool-call-card-header:hover {
+  background: var(--surface-hover);
+}
+
+.tc-duration-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  color: var(--text-3);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.tc-icon.ok { color: var(--ok); }
+.tc-icon.fail { color: var(--danger); }
+.tc-icon.pending { color: var(--warn); }
+.tc-icon.unknown { color: var(--unknown); }
+
+.spinner-mini {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+.live-tool-chip.running, .live-tool-dot.running { animation: none; }
+}

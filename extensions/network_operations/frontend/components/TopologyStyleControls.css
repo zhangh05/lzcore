@@ -1,0 +1,265 @@
+/* TopologyStyleControls owns this component surface; cascade layers stay unchanged. */
+
+
+
+@layer extension {
+
+.inspector-panel {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.inspector-header h4 {
+  margin: 0;
+  font-size: var(--fs-15);
+  color: var(--text);
+}
+
+.inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.inspector-label {
+  font-size: var(--fs-12);
+  font-weight: var(--weight-label);
+  color: var(--text-3);
+}
+
+.inspector-desc {
+  margin: 0;
+  font-size: var(--fs-12);
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-12);
+  font-weight: var(--weight-label);
+  color: var(--text);
+}
+
+.inspector-field input, .inspector-field select, .inspector-field textarea {
+  min-height: var(--h-control-compact);
+  font-size: var(--fs-12);
+  padding: 4px 8px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-6);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.inspector-field textarea { min-height: 66px; resize: vertical; font-family: inherit; line-height: 1.45; }
+.inspector-dimension-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+
+.inspector-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.inspector-check input { accent-color: var(--accent); }
+
+.inspector-endpoints-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--r-8);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.inspector-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inspector-link-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--r-6);
+  background: var(--surface-2);
+  cursor: pointer;
+  font-size: var(--fs-12);
+}
+
+.link-kind-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-4);
+  flex-shrink: 0;
+}
+
+.link-kind-dot.physical {
+  background: var(--ok);
+}
+
+.link-kind-dot.logical {
+  background: var(--accent);
+}
+
+.inspector-group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inspector-actions {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+.link-width-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.link-width-chip {
+  padding: 4px 0;
+  font-size: var(--fs-11);
+  font-weight: var(--weight-label);
+  border-radius: var(--r-4, 4px);
+  border: 1px solid var(--line-3);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.link-width-chip:hover {
+  background: var(--surface-3, rgba(0, 0, 0, 0.05));
+  color: var(--text);
+}
+
+.link-width-chip.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  font-weight: var(--weight-heading);
+}
+
+.link-color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.link-color-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  position: relative;
+}
+
+.link-color-swatch:hover {
+  transform: scale(1.18);
+}
+
+.link-color-swatch.active {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+  transform: scale(1.1);
+}
+
+.link-custom-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.link-color-picker {
+  -webkit-appearance: none;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-4, 4px);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
+
+.link-color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.link-color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.link-color-text {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--fs-11);
+  padding: 4px 8px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-6);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.link-style-reset-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-11);
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-style-reset-btn:hover {
+  opacity: 0.8;
+}
+
+.link-full-reset-btn {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border: 1px dashed var(--line-3);
+  border-radius: var(--r-6);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  cursor: pointer;
+  text-align: center;
+  width: 100%;
+  transition: all 0.15s ease;
+}
+
+.link-full-reset-btn:hover {
+  border-color: var(--line-2, #94a3b8);
+  color: var(--text);
+  background: var(--surface-3, rgba(0, 0, 0, 0.05));
+}
+
+}

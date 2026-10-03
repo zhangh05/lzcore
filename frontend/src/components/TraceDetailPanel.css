@@ -1,0 +1,228 @@
+/* trace foundations. Refinements use the existing declared cascade layers. */
+@layer base {
+.trace-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+.trace-panel {
+  margin-top: 0;
+}
+
+.trace-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.trace-summary-title {
+  font-size: var(--fs-14);
+  font-weight: var(--weight-heading);
+}
+
+.trace-summary-id {
+  color: var(--text-4);
+  font-size: var(--fs-11);
+  font-family: var(--font-mono);
+}
+
+.trace-spacer {
+  flex: 1;
+}
+
+.trace-stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.trace-stats-time {
+  color: var(--text-4);
+  font-size: var(--fs-11);
+  padding: 2px 0;
+}
+
+.trace-decision-fold {
+  margin-bottom: 10px;
+  font-size: var(--fs-12);
+}
+
+.trace-decision-summary {
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.trace-decision-pre {
+  margin-top: 4px;
+  font-size: var(--fs-11);
+  max-height: 120px;
+  overflow: auto;
+  background: var(--surface-2);
+  padding: 8px;
+  border-radius: var(--r-4);
+}
+
+.trace-filter-bar {
+  margin-bottom: 12px;
+}
+
+.trace-search-input {
+  margin-bottom: 12px;
+  height: 30px;
+  font-size: var(--fs-12);
+}
+
+.trace-event-list {
+  border: 1px solid var(--line);
+  border-radius: var(--r-8);
+  overflow: hidden;
+}
+
+.trace-empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: var(--fs-13);
+}
+
+.trace-event-item {
+  border-bottom: 1px solid var(--line-2);
+  font-size: var(--fs-12);
+}
+
+.trace-event-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: var(--surface);
+  transition: background var(--dur-2) var(--ease);
+}
+
+.trace-event-header.open {
+  background: var(--surface-3);
+}
+
+.trace-event-index {
+  color: var(--text-4);
+  font-size: var(--fs-10);
+  font-family: var(--font-mono);
+  min-width: 22px;
+}
+
+.trace-event-tool-id {
+  font-size: var(--fs-10);
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
+.trace-event-name {
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
+
+.trace-event-summary {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.trace-event-time {
+  color: var(--text-4);
+  font-size: var(--fs-10);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.trace-event-toggle {
+  color: var(--text-3);
+  font-size: var(--fs-10);
+}
+
+.trace-event-detail {
+  padding: 8px 12px 8px 48px;
+  background: var(--surface-2);
+}
+
+.trace-detail-summary {
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.trace-detail-message {
+  margin-bottom: 4px;
+  color: var(--warn);
+}
+
+.trace-detail-error {
+  margin-bottom: 4px;
+  color: var(--danger);
+}
+
+.trace-detail-duration {
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
+
+.trace-detail-fold {
+  margin-top: 4px;
+}
+
+.trace-detail-fold-summary {
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
+
+.trace-detail-pre {
+  max-height: 80px;
+  overflow: auto;
+  margin-top: 4px;
+  font-size: var(--fs-10);
+  background: var(--surface);
+  padding: 6px;
+  border-radius: var(--r-4);
+}
+
+.trace-detail-pre-large {
+  max-height: 150px;
+  overflow: auto;
+  margin-top: 4px;
+  font-size: var(--fs-10);
+  background: var(--surface);
+  padding: 6px;
+  border-radius: var(--r-4);
+}
+
+.trace-metadata-section {
+  margin-top: 12px;
+}
+
+.trace-metadata-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.trace-metadata-pre {
+  flex: 1;
+  font-size: var(--fs-10);
+  max-height: 280px;
+  overflow: auto;
+  background: var(--surface-2);
+  padding: 10px;
+  border-radius: var(--r-6);
+  border: 1px solid var(--line-2);
+}
+}

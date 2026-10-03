@@ -1,5 +1,3 @@
-/* Design System 3.0: shared primitives and page compositions. */
-
 @layer console {
 .page {
   width: 100%;
@@ -13,40 +11,18 @@
   min-height: 72px;
   padding: var(--space-4) var(--space-6) var(--space-3);
   gap: 16px;
-  background: var(--console-surface);
-  border-bottom: 1px solid var(--console-border-soft);
-  box-shadow: none;
+  border-bottom: 0;
+  background: var(--bg);
 }
 .page-header h1 {
-  margin-bottom: 2px;
   color: var(--console-ink);
-  font-size: var(--fs-20);
-  font-weight: var(--weight-heading);
-  letter-spacing: -0.018em;
 }
-/* The older page rhythm, for the pages that have not moved to
-   `components/ui/PageHeader` yet. It has to share a layer with the rule above,
-   because the two split by *specificity*: `.page-header.ui-page-header` (0,2,0)
-   must keep beating it on the pages that do use PageHeader, while a bare
-   `.page-header` (0,1,0) takes this one on load order. Layering them apart
-   decides every page the same way and moves the header 4px on five routes.
-   Moved here from typography.css, unchanged. */
 .page-header {
   gap: var(--flow-loose);
   padding: var(--flow-loose) var(--page-gutter) var(--flow-base);
 }
 .page-header h1 span,
 .page-header .subtitle { color: var(--console-muted-ink) !important; }
-.page-header .subtitle { font-size: var(--fs-13); line-height: 1.5; }
-/* The older page rhythm, moved here from typography.css unchanged. It has to
-   share a layer with `.capability-center .page-body { padding-top }` (0,2,0),
-   which refines it — and a layer beats specificity, so a later layer would let
-   the shorthand win and add 4px above the capability directory.
-
-   A second bare `.page-body { padding: var(--space-6) }` used to sit directly
-   above this one. It was dead on arrival: same layer, same specificity, and
-   this rule comes later, so it never applied to anything. Deleted rather than
-   left to be read as the page's actual gutter. */
 .page-body { padding: var(--flow-loose) var(--page-gutter) var(--flow-block); }
 
 @media (max-width: 900px) {
@@ -54,304 +30,17 @@
   .page-header.ui-page-header { min-height: 60px; padding: 12px 16px 10px; }
   .page-body { padding: var(--space-4); }
 }
-
-/* Data-list model: directory, filter, evidence table, then detail. */
-.data-center-tabs,
-.data-center > .ui-filter-bar:not(.data-center-tabs) {
-  padding: 8px 24px;
-  background: var(--console-surface);
-  border-bottom-color: var(--console-border-soft);
-}
-.data-overview,
-.data-center > .data-lifecycle-grid,
-.data-center > .data-relations-grid { padding: var(--space-6); }
-.data-summary-panel,
-.data-main-panel,
-.data-governance-panel {
-  background: var(--console-surface);
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-12);
-  box-shadow: var(--shadow-card);
-}
-.data-summary-head,
-.data-panel-head { min-height: 42px; padding: 10px 14px; border-bottom-color: var(--console-border-soft); }
-.data-split { grid-template-columns: clamp(320px, 31%, 420px) minmax(0, 1fr); }
-.data-list { background: var(--console-muted); }
-.data-list-item,
-.data-recent-row {
-  border-radius: var(--r-4);
-  box-shadow: none;
-}
-.data-list-item:hover,
-.data-list-item.selected { background: var(--console-action-soft); }
-
-/* Operations model: normal activity is quiet; only exceptions acquire semantic color. */
-.operations-split > aside{ background: var(--console-muted); }
-.job-card{
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-8);
-  box-shadow: var(--shadow-xs);
-  transition: all var(--dur-2) var(--ease);
-}
-.job-card { width: 100%; margin: 0; background: transparent; }
-.job-card:hover {
-  background: var(--console-surface);
-  border-color: var(--console-border);
-  box-shadow: var(--shadow-sm);
-}
-.job-card.selected {
-  background: var(--console-action-soft);
-  border-color: color-mix(in srgb, var(--console-action) 34%, var(--console-border));
-  box-shadow: var(--shadow-xs);
-}
-.job-card.selected::before { width: 2px; background: var(--console-action); }
-.job-card-head { min-height: 28px; }
-.job-card-meta{ color: var(--console-muted-ink); font-size: 11px; }
-
-/* 任务卡片底部的操作行（重试/恢复/删除）。之前没规则，按钮直接贴 meta 行，
-   跟 meta 之间没有视觉分隔，删除按钮的红边跟"智能体对话"行混在一起看不出层级。
-   加一条顶部细线 + 内边距，让操作区像 footer 一样独立。 */
-.job-card-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: var(--space-3) var(--space-3) 0;
-  margin-top: var(--space-2);
-  border-top: 1px solid var(--line-2);
-}
-
-/* "选择可删除项 + 删除已选" 的批量操作行。补内边距和 checkbox / button 对齐。 */
-.job-bulk-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-2);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-8);
-  background: var(--surface-2);
-}
-.job-select-all {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-2);
-  font-size: var(--fs-12);
-  font-weight: 500;
-  cursor: pointer;
-  user-select: none;
-}
-.job-bulk-actions .btn {
-  margin-left: auto;
-}
-
-/* Shared observation strips: dense summaries should read as one instrument panel. */
 .stat-grid {
   gap: 0;
   padding: 0;
-  margin-bottom: 14px;
-  background: var(--console-surface);
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-12);
-  box-shadow: var(--shadow-card);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 .stat-card { min-height: 64px; padding: 12px 16px; }
-.stat-card + .stat-card { border-left: 1px solid var(--console-border-soft); }
+.stat-card + .stat-card { border-left: 1px solid var(--line-2); }
 .stat-value { color: var(--console-ink); font-size: 20px; }
 .stat-label { color: var(--console-muted-ink); }
-
-/* Governance model: object list, structured editor, and explicit risk boundary. */
-.user-access-layout{
-  background: var(--console-surface);
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-6);
-  overflow: hidden;
-}
-.user-access-list{ background: var(--console-muted); border-right-color: var(--console-border-soft); }
-.user-access-list-title{
-  min-height: 42px;
-  padding: 10px 12px;
-  color: var(--console-muted-ink);
-  border-bottom-color: var(--console-border-soft);
-  font-size: 11px;
-  letter-spacing: 0.025em;
-}
-.user-access-list button{
-  min-height: 38px;
-  margin: 2px 6px;
-  border-radius: var(--r-4);
-}
-.user-access-list button.selected{ color: var(--console-ink); background: var(--console-action-soft); }
-.user-access-editor{ padding: 18px 20px; background: var(--console-surface); }
-.user-access-editor-head{ padding-bottom: 12px; border-bottom-color: var(--console-border-soft); }
-.user-access-editor-head > div > span{ color: var(--console-action); }
-.user-access-section{ padding: 16px 0; border-bottom-color: var(--console-border-soft); }
-.user-role-options label,
-.user-workspace-options label {
-  padding: 10px;
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-4);
-  background: transparent;
-}
-.user-role-options label.selected,
-.user-workspace-options label.selected {
-  border-color: color-mix(in srgb, var(--console-action) 44%, var(--console-border));
-  background: var(--console-action-soft);
-}
-.user-access-actions{ padding-top: 14px; }
-.user-access-denied { border-color: var(--console-border-soft); border-radius: var(--r-6); box-shadow: none; }
-
-/* Builder model: the canvas/editor dominates; peripheral summaries stay instrumental. */
-.user-access-summary{
-  gap: 0;
-  margin-bottom: 14px;
-  background: var(--console-surface);
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-6);
-}
-.user-access-summary > *{
-  min-height: 58px;
-  padding: 12px 14px;
-  background: transparent;
-  border: 0;
-  border-right: 1px solid var(--console-border-soft);
-  border-radius: 0;
-  box-shadow: none;
-}
-.user-access-summary > *:last-child{ border-right: 0; }
-
-/* Per-page directory refinements: use operational hierarchy rather than generic cards. */
-.data-center .data-center-tabs {
-  margin-bottom: 12px;
-  padding: 0 2px;
-  border-bottom: 1px solid var(--console-border-soft);
-}
-.data-center .data-center-tabs button {
-  min-height: 36px;
-  padding: 8px 12px;
-  border-radius: var(--r-4) var(--r-4) 0 0;
-  font-size: 12px;
-}
-.data-center .data-overview,
-.data-center .data-summary-panel,
-.data-center .data-main-panel,
-.data-center .data-governance-panel {
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-6);
-  box-shadow: none;
-}
-.data-center .data-summary-panel,
-.data-center .data-main-panel,
-.data-center .data-governance-panel { background: var(--console-surface); }
-.data-center .data-summary-head,
-.data-center .data-panel-head {
-  min-height: 44px;
-  padding: 10px 14px;
-  border-bottom-color: var(--console-border-soft);
-}
-.data-center .data-summary-title,
-.data-center .data-panel-head h2 { font-size: 13px; letter-spacing: 0; }
-.data-center .data-lifecycle-grid,
-.data-center .data-info-grid { gap: 0; }
-.data-center .data-lifecycle-card,
-.data-center .data-info-cell {
-  min-height: 66px;
-  padding: 12px 14px;
-  border-color: var(--console-border-soft);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.data-center .data-lifecycle-card + .data-lifecycle-card,
-.data-center .data-info-cell + .data-info-cell { border-left-color: var(--console-border-soft); }
-.data-center .data-list-toolbar {
-  min-height: 42px;
-  padding: 7px 10px;
-  border-bottom-color: var(--console-border-soft);
-  background: var(--console-surface);
-}
-.data-center .data-list-scroll { background: var(--console-muted); }
-.data-center .data-row,
-.data-center .data-recent-row,
-.data-center .data-archive-row {
-  border-color: var(--console-border-soft);
-  border-radius: 0;
-  box-shadow: none;
-}
-.data-center .data-row:hover,
-.data-center .data-recent-row:hover,
-.data-center .data-archive-row:hover { background: var(--console-action-soft); }
-.data-center .data-detail-section { border-bottom-color: var(--console-border-soft); }
-.data-center .data-relation-card { border-color: var(--console-border-soft); border-radius: var(--r-4); box-shadow: none; }
-.data-center .data-compact-empty { border-color: var(--console-border-soft); border-radius: var(--r-6); background: var(--console-muted); }
-
-.knowledge-library .page-header { align-items: flex-start; }
-.knowledge-library .page-body { display: grid; gap: 0; }
-.knowledge-library .page-body > .card {
-  padding: var(--space-6) 0;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--console-border-soft);
-  border-radius: 0;
-  box-shadow: none;
-}
-.knowledge-library .page-body > .card:first-of-type { padding-top: var(--space-4); }
-.knowledge-library .knowledge-upload-row,
-.knowledge-library .kl-summary-box,
-.knowledge-library .kl-result-row,
-.knowledge-library .kl-chunk-row {
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-6);
-  box-shadow: none;
-}
-.knowledge-library .knowledge-upload-row {
-  min-height: var(--space-16);
-  padding: var(--space-2) var(--space-3);
-  background: var(--console-surface);
-}
-.knowledge-library .knowledge-meta-grid,
-.knowledge-library .kl-summary-box {
-  gap: 0;
-  overflow: hidden;
-  background: var(--console-surface);
-}
-.knowledge-library .knowledge-meta-grid > *,
-.knowledge-library .kl-summary-cell {
-  min-height: var(--h-control);
-  padding: var(--space-2) var(--space-3);
-  border-color: var(--console-border-soft);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.knowledge-library .knowledge-meta-grid > * + *,
-.knowledge-library .kl-summary-cell + .kl-summary-cell { border-left: 1px solid var(--console-border-soft); }
-.knowledge-library .kl-results-title,
-.knowledge-library .kl-chunks-title {
-  min-height: 38px;
-  margin: 0;
-  padding: 10px 2px;
-  color: var(--console-muted-ink);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.035em;
-  text-transform: uppercase;
-}
-.knowledge-library .kl-result-row,
-.knowledge-library .kl-chunk-row { background: var(--console-surface); }
-.knowledge-library .kl-result-row:hover { background: var(--console-muted); }
-.knowledge-library .kl-result-header,
-.knowledge-library .kl-chunk-header {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--console-border-soft);
-}
-.knowledge-library .kl-modal-detail { border-color: var(--console-border-soft); border-radius: var(--r-6); box-shadow: none; }
-
-/* ── Empty state ──────────────────────────────────────────────────────────
-   Two roles, one implementation. `inline` says a panel has nothing in it yet;
-   `onboarding` is the first-run state that tells a new user what to do. Memory
-   and Operations had each styled their own "hero" for the second role, and
-   three other pages had invented their own one-line version of the first. */
 .empty-onboarding {
   display: flex;
   flex-direction: column;
@@ -386,11 +75,6 @@
 }
 
 .empty-action { margin-top: var(--flow-tight); }
-
-/* ── Search field ─────────────────────────────────────────────────────────
-   One control for every page. The icon sits in the field, the input keeps its
-   own padding so text never runs under either affordance, and the clear button
-   occupies a fixed slot so the field does not resize when it appears. */
 .ui-search {
   position: relative;
   display: flex;
@@ -436,377 +120,15 @@
   background: var(--console-action-soft);
 }
 
-.memory-page .memory-list {
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-6);
-  overflow: hidden;
-  background: var(--console-surface);
-}
-/* Continuous rows. The list is the single container, so the separator belongs
-   to the row rather than to a per-entry border box. */
-.memory-page .memory-card {
-  border-bottom: 1px solid var(--console-border-soft);
-  background: transparent;
-  cursor: default;
-}
-.memory-page .memory-card:last-child { border-bottom: 0; }
-.memory-page .memory-card.checked { background: var(--console-action-soft); }
-.memory-page .memory-card.inactive { opacity: 0.7; }
-.memory-page .memory-card-row {
-  min-height: 58px;
-  margin: 0;
-  padding: 10px 14px;
-  border-color: var(--console-border-soft);
-  border-radius: 0;
-  box-shadow: none;
-}
-.memory-page .memory-card-row:hover { background: var(--console-action-soft); }
-.memory-detail-toggle { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; color: inherit; text-align: left; }
-.memory-detail-toggle strong { overflow-wrap: anywhere; }
-.memory-detail-toggle > span { color: var(--text-4); }
-/* Provenance and trust, stated once per row in the metadata language. */
-.memory-page .memory-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px 14px;
-  margin-top: 5px;
-}
-.memory-page .memory-card-detail,
-.memory-page .memory-explain-box,
-.memory-page .memory-error-card {
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-4);
-  box-shadow: none;
-}
-.memory-page .memory-form-input,
-.memory-page .memory-form-textarea { border-color: var(--console-border); background: var(--console-surface); }
-.memory-page .memory-delete-confirm { border-color: color-mix(in srgb, var(--danger) 38%, var(--console-border)); border-radius: var(--r-4); box-shadow: none; }
-
-.capability-center .cc-page-header { padding-bottom: 12px; border-bottom: 1px solid var(--console-border-soft); }
-.capability-center .cc-pill-row { gap: 6px; }
-.capability-center .cc-pill-row .status-pill { background: var(--console-action-soft); }
-.capability-center .card {
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-6);
-  background: var(--console-surface);
-  box-shadow: none;
-}
-.capability-center .card-title { min-height: 40px; padding-bottom: 9px; border-bottom: 1px solid var(--console-border-soft); }
-.capability-center .cc-controls { padding: 10px 0; border-bottom: 1px solid var(--console-border-soft); }
-.capability-center .tool-row { border-color: var(--console-border-soft); border-radius: 0; box-shadow: none; }
-.capability-center .tool-row:hover { background: var(--console-action-soft); }
-.capability-center .tool-detail-card { border-color: var(--console-border-soft); box-shadow: none; }
-.capability-center .tool-detail-card { border-radius: var(--r-4); }
-.capability-center .tool-info-grid { gap: var(--space-2); }
-.capability-center .cap-info-grid { gap: var(--space-2) var(--space-4); }
-.capability-center .tool-info-item,
-.capability-center .cap-sr-row { border-color: var(--console-border-soft); border-radius: var(--r-4); }
-.capability-center .tool-restriction { border-color: var(--console-border-soft); border-radius: var(--r-4); }
-
 @media (max-width: 920px) {
   .knowledge-library .knowledge-meta-grid > * + *,
   .knowledge-library .kl-summary-cell + .kl-summary-cell,
   .data-center .data-lifecycle-card + .data-lifecycle-card,
   .data-center .data-info-cell + .data-info-cell { border-left: 0; border-top: 1px solid var(--console-border-soft); }
 }
-
-/* Per-page observation refinements: prioritise current state, evidence, then remediation. */
-.operations-page .operations-tabs {
-  min-height: 38px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--console-border-soft);
-}
-.operations-page .operations-tabs button { min-height: 36px; padding: 8px 12px; border-radius: var(--r-4) var(--r-4) 0 0; }
-.operations-page .operations-split{
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-6);
-  overflow: hidden;
-  background: var(--console-surface);
-}
-.operations-page .jobs-list{ background: var(--console-muted); }
-.operations-page .jobs-list { padding: 6px; }
-.operations-page .operations-detail-header {
-  min-height: 52px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--console-border-soft);
-  background: var(--console-surface);
-}
-.operations-page .operations-detail-body { padding: 14px 16px; }
-.operations-page .operations-stat-bar {
-  gap: 0;
-  margin: 0;
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-4);
-  overflow: hidden;
-}
-.operations-page .operations-stat-bar > * {
-  min-height: 54px;
-  padding: 10px 12px;
-  border-right: 1px solid var(--console-border-soft);
-  background: transparent;
-}
-.operations-page .operations-stat-bar > *:last-child { border-right: 0; }
-.operations-page .run-card,
-.operations-page .event-card,
-.operations-page .timeline-row {
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-4);
-  background: var(--console-surface);
-  box-shadow: none;
-}
-.operations-page .timeline-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-}
-.operations-page .timeline-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: var(--console-surface);
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-4);
-  font-size: var(--fs-12);
-}
-.operations-page .timeline-meta-label {
-  color: var(--text-4);
-  font-weight: 500;
-}
-.operations-page .timeline-meta-val {
-  color: var(--console-ink);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.operations-page .detail-section-divider {
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--console-border-soft);
-}
-.operations-page .event-card-detail,
-.operations-page .fail-reason-body { border-top-color: var(--console-border-soft); }
-.operations-page .operations-alert {
-  margin: 0 0 12px;
-  border-color: color-mix(in srgb, var(--warning) 40%, var(--console-border));
-  border-radius: var(--r-4);
-  box-shadow: none;
-}
-.operations-page .operations-empty { border-color: var(--console-border-soft); border-radius: var(--r-6); background: var(--console-muted); }
-
-.diagnostics-page .page-header { padding-bottom: 12px; border-bottom: 1px solid var(--console-border-soft); }
-.diagnostics-page .diag-summary,
-.diagnostics-page .diag-section,
-.diagnostics-page .diag-continuation-panel {
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-6);
-  background: var(--console-surface);
-  box-shadow: none;
-}
-.diagnostics-page .diag-summary { padding: 14px 16px; }
-.diagnostics-page .diag-summary-icon { color: var(--console-action); background: var(--console-action-soft); }
-.diagnostics-page .diag-summary-alert { border-color: color-mix(in srgb, var(--warning) 40%, var(--console-border)); border-radius: var(--r-4); box-shadow: none; }
-.diagnostics-page .diag-section-head { min-height: 42px; padding: 10px 14px; border-bottom: 1px solid var(--console-border-soft); }
-.diagnostics-page .diag-section-title { font-size: 13px; letter-spacing: 0; }
-.diagnostics-page .diag-health-grid { gap: 0; border: 1px solid var(--console-border-soft); border-radius: var(--r-4); overflow: hidden; }
-.diagnostics-page .diag-health-card { min-height: 86px; padding: 12px 14px; border: 0; border-right: 1px solid var(--console-border-soft); border-radius: 0; box-shadow: none; }
-.diagnostics-page .diag-health-card:last-child { border-right: 0; }
-.diagnostics-page .diag-row-2col,
-.diagnostics-page .diag-row-3col { gap: 12px; }
-.diagnostics-page .diag-usage-body,
-.diagnostics-page .diag-issues-list,
-.diagnostics-page .diag-prompt-list,
-.diagnostics-page .diag-context-info,
-.diagnostics-page .diag-policy-management { border-color: var(--console-border-soft); border-radius: var(--r-4); box-shadow: none; }
-.diagnostics-page .diag-issue-item { border-color: var(--console-border-soft); border-radius: 0; box-shadow: none; }
-.diagnostics-page .diag-policy-block { border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-muted); }
-.diagnostics-page .diag-continuation-alert { border-color: var(--console-border-soft); border-radius: var(--r-4); box-shadow: none; }
-.diagnostics-page .diag-summary-standby {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  background: var(--console-muted);
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-8);
-  margin-bottom: 16px;
-}
-.diagnostics-page .diag-summary-standby .diag-summary-text h2 {
-  font-size: var(--fs-14);
-  font-weight: 600;
-  color: var(--console-ink);
-  margin-bottom: 2px;
-}
-.diagnostics-page .diag-summary-standby .diag-summary-text p {
-  font-size: var(--fs-12);
-  color: var(--console-muted-ink);
-  margin: 0;
-}
-.diagnostics-page .diag-icon-idle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--r-6);
-  background: var(--surface-3);
-  color: var(--console-muted-ink);
-  flex-shrink: 0;
-}
-.diagnostics-page .diag-status-idle {
-  background: var(--text-4);
-  opacity: 0.55;
-}
-.diagnostics-page .diag-health-standby {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
-  border: 0;
-  border-radius: 0;
-  overflow: visible;
-}
-.diagnostics-page .diag-health-standby .diag-health-card {
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-6);
-  background: var(--console-surface);
-}
-.diagnostics-page .diag-status-detecting {
-  background: var(--console-action);
-  animation: diagPulse 1.2s ease-in-out infinite;
-}
 @keyframes diagPulse {
   0%, 100% { transform: scale(1); opacity: 0.6; }
   50% { transform: scale(1.35); opacity: 1; }
-}
-.diagnostics-page .diag-empty-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 16px;
-  text-align: center;
-  gap: 6px;
-}
-.diagnostics-page .diag-empty-card-title {
-  font-size: var(--fs-13);
-  font-weight: 500;
-  color: var(--text-3);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.diagnostics-page .diag-empty-card-title .spin {
-  color: var(--console-action);
-}
-.diagnostics-page .diag-empty-card-hint {
-  font-size: var(--fs-11);
-  color: var(--text-4);
-  max-width: 320px;
-  line-height: var(--lh-base);
-}
-.diagnostics-page .diag-check-passed {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 16px;
-  text-align: center;
-  gap: 6px;
-}
-.diagnostics-page .diag-check-passed-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ok) 12%, transparent);
-  color: var(--ok);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.diagnostics-page .diag-check-passed-title {
-  font-size: var(--fs-13);
-  font-weight: 600;
-  color: var(--text);
-}
-.diagnostics-page .diag-check-passed-desc {
-  font-size: var(--fs-11);
-  color: var(--text-3);
-  max-width: 320px;
-  line-height: var(--lh-base);
-}
-.diagnostics-page .diag-ledger-clean {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 14px 16px;
-  font-size: var(--fs-12);
-  color: var(--text-3);
-  background: var(--console-muted);
-  border-radius: var(--r-4);
-  border: 1px dashed var(--console-border-soft);
-}
-
-
-@media (max-width: 920px) {
-  .operations-page .operations-stat-bar > * { border-right: 0; border-bottom: 1px solid var(--console-border-soft); }
-  .operations-page .operations-stat-bar > *:last-child { border-bottom: 0; }
-  .diagnostics-page .diag-health-card { border-right: 0; border-bottom: 1px solid var(--console-border-soft); }
-  .diagnostics-page .diag-health-card:last-child { border-bottom: 0; }
-}
-
-/* Per-page governance and builder refinements: intent, editable scope, then commit action. */
-.settings-page .page-header { padding-bottom: 12px; border-bottom: 1px solid var(--console-border-soft); }
-.settings-page .settings-layout {
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-6);
-  overflow: hidden;
-  background: var(--console-surface);
-}
-.settings-page .provider-sidebar {
-  padding: 8px;
-  border-right-color: var(--console-border-soft);
-  background: var(--console-muted);
-}
-.settings-page .provider-sidebar-label {
-  min-height: var(--h-control);
-  padding: 7px 8px;
-  color: var(--console-muted-ink);
-  border-bottom: 1px solid var(--console-border-soft);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.035em;
-  text-transform: uppercase;
-}
-.settings-page .provider-sidebar button {
-  min-height: 48px;
-  margin: 2px 0;
-  padding: 8px 10px;
-  border-radius: var(--r-4);
-}
-.settings-page .provider-sidebar button:hover,
-.settings-page .provider-sidebar button.active { background: var(--console-action-soft); }
-.settings-page .settings-form-panel { padding: 16px 18px; background: var(--console-surface); }
-.settings-page .settings-form-card {
-  max-width: none;
-  border-color: var(--console-border-soft);
-  border-radius: var(--r-6);
-  box-shadow: none;
-}
-.settings-page .settings-form-header {
-  min-height: 54px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--console-border-soft);
-  background: var(--console-muted);
-}
-.settings-page .settings-row,
-.settings-page .settings-toggle-row { border-bottom-color: var(--console-border-soft); }
-.settings-page .settings-row { padding: 13px 14px; }
-.settings-page .settings-row-grid { gap: 12px; }
-.settings-page .settings-actions {
-  padding: 14px;
-  border-top: 1px solid var(--console-border-soft);
-  background: var(--console-muted);
 }
 .settings-page .memory-gating-card {
   border-color: var(--console-border-soft);
@@ -817,195 +139,6 @@
 .settings-page .memory-gating-header { padding-bottom: 12px; border-bottom: 1px solid var(--console-border-soft); }
 .settings-page .memory-gating-box { border-color: var(--console-border-soft); border-radius: var(--r-4); box-shadow: none; }
 .settings-page .memory-gating-footer { border-top-color: var(--console-border-soft); }
-.settings-page .test-result-pre { border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-muted); }
-
-.user-management .page-header { padding-bottom: 12px; border-bottom: 1px solid var(--console-border-soft); }
-.user-management .user-management-notice { border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-action-soft); box-shadow: none; }
-.user-management .user-access-summary > * { color: var(--console-muted-ink); }
-.user-management .user-access-list { padding: 8px; }
-.user-management .user-access-list > button {
-  min-height: 48px;
-  margin: 2px 0;
-  padding: 8px 10px;
-  border-radius: var(--r-4);
-}
-.user-management .user-access-list > button:hover { background: color-mix(in srgb, var(--console-action-soft) 72%, transparent); }
-.user-management .user-access-empty,
-.user-management .user-access-placeholder { border-color: var(--console-border-soft); border-radius: var(--r-4); background: transparent; }
-.user-management .user-access-fields { gap: 12px; }
-.user-management .user-access-fields label > span { color: var(--console-muted-ink); font-size: 11px; font-weight: 650; }
-.user-management .user-enabled-switch { padding: 8px 10px; border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-muted); }
-.user-management .user-access-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 0 0;
-  border-top: 1px solid var(--console-border-soft);
-}
-.user-management .user-access-actions .danger { margin-right: auto; }
-
-@media (max-width: 920px) {
-  .settings-page .provider-sidebar { border-right: 0; border-bottom: 1px solid var(--console-border-soft); }
-}
-
-/* ── Selected direction compositions ───────────────────────────────────── */
-.operations-page .operations-split {
-  grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
-  border-radius: var(--r-12);
-}
-.operations-page .operations-filterbar {
-  flex: 0 0 auto;
-  min-height: 52px;
-  padding: var(--space-2) var(--space-6);
-  border-bottom: 1px solid var(--console-border-soft);
-}
-.operations-page .operations-filterbar .input:first-child { width: min(360px, 42vw); }
-.operations-page .operations-filterbar select { width: 150px; }
-.operations-filter-count { margin-left: auto; color: var(--console-muted-ink); font-size: var(--fs-12); }
-.operations-list-empty { padding: var(--space-8) var(--space-4); color: var(--console-muted-ink); text-align: center; font-size: var(--fs-12); }
-.operations-page .jobs-list {
-  padding: 0;
-  background: var(--console-surface);
-}
-.operations-page .job-card {
-  min-height: 72px;
-  padding: var(--space-3) var(--space-4);
-  border: 0;
-  border-bottom: 1px solid var(--console-border-soft);
-  border-radius: 0;
-}
-.operations-page .job-card:hover { background: var(--surface-hover); }
-.operations-page .job-card.selected {
-  background: var(--console-action-soft);
-  border-color: var(--console-border-soft);
-  box-shadow: inset 3px 0 0 var(--console-action);
-}
-.operations-page .operations-detail-body { padding: var(--space-4) var(--space-6) var(--space-6); }
-.operations-page .operations-detail-header { margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-6)) var(--space-4); }
-.operations-page .run-card,
-.operations-page .event-card,
-.operations-page .timeline-row { border-radius: var(--r-8); }
-
-.data-center .data-overview-layout {
-  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
-  gap: var(--space-4);
-}
-.data-center .data-summary-panel,
-.data-center .data-main-panel,
-.data-center .data-governance-panel { border-radius: var(--r-12); }
-.data-center .data-recent-list { padding: 0 var(--space-4) var(--space-2); }
-.data-center .data-recent-row { min-height: 52px; padding: var(--space-3) 0; }
-.data-center .data-recent-row > span:first-child { overflow: hidden; }
-.data-center .data-recent-row > span:first-child b {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.capability-center .page-body { padding-top: var(--space-4); }
-.capability-directory {
-  display: grid;
-  grid-template-columns: minmax(280px, 32%) minmax(0, 1fr);
-  min-height: 430px;
-  overflow: hidden;
-  background: var(--console-surface);
-  border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-12);
-  box-shadow: var(--shadow-card);
-}
-.capability-directory-list {
-  padding: var(--space-2);
-  background: var(--console-muted);
-  border-right: 1px solid var(--console-border-soft);
-}
-.capability-directory-head { padding: var(--space-3); border-bottom: 1px solid var(--console-border-soft); }
-.capability-directory-head > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.capability-directory-head strong { color: var(--console-ink); font-size: var(--fs-14); }
-.capability-directory-head span,
-.capability-directory-head p { color: var(--console-muted-ink); font-size: var(--fs-12); }
-.capability-directory-head p { margin: var(--space-1) 0 0; }
-.capability-directory-row {
-  display: flex;
-  width: 100%;
-  min-height: 62px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  color: inherit;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--console-border-soft);
-  cursor: pointer;
-}
-.capability-directory-row:hover { background: var(--surface-hover); }
-.capability-directory-row.selected { background: var(--console-action-soft); box-shadow: inset 3px 0 0 var(--console-action); }
-.capability-directory-row > span:first-child { display: grid; min-width: 0; gap: 3px; }
-.capability-directory-row b,
-.capability-directory-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.capability-directory-row b { color: var(--console-ink); font-size: var(--fs-13); }
-.capability-directory-row small { color: var(--console-muted-ink); font-size: var(--fs-11); }
-.capability-directory-detail { padding: var(--space-6); }
-.capability-directory-detail > .card { padding: 0; border: 0; }
-.capability-directory-detail .card-title { margin-top: var(--space-6); }
-.capability-center > .page-body > .card { border-radius: var(--r-12); }
-
-.diagnostics-page .diag-health-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-radius: var(--r-12);
-}
-.diagnostics-page .diag-health-card {
-  min-height: 72px;
-  background: transparent;
-  border-right: 0;
-  border-bottom: 1px solid var(--console-border-soft);
-}
-.diagnostics-page .diag-health-ok { border-color: var(--console-border-soft); }
-.diagnostics-page .diag-health-warning,
-.diagnostics-page .diag-health-error { border-left: 3px solid currentColor; }
-.diagnostics-page .diag-summary { border: 0; background: transparent; padding-inline: 0; }
-.diagnostics-page .diag-summary-icon { width: 36px; height: 36px; box-shadow: none; }
-.diagnostics-page .diag-continuation-alert {
-  min-height: 64px;
-  background: color-mix(in srgb, var(--warning) 5%, var(--console-surface));
-  border-color: var(--console-border-soft);
-  border-left: 3px solid var(--warning);
-}
-
-.settings-page .settings-layout {
-  grid-template-columns: 300px minmax(0, 1fr);
-  border-radius: var(--r-12);
-  box-shadow: var(--shadow-card);
-}
-.settings-page .provider-sidebar { padding: var(--space-3); }
-.settings-page .provider-sidebar .provider-card {
-  min-height: 60px;
-  margin: 0;
-  border: 0;
-  border-bottom: 1px solid var(--console-border-soft);
-  border-radius: 0;
-  box-shadow: none;
-  transform: none;
-}
-.settings-page .provider-sidebar .provider-card:hover { transform: none; }
-.settings-page .provider-sidebar .provider-card.active,
-.settings-page .provider-sidebar .provider-card.selected { box-shadow: inset 3px 0 0 var(--console-action); }
-.settings-page .settings-form-panel { padding: var(--space-6); }
-.settings-page .settings-form-card { padding: 0; border: 0; }
-.settings-page .success-text,
-.settings-page .settings-result-heading { display: inline-flex; align-items: center; gap: var(--space-1); }
-.settings-page .settings-form-header { border-radius: var(--r-8); }
-.settings-page .settings-actions {
-  position: sticky;
-  z-index: 4;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  margin: var(--space-6) calc(-1 * var(--space-6)) calc(-1 * var(--space-6));
-  padding: var(--space-3) var(--space-6);
-  background: var(--console-surface);
-}
 
 .cursor-pointer:focus-visible,
 .capability-directory-row:focus-visible,
@@ -1019,93 +152,24 @@
   .operations-page .operations-split,
   .capability-directory,
   .settings-page .settings-layout { grid-template-columns: 1fr; }
-  .capability-directory-list { max-height: 260px; border-right: 0; border-bottom: 1px solid var(--console-border-soft); overflow: auto; }
-  .settings-page .provider-sidebar {
-    display: grid;
-    grid-template-columns: repeat(7, 180px);
-    gap: var(--space-2);
-    min-width: 0;
-    max-width: 100%;
-    max-height: none;
-    border-right: 0;
-    border-bottom: 1px solid var(--console-border-soft);
-    overflow-x: auto;
-  }
-  .settings-page .provider-sidebar-label { grid-column: 1 / -1; margin-bottom: 0; }
-  .settings-page .provider-sidebar .provider-card { border-radius: var(--r-8); border-bottom: 0; }
-  .data-center .data-overview-layout { grid-template-columns: 1fr; }
-  .diagnostics-page .diag-health-grid { grid-template-columns: 1fr; }
 }
-
-/* Shared information hierarchy, independent of business outcome. */
 .page-header > div:first-child, .ui-detail-panel-head > div:first-child { min-width: 0; }
 .page-header h1, .ui-detail-panel-title { overflow-wrap: anywhere; }
 .tbl td { font-size: var(--fs-13); }
-.tbl :is(th, td), .mono, .job-card-meta { font-variant-numeric: tabular-nums; }
 .btn { flex-shrink: 0; }
 textarea.input { min-height: var(--space-16); height: auto; line-height: var(--lh-base); }
 .ui-form-label { font-weight: var(--weight-label); font-size: var(--fs-13); color: var(--text-2); }
 .ui-form-hint, .ui-form-error { font-size: var(--fs-12); line-height: var(--lh-base); }
-.data-table-scroll { max-width: 100%; overflow: auto; }
-.data-table-scroll .tbl { min-width: max-content; width: 100%; }
-.operations-page .job-card-head { justify-content: flex-start; text-align: left; gap: var(--space-2); }
-.operations-page .job-card-title { flex: 1; min-width: 0; text-align: left; }
-.operations-page .job-card-meta { font-size: var(--fs-12); }
-.operations-page .operations-filterbar { flex-wrap: wrap; }
-.data-center :is(.data-main-panel, .data-governance-panel) { border: 0; border-radius: var(--r-8); }
-.data-center .data-recent-row > span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.knowledge-library .page-body { align-content: start; }
-.knowledge-library .page-body > .card { padding-block: var(--space-4); margin-block: 0; }
-.knowledge-library .knowledge-meta-grid { gap: var(--space-2); margin-top: var(--space-2); background: transparent; }
-.knowledge-library .knowledge-meta-grid > * { background: var(--field); border: 1px solid var(--line); border-radius: var(--r-8); }
-.knowledge-library .page-body > .card .empty { min-height: 0; padding: var(--space-6); }
-.capability-center :is(.tool-category, .tool-group, .tool-row) { border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; box-shadow: none; }
-.capability-center .tool-group { background: transparent; padding-left: var(--space-4); }
-.capability-center summary { min-height: var(--h-control); }
-/* The list now owns the border, so a row needs no fill of its own — it would
-   read as a stack of panels rather than as entries in one list. */
-.capability-center .tool-row { background: transparent; }
-.diagnostics-page .diag-health-grid { gap: 0 var(--space-4); border: 0; }
-.diagnostics-page .diag-health-card { border-radius: 0; border-top: 0; }
-.diagnostics-page .diag-health-ok { border-left: 0; }
-.diagnostics-page .diag-health-warning { border-left-color: var(--warn); }
-.diagnostics-page .diag-health-error { border-left-color: var(--danger); }
-.settings-page .settings-form-header { padding: 0 0 var(--space-4); background: transparent; }
-.settings-page .settings-row { padding: var(--space-3) 0; }
-.settings-page .provider-card-hint { overflow-wrap: anywhere; }
-.user-access-list > button { width: 100%; margin-inline: 0; border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; }
-.user-access-list > button:hover { transform: none; }
-.user-access-fields label, .user-access-section-title p, .user-access-list small { font-size: var(--fs-12); color: var(--text-3); }
-.user-access-placeholder > svg { margin-inline: auto; }
 @media (max-width: 900px) {
-  .data-center .data-split { grid-template-columns: minmax(0, 1fr); }
   .ui-page-header-actions { flex-wrap: wrap; }
 }
 @media (max-width: 760px) {
-  .page-body, .data-overview, .data-center > .data-lifecycle-grid, .data-center > .data-relations-grid { padding: var(--space-3); }
   .page-header { flex-wrap: wrap; }
-  .operations-page .operations-filterbar { padding-inline: var(--space-3); }
-  .operations-page .operations-filterbar .input:first-child { width: 100%; }
   .btn, .btn.sm, .input, select.input { min-height: var(--h-touch); }
   .btn.icon-only, .btn.icon-only.sm { min-width: var(--h-touch); }
   .tbl :is(th, td) { padding: var(--space-2); }
-  .settings-page .settings-actions { flex-wrap: wrap; }
 }
-.diagnostics-page .diag-comp-msg { font-size: var(--fs-12); color: var(--text-3); overflow-wrap: anywhere; }
-.diagnostics-page .diag-summary-icon { color: var(--ok); background: var(--ok-soft); }
-.diagnostics-page .diag-summary-icon[data-healthy="false"] { color: var(--warn); background: var(--warn-soft); }
-
-/* Static reading surfaces do not need entrance animation. */
 .page .card, .page .hero { animation: none; }
-
-/* ── Enterprise layout rhythm: containers ─────────────────────────────────
-   Moved here from typography.css. Those rules normalise hardcoded padding and
-   margin values that live in *this* file and in global.css, so they were only
-   ever correct because typography.css happened to load last. Under a cascade
-   layer that no longer holds — layer order beats specificity, so a rule here
-   with a page prefix (0-3-0) would lose to typography's bare `.card` (0-1-0).
-   Keeping them in the sheet that owns the containers lets specificity decide
-   again, which is what the values were written for. */
 
 .card {
   padding: var(--flow-loose);
@@ -1126,9 +190,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
      11px 的小分区标签用 minor 档就够。 */
   font-weight: var(--weight-minor);
 }
-
-/* 分区标题原本只有右侧一条填充细线，在长页面里扫读时抓不住层级。
-   左侧补一条 accent 竖线当定位锚点。 */
 .section-head::before {
   flex: 0 0 auto;
   width: 2px;
@@ -1145,34 +206,23 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
   padding: var(--flow-tight) var(--flow-base);
   margin-bottom: var(--flow-base);
 }
-
-/* 空状态原本 34px 上下内边距，不在网格上，也跟卡片内边距（20px）对不齐 */
 .empty {
-  gap: var(--flow-base);
   padding: var(--flow-section) var(--flow-loose);
 }
-
-/* ── Stat strips ────────────────────────────────────────────────────────────
-   .stat-grid 有两套定义：global.css:5820 是 gap:14 / padding:14px 18px 的
-   "卡片网格"，console-system.css:252 把它重做成 gap:0 / padding:0、靠
-   .stat-card 之间的 border-left 分隔的"仪器面板"。后者后加载胜出，是有意的
-   设计，所以这里绝不能覆盖 padding/gap，否则分隔线布局会散架。
-   真正偏离网格的只有 margin-bottom:14px 和 border-radius:12px（.card 是 8px）。 */
 .stat-grid {
   margin-bottom: var(--flow-loose);
   border-radius: var(--r-8);
+  box-shadow: none;
+  border-color: transparent;
+  background: transparent;
 }
 
 .stat-label {
   margin-top: var(--flow-hair);
 }
-
-/* stat-card-box 的 10px 14px 两个方向都不在网格上 */
 .stat-card-box {
   padding: var(--flow-tight) var(--flow-base);
 }
-
-/* 680 / 720 都不在 weight-* 令牌体系里 */
 .stat-card-box-label {
   margin-bottom: var(--flow-hair);
   font-weight: var(--weight-minor);
@@ -1182,8 +232,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 .stat-card-box-value {
   font-weight: var(--weight-subhead);
 }
-
-/* 42px 不在 8pt 网格上（40 或 44 才是） */
 .empty-icon {
   width: 40px;
   height: 40px;
@@ -1191,36 +239,5 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 
 .empty-text {
   font-weight: var(--weight-subhead);
-}
-
-/* ── Page-specific card overrides that drifted off the grid ───────────────
-   --console-border-soft 就是 --line-2、--console-surface 就是 --surface
-   （global.css:72/75），所以那些覆盖在颜色上是等价重复，不必动。
-   真正不一致的是圆角和内边距：能力中心用 6px 圆角 + 9px 下内边距，
-   跟全局 8px 卡片对不上。 */
-.capability-center .card {
-  border-radius: var(--r-8);
-}
-.capability-center .card-title {
-  padding-bottom: var(--flow-tight);
-}
-/* Configuration cards retain their natural height; the containing panels scroll. */
-.settings-page .provider-sidebar .provider-card {
-  flex: 0 0 auto;
-  height: auto;
-  min-height: 92px;
-  padding: var(--space-3);
-  display: block;
-  overflow: visible;
-}
-.settings-page .settings-form-panel { min-width: 0; container-type: inline-size; }
-.settings-page .settings-row-grid { align-items: stretch; margin-bottom: var(--space-4); }
-.settings-page .settings-row-grid .ui-form-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
-.settings-page .settings-row-grid .ui-form-control { margin-top: auto; }
-.settings-page .settings-row-compact { display: grid; gap: var(--space-4); padding-block: var(--space-4); }
-.settings-page .settings-actions { position: static; margin: var(--space-4) 0; padding: var(--space-4) 0; }
-@container (max-width: 560px) {
-  .settings-row-grid { grid-template-columns: minmax(0, 1fr); }
-  .settings-form-header { flex-wrap: wrap; }
 }
 }

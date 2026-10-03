@@ -48,7 +48,7 @@ export type NodeRuntimeStatus = "ok" | "warning" | "error" | "unknown";
 /**
  * Cytoscape paints to a canvas and cannot resolve CSS custom properties, so the
  * product's semantic colours are mirrored here as literals. This is the only
- * place allowed to duplicate them — keep in sync with `styles/global.css`
+ * place allowed to duplicate them — keep in sync with `styles/tokens.css`
  * (`:root` and `[data-theme="dark"]`). The values used to be a second palette
  * (Tailwind emerald/amber/red plus blue for selection), which is exactly the
  * "second brand colour" the design rules forbid.
@@ -72,7 +72,7 @@ export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, strin
 }
 
 /** Transient canvas feedback: selection, drag-to-connect, alignment guides. */
-export const CANVAS_ACCENT = { light: "#0f7773", dark: "#72c3ba" };
+export const CANVAS_ACCENT = { light: "#0f7773", dark: "#7cc9bc" };
 /** Group containers are structure, not signal: accent-soft fill, hairline border. */
 export const CANVAS_GROUP = {
   light: { fill: "#f8fafc", border: "#cbd5e1", text: "#475569" },

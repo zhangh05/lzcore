@@ -1,0 +1,162 @@
+/* forms owns this component surface; cascade layers stay unchanged. */
+
+@layer base {
+
+.input:focus-visible,
+textarea.input:focus-visible,
+select.input:focus-visible,
+.wb-input:focus-visible,
+.wb-send:focus-visible,
+.collapse-btn:focus-visible,
+.theme-toggle:focus-visible,
+.app-nav-item:focus-visible,
+.list-item:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: 1px;
+  box-shadow: var(--shadow-focus);
+}
+
+.input,
+textarea.input,
+select.input {
+  width: 100%;
+  padding: 0 11px;
+  outline: 0;
+}
+
+.input:focus,
+textarea.input:focus,
+select.input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
+}
+
+.input::placeholder,
+textarea.input::placeholder {
+  color: var(--text-4);
+}
+
+.ui-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ui-form-label {
+  display: block;
+  line-height: 1.4;
+}
+
+.ui-form-required {
+  color: var(--danger);
+}
+
+.ui-form-hint {
+  color: var(--text-4);
+  font-size: var(--fs-12);
+  line-height: 1.45;
+}
+
+.ui-form-error {
+  color: var(--danger);
+  font-size: var(--fs-12);
+  line-height: 1.45;
+}
+
+.ui-form-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-8);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.segmented button {
+  height: 26px;
+  padding: 0 10px;
+  color: var(--text-3);
+  border-radius: var(--r-6);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-label);
+  transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segmented button.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  font-weight: var(--weight-heading);
+}
+
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+
+.toggle::before {
+  width: 34px;
+  height: 20px;
+  content: "";
+  background: var(--surface-3);
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-pill);
+  transition: background var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+.toggle::after {
+  position: absolute;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  content: "";
+  background: var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform var(--dur-2) var(--ease-snap), background var(--dur-2) var(--ease);
+}
+
+.toggle.on::before {
+  background: var(--lz-primary, var(--accent));
+  border-color: var(--lz-primary, var(--accent));
+  box-shadow: 0 0 0 3px var(--lz-primary-glow, color-mix(in srgb, var(--accent) 18%, transparent));
+}
+
+.toggle.on::after {
+  transform: translateX(14px);
+  background: var(--accent-text);
+}
+.input-xs { height: 22px; font-size: var(--fs-12); width: 100%; }
+
+.select-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-12);
+  color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.select-all input {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+}

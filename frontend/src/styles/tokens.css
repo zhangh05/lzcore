@@ -1,30 +1,34 @@
 /* Product tokens: themes, spacing, type, controls and semantic outcomes. */
 @layer base {
 :root {
+  --weight-body: 400;
+  --field-border: #7d9189;
+  --scroll-thumb: color-mix(in srgb, var(--text-3) 42%, transparent);
+  --scroll-thumb-hover: var(--text-3);
+  --canvas-surface: var(--surface);
+  --surface-rail: var(--surface-2);
+}
+[data-theme="dark"] { --field-border: #657b71; }
+:root {
   color-scheme: light;
 
-  /* Design System 3.0 — calm, evidence-led operations workspace. */
-  --bg: #f6f8f7;
+  /* Product palette: neutral surfaces, one accent and distinct outcomes. */
+  --bg: #f4f7f6;
   --surface: #ffffff;
-  --surface-2: #fafcfb;
-  --surface-3: #f0f4f2;
-  --overlay: rgba(16, 24, 40, 0.42);
+  --surface-2: #f8faf9;
+  --surface-3: #eef3f1;
+  --overlay: rgba(16, 24, 28, 0.36);
 
   --text: #172326;
   --text-1: var(--text);
   --text-2: #334348;
-  /* The two muted levels used to sit 0.3 contrast apart (4.68 / 4.36 on
-     white), close enough that nobody could tell them apart, and the lighter of
-     the two was under WCAG AA for the 10–11px text it carries. They are
-     re-spaced here: --text-4 takes the old --text-3 value and --text-3 moves
-     down, so both clear 4.5 on white and on --surface-2 and the step between
-     them is visible. 72 element classes across 11 routes depended on this. */
-  --text-3: #5d6b6f;
-  --text-4: #66777b;
+  /* Text levels clear 4.5:1 on the four neutral product surfaces. */
+  --text-3: #52655d;
+  --text-4: #60716a;
 
-  --line: #d7e1de;
-  --line-2: #e7ecea;
-  --line-3: #b8c7c3;
+  --line: #d3deda;
+  --line-2: #e3ebe7;
+  --line-3: #a4b5af;
 
   --accent: #0f7773;
   --accent-2: #085b59;
@@ -50,14 +54,14 @@
   --info-text: #ffffff;
   --surface-hover: #f0f5f3;
   --surface-selected: #e4efec;
-  --field: #fcfdfc;
+  --field: #ffffff;
   --focus-ring: #0f7778;
   --focus-ring-shadow: rgba(15, 119, 120, 0.18);
   --message-assistant: #fcfdfc;
   --message-assistant-border: #e3ebe8;
   --message-user: #eaf3f0;
   --message-user-border: #d2e3dc;
-  --shadow-composer: 0 10px 28px rgba(28, 48, 48, 0.06);
+  --shadow-composer: 0 4px 16px rgba(28, 48, 48, 0.05);
 
   --console-canvas: var(--bg);
   --console-surface: var(--surface);
@@ -76,9 +80,9 @@
   --lz-primary-glow: rgba(15, 119, 115, 0.16);
   --lz-surface-glass: var(--surface);
   --lz-surface-glass-border: var(--line-2);
-  --lz-surface-dock: #ffffff;
-  --lz-shadow-ambient: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
-  --lz-shadow-dock: 0 16px 36px -4px rgba(15, 23, 42, 0.12), 0 6px 16px -2px rgba(15, 23, 42, 0.06);
+  --lz-surface-dock: var(--surface);
+  --lz-shadow-ambient: var(--shadow-sm);
+  --lz-shadow-dock: var(--shadow-menu);
   --lz-glow-ok: rgba(20, 122, 85, 0.18);
   --lz-glow-warn: rgba(161, 98, 7, 0.18);
   --lz-glow-err: rgba(189, 48, 64, 0.18);
@@ -122,7 +126,7 @@
   --shadow-md: 0 6px 16px -2px rgba(16, 24, 40, 0.08), 0 2px 6px -1px rgba(16, 24, 40, 0.04);
   --shadow-lg: 0 14px 30px -4px rgba(16, 24, 40, 0.12), 0 4px 12px -2px rgba(16, 24, 40, 0.06);
   --shadow-float: 0 20px 42px -6px rgba(16, 24, 40, 0.16), 0 8px 18px -4px rgba(16, 24, 40, 0.08);
-  --shadow-card: 0 1px 3px 0 rgba(16, 24, 40, 0.04), 0 1px 2px -1px rgba(16, 24, 40, 0.03);
+  --shadow-card: none;
   --shadow-menu: 0 18px 48px rgba(16, 24, 40, 0.14), 0 2px 10px rgba(16, 24, 40, 0.08);
   --shadow-focus: 0 0 0 2px var(--focus-ring-shadow);
 
@@ -138,7 +142,7 @@
   --h-control-compact: 30px;
   --h-touch: 44px;
   --weight-heading: 600;
-  --weight-label: 600;
+  --weight-label: 500;
   --focus-width: 2px;
 
   --ease: cubic-bezier(0.2, 0, 0, 1);
@@ -214,21 +218,21 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0e141b;
-  --surface: #141b24;
-  --surface-2: #101821;
-  --surface-3: #0b1118;
-  --overlay: rgba(0, 0, 0, 0.62);
-  --text: #f0f4f8;
-  --text-2: #c8d4e0;
-  --text-3: #8fa0b5;
-  --text-4: #6d7e93;
-  --line: #24303d;
-  --line-2: #1b2530;
-  --line-3: #324254;
-  --accent: #72c3ba;
-  --accent-2: #9ad9d1;
-  --accent-soft: #173633;
+  --bg: #111719;
+  --surface: #181f22;
+  --surface-2: #141b1e;
+  --surface-3: #202a2e;
+  --overlay: rgba(0, 0, 0, 0.48);
+  --text: #edf3f2;
+  --text-2: #ccd8d5;
+  --text-3: #a5b5b0;
+  --text-4: #91a39d;
+  --line: #35433e;
+  --line-2: #29362f;
+  --line-3: #63766e;
+  --accent: #7cc9bc;
+  --accent-2: #a2ded2;
+  --accent-soft: #203c35;
   --accent-text: #09111a;
   --ok: #77ca9c;
   --ok-soft: #173526;
@@ -242,16 +246,16 @@
   --info: #80badc;
   --info-soft: #183044;
   --info-text: #09111a;
-  --surface-hover: #18222b;
-  --surface-selected: #173238;
-  --field: #111a20;
+  --surface-hover: #202b27;
+  --surface-selected: #203c35;
+  --field: #181f22;
   --focus-ring: #8dd1cf;
   --focus-ring-shadow: rgba(141, 209, 207, 0.22);
   --message-assistant: #151e20;
   --message-assistant-border: #2a3839;
-  --message-user: #173438;
-  --message-user-border: #2d5b5c;
-  --shadow-composer: 0 10px 28px rgba(0, 0, 0, 0.22);
+  --message-user: #203c35;
+  --message-user-border: #365a4f;
+  --shadow-composer: 0 4px 16px rgba(0, 0, 0, 0.12);
   --region-purple: #c084fc;
   --region-purple-soft: #3b1f52;
   --region-amber: #e2ad4d;
@@ -264,11 +268,11 @@
   --lz-primary-hover: var(--accent-2);
   --lz-primary-soft: var(--accent-soft);
   --lz-primary-glow: rgba(114, 195, 186, 0.22);
-  --lz-surface-glass: rgba(20, 27, 36, 0.85);
-  --lz-surface-glass-border: rgba(255, 255, 255, 0.08);
-  --lz-surface-dock: #141b24;
-  --lz-shadow-ambient: 0 4px 20px -2px rgba(0, 0, 0, 0.45);
-  --lz-shadow-dock: 0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --lz-surface-glass: var(--surface);
+  --lz-surface-glass-border: var(--line-2);
+  --lz-surface-dock: var(--surface);
+  --lz-shadow-ambient: var(--shadow-sm);
+  --lz-shadow-dock: var(--shadow-menu);
   --lz-glow-ok: rgba(119, 202, 156, 0.25);
   --lz-glow-warn: rgba(226, 173, 77, 0.25);
   --lz-glow-err: rgba(239, 113, 128, 0.25);
@@ -276,8 +280,53 @@
   --shadow-sm: 0 2px 6px -1px rgba(0, 0, 0, 0.45), 0 1px 3px -1px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 6px 16px -2px rgba(0, 0, 0, 0.55), 0 2px 6px -1px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 14px 30px -4px rgba(0, 0, 0, 0.65), 0 4px 12px -2px rgba(0, 0, 0, 0.4);
-  --shadow-float: 0 20px 42px -6px rgba(0, 0, 0, 0.75), 0 8px 18px -4px rgba(0, 0, 0, 0.5);
-  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.35);
+  --shadow-float: 0 16px 40px rgba(0, 0, 0, 0.3);
+  --shadow-card: none;
+}
+:root {
+  /* ── Vertical rhythm ───────────────────────────────────────────────────
+     One 4px-based scale replaces the off-grid spacing scattered across the
+     codebase. Name by role, not by size: the role is what should be stable. */
+  --flow-hair: 4px; /* between list items, inline marker to text */
+  --flow-tight: 8px; /* elements inside one group */
+  --flow-base: 12px; /* between paragraphs */
+  --flow-loose: 20px; /* above a minor heading */
+  --flow-block: 28px; /* above a major heading, between blocks */
+  --flow-section: 40px; /* between page-level sections */
+
+  /* ── Line height ───────────────────────────────────────────────────────
+     Chinese text needs more leading than Latin: 1.72 on a 14px base gives a
+     ~24px line box, which keeps dense CJK glyphs from touching. */
+  --lh-display: 1.24; /* page title */
+  --lh-heading: 1.34; /* content heading */
+  --lh-body: 1.72; /* body copy — shared by paragraphs AND list items so the
+                      two never drift apart again */
+  --lh-compact: 1.45; /* table cells, chips, short labels */
+
+  /* ── Weight ────────────────────────────────────────────────────────────
+     The heading block, the page title and table headers used to render at
+     720 / 740 / 760 respectively. Three values, no intent behind any of them. */
+  --weight-display: 600; /* page and document titles */
+  --weight-subhead: 600; /* h3-h6, table headers */
+  --weight-minor: 500; /* kickers, meta labels */
+
+  /* ── Letter spacing ────────────────────────────────────────────────────
+     Negative tracking is a Latin display convention. Applied to CJK it pushes
+     glyphs into each other, so content tracking is explicitly zero. */
+  --tracking-cjk: 0;
+  --tracking-caps: 0.04em; /* uppercase Latin labels only */
+
+  /* ── Page gutter ───────────────────────────────────────────────────────
+     The page header used 26px and the page body 24px, so every page title sat
+     2px off the content column it was labelling. One gutter, both surfaces. */
+  --page-gutter: 24px;
+}
+:root {
+  --meta-size: 11.5px;
+  --meta-label-size: 10px;
+  --meta-tracking: 0.02em;
+  --meta-label-tracking: 0.08em;
+  --meta-color: var(--text-4);
 }
 
 }

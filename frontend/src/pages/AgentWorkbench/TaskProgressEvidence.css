@@ -1,0 +1,381 @@
+/* TaskProgressEvidence owns this component surface; cascade layers stay unchanged. */
+
+@layer workbench {
+
+.pulse-radar {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: radar-pulse 1.4s ease-out infinite;
+}
+.task-in-flight-card {
+  background: var(--accent-soft);
+  border: 0;
+  border-left: 2px solid var(--accent);
+  border-radius: var(--r-8);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.task-in-flight-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.in-flight-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-weight: var(--weight-heading);
+}
+
+.in-flight-phase {
+  color: var(--text-3);
+  font-weight: var(--weight-label);
+}
+
+.task-in-flight-tool {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.in-flight-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-soft) 80%, var(--surface));
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.in-flight-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  min-width: 0;
+}
+
+.in-flight-info strong {
+  color: var(--text);
+  font-weight: var(--weight-heading);
+}
+
+.in-flight-info span {
+  color: var(--text-4);
+}
+
+.in-flight-info small {
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.task-in-flight-note {
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.live-scan-track {
+  height: 2px;
+  background: var(--line-2);
+  border-radius: 2px;
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+  margin-top: 2px;
+}
+
+.live-scan-bar {
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: live-scan-slide 1.5s ease-in-out infinite;
+}
+
+.task-evidence-list {
+  display: grid;
+  margin-top: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-8);
+}
+
+.task-evidence {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 20px;
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-2);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.task-evidence:hover {
+  background: var(--surface-hover);
+}
+
+.task-evidence:last-child { border-bottom: 0; }
+
+.task-evidence-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--accent);
+  background: var(--surface-hover);
+  border-radius: 6px;
+}
+
+.task-evidence-meta {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.task-evidence-meta strong {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: var(--weight-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-evidence-meta span,
+.task-evidence-meta small {
+  overflow: hidden;
+  color: var(--text-4);
+  font-size: 10px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-evidence-status {
+  color: var(--text-4) !important;
+  text-align: center;
+  font-size: 11px;
+}
+
+.task-evidence.done .task-evidence-status { color: var(--ok) !important; }
+.task-evidence.running .task-evidence-status { color: var(--accent) !important; }
+.task-evidence.failed .task-evidence-status { color: var(--danger) !important; }
+.task-footprint-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footprint-badge {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-weight: var(--weight-heading);
+}
+
+.footprint-tip {
+  font-size: 10px;
+  color: var(--text-4);
+  font-weight: var(--weight-body);
+}
+
+.task-footprint-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-footprint-card {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.task-footprint-card:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 25%, var(--surface));
+  transform: none;
+  box-shadow: none;
+}
+
+.task-footprint-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.footprint-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.footprint-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.footprint-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.footprint-card-seq {
+  color: var(--text-4);
+  font-size: 10px;
+  font-weight: var(--weight-heading);
+  font-family: var(--font-mono, monospace);
+}
+
+.footprint-card-title-row strong {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: var(--weight-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footprint-card-source {
+  font-size: 10px;
+  color: var(--text-4);
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.footprint-card-summary {
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footprint-card-hint {
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+.footprint-card-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footprint-status-tag {
+  font-size: 10px;
+  font-weight: var(--weight-heading);
+  padding: 1px 6px;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+
+.footprint-status-tag.done {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok-soft) 60%, var(--surface));
+}
+
+.footprint-status-tag.running {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface));
+}
+
+.footprint-status-tag.failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 60%, var(--surface));
+}
+
+.footprint-status-tag.unknown {
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+.footprint-jump-icon {
+  color: var(--text-4);
+  opacity: 0.6;
+  transition: all 120ms ease;
+}
+
+.task-footprint-card:hover .footprint-jump-icon {
+  color: var(--accent);
+  opacity: 1;
+  transform: none;
+}
+
+.task-footprint-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: var(--space-2) 0;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.task-footprint-empty.is-waiting {
+  padding: var(--space-2) 0;
+  border-style: none;
+  border-color: var(--line-2);
+}
+
+.footprint-empty-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.footprint-empty-text strong {
+  display: block;
+  color: var(--text-2);
+  margin-bottom: 2px;
+}
+
+.footprint-empty-text p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-4);
+  line-height: 1.4;
+}
+.task-in-flight-header { flex-wrap: wrap; gap: var(--space-2); align-items: flex-start; }
+.task-in-flight-note, .in-flight-info { overflow-wrap: anywhere; }
+}

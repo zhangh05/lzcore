@@ -1,0 +1,237 @@
+/* TaskProgressPhases owns this component surface; cascade layers stay unchanged. */
+
+@layer workbench {
+.task-phase-list {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.task-stepper-item {
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.task-stepper-item.is-last {
+  padding-bottom: 0;
+}
+
+.stepper-spine {
+  position: absolute;
+  left: 15px;
+  top: 28px;
+  bottom: 0;
+  width: 2px;
+  background: var(--line-2);
+  z-index: 1;
+  transition: background-color 200ms ease;
+}
+
+.stepper-spine.is-done {
+  background: var(--ok);
+}
+
+.stepper-spine.is-active {
+  background: linear-gradient(to bottom, var(--accent), var(--line-2));
+}
+
+.task-phase {
+  border-radius: 6px;
+  transition: background-color 140ms ease;
+}
+
+.task-phase-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.task-phase-summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-phase-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.task-phase-index {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: var(--weight-heading);
+  transition: all 180ms ease;
+}
+
+.task-phase.done .task-phase-index {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.task-phase.active .task-phase-index {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--lz-primary-glow);
+}
+
+.task-phase.failed .task-phase-index {
+  color: var(--danger-text);
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.task-phase-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-phase-title-wrap h3 {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: var(--weight-heading);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.task-phase.active .task-phase-title-wrap h3,
+.task-phase.failed .task-phase-title-wrap h3 {
+  color: var(--text);
+  font-weight: var(--weight-heading);
+}
+
+.task-phase-caret {
+  color: var(--text-4);
+  flex-shrink: 0;
+  transition: transform 150ms ease;
+}
+
+details[open] .task-phase-caret {
+  transform: rotate(180deg);
+}
+
+.task-phase-status-tag {
+  font-size: 10px;
+  font-weight: var(--weight-heading);
+  padding: 1px 6px;
+  border-radius: 999px;
+  line-height: 1.3;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.task-phase-status-tag.done {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok-soft) 62%, var(--surface));
+}
+
+.task-phase-status-tag.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 62%, var(--surface));
+}
+
+.task-phase-status-tag.failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 62%, var(--surface));
+}
+
+.task-phase-status-tag.idle,
+.task-phase-status-tag.pending {
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+.task-phase-content {
+  min-width: 0;
+  padding: 4px 4px 10px 38px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.task-phase-content > p {
+  margin: 0 0 8px;
+}
+.task-gantt-section {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-gantt-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-2);
+  gap: 2px;
+}
+
+.task-gantt-segment {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 200ms ease;
+}
+
+.task-gantt-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.gantt-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-name {
+  color: var(--text-2);
+  flex: 1;
+  white-space: nowrap;
+}
+
+.legend-val {
+  color: var(--text-4);
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .task-progress-header, .task-phase-list, .task-progress-footer { padding-inline: 16px; }
+}
+}
