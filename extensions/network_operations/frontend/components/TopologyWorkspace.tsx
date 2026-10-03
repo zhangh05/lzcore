@@ -2046,6 +2046,9 @@ export default function TopologyWorkspace({
    */
   const deepLinkTopologyRef = useRef(false);
   const deepLinkNodeRef = useRef(false);
+  // Only consume the incoming node link. Selection updates the URL too;
+  // rereading that URL after a save used to schedule an unsolicited refocus.
+  const incomingNodeRef = useRef(typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("node"));
   useEffect(() => {
     if (deepLinkTopologyRef.current || !topologies.length) return;
     const wanted = new URLSearchParams(window.location.search).get("topology");
@@ -2053,7 +2056,7 @@ export default function TopologyWorkspace({
     deepLinkTopologyRef.current = true;
   }, [topologies]);
   useEffect(() => {
-    const nodeId = new URLSearchParams(window.location.search).get("node");
+    const nodeId = incomingNodeRef.current;
     if (!nodeId || !activeTopology || deepLinkNodeRef.current) return;
     if (!activeTopology.nodes.some((node) => node.node_id === nodeId)) return;
     deepLinkNodeRef.current = true;

@@ -286,6 +286,18 @@ def run(exe: Path, mode: str, output: Path):
         if not report.exists() or proc.returncode:
             for log in (data/'logs').glob('desktop.log*'):
                 print(log.read_text(encoding='utf-8',errors='replace')[-15000:])
+            if os.name == 'nt' and proc.returncode:
+                # A windowed EXE has no console for CLR failures. Keep the
+                # corresponding Windows event, without accepting a bad exit.
+                diagnostic = subprocess.run([
+                    'powershell.exe', '-NoProfile', '-Command',
+                    "Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue | "
+                    "Where-Object { $_.ProviderName -in @('.NET Runtime','Application Error') -and $_.Message -match 'lzcore\\.exe' } | "
+                    "Select-Object TimeCreated,ProviderName,Message | ConvertTo-Json -Depth 3",
+                ], capture_output=True, text=True, errors='replace', timeout=20)
+                details = diagnostic.stdout + diagnostic.stderr
+                (output/'native-errors.txt').write_text(details, encoding='utf-8')
+                print(details)
     (output/'result.json').write_text(json.dumps({'ok':True,'mode':mode,'exe':str(exe),'platform':os.name,'data':str(data)}),encoding='utf-8')
     return data
 

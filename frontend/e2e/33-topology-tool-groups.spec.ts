@@ -210,3 +210,26 @@ test('33f. click jitter does not start a drag and a subsequent drag stays respon
   await expect.poll(()=>host.evaluate((el:any)=>el._cyreg.cy.getElementById('b').position().x)).toBeCloseTo(702,0);
   await page.mouse.up();
 });
+
+test('33g. saving a selected-node drag does not replay incoming-link focus or change the next drag viewport',async({page})=>{
+  const host=await drawingPage(page);
+  await host.evaluate((el:any)=>{el._cyreg.cy.getElementById('b').select();});
+  await page.getByRole('button',{name:'收起详情',exact:true}).click();
+  await host.evaluate((el:any)=>{const cy=el._cyreg.cy;cy.stop();cy.zoom(.6);cy.pan({x:20,y:20});});
+  const box=(await host.boundingBox())!;
+  let point=await host.evaluate((el:any)=>el._cyreg.cy.getElementById('b').renderedPosition());
+  await page.mouse.move(box.x+point.x,box.y+point.y);await page.mouse.down();
+  await page.mouse.move(box.x+point.x+20,box.y+point.y+24);await page.mouse.up();
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect(page.getByRole('button',{name:'已保存',exact:true})).toBeVisible();
+  const before=await host.evaluate((el:any)=>({zoom:el._cyreg.cy.zoom(),...el._cyreg.cy.pan()}));
+  expect(before.zoom).toBe(.6);
+  point=await host.evaluate((el:any)=>el._cyreg.cy.getElementById('b').renderedPosition());
+  await page.mouse.move(box.x+point.x,box.y+point.y);await page.mouse.down();
+  await page.mouse.move(box.x+point.x+8,box.y+point.y+8);
+  // The erroneous incoming-link callback fired 400ms after the preceding
+  // model update and completed its centring/zoom another 230ms later.
+  await page.waitForTimeout(800);
+  expect(await host.evaluate((el:any)=>({zoom:el._cyreg.cy.zoom(),...el._cyreg.cy.pan()}))).toEqual(before);
+  await page.mouse.up();
+});
