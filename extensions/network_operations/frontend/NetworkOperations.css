@@ -12,20 +12,22 @@
   gap: var(--space-3);
   margin: var(--space-3) var(--space-6) 0;
   padding: 8px 10px 8px 14px;
-  border: 1px solid color-mix(in srgb, var(--warn) 26%, transparent);
+  border: 0;
   border-radius: var(--r-8);
-  background: var(--warn-soft);
-  color: var(--warn);
+  background: var(--surface-2);
+  color: var(--text-2);
   font-size: var(--fs-13);
   line-height: 1.5;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   animation: network-notice-appear 0.18s ease-out;
+  border-left: 3px solid var(--warn);
 }
 
 .network-notice.kind-ok {
-  border-color: color-mix(in srgb, var(--ok) 26%, transparent);
-  background: var(--ok-soft);
-  color: var(--ok);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 0;
+  border-left: 3px solid var(--ok);
 }
 
 .network-notice-text {

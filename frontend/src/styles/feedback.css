@@ -90,9 +90,10 @@
 .login-error {
   padding: 9px 10px;
   border-radius: var(--r-6);
-  color: var(--danger);
-  background: var(--danger-soft);
+  color: var(--text-2);
+  background: var(--surface-2);
   font-size: var(--fs-12);
+  border-left: 3px solid var(--danger);
 }
 
 .login-submit {
@@ -133,7 +134,7 @@
   margin-bottom: 8px;
   place-items: center;
   color: var(--danger);
-  background: var(--danger-soft);
+  background: var(--surface-2);
   border-radius: var(--r-8);
 }
 
@@ -171,16 +172,17 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border: 1px solid var(--danger);
+  border: 0;
   border-radius: 6px;
-  background: var(--danger-soft);
+  background: var(--surface-2);
   font-size: var(--fs-11);
-  color: var(--danger);
+  color: var(--text-2);
   margin-top: 6px;
+  border-left: 3px solid var(--danger);
 }
 .msg-error-box button {
-  background: var(--danger);
-  color: var(--danger-text);
+  background: transparent;
+  color: var(--danger);
   border: none;
   border-radius: 4px;
   padding: 2px 8px;

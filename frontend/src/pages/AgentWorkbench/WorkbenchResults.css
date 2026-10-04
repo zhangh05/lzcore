@@ -20,6 +20,9 @@
   margin: 8px 0;
   color: var(--text-2);
   font-size: var(--fs-12);
+  background: var(--surface-2);
+  border: 0;
+  border-left: 3px solid var(--unknown);
 }
 .unknown-outcome-alert strong { color: var(--unknown); }
 .unknown-outcome-alert p { margin: 0; line-height: 1.55; }
@@ -150,10 +153,10 @@
 .result-inline-details {
   padding-top: 2px;
 }
-.cognitive-summary { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; padding: 8px 10px; color: var(--text-2); background: color-mix(in srgb, var(--accent-soft) 56%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line-2)); border-radius: 7px; font-size: var(--fs-11); }
+.cognitive-summary { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; padding: 8px 10px; color: var(--text-2); background: var(--surface-2); border: 0; border-radius: 7px; font-size: var(--fs-11); border-left: 3px solid var(--accent); }
 .cognitive-summary-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cognitive-summary-outcome { flex: 0 0 auto; margin-left: auto; color: var(--text-3); font-size: var(--fs-10); text-transform: capitalize; }
-[data-theme="dark"] .cognitive-summary { background: color-mix(in srgb, var(--accent-soft) 38%, transparent); }
+[data-theme="dark"] .cognitive-summary { background: var(--surface-2); }
 }
 @layer workbench {
 
@@ -165,13 +168,15 @@
 .approval-card {
   padding: 18px 20px;
   color: var(--text);
-  background: color-mix(in srgb, var(--surface) 95%, var(--accent) 5%);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line-2));
-  border-left: 4px solid var(--accent);
+  background: var(--surface-2);
+  border: 0;
+  border-left: 3px solid var(--line-2);
   border-radius: var(--r-12);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   transition: all var(--dur-2) var(--ease);
 }
+
+.approval-card[data-pending="true"] { border-left-color: var(--warn); }
 
 .approval-card header {
   display: flex;
@@ -251,9 +256,9 @@
 .unknown-outcome-alert {
   padding: 14px 16px;
   border-radius: 10px;
-  border: 1px solid var(--line);
+  border: 0;
   border-left: 3px solid var(--unknown);
-  background: var(--unknown-soft);
+  background: var(--surface-2);
   margin-bottom: 10px;
 }
 
@@ -284,7 +289,7 @@
   color: var(--text-2);
   font-size: 12px;
   font-weight: var(--weight-label);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   cursor: pointer;
   transition: all var(--dur-2) var(--ease);
 }

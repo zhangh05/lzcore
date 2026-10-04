@@ -59,11 +59,12 @@
 .operations-alert {
   margin: 12px 24px 0;
   padding: 10px 14px;
-  color: var(--danger);
-  background: var(--danger-soft);
+  color: var(--text-2);
+  background: var(--surface-2);
   border-radius: var(--r-6);
   font-size: var(--fs-13);
-  font-weight: var(--weight-heading);
+  font-weight: var(--weight-body);
+  border-left: 3px solid var(--danger);
 }
 
 .operations-detail-header {
@@ -253,7 +254,7 @@
 .job-card{
   border: 1px solid var(--console-border-soft);
   border-radius: var(--r-8);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   transition: all var(--dur-2) var(--ease);
 }
 .job-card { width: 100%; margin: 0; background: transparent; }
@@ -265,7 +266,7 @@
 .job-card.selected {
   background: var(--console-action-soft);
   border-color: color-mix(in srgb, var(--console-action) 34%, var(--console-border));
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 .job-card.selected::before { width: 2px; background: var(--console-action); }
 .job-card-head { min-height: 28px; }
@@ -373,9 +374,10 @@
 .operations-page .fail-reason-body { border-top-color: var(--console-border-soft); }
 .operations-page .operations-alert {
   margin: 0 0 12px;
-  border-color: color-mix(in srgb, var(--warning) 40%, var(--console-border));
   border-radius: var(--r-4);
   box-shadow: none;
+  border: 0;
+  border-left: 3px solid var(--danger);
 }
 .operations-page .operations-empty { border-color: var(--console-border-soft); border-radius: var(--r-6); background: var(--console-muted); }
 

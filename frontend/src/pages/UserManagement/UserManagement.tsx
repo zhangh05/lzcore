@@ -142,7 +142,7 @@ export function UserManagement() {
   return <div className="page user-management">
     <header className="page-header ui-page-header">
       <div><h1>用户与权限 <span>User Access</span></h1><p className="subtitle">由管理员统一创建普通用户，并控制角色和账户状态。</p></div>
-      <button className="btn primary" onClick={startCreate}>新建用户</button>
+      <button className={`btn${!creating && !selectedUsername ? " primary" : ""}`} onClick={startCreate}>新建用户</button>
     </header>
     <div className="page-body">
       {error ? <div className="extension-center-error" role="alert">{error}</div> : null}

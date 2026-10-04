@@ -53,6 +53,12 @@
   box-shadow: none;
   transform: none;
 }
+.btn.selected {
+  color: var(--accent);
+  background: var(--surface-selected);
+  border-color: var(--accent);
+}
+.btn.selected:hover:not(:disabled) { color: var(--accent); background: var(--surface-hover); border-color: var(--accent); }
 .btn.ghost {
   border-color: transparent;
   background: transparent;
@@ -70,29 +76,33 @@
 .btn-xs-compact { height: var(--h-control-compact); padding: 0 4px; font-size: var(--fs-12); }
 .btn-info,
 .btn-info.btn {
-  color: var(--info-text);
-  background: var(--info);
-  border-color: var(--info);
+  color: var(--text-2);
+  background: transparent;
+  border-color: var(--line);
 }
 .btn-info:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--info) 86%, #000);
-  border-color: color-mix(in srgb, var(--info) 86%, #000);
+  background: var(--surface-hover);
+  border-color: var(--line-3);
 }
 .btn-info:active:not(:disabled) {
-  background: color-mix(in srgb, var(--info) 76%, #000);
-  border-color: color-mix(in srgb, var(--info) 76%, #000);
+  background: var(--surface-3);
+  border-color: var(--line-3);
 }
 .btn.sm { height: var(--h-control-compact); border-radius: var(--r-4); padding: 0 9px; font-size: var(--fs-13); }
 .btn.icon-only { width: 32px; padding: 0; }
-.btn.icon-only.sm { width: 26px; }
+.btn.icon-only.sm { width: 32px; min-height: 32px; }
 .btn.danger,
-.btn.danger-ghost { color: var(--danger); }
-.btn.danger-ghost { background: transparent; border-color: transparent; }
+.btn.danger-ghost { color: var(--danger); background: transparent; border-color: transparent; }
 .btn.danger:hover:not(:disabled),
 .btn.danger-ghost:hover:not(:disabled) {
+  color: var(--danger);
   background: var(--danger-soft);
-  border-color: rgba(189, 48, 64, 0.24);
+  border-color: color-mix(in srgb, var(--danger) 24%, transparent);
 }
+.btn.danger-confirm { color: var(--danger-text); background: var(--danger); border-color: var(--danger); }
+.btn.danger-confirm:hover:not(:disabled) { color: var(--danger-text); background: color-mix(in srgb, var(--danger) 88%, #000); border-color: transparent; }
+.btn.primary:disabled,
+.btn.danger-confirm:disabled { color: var(--text-3); background: var(--surface-3); border-color: transparent; cursor: not-allowed; }
 .btn.danger:disabled,
 .btn.danger-ghost:disabled {
   color: var(--text-4);

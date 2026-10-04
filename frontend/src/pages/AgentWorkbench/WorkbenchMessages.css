@@ -280,7 +280,7 @@
   background: var(--message-user);
   border: 1px solid var(--message-user-border);
   border-radius: var(--r-12) var(--r-12) var(--r-4) var(--r-12);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   font-size: 14px;
   font-weight: var(--weight-label);
   line-height: 1.6;
@@ -348,7 +348,7 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r-8);
   overflow: hidden;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
 
@@ -358,7 +358,7 @@
 
 .stage-output[open] {
   border-color: var(--line);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .stage-output > summary {

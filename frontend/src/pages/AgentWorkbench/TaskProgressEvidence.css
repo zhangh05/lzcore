@@ -10,9 +10,9 @@
   animation: radar-pulse 1.4s ease-out infinite;
 }
 .task-in-flight-card {
-  background: var(--accent-soft);
+  background: var(--surface-2);
   border: 0;
-  border-left: 2px solid var(--accent);
+  border-left: 3px solid var(--accent);
   border-radius: var(--r-8);
   padding: 12px 14px;
   display: flex;
@@ -52,7 +52,7 @@
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--accent-soft) 80%, var(--surface));
+  background: var(--surface);
   color: var(--accent);
   display: grid;
   place-items: center;

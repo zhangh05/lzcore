@@ -87,6 +87,7 @@
 }
 .kl-collapsible-card {
   padding: 0;
+  border: 0;
 }
 .kl-collapsible-card > .kl-collapsible-summary {
   display: flex;
@@ -398,12 +399,12 @@
   font-size: var(--fs-11);
   font-weight: var(--weight-minor);
 }
-.kl-stat--ok { background: color-mix(in srgb, var(--ok-soft) 45%, var(--surface)); }
+.kl-stat--ok { background: var(--surface-2); border-left: 3px solid var(--ok); }
 .kl-stat--ok .stat-value { color: var(--ok); }
-.kl-stat--warn { background: color-mix(in srgb, var(--warn-soft) 45%, var(--surface)); }
+.kl-stat--warn { background: var(--surface-2); border-left: 3px solid var(--warn); }
 .kl-stat--warn .stat-value { color: var(--warn); }
-.kl-stat--accent { background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.kl-stat--accent { background: var(--surface-2); border-left: 3px solid var(--accent); }
 .kl-stat--accent .stat-value { color: var(--accent); }
-.kl-stat--danger { background: color-mix(in srgb, var(--danger-soft) 45%, var(--surface)); }
+.kl-stat--danger { background: var(--surface-2); border-left: 3px solid var(--danger); }
 .kl-stat--danger .stat-value { color: var(--danger); }
 }

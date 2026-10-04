@@ -35,9 +35,10 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  color: var(--warn);
-  background: var(--warn-soft);
+  color: var(--text-2);
+  background: var(--surface-2);
   font-size: var(--fs-12);
+  border-left: 3px solid var(--warn);
 }
 
 .wb-retry-bar button {
@@ -264,6 +265,9 @@
 .wb-retry-bar {
   padding: 10px 22px;
   border-top: 1px solid color-mix(in srgb, var(--warn) 24%, var(--line));
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-left: 3px solid var(--warn);
 }
 
 .wb-retry-bar button {
@@ -380,12 +384,12 @@
 @keyframes tool-card-flash {
   0% {
     outline: 2px solid var(--accent);
-    box-shadow: 0 0 16px var(--accent-soft);
+    box-shadow: none;
     background: color-mix(in srgb, var(--accent-soft) 25%, var(--surface));
   }
   40% {
     outline: 2px solid var(--accent);
-    box-shadow: 0 0 24px var(--accent-soft);
+    box-shadow: none;
     background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
   }
   100% {

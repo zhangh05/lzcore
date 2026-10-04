@@ -63,7 +63,7 @@
 .topology-agent-send-btn:hover:not(:disabled) { filter: brightness(1.08); }
 .topology-agent-send-btn:disabled { background: var(--surface-3); color: var(--text-4); opacity: 1; cursor: not-allowed; }
 .topology-agent-stop-btn { background: color-mix(in srgb, var(--danger-soft) 80%, transparent); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--line)); }
-.topology-agent-stop-btn:hover { background: var(--danger); color: var(--accent-text); border-color: var(--danger); }
+.topology-agent-stop-btn:hover { background: var(--danger); color: var(--danger-text); border-color: var(--danger); }
 .topology-agent-error { padding: 10px 16px; font-size: 11px; }
 .topology-agent-error { color: var(--danger); }
 .topology-agent-error button { padding: 3px; margin-left: 6px; background: transparent; border: 0; color: inherit; text-decoration: underline; }

@@ -50,7 +50,7 @@
   border: 1px solid var(--console-border-soft);
   border-radius: var(--r-8);
   background: var(--console-surface);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 .empty-onboarding .empty-text {
@@ -174,7 +174,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 .card {
   padding: var(--flow-loose);
   margin-bottom: var(--flow-loose);
-  border-color: var(--line-2);
 }
 
 .card-title {
@@ -186,7 +185,7 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 .section-head {
   gap: var(--flow-tight);
   margin-bottom: var(--flow-base);
-  /* 760 不在 weight-* 令牌体系里（display 700 / subhead 650 / minor 620）。
+  /* 标题统一使用 600，控件标签 500，正文 400。
      11px 的小分区标签用 minor 档就够。 */
   font-weight: var(--weight-minor);
 }

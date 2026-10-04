@@ -1,7 +1,7 @@
 /* users foundations. Refinements use the existing declared cascade layers. */
 @layer base {
-.user-management-notice { padding: 10px 14px; margin-bottom: 12px; color: var(--ok); font-size: var(--fs-11); border: 1px solid color-mix(in srgb, var(--ok) 32%, var(--line-2)); border-radius: 7px; background: color-mix(in srgb, var(--ok) 8%, var(--surface)); }
-.user-access-summary { display: grid; grid-template-columns: repeat(2, minmax(105px, 145px)) minmax(280px, 1fr); overflow: hidden; }
+.user-management-notice { padding: 10px 14px; margin-bottom: 12px; color: var(--text-2); font-size: var(--fs-11); border: 0; border-radius: 7px; background: var(--surface-2); border-left: 3px solid var(--ok); }
+.user-access-summary { display: grid; grid-template-columns: repeat(2, minmax(105px, 145px)) minmax(280px, 1fr); overflow: hidden; border: 0; }
 .user-access-summary > div, .user-access-summary article { min-height: 78px; padding: 14px 16px; background: var(--surface); }
 .user-access-summary > div { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
 .user-access-summary > div b { color: var(--text-1); font-size: 22px; }
@@ -23,7 +23,7 @@
 .user-access-list > button > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
 .user-access-list b { overflow: hidden; font-size: var(--fs-12); text-overflow: ellipsis; }
 .user-access-list small { color: var(--text-4); font-size: var(--fs-10); }
-.user-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 13%, transparent); }
+.user-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: none; }
 .user-status-dot.disabled { background: var(--text-4); box-shadow: none; }
 .user-access-editor { min-width: 0; }
 .user-access-placeholder { display: grid; min-height: 500px; place-content: center; color: var(--text-4); text-align: center; }
@@ -110,7 +110,7 @@
   gap: 0;
   margin-bottom: 14px;
   background: var(--console-surface);
-  border: 1px solid var(--console-border-soft);
+  border: 0;
   border-radius: var(--r-6);
 }
 .user-access-summary > *{
@@ -125,7 +125,7 @@
 .user-access-summary > *:last-child{ border-right: 0; }
 
 .user-management .page-header { padding-bottom: 12px; border-bottom: 1px solid var(--console-border-soft); }
-.user-management .user-management-notice { border-color: var(--console-border-soft); border-radius: var(--r-4); background: var(--console-action-soft); box-shadow: none; }
+.user-management .user-management-notice { border-radius: var(--r-4); background: var(--surface-2); box-shadow: none; border: 0; border-left: 3px solid var(--ok); }
 .user-management .user-access-summary > * { color: var(--console-muted-ink); }
 .user-management .user-access-list { padding: 8px; }
 .user-management .user-access-list > button {

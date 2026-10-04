@@ -228,13 +228,15 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 .toast-notification.ok {
-  color: var(--ok-text);
-  background: var(--ok);
+  color: var(--text-2);
+  background: var(--surface);
+  border-left: 3px solid var(--ok);
 }
 
 .toast-notification.err {
-  color: var(--danger-text);
-  background: var(--danger);
+  color: var(--text-2);
+  background: var(--surface);
+  border-left: 3px solid var(--danger);
 }
 .modal-overlay {
   position: fixed;

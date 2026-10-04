@@ -173,7 +173,7 @@ export function MemoryPage() {
             text="暂无记忆数据"
             hint="智能体处理任务时会自动记录重要的决策、偏好和知识。你也可以手动创建记忆。"
             action={
-              <button className="btn primary" onClick={() => setShowCreate(true)}>
+              <button className={`btn${showCreate ? "" : " primary"}`} onClick={() => setShowCreate(true)}>
                 <IconPlus size={14} /> 创建第一条记忆
               </button>
             }
@@ -361,7 +361,7 @@ export function MemoryPage() {
                   {deleteConfirm === e.memory_id && (
                     <div className="memory-delete-confirm">
                       <span>永久删除这条记忆？此操作不可逆。</span>
-                      <button className="btn sm danger" onClick={() => handleDeleteHard(e.memory_id!)}>
+                      <button className="btn sm danger-confirm" onClick={() => handleDeleteHard(e.memory_id!)}>
                         <IconCheck size={11} /> 确认
                       </button>
                       <button className="btn sm ghost" onClick={(ev) => { ev.stopPropagation(); setDeleteConfirm(null); }}>
@@ -394,7 +394,7 @@ export function MemoryPage() {
                       )}
                       {(e.status === "pending" || e.status === "conflict") && e.memory_id && (
                         <div className="actions">
-                          <button className="btn primary sm" onClick={() => void handleReview(e.memory_id!, "confirm")}>
+                          <button className="btn sm" onClick={() => void handleReview(e.memory_id!, "confirm")}>
                             <IconCheck size={12} /> 确认并启用
                           </button>
                           <button className="btn sm" onClick={() => void handleReview(e.memory_id!, "reject")}>

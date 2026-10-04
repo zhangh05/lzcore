@@ -67,7 +67,7 @@ export function ConfirmHost() {
         <div className="row-flex-sm confirm-dialog-actions">
           <Button onClick={onClose} size="sm">{state.cancelLabel ?? "取消"}</Button>
           <Button
-            variant={state.destructive ? "danger" : "primary"}
+            variant={state.destructive ? "danger-confirm" : "primary"}
             size="sm"
             onClick={() => close(true)}
             data-testid="confirm-dialog-confirm"

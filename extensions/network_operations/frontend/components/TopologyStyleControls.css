@@ -156,8 +156,8 @@
 }
 
 .link-width-chip.active {
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--surface-selected);
+  color: var(--accent);
   border-color: var(--accent);
   font-weight: var(--weight-heading);
 }

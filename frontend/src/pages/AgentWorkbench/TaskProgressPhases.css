@@ -87,7 +87,7 @@
   color: var(--accent-text);
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--lz-primary-glow);
+  box-shadow: none;
 }
 
 .task-phase.failed .task-phase-index {

@@ -2888,7 +2888,8 @@ export default function TopologyWorkspace({
   const pinButton = (
     <Button
       size="sm"
-      variant={isPinned ? "primary" : "ghost"}
+      variant={isPinned ? "selected" : "ghost"}
+      aria-pressed={isPinned}
       title={isPinned ? "已固定在右上角 (点击切换为跟随设备)" : "固定到右上角 (避免遮挡画布设备)"}
       aria-label={isPinned ? "已固定在右上角" : "固定到右上角"}
       onClick={() => {
@@ -3169,7 +3170,7 @@ export default function TopologyWorkspace({
               <span className="tool-action-label">{isInspectorOpen ? "收起详情" : "查看详情"}</span>
             </Button>
             <div className="topology-chat-actions" role="group" aria-label="图纸对话">
-            <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "primary" : "default"} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>绘图对话</Button>
+            <Button size="sm" icon={<IconSparkle size={15} />} variant={showAgent ? "selected" : "default"} aria-pressed={showAgent} onClick={() => { setShowAgent((value) => !value); setIsInspectorOpen(false); }}>绘图对话</Button>
             <details className="studio-chat-menu" data-toolbar-menu><summary aria-label="对话选项" title="对话选项"><IconChevronDown size={13} /></summary><div>
             <button
               type="button"
@@ -3199,7 +3200,7 @@ export default function TopologyWorkspace({
             {workspaceMode === "edit" && showEditbar && <div className="studio-secondary-tools" role="group" aria-label="画板与排列">
             <Button
               size="sm"
-              variant={whiteboardActive ? "primary" : "default"}
+              variant={whiteboardActive ? "selected" : "default"}
               icon={<IconPencil size={13} />}
               className="annotation-action"
               aria-label={whiteboardActive ? "关闭画板" : "画板批注"}
@@ -3307,7 +3308,7 @@ export default function TopologyWorkspace({
             </section>
             <Button
               size="sm"
-              variant={isFullscreen ? "primary" : "default"}
+              variant={isFullscreen ? "selected" : "default"}
               icon={isFullscreen ? <IconArrowsIn size={13} /> : <IconExpand size={13} />}
               onClick={handleToggleFullscreen}
               title={isFullscreen ? "退出全屏展示 (Esc / F11)" : "全屏展示拓扑图 (快捷键 F11 / 点击体验沉浸大屏)"}
@@ -3511,7 +3512,7 @@ export default function TopologyWorkspace({
                     <div className="batch-grid">
                       <Button
                         size="sm"
-                        variant="primary"
+                        variant="default"
                         icon={<IconBox size={13} />}
                         onClick={handleOpenCreateZone}
                         title="依据选中设备的坐标范围与呼吸留白，自动计算并生成贴合底框"
@@ -3525,7 +3526,7 @@ export default function TopologyWorkspace({
                 <div className="batch-grid">
                   <Button
                     size="sm"
-                    variant={selectedNodes.length >= 2 ? "primary" : "default"}
+                    variant="default"
                     icon={<IconLock size={13} />}
                     onClick={handleLockSelectedNodes}
                     title="固定选中设备的相对位置，拖动其中任意一台，其他设备跟随同样轨迹移动"

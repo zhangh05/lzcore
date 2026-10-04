@@ -29,7 +29,7 @@
 .network-admin .skill-page { display: grid; gap: var(--space-4); }
 .network-admin .drawing-skill-card .skill-title { display: flex; align-items: center; gap: 6px; }
 .network-admin .drawing-skill-card .skill-title svg { color: var(--accent); flex-shrink: 0; }
-.network-admin .drawing-skill-link { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-6); color: var(--text); background: var(--surface-2); box-shadow: var(--shadow-xs); font-size: var(--fs-12); font-weight: var(--weight-label); text-decoration: none; transition: all 0.15s ease; }
+.network-admin .drawing-skill-link { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-6); color: var(--text); background: var(--surface-2); box-shadow: none; font-size: var(--fs-12); font-weight: var(--weight-label); text-decoration: none; transition: all 0.15s ease; }
 .network-admin .drawing-skill-link:hover { background: var(--surface-3); border-color: var(--accent); color: var(--accent); box-shadow: none; }
 .network-admin .panel-heading { display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; margin: 0; padding: var(--space-4); border-bottom: 1px solid var(--line); }
 .network-admin .record-count { font-size: var(--fs-12); color: var(--text-3); white-space: nowrap; }

@@ -54,7 +54,7 @@ export function DesktopHost() {
   if (!isDesktop()) return null;
   return <ModalShell open={Boolean(panel)} onClose={close} size="sheet" className="desktop-dialog" title={panel === 'close' ? '退出联智中枢' : '桌面设置'} footer={panel === 'close' ? <>
     <Button onClick={close}>返回应用</Button><Button disabled={!info?.tray || busy} onClick={async () => { if (await run('request_exit', 'background')) setPanel(null); }}>后台运行</Button>
-    <Button variant="danger" disabled={busy || (info?.dirty && !discard) || info?.shutdown.status === 'stopping'} onClick={() => { void run('request_exit', force ? 'force' : 'exit', discard); }}>{force ? '确认中断并退出' : '停止任务并退出'}</Button>
+    <Button variant="danger-confirm" disabled={busy || (info?.dirty && !discard) || info?.shutdown.status === 'stopping'} onClick={() => { void run('request_exit', force ? 'force' : 'exit', discard); }}>{force ? '确认中断并退出' : '停止任务并退出'}</Button>
   </> : <Button onClick={close}>完成</Button>}>
     <div className="desktop-dialog-body">
       {message && <p role="status" className="desktop-message">{message}</p>}
@@ -75,7 +75,7 @@ export function DesktopHost() {
           <label><input type="checkbox" checked={credentials} onChange={e => setCredentials(e.target.checked)}/> 将凭据放入加密备份（需要口令）</label>
           <p>普通备份不包含凭据。恢复或迁移会替换当前数据，原数据保留在恢复前目录。请先退出旧版程序。</p>
           <div className="desktop-buttons"><Button disabled={info?.admin === false || busy || Boolean(info?.active_jobs) || Boolean(info?.dirty)} onClick={() => { void run('create_backup', password, credentials); }}>创建备份</Button><Button disabled={info?.admin === false || busy || Boolean(info?.active_jobs) || Boolean(info?.dirty)} onClick={() => { void run('import_backup', password); }}>选择备份</Button><Button disabled={info?.admin === false || busy || Boolean(info?.active_jobs) || Boolean(info?.dirty)} onClick={() => { void run('migrate_data'); }}>迁移旧版数据</Button></div>
-          {info?.restore && <div className="desktop-message"><p>数据已校验并暂存。确认替换当前数据并重启？原数据会保留。</p><Button variant="danger" disabled={info.admin === false || busy || Boolean(info.active_jobs) || info.dirty} onClick={() => { void run('apply_restore'); }}>确认恢复并重启</Button></div>}
+          {info?.restore && <div className="desktop-message"><p>数据已校验并暂存。确认替换当前数据并重启？原数据会保留。</p><Button variant="danger-confirm" disabled={info.admin === false || busy || Boolean(info.active_jobs) || info.dirty} onClick={() => { void run('apply_restore'); }}>确认恢复并重启</Button></div>}
         </section>
         <section><h3>版本与更新</h3><p>v{info?.version} · {info?.commit?.slice(0, 8)} · {info?.mode === 'portable' ? '便携版' : info?.mode === 'installed' ? '安装版' : '源码运行'}</p><p>{info?.signed ? '已签名' : '未签名'} · WebView2 {info?.webview2}</p>
           <div className="desktop-buttons"><Button disabled={busy || ['checking', 'downloading'].includes(info?.update.status || '')} onClick={() => { void run('check_update'); }}>检查更新</Button>{info?.settings.previous_version && <Button disabled={busy} onClick={() => { void run('check_update', true); }}>检查可回退版本</Button>}<Button disabled={info?.admin === false || busy} onClick={() => { void run('export_diagnostics'); }}>导出脱敏诊断</Button></div>

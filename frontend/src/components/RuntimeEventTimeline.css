@@ -16,7 +16,7 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r-8);
   background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   /* v3.9.1: was overflow:hidden, which clipped expanded bodies.
      Keep radius by allowing children to render normally; the rt-list above
      is the scroll container. */
@@ -61,7 +61,7 @@
 /* ── diagnostics ── */
 .rt-diag {
   display: flex; flex-direction: column; gap: 4px; padding: 8px 12px;
-  border-radius: 6px; border: 1px solid var(--warn); background: var(--warn-soft);
+  border-radius: 6px; border: 0; background: var(--surface-2); border-left: 3px solid var(--warn);
 }
 .rt-diag-e { font-size: 12px; color: var(--danger); font-family: "SF Mono", Menlo, monospace; }
 .rt-diag-w { font-size: 12px; color: var(--warn); font-family: "SF Mono", Menlo, monospace; }
@@ -112,7 +112,7 @@
 .rt-step-head {
   display: flex; align-items: center; gap: 7px; padding: 5px 11px;
   border: 1px solid var(--line-2); border-radius: var(--r-6); background: var(--surface-2);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
 .rt-step-head:hover { border-color: var(--line-3); box-shadow: none; }
@@ -134,8 +134,7 @@
    放在 .rt-step-head:hover 之后：两者特异性相同，靠顺序保证
    悬停时未知态不会被 --line-3 覆盖掉。 */
 .rt-step-head.unknown,
-.rt-step-head.unknown:hover {
-  border-color: var(--unknown); background: var(--unknown-soft);
+.rt-step-head.unknown:hover { background: var(--surface-2); border: 0; border-left: 3px solid var(--unknown);
 }
 .rt-step-ok.unknown { color: var(--unknown); }
 /* 失败态此前继承 .rt-step-ok 的 --ok 绿色，于是「失败」旁边是个绿叉。 */
@@ -158,7 +157,7 @@
 .rt-artifacts {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 10px; border: 1px solid var(--line-2); border-radius: var(--r-6);
-  background: var(--surface-2); box-shadow: var(--shadow-xs);
+  background: var(--surface-2); box-shadow: none;
 }
 .rt-art-label { font-size: 11px; font-weight: var(--weight-heading); color: var(--text-3); flex-shrink: 0; }
 
@@ -170,7 +169,7 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r-6);
   background: var(--surface-2);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 .rt-retry-items { display: flex; flex-wrap: wrap; gap: 4px; }
 .rt-retry-chip {
@@ -198,7 +197,7 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r-6);
   background: var(--surface-2);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 .rt-tracking-id {
   font-size: 11px;

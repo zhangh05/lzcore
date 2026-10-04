@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-type ButtonVariant = "default" | "primary" | "ghost" | "danger" | "danger-ghost";
+type ButtonVariant = "default" | "primary" | "selected" | "ghost" | "danger" | "danger-ghost" | "danger-confirm";
 type ButtonSize = "default" | "sm";
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> {

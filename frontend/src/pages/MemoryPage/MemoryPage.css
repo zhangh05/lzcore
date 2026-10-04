@@ -7,12 +7,13 @@
   font-size: 12px;
   line-height: 1.7;
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: 0;
+  border-left: 3px solid var(--text-3);
 }
 
 .memory-gating-box.ok {
-  background: rgba(52, 199, 89, 0.06);
-  border-color: rgba(52, 199, 89, 0.2);
+  background: var(--surface-2);
+  border-color: var(--ok);
 }
 
 .memory-gating-title {
@@ -158,10 +159,12 @@
 .memory-delete-confirm {
   padding: 6px 16px 8px;
   border-top: 1px solid var(--line-2);
-  background: var(--danger-soft, #fde8e8);
+  background: var(--surface-2);
   display: flex;
   align-items: center;
   gap: 8px;
+  border: 0;
+  border-left: 3px solid var(--danger);
 }
 
 .memory-delete-confirm span {
@@ -288,7 +291,7 @@
 }
 .memory-page .memory-form-input,
 .memory-page .memory-form-textarea { border-color: var(--console-border); background: var(--console-surface); }
-.memory-page .memory-delete-confirm { border-color: color-mix(in srgb, var(--danger) 38%, var(--console-border)); border-radius: var(--r-4); box-shadow: none; }
+.memory-page .memory-delete-confirm { border-radius: var(--r-4); box-shadow: none; border: 0; border-left: 3px solid var(--danger); }
 }
 
 @layer pages {

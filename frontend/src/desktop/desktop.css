@@ -10,8 +10,8 @@
   .desktop-dialog-body input[type="checkbox"] { accent-color: var(--accent); }
   .desktop-dialog-body :is(select, input):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   [data-theme="dark"] .desktop-dialog { color-scheme: dark; }
-  .desktop-dialog .btn:not(.primary):not(.danger) { border-color: transparent; background: transparent; }
-  .desktop-dialog .btn:not(.primary):not(.danger):hover:not(:disabled) { background: var(--surface-hover); }
+  .desktop-dialog .btn:not(.primary):not(.danger-confirm) { border-color: transparent; background: transparent; }
+  .desktop-dialog .btn:not(.primary):not(.danger-confirm):hover:not(:disabled) { background: var(--surface-hover); }
   .desktop-dialog .modal-footer { color: var(--text-3); }
   .desktop-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   .desktop-path, .desktop-notes { overflow-wrap: anywhere; white-space: pre-wrap; }

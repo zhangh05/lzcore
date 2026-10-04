@@ -9,9 +9,9 @@
   padding: 0 10px;
   color: var(--text-2);
   background: var(--surface-2);
-  border: 1px solid var(--line-2);
+  border: 0;
   border-radius: var(--r-pill);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   font-size: var(--fs-11);
   font-weight: var(--weight-heading);
   line-height: 1;
@@ -33,7 +33,7 @@
   flex: 0 0 auto;
   background: var(--ok);
   border-radius: 50%;
-  box-shadow: 0 0 4px color-mix(in srgb, currentColor 40%, transparent);
+  box-shadow: none;
 }
 
 .metric-chip .dot.warn,
@@ -85,7 +85,7 @@
   background: var(--surface-2);
   border: 1px solid var(--line-2);
   border-radius: var(--r-pill);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   font-size: var(--fs-11);
   font-weight: var(--weight-label);
   line-height: 1;
@@ -95,6 +95,7 @@
     border-color var(--dur-2) var(--ease),
     color var(--dur-2) var(--ease),
     box-shadow var(--dur-2) var(--ease);
+  border-color: transparent;
 }
 
 .badge .dot {
@@ -102,7 +103,7 @@
   height: 5px;
   background: currentColor;
   border-radius: 50%;
-  box-shadow: 0 0 3px currentColor;
+  box-shadow: none;
 }
 
 .badge.ok,
@@ -132,14 +133,14 @@
   border-color: color-mix(in srgb, var(--unknown) 25%, transparent);
 }
 
-.badge.info,
 .badge.accent,
-.badge.s-modified,
 .badge.planned {
   color: var(--accent-2);
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 25%, transparent);
 }
+.badge.info,
+.badge.s-modified { color: var(--info); background: var(--info-soft); border-color: transparent; }
 
 .badge.muted,
 .badge.s-ignored {
@@ -156,8 +157,9 @@
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
-  border: 1px solid var(--line-2);
+  border: 0;
   align-items: center;
+  gap: var(--space-4);
 }
 
 .stat-card {
@@ -177,9 +179,9 @@
 
 .stat-card-box {
   background: var(--surface-2);
-  border: 1px solid var(--line-2);
+  border: 0;
   border-radius: var(--r-8);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   transition: background var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
 .stat-card-box:hover {
@@ -211,8 +213,9 @@
 @media (max-width: 900px) {
   .stat-grid {
     grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-    gap: 10px;
+    gap: var(--space-4);
     padding: 12px 14px;
+    border: 0;
   }
 }
 

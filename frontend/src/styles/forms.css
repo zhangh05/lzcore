@@ -2,6 +2,9 @@
 
 @layer base {
 
+input[type="checkbox"],
+input[type="radio"] { accent-color: var(--accent); }
+
 .input:focus-visible,
 textarea.input:focus-visible,
 select.input:focus-visible,
@@ -97,7 +100,7 @@ textarea.input::placeholder {
 .segmented button.active {
   color: var(--text);
   background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   font-weight: var(--weight-heading);
 }
 
@@ -134,7 +137,7 @@ textarea.input::placeholder {
 .toggle.on::before {
   background: var(--lz-primary, var(--accent));
   border-color: var(--lz-primary, var(--accent));
-  box-shadow: 0 0 0 3px var(--lz-primary-glow, color-mix(in srgb, var(--accent) 18%, transparent));
+  box-shadow: none;
 }
 
 .toggle.on::after {

@@ -7,7 +7,7 @@
 .topology-studio .topology-save-btn { white-space: nowrap; font-size: 12px; height: 26px; padding: 0 10px; gap: 5px; font-weight: var(--weight-label); transition: all var(--dur-2); }
 .topology-studio .topology-save-btn.status-saved { color: var(--ok); background: transparent; border-color: transparent; }
 .topology-studio .topology-save-btn.status-saved:disabled { opacity: 0.85; cursor: default; }
-.topology-studio .topology-save-btn.status-unsaved { font-weight: var(--weight-heading); box-shadow: 0 1px 3px rgba(15, 119, 120, 0.25); }
+.topology-studio .topology-save-btn.status-unsaved { font-weight: var(--weight-heading); box-shadow: none; }
 .topology-studio .topology-save-btn.status-conflict { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); cursor: pointer; }
 .topology-studio .topology-save-btn.status-conflict:hover { background: var(--warn-soft); opacity: 0.9; }
 .studio-workspace-mode-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm, 6px); background: var(--bg); margin-left: 8px; }
@@ -31,7 +31,7 @@
   border-radius: var(--r-6);
   background: var(--surface);
   color: var(--text-2);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   cursor: pointer;
   transition: all var(--dur-2) var(--ease);
 }
@@ -62,7 +62,7 @@
   font-size: var(--fs-13);
   font-weight: var(--weight-label);
   cursor: pointer;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   transition: all var(--dur-2) var(--ease);
   white-space: nowrap;
 }
@@ -76,11 +76,11 @@
 }
 
 .studio-device-chip.is-active {
-  background: var(--accent);
+  background: var(--surface-selected);
   border-color: var(--accent);
-  color: var(--accent-text);
+  color: var(--accent);
   font-weight: var(--weight-heading);
-  box-shadow: 0 2px 8px var(--lz-primary-glow);
+  box-shadow: none;
   transform: none;
 }
 

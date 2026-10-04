@@ -361,7 +361,7 @@ export function DataCenter() {
           if (file) void upload(file);
           event.target.value = "";
         }} />
-        <Button variant="primary" size="sm" disabled={busy} onClick={() => uploadRef.current?.click()}>
+        <Button variant={tab === "lifecycle" ? "default" : "primary"} size="sm" disabled={busy} onClick={() => uploadRef.current?.click()}>
           {busy ? "处理中…" : "导入数据"}
         </Button>
         <Button size="sm" onClick={() => { void loadData(); void loadArtifacts(); }}>刷新</Button>
@@ -498,7 +498,7 @@ function Overview({ overview, files, onImport, onOpenFiles, onOpenLifecycle }: {
           icon={<IconPlus size={18} aria-hidden="true" />}
           text="还没有数据"
           hint="导入文件，或运行一次会生成结果文件的任务。"
-          action={<Button variant="primary" size="sm" onClick={onImport}>导入第一份数据</Button>}
+          action={<Button size="sm" onClick={onImport}>导入第一份数据</Button>}
         />}
       </section>
 
@@ -636,7 +636,7 @@ function ArtifactsView({ artifacts, governance, view, onView, producerId, onClea
   return <>
     <FilterBar>
       {([ ["", "全部"], ["current", "当前有效"], ["history", "历史或不完整"], ["deliverables", "交付结果"] ] as Array<[ArtifactView, string]>).map(([key, label]) => (
-        <Button key={key || "all"} size="sm" variant={view === key ? "primary" : "default"} onClick={() => onView(key)}>{label}</Button>
+        <Button key={key || "all"} size="sm" variant={view === key ? "selected" : "default"} aria-pressed={view === key} onClick={() => onView(key)}>{label}</Button>
       ))}
       {producerId && <span className="metric-chip">任务 {shortId(producerId)} <button type="button" className="link-button" onClick={onClearProducer}>清除</button></span>}
       <div className="spacer" />

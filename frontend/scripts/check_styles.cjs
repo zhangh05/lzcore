@@ -40,6 +40,13 @@ for (const file of files) {
     }
     if (!layered) failures.push(`${file}:${rule.source.start.line}: rule outside declared layer: ${rule.selector}`);
   });
+  // A zero-offset blurred shadow is a glow, not elevation. Zero-blur focus,
+  // selection rings and inset edge markers remain valid.
+  ast.walkDecls('box-shadow', declaration => {
+    if (/(?:^|,)\s*(?:inset\s+)?0(?:px)?\s+0(?:px)?\s+(?:[1-9]\d*(?:\.\d+)?|0\.\d+)px\b/.test(declaration.value)) {
+      failures.push(`${file}:${declaration.source.start.line}: glow shadow; use a status marker or a downward floating shadow`);
+    }
+  });
 }
 if (process.argv.includes('--built')) {
   const dist = path.join(root, 'frontend/dist');

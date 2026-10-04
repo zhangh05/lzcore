@@ -129,20 +129,23 @@
   align-items: center;
 }
 
-.card-danger-left {
+.card.card-danger-left {
   border-left: 3px solid var(--danger);
 }
 
-.card-danger-border {
+.card.card-danger-border {
   border-color: var(--danger);
+  border-left: 3px solid var(--danger);
 }
 
-.card-ok-border {
+.card.card-ok-border {
   border-color: var(--ok);
+  border-left: 3px solid var(--ok);
 }
 
-.card-warn-border {
+.card.card-warn-border {
   border-color: var(--warn);
+  border-left: 3px solid var(--warn);
 }
 
 .section-head {
@@ -161,7 +164,7 @@
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--line-2);
+  border: 0;
   border-radius: var(--r-8);
   box-shadow: var(--shadow-card);
   transition:
@@ -220,7 +223,7 @@
   border-collapse: separate;
   border-spacing: 0;
   border-radius: var(--r-8);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 .tbl thead th {
@@ -338,10 +341,12 @@
   align-items: flex-start;
   gap: 8px;
   font-size: var(--fs-11);
-  color: var(--warn, #e65100);
+  color: var(--warn);
   padding: 8px 10px;
-  background: color-mix(in srgb, #e65100 6%, transparent);
+  background: var(--surface-2);
   border-radius: var(--r-6);
+  border: 0;
+  border-left: 3px solid var(--warn);
 }
 
 @media (max-width: 900px) {

@@ -71,12 +71,12 @@ export function ApprovalActions({ result, workspaceId }: {
       if (!operation) return <div className="approval-card" key={id}>正在读取待决定操作…</div>;
       const target = operation.target || {};
       const waiting = operation.status === "pending";
-      return <section className="approval-card" key={id} data-testid={`approval-${id}`}>
+      return <section className="approval-card" data-pending={waiting} key={id} data-testid={`approval-${id}`}>
         <header><strong>{waiting ? "等待审批" : "审批结果"}</strong><span>{target.name || "设备"} · {target.host || "地址未知"}</span></header>
         <p>以下命令将按原始顺序执行；批准内容以 Digest <code>{operation.digest}</code> 绑定。</p>
         <pre>{operation.commands.join("\n")}</pre>
         {waiting ? <div className="approval-card-actions">
-          <Button variant="primary" disabled={busy === id} onClick={() => void decide(operation, "approve")}>批准并执行</Button>
+          <Button disabled={busy === id} onClick={() => void decide(operation, "approve")}>批准并执行</Button>
           <Button disabled={busy === id} onClick={() => void decide(operation, "reject")}>拒绝</Button>
           <Button variant="danger-ghost" disabled={busy === id} onClick={() => void decide(operation, "cancel")}>取消</Button>
         </div> : <p className="approval-state">当前状态：{operation.status}</p>}
