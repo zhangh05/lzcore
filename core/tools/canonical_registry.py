@@ -530,6 +530,15 @@ def _handle_workspace_file(inv: ToolInvocation) -> dict:
     from storage.project_changes import workspace_files_lock
     from core.tools.general_tools.shared import _caller_workspace
     with workspace_files_lock(_caller_workspace(inv)):
+        from core.tools.project_execution import environment_for
+        from core.tools.general_tools.shared import _workspace_path
+        environment = environment_for(_caller_workspace(inv))
+        filepath = (inv.arguments or {}).get("filepath")
+        if environment is not None and filepath and _action(inv) in {"create", "edit", "patch", "delete"}:
+            if environment.source_protected(_workspace_path(_caller_workspace(inv), filepath)):
+                return {"ok": False, "error_code": "CODING_SOURCE_OWNED_BY_IMPLEMENTATION",
+                        "error": "Reviewed project source is read-only for QA/coordinator. Delegate a source revision and exact QA, then integrate. Runtime outputs belong in declared generated directories or /tmp.",
+                        "executed": False}
         return _dispatch_workspace_file(inv)
 
 

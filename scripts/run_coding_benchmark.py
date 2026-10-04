@@ -77,7 +77,7 @@ def main() -> int:
     from core.runtime_engine.models import MainAgentRuntimeControl
     from core.tools.integration import get_default_tool_runtime_client
     from core.tools.context import ToolRuntimeContext
-    from core.tools.project_execution import isolated_project
+    from core.tools.project_execution import isolated_project, PREVIEW_BIND_PORT
 
     ws = validate_workspace_id(
         args.workspace_id or f"bench_{args.case}_{uuid.uuid4().hex[:10]}"
@@ -100,7 +100,7 @@ def main() -> int:
         .replace("{{PROJECT_DIR}}", f"files/data/{args.case}")
         .replace("{{PREVIEW_ORIGIN}}", origin)
     )
-    prompt += "\n执行环境是受系统隔离的 Linux 容器；仅工程目录可写，依赖通过专用 registry 代理获取。预览必须在容器内绑定 0.0.0.0，平台只向宿主的 127.0.0.1 发布指定端口。不要修改隔离环境或启动其他宿主服务。\n"
+    prompt += f"\n执行环境是受系统隔离的 Linux 容器，依赖经专用 registry 代理。预览须使用进程环境 HOST/PORT（0.0.0.0:{PREVIEW_BIND_PORT}），浏览器 origin 的端口只是平台转发入口，不能写进源码或用于容器监听。实现分支可写源码；QA 与团队协调者源码为只读，只能写声明的输出目录和 /tmp。日志/PID/临时检查放 /tmp；修改源码须重新委派准确候选 QA 与整合。不要修改隔离环境或启动宿主服务。\n"
     session_id = (
         args.session_id
         or create_session(ws, title=f"Coding benchmark: {args.case}")["session_id"]
@@ -194,7 +194,9 @@ def main() -> int:
         flush=True,
     )
     project = workspace_root(ws) / "files/data" / args.case
-    environment_scope = isolated_project(ws, project, args.port)
+    environment_scope = isolated_project(ws, project, args.port,
+        source_mode="coordinator" if args.require_coding_team else "implementation",
+        generated_paths=["dist"] if args.require_coding_team else [])
     environment = None
     exit_code = 1
     agent_turn_ok, acceptance_exit_code, team_ok, cleanup_confirmed = (

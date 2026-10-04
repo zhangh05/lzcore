@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import sys
 import uuid
+import time
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -30,6 +32,7 @@ def main() -> int:
     from core.tools.integration import get_default_tool_runtime_client
     from core.tools.project_execution import isolated_project
     from storage.paths import workspace_root
+    from storage.project_changes import quiescent_project
     client = get_default_tool_runtime_client()
     reports = []
     for index in range(args.rounds):
@@ -60,6 +63,28 @@ def main() -> int:
             probe("registry_tls_dependency_allowed", {"action": "shell", "command": "npm view react version", "timeout": 30}, True)
             probe("unapproved_tls_origin_denied", {"action": "python", "code": "import urllib.request; result = urllib.request.urlopen('https://example.com', timeout=5).status", "timeout": 10}, False)
             probe("direct_network_cannot_bypass_proxy", {"action": "python", "code": "import socket; result = socket.create_connection(('1.1.1.1', 443), timeout=2).getpeername()", "timeout": 5}, False)
+            with quiescent_project(ws):
+                environment.coordinate(["dist"])
+            descriptor = environment.descriptor()
+            probe("coordinator_source_write_denied_by_kernel", {"action": "shell", "command": "printf 'unreviewed' > owned.txt"}, False)
+            probe("coordinator_source_delete_denied_by_kernel", {"action": "shell", "command": "rm owned.txt"}, False)
+            probe("coordinator_source_write_denied_by_api", {"action": "shell", "command": "test \"$(cat owned.txt)\" = scoped"}, True)
+            protected = client.invoke("workspace.file", {"action":"edit", "filepath":"files/data/project/owned.txt", "old_string":"scoped", "new_string":"unreviewed"}, context=context)
+            checks.append({"name":"governed_source_edit_denied", "passed": protected.status == "failed" and (project / "owned.txt").read_text() == "scoped"})
+            probe("declared_build_output_writable", {"action":"shell", "command":"printf 'built' > dist/output.txt"}, True)
+            probe("temporary_runtime_output_writable", {"action":"shell", "command":"printf 'runtime' > /tmp/owned.log"}, True)
+            probe("preview_bind_contract_stable", {"action":"python", "code":"import os; assert os.environ['PORT'] == '8080' and os.environ['HOST'] == '0.0.0.0'; result = True"}, True)
+            probe("preview_service_in_readonly_project", {"action":"shell", "command":"python3 -m http.server \"$PORT\" --bind \"$HOST\" </dev/null >/tmp/owned-preview.log 2>&1 &"}, True)
+            forwarded = False
+            until = time.monotonic() + 10
+            while time.monotonic() < until:
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{args.base_port + index}", timeout=1) as response:
+                        forwarded = response.status == 200
+                    break
+                except OSError:
+                    time.sleep(0.2)
+            checks.append({"name":"external_port_maps_stable_internal_preview", "passed": forwarded})
             # Detached children and their parent are stopped as one kernel
             # resource, not merely by killing a local Docker client process.
             probe("timeout_stops_descendants", {"action": "shell", "command": "sleep 120 & wait", "timeout": 1}, False)

@@ -96,6 +96,13 @@ def create_assignment(task, supplied: dict) -> dict:
         assignment["generated_paths"] = list(target.coding.get("generated_paths", []))
     elif review_id:
         raise ValueError("coding_review_target_requires_qa_profile")
+    from core.tools.project_execution import environment_for
+    parent_environment = environment_for(task.workspace_id)
+    if parent_environment is not None:
+        if parent_environment.project != project_path(task.workspace_id, project).resolve():
+            raise ValueError("coding_parent_project_binding_mismatch")
+        with quiescent_project(task.workspace_id):
+            parent_environment.coordinate(assignment["generated_paths"])
     return assignment
 
 
@@ -152,7 +159,9 @@ def coding_run(task):
     assignment["phase"] = "executing"
     _save_task(task)
     port = _free_preview_port()
-    with isolated_project(branch_ws, branch, port) as environment:
+    with isolated_project(branch_ws, branch, port,
+                          source_mode="review" if task.profile_id == "qa_agent" else "implementation",
+                          generated_paths=assignment.get("generated_paths")) as environment:
         assignment["environment"] = environment.descriptor()
         instruction = (
             task.goal
@@ -164,9 +173,10 @@ def coding_run(task):
                     "generated_paths": assignment.get("generated_paths", []),
                     "role": task.profile_id,
                     "preview_origin": f"http://127.0.0.1:{port}",
+                    "preview_bind_port": environment.descriptor()["preview_bind_port"],
                     "validation_commands": assignment["validation_commands"],
                     "review_subtask_id": assignment["review_subtask_id"],
-                    "constraints": "Work only in this isolated project branch. Dependencies are already integrated. Bind preview to 0.0.0.0. QA must preserve all reviewed source files; temporary acceptance code belongs under /tmp. Parent integration requires an independent QA task and exact candidate identity.",
+                    "constraints": "Work only in this isolated project branch. Dependencies are already integrated. Bind preview to HOST/PORT from the process environment, never the browser origin port. Implementation owns writable source; QA and coordinator source mounts are read-only. Build outputs belong in declared generated directories; logs/PID/temporary checks belong under /tmp. Source revisions require a new implementation and exact QA, then governed integration.",
                 },
                 ensure_ascii=False,
             )

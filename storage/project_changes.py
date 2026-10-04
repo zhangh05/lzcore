@@ -198,10 +198,11 @@ def quiescent_project(workspace_id: str):
         )
         if paused:
             environment._docker("pause", environment.name)
+        generation = environment.generation if environment is not None else None
         try:
             yield
         finally:
-            if paused:
+            if paused and not environment.closed and environment.generation == generation:
                 environment._docker("unpause", environment.name)
 
 

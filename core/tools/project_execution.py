@@ -22,6 +22,18 @@ from storage.paths import workspace_root
 
 _BINDINGS: dict[str, "DockerProjectEnvironment"] = {}
 _LOCK = threading.RLock()
+PREVIEW_BIND_PORT = 8080
+
+
+def _security_arguments():
+    return [
+        "--init",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--pids-limit=256",
+        "--tmpfs=/tmp:rw,nosuid,nodev,size=512m",
+    ]
 
 
 def environment_for(workspace_id: str):
@@ -73,7 +85,14 @@ class DockerProjectEnvironment:
     isolation_level = "strong_container"
 
     def __init__(
-        self, workspace_id: str, project: Path, port: int, *, image: str | None = None
+        self,
+        workspace_id: str,
+        project: Path,
+        port: int,
+        *,
+        image: str | None = None,
+        source_mode: str = "implementation",
+        generated_paths: list[str] | None = None,
     ):
         self.workspace_id = workspace_id
         self.root = workspace_root(workspace_id).resolve()
@@ -91,6 +110,15 @@ class DockerProjectEnvironment:
         if not 1024 <= port <= 65535:
             raise ValueError("invalid_isolated_preview_port")
         self.port = port
+        from storage.project_changes import validate_generated_paths
+
+        if source_mode not in {"implementation", "coordinator", "review"}:
+            raise ValueError("invalid_project_source_mode")
+        self.source_mode = source_mode
+        self.generated_paths = validate_generated_paths(generated_paths)
+        self.generation = 0
+        self._execution_lock = threading.RLock()
+        self._active_executions = 0
         self.image = image or os.environ.get(
             "LZCORE_CODING_EXECUTION_IMAGE", "lzcore-coding-runtime:local"
         )
@@ -133,14 +161,7 @@ class DockerProjectEnvironment:
             if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.image_id):
                 raise ValueError("invalid_coding_image_digest")
             self._docker("network", "create", "--internal", self.network)
-            shared = [
-                "--init",
-                "--read-only",
-                "--cap-drop=ALL",
-                "--security-opt=no-new-privileges",
-                "--pids-limit=256",
-                "--tmpfs=/tmp:rw,nosuid,nodev,size=512m",
-            ]
+            shared = _security_arguments()
             self._docker(
                 "run",
                 "--detach",
@@ -152,11 +173,11 @@ class DockerProjectEnvironment:
                 "--cpus=0.5",
                 "--user=65532:65532",
                 "--publish",
-                f"127.0.0.1:{self.port}:{self.port}",
+                f"127.0.0.1:{self.port}:{PREVIEW_BIND_PORT}",
                 "--env",
                 f"PROJECT_HOST={self.name}",
                 "--env",
-                f"PROJECT_PORT={self.port}",
+                f"PROJECT_PORT={PREVIEW_BIND_PORT}",
                 self.image_id,
                 "python3",
                 "-u",
@@ -170,35 +191,101 @@ class DockerProjectEnvironment:
                 self.network,
                 self.broker,
             )
-            self._docker(
-                "run",
-                "--detach",
-                "--pull=never",
-                "--name",
-                self.name,
-                *shared,
-                "--memory=1536m",
-                "--cpus=2",
-                f"--user={(getattr(os, 'getuid', lambda: 65532)() or 65532)}:{(getattr(os, 'getgid', lambda: 65532)() or 65532)}",
-                "--network",
-                self.network,
-                "--mount",
-                f"type=bind,source={self.mount_source},target={self.mount_target}",
-                f"--workdir={self.mount_target}",
-                "--env=HOME=/tmp/home",
-                "--env=HTTPS_PROXY=http://package-egress:3128",
-                "--env=HTTP_PROXY=http://package-egress:3128",
-                "--env=NO_PROXY=localhost,127.0.0.1,::1",
-                self.image_id,
-                "sh",
-                "-c",
-                "mkdir -p /tmp/home && exec sleep infinity",
-            )
+            self._launch_project(shared)
             self.started = True
             return self
         except Exception:
             self.close()
             raise
+
+    def _launch_project(self, shared):
+        mounts = [
+            "--mount",
+            f"type=bind,source={self.mount_source},target={self.mount_target}"
+            + (",readonly" if self.source_mode != "implementation" else ""),
+        ]
+        if self.source_mode != "implementation":
+            for relative in dict.fromkeys(
+                [*self.generated_paths, "node_modules", ".venv", ".pytest_cache"]
+            ):
+                target = self.project / relative
+                if any(
+                    p.is_symlink()
+                    for p in (target, *target.parents)
+                    if p != self.project.parent
+                ):
+                    raise ValueError("readonly_output_symlink_forbidden")
+                target.resolve().relative_to(self.project)
+                if target.exists() and not target.is_dir():
+                    raise ValueError("readonly_generated_output_requires_directory")
+                target.mkdir(parents=True, exist_ok=True)
+                mounts += [
+                    "--mount",
+                    f"type=bind,source={docker_project_mount(target)},target={self.mount_target}/{relative}",
+                ]
+        self._docker(
+            "run",
+            "--detach",
+            "--pull=never",
+            "--name",
+            self.name,
+            *shared,
+            "--memory=1536m",
+            "--cpus=2",
+            f"--user={(getattr(os, 'getuid', lambda: 65532)() or 65532)}:{(getattr(os, 'getgid', lambda: 65532)() or 65532)}",
+            "--network",
+            self.network,
+            *mounts,
+            f"--workdir={self.mount_target}",
+            "--env=HOME=/tmp/home",
+            "--env=HTTPS_PROXY=http://package-egress:3128",
+            "--env=HTTP_PROXY=http://package-egress:3128",
+            "--env=NO_PROXY=localhost,127.0.0.1,::1",
+            f"--env=PORT={PREVIEW_BIND_PORT}",
+            "--env=HOST=0.0.0.0",
+            "--env=PYTHONPYCACHEPREFIX=/tmp/pycache",
+            self.image_id,
+            "sh",
+            "-c",
+            "mkdir -p /tmp/home && exec sleep infinity",
+        )
+
+    def coordinate(self, generated_paths):
+        """Transfer source ownership at a quiescent boundary, never mid-command."""
+        from storage.project_changes import validate_generated_paths
+
+        generated = validate_generated_paths(generated_paths)
+        with self._execution_lock:
+            if self.source_mode == "coordinator":
+                if generated != self.generated_paths:
+                    raise ValueError("coding_source_contract_mismatch")
+                return
+            if self.source_mode != "implementation" or self.closed or not self.started:
+                raise ValueError("coding_coordination_invalid_lifecycle")
+            if self._active_executions:
+                raise ValueError("coding_parent_execution_busy")
+            # The caller owns the workspace lock and has paused descendants.
+            # Retiring the writer before starting its read-only successor makes
+            # the source ownership change fail closed even if Docker fails.
+            self._docker("rm", "--force", self.name)
+            self.generation += 1
+            self.source_mode = "coordinator"
+            self.generated_paths = generated
+            try:
+                self._launch_project(_security_arguments())
+            except Exception:
+                self.close()
+                raise
+
+    def source_protected(self, target: Path) -> bool:
+        if self.source_mode == "implementation":
+            return False
+        try:
+            relative = target.resolve().relative_to(self.project).as_posix()
+        except ValueError:
+            return False
+        outputs = [*self.generated_paths, "node_modules", ".venv", ".pytest_cache"]
+        return not any(relative == p or relative.startswith(p + "/") for p in outputs)
 
     def descriptor(self):
         return {
@@ -209,6 +296,10 @@ class DockerProjectEnvironment:
             "image_id": self.image_id,
             "network": "internal_with_dependency_only_tls_egress",
             "preview_port": self.port,
+            "preview_origin": f"http://127.0.0.1:{self.port}",
+            "preview_bind_port": PREVIEW_BIND_PORT,
+            "source_mode": self.source_mode,
+            "generated_paths": list(self.generated_paths),
             "closed": self.closed,
             "cleanup_confirmed": self.cleanup_confirmed,
             "cleanup_errors": self.cleanup_errors,
@@ -239,7 +330,9 @@ class DockerProjectEnvironment:
         # The host adapter's default workspace cwd denotes the bound project
         # in a strict environment. Shell and Python share this writable root;
         # an explicit workspace-relative project subdirectory stays explicit.
-        target = "/workspace/" + relative.as_posix() if relative.parts else self.mount_target
+        target = (
+            "/workspace/" + relative.as_posix() if relative.parts else self.mount_target
+        )
         if not (
             target == self.mount_target or target.startswith(self.mount_target + "/")
         ):
@@ -261,14 +354,26 @@ class DockerProjectEnvironment:
             args += ["--env", f"{key}={value}"]
         from core.tools.general_tools.shared import _run_shell
 
-        result = _run_shell(
-            "isolated command",
-            cwd=str(self.root),
-            env=self.client_env,
-            timeout=timeout,
-            cancel_check=cancel_check,
-            argv_override=[*args, self.name, *argv],
-        )
+        with self._execution_lock:
+            if self.closed:
+                return {
+                    "ok": False,
+                    "executed": False,
+                    "error_code": "ISOLATED_ENVIRONMENT_CLOSED",
+                }
+            self._active_executions += 1
+        try:
+            result = _run_shell(
+                "isolated command",
+                cwd=str(self.root),
+                env=self.client_env,
+                timeout=timeout,
+                cancel_check=cancel_check,
+                argv_override=[*args, self.name, *argv],
+            )
+        finally:
+            with self._execution_lock:
+                self._active_executions -= 1
         if result.get("cancelled") or result.get("process_tree_killed"):
             stopped = self.close()
             result.update(

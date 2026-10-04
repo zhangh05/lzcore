@@ -102,3 +102,81 @@ def test_python_contract_shared_with_host_and_container():
     result = subprocess.run(['python3', '-c', build_program('result = {"值": input_data["值"] + 1}', {'值': 2})], capture_output=True, text=True, encoding='utf-8')
     decoded = decode_program_output({'stdout': result.stdout, 'stderr': result.stderr, 'ok': result.returncode == 0})
     assert decoded['ok'] and decoded['structured_output'] == {'值': 3} and decoded['stdout'] == ''
+
+
+@pytest.mark.parametrize("mode", ["coordinator", "review"])
+def test_source_ownership_mounts_and_stable_preview_binding(environment, monkeypatch, mode):
+    calls = []
+    def docker(*args, **kwargs):
+        calls.append(args)
+        result = completed(*args)
+        if args[:2] == ('image', 'inspect'):
+            result.stdout = 'sha256:' + '1' * 64
+        return result
+    environment.source_mode = mode
+    environment.generated_paths = ['dist']
+    monkeypatch.setattr(environment, '_docker', docker)
+    environment.start()
+    run = next(c for c in calls if c[0] == 'run' and environment.name in c)
+    mounts = [v for v in run if v.startswith('type=bind')]
+    assert mounts[0].endswith(',readonly')
+    assert len(mounts) == 5
+    assert all('source=' + str(environment.project) in v for v in mounts)
+    assert '--env=PORT=8080' in run
+    broker = next(c for c in calls if c[0] == 'run' and environment.broker in c)
+    assert '127.0.0.1:5279:8080' in broker and 'PROJECT_PORT=8080' in broker
+    assert environment.descriptor()['preview_bind_port'] == 8080
+    assert environment.descriptor()['preview_origin'] == 'http://127.0.0.1:5279'
+
+
+def test_governed_file_tools_cannot_bypass_coordinator_source_ownership(environment, monkeypatch):
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.context import ToolRuntimeContext
+    environment.source_mode = 'coordinator'
+    environment.generated_paths = ['dist']
+    monkeypatch.setitem(environments._BINDINGS, str(environment.root), environment)
+    client = get_default_tool_runtime_client()
+    ctx = ToolRuntimeContext(workspace_id='isolated', session_id='ownership', requested_by='turn_runner')
+    for action, extra in [('create', {'content':'unreviewed'}), ('edit', {'old_string':'old','new_string':'new'}), ('delete', {})]:
+        result = client.invoke('workspace.file', {'action':action, 'filepath':'files/data/project/source.py', **extra}, context=ctx)
+        assert result.status == 'failed' and result.output['error_code'] == 'CODING_SOURCE_OWNED_BY_IMPLEMENTATION'
+    assert not (environment.project / 'source.py').exists()
+    result = client.invoke('workspace.file', {'action':'create','filepath':'files/data/project/dist/output.txt','content':'built'}, context=ctx)
+    assert result.status == 'succeeded'
+
+
+def test_ownership_transition_retires_writer_and_never_resumes_replacement(environment, monkeypatch):
+    from storage.project_changes import quiescent_project
+    environment.started = True
+    calls = []
+    monkeypatch.setattr(environment, '_docker', lambda *a, **kw: calls.append(a) or completed(*a))
+    monkeypatch.setitem(environments._BINDINGS, str(environment.root), environment)
+    with quiescent_project('isolated'):
+        environment.coordinate(['dist'])
+    assert environment.source_mode == 'coordinator' and environment.generation == 1
+    assert ('pause', environment.name) in calls
+    assert ('rm', '--force', environment.name) in calls
+    assert ('unpause', environment.name) not in calls
+    run = next(c for c in calls if c[0] == 'run')
+    assert any(v.startswith('type=bind') and v.endswith(',readonly') for v in run)
+    with pytest.raises(ValueError, match='contract_mismatch'):
+        environment.coordinate(['src'])
+
+
+def test_busy_execution_cannot_be_retired_by_coordination(environment, monkeypatch):
+    environment.started = True
+    environment._active_executions = 1
+    monkeypatch.setattr(environment, '_docker', lambda *a, **kw: pytest.fail('must not retire active execution'))
+    with pytest.raises(ValueError, match='execution_busy'):
+        environment.coordinate(['dist'])
+    assert environment.source_mode == 'implementation' and environment.generation == 0
+
+
+def test_ownership_restart_failure_closes_execution_instead_of_restoring_writer(environment, monkeypatch):
+    environment.started = True
+    monkeypatch.setattr(environment, '_docker', completed)
+    monkeypatch.setattr(environment, '_launch_project', lambda shared: (_ for _ in ()).throw(OSError('owned test outage')))
+    with pytest.raises(OSError):
+        environment.coordinate(['dist'])
+    assert environment.closed and environment.cleanup_confirmed
+    assert not environment.execute('touch unsafe', str(environment.project))['executed']
