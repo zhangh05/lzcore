@@ -67,7 +67,7 @@ def deserialize_loop_message(value: dict[str, Any]) -> LLMMessage:
         if isinstance(value.get("content"), list)
         else str(value.get("content") or ""),
         tool_call_id=str(value.get("tool_call_id") or "") or None,
-        tool_calls=list(value.get("tool_calls") or []) or None,
+        tool_calls=(list(value["tool_calls"]) if value.get("tool_calls") is not None else None),
         protocol=copy.deepcopy(value.get("protocol") or {}),
     )
 

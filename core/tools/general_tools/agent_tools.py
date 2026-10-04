@@ -396,6 +396,10 @@ def handle_agent_get_result(inv: ToolInvocation) -> dict:
             payload = {
                 "workspace_id": ws,
                 **persisted,
+                # The tool envelope's status describes this read operation.
+                # Preserve the child's independent lifecycle under a stable
+                # name even when _ok projects status='ok'.
+                "task_status": status,
                 "tracking": _subtask_tracking(subtask_id, status),
             }
             payload.setdefault("subtask_id", subtask_id)

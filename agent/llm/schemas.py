@@ -32,7 +32,9 @@ class LLMMessage:
     role: str  # system, user, assistant, tool
     content: Union[str, List[dict]]  # str for text, List[dict] for multimodal (text + image_url)
     tool_call_id: Optional[str] = None  # for role=tool responses
-    tool_calls: Optional[List[dict]] = None  # for role=assistant with function_call
+    # None preserves a native provider proposal; an explicit list is the
+    # runtime interaction contract, and [] means no tools were executed.
+    tool_calls: Optional[List[dict]] = None
     # Provider protocol state, never public display metadata.
     protocol: Dict[str, Any] = field(default_factory=dict, repr=False)
 

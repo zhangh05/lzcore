@@ -58,7 +58,7 @@ def _invoke_llm_for_ssot_runtime(**kwargs):
                 role=str(message.role),
                 content=message.content,
                 tool_call_id=message.tool_call_id,
-                tool_calls=list(message.tool_calls or []) or None,
+                tool_calls=(list(message.tool_calls) if message.tool_calls is not None else None),
                 protocol=message.protocol,
             )
             for message in runtime_messages

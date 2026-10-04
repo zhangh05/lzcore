@@ -316,6 +316,7 @@ class LoopModelGateway:
                         "error_type": str(
                             (response.metadata or {}).get("error_type") or ""
                         )[:100],
+                        "request_structure": (response.metadata or {}).get("request_structure", {}),
                     }
                     response.error = _normalize_llm_error(response.error)
                 else:

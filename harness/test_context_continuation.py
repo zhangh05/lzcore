@@ -181,12 +181,20 @@ def test_full_query_loop_three_hundred_tool_rounds(ctx):
     registry = {'data.manage': {'description': 'parse indexed data', 'args_schema': {'type': 'object', 'required': ['action', 'index'], 'properties': {'action': {'type': 'string'}, 'index': {'type': 'string'}, 'text': {'type': 'string'}}}}}
     invocations = []
     def model(**kwargs):
+        from agent.llm.provider import _to_anthropic_messages_request
+        from agent.llm.schemas import LLMRequest
+        from agent.llm.protocol_projection import anthropic_request_structure
         i = len(invocations)
         invocations.append(estimate_message_tokens(kwargs['messages']))
+        wire = _to_anthropic_messages_request(LLMRequest(task='assistant_chat', messages=kwargs['messages']), {})
+        assert anthropic_request_structure(wire)['violations'] == {}
         assert ctx.user_input in kwargs['messages'][1].content
         if i == 310:
             return LLMResponse(content='310 indexed sources read, no write actions taken.')
-        return LLMResponse(tool_calls=[LLMToolCall(id=f'indexed-{i}', name='data__manage', arguments={'action': 'parse', 'index': str(i), 'text': f'item\n{i}'})])
+        call = LLMToolCall(id='reused-provider-id', name='data__manage', arguments={'action': 'parse', 'index': str(i), 'text': f'item\n{i}'})
+        return LLMResponse(tool_calls=[call], protocol={'anthropic': [
+            {'type': 'thinking', 'thinking': f'opaque round {i}', 'signature': f'fixture-signature-{i}'},
+            {'type': 'tool_use', 'id': call.id, 'name': call.name, 'input': call.arguments}]})
     result = asyncio.run(QueryLoop(config, registry, runtime, llm_invoke=model).run(ctx, BudgetController(config), None))
     assert result.error is None, result.error
     assert executed == list(range(310)), [(r.error, r.output) for r in result.tool_results[:1]]

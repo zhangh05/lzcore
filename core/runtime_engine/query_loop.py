@@ -364,8 +364,8 @@ class QueryLoop(
                 # answer. Preserve every received token in the conversation
                 # and ask the same model to continue before any final result
                 # is emitted to the user.
-                if response.content:
-                    messages.append(response.assistant_message())
+                if response.content or response.protocol:
+                    messages.append(response.assistant_message([]))
                 if response.tool_calls:
                     continuation = (
                         "The preceding response ended while producing tool calls. None of those partial calls "
@@ -532,7 +532,8 @@ class QueryLoop(
                     # Keep the model's proposal in transcript as a proposal,
                     # then make the no-progress diagnosis explicit.  It was
                     # never executed, so no synthetic tool result is created.
-                    messages = [*messages, response.assistant_message()]
+                    if not tool_calls:
+                        messages = [*messages, response.assistant_message([])]
                     messages = self._append_turn_nudge(messages, duplicate_note)
                 if not tool_calls:
                     signature = str(

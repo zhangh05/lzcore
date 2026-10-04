@@ -118,6 +118,19 @@ def test_runtime_adapter_preserves_protocol(monkeypatch):
     assert captured["messages"][0].protocol == state
 
 
+def test_runtime_adapter_keeps_explicitly_rejected_native_calls(monkeypatch):
+    from agent.runtime.ssot_runtime import _invoke_llm_for_ssot_runtime
+    captured = {}
+    def invoke(**kwargs):
+        captured.update(kwargs)
+        return LLMResponse(content="ok")
+    monkeypatch.setattr("agent.llm.runtime.invoke_llm", invoke)
+    message = LLMResponse(content="proposal", protocol={"anthropic": [
+        {"type": "tool_use", "id": "not_executed", "name": "exec__run", "input": {}}]}).assistant_message([])
+    _invoke_llm_for_ssot_runtime(messages=[message])
+    assert captured["messages"][0].tool_calls == []
+
+
 def test_provider_switch_never_sends_other_providers_private_state():
     original = {"provider": "one", "base_url": "https://one", "model": "m1"}
     message = LLMResponse(content="public", protocol={
@@ -126,3 +139,125 @@ def test_provider_switch_never_sends_other_providers_private_state():
     }).assistant_message()
     assert provider._format_message(message, original)["reasoning_content"] == "private"
     assert provider._format_message(message, {**original, "model": "m2"}) == {"role": "assistant", "content": "public"}
+
+
+def test_native_projection_uses_compiled_contract_and_preserves_original_evidence():
+    from copy import deepcopy
+    from agent.llm.schemas import LLMMessage
+
+    native = [
+        {"type": "thinking", "thinking": "opaque", "signature": "signature"},
+        {"type": "tool_use", "id": "a", "name": "test__read", "input": {"index": 1}},
+        {"type": "tool_use", "id": "b", "name": "test__read", "input": {"index": 2}},
+    ]
+    evidence = deepcopy(native)
+    effective = [{"id": "a_i2_1", "type": "function", "function": {
+        "name": "test__read", "arguments": json.dumps({"action": "read_batch", "start_index": 1, "limit": 2})}}]
+    response = provider._parse_anthropic_messages_response({"content": native}, {})
+    messages = [response.assistant_message(effective), LLMMessage(role="tool", tool_call_id="a_i2_1", content="observed result")]
+    body = provider._to_anthropic_messages_request(LLMRequest(task="assistant_chat", messages=messages), {})
+    blocks = body["messages"][0]["content"]
+    assert blocks[0] == evidence[0]
+    assert len(blocks) == 2
+    assert blocks[1]["id"] == body["messages"][1]["content"][0]["tool_use_id"] == "a_i2_1"
+    assert blocks[1]["input"] == {"action": "read_batch", "start_index": 1, "limit": 2}
+    assert response.protocol["anthropic"] == evidence
+
+
+@pytest.mark.parametrize("protocol_type", ["anthropic", "openai"])
+def test_suppressed_proposal_has_no_unanswered_wire_calls(protocol_type):
+    from agent.llm.schemas import LLMMessage
+
+    if protocol_type == "anthropic":
+        state = {"anthropic": [
+            {"type": "thinking", "thinking": "opaque", "signature": "sig"},
+            {"type": "text", "text": "proposal"},
+            {"type": "tool_use", "id": "not_executed", "name": "exec__run", "input": {"action": "shell"}},
+        ]}
+    else:
+        state = {"openai": {"content": "proposal", "reasoning_content": "opaque", "tool_calls": [
+            {"id": "not_executed", "type": "function", "function": {"name": "exec__run", "arguments": "{}"}}]}}
+    response = LLMResponse(content="proposal", protocol=state)
+    message = response.assistant_message([])
+    if protocol_type == "anthropic":
+        body = provider._to_anthropic_messages_request(LLMRequest(task="assistant_chat", messages=[
+            message, LLMMessage(role="user", content="Proposal not executed; choose a different action.")]), {})
+        assert [b["type"] for b in body["messages"][0]["content"]] == ["thinking", "text"]
+        assert body["messages"][0]["content"][0]["signature"] == "sig"
+        assert state["anthropic"][-1]["id"] == "not_executed"
+    else:
+        body = provider._format_message(message)
+        assert "tool_calls" not in body
+        assert body["reasoning_content"] == "opaque"
+        assert state["openai"]["tool_calls"][0]["id"] == "not_executed"
+
+
+def test_rejected_native_proposal_remains_rejected_after_durable_restart():
+    from core.runtime_engine.loop_messages import serialize_loop_message, deserialize_loop_message
+    response = LLMResponse(content="proposal", protocol={"anthropic": [
+        {"type": "tool_use", "id": "not_executed", "name": "exec__run", "input": {}}]})
+    restored = deserialize_loop_message(serialize_loop_message(response.assistant_message([])))
+    assert restored.tool_calls == []
+    body = provider._to_anthropic_messages_request(LLMRequest(task="assistant_chat", messages=[restored]), {})
+    assert body["messages"] == []
+    assert restored.protocol["anthropic"][0]["id"] == "not_executed"
+
+
+def test_query_loop_suppresses_repeated_native_proposal_without_protocol_orphans(tmp_path, monkeypatch):
+    import asyncio
+    from agent.llm.schemas import LLMToolCall
+    from core.runtime_engine.budget_controller import BudgetController
+    from core.runtime_engine.models import StatelessContext
+    from core.runtime_engine.tool_runtime import ToolRuntime
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    config = SSOTRuntimeConfig(max_query_loop_iterations=10)
+    runtime = ToolRuntime(config)
+    observed = []
+    runtime.register("data.manage", lambda args: observed.append(args["text"]) or {"ok": True, "value": args["text"]})
+    registry = {"data.manage": {"description": "parse data", "args_schema": {
+        "type": "object", "required": ["action", "text"], "properties": {"action": {"type": "string"}, "text": {"type": "string"}}}}}
+    requests = []
+    def model(**kwargs):
+        wire = provider._to_anthropic_messages_request(LLMRequest(task="assistant_chat", messages=kwargs["messages"]), {})
+        pending = set()
+        for message in wire["messages"]:
+            if message["role"] == "assistant":
+                assert not pending
+                pending = {b["id"] for b in message["content"] if b["type"] == "tool_use"}
+            else:
+                results = [b["tool_use_id"] for b in message["content"] if b["type"] == "tool_result"]
+                for result in results:
+                    assert result in pending
+                    pending.remove(result)
+                assert not pending
+        assert not pending
+        requests.append(wire)
+        if len(requests) > 2:
+            return LLMResponse(content="Parsed the data once.")
+        call = LLMToolCall(id="reused", name="data__manage", arguments={"action": "parse", "text": "source"})
+        return LLMResponse(content="Parsing", tool_calls=[call], protocol={"anthropic": [
+            {"type": "thinking", "thinking": "opaque", "signature": "sig"},
+            {"type": "text", "text": "Parsing"},
+            {"type": "tool_use", "id": call.id, "name": call.name, "input": call.arguments}]})
+    loop = QueryLoop(config, registry, runtime, llm_invoke=model)
+    ctx = StatelessContext("protocol", "session", "request", "Parse source once.")
+    result = asyncio.run(loop.run(ctx, BudgetController(config), None))
+    assert result.error is None, result.error
+    assert observed == ["source"]
+    assert len(requests) == 3
+
+
+def test_failure_structure_detects_protocol_errors_without_logging_content():
+    from agent.llm.protocol_projection import anthropic_request_structure
+    body = {"model": "test", "messages": [
+        {"role": "assistant", "content": [{"type": "thinking", "thinking": "private secret", "signature": "opaque signature"},
+            {"type": "tool_use", "id": "c", "name": "exec__run", "input": {"password": "private credential"}}]},
+        {"role": "user", "content": [{"type": "text", "text": "private request"}]},
+    ]}
+    result = anthropic_request_structure(body)
+    assert result["violations"] == {"user_before_all_results": 1, "unanswered_calls": 1}
+    assert result["blocks"] == {"thinking": 1, "tool_use": 1, "text": 1}
+    assert len(result["sha256"]) == 64
+    assert "private" not in json.dumps(result)
+    assert "opaque" not in json.dumps(result)

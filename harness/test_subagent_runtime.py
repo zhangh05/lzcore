@@ -736,6 +736,8 @@ def test_completed_subagent_persists_full_result_artifact_and_get_result_exposes
         arguments={"action": "get", "subtask_id": created["subtask_id"]},
     ))
     assert handoff["subagent_result_complete"] is True
+    assert handoff["status"] == "ok"
+    assert handoff["task_status"] == "succeeded"
     assert handoff["content_complete"] is True
     assert handoff["preview"] == full_result
     assert handoff["artifact_id"] == task["result_artifact_id"]

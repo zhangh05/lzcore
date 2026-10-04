@@ -840,7 +840,8 @@ def _redact_error_detail(msg: str) -> str:
 def _format_message(m, cfg: dict | None = None) -> dict:
     msg = {"role": m.role, "content": m.content}
     if m.role == "assistant":
-        msg.update(_compatible_protocol(m, cfg).get("openai", {}))
+        from agent.llm.protocol_projection import openai_assistant_state
+        msg.update(openai_assistant_state(m, _compatible_protocol(m, cfg)))
     if m.tool_call_id:
         msg["tool_call_id"] = m.tool_call_id
     if m.tool_calls:
@@ -895,7 +896,8 @@ def _anthropic_messages_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
         result = send(body)
         cache_requested = _anthropic_prompt_cache_enabled(cfg) and _has_anthropic_prompt_cache(body)
         if cache_requested and _anthropic_prompt_cache_rejected(result):
-            result = send(_without_anthropic_prompt_cache(body))
+            body = _without_anthropic_prompt_cache(body)
+            result = send(body)
             result.metadata = {
                 **(result.metadata or {}),
                 "prompt_cache_requested": True,
@@ -907,6 +909,9 @@ def _anthropic_messages_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
                 "prompt_cache_requested": cache_requested,
                 "prompt_cache_fallback": False,
             }
+        if result.error:
+            from agent.llm.protocol_projection import anthropic_request_structure
+            result.metadata["request_structure"] = anthropic_request_structure(body)
         return result
     except Exception as exc:
         return LLMResponse(error=f"provider_anthropic_error: {str(exc)[:300]}")
@@ -960,13 +965,14 @@ def _to_anthropic_messages_request(req: LLMRequest, cfg: dict) -> dict:
         blocks: list[dict] = []
         protocol = _compatible_protocol(message, cfg)
         if message.role == "assistant" and "anthropic" in protocol:
+            from agent.llm.protocol_projection import anthropic_assistant_blocks
             # Native thinking/signatures must survive unchanged. A malformed
             # proposal, however, cannot be resent as a non-object tool input:
             # that would make the validation-feedback request itself invalid.
             append_message("assistant", [
                 {**block, "input": _anthropic_tool_input(block.get("input", {}))}
                 if block.get("type") == "tool_use" else block
-                for block in protocol["anthropic"]
+                for block in anthropic_assistant_blocks(message, protocol, _to_anthropic_tool_use)
             ])
             continue
         if isinstance(message.content, list):
