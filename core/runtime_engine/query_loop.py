@@ -34,7 +34,9 @@ from .cognitive_state import initialize_cognitive_state
 from .context_budget import (
     RuntimeContextBudget,
     estimate_json_tokens,
+    estimate_text_tokens,
 )
+from .context_continuation import ContextContinuation, ContextContinuationError
 from .context_compaction import (
     estimate_chars as _estimate_chars,
 )
@@ -97,7 +99,7 @@ def _normalize_llm_error(error: Any) -> str:
     if value in {
         "llm_call_timeout", "llm_rate_limited", "llm_auth_failed",
         "llm_configuration_error", "llm_request_rejected", "llm_provider_error", "no_response",
-        "context_capacity_exceeded",
+        "context_capacity_exceeded", "context_checkpoint_failed",
     }:
         return value
     if "timeout" in value or "timed out" in value:
@@ -132,6 +134,7 @@ def _llm_failure_message(error_code: str) -> str:
         "llm_configuration_error": "模型服务配置不可用，请联系管理员检查配置。",
         "llm_request_rejected": "模型服务拒绝了当前请求；保留的上下文和证据未丢失，但需要修正请求或模型约束后才能继续。",
         "context_capacity_exceeded": "完整上下文的估算大小超过当前模型的可用容量，已停止重复请求。历史和工具结果仍保留，请使用容量更大的模型或在新会话中继续。",
+        "context_checkpoint_failed": "上下文接续归档未成功，任务已停止；历史和已执行结果保留，请恢复存储后继续，不要重复未知结果的写入。",
     }
     return messages.get(error_code, "模型服务暂时不可用，请稍后重试。")
 
@@ -1420,6 +1423,7 @@ class QueryLoop:
             safety_tokens=config.context_safety_tokens,
         )
         self._llm_call_count = 0
+        self._context_continuation = None
 
     def _emit_stage(
         self,
@@ -1484,6 +1488,7 @@ class QueryLoop:
 
         # Build initial messages (cacheable prefix)
         messages = self._build_initial(ctx)
+        self._context_continuation = ContextContinuation(messages)
         resume = ctx.extras.get("approval_continuation_resume")
         if isinstance(resume, dict):
             try:
@@ -1587,6 +1592,8 @@ class QueryLoop:
                     metrics.snapshot().context_compacted if metrics else False
                 ),
                 "context_budget": self._context_budget.as_dict(),
+                "context_epochs": list(ctx.extras.get("context_epochs") or []),
+                "context_continuation_error": str(ctx.extras.get("context_continuation_error") or ""),
                 "execution_duration_ms": execution_duration_ms,
                 "max_parallel_width": self._executor.max_parallel_width,
                 "orchestration_batches": list(ctx.extras.get("orchestration_batches") or []),
@@ -1874,7 +1881,7 @@ class QueryLoop:
                 # and invalid model configuration cannot: retrying the exact
                 # same request only creates a busy loop.  Return the complete
                 # already-collected evidence and a typed operator-facing state.
-                if provider_error in {"llm_auth_failed", "llm_configuration_error", "llm_request_rejected", "context_capacity_exceeded"}:
+                if provider_error in {"llm_auth_failed", "llm_configuration_error", "llm_request_rejected", "context_capacity_exceeded", "context_checkpoint_failed"}:
                     final_response = (
                         self._build_tool_result_fallback(ctx, all_results)
                         if all_results else _llm_failure_message(provider_error)
@@ -2526,6 +2533,7 @@ class QueryLoop:
                     "context_estimated_tokens": _estimate_message_tokens(messages),
                     "context_compacted": metrics.snapshot().context_compacted if metrics else False,
                     "context_budget": self._context_budget.as_dict(),
+                    "context_epochs": list(ctx.extras.get("context_epochs") or []),
                     "execution_duration_ms": execution_duration_ms,
                     "max_parallel_width": self._executor.max_parallel_width,
                 },
@@ -2663,15 +2671,25 @@ class QueryLoop:
             # the same visible tool surface; the model may still choose a
             # necessary safe verification action.
             tools_for_call = self._cached_tools if tools_override is None else tools_override
-            # Preserve the complete transcript; do not send the same oversized
-            # request repeatedly or silently truncate evidence to make it fit.
-            # max_input_tokens is telemetry, while the model window is capacity.
-            estimated_tokens = _estimate_message_tokens(messages) + estimate_json_tokens(tools_for_call)
+            # Provider windows and durable task history are separate. Reserve
+            # system/schema/output capacity before choosing a complete epoch.
+            # A failed archive never permits evidence deletion or tool replay.
             available_tokens = (
                 self._context_budget.context_window_tokens
                 - self._context_budget.reserved_output_tokens
                 - self._context_budget.safety_tokens
+                - estimate_json_tokens(tools_for_call)
+                - estimate_text_tokens(system_prompt)
             )
+            if self._context_continuation is not None:
+                try:
+                    self._context_continuation.prepare(messages, ctx, max(0, int(available_tokens * 0.85)))
+                except ContextContinuationError as exc:
+                    ctx.extras["context_continuation_error"] = str(exc)
+                except (OSError, ValueError) as exc:
+                    ctx.extras["context_continuation_error"] = type(exc).__name__
+                    return LLMResponse(error="context_checkpoint_failed")
+            estimated_tokens = _estimate_message_tokens(messages)
             if estimated_tokens > available_tokens:
                 ctx.extras["context_capacity"] = {
                     "estimated_input_tokens": estimated_tokens,

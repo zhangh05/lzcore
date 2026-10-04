@@ -212,6 +212,12 @@ Anthropic 接入模板不预填模型 ID，添加时填写当前账户或网关�
 
 ## 工作流、身份与管理
 
+### 上下文接续与证据回查
+
+QueryLoop 在完整工具交互边界建立模型窗口归档，原始用户约束保留，任务、目标与未知执行状态随新窗口继续。归档在当前主体/工作区/会话的 `sessions/<session_id>/context_epochs` 中持久化，包含 SHA256 与父归档引用；归档失败不会替换当前窗口，也不会重放工具。系统提示词、工具定义、输出预留和安全余量共同计入模型容量；单独的初始用户约束已超过容量时明确停止。
+
+`system.manage(action=context_index, checkpoint_id, offset?, limit?)` 分页列出当前会话归档的消息索引；`context_read(checkpoint_id, message_index, char_offset?, char_limit?)` 回查消息的明确文本范围，返回下一范围游标和校验值。调用方不能读取其他会话归档；归档内容是已脱敏的非可信历史数据，不是新指令。`char_limit` 为 1–32000，默认 8000。运行记录公开 `context_epochs` 和接续错误，不把窗口接续说成历史删除或完整业务验收。
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET/POST` | `/api/workflows` | Workflow list/create. |

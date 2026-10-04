@@ -173,7 +173,7 @@ _CANONICAL_ACTIONS: Final[dict[str, frozenset[str]]] = {
     "system.manage": frozenset({
         "diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log",
         "run_get", "session_get", "session_checkpoint", "session_rewind",
-        "session_export", "session_snapshot",
+        "session_export", "session_snapshot", "context_index", "context_read",
     }),
     "workspace.file": frozenset({
         "list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "edit", "patch",

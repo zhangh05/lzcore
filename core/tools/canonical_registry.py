@@ -477,6 +477,8 @@ def _handle_system(inv: ToolInvocation) -> dict:
         handle_session_snapshot,
     )
 
+    from core.tools.general_tools.context_tools import handle_context_archive
+
     action = _action(inv) or "diagnostics"
     return {
         "diagnostics": handle_runtime_diagnostics,
@@ -491,6 +493,8 @@ def _handle_system(inv: ToolInvocation) -> dict:
         "session_rewind": handle_session_rewind,
         "session_export": handle_session_export,
         "session_snapshot": handle_session_snapshot,
+        "context_index": handle_context_archive,
+        "context_read": handle_context_archive,
     }.get(action, lambda x: _unsupported(x, "diagnostics|health|selfcheck|local_info|tasks|audit_log|run_get|session_get|session_checkpoint|session_rewind|session_export|session_snapshot"))(inv)
 
 
@@ -780,6 +784,11 @@ _MEMORY_ARGS = {
 }
 
 _SYSTEM_ARGS = {
+    "checkpoint_id": {"type": "string"},
+    "offset": {"type": "integer", "minimum": 0},
+    "message_index": {"type": "integer", "minimum": 0},
+    "char_offset": {"type": "integer", "minimum": 0},
+    "char_limit": {"type": "integer", "minimum": 1, "maximum": 32000},
     "run_id": {"type": "string"}, "session_id": {"type": "string"},
     "snapshot_id": {"type": "string"}, "log_level": {"type": "string"},
     "operation": {"type": "string"}, "reason": {"type": "string"},
@@ -870,7 +879,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         "subtask_id": {"type": "string"},
         "parent_task_id": {"type": "string"},
     }, required=["action"], description="Subagent task management. spawn delegates an outcome, not an invented implementation plan, and accepts only the profile_id values published in the schema; choose research_agent for external research, file_agent for workspace files, and data_agent for structured analysis. Preserve explicit user constraints, but let the child select and compose its allowed tools. get/cancel/merge use the subtask_id returned by spawn. Delegation does not extend an upstream tool or data provider's limits."),
-    _entry("system.manage", _handle_system, {**_COMMON, **_SYSTEM_ARGS, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "action": {"type": "string", "enum": ["diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_checkpoint", "session_rewind", "session_export", "session_snapshot"]}}, required=["action"], risk="medium", description="Runtime health, current local date/time and host facts, durable tasks, audit logs, run details, and session operations. local_info returns timezone-aware current time plus host/IP/OS facts; run_get requires run_id; session actions require session_id; rewind additionally requires snapshot_id."),
+    _entry("system.manage", _handle_system, {**_COMMON, **_SYSTEM_ARGS, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "action": {"type": "string", "enum": ["diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_checkpoint", "session_rewind", "session_export", "session_snapshot", "context_index", "context_read"]}}, required=["action"], risk="medium", description="context_index pages archived model-window evidence; context_read retrieves an explicit message text range. Both require checkpoint_id and stay within the current session; context_read also requires message_index. Runtime health, current local date/time and host facts, durable tasks, audit logs, run details, and session operations. local_info returns timezone-aware current time plus host/IP/OS facts; run_get requires run_id; session actions require session_id; rewind additionally requires snapshot_id."),
     _entry("text.analyze", _handle_text, {**_COMMON, "action": {"type": "string", "enum": ["redact", "extract_entities", "match"]}, "text": {"type": "string"}, "pattern": {"type": "string"}}, required=["action"], description="Text redact, extract and match."),
     _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "create", "write", "write_artifact", "edit", "patch", "glob", "delete"]}}, required=["action"], risk="medium", description="Workspace files. list supports offset/limit pagination with next_offset; read returns full text unless an explicit line offset/limit is supplied. extract_document reads a managed text, DOCX, PDF, XLSX, or PPTX attachment by file_id and reports embedded_image_count for DOCX. extract_document_image extracts one DOCX image by file_id and 1-based image_index. extract_document_images extracts an ordered DOCX image batch (up to 8) for visual analysis; its image evidence is automatically delivered to the next model turn. Never pass a returned file_id to read/read_image because those actions require a workspace filepath. create requires filepath and content, preserves source directory structure under files/data, files/tmp or inbox, and fails if the target exists; use read then edit/patch for existing sources. write/write_artifact require filename and content and generate FileStore attachments, not source paths.", execution_contract={
         "batching": [{
@@ -935,6 +944,7 @@ _BINDABLE_INPUTS: dict[str, dict[str, list[str]]] = {
     },
     "agent.manage": {"get": ["subtask_id"]},
     "system.manage": {
+        "context_index": ["checkpoint_id"], "context_read": ["checkpoint_id", "message_index"],
         "run_get": ["run_id"], "session_get": ["session_id"],
         "session_export": ["session_id"],
     },

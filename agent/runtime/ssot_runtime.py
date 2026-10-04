@@ -534,6 +534,8 @@ def run_ssot_turn(
                 (runtime_result.metadata or {}).get("context_estimated_tokens", 0) or 0
             ),
             "context_budget": dict((runtime_result.metadata or {}).get("context_budget") or {}),
+            "context_epochs": list((runtime_result.metadata or {}).get("context_epochs") or []),
+            "context_continuation_error": str((runtime_result.metadata or {}).get("context_continuation_error") or ""),
             "execution_outcome": str(
                 (runtime_result.metadata or {}).get("execution_outcome")
                 or ("complete" if runtime_result.success else "failed")
