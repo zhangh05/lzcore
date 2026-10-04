@@ -667,7 +667,7 @@ _EXEC_ARGS = {
         "description": "Structured data supplied to action=python as the input_data variable; may be bound from a prior tool step.",
     },
     "description": {"type": "string"},
-    "working_dir": {"type": "string", "description": "Workspace-relative working directory. Shell relative paths resolve from this directory; workspace.file paths always resolve from the workspace root."},
+    "working_dir": {"type": "string", "description": "Explicit workspace-relative working directory. When omitted, strict project execution uses its writable project root; trusted local execution uses the workspace root. Shell paths resolve from the returned working_dir; workspace.file paths always resolve from the workspace root."},
     "timeout": {"type": "integer", "minimum": 1, "maximum": 600},
     "target": {"type": "string", "enum": ["local"], "default": "local"},
     "shell": {"type": "string", "enum": ["native", "cmd", "powershell"], "default": "native", "description": "native uses /bin/bash on macOS/Linux and cmd.exe on Windows; powershell requires Windows."},

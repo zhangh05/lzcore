@@ -184,7 +184,7 @@ class DockerProjectEnvironment:
                 self.network,
                 "--mount",
                 f"type=bind,source={self.mount_source},target={self.mount_target}",
-                "--workdir=/workspace",
+                f"--workdir={self.mount_target}",
                 "--env=HOME=/tmp/home",
                 "--env=HTTPS_PROXY=http://package-egress:3128",
                 "--env=HTTP_PROXY=http://package-egress:3128",
@@ -204,7 +204,7 @@ class DockerProjectEnvironment:
         return {
             "isolation_level": self.isolation_level,
             "os": "Linux",
-            "cwd": "/workspace",
+            "cwd": self.mount_target,
             "project": self.mount_target,
             "image_id": self.image_id,
             "network": "internal_with_dependency_only_tls_egress",
@@ -236,8 +236,11 @@ class DockerProjectEnvironment:
                 "error": "isolated project environment is closed; host fallback is forbidden",
             }
         relative = Path(cwd).resolve().relative_to(self.root)
-        target = "/workspace" + ("/" + relative.as_posix() if relative.parts else "")
-        if target != "/workspace" and not (
+        # The host adapter's default workspace cwd denotes the bound project
+        # in a strict environment. Shell and Python share this writable root;
+        # an explicit workspace-relative project subdirectory stays explicit.
+        target = "/workspace/" + relative.as_posix() if relative.parts else self.mount_target
+        if not (
             target == self.mount_target or target.startswith(self.mount_target + "/")
         ):
             return {
@@ -280,6 +283,8 @@ class DockerProjectEnvironment:
             isolation_level=self.isolation_level,
             runner="project_container",
             image_id=self.image_id,
+            working_dir=target.removeprefix("/workspace/"),
+            container_cwd=target,
         )
         return result
 

@@ -47,11 +47,14 @@ def main() -> int:
             checks.append({"name": name, "passed": passed, "runtime_status": result.status})
         with isolated_project(ws, project, args.base_port + index) as environment:
             descriptor = environment.descriptor()
-            probe("authorized_source_write", {"action": "shell", "command": "printf 'scoped' > files/data/project/owned.txt"}, True)
+            probe("authorized_default_project_source_write", {"action": "shell", "command": "printf 'scoped' > owned.txt"}, True)
+            checks.append({"name": "default_write_in_project", "passed": (project / "owned.txt").exists() and (project / "owned.txt").read_text() == "scoped"})
+            probe("explicit_workspace_project_directory", {"action": "shell", "working_dir": "files/data/project", "command": "test -f owned.txt && pwd"}, True)
+            probe("python_default_matches_shell_project", {"action": "python", "code": "from pathlib import Path; assert Path('owned.txt').read_text() == 'scoped'; result = str(Path.cwd())"}, True)
             probe("framework_evaluator_socket_not_mounted", {"action": "shell", "command":
                 f"test ! -e {ROOT.as_posix()} && test ! -e /project/harness && test ! -S /var/run/docker.sock"}, True)
             probe("outside_project_canary_denied", {"action": "python", "code": f"result = open({str(canary)!r}).read()"}, False)
-            probe("symlink_cannot_reach_host", {"action": "shell", "command": "cat files/data/project/host-link"}, False)
+            probe("symlink_cannot_reach_host", {"action": "shell", "command": "cat host-link"}, False)
             probe("root_filesystem_readonly", {"action": "shell", "command": "touch /usr/local/host-escape"}, False)
             probe("cwd_traversal_denied", {"action": "shell", "working_dir": "../../", "command": "echo escaped"}, False)
             probe("registry_tls_dependency_allowed", {"action": "shell", "command": "npm view react version", "timeout": 30}, True)
@@ -61,7 +64,7 @@ def main() -> int:
             # resource, not merely by killing a local Docker client process.
             probe("timeout_stops_descendants", {"action": "shell", "command": "sleep 120 & wait", "timeout": 1}, False)
             checks.append({"name": "timeout_environment_stopped", "passed": environment.closed and environment.cleanup_confirmed})
-            probe("late_child_never_falls_back_to_host", {"action": "shell", "command": "touch files/data/project/late-host-write"}, False)
+            probe("late_child_never_falls_back_to_host", {"action": "shell", "command": "touch late-host-write"}, False)
         checks.append({"name": "late_write_absent", "passed": not (project / "late-host-write").exists()})
         checks.append({"name": "kernel_cleanup_confirmed", "passed": environment.cleanup_confirmed})
         reports.append({"round": index + 1, "environment": descriptor, "checks": checks})

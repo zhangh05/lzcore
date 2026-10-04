@@ -77,6 +77,26 @@ def test_env_does_not_inherit_credentials(environment, monkeypatch):
     # Client HOME is used by Docker/Lima; it is never supplied as container env.
 
 
+def test_strict_default_shell_directory_is_writable_project_and_explicit_paths_stay_scoped(environment, monkeypatch):
+    calls = []
+    environment.started = True
+    def run(*args, **kwargs):
+        calls.append(kwargs['argv_override'])
+        return {'ok': True, 'stdout': '', 'exit_code': 0}
+    monkeypatch.setattr('core.tools.general_tools.shared._run_shell', run)
+    default = environment.execute('touch server.pid', str(environment.root))
+    assert default['container_cwd'] == environment.descriptor()['cwd'] == environment.mount_target
+    assert default['working_dir'] == 'files/data/project'
+    assert calls[-1][calls[-1].index('--workdir') + 1] == environment.mount_target
+    child = environment.project / 'source'
+    child.mkdir()
+    explicit = environment.execute('pwd', str(child))
+    assert explicit['container_cwd'] == environment.mount_target + '/source'
+    rejected = environment.execute('pwd', str(environment.root / 'sessions'))
+    assert rejected['ok'] is False and rejected['executed'] is False
+    assert len(calls) == 2
+
+
 def test_python_contract_shared_with_host_and_container():
     from core.tools.python_program import build_program, decode_program_output
     result = subprocess.run(['python3', '-c', build_program('result = {"值": input_data["值"] + 1}', {'值': 2})], capture_output=True, text=True, encoding='utf-8')

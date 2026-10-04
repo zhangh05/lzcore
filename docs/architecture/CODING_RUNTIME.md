@@ -16,6 +16,8 @@
 
 Shell 与 Python 都经原有 ToolRuntime 进入同一适配器。系统隔离不可用即失败，不回退宿主 Shell；普通受信任本地执行保持原有独立合同。超时/取消清理整个任务容器及后代进程，清理未确认记录 unknown，禁止自动重试。关闭后的工作区绑定保持关闭，迟到调用不会回退宿主。跨主机 daemon 只能映射服务端明确指定的 scratch 根。
 
+严格工程执行的 Shell/Python 默认目录统一为可写工程根目录，容器描述与结果的 `container_cwd`/`working_dir` 给出实际位置；显式 `working_dir` 仍是工作区相对路径并限定在挂载工程内。普通本地执行默认工作区根目录，`workspace.file` 始终使用工作区相对路径，不因 Shell 目录改变。
+
 ## Coding Team
 
 `coding_agent`、`frontend_agent`、`qa_agent` 与研究/文件/数据角色共享工具目录。`coding_assignment` 声明工程、文件或目录责任、已存在的前置任务和验证命令；`.` 表示整个工程，不支持隐含 glob。服务端父任务/会话身份决定归属，模型不能覆盖它们。当前领域 Skill 不能被静默迁移到工程副本，因此这类委派要求无领域绑定的编码任务。
