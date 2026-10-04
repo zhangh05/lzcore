@@ -48,6 +48,7 @@ def team(monkeypatch, tmp_path):
         depends=None,
         responsibilities=None,
         instruction="Implement",
+        generated_paths=None,
     ):
         arguments = {
             "action": "spawn",
@@ -60,6 +61,7 @@ def team(monkeypatch, tmp_path):
                 "depends_on": depends or [],
                 "validation_commands": ["python3 -c 'assert True'"],
                 "review_subtask_id": review,
+                "generated_paths": generated_paths or [],
             },
         }
         result = client.invoke("agent.manage", arguments, context=parent)
@@ -281,6 +283,18 @@ def test_governed_spawn_rejects_forged_session(team):
         context=team.parent,
     )
     assert result.status == "failed" and "session_id_mismatch" in str(result.output)
+
+
+def test_team_acceptance_uses_declared_generated_output_contract(team, monkeypatch):
+    from scripts.benchmark_team_acceptance import verify_team
+    first = team.spawn(generated_paths=["dist"])
+    assert team.spawn("qa_agent", review=first["subtask_id"])["task_status"] == "succeeded"
+    assert subagent.merge_subagent_result("parent-task", first["subtask_id"], "parent-ws")["ok"]
+    output = workspace_root("parent-ws") / "files/data/app/dist/asset.js"
+    output.parent.mkdir()
+    output.write_text("x" * 256)
+    monkeypatch.setattr(project_changes, "MAX_BYTES", 128)
+    assert verify_team("parent-ws", "parent-session", "files/data/app")["status"] == "PASS"
 
 
 def test_acceptance_replays_reviewed_updates_and_rejects_unreviewed_changes(team, monkeypatch):

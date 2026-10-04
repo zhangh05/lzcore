@@ -70,7 +70,7 @@ def verify_team(workspace_id: str, session_id: str, project_dir: str) -> dict:
                     "publication_order": order,
                 }
             )
-        current = source_manifest(project_path(workspace_id, project_dir))
+        current = source_manifest(project_path(workspace_id, project_dir), task["coding"].get("generated_paths"))
         assert all(current.get(path) == expected for path, expected in heads.items()), "parent source changed after exact-candidate QA"
     return {
         "schema": "coding.team_acceptance.v1",
