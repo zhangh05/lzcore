@@ -410,3 +410,40 @@ def test_output_contract_preserves_build_and_nested_dist_sources(monkeypatch, tm
 def test_generated_paths_cannot_hide_entire_project_or_its_contract(path):
     with pytest.raises(ValueError):
         project_changes.validate_generated_paths([path])
+
+
+def test_request_wait_returns_same_running_worker_without_cancelling(team, monkeypatch):
+    import threading
+    original_run = __import__('agent.runtime.ssot_runtime', fromlist=['run_ssot_turn']).run_ssot_turn
+    entered, release = threading.Event(), threading.Event()
+    def slow_run(*args, **kwargs):
+        entered.set()
+        assert release.wait(3)
+        return original_run(*args, **kwargs)
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn', slow_run)
+    original_wait = subagent.wait_subagent_task
+    monkeypatch.setattr(subagent, 'wait_subagent_task', lambda identity, ws: original_wait(identity, ws, 0.01))
+    try:
+        result=team.spawn()
+        identity=result['subtask_id']
+        assert entered.is_set() and result['task_status']=='running' and result['deferred']
+        assert subagent.subagent_worker_alive('parent-ws',identity)
+        assert subagent._load_task('parent-ws',identity).status=='running'
+    finally:
+        release.set()
+    result=original_wait(identity,'parent-ws',2)
+    assert result['status']=='succeeded'
+    assert subagent._load_task('parent-ws',identity).coding['phase']=='changes_ready'
+
+
+def test_cancel_probe_reads_durable_marker_without_a_process_local_signal(monkeypatch,tmp_path):
+    import threading
+    from agent.runtime.durable.subagent_control import cancellation_probe
+    monkeypatch.setenv('LZCORE_WORKSPACE_ROOT',str(tmp_path))
+    created=subagent.create_subagent_task(parent_task_id='parent',workspace_id='cancel-ws',session_id='session',profile_id='research_agent',goal='read')
+    identity=created['subtask_id'];event=threading.Event()
+    assert not cancellation_probe('cancel-ws',identity,event)()
+    task=subagent._load_task('cancel-ws',identity);task.status='cancelled';subagent._save_task(task)
+    assert not event.is_set()
+    assert cancellation_probe('cancel-ws',identity,event)()
+    assert event.is_set()

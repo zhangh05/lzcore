@@ -285,7 +285,16 @@ def main() -> int:
         )
         acceptance_exit_code = acceptance.returncode
     finally:
+        cancel.set()
         timer.cancel()
+        from scripts.benchmark_cleanup import drain_delegations
+
+        delegated_cleanup = drain_delegations(
+            get_default_tool_runtime_client(), ws, session_id
+        )
+        (report / "delegation_cleanup.json").write_text(
+            json.dumps(delegated_cleanup, indent=2), encoding="utf-8"
+        )
         StreamEmitter.clear_realtime_callback()
         if environment is not None:
             environment_scope.__exit__(None, None, None)
@@ -293,7 +302,9 @@ def main() -> int:
             (report / "execution_cleanup.json").write_text(
                 json.dumps(cleanup, indent=2), encoding="utf-8"
             )
-            cleanup_confirmed = cleanup["cleanup_confirmed"]
+            cleanup_confirmed = (
+                cleanup["cleanup_confirmed"] and delegated_cleanup["confirmed"]
+            )
             if not cleanup_confirmed:
                 exit_code = 1
                 print(

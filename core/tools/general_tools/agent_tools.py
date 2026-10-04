@@ -59,55 +59,80 @@ def _inherit_parent_workbench_context(inv: ToolInvocation, workspace_id: str) ->
     from extensions.runtime import list_workbench_skills, resolve_workbench_context
 
     catalog = list_workbench_skills(workspace_id)
-    entry = next((item for item in catalog if str(item.get("skill_id") or "") == skill_id), None)
+    entry = next(
+        (item for item in catalog if str(item.get("skill_id") or "") == skill_id), None
+    )
     if not entry:
         raise ValueError("parent_workbench_skill_not_available")
-    context = resolve_workbench_context(workspace_id, {
-        "extension_id": str(entry.get("extension_id") or ""),
-        "skill_id": skill_id,
-    })
+    context = resolve_workbench_context(
+        workspace_id,
+        {
+            "extension_id": str(entry.get("extension_id") or ""),
+            "skill_id": skill_id,
+        },
+    )
     selected_connection_ids = {
-        str(item) for item in (getattr(inv, "skill_connection_ids", ()) or ()) if str(item)
+        str(item)
+        for item in (getattr(inv, "skill_connection_ids", ()) or ())
+        if str(item)
     }
     if not selected_connection_ids:
         return context
     connections = [
-        item for item in (context.get("connections") or [])
-        if isinstance(item, dict) and str(item.get("connection_id") or "") in selected_connection_ids
+        item
+        for item in (context.get("connections") or [])
+        if isinstance(item, dict)
+        and str(item.get("connection_id") or "") in selected_connection_ids
     ]
-    resolved_connection_ids = {str(item.get("connection_id") or "") for item in connections}
+    resolved_connection_ids = {
+        str(item.get("connection_id") or "") for item in connections
+    }
     if resolved_connection_ids != selected_connection_ids:
         raise ValueError("parent_workbench_connection_scope_not_available")
-    device_ids = list(dict.fromkeys(
-        str(item.get("device_id") or "") for item in connections if str(item.get("device_id") or "")
-    ))
+    device_ids = list(
+        dict.fromkeys(
+            str(item.get("device_id") or "")
+            for item in connections
+            if str(item.get("device_id") or "")
+        )
+    )
     return {
         **context,
-        "connection_ids": [str(item.get("connection_id") or "") for item in connections],
+        "connection_ids": [
+            str(item.get("connection_id") or "") for item in connections
+        ],
         "connections": connections,
         "device_ids": device_ids,
         "devices": [
-            item for item in (context.get("devices") or [])
-            if isinstance(item, dict) and str(item.get("device_id") or "") in set(device_ids)
+            item
+            for item in (context.get("devices") or [])
+            if isinstance(item, dict)
+            and str(item.get("device_id") or "") in set(device_ids)
         ],
     }
 
 
-def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: str,
-                          parent_task_id: str = "",
-                          profile_id: str = "research_agent",
-                          max_turns: int | None = None,
-                          background: bool = False,
-                          workbench_context: dict | None = None,
-                          coding_assignment: dict | None = None,
-                          cancel_check=None) -> dict:
+def _run_durable_subagent(
+    *,
+    instruction: str,
+    workspace_id: str,
+    session_id: str,
+    parent_task_id: str = "",
+    profile_id: str = "research_agent",
+    max_turns: int | None = None,
+    background: bool = False,
+    workbench_context: dict | None = None,
+    coding_assignment: dict | None = None,
+    cancel_check=None,
+) -> dict:
     from agent.runtime.durable.subagent import (
         create_subagent_task,
         start_subagent_task,
         merge_subagent_result,
-        run_subagent_task,
+        wait_subagent_task,
     )
     from core.tools.context import get_runtime_operation_context
+
     runtime_operation = get_runtime_operation_context()
 
     profile = _get_profile(profile_id)
@@ -135,20 +160,33 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
         goal=instruction,
         context_refs=[],
         max_steps=effective_turns,
-        operation_id=(runtime_operation[1] if runtime_operation and runtime_operation[0] == workspace_id else ""),
-        operation_call_id=(runtime_operation[2] if runtime_operation and runtime_operation[0] == workspace_id else ""),
+        operation_id=(
+            runtime_operation[1]
+            if runtime_operation and runtime_operation[0] == workspace_id
+            else ""
+        ),
+        operation_call_id=(
+            runtime_operation[2]
+            if runtime_operation and runtime_operation[0] == workspace_id
+            else ""
+        ),
         workbench_context=workbench_context,
         coding_assignment=coding_assignment,
     )
     if not created.get("ok"):
-        return {"ok": False, "error": created.get("error", "failed to create subagent task")}
+        return {
+            "ok": False,
+            "error": created.get("error", "failed to create subagent task"),
+        }
 
     subtask_id = created["subtask_id"]
     from agent.runtime.durable.subagent_control import register_parent_cancel
+
     register_parent_cancel(workspace_id, subtask_id, cancel_check)
 
     if runtime_operation and runtime_operation[0] == workspace_id:
         from core.runtime_engine.operation_ledger import link_operation_resource
+
         link_operation_resource(
             workspace_id,
             runtime_operation[1],
@@ -162,7 +200,8 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
             return started
         status = str(started.get("status") or "running")
         return {
-            "ok": True, "subtask_id": subtask_id,
+            "ok": True,
+            "subtask_id": subtask_id,
             "parent_task_id": parent_task_id,
             "status": status,
             "background": True,
@@ -171,11 +210,19 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
             "_hint": f"Subagent {profile_id} launched in background (task: {subtask_id})",
         }
 
-    result = run_subagent_task(subtask_id, workspace_id)
-    if result.get("ok") and result.get("status") == "succeeded" and not result.get("coding"):
+    started = start_subagent_task(subtask_id, workspace_id)
+    if not started.get("ok"):
+        return started
+    result = wait_subagent_task(subtask_id, workspace_id)
+    if (
+        result.get("ok")
+        and result.get("status") == "succeeded"
+        and not result.get("coding")
+    ):
         merge_subagent_result(parent_task_id, subtask_id, workspace_id)
     return {
-        "ok": result.get("ok", False) and result.get("status") in {"succeeded", "created", "running"},
+        "ok": result.get("ok", False)
+        and result.get("status") in {"succeeded", "created", "running"},
         "final_response": result.get("summary", ""),
         "summary": result.get("summary", ""),
         "subtask_id": subtask_id,
@@ -188,6 +235,7 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
         "errors": result.get("errors", []),
         "warnings": result.get("warnings", []),
         "coding": result.get("coding", {}),
+        "deferred": bool(result.get("deferred")),
     }
 
 
@@ -241,17 +289,30 @@ def _spawn_agent(inv: ToolInvocation, profile_id: str) -> dict:
             coding_assignment=args.get("coding_assignment"),
             cancel_check=getattr(inv, "cancel_check", None),
         )
-        return _result(inv, result.get("ok", False), {
-            **result,
-            "task_status": result.get("status", "unknown"),
-            **({"tracking": _subtask_tracking(result["subtask_id"], result["status"])} if result.get("subtask_id") and result.get("status") in {"created", "running"} else {}),
-            "_hint": (
-                f"Subagent {profile_id} "
-                + ("已启动（后台）。" if background else f"完成，状态: {result.get('status')}。")
-                + f" subtask_id: {result.get('subtask_id')}。"
-                + " 用 agent.manage(action=get) 获取详细结果。"
-            ),
-        })
+        return _result(
+            inv,
+            result.get("ok", False),
+            {
+                **result,
+                "task_status": result.get("status", "unknown"),
+                **(
+                    {
+                        "tracking": _subtask_tracking(
+                            result["subtask_id"], result["status"]
+                        )
+                    }
+                    if result.get("subtask_id")
+                    and result.get("status") in {"created", "running"}
+                    else {}
+                ),
+                "_hint": (
+                    f"Subagent {profile_id} "
+                    + f"已受理，当前状态: {result.get('status')}。"
+                    + f" subtask_id: {result.get('subtask_id')}。"
+                    + " 用 agent.manage(action=get) 获取详细结果。"
+                ),
+            },
+        )
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
 
@@ -262,15 +323,22 @@ def _spawn_agent(inv: ToolInvocation, profile_id: str) -> dict:
 def handle_agent_start(inv: ToolInvocation) -> dict:
     """Start a dependency-ready assignment without spawning a duplicate."""
     from agent.runtime.durable.subagent import _load_task, start_subagent_task
+
     ws = _caller_workspace(inv)
     subtask_id = str(inv.arguments.get("subtask_id") or "")
     task = _load_task(ws, subtask_id)
     if not task:
         return _error_inv(inv, "subtask not found")
-    if task.coding and (task.parent_task_id != getattr(inv, "task_id", "") or task.session_id != _inv_session_id(inv)):
+    if task.coding and (
+        task.parent_task_id != getattr(inv, "task_id", "")
+        or task.session_id != _inv_session_id(inv)
+    ):
         return _error_inv(inv, "coding_parent_identity_mismatch")
     result = start_subagent_task(subtask_id, ws)
-    return {**result, "tracking": _subtask_tracking(subtask_id, result.get("status", "created"))}
+    return {
+        **result,
+        "tracking": _subtask_tracking(subtask_id, result.get("status", "created")),
+    }
 
 
 def handle_agent_spawn(inv: ToolInvocation) -> dict:
@@ -284,23 +352,29 @@ def handle_agent_list(inv: ToolInvocation) -> dict:
     """List available agent profiles with capabilities."""
     profiles = []
     for pid, p in BUILTIN_PROFILES.items():
-        profiles.append({
-            "profile_id": pid,
-            "name": p.name,
-            "description": p.description,
-            "max_steps": p.max_steps,
-            "allowed_tools": [],
-            "inherits_parent_tool_surface": True,
-            "inherits_selected_skill": True,
-            "can_modify_files": True,
-            "can_execute_commands": True,
-            "can_call_network": True,
-        })
-    return _ok(inv, "", {
-        "profiles": profiles,
-        "count": len(profiles),
-        "_hint": "可用子Agent profile: " + ", ".join(BUILTIN_PROFILES.keys()),
-    })
+        profiles.append(
+            {
+                "profile_id": pid,
+                "name": p.name,
+                "description": p.description,
+                "max_steps": p.max_steps,
+                "allowed_tools": [],
+                "inherits_parent_tool_surface": True,
+                "inherits_selected_skill": True,
+                "can_modify_files": True,
+                "can_execute_commands": True,
+                "can_call_network": True,
+            }
+        )
+    return _ok(
+        inv,
+        "",
+        {
+            "profiles": profiles,
+            "count": len(profiles),
+            "_hint": "可用子Agent profile: " + ", ".join(BUILTIN_PROFILES.keys()),
+        },
+    )
 
 
 def handle_agent_get_result(inv: ToolInvocation) -> dict:
@@ -315,6 +389,7 @@ def handle_agent_get_result(inv: ToolInvocation) -> dict:
     try:
         validate_workspace_id(ws)
         from agent.runtime.durable.subagent import get_subagent_task
+
         persisted = get_subagent_task(ws, subtask_id)
         if persisted is not None:
             status = str(persisted.get("status") or "unknown")
@@ -332,17 +407,20 @@ def handle_agent_get_result(inv: ToolInvocation) -> dict:
                 # artifact is the durable authority for a completed child result;
                 # do not downgrade it to the diagnostic summary field.
                 from artifacts.store import read_artifact_content
+
                 full_result = read_artifact_content(ws, artifact_id)
                 if full_result is not None:
-                    payload.update({
-                        "artifact_id": artifact_id,
-                        "artifact_ids": [artifact_id],
-                        "artifact_type": "output_data",
-                        "preview": full_result,
-                        "content_chars": len(full_result),
-                        "content_complete": True,
-                        "subagent_result_complete": True,
-                    })
+                    payload.update(
+                        {
+                            "artifact_id": artifact_id,
+                            "artifact_ids": [artifact_id],
+                            "artifact_type": "output_data",
+                            "preview": full_result,
+                            "content_chars": len(full_result),
+                            "content_complete": True,
+                            "subagent_result_complete": True,
+                        }
+                    )
                     return _ok(
                         inv,
                         f"Subagent result ready: {len(full_result)} chars in artifact {artifact_id}",
@@ -354,20 +432,30 @@ def handle_agent_get_result(inv: ToolInvocation) -> dict:
                     if status in {"cancelled", "canceled"}
                     else "SUBAGENT_FAILED"
                 )
-                errors = [str(item) for item in (persisted.get("errors") or []) if str(item)]
+                errors = [
+                    str(item) for item in (persisted.get("errors") or []) if str(item)
+                ]
                 summary = str(
                     persisted.get("summary")
                     or (errors[0] if errors else f"Subagent {status}")
                 )
-                return _result(inv, False, {
-                    **payload,
-                    "summary": summary,
-                    "error": summary,
-                    "errors": errors or [summary],
-                    "error_code": error_code,
-                    "retryable": False,
-                })
-            return _ok(inv, str(persisted.get("summary") or f"Subagent status: {status}"), payload)
+                return _result(
+                    inv,
+                    False,
+                    {
+                        **payload,
+                        "summary": summary,
+                        "error": summary,
+                        "errors": errors or [summary],
+                        "error_code": error_code,
+                        "retryable": False,
+                    },
+                )
+            return _ok(
+                inv,
+                str(persisted.get("summary") or f"Subagent status: {status}"),
+                payload,
+            )
 
         return _error_inv(inv, "subtask not found")
     except Exception as e:
@@ -384,13 +472,19 @@ def handle_agent_cancel(inv: ToolInvocation) -> dict:
         ws = _caller_workspace(inv)
         validate_workspace_id(ws)
         from agent.runtime.durable.subagent import cancel_subagent_task
+
         cancelled = cancel_subagent_task(subtask_id, ws)
         if not cancelled.get("ok"):
             return _error_inv(inv, cancelled.get("error", "cancel failed"))
-        return _ok(inv, "", {
-            "subtask_id": subtask_id, "cancelled": True,
-            "_hint": f"Subagent {subtask_id} 已取消。",
-        })
+        return _ok(
+            inv,
+            "",
+            {
+                "subtask_id": subtask_id,
+                "cancelled": True,
+                "_hint": f"Subagent {subtask_id} 已取消。",
+            },
+        )
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
 
@@ -404,6 +498,7 @@ def handle_agent_merge(inv: ToolInvocation) -> dict:
     try:
         ws = _caller_workspace(inv)
         from agent.runtime.durable.subagent import _load_task, merge_subagent_result
+
         task = _load_task(ws, subtask_id)
         if task is None:
             return _error_inv(inv, "subtask not found")
@@ -428,11 +523,17 @@ def handle_agent_status(inv: ToolInvocation) -> dict:
         ws = _caller_workspace(inv)
         validate_workspace_id(ws)
         from agent.runtime.durable.subagent import list_subagent_tasks
+
         tasks = list_subagent_tasks(ws)
-        return _ok(inv, "", {
-            "tasks": tasks, "count": len(tasks),
-            "_hint": f"{len(tasks)} 个子Agent任务。用 agent.manage(action=cancel) 取消运行中的任务。",
-        })
+        return _ok(
+            inv,
+            "",
+            {
+                "tasks": tasks,
+                "count": len(tasks),
+                "_hint": f"{len(tasks)} 个子Agent任务。用 agent.manage(action=cancel) 取消运行中的任务。",
+            },
+        )
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
 
@@ -441,10 +542,10 @@ def handle_agent_status(inv: ToolInvocation) -> dict:
 
 __all__ = [
     # Other action handlers
-    'handle_agent_spawn',
-    'handle_agent_list',
-    'handle_agent_get_result',
-    'handle_agent_cancel',
-    'handle_agent_merge',
-    'handle_agent_status',
+    "handle_agent_spawn",
+    "handle_agent_list",
+    "handle_agent_get_result",
+    "handle_agent_cancel",
+    "handle_agent_merge",
+    "handle_agent_status",
 ]

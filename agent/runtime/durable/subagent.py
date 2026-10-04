@@ -631,6 +631,27 @@ def start_subagent_task(subtask_id: str, ws_id: str) -> dict:
     return {"ok": True, "subtask_id": subtask_id, "status": "running"}
 
 
+
+def subagent_worker_alive(ws_id: str, subtask_id: str) -> bool:
+    key = _worker_key(ws_id, subtask_id)
+    with _TASK_LOCK:
+        worker = _WORKER_THREADS.get(key)
+    return bool(worker and worker.is_alive())
+
+
+def wait_subagent_task(subtask_id: str, ws_id: str, timeout: float = 15.0) -> dict:
+    """Bound the request wait, never the lifetime of the durable worker."""
+    key = _worker_key(ws_id, subtask_id)
+    with _TASK_LOCK:
+        worker = _WORKER_THREADS.get(key)
+    if worker and worker is not threading.current_thread():
+        worker.join(timeout=max(0.0, min(15.0, timeout)))
+    result = get_subagent_task(ws_id, subtask_id)
+    if result is None:
+        return {"ok": False, "error": "subtask not found"}
+    return {**result, "ok": result["status"] in {"created", "running", "succeeded"},
+            "deferred": result["status"] in {"created", "running"}}
+
 def cancel_subagent_task(subtask_id: str, ws_id: str) -> dict:
     """Persist cancellation and signal the running QueryLoop cooperatively."""
     try:
@@ -701,6 +722,8 @@ def get_subagent_task(ws_id: str, subtask_id: str) -> Optional[dict]:
         "result_artifact_id": task.result_artifact_id,
         "result_total_chars": int(task.result_total_chars or len(task.summary or "")),
         "coding": task.coding,
+        "errors": list(task.errors),
+        "warnings": list(task.warnings),
         "created_at": task.created_at,
         "started_at": task.started_at,
         "finished_at": task.finished_at,
