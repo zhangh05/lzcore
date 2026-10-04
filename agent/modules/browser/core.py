@@ -416,6 +416,10 @@ def browser_snapshot(selector: str = "body", compact: bool = True, max_elements:
                 const actionable = Boolean(role) || semanticTags.has(element.tagName) || element.tabIndex >= 0;
                 if (options.compact ? !actionable : (!actionable && !name)) continue;
                 const row = { role: role || 'text', name, selector: cssPath(element) };
+                if (['button','link','textbox','searchbox','combobox','listbox','checkbox','radio','switch','menuitem','option','tab','gridcell','treeitem'].includes(role)) {
+                  row.disabled = element.matches(':disabled') || Boolean(element.closest('[aria-disabled="true"]'));
+                  row.readonly = Boolean(element.readOnly) || element.getAttribute('aria-readonly') === 'true';
+                }
                 if ('value' in element && element.value) row.value = String(element.value).slice(0, 100);
                 if (role === 'checkbox' || role === 'radio') row.checked = Boolean(element.checked);
                 rows.push(row);
@@ -575,43 +579,41 @@ def browser_screenshot(
         return {"ok": False, "error": f"Screenshot failed: {str(e)[:200]}"}
 
 
-async def _click_by_ref(page: Any, ref: str) -> bool:
-    """Click an element referenced by snapshot ref ID."""
+def _locator_for_ref(page: Any, ref: str):
+    """Resolve a current snapshot target without silently changing identity."""
     mapping = _state().refs.get(ref, "")
     if mapping.startswith("css:") and mapping[4:]:
-        try:
-            await page.locator(mapping[4:]).click(timeout=5000)
-            return True
-        except Exception:
-            pass
+        return page.locator(mapping[4:])
     if mapping and mapping.startswith("role:"):
         parts = mapping.split(":", 2)
         role = parts[1]
         name = parts[2] if len(parts) > 2 else ""
-        try:
-            if name:
-                await page.get_by_role(role, name=name).click(timeout=5000)
-            else:
-                await page.get_by_role(role).first.click(timeout=5000)
-            return True
-        except Exception:
-            pass
-    return False
+        return page.get_by_role(role, name=name, exact=True) if name else page.get_by_role(role)
+    return None
 
 
 def browser_click(selector: str = "", ref: str = "") -> dict:
     """Click an element. Prefer ref (from snapshot) over selector."""
     async def _click():
         page = await _get_page()
-        if ref:
-            ok = await _click_by_ref(page, ref)
-            if ok:
-                return {"ok": True, "clicked_ref": ref, "title": await page.title(), "url": page.url}
-            return {"ok": False, "error": f"ref {ref} not found or not clickable", "clicked_ref": ref}
-        if selector:
-            await page.click(selector, timeout=5000)
-            return {"ok": True, "clicked": selector, "title": await page.title(), "url": page.url}
-        return {"ok": False, "error": "selector or ref is required"}
+        target = _locator_for_ref(page, ref) if ref else page.locator(selector) if selector else None
+        identity = {"target_ref": ref} if ref else {"target_selector": selector}
+        def unavailable(code, message):
+            return {"ok": False, "error_code": code, "error": message,
+                    "interaction_sent": False, **identity}
+        if target is None:
+            return unavailable("target_not_found", "selector or a current snapshot ref is required; take a fresh snapshot")
+        count = await target.count()
+        if count != 1:
+            return unavailable("target_not_unique" if count else "target_not_found",
+                               f"target matches {count} elements; take a fresh snapshot and select one target")
+        if not await target.is_visible():
+            return unavailable("target_hidden", "target is hidden; take a fresh snapshot before acting")
+        if not await target.is_enabled():
+            return unavailable("target_disabled", "target is disabled; no click was sent; inspect current page state")
+        await target.click(timeout=5000)
+        return {"ok": True, **({"clicked_ref": ref} if ref else {"clicked": selector}),
+                "title": await page.title(), "url": page.url}
     return _run(_click())
 
 

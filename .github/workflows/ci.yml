@@ -82,6 +82,7 @@ jobs:
 
       - name: Run tests
         run: |
+          python -m playwright install --with-deps chromium
           python -m pytest harness/ -q --tb=short
           python scripts/platform_contract.py > /tmp/platform-contract.json
           python scripts/platform_runtime_check.py

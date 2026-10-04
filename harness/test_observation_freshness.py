@@ -30,8 +30,31 @@ def test_failed_write_can_be_corrected_after_state_changes_but_unknown_is_not_de
     assert loop._suppress_repeated_tool_calls(ctx, [call])[0] == []
     ctx.extras["tool_state_revision"] = 3
     assert loop._suppress_repeated_tool_calls(ctx, [call])[0] == [call]
+
     prior["execution_may_continue"] = True
     ctx.extras["tool_state_revision"] = 2
     # Uncertain effects remain the responsibility of the operation ledger,
     # never converted into a deterministic cached failure by this filter.
     assert loop._suppress_repeated_tool_calls(ctx, [call])[0] == [call]
+
+
+def test_one_failed_batch_is_one_recovery_round_and_does_not_end_before_feedback():
+    failure = SimpleNamespace(ok=False, tool_name="browser.manage", output={"error": "target disabled"}, error="")
+    streaks = {}
+    assert QueryLoop._advance_tool_failure_round(streaks, [failure] * 10) is None
+    assert list(streaks.values()) == [1]
+    assert QueryLoop._advance_tool_failure_round(streaks, [failure] * 10) is None
+    assert QueryLoop._advance_tool_failure_round(streaks, [failure] * 10) is failure
+
+
+def test_new_error_or_successful_observation_reopens_failure_recovery():
+    failure = SimpleNamespace(ok=False, tool_name="browser.manage", output={"error": "disabled"}, error="")
+    other = SimpleNamespace(ok=False, tool_name="browser.manage", output={"error": "missing"}, error="")
+    success = SimpleNamespace(ok=True)
+    streaks = {}
+    QueryLoop._advance_tool_failure_round(streaks, [failure])
+    QueryLoop._advance_tool_failure_round(streaks, [failure])
+    assert QueryLoop._advance_tool_failure_round(streaks, [other]) is None
+    assert list(streaks.values()) == [1]
+    assert QueryLoop._advance_tool_failure_round(streaks, [success, other]) is None
+    assert list(streaks.values()) == [1]

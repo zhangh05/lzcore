@@ -2307,27 +2307,23 @@ class QueryLoop:
                                   total_tool_calls=len(all_results), llm_calls=budget.llm_calls,
                                   error="tool_no_progress")
 
-                # Track consecutive identical tool failures to prevent infinite retry loops
-                for res in results:
-                    if not res.ok:
-                        err_code = str((res.output or {}).get("error") or res.error or "unknown_error")
-                        sig = f"{res.tool_name}:{err_code}"
-                        consecutive_tool_failures[sig] = consecutive_tool_failures.get(sig, 0) + 1
-                        if consecutive_tool_failures[sig] >= 3:
-                            ctx.extras["response_outcome"] = "tool_failure_limit_reached"
-                            return finish(
-                                final_response=(
-                                    f"任务受阻：工具 {res.tool_name} 连续多次返回相同错误（{err_code}）。"
-                                    "已主动停止重复重试，避免陷入无限循环。已保留当前工作结果与对话状态，请核对后继续。"
-                                ),
-                                tool_results=all_results,
-                                iterations=iterations,
-                                total_tool_calls=len(all_results),
-                                llm_calls=budget.llm_calls,
-                                error="consecutive_tool_failures",
-                            )
-                    else:
-                        consecutive_tool_failures.clear()
+                # A batch is one model proposal, not several recovery attempts.
+                # Deliver its failures before counting another retry round.
+                limited = self._advance_tool_failure_round(consecutive_tool_failures, results)
+                if limited is not None:
+                    err_code = str((limited.output or {}).get("error") or limited.error or "unknown_error")
+                    ctx.extras["response_outcome"] = "tool_failure_limit_reached"
+                    return finish(
+                        final_response=(
+                            f"任务受阻：工具 {limited.tool_name} 连续多轮返回相同错误（{err_code}）。"
+                            "已主动停止重复重试，避免陷入无限循环。已保留当前工作结果与对话状态，请核对后继续。"
+                        ),
+                        tool_results=all_results,
+                        iterations=iterations,
+                        total_tool_calls=len(all_results),
+                        llm_calls=budget.llm_calls,
+                        error="consecutive_tool_failures",
+                    )
 
                 # Append assistant message (with tool_calls) + tool results
                 messages = self._append_tool_round(messages, model_tool_calls, results, response=response)
@@ -3213,6 +3209,23 @@ class QueryLoop:
             if any(isinstance(claim, dict) and str(claim.get("status") or "").lower() == "collected" for claim in claims):
                 return True
         return False
+
+    @staticmethod
+    def _advance_tool_failure_round(streaks: dict[str, int], results: list):
+        """Count consecutive unchanged failure proposals, independent of width."""
+        if any(result.ok for result in results):
+            streaks.clear()
+        failures = {
+            f"{result.tool_name}:{str((result.output or {}).get('error') or result.error or 'unknown_error')}": result
+            for result in results if not result.ok
+        }
+        for old in set(streaks) - set(failures):
+            streaks.pop(old)
+        for signature, result in failures.items():
+            streaks[signature] = streaks.get(signature, 0) + 1
+            if streaks[signature] >= 3:
+                return result
+        return None
 
     def _record_task_state_execution_manifest(
         self,

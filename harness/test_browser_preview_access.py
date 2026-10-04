@@ -2,6 +2,7 @@
 import json
 import asyncio
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -97,7 +98,7 @@ def test_governed_browser_preview_and_sessions_are_isolated(monkeypatch, tmp_pat
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers()
-            self.wfile.write(b'<title>Preview</title><main><button>Click</button><p>Hello</p></main><script>console.error("observed console error");throw new Error("observed page error")</script>')
+            self.wfile.write(b'<title>Preview</title><main><button>Click</button><button disabled>Unavailable</button><p>Hello</p></main><script>console.error("observed console error");throw new Error("observed page error")</script>')
         def log_message(self, *_):
             pass
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -120,6 +121,13 @@ def test_governed_browser_preview_and_sessions_are_isolated(monkeypatch, tmp_pat
         assert "200" in str(invoke("network").output)
         snapshot = invoke("snapshot")
         assert "Hello" in str(snapshot.output)
+        disabled = next(item for item in snapshot.output["elements"] if item["name"] == "Unavailable")
+        assert disabled["disabled"] is True
+        started = time.monotonic()
+        rejected = invoke("click", ref=disabled["ref"])
+        assert rejected.output["error_code"] == "target_disabled"
+        assert rejected.output["interaction_sent"] is False
+        assert time.monotonic() - started < 1
         # Another session cannot see the first session's DOM, history or refs.
         other = invoke("snapshot", session="two")
         assert "Hello" not in str(other.output)
