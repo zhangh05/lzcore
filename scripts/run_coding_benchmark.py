@@ -71,7 +71,7 @@ def main() -> int:
     if not config.get("enabled") or not config.get("key_loaded"):
         raise RuntimeError("A real enabled provider with loaded credentials is required")
     prompt_path = args.prompt or ROOT / "harness/fixtures/coding_bench" / f"{args.case}.md"
-    prompt = prompt_path.read_text().replace("{{PROJECT_DIR}}", f"files/data/{args.case}").replace("{{PREVIEW_ORIGIN}}", origin)
+    prompt = prompt_path.read_text(encoding="utf-8").replace("{{PROJECT_DIR}}", f"files/data/{args.case}").replace("{{PREVIEW_ORIGIN}}", origin)
     session_id = args.session_id or create_session(ws, title=f"Coding benchmark: {args.case}")["session_id"]
     report = base / "reports" / ws / uuid.uuid4().hex[:10]
     report.mkdir(parents=True)
@@ -89,8 +89,8 @@ def main() -> int:
         name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
         for name in untracked.decode().split("\0") if name and (ROOT / name).is_file()
     }
-    (report / "configuration.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2))
-    (report / "prompt.md").write_text(prompt)
+    (report / "configuration.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    (report / "prompt.md").write_text(prompt, encoding="utf-8")
     cancel = threading.Event()
     timer = threading.Timer(args.deadline, cancel.set)
     timer.daemon = True
@@ -98,7 +98,7 @@ def main() -> int:
     lock = threading.Lock()
 
     def on_event(event):
-        with lock, (report / "events.jsonl").open("a") as stream:
+        with lock, (report / "events.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(redact_value(event), ensure_ascii=False, default=str) + "\n")
         if event.get("type") in {"execution_started", "turn_completed", "model_completed"}:
             print(json.dumps({key: event[key] for key in ("type", "action", "ok", "iteration") if key in event}), flush=True)
@@ -113,7 +113,7 @@ def main() -> int:
         payload = redact_value(result.to_dict())
         payload["benchmark_duration_seconds"] = round(time.monotonic() - started, 2)
         payload["deadline_reached"] = cancel.is_set()
-        (report / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        (report / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         print(json.dumps({"report": str(report), "runtime_ok": result.ok,
                           "independent_acceptance": "NOT VERIFIED", "duration_seconds": payload["benchmark_duration_seconds"]}), flush=True)
         return 0 if result.ok else 1

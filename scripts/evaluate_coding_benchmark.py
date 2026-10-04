@@ -36,7 +36,7 @@ def main() -> int:
         except Exception as exc:
             checks.append({"name": name, "status": "FAIL", "error": str(exc)[:1200]})
     def command(arguments):
-        result = subprocess.run(arguments, cwd=project, capture_output=True, text=True, timeout=180)
+        result = subprocess.run(arguments, cwd=project, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
         if result.returncode:
             raise AssertionError((result.stdout + result.stderr)[-1200:])
         return (result.stdout + result.stderr)[-1600:]
@@ -91,7 +91,7 @@ def main() -> int:
             assert entry, "generated engine entry is missing"
             evaluator = Path(__file__).resolve().parents[1] / "harness/fixtures/coding_bench/rts_acceptance.cjs"
             result = subprocess.run(["node", str(evaluator), str(project), str(entry), scenario],
-                                    cwd=project, capture_output=True, text=True, timeout=30)
+                                    cwd=project, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
             assert result.returncode == 0, (result.stdout + result.stderr)[-1200:]
             return json.loads(result.stdout.strip().splitlines()[-1])
         for scenario in ("seed_and_tick", "save_load", "fog_save", "battle_100v100"):
@@ -138,8 +138,8 @@ def main() -> int:
                "full_benchmark_acceptance": "NOT VERIFIED",
                "note": "Only the named checks were independently executed; generated tests are not independent functional acceptance."}
     args.report.parent.mkdir(parents=True, exist_ok=True)
-    args.report.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    args.report.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return 1 if any(item["status"] == "FAIL" for item in checks) else 0
 
 

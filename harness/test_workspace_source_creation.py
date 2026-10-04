@@ -30,9 +30,13 @@ def test_governed_create_preserves_tree_and_never_overwrites(client, caller):
     path = "files/data/project/src/设备.js"
     assert create(client, path, "中文\n", caller)
     target = workspace_root("source_test") / path
-    assert target.read_text() == "中文\n"
+    assert target.read_text(encoding="utf-8") == "中文\n"
+    assert target.read_bytes().startswith("中文".encode("utf-8"))
+    read = client.invoke("workspace.file", {"action": "read", "filepath": path},
+                         context=ToolRuntimeContext(workspace_id="source_test", requested_by=caller))
+    assert read.status == "succeeded" and read.output["content"] == "中文\n"
     assert not create(client, path, "replacement", caller)
-    assert target.read_text() == "中文\n"
+    assert target.read_text(encoding="utf-8") == "中文\n"
     assert not list(target.parent.glob(".source-*"))
 
 
@@ -54,7 +58,7 @@ def test_concurrent_create_has_one_winner_and_complete_payload(client):
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(lambda n: create(client, path, str(n) * 10000), range(4)))
     assert sum(results) == 1
-    text = (workspace_root("source_test") / path).read_text()
+    text = (workspace_root("source_test") / path).read_text(encoding="utf-8")
     assert len(text) == 10000 and len(set(text)) == 1
 
 
