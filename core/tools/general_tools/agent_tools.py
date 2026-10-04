@@ -172,6 +172,7 @@ def _run_durable_subagent(
         ),
         workbench_context=workbench_context,
         coding_assignment=coding_assignment,
+        cancel_check=cancel_check,
     )
     if not created.get("ok"):
         return {
@@ -334,6 +335,8 @@ def handle_agent_start(inv: ToolInvocation) -> dict:
         or task.session_id != _inv_session_id(inv)
     ):
         return _error_inv(inv, "coding_parent_identity_mismatch")
+    from agent.runtime.durable.subagent_control import register_parent_cancel
+    register_parent_cancel(ws, subtask_id, getattr(inv, "cancel_check", None))
     result = start_subagent_task(subtask_id, ws)
     return {
         **result,

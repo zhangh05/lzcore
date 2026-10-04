@@ -209,6 +209,7 @@ def create_subagent_task(
     operation_call_id: str = "",
     workbench_context: dict | None = None,
     coding_assignment: dict | None = None,
+    cancel_check=None,
 ) -> dict:
     profile = get_profile(profile_id)
     if not profile:
@@ -243,6 +244,8 @@ def create_subagent_task(
             return {"ok": False, "error": str(exc)}
     elif coding_assignment:
         return {"ok": False, "error": "coding_assignment_requires_coding_profile"}
+    from .subagent_control import register_parent_cancel
+    register_parent_cancel(workspace_id, task.subtask_id, cancel_check)
     _save_task(task)
 
     _emit_event(workspace_id, parent_task_id, session_id, "subagent_created",
@@ -336,9 +339,11 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
     if task.coding:
         from .coding_team import ready
         if not ready(task):
-            task.status = "created"
+            if task.coding.get("phase") != "dependency_failed":
+                task.status = "created"
             _save_task(task)
-            return {"ok": True, "subtask_id": subtask_id, "status": "created", "coding": task.coding}
+            _release_worker(ws_id, subtask_id, preserve_parent=task.status == "created")
+            return {"ok": task.status == "created", "subtask_id": subtask_id, "status": task.status, "coding": task.coding}
     cancel_event = _cancel_event(ws_id, subtask_id)
     from .subagent_control import cancellation_probe
     cancel_check = cancellation_probe(ws_id, subtask_id, cancel_event)
@@ -524,7 +529,9 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         task.warnings = list(result.warnings)
         task.finished_at = _now()
         _save_task(task)
-    result.finished_at = _now()
+        result.status = task.status
+        result.summary = task.summary
+    result.finished_at = task.finished_at
 
     # Update live tasks registry with final status
     from agent.runtime.durable.trajectory import _live_tasks
@@ -577,6 +584,9 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         "coding": task.coding,
     }
     _release_worker(ws_id, subtask_id)
+    if task.coding:
+        from .coding_dispatch import dispatch_dependents
+        dispatch_dependents(task)
     return payload
 
 
@@ -591,21 +601,30 @@ def start_subagent_task(subtask_id: str, ws_id: str) -> dict:
     if not task or task.workspace_id != ws_id:
         return {"ok": False, "error": "subtask not found"}
     key = _worker_key(ws_id, subtask_id)
-    with _TASK_LOCK:
+    from storage.subagent_store import task_control_lock
+    with _TASK_LOCK, task_control_lock(ws_id, subtask_id):
+        task = _load_task(ws_id, subtask_id)
+        if not task:
+            return {"ok": False, "error": "subtask not found"}
         existing = _WORKER_THREADS.get(key)
         if existing and existing.is_alive():
             return {"ok": True, "subtask_id": subtask_id, "status": task.status}
-        if task.coding:
-            from .coding_team import ready
-            if not ready(task):
-                _save_task(task)
-                return {"ok": True, "subtask_id": subtask_id, "status": "created", "coding": task.coding}
         if task.status != "created":
             return {
                 "ok": False,
                 "error": f"subtask is {task.status}; only created tasks can start",
                 "status": task.status,
             }
+        from .subagent_control import cancellation_probe
+        if cancellation_probe(ws_id, subtask_id, _cancel_event(ws_id, subtask_id))():
+            return cancel_subagent_task(subtask_id, ws_id)
+        if task.coding:
+            from .coding_team import ready
+            if not ready(task):
+                _save_task(task)
+                if task.status != "created":
+                    _release_worker(ws_id, subtask_id)
+                return {"ok": task.status == "created", "subtask_id": subtask_id, "status": task.status, "coding": task.coding}
         _cancel_event(ws_id, subtask_id).clear()
         task.status = "running"
         task.started_at = task.started_at or _now()
@@ -674,10 +693,15 @@ def cancel_subagent_task(subtask_id: str, ws_id: str) -> dict:
         task.finished_at = _now()
         task.summary = "Subagent cancelled by user"
         _save_task(task)
+    if task.status != "cancelled":
+        return {"ok": False, "error": f"subtask is already {task.status}", "status": task.status}
     from agent.runtime.durable.trajectory import _live_tasks
     live = _live_tasks.get(subtask_id)
     if live is not None:
         live.update({"status": "cancelled", "cancelled_at": _now()})
+    if task.coding:
+        from .coding_dispatch import dispatch_dependents
+        dispatch_dependents(task)
     return {"ok": True, "subtask_id": subtask_id, "status": task.status}
 
 
@@ -796,7 +820,11 @@ def merge_subagent_result(parent_task_id: str, subtask_id: str, ws_id: str) -> d
 
     if task.coding:
         from .coding_team import integrate
-        return integrate(task)
+        result = integrate(task)
+        if result.get("phase") == "integrated":
+            from .coding_dispatch import dispatch_dependents
+            dispatch_dependents(_load_task(ws_id, subtask_id))
+        return result
     profile = get_profile(task.profile_id)
     _emit_event(ws_id, parent_task_id, task.session_id, "subagent_merged",
                 f"Subagent {profile.name if profile else subtask_id} merged into parent")
@@ -811,7 +839,9 @@ def _save_task(task: SubagentTask):
     from storage.subagent_store import save_subagent
     task.workspace_id = _validated_workspace_id(task.workspace_id)
     _validated_subtask_id(task.subtask_id)
-    save_subagent(task.workspace_id, task.subtask_id, asdict(task))
+    saved = save_subagent(task.workspace_id, task.subtask_id, asdict(task))
+    for field in ("status", "summary", "finished_at", "errors", "warnings"):
+        setattr(task, field, saved[field])
 
 def _load_task(ws_id: str, subtask_id: str) -> Optional[SubagentTask]:
     from storage.subagent_store import read_subagent
@@ -838,9 +868,10 @@ def _cancel_event(ws_id: str, subtask_id: str) -> threading.Event:
         return _CANCEL_EVENTS.setdefault(key, threading.Event())
 
 
-def _release_worker(ws_id: str, subtask_id: str) -> None:
+def _release_worker(ws_id: str, subtask_id: str, *, preserve_parent=False) -> None:
     from .subagent_control import release_parent_cancel
-    release_parent_cancel(ws_id, subtask_id)
+    if not preserve_parent:
+        release_parent_cancel(ws_id, subtask_id)
     key = _worker_key(ws_id, subtask_id)
     with _TASK_LOCK:
         if _WORKER_THREADS.get(key) is threading.current_thread():

@@ -83,7 +83,9 @@ def create_assignment(task, supplied: dict) -> dict:
     }
     task.coding = assignment
     for subtask_id in dependencies:
-        _related(task, subtask_id)
+        dependency = _related(task, subtask_id)
+        if dependency.profile_id == "qa_agent":
+            raise ValueError("coding_dependency_requires_implementation_candidate")
     if task.profile_id == "qa_agent":
         if not review_id:
             raise ValueError("coding_qa_review_target_required")
@@ -108,13 +110,30 @@ def create_assignment(task, supplied: dict) -> dict:
 
 def ready(task) -> bool:
     assignment = task.coding
-    for subtask_id in assignment.get("depends_on") or []:
-        if _related(task, subtask_id).coding.get("phase") != "integrated":
-            assignment["phase"] = "dependency_wait"
-            return False
+    dependencies = list(assignment.get("depends_on") or [])
     if task.profile_id == "qa_agent":
-        target = _related(task, assignment["review_subtask_id"])
-        if target.coding.get("phase") not in {"changes_ready", "validated"}:
+        dependencies = list(dict.fromkeys([*dependencies, assignment["review_subtask_id"]]))
+    for subtask_id in dependencies:
+        try:
+            target = _related(task, subtask_id)
+        except ValueError:
+            task.status = "failed"
+            assignment["phase"] = "dependency_failed"
+            task.summary = "Coding dependency identity is unavailable"
+            return False
+        if target.status in {"failed", "cancelled"}:
+            task.status = "failed"
+            assignment["phase"] = "dependency_failed"
+            task.summary = "Coding dependency did not complete successfully"
+            return False
+        # Review consumes a completed candidate. Publication consumes its QA;
+        # requiring publication here creates an impossible dependency cycle.
+        phase = "candidate" if task.profile_id == "qa_agent" and subtask_id == assignment["review_subtask_id"] else "publication"
+        available = target.status == "succeeded" and (
+            target.coding.get("phase") in {"changes_ready", "validated"}
+            if phase == "candidate" else target.coding.get("phase") == "integrated"
+        )
+        if not available:
             assignment["phase"] = "dependency_wait"
             return False
     return True

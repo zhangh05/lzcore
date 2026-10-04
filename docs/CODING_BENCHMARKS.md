@@ -42,3 +42,5 @@ Evaluator 的独立调用必须提供服务端已建立的容器身份、镜像 
 `verify_coding_isolation.py` 经真实 ToolRuntime 压测越界、符号链接、受限出站、后台后代超时及关闭后迟到调用。`test_project_changes_stress.py` 重复竞争整合，断点恢复、候选变化、QA 失败、身份跨越和取消另见 `test_coding_team.py`。310 轮窗口测试是确定性 Provider 与真实 QueryLoop/ToolRuntime，不是 310 次真实模型交付。
 
 历史结果见 [2026-10-04](CODING_BENCHMARK_RESULTS_2026-10-04.md)，保留原失败与验证边界。本轮最终结果单独留证，不覆盖历史记录。
+
+本轮架构、重复压力与真实模型结果见 [2026-10-05](CODING_BENCHMARK_RESULTS_2026-10-05.md)，包括失败、修复依据和未验证范围。

@@ -49,12 +49,13 @@ def team(monkeypatch, tmp_path):
         responsibilities=None,
         instruction="Implement",
         generated_paths=None,
+        background=False,
     ):
         arguments = {
             "action": "spawn",
             "instruction": instruction,
             "profile_id": profile,
-            "background": False,
+            "background": background,
             "coding_assignment": {
                 "project_dir": "files/data/app",
                 "responsibilities": responsibilities or ["src"],
@@ -137,6 +138,75 @@ def test_dependencies_do_not_run_or_merge_before_ready(team):
     )["ok"]
 
 
+def test_qa_dependency_consumes_completed_candidate_before_publication(team):
+    first = team.spawn()
+    review = team.spawn("qa_agent", review=first["subtask_id"], depends=[first["subtask_id"]])
+    assert review["task_status"] == "succeeded", review
+    assert subagent.merge_subagent_result("parent-task", first["subtask_id"], "parent-ws")["ok"]
+
+
+@pytest.mark.parametrize("cancel_review,fail_implementation", [(False, False), (True, False), (False, True)])
+def test_queued_review_wakes_once_or_propagates_cancellation_and_failure(team, monkeypatch, cancel_review, fail_implementation):
+    import threading
+    from agent.runtime import ssot_runtime
+    original = ssot_runtime.run_ssot_turn
+    entered, release = threading.Event(), threading.Event()
+    reviews = []
+    def controlled(session, turn, **kwargs):
+        if turn.op.runtime_control.profile["profile_id"] != "qa_agent":
+            entered.set()
+            assert release.wait(3)
+            if fail_implementation:
+                raise RuntimeError('owned implementation test failure')
+        else:
+            reviews.append(session.session_id)
+        return original(session, turn, **kwargs)
+    monkeypatch.setattr(ssot_runtime, "run_ssot_turn", controlled)
+    first = team.spawn(background=True)
+    assert entered.wait(2)
+    try:
+        queued = team.spawn("qa_agent", review=first["subtask_id"], depends=[first["subtask_id"]], background=True)
+        assert queued["task_status"] == "created"
+        if cancel_review:
+            assert subagent.cancel_subagent_task(queued["subtask_id"], "parent-ws")["ok"]
+    finally:
+        release.set()
+    subagent.wait_subagent_task(first["subtask_id"], "parent-ws", timeout=2)
+    result = subagent.wait_subagent_task(queued["subtask_id"], "parent-ws", timeout=2)
+    expected = "cancelled" if cancel_review else "failed" if fail_implementation else "succeeded"
+    assert result["status"] == expected, result
+    from agent.runtime.durable.coding_dispatch import dispatch_dependents
+    dispatch_dependents(subagent._load_task("parent-ws", first["subtask_id"]))
+    assert len(reviews) == (1 if expected == "succeeded" else 0)
+    assert not (workspace_root("parent-ws") / "files/data/app/src/value.py").exists()
+
+
+def test_publication_automatically_activates_requested_next_implementation(team, monkeypatch):
+    from agent.runtime import ssot_runtime
+    original = ssot_runtime.run_ssot_turn
+    called = []
+    def update(session, turn, **kwargs):
+        if turn.op.runtime_control.profile["profile_id"] == "qa_agent":
+            return original(session, turn, **kwargs)
+        called.append(session.session_id)
+        path = workspace_root(session.workspace_id) / "files/data/app/src/value.py"
+        if not path.exists():
+            return original(session, turn, **kwargs)
+        result = team.client.invoke('workspace.file', {'action':'edit','filepath':'files/data/app/src/value.py','old_string':'42','new_string':'84'}, context=ToolRuntimeContext(workspace_id=session.workspace_id, session_id=session.session_id, requested_by='subagent'))
+        assert result.status == 'succeeded'
+        return SimpleNamespace(ok=True, final_response='Revised', tool_calls=[])
+    monkeypatch.setattr(ssot_runtime, 'run_ssot_turn', update)
+    first = team.spawn()
+    next_task = team.spawn(depends=[first['subtask_id']], background=True)
+    assert next_task['task_status'] == 'created'
+    assert team.spawn('qa_agent', review=first['subtask_id'])['task_status'] == 'succeeded'
+    assert subagent.merge_subagent_result('parent-task', first['subtask_id'], 'parent-ws')['ok']
+    result = subagent.wait_subagent_task(next_task['subtask_id'], 'parent-ws', timeout=2)
+    assert result['status'] == 'succeeded' and result['coding']['phase'] == 'changes_ready', result
+    assert len(called) == 2
+    assert (workspace_root('parent-ws') / 'files/data/app/src/value.py').read_text() == 'VALUE = 42\n'
+
+
 def test_file_responsibilities_fail_closed(team):
     result = team.spawn(responsibilities=["frontend"])
     assert result["task_status"] == "failed"
@@ -162,6 +232,7 @@ def test_parent_conflict_preserves_users_file(team):
     first = team.spawn()
     qa = team.spawn("qa_agent", review=first["subtask_id"])
     assert qa["task_status"] == "succeeded", qa
+
     target = workspace_root("parent-ws") / "files/data/app/src/value.py"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("VALUE = 'user edit'\n")
@@ -170,6 +241,33 @@ def test_parent_conflict_preserves_users_file(team):
     )
     assert result["phase"] == "conflict" and not result["ok"]
     assert target.read_text() == "VALUE = 'user edit'\n"
+
+
+def test_qa_cannot_be_a_publication_dependency(team):
+    implementation = team.spawn()
+    qa = team.spawn("qa_agent", review=implementation["subtask_id"])
+    invalid = team.spawn(depends=[qa["subtask_id"]])
+    assert not invalid["ok"]
+    assert "requires_implementation_candidate" in str(invalid)
+
+
+def test_cancelled_dependency_propagates_through_waiting_dag(team):
+    from agent.runtime.durable.coding_dispatch import dispatch_dependents
+    from storage.records import atomic_save_json
+    from dataclasses import asdict
+
+    implementation = team.spawn()
+    second = team.spawn(depends=[implementation["subtask_id"]])
+    third = team.spawn(depends=[second["subtask_id"]])
+    target = subagent._load_task("parent-ws", implementation["subtask_id"])
+    # Simulate a predecessor's durable failed result without running a provider.
+    target.status = "failed"
+    atomic_save_json("parent-ws", ("subagents", f"{target.subtask_id}.json"), asdict(target))
+    dispatch_dependents(target)
+    for identity in [second["subtask_id"], third["subtask_id"]]:
+        task = subagent._load_task("parent-ws", identity)
+        assert task.status == "failed"
+        assert task.coding["phase"] == "dependency_failed"
 
 
 def test_candidate_change_after_qa_rejected(team):
@@ -198,7 +296,11 @@ def test_related_tasks_cannot_cross_parent_or_workspace(team):
     )["ok"]
     task = subagent._load_task("parent-ws", first["subtask_id"])
     task.session_id = "other-session"
-    subagent._save_task(task)
+    with pytest.raises(ValueError, match="identity_is_immutable"):
+        subagent._save_task(task)
+    from storage.records import atomic_save_json
+    from dataclasses import asdict
+    atomic_save_json("parent-ws", ("subagents", f"{task.subtask_id}.json"), asdict(task))
     invalid = team.spawn(depends=[first["subtask_id"]])
     assert not invalid["ok"] and "outside_parent" in str(invalid)
 
