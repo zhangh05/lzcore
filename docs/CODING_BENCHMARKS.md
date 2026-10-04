@@ -29,3 +29,5 @@
 ## 框架回归
 
 工程源文件原子创建、目录/主体归属、存在即拒绝覆盖、主/子 Agent 治理一致性见 `harness/test_workspace_source_creation.py`；新鲜观察、状态修订与显式纯计算复用见 `harness/test_observation_freshness.py`；精确预览授权、会话隔离、真实错误/网络观测和生命周期上限见 `harness/test_browser_preview_access.py`。Provider 错误安全诊断见 `harness/test_runtime_recovery_hardening.py`。
+
+当前实测与明确失败项见 [2026-10-04 压测记录](CODING_BENCHMARK_RESULTS_2026-10-04.md)。

@@ -60,8 +60,8 @@ def main() -> int:
             devices = array("/api/devices", "devices")
             interfaces = array("/api/interfaces", "interfaces")
             topology = api("/api/topology")
-            assert len(devices) >= 50 and len(interfaces) >= 300
-            assert len(topology["links"]) >= 80
+            assert len(devices) >= 50 and len(interfaces) >= 300, f"inventory below baseline: {len(devices)} devices, {len(interfaces)} interfaces"
+            assert len(topology["links"]) >= 80, f"only {len(topology['links'])} links"
             assert len({item["id"] for item in devices}) == len(devices)
             return {"devices": len(devices), "interfaces": len(interfaces), "links": len(topology["links"])}
         check("baseline_inventory", inventory)
@@ -75,9 +75,13 @@ def main() -> int:
         def stress():
             api("/api/test/stress", {})
             data = inventory()
-            assert data["devices"] >= 100 and data["interfaces"] >= 1000
-            assert len(array("/api/syslog", "syslog")) >= 10000
-            assert len(array("/api/alerts", "alerts")) >= 500
+            assert data["devices"] >= 100 and data["interfaces"] >= 1000, f"stress inventory below target: {data}"
+            state = api("/api/test/state")
+            # Retention counts differ from the page returned by a bounded API.
+            assert array("/api/syslog", "syslog"), "syslog endpoint returned no retained records"
+            data.update(syslogs=state["counts"]["syslog"], active_alerts=state["activeAlerts"])
+            assert data["syslogs"] >= 10000, f"only {data['syslogs']} retained syslogs; need 10000"
+            assert data["active_alerts"] >= 500, f"only {data['active_alerts']} active alerts; need 500"
             return data
         check("stress_inventory", stress)
     if args.case == "rts":
