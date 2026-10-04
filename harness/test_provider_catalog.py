@@ -43,7 +43,9 @@ def test_named_vendors_survive_reload_and_keep_identity_on_rename(catalog):
     listed = client.get("/api/agent/llm/providers").get_json()
     assert {first["provider"], second["provider"]} <= {p["provider"] for p in listed["providers"]}
     assert all(not p["key_configured"] for p in listed["templates"])
-    assert "sk-test-catalog" not in (store.PROVIDERS_DIR / f'{first["provider"]}.json').read_text()
+    stored = (store.PROVIDERS_DIR / f'{first["provider"]}.json').read_text(encoding="utf-8")
+    assert "sk-test-catalog" not in stored
+    assert json.loads(stored)["label"] == "公司网关"
     renamed = client.post(f'/api/agent/llm/providers/{first["provider"]}', json={"label": "  新网关  "}).get_json()["config"]
     assert renamed["label"] == "新网关" and renamed["provider"] == first["provider"]
     assert store.load_provider_config(second["provider"])["provider_type"] == "anthropic_messages"
