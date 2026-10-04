@@ -11,6 +11,7 @@ import re
 from datetime import datetime, timezone
 import json
 import os
+import platform
 from typing import Any, Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from core.context.prompt_text import DATA_BOUNDARIES, RUNTIME_BOUNDARIES, escape_prompt_data
@@ -372,6 +373,8 @@ def build_turn_message(
         "<runtime_identity>\n"
         f"workspace_id: {_clean(workspace_id, 200)}\n"
         f"session_id: {_clean(session_id, 200)}\n"
+        f"host_os: {platform.system()}\n"
+        f"native_shell: {'cmd.exe /d /s /c' if os.name == 'nt' else '/bin/bash -c'}\n"
         "</runtime_identity>",
     ]
     if conversation_history.strip():

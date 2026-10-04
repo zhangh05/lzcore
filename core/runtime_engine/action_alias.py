@@ -177,7 +177,7 @@ _CANONICAL_ACTIONS: Final[dict[str, frozenset[str]]] = {
     }),
     "workspace.file": frozenset({
         "list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "edit", "patch",
-        "write", "write_artifact", "glob", "delete",
+        "create", "write", "write_artifact", "glob", "delete",
     }),
     "knowledge.manage": frozenset({
         "search", "read", "list", "chunk", "import", "reindex",

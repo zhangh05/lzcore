@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import tempfile
 
 from storage.atomic_io import atomic_write_text
 from storage.ids import validate_run_id
@@ -42,6 +44,45 @@ def is_current_workspace_write_path(workspace_id: str, target: Path) -> bool:
 
 def write_text_atomic(path: Path, content: str) -> None:
     atomic_write_text(path, content)
+
+
+def create_workspace_text(workspace_id: str, subpath: str, content: str) -> Path:
+    """Publish a complete source file without replacing an existing path.
+
+    Source trees retain their requested paths; generated attachments continue
+    to use FileStore. The hard link publishes atomically and fails if another
+    writer has already created the target, including a dangling symlink.
+    """
+    if not subpath or Path(subpath).is_absolute() or "\\" in subpath:
+        raise ValueError("source filepath must be workspace-relative using forward slashes")
+    if ".." in Path(subpath).parts:
+        raise ValueError("path_escape_denied")
+    lexical = workspace_root(workspace_id)
+    for part in Path(subpath).parts:
+        lexical = lexical / part
+        if lexical.is_symlink():
+            raise ValueError("source filepath must not traverse symlinks")
+    target = resolve_workspace_path(workspace_id, subpath)
+    if not is_current_workspace_write_path(workspace_id, target):
+        raise ValueError("source creation only writes to current managed workspace directories")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Resolve again after creating parents, before publishing into that scope.
+    target = resolve_workspace_path(workspace_id, subpath)
+    if not is_current_workspace_write_path(workspace_id, target):
+        raise ValueError("path_escape_denied")
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent,
+                                         prefix=".source-", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, target)
+        return target
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def write_python_temp_script(workspace_id: str, run_id: str, content: str) -> tuple[Path, Path]:

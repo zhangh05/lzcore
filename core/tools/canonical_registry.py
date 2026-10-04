@@ -197,6 +197,14 @@ def _handle_exec(inv: ToolInvocation) -> dict:
 
 
 def _handle_browser(inv: ToolInvocation) -> dict:
+    from agent.modules.browser.access import browser_scope
+    from core.tools.general_tools.shared import _caller_workspace
+
+    with browser_scope(_caller_workspace(inv), str(inv.session_id or "")):
+        return _dispatch_browser(inv)
+
+
+def _dispatch_browser(inv: ToolInvocation) -> dict:
     args = inv.arguments or {}
     action = _action(inv) or "navigate"
     from agent.modules.browser import core as browser
@@ -516,6 +524,7 @@ def _handle_text(inv: ToolInvocation) -> dict:
 def _handle_workspace_file(inv: ToolInvocation) -> dict:
     from core.tools.general_tools.filestore_tools import handle_file_extract_document, handle_file_extract_document_image, handle_file_extract_document_images
     from core.tools.general_tools.file_tools import (
+        handle_file_create,
         handle_file_edit,
         handle_file_patch,
         handle_file_read,
@@ -532,13 +541,14 @@ def _handle_workspace_file(inv: ToolInvocation) -> dict:
         "extract_document": handle_file_extract_document,
         "extract_document_image": handle_file_extract_document_image,
         "extract_document_images": handle_file_extract_document_images,
+        "create": handle_file_create,
         "edit": handle_file_edit,
         "patch": handle_file_patch,
         "write": handle_ws_write_artifact_file,
         "write_artifact": handle_ws_write_artifact_file,
         "glob": _local_glob,
         "delete": _local_delete,
-    }.get(action, lambda x: _unsupported(x, "list|read|read_image|extract_document|extract_document_image|extract_document_images|edit|patch|write|write_artifact|glob|delete"))(inv)
+    }.get(action, lambda x: _unsupported(x, "list|read|read_image|extract_document|extract_document_image|extract_document_images|create|edit|patch|write|write_artifact|glob|delete"))(inv)
 
 
 def _handle_workspace_artifact(inv: ToolInvocation) -> dict:
@@ -648,7 +658,7 @@ _EXEC_ARGS = {
     "working_dir": {"type": "string", "description": "Workspace-relative working directory."},
     "timeout": {"type": "integer", "minimum": 1, "maximum": 600},
     "target": {"type": "string", "enum": ["local"], "default": "local"},
-    "shell": {"type": "string", "enum": ["cmd", "powershell"], "default": "cmd"},
+    "shell": {"type": "string", "enum": ["native", "cmd", "powershell"], "default": "native", "description": "native uses /bin/bash on macOS/Linux and cmd.exe on Windows; powershell requires Windows."},
     "env_vars": {"type": "object"},
 }
 
@@ -778,8 +788,8 @@ _SYSTEM_ARGS = {
 }
 
 _WORKSPACE_FILE_ARGS = {
-    "filepath": {"type": "string", "description": "Workspace-relative path for read/edit/patch/delete."},
-    "content": {"type": "string", "description": "Content for write/write_artifact."},
+    "filepath": {"type": "string", "description": "Workspace-relative path for create/read/edit/patch/delete."},
+    "content": {"type": "string", "description": "Text content for create/write/write_artifact."},
     "limit": {"type": "integer", "minimum": 1},
     "offset": {"type": "integer", "minimum": 0}, "subdir": {"type": "string"},
     "pattern": {"type": "string"}, "old_string": {"type": "string"},
@@ -862,7 +872,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
     }, required=["action"], description="Subagent task management. spawn delegates an outcome, not an invented implementation plan, and accepts only the profile_id values published in the schema; choose research_agent for external research, file_agent for workspace files, and data_agent for structured analysis. Preserve explicit user constraints, but let the child select and compose its allowed tools. get/cancel/merge use the subtask_id returned by spawn. Delegation does not extend an upstream tool or data provider's limits."),
     _entry("system.manage", _handle_system, {**_COMMON, **_SYSTEM_ARGS, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "action": {"type": "string", "enum": ["diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_checkpoint", "session_rewind", "session_export", "session_snapshot"]}}, required=["action"], risk="medium", description="Runtime health, current local date/time and host facts, durable tasks, audit logs, run details, and session operations. local_info returns timezone-aware current time plus host/IP/OS facts; run_get requires run_id; session actions require session_id; rewind additionally requires snapshot_id."),
     _entry("text.analyze", _handle_text, {**_COMMON, "action": {"type": "string", "enum": ["redact", "extract_entities", "match"]}, "text": {"type": "string"}, "pattern": {"type": "string"}}, required=["action"], description="Text redact, extract and match."),
-    _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "write", "write_artifact", "edit", "patch", "glob", "delete"]}}, required=["action"], risk="medium", description="Workspace files. list supports offset/limit pagination with next_offset; read returns full text unless an explicit line offset/limit is supplied. extract_document reads a managed text, DOCX, PDF, XLSX, or PPTX attachment by file_id and reports embedded_image_count for DOCX. extract_document_image extracts one DOCX image by file_id and 1-based image_index. extract_document_images extracts an ordered DOCX image batch (up to 8) for visual analysis; its image evidence is automatically delivered to the next model turn. Never pass a returned file_id to read/read_image because those actions require a workspace filepath. write/write_artifact require filename and content.", execution_contract={
+    _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "create", "write", "write_artifact", "edit", "patch", "glob", "delete"]}}, required=["action"], risk="medium", description="Workspace files. list supports offset/limit pagination with next_offset; read returns full text unless an explicit line offset/limit is supplied. extract_document reads a managed text, DOCX, PDF, XLSX, or PPTX attachment by file_id and reports embedded_image_count for DOCX. extract_document_image extracts one DOCX image by file_id and 1-based image_index. extract_document_images extracts an ordered DOCX image batch (up to 8) for visual analysis; its image evidence is automatically delivered to the next model turn. Never pass a returned file_id to read/read_image because those actions require a workspace filepath. create requires filepath and content, preserves source directory structure under files/data, files/tmp or inbox, and fails if the target exists; use read then edit/patch for existing sources. write/write_artifact require filename and content and generate FileStore attachments, not source paths.", execution_contract={
         "batching": [{
             "source_action": "extract_document_image",
             "target_action": "extract_document_images",
@@ -876,6 +886,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
             "extract_document": {"file_id": "managed_file"},
             "extract_document_image": {"file_id": "managed_file"},
             "extract_document_images": {"file_id": "managed_file"},
+            "create": {"filepath": "workspace_path"},
             "read": {"filepath": "workspace_path"},
             "read_image": {"filepath": "workspace_path"},
             "edit": {"filepath": "workspace_path"},
@@ -1021,6 +1032,7 @@ _REFERENCEABLE_OUTPUTS: dict[str, dict[str, list[str]]] = {
         "extract_document": ["file_id", "file_kind", "title", "content", "truncated", "embedded_image_count"],
         "extract_document_image": ["file_id", "image_index", "image_count", "evidence_parts"],
         "extract_document_images": ["file_id", "image_count", "evidence_parts", "has_more"],
+        "create": ["filepath", "size", "created"],
         "write": ["filepath", "file_id"],
         "write_artifact": ["filepath", "file_id", "artifact_id"],
     },

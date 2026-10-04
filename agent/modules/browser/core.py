@@ -10,7 +10,7 @@ Key features:
     - Form filling, typing, scrolling, hovering, key pressing
 
 Architecture:
-    Single global browser instance (headless Chromium).
+    Isolated browser instances per principal, workspace and session.
     Each synchronous action delegates to one persistent Playwright event loop.
     Screenshots saved as workspace artifacts rather than returned inline
     (base64 in tool result is truncated to prefix for brevity).
@@ -24,16 +24,87 @@ import json
 import logging
 import threading
 import time
+from dataclasses import dataclass, field
+from collections import OrderedDict, deque
+from agent.modules.browser.access import current_browser_scope, local_preview_allowed
 from typing import Any
 
 _log = logging.getLogger(__name__)
 
 _playwright = None
 _pw_instance = None
-_browser = None
-_context = None
-_pages: dict[int, Any] = {}  # tab_index → page
-_active_tab: int = 0
+@dataclass
+class _PageObservations:
+    console: Any = field(default_factory=lambda: deque(maxlen=200))
+    requests: Any = field(default_factory=OrderedDict)
+    console_total: int = 0
+    request_total: int = 0
+
+    def record_console(self, kind: str, text: str) -> None:
+        self.console_total += 1
+        self.console.append({"type": kind, "text": text})
+
+    def record_request(self, request) -> None:
+        self.request_total += 1
+        self.requests[request] = {"url": request.url, "method": request.method,
+                                  "resource_type": request.resource_type, "status": "pending"}
+        while len(self.requests) > 500:
+            self.requests.popitem(last=False)
+
+    def record_response(self, response) -> None:
+        item = self.requests.get(response.request)
+        if item is not None:
+            item["status"] = response.status
+
+    def record_failure(self, request) -> None:
+        item = self.requests.get(request)
+        if item is not None:
+            item.update(status="failed", error=request.failure)
+
+
+@dataclass
+class _BrowserSession:
+    browser: Any = None
+    context: Any = None
+    pages: dict[int, Any] = field(default_factory=dict)
+    active_tab: int = 0
+    refs: dict[str, str] = field(default_factory=dict)
+    last_used: float = field(default_factory=time.monotonic)
+    observations: dict[int, _PageObservations] = field(default_factory=dict)
+
+
+_sessions: dict[Any, _BrowserSession] = {}
+
+
+def _state() -> _BrowserSession:
+    scope = current_browser_scope()
+    state = _sessions.get(scope)
+    if state is None:
+        if len(_sessions) >= 16:
+            raise RuntimeError("browser_session_capacity: close an existing session before opening another")
+        state = _sessions[scope] = _BrowserSession()
+    state.last_used = time.monotonic()
+    return state
+
+
+async def _close_session(state: _BrowserSession) -> None:
+    if state.context:
+        await state.context.close()
+    if state.browser:
+        await state.browser.close()
+    state.pages.clear()
+    state.refs.clear()
+    state.observations.clear()
+
+
+async def _expire_idle_sessions() -> None:
+    now = time.monotonic()
+    for scope, state in list(_sessions.items()):
+        if scope != current_browser_scope() and now - state.last_used > 900:
+            await _close_session(state)
+            _sessions.pop(scope, None)
+
+
 _loop: asyncio.AbstractEventLoop | None = None
 _loop_thread: threading.Thread | None = None
 _loop_lock = threading.Lock()
@@ -43,7 +114,7 @@ _browser_call_lock = threading.Lock()
 # Snapshot assigns ref=e1, e2, ... to elements. The mapping stores
 # the Playwright locator that was used to find each element, so
 # click/type/hover can resolve ref → actual selector.
-_ref_map: dict[str, str] = {}
+
 
 VIEWPORT = {"width": 1280, "height": 800}
 USER_AGENT = (
@@ -67,28 +138,45 @@ def _ensure_playwright():
 
 async def _get_page(tab_index: int | None = None) -> Any:
     """Get or create a browser page. Uses tab_index for multi-tab support."""
-    global _browser, _context, _pages, _active_tab, _playwright, _pw_instance
+    global _pw_instance
+    await _expire_idle_sessions()
     _ensure_playwright()
 
-    if _browser is None:
+    if _state().browser is None:
         if _pw_instance is None:
             _pw_instance = await _playwright().start()
-        _browser = await _pw_instance.chromium.launch(headless=True)
-        _context = await _browser.new_context(
+        _state().browser = await _pw_instance.chromium.launch(headless=True)
+        _state().context = await _state().browser.new_context(
             viewport=VIEWPORT,
             user_agent=USER_AGENT,
         )
-        await _context.route("**/*", _abort_blocked_browser_request)
-        _pages[0] = await _context.new_page()
-        _active_tab = 0
+        scope = current_browser_scope()
+        async def scoped_route(route):
+            await _abort_blocked_browser_request(route, scope=scope)
+        await _state().context.route("**/*", scoped_route)
+        await _new_page(0)
+        _state().active_tab = 0
 
-    idx = tab_index if tab_index is not None else _active_tab
+    idx = tab_index if tab_index is not None else _state().active_tab
 
-    if idx not in _pages or _pages[idx].is_closed():
-        _pages[idx] = await _context.new_page()
+    if idx not in _state().pages or _state().pages[idx].is_closed():
+        await _new_page(idx)
 
-    _active_tab = idx
-    return _pages[idx]
+    _state().active_tab = idx
+    return _state().pages[idx]
+
+
+async def _new_page(index: int):
+    state = _state()
+    page = await state.context.new_page()
+    observations = state.observations[index] = _PageObservations()
+    page.on("console", lambda message: observations.record_console(message.type, message.text))
+    page.on("pageerror", lambda error: observations.record_console("pageerror", str(error)))
+    page.on("request", observations.record_request)
+    page.on("response", observations.record_response)
+    page.on("requestfailed", observations.record_failure)
+    state.pages[index] = page
+    return page
 
 
 def _browser_event_loop() -> asyncio.AbstractEventLoop:
@@ -154,7 +242,7 @@ def _blocked_ip(value) -> bool:
     )
 
 
-def _validate_browser_url(url: str) -> dict | None:
+def _validate_browser_url(url: str, *, scope=None) -> dict | None:
     """Reject non-public browser targets. DNS failure is a block, not a pass."""
     if not url:
         return None
@@ -182,7 +270,7 @@ def _validate_browser_url(url: str) -> dict | None:
     hostname = (parsed.hostname or "").strip().lower().rstrip(".")
     if not hostname:
         return {"ok": False, "error": "invalid_url", "message": "URL has no hostname."}
-    if _browser_private_network_allowed():
+    if _browser_private_network_allowed() or local_preview_allowed(url, scope):
         return None
     if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or hostname.endswith(".local") or hostname.endswith(".internal") or hostname.endswith(".localhost"):
         return {
@@ -236,9 +324,9 @@ def _validate_browser_url(url: str) -> dict | None:
     return None
 
 
-async def _abort_blocked_browser_request(route) -> None:
+async def _abort_blocked_browser_request(route, *, scope=None) -> None:
     """Re-check the URL Playwright is about to fetch, including redirects."""
-    blocked = _validate_browser_url(getattr(route.request, "url", "") or "")
+    blocked = _validate_browser_url(getattr(route.request, "url", "") or "", scope=scope)
     if blocked is not None:
         await route.abort()
         return
@@ -272,11 +360,10 @@ def browser_snapshot(selector: str = "body", compact: bool = True, max_elements:
     Each element gets a ref ID (e1, e2, ...). Use these ref IDs in
     click/type/hover/select_option.fill_form for precise targeting.
     """
-    global _ref_map
 
     async def _snap():
         page = await _get_page()
-        _ref_map.clear()
+        _state().refs.clear()
         title = await page.title()
         url = page.url
         limit = max(1, min(int(max_elements), 500))
@@ -342,7 +429,7 @@ def browser_snapshot(selector: str = "body", compact: bool = True, max_elements:
         for item in raw_elements:
             ref = f"e{len(elements) + 1}"
             css_selector = str(item.pop("selector", "") or "")
-            _ref_map[ref] = f"css:{css_selector}" if css_selector else ""
+            _state().refs[ref] = f"css:{css_selector}" if css_selector else ""
             elements.append({"ref": ref, **item})
         total = int((snapshot or {}).get("total") or len(elements))
         truncated = total > len(elements)
@@ -378,7 +465,7 @@ def _parse_snapshot(node: dict, page: Any | None = None, depth: int = 0) -> list
                   "listitem", "gridcell", "row", "cell", "main", "region"}
 
     if role in actionable or name:
-        ref = f"e{len(_ref_map) + 1}"
+        ref = f"e{len(_state().refs) + 1}"
 
         # Build a CSS selector via Playwright locator
         selector = ""
@@ -387,9 +474,9 @@ def _parse_snapshot(node: dict, page: Any | None = None, depth: int = 0) -> list
                 locator = page.get_by_role(role, name=name)
                 # We can't easily get the CSS, but we can store the locator
                 # For ref-based targeting, we'll use get_by_role approach
-                _ref_map[ref] = f"role:{role}:{name}"
+                _state().refs[ref] = f"role:{role}:{name}"
             except Exception:
-                _ref_map[ref] = ""
+                _state().refs[ref] = ""
 
         elem = {
             "ref": ref,
@@ -490,7 +577,7 @@ def browser_screenshot(
 
 async def _click_by_ref(page: Any, ref: str) -> bool:
     """Click an element referenced by snapshot ref ID."""
-    mapping = _ref_map.get(ref, "")
+    mapping = _state().refs.get(ref, "")
     if mapping.startswith("css:") and mapping[4:]:
         try:
             await page.locator(mapping[4:]).click(timeout=5000)
@@ -536,7 +623,7 @@ def browser_type(text: str, selector: str = "", ref: str = "", clear_first: bool
         target_label = ""
 
         if ref:
-            mapping = _ref_map.get(ref, "")
+            mapping = _state().refs.get(ref, "")
             if mapping.startswith("css:") and mapping[4:]:
                 target = page.locator(mapping[4:])
                 target_label = f"ref:{ref}"
@@ -573,7 +660,7 @@ def browser_hover(selector: str = "", ref: str = "") -> dict:
     async def _hover():
         page = await _get_page()
         if ref:
-            mapping = _ref_map.get(ref, "")
+            mapping = _state().refs.get(ref, "")
             if mapping.startswith("css:") and mapping[4:]:
                 await page.locator(mapping[4:]).hover(timeout=5000)
                 return {"ok": True, "hovered_ref": ref}
@@ -599,7 +686,7 @@ def browser_select_option(value: str, selector: str = "", ref: str = "") -> dict
         page = await _get_page()
         target_label = ""
         if ref:
-            mapping = _ref_map.get(ref, "")
+            mapping = _state().refs.get(ref, "")
             if mapping.startswith("css:") and mapping[4:]:
                 await page.locator(mapping[4:]).select_option(value)
                 target_label = f"ref:{ref}"
@@ -721,44 +808,44 @@ def browser_tabs(action: str = "list", tab_index: int = 0, url: str = "") -> dic
         if blocked is not None:
             return blocked
     async def _tabs():
-        global _pages, _active_tab
         # tabs is a public entry point and must work before navigate/snapshot.
         # Initialize the shared browser context instead of dereferencing None.
         await _get_page()
 
         if action == "list":
             tabs = []
-            for idx, page in list(_pages.items()):
+            for idx, page in list(_state().pages.items()):
                 if not page.is_closed():
                     tabs.append({
                         "index": idx,
                         "url": page.url,
                         "title": await page.title(),
-                        "active": idx == _active_tab,
+                        "active": idx == _state().active_tab,
                     })
             return {"ok": True, "tabs": tabs, "count": len(tabs)}
 
         elif action == "new":
-            new_idx = max(_pages.keys()) + 1 if _pages else 0
-            _pages[new_idx] = await _context.new_page()
+            new_idx = max(_state().pages.keys()) + 1 if _state().pages else 0
+            await _new_page(new_idx)
             if url:
-                await _pages[new_idx].goto(url, timeout=DEFAULT_TIMEOUT)
-            _active_tab = new_idx
+                await _state().pages[new_idx].goto(url, timeout=DEFAULT_TIMEOUT)
+            _state().active_tab = new_idx
             return {"ok": True, "tab_index": new_idx, "action": "created"}
 
         elif action == "close":
-            if tab_index in _pages and not _pages[tab_index].is_closed():
-                await _pages[tab_index].close()
-                del _pages[tab_index]
-                if _active_tab == tab_index:
-                    _active_tab = next(iter(_pages.keys()), 0)
-                return {"ok": True, "closed_tab": tab_index, "active_tab": _active_tab}
+            if tab_index in _state().pages and not _state().pages[tab_index].is_closed():
+                await _state().pages[tab_index].close()
+                del _state().pages[tab_index]
+                _state().observations.pop(tab_index, None)
+                if _state().active_tab == tab_index:
+                    _state().active_tab = next(iter(_state().pages.keys()), 0)
+                return {"ok": True, "closed_tab": tab_index, "active_tab": _state().active_tab}
             return {"ok": False, "error": f"tab {tab_index} not found"}
 
         elif action == "switch":
-            if tab_index in _pages and not _pages[tab_index].is_closed():
-                _active_tab = tab_index
-                page = _pages[tab_index]
+            if tab_index in _state().pages and not _state().pages[tab_index].is_closed():
+                _state().active_tab = tab_index
+                page = _state().pages[tab_index]
                 return {
                     "ok": True, "selected_tab": tab_index,
                     "url": page.url, "title": await page.title(),
@@ -774,63 +861,26 @@ def browser_tabs(action: str = "list", tab_index: int = 0, url: str = "") -> dic
 
 
 def browser_network() -> dict:
-    """List network requests made by the current page."""
+    """Return bounded actual request/response/failure observations for this tab."""
     async def _net():
-        page = await _get_page()
-        requests = []
-        # Access requests from the page context
-        try:
-            # Playwright stores requests on the page
-            for req in page._requests or []:
-                requests.append({
-                    "url": req.url[:300],
-                    "method": req.method,
-                    "status": req.status,
-                    "resource_type": req.resource_type,
-                })
-        except Exception:
-            pass
-
-        if not requests:
-            # Try getting them via evaluate
-            perf = await page.evaluate("() => JSON.stringify(performance.getEntriesByType('resource'))")
-            try:
-                entries = json.loads(perf)
-                for entry in entries[:50]:
-                    requests.append({
-                        "url": entry.get("name", "")[:300],
-                        "resource_type": entry.get("initiatorType", ""),
-                        "duration_ms": round(entry.get("duration", 0), 1),
-                    })
-            except Exception:
-                pass
-
-        return {
-            "ok": True,
-            "requests": requests[:50],
-            "count": len(requests),
-        }
+        await _get_page()
+        observations = _state().observations[_state().active_tab]
+        requests = list(observations.requests.values())
+        return {"ok": True, "requests": requests[-50:], "count": len(requests),
+                "total": observations.request_total,
+                "truncated": observations.request_total > 50}
     return _run(_net())
 
 
 def browser_console() -> dict:
-    """Get browser console messages."""
+    """Return real console and uncaught-page-error events for this tab."""
     async def _con():
-        page = await _get_page()
-        msgs = []
-        try:
-            for msg in page._console_messages or []:
-                msgs.append({
-                    "type": msg.type,
-                    "text": msg.text[:300],
-                })
-        except Exception:
-            pass
-        return {
-            "ok": True,
-            "messages": msgs[:50],
-            "count": len(msgs),
-        }
+        await _get_page()
+        observations = _state().observations[_state().active_tab]
+        messages = list(observations.console)
+        return {"ok": True, "messages": messages[-50:], "count": len(messages),
+                "total": observations.console_total,
+                "truncated": observations.console_total > 50}
     return _run(_con())
 
 
@@ -848,19 +898,9 @@ def browser_navigate_back() -> dict:
 def browser_close() -> dict:
     """Close the browser and all tabs."""
     async def _close():
-        global _browser, _context, _pages
-        for page in list(_pages.values()):
-            try:
-                if not page.is_closed():
-                    await page.close()
-            except Exception:
-                pass
-        _pages.clear()
-        if _context:
-            await _context.close()
-            _context = None
-        if _browser:
-            await _browser.close()
-            _browser = None
+        state = _sessions.get(current_browser_scope())
+        if state is not None:
+            await _close_session(state)
+            _sessions.pop(current_browser_scope(), None)
         return {"ok": True, "closed": True}
     return _run(_close())

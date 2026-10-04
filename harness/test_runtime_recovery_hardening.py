@@ -124,6 +124,36 @@ def test_explicit_llm_configuration_error_ends_without_a_retry_loop():
     assert "配置" in result.final_response
 
 
+def test_provider_rejection_preserves_safe_diagnostic_and_stable_code():
+    def rejected_provider(**_kwargs):
+        return LLMResponse(error="HTTP 400 invalid request api_key=private-token",
+                           metadata={"http_status": 400, "error_type": "invalid_request"})
+
+    config = SSOTRuntimeConfig(max_query_loop_iterations=0)
+    loop = QueryLoop(config, {}, None, llm_invoke=rejected_provider)
+    context = StatelessContext(workspace_id="default", session_id="rejected-session",
+                               request_id="rejected-request", user_input="build")
+    result = asyncio.run(loop.run(context, BudgetController(config), None))
+    assert result.error == "llm_request_rejected"
+    diagnostic = context.extras["provider_recovery_events"][0]["diagnostic"]
+    assert diagnostic["http_status"] == 400
+    assert "invalid request" in diagnostic["detail"]
+    assert "private-token" not in str(diagnostic)
+
+
+def test_provider_exception_retains_redacted_diagnostic():
+    def broken_provider(**_kwargs):
+        raise RuntimeError("HTTP 422 invalid request password=private-password")
+
+    loop = QueryLoop(SSOTRuntimeConfig(), {}, None, llm_invoke=broken_provider)
+    response = asyncio.run(loop._call_llm([LLMMessage(role="user", content="build")],
+        StatelessContext(workspace_id="default", session_id="one", request_id="one", user_input="build")))
+    assert response.error == "llm_request_rejected"
+    diagnostic = response.metadata["provider_failure_diagnostic"]
+    assert diagnostic["error_type"] == "RuntimeError"
+    assert "private-password" not in str(diagnostic)
+
+
 def test_history_tool_context_preserves_all_evidence():
     result = type("Result", (), {"tool_calls": [
         {

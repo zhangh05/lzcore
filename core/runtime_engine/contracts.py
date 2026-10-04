@@ -317,6 +317,18 @@ def is_read_only_call(
     return action in READ_ONLY_ACTIONS.get(normalized, frozenset())
 
 
+def observation_is_reusable(tool_name: str, arguments: dict[str, Any] | None = None) -> bool:
+    """Reuse only an explicitly immutable action observation within this turn."""
+    from core.tools.action_requirements import action_execution_contract
+    normalized = str(tool_name or "").replace("__", ".")
+    action = str((arguments or {}).get("action") or "").strip().lower()
+    declared = action_execution_contract(normalized, action)
+    if not declared:
+        contract = get_contract(normalized)
+        declared = (contract.action_contracts or {}).get(action, {}) if contract else {}
+    return declared.get("observation_cache") == "turn"
+
+
 def get_retry_contract(
     tool_name: str,
     arguments: dict[str, Any] | None = None,
@@ -366,5 +378,4 @@ def get_risk_level(tool_name: str) -> str:
 
 def register_contract(contract: ToolContract) -> None:
     BUILTIN_CONTRACTS[contract.name] = contract
-
 

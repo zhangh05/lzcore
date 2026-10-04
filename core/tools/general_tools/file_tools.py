@@ -6,6 +6,7 @@ from pathlib import Path
 from core.tools.schemas import ToolInvocation
 from storage.ids import validate_workspace_id
 from storage.workspace_files import (
+    create_workspace_text,
     is_current_workspace_write_path,
     write_text_atomic,
 )
@@ -16,6 +17,24 @@ from core.tools.general_tools.shared import _caller_workspace, _error_inv, _gene
 
 def _is_current_workspace_write_path(ws: str, target: Path) -> bool:
     return is_current_workspace_write_path(ws, target)
+
+
+def handle_file_create(inv: ToolInvocation) -> dict:
+    """Create a source file at an exact managed path; never overwrite."""
+    ws = _caller_workspace(inv)
+    filepath = str(inv.arguments.get("filepath") or "")
+    try:
+        content = inv.arguments.get("content")
+        if not isinstance(content, str):
+            return _error_inv(inv, "content must be a string")
+        target = create_workspace_text(ws, filepath, content)
+        return _ok(inv, f"Created {filepath}.", {
+            "filepath": filepath, "size": target.stat().st_size, "created": True,
+        })
+    except FileExistsError:
+        return _error_inv(inv, "file already exists; read it before using edit or patch")
+    except (ValueError, OSError) as exc:
+        return _error_inv(inv, str(exc)[:200])
 
 
 def handle_file_read(inv: ToolInvocation) -> dict:
@@ -301,4 +320,4 @@ def handle_file_read_image(inv: ToolInvocation) -> dict:
         return _error_inv(inv, str(e)[:200])
 
 
-__all__ = ['handle_file_read', 'handle_file_edit', 'handle_file_patch', 'handle_ws_list_files', 'handle_ws_write_artifact_file', 'handle_ws_get_metadata']
+__all__ = ['handle_file_create', 'handle_file_read', 'handle_file_edit', 'handle_file_patch', 'handle_ws_list_files', 'handle_ws_write_artifact_file', 'handle_ws_get_metadata']

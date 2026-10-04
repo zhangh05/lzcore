@@ -29,3 +29,11 @@
 作业检查 /api/jobs/<job_id>、事件和 worker status；排队/运行先取消并等终态，永久删除要显式确认。队列 at-least-once，外部写入需要幂等。
 
 恢复先 python3 scripts/backup_cli.py verify <archive>，再明确 restore；检查回退根、ready、worker 和业务路径。Windows 导出/退出/更新检查原生 bridge、实际任务及未保存编辑，不仅检查按钮文案；见 [WINDOWS](WINDOWS.md)。
+
+## Agent 浏览器与本地工程预览
+
+浏览器实例、标签、引用和观测缓冲按认证主体、工作区和会话隔离。关闭仅作用于调用者的会话。最多保留 16 个会话；获取页面时清理其他超过 900 秒未使用的会话，无后台定时清理。控制台来自真实 console/pageerror 事件，最多保留 200 项；请求来自真实 request/response/requestfailed 事件，最多保留 500 项。查询返回最近 50 项及累计数量、截断标记，空结果不代替尚未观测的事实。
+
+本地预览默认禁止。管理员可通过 `LZCORE_BROWSER_LOCAL_PREVIEWS` 配置精确授权，例如 `{"local/bench":["http://127.0.0.1:18731"]}`。键为存储主体键/工作区；`local` 仅表示可信本机未绑定主体，认证用户应使用实际主体键。只支持显式端口不低于 1024 的 HTTP(S) literal loopback origin（127.0.0.1 或 ::1），不支持 localhost、LAN、用户名或路径授权。另一个主体、工作区、协议或端口均不继承授权。初始导航、重定向和子请求均检查创建该会话时的范围；工具参数不能扩大授权。配置错误保持拒绝。
+
+这不是对整个 shell 的网络隔离。预览需由管理员确认实际服务归属，不能给任意现有本地服务端口授权。真实编码压测使用隔离数据和独占预览端口，方法与验证边界见 [编码压测](CODING_BENCHMARKS.md)。

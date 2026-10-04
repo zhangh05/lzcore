@@ -960,7 +960,14 @@ def _to_anthropic_messages_request(req: LLMRequest, cfg: dict) -> dict:
         blocks: list[dict] = []
         protocol = _compatible_protocol(message, cfg)
         if message.role == "assistant" and "anthropic" in protocol:
-            append_message("assistant", protocol["anthropic"])
+            # Native thinking/signatures must survive unchanged. A malformed
+            # proposal, however, cannot be resent as a non-object tool input:
+            # that would make the validation-feedback request itself invalid.
+            append_message("assistant", [
+                {**block, "input": _anthropic_tool_input(block.get("input", {}))}
+                if block.get("type") == "tool_use" else block
+                for block in protocol["anthropic"]
+            ])
             continue
         if isinstance(message.content, list):
             blocks.extend(_to_anthropic_content_part(part) for part in message.content)
@@ -1055,22 +1062,29 @@ def _anthropic_prompt_cache_rejected(response: LLMResponse) -> bool:
     return int(metadata.get("http_status") or 0) in {400, 422}
 
 
-def _to_anthropic_tool_use(call: dict) -> dict:
-    function = call.get("function") or {}
-    name = str(function.get("name") or call.get("name") or "")
-    arguments = function.get("arguments", call.get("arguments", {}))
+def _anthropic_tool_input(arguments) -> dict:
+    """Keep rejected proposals diagnosable while satisfying wire object shape."""
+    original = arguments
     if isinstance(arguments, str):
         try:
             arguments = json.loads(arguments)
         except json.JSONDecodeError:
-            arguments = {}
-    if not isinstance(arguments, dict):
-        arguments = {}
+            pass
+    if isinstance(arguments, dict):
+        return arguments
+    return {"__invalid_tool_arguments_json__": original if isinstance(original, str)
+            else json.dumps(original, ensure_ascii=False)}
+
+
+def _to_anthropic_tool_use(call: dict) -> dict:
+    function = call.get("function") or {}
+    name = str(function.get("name") or call.get("name") or "")
+    arguments = function.get("arguments", call.get("arguments", {}))
     return {
         "type": "tool_use",
         "id": str(call.get("id") or ""),
         "name": name,
-        "input": arguments,
+        "input": _anthropic_tool_input(arguments),
     }
 
 

@@ -1866,6 +1866,7 @@ class QueryLoop:
                 ctx.extras.setdefault("provider_recovery_events", []).append({
                     "attempt": provider_failure_count,
                     "error": provider_error,
+                    "diagnostic": dict((response.metadata or {}).get("provider_failure_diagnostic") or {}) if response else {},
                     "tool_results_preserved": len(all_results),
                 })
                 # A provider can recover from transport errors without losing
@@ -2317,7 +2318,7 @@ class QueryLoop:
                             return finish(
                                 final_response=(
                                     f"任务受阻：工具 {res.tool_name} 连续多次返回相同错误（{err_code}）。"
-                                    "已主动停止重复重试，避免陷入无限循环。已保留当前已生成的图纸与对话状态，请核对后继续。"
+                                    "已主动停止重复重试，避免陷入无限循环。已保留当前工作结果与对话状态，请核对后继续。"
                                 ),
                                 tool_results=all_results,
                                 iterations=iterations,
@@ -2748,6 +2749,12 @@ class QueryLoop:
                         "sensitive_output_redacted": bool(policy.get("sensitive_output_redacted")),
                     })
                 if response.error:
+                    response.metadata = dict(response.metadata or {})
+                    response.metadata["provider_failure_diagnostic"] = {
+                        "detail": _redact_tool_error(response.error)[:600],
+                        "http_status": (response.metadata or {}).get("http_status"),
+                        "error_type": str((response.metadata or {}).get("error_type") or "")[:100],
+                    }
                     response.error = _normalize_llm_error(response.error)
                 else:
                     mark_evidence_delivered(
@@ -2769,7 +2776,13 @@ class QueryLoop:
                 type(e).__name__,
                 _redact_tool_error(e),
             )
-            return LLMResponse(error=_normalize_llm_error(str(e)))
+            return LLMResponse(error=_normalize_llm_error(str(e)), metadata={
+                "provider_failure_diagnostic": {
+                    "detail": _redact_tool_error(e)[:600],
+                    "http_status": None,
+                    "error_type": type(e).__name__,
+                },
+            })
 
     async def _recover_final_synthesis(
         self,
@@ -3146,7 +3159,7 @@ class QueryLoop:
         return f"sha256:{digest}"
 
     def _suppress_repeated_tool_calls(self, ctx: StatelessContext, tool_calls: list[LLMToolCall]) -> tuple[list[LLMToolCall], str]:
-        """Do not re-run exact successful reads or deterministic failed writes."""
+        """Reuse immutable observations; suppress unchanged deterministic failures."""
         previous = {
             str(item.get("call_key") or ""): item
             for item in (ctx.extras.get("task_state_execution_manifest") or [])
@@ -3154,21 +3167,17 @@ class QueryLoop:
         }
         executable, suppressed, suppressed_keys = [], [], []
         for call in tool_calls:
-            call_tool = str(call.name).replace("__", ".")
-            if call_tool == "network.operations.topology":
-                # Canvas topology operations must NEVER be suppressed by runtime deduplication!
-                # Both patch (canvas mutation) and read (canvas inspection) are lightweight
-                # state queries/updates that must always be allowed to execute without interception.
-                executable.append(call)
-                continue
-
             prior = previous.get(self._durable_call_key(call))
             if not prior:
                 executable.append(call)
                 continue
             read_only = self._executor._is_read_only_call(call)
-            deterministic_failure = not read_only and not bool(prior.get("ok")) and not bool(prior.get("execution_may_continue"))
-            if (read_only and bool(prior.get("ok"))) or deterministic_failure:
+            from .contracts import observation_is_reusable
+            unchanged = int(prior.get("state_revision") or 0) == int(ctx.extras.get("tool_state_revision") or 0)
+            deterministic_failure = (not read_only and not bool(prior.get("ok"))
+                                     and not bool(prior.get("execution_may_continue")) and unchanged)
+            reusable_read = read_only and bool(prior.get("ok")) and observation_is_reusable(call.name, call.arguments)
+            if reusable_read or deterministic_failure:
                 # This text returns to the model, so retain the same alias
                 # spelling exposed in provider tool definitions.
                 suppressed.append(str(call.name).replace(".", "__"))
@@ -3217,10 +3226,14 @@ class QueryLoop:
             manifest = []
             ctx.extras["task_state_execution_manifest"] = manifest
         for call, result in zip(tool_calls, results):
+            side_effecting = not self._executor._is_read_only_call(call)
+            if side_effecting and result.ok:
+                ctx.extras["tool_state_revision"] = int(ctx.extras.get("tool_state_revision") or 0) + 1
             manifest.append({
                 "tool_id": str(call.name or "")[:160],
                 "call_key": self._durable_call_key(call),
-                "side_effecting": not self._executor._is_read_only_call(call),
+                "side_effecting": side_effecting,
+                "state_revision": int(ctx.extras.get("tool_state_revision") or 0),
                 "ok": bool(result.ok),
                 # Preserve uncertainty as telemetry so the model receives the
                 # factual outcome without a runtime execution restriction.
@@ -4341,7 +4354,7 @@ class QueryLoop:
                 )
                 lines.append(f"{index}. [{status}] {summary}" + (f"（证据：{ref}）" if ref else ""))
             if fail_count:
-                lines.extend(["", f"另有 {fail_count} 项工具观察失败，未据此推断设备状态。"])
+                lines.extend(["", f"另有 {fail_count} 项工具观察失败，未据此推断外部状态。"])
             lines.extend(["", "原始大型结果已保存为证据制品，可在后续请求中继续分析，无需重复执行已成功的操作。"])
             return "\n".join(lines)
 

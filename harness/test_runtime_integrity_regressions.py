@@ -59,7 +59,7 @@ def test_operational_symbols_survive_data_only_rendering():
 def test_repeated_terminal_tool_proposal_has_stable_signature():
     loop = QueryLoop.__new__(QueryLoop)
     loop._executor = SimpleNamespace(_is_read_only_call=lambda _call: True)
-    call = LLMToolCall(id="one", name="workspace.file", arguments={"action": "read", "path": "x"})
+    call = LLMToolCall(id="one", name="data.manage", arguments={"action": "stats", "rows": [{"value": 1}]})
     ctx = SimpleNamespace(extras={"task_state_execution_manifest": [{
         "call_key": QueryLoop._durable_call_key(call), "ok": True,
     }]})

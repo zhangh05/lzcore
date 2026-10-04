@@ -1,5 +1,6 @@
 """Native provider state is distinct from the public conversation projection."""
 import json
+import pytest
 
 from agent.llm import provider
 from agent.llm.schemas import LLMRequest, LLMResponse
@@ -23,6 +24,29 @@ def test_anthropic_native_blocks_survive_tool_round():
     assert body["messages"][0]["content"] == blocks
     assert response.content == "Checking now"
     assert "private state" not in repr(messages[0])
+
+
+@pytest.mark.parametrize("arguments", ['{"command":"unterminated', [], None])
+def test_rejected_native_tool_input_does_not_break_validation_feedback_request(arguments):
+    from agent.llm.schemas import LLMMessage
+    native = [
+        {"type": "thinking", "thinking": "private state", "signature": "signed"},
+        {"type": "tool_use", "id": "bad", "name": "exec__run", "input": arguments},
+    ]
+    response = provider._parse_anthropic_messages_response({"content": native}, {})
+    message = response.assistant_message()
+    request = LLMRequest(task="assistant_chat", messages=[message,
+        LLMMessage(role="tool", tool_call_id="bad", content="INVALID_TOOL_ARGUMENTS_JSON: resend complete arguments")])
+    body = provider._to_anthropic_messages_request(request, {})
+    sent = body["messages"][0]["content"]
+    assert sent[0] == native[0]
+    assert isinstance(sent[1]["input"], dict)
+    assert "__invalid_tool_arguments_json__" in sent[1]["input"]
+    assert native[1]["input"] == arguments  # no mutation of private history
+    assert body["messages"][1]["content"][0]["tool_use_id"] == "bad"
+    loop = QueryLoop(SSOTRuntimeConfig(), {}, None)
+    parsed = loop._parse_tool_calls(response.tool_calls)
+    assert "__invalid_tool_arguments_json__" in parsed[0].arguments
 
 
 def test_anthropic_stream_reassembles_thinking_signature_and_tool_input(monkeypatch):

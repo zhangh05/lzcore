@@ -69,6 +69,7 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("workspace.file", "extract_document_image"): ("file_id", "image_index"),
     ("workspace.file", "extract_document_images"): ("file_id",),
     ("workspace.file", "write"): ("filename", "content"),
+    ("workspace.file", "create"): ("filepath", "content"),
     ("workspace.file", "write_artifact"): ("filename", "content"),
     ("workspace.file", "edit"): ("filepath", "old_string", "new_string"),
     ("workspace.file", "patch"): ("filepath", "patch_text"),
@@ -79,6 +80,12 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("workspace.artifact", "delete"): ("artifact_id",),
     ("workspace.filestore", "references"): ("file_id",),
     ("workspace.filestore", "import"): ("filepath",),
+}
+
+# Presence and a valid string type are sufficient for an empty source file.
+# Other required text (paths, identifiers, commands) must remain non-empty.
+ACTION_ALLOW_EMPTY: dict[tuple[str, str], frozenset[str]] = {
+    ("workspace.file", "create"): frozenset({"content"}),
 }
 
 
@@ -173,7 +180,7 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts(
     ("list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "glob"),
     _READ,
 ))
-ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.file", ("write", "write_artifact", "edit", "patch"), _WRITE))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.file", ("create", "write", "write_artifact", "edit", "patch"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.file", ("delete",), _DELETE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("list", "read"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("save", "tag"), _WRITE))
@@ -202,6 +209,12 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts(
     "text.analyze", ("redact", "extract_entities", "match"), _READ,
 ))
 
+
+# Only computations over supplied arguments have reusable observations. Safe
+# retries do not imply that a browser, file, device or job is still unchanged.
+for _tool_action, _contract in ACTION_EXECUTION_CONTRACTS.items():
+    if _tool_action[0] in {"data.manage", "text.analyze"}:
+        _contract["observation_cache"] = "turn"
 
 def action_execution_contract(tool_id: str, action: str) -> dict:
     """Return a copy of the canonical action-level execution contract."""

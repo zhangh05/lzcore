@@ -328,7 +328,7 @@ class SemanticValidator:
         result: SemanticValidationResult,
     ) -> None:
         """Validate conditional requirements for every merged tool action."""
-        from core.tools.action_requirements import ACTION_REQUIRED_ALL, ACTION_REQUIRED_ANY
+        from core.tools.action_requirements import ACTION_REQUIRED_ALL, ACTION_REQUIRED_ANY, ACTION_ALLOW_EMPTY
 
         action = str(node.args.get("action") or "shell").strip().lower()
         key = (node.tool, action)
@@ -342,7 +342,8 @@ class SemanticValidator:
         extension_any = extension_any if isinstance(extension_any, dict) else {}
 
         for field_name in tuple(ACTION_REQUIRED_ALL.get(key, ())) + tuple(extension_all.get(action) or ()):
-            if not _has_argument_value(node.args, field_name) and field_name not in node.result_bindings:
+            present_empty = field_name in ACTION_ALLOW_EMPTY.get(key, ()) and isinstance(node.args.get(field_name), str)
+            if not _has_argument_value(node.args, field_name) and not present_empty and field_name not in node.result_bindings:
                 result.errors.append(SemanticError(
                     node_id=node.id,
                     code="MISSING_REQUIRED_ARG",

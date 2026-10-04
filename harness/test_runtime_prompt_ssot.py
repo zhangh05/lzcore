@@ -248,7 +248,7 @@ def test_llm_tool_descriptions_include_action_level_boundaries():
     desc = tool["function"]["description"]
     assert "Action boundaries" in desc
     assert "list=read" in desc
-    assert "delete=write/high" in desc
+    assert "delete=write/high" in desc or "write/high:[delete]" in desc
 
 
 def test_llm_tool_descriptions_publish_safe_result_binding_contracts():
@@ -353,7 +353,7 @@ def test_ssot_registry_feeds_action_profiles_to_llm_tools():
 
     tools = _build_cached_tool_definitions(registry)
     desc = tools[0]["function"]["description"]
-    assert "delete=write/high" in desc
+    assert "delete=write/high" in desc or "write/high:[delete]" in desc
 
 
 def test_llm_tool_descriptions_keep_long_action_boundaries_complete():
