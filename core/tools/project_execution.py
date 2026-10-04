@@ -116,6 +116,7 @@ class DockerProjectEnvironment:
             raise ValueError("invalid_project_source_mode")
         self.source_mode = source_mode
         self.generated_paths = validate_generated_paths(generated_paths)
+        self.validation_commands = frozenset()
         self.generation = 0
         self._execution_lock = threading.RLock()
         self._active_executions = 0
@@ -277,6 +278,11 @@ class DockerProjectEnvironment:
                 self.close()
                 raise
 
+    def configure_validation(self, commands):
+        """Bind the assignment's exact argv checks, never arbitrary model flags."""
+        import shlex
+        self.validation_commands = frozenset(tuple(shlex.split(command)) for command in commands)
+
     def source_protected(self, target: Path) -> bool:
         if self.source_mode == "implementation":
             return False
@@ -308,6 +314,14 @@ class DockerProjectEnvironment:
     def execute(
         self, command: str, cwd: str, *, env=None, timeout=None, cancel_check=None
     ):
+        import shlex
+        try:
+            argv = tuple(shlex.split(command))
+        except ValueError:
+            argv = ()
+        if self.source_mode != "implementation" and argv in self.validation_commands:
+            from core.tools.project_validation import execute_validation
+            return execute_validation(self, command, cwd, env=env, timeout=timeout, cancel_check=cancel_check)
         return self._execute(
             ["/bin/bash", "-c", command],
             cwd,

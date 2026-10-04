@@ -63,9 +63,18 @@ def main() -> int:
             probe("registry_tls_dependency_allowed", {"action": "shell", "command": "npm view react version", "timeout": 30}, True)
             probe("unapproved_tls_origin_denied", {"action": "python", "code": "import urllib.request; result = urllib.request.urlopen('https://example.com', timeout=5).status", "timeout": 10}, False)
             probe("direct_network_cannot_bypass_proxy", {"action": "python", "code": "import socket; result = socket.create_connection(('1.1.1.1', 443), timeout=2).getpeername()", "timeout": 5}, False)
+            # The escape probe must not become a valid reviewed build source.
+            (project / "host-link").unlink()
             with quiescent_project(ws):
                 environment.coordinate(["dist"])
             descriptor = environment.descriptor()
+            rebuild = "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist');fs.writeFileSync('dist/rebuilt.txt','rebuilt');\""
+            poison = "node -e \"require('fs').writeFileSync('owned.txt','tampered');\""
+            environment.configure_validation([rebuild, poison])
+            probe("standard_rebuild_deletes_output_root_in_snapshot", {"action":"shell", "command":rebuild, "timeout":30}, True)
+            checks.append({"name":"validated_output_promoted", "passed": (project / "dist/rebuilt.txt").is_file() and (project / "dist/rebuilt.txt").read_text() == "rebuilt"})
+            probe("validation_source_change_rejected", {"action":"shell", "command":poison, "timeout":30}, False)
+            checks.append({"name":"validation_keeps_reviewed_source", "passed": (project / "owned.txt").read_text() == "scoped"})
             probe("coordinator_source_write_denied_by_kernel", {"action": "shell", "command": "printf 'unreviewed' > owned.txt"}, False)
             probe("coordinator_source_delete_denied_by_kernel", {"action": "shell", "command": "rm owned.txt"}, False)
             probe("coordinator_source_write_denied_by_api", {"action": "shell", "command": "test \"$(cat owned.txt)\" = scoped"}, True)
