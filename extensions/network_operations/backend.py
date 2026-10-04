@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import math
 from typing import Any
 
 from flask import jsonify, request
@@ -612,7 +613,7 @@ def wait(invocation):
         seconds = float((invocation.arguments or {}).get("seconds"))
     except (TypeError, ValueError):
         return {"ok": False, "error": "seconds must be a non-negative number"}
-    if seconds < 0:
+    if not math.isfinite(seconds) or seconds < 0:
         return {"ok": False, "error": "seconds must be a non-negative number"}
     started = time.monotonic()
     deadline = started + seconds
@@ -1097,6 +1098,7 @@ def register():
                 },
                 "referenceable_outputs": {"*": ["requested_seconds", "elapsed_seconds", "status"]},
                 "handler": wait,
+                "execution_time_budget": {"duration_argument": "seconds", "guard_seconds": 2},
                 "input_schema": {
                     "type": "object",
                     "properties": {**common, "seconds": {"type": "number", "minimum": 0}},

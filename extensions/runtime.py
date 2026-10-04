@@ -119,6 +119,11 @@ def _build_tools(manifest: ExtensionManifest, contribution: dict[str, Any]) -> t
         properties = (item.get("input_schema") or {}).get("properties") or {}
         actions = set((properties.get("action") or {}).get("enum") or [])
         action_execution_contracts = item.get("action_execution_contracts") or {}
+        from core.tools.execution_contracts import validate_execution_time_budget
+        try:
+            execution_time_budget = validate_execution_time_budget(item.get("execution_time_budget"), item.get("input_schema") or {})
+        except ValueError as exc:
+            raise ExtensionValidationError(f"invalid execution time budget for {tool_id}") from exc
         if not isinstance(action_execution_contracts, dict):
             raise ExtensionValidationError(f"action_execution_contracts must be an object: {tool_id}")
         if actions and set(action_execution_contracts) != actions:
@@ -198,6 +203,7 @@ def _build_tools(manifest: ExtensionManifest, contribution: dict[str, Any]) -> t
                 "extension_id": manifest.extension_id,
                 "extension_name": manifest.name,
                 "evidence_retention": evidence_retention,
+                "execution_time_budget": execution_time_budget,
                 "action_execution_contracts": {
                     str(action): dict(contract)
                     for action, contract in action_execution_contracts.items()
@@ -592,6 +598,7 @@ def _sync_runtime_contracts(specs) -> None:
                 str(action).lower(): dict(contract)
                 for action, contract in ((spec.metadata or {}).get("action_execution_contracts") or {}).items()
             },
+            execution_time_budget=dict((spec.metadata or {}).get("execution_time_budget") or {}),
         ))
 
 

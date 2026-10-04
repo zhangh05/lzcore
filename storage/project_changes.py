@@ -169,6 +169,23 @@ def _transaction_root(workspace_id: str, change_id: str) -> Path:
     return workspace_root(workspace_id) / "sys/coding-transactions" / change_id
 
 
+def publication_record(workspace_id: str, change_id: str) -> dict:
+    """Read the durable publication evidence; caller holds the workspace lock."""
+    return json.loads((_transaction_root(workspace_id, change_id) / "journal.json").read_text(encoding="utf-8"))
+
+
+def _next_publication_order(workspace_id: str) -> int:
+    # The same principal-scoped workspace lock covers reservation and apply.
+    # A crash may leave a gap, never reuse an order or infer a completed write.
+    path = workspace_root(workspace_id) / "sys/coding-publication-sequence.json"
+    previous = json.loads(path.read_text(encoding="utf-8"))["order"] if path.exists() else 0
+    if type(previous) is not int or previous < 0:
+        raise ValueError("invalid_coding_publication_sequence")
+    order = previous + 1
+    atomic_write_json(path, {"schema": "coding.publication_sequence.v1", "order": order})
+    return order
+
+
 @contextmanager
 def quiescent_project(workspace_id: str):
     """Serialize API writers and freeze project descendants during publication."""
@@ -292,7 +309,8 @@ def publish_changes(
                     if _hash(target) != expected:
                         raise ValueError("coding_transaction_snapshot_changed")
         record = {
-            "schema": "coding.publication.v1",
+            "schema": "coding.publication.v2",
+            "publication_order": _next_publication_order(workspace_id),
             "project": project_relative,
             "generated_paths": generated,
             "digest": change["digest"],

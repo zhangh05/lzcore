@@ -283,6 +283,48 @@ def test_governed_spawn_rejects_forged_session(team):
     assert result.status == "failed" and "session_id_mismatch" in str(result.output)
 
 
+def test_acceptance_replays_reviewed_updates_and_rejects_unreviewed_changes(team, monkeypatch):
+    from agent.runtime import ssot_runtime
+    from scripts.benchmark_team_acceptance import verify_team
+
+    first = team.spawn()
+    assert team.spawn("qa_agent", review=first["subtask_id"])["task_status"] == "succeeded"
+    merged = subagent.merge_subagent_result("parent-task", first["subtask_id"], "parent-ws")
+    first_order = merged["publication_order"]
+    original = ssot_runtime.run_ssot_turn
+
+    def update(session, turn, **kwargs):
+        if turn.op.runtime_control.profile["profile_id"] == "qa_agent":
+            return original(session, turn, **kwargs)
+        else:
+            written = team.client.invoke("workspace.file", {
+                "action": "edit", "filepath": "files/data/app/src/value.py", "old_string": "VALUE = 42", "new_string": "VALUE = 99",
+            }, context=ToolRuntimeContext(workspace_id=session.workspace_id, session_id=session.session_id, requested_by="subagent"))
+            assert written.status == "succeeded"
+        return SimpleNamespace(ok=True, final_response="Updated", tool_calls=[])
+
+    monkeypatch.setattr(ssot_runtime, "run_ssot_turn", update)
+    second = team.spawn(depends=[first["subtask_id"]])
+    assert second["task_status"] == "succeeded", second
+    assert team.spawn("qa_agent", review=second["subtask_id"])["task_status"] == "succeeded"
+    merged = subagent.merge_subagent_result("parent-task", second["subtask_id"], "parent-ws")
+    assert merged["ok"] and merged["publication_order"] > first_order
+    replay = subagent.merge_subagent_result("parent-task", first["subtask_id"], "parent-ws")
+    assert replay["coding"]["publication"]["publication_order"] == first_order
+    assert len(verify_team("parent-ws", "parent-session", "files/data/app")["integrations"]) == 2
+
+    target = workspace_root("parent-ws") / "files/data/app/src/value.py"
+    target.write_text("VALUE = 'unreviewed'\n")
+    with pytest.raises(AssertionError, match="parent source changed"):
+        verify_team("parent-ws", "parent-session", "files/data/app")
+    target.write_text("VALUE = 99\n")
+    task = subagent._load_task("parent-ws", second["subtask_id"])
+    task.coding["publication"]["publication_order"] = first_order
+    subagent._save_task(task)
+    with pytest.raises(AssertionError, match="durable journal"):
+        verify_team("parent-ws", "parent-session", "files/data/app")
+
+
 def test_ssot_tool_adapter_transfers_current_task_identity():
     import asyncio
     from agent.runtime.ssot_tools import _make_tool_handler

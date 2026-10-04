@@ -321,9 +321,13 @@ class ToolRuntime:
             from .contracts import get_contract
             timeout_ms = int(self._config.single_node_timeout_ms)
             contract = get_contract(node.tool)
-            contract_ms = int(getattr(contract, "timeout_seconds", 0) or 0) * 1000
+            from core.tools.execution_contracts import execution_timeout_seconds
+            contract_ms = execution_timeout_seconds(
+                float(getattr(contract, "timeout_seconds", 0) or 0), merged_args,
+                getattr(contract, "execution_time_budget", {}) or {},
+            ) * 1000
             if contract_ms > 0:
-                timeout_ms = min(timeout_ms, contract_ms)
+                timeout_ms = int(min(timeout_ms, contract_ms))
             # Shield the handler task so an asyncio timeout does not pretend
             # that a worker thread was killed. The result is deliberately
             # uncertain and retry policy must not replay it automatically.

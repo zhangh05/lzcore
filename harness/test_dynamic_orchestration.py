@@ -1501,7 +1501,14 @@ def test_queryloop_replans_batch_introduced_after_initial_constraint_check(monke
     assert any("规范化后的计划仍包含批量 action" in message.content for message in prompts[1])
 
 
-def test_executable_read_timeout_never_installs_unknown_write_fence(monkeypatch):
+@pytest.mark.parametrize("tool_name,arguments", [
+    ("web.manage", {"action": "weather_batch", "locations": ["广州", "深圳"], "days": 2}),
+    ("network.operations.wait", {"seconds": 30}),
+])
+def test_executable_read_timeout_never_installs_unknown_write_fence(monkeypatch, tool_name, arguments):
+    # Load extension contracts but deliberately omit catalog metadata from the
+    # executor, as recovered and delegated calls may do.
+    _registry()
     from core.runtime_engine.query_loop import StreamingToolResult
 
     class Runtime:
@@ -1524,8 +1531,8 @@ def test_executable_read_timeout_never_installs_unknown_write_fence(monkeypatch)
     monkeypatch.setattr(executor, "_execute_one", fake_execute_one)
     ctx = _ctx()
     call = LLMToolCall(
-        id="read-timeout", name="web.manage",
-        arguments={"action": "weather_batch", "locations": ["广州", "深圳"], "days": 2},
+        id="read-timeout", name=tool_name,
+        arguments=arguments,
         step_id="read_timeout",
     )
     results = asyncio.run(executor.execute([call], ctx=ctx))

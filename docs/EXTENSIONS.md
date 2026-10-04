@@ -9,6 +9,8 @@ python3 scripts/extension_cli.py validate plugins/acme_insights
 
 工具前缀 <extension_id>.，后端 /api/extensions/<extension_id>，扩展前端 /extensions/<extension_id>。清单发布兼容版本、工具和贡献；不兼容清单不注册。模型经 ToolRuntime，外部接入经 ToolRuntimeClient，不能直接调 handler。
 
+工具执行语义由 schema 与 `action_execution_contracts` 共同决定，目录、策略和运行时使用同一解析器。没有 `action` 字段的独立工具可以声明唯一执行合同；组合工具缺少 `action` 时不推断为只读。声明了等待时长的工具可设置 `execution_time_budget`，指定数值参数 `duration_argument` 与 0.1–10 秒的 `guard_seconds`，为返回预留时间；实际执行仍受调用方的节点时限限制。纯读取/等待超时不安装未知写入屏障，真正未知写入仍只允许回查和对账。
+
 ## 网络设备与独立绘图
 
 network.operations 拥有区域、设备、连接、发布 Skill、Observation、Reference 和命令反馈。选择仅传资源意向；调用前重新读取发布 Skill 范围，不预连。配置是否被接受最终取决于设备账号，不能靠模型 action 冒充只读。独立目标失败不阻断其他设备。

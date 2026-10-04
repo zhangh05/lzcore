@@ -29,6 +29,7 @@ class ToolContract:
     # tools alike.  Keeping them on the runtime contract lets scheduling,
     # retries and authorization use the same declared facts as the catalog.
     action_contracts: dict[str, dict[str, Any]] = field(default_factory=dict)
+    execution_time_budget: dict[str, Any] = field(default_factory=dict)
 
 
 BUILTIN_CONTRACTS: dict[str, ToolContract] = {
@@ -290,7 +291,8 @@ def is_read_only_call(
     if action_contract:
         return action_contract.get("read_only") is True
     if contract:
-        declared = (contract.action_contracts or {}).get(action) or {}
+        from core.tools.execution_contracts import declared_action_contract
+        declared = declared_action_contract(contract.input_schema, contract.action_contracts or {}, args)
         if declared:
             return declared.get("read_only") is True
     if contract and action in contract.read_only_actions:
@@ -310,9 +312,10 @@ def is_read_only_call(
     # because there is no action value to match.
     metadata = (tool_metadata or {}).get("metadata") or {}
     declared_contracts = metadata.get("action_execution_contracts") or {}
-    if not action and isinstance(declared_contracts, dict) and len(declared_contracts) == 1:
-        declared = next(iter(declared_contracts.values()))
-        if isinstance(declared, dict):
+    if isinstance(declared_contracts, dict):
+        from core.tools.execution_contracts import declared_action_contract
+        declared = declared_action_contract((tool_metadata or {}).get("args_schema") or (tool_metadata or {}).get("input_schema") or (contract.input_schema if contract else {}), declared_contracts, args)
+        if declared:
             return declared.get("read_only") is True
     return action in READ_ONLY_ACTIONS.get(normalized, frozenset())
 
@@ -378,4 +381,3 @@ def get_risk_level(tool_name: str) -> str:
 
 def register_contract(contract: ToolContract) -> None:
     BUILTIN_CONTRACTS[contract.name] = contract
-

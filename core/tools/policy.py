@@ -106,8 +106,8 @@ class ToolPolicy:
             action_contract = action_execution_contract(spec.tool_id, action)
             if not action_contract:
                 declared = (spec.metadata or {}).get("action_execution_contracts") or {}
-                candidate = declared.get(action) if isinstance(declared, dict) else None
-                action_contract = dict(candidate) if isinstance(candidate, dict) else {}
+                from core.tools.execution_contracts import declared_action_contract
+                action_contract = declared_action_contract(spec.input_schema or {}, declared, invocation.arguments or {})
         except ImportError:
             action_contract = {}
 
@@ -196,4 +196,3 @@ class ToolPolicy:
             risk_level=effective_risk,
             blocked_rules=[],
         )
-

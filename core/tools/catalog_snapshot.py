@@ -124,8 +124,11 @@ def _action_profiles(
     include_policy: bool = True,
     action_contracts: dict[str, dict] | None = None,
 ) -> list[dict]:
+    from core.tools.execution_contracts import declared_action_contract
     if not actions:
-        return []
+        if not declared_action_contract(input_schema, action_contracts or {}, {}):
+            return []
+        actions = [""]
     policy = None
     manifest = None
     ToolInvocation = ToolSpec = None
@@ -145,7 +148,7 @@ def _action_profiles(
     for action in actions:
         from core.tools.action_requirements import action_execution_contract
 
-        action_contract = dict((action_contracts or {}).get(action) or {})
+        action_contract = declared_action_contract(input_schema, action_contracts or {}, {"action": action} if action else {})
         if not action_contract:
             action_contract = action_execution_contract(tool_id, action)
         risk_level = getattr(manifest, "risk_level", "low") if manifest else "low"
@@ -158,10 +161,11 @@ def _action_profiles(
                     category=category or "tool",
                     risk_level=risk_level,
                     input_schema=input_schema or {},
+                    metadata={"action_execution_contracts": action_contracts or {}},
                 ),
                 ToolInvocation(
                     tool_id=tool_id,
-                    arguments={"action": action},
+                    arguments={"action": action} if action else {},
                     workspace_id="default",
                     requested_by="catalog",
                 ),
