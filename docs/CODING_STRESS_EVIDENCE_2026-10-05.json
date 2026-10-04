@@ -1,0 +1,834 @@
+{
+  "schema": "lzcore.coding_stress_evidence.v1",
+  "date": "2026-10-05",
+  "scope": "Named independent Counter checks and architecture stress; full NOC/RTS acceptance remains NOT VERIFIED",
+  "backend": {
+    "passed": 2034,
+    "skipped": 11
+  },
+  "frontend": {
+    "unit_passed": 402,
+    "chromium_passed": 88
+  },
+  "deterministic_context_rounds": 310,
+  "publication_race_attempts": 192,
+  "real_kernel_final_rounds": 3,
+  "runs": [
+    {
+      "round": 1,
+      "run_id": "eaf96386e0",
+      "framework_commit": "8c2fa8fe7251502cdafad81860634abb52ba02db",
+      "framework_diff_sha256": "2f25868262ff155963ce430f6c99582eaf74043eb763cf89a2677416498a6448",
+      "prompt_sha256": "2a0f59ae35df5dc6e3b00b4076658c8a0ccc9d6403e8b6e0119a3f30126d3d2d",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 132.72,
+      "main_model_completions": 40,
+      "deadline_reached": false,
+      "verdict": {
+        "status": "INCOMPLETE_OR_INTERRUPTED"
+      },
+      "team_status": null,
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": null
+    },
+    {
+      "round": 2,
+      "run_id": "80b2e2f467",
+      "framework_commit": "8c2fa8fe7251502cdafad81860634abb52ba02db",
+      "framework_diff_sha256": "49dda07a06a5f0ef304e728600be379a27d5a125c21a4c71b5db536467174188",
+      "prompt_sha256": "c3bd63d99b6feda7794735ffdf23e931e5d0fd934f98042f0099f150733bc673",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 283.8,
+      "main_model_completions": 47,
+      "deadline_reached": false,
+      "verdict": {
+        "status": "INCOMPLETE_OR_INTERRUPTED"
+      },
+      "team_status": null,
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "FAIL"
+        },
+        {
+          "name": "production_build",
+          "status": "FAIL"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "FAIL"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": null
+    },
+    {
+      "round": 3,
+      "run_id": "1da37b01b9",
+      "framework_commit": "8c2fa8fe7251502cdafad81860634abb52ba02db",
+      "framework_diff_sha256": "bf29d001fdb784c1d6de152733152b0d295283aba88a6797637800b2c5b68469",
+      "prompt_sha256": "c736572a5681ffad569ca3227d4c3473d507fb9a71022fd945e0f47a41b79602",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 305.87,
+      "main_model_completions": 53,
+      "deadline_reached": false,
+      "verdict": {
+        "status": "INCOMPLETE_OR_INTERRUPTED"
+      },
+      "team_status": null,
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "FAIL"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": null
+    },
+    {
+      "round": 4,
+      "run_id": "5e52a79a0b",
+      "framework_commit": "8c2fa8fe7251502cdafad81860634abb52ba02db",
+      "framework_diff_sha256": "1cee03d5e81da35481fba0de6104736b8e8652ac30c933878b872bdfd867811b",
+      "prompt_sha256": "30ac26c18a1881a1885b9c500fbfc232b45557fa2118b9fe7ef44db3f738847e",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 287.02,
+      "main_model_completions": 67,
+      "deadline_reached": false,
+      "verdict": {
+        "status": "INCOMPLETE_OR_INTERRUPTED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": null
+    },
+    {
+      "round": 5,
+      "run_id": "e7560aac72",
+      "framework_commit": "2971afb0fba5f4a9dd0330bd2a10cb3d641e87f8",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "48a6e6d330103c3b573a4db2a8b184391b9521513d22d87eec63ef01b7911924",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 886.3,
+      "main_model_completions": 119,
+      "deadline_reached": false,
+      "verdict": {
+        "status": "INCOMPLETE_OR_INTERRUPTED"
+      },
+      "team_status": "FAIL",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "FAIL"
+        },
+        {
+          "name": "production_build",
+          "status": "FAIL"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "FAIL"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": null
+    },
+    {
+      "round": 6,
+      "run_id": "619f4e9d46",
+      "framework_commit": "2971afb0fba5f4a9dd0330bd2a10cb3d641e87f8",
+      "framework_diff_sha256": "87db64a3d4ce01410f9ae3890dd0c0774ced1b98bca346666a1108910fa8c6a0",
+      "prompt_sha256": "0d6ff7a35ddb4f9527c6b4d51e9751e95107deb1fd30b521fd169a50c4e41a58",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 728.63,
+      "main_model_completions": 138,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": null
+    },
+    {
+      "round": 7,
+      "run_id": "10321cdc32",
+      "framework_commit": "e0f881fdaa6aa958dbc1b43cdcfd168f06592f26",
+      "framework_diff_sha256": "47e7c183e4a90705076f0db554b371525df4d1f5c90ba1eb276f7d9d37906aa9",
+      "prompt_sha256": "10c0f593b52c7400c7a0d4e230057be46b04a02c877fe4cc07b6bdc639a13daa",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 902.92,
+      "main_model_completions": 57,
+      "deadline_reached": true,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "FAIL"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 8,
+      "run_id": "14a618dca2",
+      "framework_commit": "88b99244f9214e72a67be297540009bac7387539",
+      "framework_diff_sha256": "19afb73b4a298065b43d026c54db8b5244b7eaa7892feb56ba5e0b86a0c1771b",
+      "prompt_sha256": "a371d56ef4a0f7be8bbfccc43a33647b9d47011f18b65e03dc6c3c7aa79fb078",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 590.6,
+      "main_model_completions": 101,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "FAIL",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 9,
+      "run_id": "e226744f70",
+      "framework_commit": "7ec92f0b291c9b9a948aacb95a1c029c32a31512",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "196a593dbeb9cab47d3ca2977ca3ec190fa910c48fce02a86e47ee7abd02bd42",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 364.24,
+      "main_model_completions": 83,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 10,
+      "run_id": "bcd0013b8b",
+      "framework_commit": "9b5b5f5445ae36bc6daa48332236ff42c4b2e56d",
+      "framework_diff_sha256": "e18c879e2a11345e210b5f3d7d329507bdb9e95dffa586a75e1e7901e1e7a2e7",
+      "prompt_sha256": "7ccbae1fc98a4de4688e897ab8a54d2003085f186e124b1522542b5b16b2b02f",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 525.01,
+      "main_model_completions": 74,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "PASS",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 11,
+      "run_id": "9b28e81d19",
+      "framework_commit": "ecb41657692e0484e7e1e5e96282c3a104512922",
+      "framework_diff_sha256": "e18c879e2a11345e210b5f3d7d329507bdb9e95dffa586a75e1e7901e1e7a2e7",
+      "prompt_sha256": "a187f54352602d30e4418f9b033d6358c6e719acd6eec1977af5e90bf1449b2e",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 479.01,
+      "main_model_completions": 67,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "FAIL",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "FAIL"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 12,
+      "run_id": "5c34ebd5f0",
+      "framework_commit": "c18a7c98475f74b2ecad7ff91996857b4a18f0be",
+      "framework_diff_sha256": "e18c879e2a11345e210b5f3d7d329507bdb9e95dffa586a75e1e7901e1e7a2e7",
+      "prompt_sha256": "b4a84c4334323abcf6a03ae1671ee8de5c1ff733a7292fa6f6c79329764d3cb3",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 357.82,
+      "main_model_completions": 78,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "FAIL",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 13,
+      "run_id": "638b4480f2",
+      "framework_commit": "c18a7c98475f74b2ecad7ff91996857b4a18f0be",
+      "framework_diff_sha256": "e18c879e2a11345e210b5f3d7d329507bdb9e95dffa586a75e1e7901e1e7a2e7",
+      "prompt_sha256": "251daf5134acbfb9929bca0a5c9e19548d6fd675f9e7047654b62fefce441f26",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 520.69,
+      "main_model_completions": 106,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "FAIL",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 14,
+      "run_id": "83ff096900",
+      "framework_commit": "5e5b5bc6e15589654ba8db12da987398fec62355",
+      "framework_diff_sha256": "e18c879e2a11345e210b5f3d7d329507bdb9e95dffa586a75e1e7901e1e7a2e7",
+      "prompt_sha256": "4a093cb12a59c52b7d1285c5cb3b291bf1266d79448782941ca388e0dd195083",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 358.51,
+      "main_model_completions": 49,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "PASS",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 15,
+      "run_id": "0414f387ac",
+      "framework_commit": "5e5b5bc6e15589654ba8db12da987398fec62355",
+      "framework_diff_sha256": "e18c879e2a11345e210b5f3d7d329507bdb9e95dffa586a75e1e7901e1e7a2e7",
+      "prompt_sha256": "3ca5ae286c874f7c243886b2cf722aa990805cdf0431453c4a2f3359035c1087",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": null,
+      "main_model_completions": 30,
+      "deadline_reached": null,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": null,
+      "named_checks": [],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 16,
+      "run_id": "95d6efed86",
+      "framework_commit": "038e403c0ff07332a8797a70468928685a72979a",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "853022bdb4f9e8e46511d96f7507d56da906662475bcb602155a3654ef622221",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 341.39,
+      "main_model_completions": 18,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "FAIL",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "FAIL"
+        },
+        {
+          "name": "production_build",
+          "status": "FAIL"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "FAIL"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 17,
+      "run_id": "e85ff77299",
+      "framework_commit": "038e403c0ff07332a8797a70468928685a72979a",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "c594d6bad38246bbb8934f43fd8eb290a963c02623601bdb02f0355a5353e27d",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": null,
+      "main_model_completions": 14,
+      "deadline_reached": null,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": null,
+      "named_checks": [],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 18,
+      "run_id": "b2a02694ed",
+      "framework_commit": "46c5ec78d2e2071b4e23b425f7f8c4d0e5bd1fe1",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "7a81d55a19c25d1ed58f82b93c19425ccc303de15165d1657bfac63a53711b47",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 901.82,
+      "main_model_completions": 152,
+      "deadline_reached": true,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": {
+        "commit": "632cc79b230c1a84cf3b549e68bfed85d4835ec8",
+        "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 19,
+      "run_id": "1642141bf1",
+      "framework_commit": "632cc79b230c1a84cf3b549e68bfed85d4835ec8",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "a0fdcca9109d2567353c8dbedc0237b62fb032fef22b5862f0817eeb712c2e75",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 89.42,
+      "main_model_completions": 19,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "PASS",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": {
+        "commit": "632cc79b230c1a84cf3b549e68bfed85d4835ec8",
+        "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 19,
+      "run_id": "ca249eb28a",
+      "framework_commit": "46c5ec78d2e2071b4e23b425f7f8c4d0e5bd1fe1",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "60c3dccdbc2d4379906acfcf12f5589ffaae92632eb160a80ce9e8a559ae1e1c",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 602.59,
+      "main_model_completions": 65,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "FAIL"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    },
+    {
+      "round": 19,
+      "run_id": "0fc5339e45",
+      "framework_commit": "632cc79b230c1a84cf3b549e68bfed85d4835ec8",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "a0fdcca9109d2567353c8dbedc0237b62fb032fef22b5862f0817eeb712c2e75",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": null,
+      "main_model_completions": 13,
+      "deadline_reached": null,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": null,
+      "named_checks": [],
+      "evaluator_source": null,
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true,
+      "operator_setup_error": true
+    },
+    {
+      "round": 20,
+      "run_id": "de8a4c390c",
+      "framework_commit": "632cc79b230c1a84cf3b549e68bfed85d4835ec8",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "b9bcaffbb0292f6d105884fae50dbcba063f85d8140e543341f12cd6c01052c4",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "agent_duration_seconds": 370.38,
+      "main_model_completions": 45,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "PASS",
+        "agent_turn_ok": true,
+        "named_acceptance_passed": true,
+        "team_required": true,
+        "team_accepted": true,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "team_status": "PASS",
+      "named_checks": [
+        {
+          "name": "generated_test_suite",
+          "status": "PASS"
+        },
+        {
+          "name": "production_build",
+          "status": "PASS"
+        },
+        {
+          "name": "independent_browser_interactions",
+          "status": "PASS"
+        }
+      ],
+      "evaluator_source": {
+        "commit": "632cc79b230c1a84cf3b549e68bfed85d4835ec8",
+        "diff_sha256": "bfbcc25dba68aad6c2cc32e0ccabfe16044e2eaac5a630fb08eb79824d7ffeb1"
+      },
+      "execution_cleanup_confirmed": true,
+      "delegation_cleanup_confirmed": true
+    }
+  ]
+}
