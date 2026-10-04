@@ -347,3 +347,5 @@ feedback.regions 提供 members、unassigned_node_ids、missing_region_refs、ou
 父 task/session 从服务器调用身份继承；模型不能伪造。start/merge 均核对当前父身份。merge 可省略 parent_task_id，存在可信父身份时由服务器推导；模型指定冲突身份即拒绝。生命周期 task_status 与工具调用 status 分开：实现回合 succeeded 时 phase 可仅为 changes_ready，独立 QA 为 validated，实际发布成功才 integrated。依赖等待 phase=dependency_wait，start 恢复原任务。
 
 QA 必须验证准确候选、源码不变、命令实际成功；merge 检查 QA 与候选摘要，并以真实父文件基线比较后发布。冲突保留原文件；结果 unknown 仅回查事务，不自动覆盖或重新执行写入。主任务取消继承到子任务，取消注册按认证主体的实际存储路径隔离。详情见 [Coding Runtime](architecture/CODING_RUNTIME.md)。
+
+工程源码分类由 `coding_assignment.generated_paths` 显式声明可再生输出路径（例如 `["dist"]`），默认空。`build/`、`dist/` 或嵌套同名目录本身不构成生成物身份；构建脚本属于源码。快照、QA、候选摘要、事务整合和团队验收使用同一份合同，QA 从实现任务继承且不能另行削弱。项目根、路径越界及项目配置文件不能被声明为排除输出。

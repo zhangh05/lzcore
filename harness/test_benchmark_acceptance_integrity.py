@@ -93,3 +93,29 @@ def test_engine_executes_only_in_worker_and_host_never_imports_generated_source(
     assert calls[-1][:3] == ["docker", "rm", "--force"]
     with pytest.raises(ValueError):
         runtime.independent_program("", "../framework.py", "invalid", 17)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"agent_turn_ok": False},
+        {"acceptance_exit_code": 1},
+        {"acceptance_exit_code": None},
+        {"acceptance_exit_code": False},
+        {"team_ok": False},
+        {"cleanup_confirmed": False},
+    ],
+)
+def test_turn_success_never_masks_failed_acceptance_or_unknown_cleanup(changes):
+    from scripts.benchmark_verdict import benchmark_verdict
+
+    arguments = dict(
+        agent_turn_ok=True,
+        acceptance_exit_code=0,
+        team_required=True,
+        team_ok=True,
+        cleanup_confirmed=True,
+    )
+    assert benchmark_verdict(**arguments)["status"] == "PASS"
+    arguments.update(changes)
+    assert benchmark_verdict(**arguments)["status"] == "FAIL"

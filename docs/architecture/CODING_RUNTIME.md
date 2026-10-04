@@ -37,3 +37,5 @@ Shell 与 Python 都经原有 ToolRuntime 进入同一适配器。系统隔离�
 ## 验证边界
 
 310 轮 QueryLoop 测试使用确定性 Provider 与真实治理执行路径，验证窗口接续、完整证据和未知写入约束，不是 310 次真实 LLM 交付。真实内核隔离、真实 Provider 工程交付、独立 Evaluator 和浏览器回归分别留证。见 [编码压测](../CODING_BENCHMARKS.md)。版本和 Release 只在本轮检查结束后更新；不部署服务器。
+
+工程源码分类由 `coding_assignment.generated_paths` 显式声明可再生输出路径（例如 `["dist"]`），默认空。`build/`、`dist/` 或嵌套同名目录本身不构成生成物身份；构建脚本属于源码。快照、QA、候选摘要、事务整合和团队验收使用同一份合同，QA 从实现任务继承且不能另行削弱。项目根、路径越界及项目配置文件不能被声明为排除输出。

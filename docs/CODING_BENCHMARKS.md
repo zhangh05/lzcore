@@ -35,7 +35,9 @@ Evaluator 的独立调用必须提供服务端已建立的容器身份、镜像 
 
 ## 证据与回归
 
-报告保存脱敏提示词、Provider 公共字段、Git 提交、已跟踪差量/未跟踪源码指纹、事件、运行结果、独立结果、清理结果。`runtime_ok` 只是 Agent 回合结果；累计 Provider 输入包含重复上下文，不是任务唯一内容规模。用户 output、凭据及配置不进入源码指纹目录。
+报告保存脱敏提示词、Provider 公共字段、Git 提交、已跟踪差量/未跟踪源码指纹、事件、运行结果、独立结果、清理结果。`agent_turn_ok` 只是 Agent 回合/传输结果（旧报告字段为 `runtime_ok`）；最终 `verdict.json` 独立核定命名验收、团队门禁与确认清理，任何失败或未知清理都为 FAIL。累计 Provider 输入包含重复上下文，不是任务唯一内容规模。用户 output、凭据及配置不进入源码指纹目录。
+
+`verify_benchmark_evaluator.py` 三个随机 Seed 证明生成引擎无法篡改宿主断言或读取验收程序，包含只读的 0600 源码。两种真实内核检查已加入 CI。
 
 `verify_coding_isolation.py` 经真实 ToolRuntime 压测越界、符号链接、受限出站、后台后代超时及关闭后迟到调用。`test_project_changes_stress.py` 重复竞争整合，断点恢复、候选变化、QA 失败、身份跨越和取消另见 `test_coding_team.py`。310 轮窗口测试是确定性 Provider 与真实 QueryLoop/ToolRuntime，不是 310 次真实模型交付。
 

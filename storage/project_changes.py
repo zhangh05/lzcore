@@ -19,9 +19,7 @@ from storage.atomic_io import atomic_write_json
 from storage.locking import FileLock
 from storage.paths import workspace_root
 
-IGNORED = frozenset(
-    {".git", "node_modules", "dist", "build", ".venv", "__pycache__", ".pytest_cache"}
-)
+IGNORED = frozenset({".git", "node_modules", ".venv", "__pycache__", ".pytest_cache"})
 MAX_BYTES = 64 * 1024 * 1024
 
 
@@ -50,13 +48,50 @@ def project_path(workspace_id: str, relative: str) -> Path:
     return target
 
 
-def source_manifest(project: Path) -> dict[str, str]:
+def validate_generated_paths(values: list[str] | None) -> list[str]:
+    if values is None:
+        return []
+    if not isinstance(values, list) or len(values) > 20:
+        raise ValueError("invalid_generated_paths")
+    result = []
+    for value in values:
+        if not isinstance(value, str) or not value or "\x00" in value:
+            raise ValueError("invalid_generated_path")
+        path = PurePosixPath(value)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or not path.parts
+            or any("*" in part or "?" in part for part in path.parts)
+        ):
+            raise ValueError("invalid_generated_path")
+        normalized = path.as_posix()
+        if normalized in (
+            ".",
+            "package.json",
+            "package-lock.json",
+            "pyproject.toml",
+            "requirements.txt",
+        ):
+            raise ValueError("generated_path_cannot_hide_project_contract")
+        result.append(normalized)
+    return sorted(set(result))
+
+
+def source_manifest(
+    project: Path, generated_paths: list[str] | None = None
+) -> dict[str, str]:
+    generated = validate_generated_paths(generated_paths)
     result, total = {}, 0
     if not project.exists():
         return result
     for path in sorted(project.rglob("*")):
         relative = path.relative_to(project)
-        if any(part in IGNORED for part in relative.parts):
+        if any(part in IGNORED for part in relative.parts) or any(
+            relative.as_posix() == output
+            or relative.as_posix().startswith(output + "/")
+            for output in generated
+        ):
             continue
         if path.is_symlink():
             raise ValueError("coding_source_symlink_forbidden")
@@ -200,8 +235,15 @@ def _recover(transaction: Path, project: Path, record: dict) -> dict:
 
 
 def publish_changes(
-    workspace_id: str, project_relative: str, change_id: str, branch: Path, change: dict
+    workspace_id: str,
+    project_relative: str,
+    change_id: str,
+    branch: Path,
+    change: dict,
+    *,
+    generated_paths: list[str] | None = None,
 ) -> dict:
+    generated = validate_generated_paths(generated_paths)
     project = project_path(workspace_id, project_relative)
     transaction = _transaction_root(workspace_id, change_id)
     with quiescent_project(workspace_id):
@@ -211,13 +253,14 @@ def publish_changes(
             if (
                 record["digest"] != change["digest"]
                 or record["project"] != project_relative
+                or record.get("generated_paths", []) != generated
             ):
                 raise ValueError("coding_transaction_identity_mismatch")
             if record["phase"] in {"prepared", "applying", "unknown"}:
                 record = _recover(transaction, project, record)
             if record["phase"] in {"integrated", "unknown"}:
                 return {"ok": record["phase"] == "integrated", **record}
-        observed = source_manifest(project)
+        observed = source_manifest(project, generated)
         conflicts = [
             path
             for path, item in change["files"].items()
@@ -230,7 +273,7 @@ def publish_changes(
                 "conflicts": conflicts,
                 "automatic_retry_allowed": False,
             }
-        branch_manifest = source_manifest(branch)
+        branch_manifest = source_manifest(branch, generated)
         if any(
             branch_manifest.get(path) != item["after"]
             for path, item in change["files"].items()
@@ -251,6 +294,7 @@ def publish_changes(
         record = {
             "schema": "coding.publication.v1",
             "project": project_relative,
+            "generated_paths": generated,
             "digest": change["digest"],
             "files": change["files"],
             "phase": "prepared",

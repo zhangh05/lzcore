@@ -884,6 +884,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         "coding_assignment": _schema({
             "project_dir": {"type": "string", "description": "Generated project directory under files/data."},
             "responsibilities": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "Relative files or directory prefixes this assignment may change; . covers the project."},
+            "generated_paths": {"type": "array", "items": {"type": "string"}, "maxItems": 20, "description": "Explicit reproducible output paths excluded from source snapshots, e.g. dist. Default empty: build/dist directories are source unless declared. Never list source code or build scripts. QA inherits this contract from the implementation."},
             "depends_on": {"type": "array", "items": {"type": "string"}},
             "validation_commands": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 12},
             "review_subtask_id": {"type": "string", "description": "QA must name the implementation task whose exact candidate it reviews."},

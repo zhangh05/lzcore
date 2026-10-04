@@ -22,6 +22,7 @@ from storage.project_changes import (
     quiescent_project,
     source_manifest,
     validate_responsibilities,
+    validate_generated_paths,
 )
 
 CODING_PROFILES = frozenset({"coding_agent", "frontend_agent", "qa_agent"})
@@ -73,6 +74,7 @@ def create_assignment(task, supplied: dict) -> dict:
         "schema": "coding.assignment.v1",
         "project_dir": project,
         "responsibilities": responsibilities,
+        "generated_paths": validate_generated_paths(supplied.get("generated_paths")),
         "depends_on": dependencies,
         "validation_commands": commands,
         "review_subtask_id": review_id,
@@ -91,6 +93,7 @@ def create_assignment(task, supplied: dict) -> dict:
         # The implementation assignment owns required checks. QA cannot weaken
         # them by asking for an easier command set.
         assignment["validation_commands"] = list(target.coding["validation_commands"])
+        assignment["generated_paths"] = list(target.coding.get("generated_paths", []))
     elif review_id:
         raise ValueError("coding_review_target_requires_qa_profile")
     return assignment
@@ -134,7 +137,7 @@ def coding_run(task):
         source = project_path(
             target.coding["branch_workspace"], assignment["project_dir"]
         )
-        baseline = source_manifest(source)
+        baseline = source_manifest(source, assignment.get("generated_paths"))
         if manifest_digest(baseline) != target.coding["candidate_digest"]:
             raise ValueError("coding_review_candidate_changed")
         assignment["review_digest"] = target.coding["change"]["digest"]
@@ -143,7 +146,7 @@ def coding_run(task):
     else:
         with quiescent_project(task.workspace_id):
             source = project_path(task.workspace_id, assignment["project_dir"])
-            baseline = source_manifest(source)
+            baseline = source_manifest(source, assignment.get("generated_paths"))
             copy_sources(source, branch, baseline)
     assignment["baseline"] = baseline
     assignment["phase"] = "executing"
@@ -158,6 +161,7 @@ def coding_run(task):
                 {
                     "project_dir": assignment["project_dir"],
                     "responsibilities": assignment["responsibilities"],
+                    "generated_paths": assignment.get("generated_paths", []),
                     "role": task.profile_id,
                     "preview_origin": f"http://127.0.0.1:{port}",
                     "validation_commands": assignment["validation_commands"],
@@ -173,7 +177,11 @@ def coding_run(task):
             environment.close()
             assignment["environment"] = environment.descriptor()
             _save_task(task)
-            if task.profile_id == "qa_agent" and source_manifest(branch) != baseline:
+            if (
+                task.profile_id == "qa_agent"
+                and source_manifest(branch, assignment.get("generated_paths"))
+                != baseline
+            ):
                 assignment["phase"] = "qa_failed"
                 _save_task(task)
                 raise ValueError("coding_qa_source_changed_before_cleanup")
@@ -193,7 +201,10 @@ def finish_assignment(task, environment, runtime_ok: bool) -> None:
         _save_task(task)
         return
     if task.profile_id == "qa_agent":
-        if source_manifest(branch) != assignment["baseline"]:
+        if (
+            source_manifest(branch, assignment.get("generated_paths"))
+            != assignment["baseline"]
+        ):
             raise ValueError("coding_qa_modified_reviewed_source")
         evidence = []
         for command in assignment["validation_commands"]:
@@ -235,7 +246,10 @@ def finish_assignment(task, environment, runtime_ok: bool) -> None:
                 assignment.update(phase="qa_failed", validation=evidence)
                 _save_task(task)
                 raise ValueError("coding_independent_validation_failed")
-        if source_manifest(branch) != assignment["baseline"]:
+        if (
+            source_manifest(branch, assignment.get("generated_paths"))
+            != assignment["baseline"]
+        ):
             raise ValueError("coding_validation_modified_reviewed_source")
         assignment.update(phase="validated", validation=evidence)
         target = _related(task, assignment["review_subtask_id"])
@@ -252,7 +266,7 @@ def finish_assignment(task, environment, runtime_ok: bool) -> None:
         # cannot mutate a candidate after it has been declared changes_ready.
         if not environment.close():
             raise RuntimeError("coding_candidate_processes_not_stopped")
-        current = source_manifest(branch)
+        current = source_manifest(branch, assignment.get("generated_paths"))
         assignment.update(
             change=changeset(
                 assignment["baseline"], current, assignment["responsibilities"]
@@ -285,7 +299,10 @@ def integrate(task) -> dict:
     ):
         return {"ok": False, "error": "coding_qa_not_successful"}
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
-    if manifest_digest(source_manifest(branch)) != assignment["qa_candidate_digest"]:
+    if (
+        manifest_digest(source_manifest(branch, assignment.get("generated_paths")))
+        != assignment["qa_candidate_digest"]
+    ):
         return {"ok": False, "error": "coding_candidate_changed_after_qa"}
     result = publish_changes(
         task.workspace_id,
@@ -293,6 +310,7 @@ def integrate(task) -> dict:
         task.subtask_id,
         branch,
         assignment["change"],
+        generated_paths=assignment.get("generated_paths"),
     )
     assignment.update(phase=result["phase"], publication=result)
     _save_task(task)

@@ -25,9 +25,12 @@ def verify_team(workspace_id: str, session_id: str, project_dir: str) -> dict:
     )
     evidence = []
     with quiescent_project(workspace_id):
-        current = source_manifest(project_path(workspace_id, project_dir))
         for task in integrated:
             assignment = task["coding"]
+            current = source_manifest(
+                project_path(workspace_id, project_dir),
+                assignment.get("generated_paths"),
+            )
             assert task["parent_task_id"], "missing trusted parent task identity"
             qa = tasks.get(assignment["qa_subtask_id"])
             assert qa and qa["profile_id"] == "qa_agent" and qa["status"] == "succeeded"
