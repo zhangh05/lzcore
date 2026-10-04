@@ -139,7 +139,7 @@ def main() -> int:
                "note": "Only the named checks were independently executed; generated tests are not independent functional acceptance."}
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 1 if any(item["status"] == "FAIL" for item in checks) else 0
 
 

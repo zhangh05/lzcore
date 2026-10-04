@@ -34,7 +34,7 @@ def test_governed_create_preserves_tree_and_never_overwrites(client, caller):
     assert target.read_bytes().startswith("中文".encode("utf-8"))
     read = client.invoke("workspace.file", {"action": "read", "filepath": path},
                          context=ToolRuntimeContext(workspace_id="source_test", requested_by=caller))
-    assert read.status == "succeeded" and read.output["content"] == "中文\n"
+    assert read.status == "succeeded" and read.output["preview"] == "中文\n"
     assert not create(client, path, "replacement", caller)
     assert target.read_text(encoding="utf-8") == "中文\n"
     assert not list(target.parent.glob(".source-*"))
