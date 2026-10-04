@@ -20,12 +20,25 @@ def main() -> int:
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--origin", required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--rounds", type=int, default=3)
+    parser.add_argument("--seed", type=int, help="Replay independent randomized acceptance")
+    parser.add_argument("--runtime-container", required=True, help="Server-created disposable implementation container")
+    parser.add_argument("--runtime-image", required=True, help="Immutable image digest used for independent QA")
+    parser.add_argument("--runtime-project", required=True, help="Container-relative generated project")
     args = parser.parse_args()
+    if not 1 <= args.rounds <= 10:
+        parser.error("rounds must be 1..10")
+    import secrets
+    base_seed = args.seed if args.seed is not None else secrets.randbelow(1_000_000_000)
     from urllib.parse import urlsplit
     origin = urlsplit(args.origin)
     if origin.hostname != "127.0.0.1" or origin.scheme != "http" or origin.username:
         parser.error("only an explicit loopback HTTP benchmark origin is accepted")
     project = args.project.resolve()
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from scripts.benchmark_runtime import BenchmarkRuntime
+    runtime = BenchmarkRuntime(args.runtime_container, args.runtime_image, project, args.runtime_project)
     checks = []
     def check(name, action):
         start = time.monotonic()
@@ -36,17 +49,18 @@ def main() -> int:
         except Exception as exc:
             checks.append({"name": name, "status": "FAIL", "error": str(exc)[:1200]})
     def command(arguments):
-        result = subprocess.run(arguments, cwd=project, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
+        result = runtime.generated_command(arguments)
         if result.returncode:
             raise AssertionError((result.stdout + result.stderr)[-1200:])
         return (result.stdout + result.stderr)[-1600:]
     check("generated_test_suite", lambda: command(["npm", "test"]))
     check("production_build", lambda: command(["npm", "run", "build"]))
 
-    def api(path, data=None):
+    identity_headers = {}
+    def api(path, data=None, *, method=None, headers=None):
         req = urllib.request.Request(args.origin.rstrip("/") + path,
             data=json.dumps(data).encode() if data is not None else None,
-            headers={"Content-Type": "application/json"})
+            headers={"Content-Type": "application/json", **identity_headers, **(headers or {})}, method=method)
         with urllib.request.urlopen(req, timeout=10) as response:
             return json.load(response)
     def array(path, key):
@@ -56,6 +70,12 @@ def main() -> int:
         return rows
     if args.case == "noc":
         check("api_boot", lambda: api("/api/health"))
+        def admin_identity():
+            token = api('/api/test/identity', {'role': 'admin'})['token']
+            assert isinstance(token, str) and token
+            identity_headers['Authorization'] = 'Bearer ' + token
+            return {'role': 'admin', 'credential_exposed': False}
+        check('independent_test_identity', admin_identity)
         def inventory():
             devices = array("/api/devices", "devices")
             interfaces = array("/api/interfaces", "interfaces")
@@ -72,6 +92,9 @@ def main() -> int:
             assert after["tick"] > before["tick"], "simulation tick did not advance"
             return {"tick_before": before["tick"], "tick_after": after["tick"]}
         check("simulation_progress", progress)
+        from scripts.benchmark_noc_acceptance import run_noc_acceptance
+        for round_index in range(args.rounds):
+            run_noc_acceptance(api, array, lambda name, action, i=round_index: check(f'{name}_round_{i+1}', action), base_seed + round_index)
         def stress():
             api("/api/test/stress", {})
             data = inventory()
@@ -85,17 +108,17 @@ def main() -> int:
             return data
         check("stress_inventory", stress)
     if args.case == "rts":
-        def engine_check(scenario):
+        def engine_check(scenario, seed):
             entries = [project / name for name in ("src/engine.ts", "src/engine.js", "src/engine/index.ts")]
             entry = next((path for path in entries if path.is_file()), None)
             assert entry, "generated engine entry is missing"
             evaluator = Path(__file__).resolve().parents[1] / "harness/fixtures/coding_bench/rts_acceptance.cjs"
-            result = subprocess.run(["node", str(evaluator), str(project), str(entry), scenario],
-                                    cwd=project, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+            result = runtime.independent_program(evaluator.read_text(encoding="utf-8"), entry.relative_to(project).as_posix(), scenario, seed)
             assert result.returncode == 0, (result.stdout + result.stderr)[-1200:]
             return json.loads(result.stdout.strip().splitlines()[-1])
-        for scenario in ("seed_and_tick", "save_load", "fog_save", "battle_100v100"):
-            check(f"independent_engine_{scenario}", lambda scenario=scenario: engine_check(scenario))
+        for round_index in range(args.rounds):
+            for scenario in ("seed_and_tick", "save_load", "fog_save", "battle_100v100", "movement_200", "continuation_determinism", "long_run_cleanup"):
+                check(f"independent_engine_{scenario}_round_{round_index+1}", lambda scenario=scenario, seed=base_seed+round_index: engine_check(scenario, seed))
     from playwright.sync_api import sync_playwright
     def browser_checks():
         with sync_playwright() as pw:
@@ -134,7 +157,7 @@ def main() -> int:
             browser.close()
             return {"viewport": "1280x720", "page_errors": errors, "screenshot": str(screenshot)}
     check("independent_browser_interactions" if args.case == "counter" else "browser_boot_only", browser_checks)
-    payload = {"case": args.case, "checks": checks,
+    payload = {"case": args.case, "seed": base_seed, "rounds": args.rounds, "checks": checks,
                "full_benchmark_acceptance": "NOT VERIFIED",
                "note": "Only the named checks were independently executed; generated tests are not independent functional acceptance."}
     args.report.parent.mkdir(parents=True, exist_ok=True)

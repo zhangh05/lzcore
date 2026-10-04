@@ -132,6 +132,17 @@ BUILTIN_PROFILES: dict[str, SubagentProfile] = {
 
 # ── SubagentTask & Result ──
 
+# Coding roles are assignments, not a reduced tool authorization surface.
+for _profile_id, _name, _role in (
+    ("coding_agent", "Coding Agent", "Implements and validates a delegated project change in an isolated branch."),
+    ("frontend_agent", "Frontend Agent", "Implements accessible responsive frontend behavior in an isolated project branch."),
+    ("qa_agent", "QA Agent", "Independently reviews an exact candidate without modifying its source, runs adversarial checks and reports failures."),
+):
+    BUILTIN_PROFILES[_profile_id] = SubagentProfile(
+        profile_id=_profile_id, name=_name, role=_role, can_modify_files=True,
+        can_execute_commands=True, can_call_network=True, merge_strategy="report",
+        output_contract="Exact changed or reviewed scope, reproducible validation and unresolved issues. Integration is a separate runtime operation; never claim self-reported prose proves acceptance.")
+
 @dataclass
 class SubagentTask:
     subtask_id: str = field(default_factory=_sid)
@@ -157,6 +168,7 @@ class SubagentTask:
     # Full terminal output is durable evidence; summary remains a bounded status preview.
     result_artifact_id: str = ""
     result_total_chars: int = 0
+    coding: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.created_at:
@@ -196,6 +208,7 @@ def create_subagent_task(
     operation_id: str = "",
     operation_call_id: str = "",
     workbench_context: dict | None = None,
+    coding_assignment: dict | None = None,
 ) -> dict:
     profile = get_profile(profile_id)
     if not profile:
@@ -222,6 +235,14 @@ def create_subagent_task(
             "max_runtime_seconds": profile.max_runtime_seconds,
         },
     )
+    from .coding_team import CODING_PROFILES, create_assignment
+    if profile_id in CODING_PROFILES:
+        try:
+            create_assignment(task, coding_assignment or {})
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+    elif coding_assignment:
+        return {"ok": False, "error": "coding_assignment_requires_coding_profile"}
     _save_task(task)
 
     _emit_event(workspace_id, parent_task_id, session_id, "subagent_created",
@@ -293,7 +314,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
     if not profile:
         return {"ok": False, "error": "profile not found"}
 
-    key = (ws_id, subtask_id)
+    key = _worker_key(ws_id, subtask_id)
     with _TASK_LOCK:
         active_worker = _WORKER_THREADS.get(key)
         if task.status in {"succeeded", "failed"}:
@@ -312,8 +333,16 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         if task.status not in {"created", "running", "cancelled"}:
             return {"ok": False, "error": f"invalid subtask status: {task.status}"}
 
+    if task.coding:
+        from .coding_team import ready
+        if not ready(task):
+            task.status = "created"
+            _save_task(task)
+            return {"ok": True, "subtask_id": subtask_id, "status": "created", "coding": task.coding}
     cancel_event = _cancel_event(ws_id, subtask_id)
-    if task.status == "cancelled" or cancel_event.is_set():
+    from .subagent_control import cancellation_probe
+    cancel_check = cancellation_probe(ws_id, subtask_id, cancel_event)
+    if task.status == "cancelled" or cancel_check():
         payload = _task_result_payload(task, ok=False)
         _release_worker(ws_id, subtask_id)
         return payload
@@ -333,12 +362,18 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         "started_at": _now(),
     }
 
+    from contextlib import ExitStack
+    execution_scope = ExitStack()
+    execution_ws, instruction, coding_environment = ws_id, task.goal, None
     try:
+        if task.coding:
+            from .coding_team import coding_run
+            execution_ws, instruction, coding_environment = execution_scope.enter_context(coding_run(task))
         # The profile guides the assignment; it does not reduce capabilities.
         from agent.core.session import AgentSession
 
         subagent_session_id = subtask_id
-        sess = AgentSession(session_id=subagent_session_id, workspace_id=ws_id)
+        sess = AgentSession(session_id=subagent_session_id, workspace_id=execution_ws)
         sess.mark_sub_agent()
         effective_steps = max(0, int((task.budget or {}).get("max_steps") or profile.max_steps))
         effective_tool_nodes = max(0, int((task.budget or {}).get("max_tool_nodes") or profile.max_tool_nodes))
@@ -354,8 +389,8 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         from core.runtime_engine.models import SubagentRuntimeControl
 
         op = AgentOp(
-            user_input=task.goal,
-            workspace_id=ws_id,
+            user_input=instruction,
+            workspace_id=execution_ws,
             session_id=subagent_session_id,
             runtime_control=SubagentRuntimeControl(
                 profile={
@@ -372,7 +407,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 subtask_id=subtask_id,
                 parent_session_id=task.session_id,
                 workbench_context=inherited_workbench_context,
-                cancel_check=cancel_event.is_set,
+                cancel_check=cancel_check,
             ),
         )
         turn = AgentTurn.from_op(op)
@@ -392,6 +427,10 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         final_resp = (getattr(llm_result, "final_response", "") or "") if llm_result is not None else ""
         is_ok = bool(getattr(llm_result, "ok", False)) if llm_result is not None else False
 
+        if task.coding:
+            from .coding_team import finish_assignment
+            finish_assignment(task, coding_environment, is_ok and bool(final_resp) and not cancel_check())
+
         # AgentResult.tool_calls is the canonical one-row-per-action projection.
         for te in (getattr(llm_result, "tool_calls", []) or []) if llm_result is not None else []:
             te_get = te.get if isinstance(te, dict) else lambda key, default=None: getattr(te, key, default)
@@ -403,7 +442,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 "summary": summary,
             })
 
-        if cancel_event.is_set():
+        if cancel_check():
             result.status = "cancelled"
             result.summary = "Subagent cancelled by user"
         elif is_ok and final_resp:
@@ -457,14 +496,24 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 result.errors.append("LLM returned error without details")
 
     except Exception as e:
+        if task.coding and task.coding.get("phase") == "executing":
+            task.coding["phase"] = "failed"
         result.status = "failed"
         result.errors.append(f"subagent execution failed: {str(e)[:200]}")
         result.summary = f"Subagent execution error: {str(e)[:100]}"
 
+    finally:
+        try:
+            execution_scope.close()
+        except Exception as exc:
+            result.status = "failed"
+            result.errors.append(f"coding cleanup failed: {type(exc).__name__}")
+            result.summary = "Coding branch cleanup is unconfirmed"
+
     with _TASK_LOCK:
         persisted = _load_task(ws_id, subtask_id)
         if (persisted and persisted.status == "cancelled") or (
-            cancel_event.is_set()
+            cancel_check()
         ):
             result.status = "cancelled"
             result.summary = "Subagent cancelled by user"
@@ -525,6 +574,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         "tool_results": result.tool_results,
         "errors": result.errors,
         "warnings": result.warnings,
+        "coding": task.coding,
     }
     _release_worker(ws_id, subtask_id)
     return payload
@@ -540,11 +590,16 @@ def start_subagent_task(subtask_id: str, ws_id: str) -> dict:
     task = _load_task(ws_id, subtask_id)
     if not task or task.workspace_id != ws_id:
         return {"ok": False, "error": "subtask not found"}
-    key = (ws_id, subtask_id)
+    key = _worker_key(ws_id, subtask_id)
     with _TASK_LOCK:
         existing = _WORKER_THREADS.get(key)
         if existing and existing.is_alive():
             return {"ok": True, "subtask_id": subtask_id, "status": task.status}
+        if task.coding:
+            from .coding_team import ready
+            if not ready(task):
+                _save_task(task)
+                return {"ok": True, "subtask_id": subtask_id, "status": "created", "coding": task.coding}
         if task.status != "created":
             return {
                 "ok": False,
@@ -645,6 +700,7 @@ def get_subagent_task(ws_id: str, subtask_id: str) -> Optional[dict]:
         "summary": task.summary[:4000],
         "result_artifact_id": task.result_artifact_id,
         "result_total_chars": int(task.result_total_chars or len(task.summary or "")),
+        "coding": task.coding,
         "created_at": task.created_at,
         "started_at": task.started_at,
         "finished_at": task.finished_at,
@@ -715,6 +771,9 @@ def merge_subagent_result(parent_task_id: str, subtask_id: str, ws_id: str) -> d
             "status": task.status,
         }
 
+    if task.coding:
+        from .coding_team import integrate
+        return integrate(task)
     profile = get_profile(task.profile_id)
     _emit_event(ws_id, parent_task_id, task.session_id, "subagent_merged",
                 f"Subagent {profile.name if profile else subtask_id} merged into parent")
@@ -745,14 +804,21 @@ def _load_task(ws_id: str, subtask_id: str) -> Optional[SubagentTask]:
     except Exception: return None
 
 
+def _worker_key(ws_id: str, subtask_id: str) -> tuple[str, str]:
+    from storage.paths import workspace_root
+    return str(workspace_root(ws_id).resolve()), subtask_id
+
+
 def _cancel_event(ws_id: str, subtask_id: str) -> threading.Event:
-    key = (ws_id, subtask_id)
+    key = _worker_key(ws_id, subtask_id)
     with _TASK_LOCK:
         return _CANCEL_EVENTS.setdefault(key, threading.Event())
 
 
 def _release_worker(ws_id: str, subtask_id: str) -> None:
-    key = (ws_id, subtask_id)
+    from .subagent_control import release_parent_cancel
+    release_parent_cancel(ws_id, subtask_id)
+    key = _worker_key(ws_id, subtask_id)
     with _TASK_LOCK:
         if _WORKER_THREADS.get(key) is threading.current_thread():
             _WORKER_THREADS.pop(key, None)

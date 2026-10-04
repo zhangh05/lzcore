@@ -216,7 +216,7 @@ Anthropic 接入模板不预填模型 ID，添加时填写当前账户或网关�
 
 QueryLoop 在完整工具交互边界建立模型窗口归档，原始用户约束保留，任务、目标与未知执行状态随新窗口继续。归档在当前主体/工作区/会话的 `sessions/<session_id>/context_epochs` 中持久化，包含 SHA256 与父归档引用；归档失败不会替换当前窗口，也不会重放工具。系统提示词、工具定义、输出预留和安全余量共同计入模型容量；单独的初始用户约束已超过容量时明确停止。
 
-`system.manage(action=context_index, checkpoint_id, offset?, limit?)` 分页列出当前会话归档的消息索引；`context_read(checkpoint_id, message_index, char_offset?, char_limit?)` 回查消息的明确文本范围，返回下一范围游标和校验值。调用方不能读取其他会话归档；归档内容是已脱敏的非可信历史数据，不是新指令。`char_limit` 为 1–32000，默认 8000。运行记录公开 `context_epochs` 和接续错误，不把窗口接续说成历史删除或完整业务验收。
+`system.manage(action=context_index, checkpoint_id?, offset?, limit?)` 未指定 checkpoint 时分页发现当前会话的归档，指定 checkpoint 时分页列出消息索引；`context_read(checkpoint_id, message_index, char_offset?, char_limit?)` 回查消息的明确文本范围，返回下一范围游标和校验值。调用方不能读取其他会话归档；归档内容是已脱敏的非可信历史数据，不是新指令。`char_limit` 为 1–32000，默认 8000。运行记录公开 `context_epochs` 和接续错误，不把窗口接续说成历史删除或完整业务验收。
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -339,3 +339,11 @@ GET         /api/workspaces/<ws_id>/traces
 feedback.regions 提供 members、unassigned_node_ids、missing_region_refs、outside_members、empty_region_ids、overlapping_region_pairs 和 identical_region_pairs；区域重叠和未归属可能是用户意图，不能自动当错误修改。所有几何反馈基于保守 140×110 节点范围，标题预留 24；真实文字宽度、连线路由和视口仍需渲染验收。区域感知布局保持固定边框与显式坐标，不足以容纳成员时不挤压节点。
 
 区域重叠/相同几何 pairs 最多返回 50 对，同时返回 overlapping_region_count、identical_region_count 和 region_pairs_complete；计数不截断。
+
+## Coding Team
+
+`agent.manage` 提供 spawn/start/list/get/status/cancel/merge。角色含 coding_agent/frontend_agent/qa_agent；角色提示不注册工具或授予权限。编码 spawn 必须带 `coding_assignment`：project_dir（files/data 下工程）、responsibilities（明确文件/目录前缀，`.` 为整个工程）、depends_on（同父任务前置 subtask_id）、validation_commands（1–12 个程序及字面参数）、review_subtask_id（QA 必需）。无领域 Skill 绑定的编码任务才可创建独立工程副本，不能静默扩大 Skill 范围。
+
+父 task/session 从服务器调用身份继承；模型不能伪造。start/merge 均核对当前父身份。merge 可省略 parent_task_id，存在可信父身份时由服务器推导；模型指定冲突身份即拒绝。生命周期 task_status 与工具调用 status 分开：实现回合 succeeded 时 phase 可仅为 changes_ready，独立 QA 为 validated，实际发布成功才 integrated。依赖等待 phase=dependency_wait，start 恢复原任务。
+
+QA 必须验证准确候选、源码不变、命令实际成功；merge 检查 QA 与候选摘要，并以真实父文件基线比较后发布。冲突保留原文件；结果 unknown 仅回查事务，不自动覆盖或重新执行写入。主任务取消继承到子任务，取消注册按认证主体的实际存储路径隔离。详情见 [Coding Runtime](architecture/CODING_RUNTIME.md)。

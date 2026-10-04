@@ -128,21 +128,31 @@ def test_generated_expiry_cannot_remove_explicit_user_rule():
     assert MemoryStore().get("claim-ws", created["memory_id"]).status == "active"
 
 
-def test_oversized_context_stops_without_provider_or_transcript_truncation():
+@pytest.mark.parametrize("oversized_user", [False, True])
+def test_oversized_context_preserves_history_and_uses_durable_continuation(oversized_user):
+    from agent.llm.schemas import LLMResponse
     from core.runtime_engine.models import SSOTRuntimeConfig, StatelessContext
     from core.runtime_engine.query_loop import QueryLoop
     from core.runtime_engine.budget_controller import BudgetController
+    from storage.context_epoch_store import read_epoch
     config = SSOTRuntimeConfig(context_window_tokens=12000, max_output_tokens=256, context_safety_tokens=512)
     calls = []
-    loop = QueryLoop(config, {}, object(), llm_invoke=lambda **kw: calls.append(kw))
+    def provider(**kwargs):
+        calls.append(kwargs)
+        return LLMResponse(content="Archived history is retrievable; current task continued.")
+    loop = QueryLoop(config, {}, object(), llm_invoke=provider)
     text = "完整历史" * 5000
-    ctx = StatelessContext(workspace_id="capacity-ws", session_id="capacity-session", request_id="request", user_input="继续", extras={"conversation_history_block": text})
+    ctx = StatelessContext(workspace_id="capacity-ws", session_id="capacity-session", request_id="request", user_input=text if oversized_user else "继续", extras={"conversation_history_block": text})
     result = asyncio.run(loop.run(ctx, BudgetController(config), None))
-    assert result.error == "context_capacity_exceeded"
-    assert result.iterations == 1 and calls == []
     assert ctx.extras["conversation_history_block"] == text
-    assert ctx.extras["context_capacity"]["messages_preserved"]
-    assert "完整上下文" in result.final_response
+    if oversized_user:
+        assert result.error == "context_capacity_exceeded" and calls == []
+        assert ctx.extras["context_capacity"]["messages_preserved"]
+    else:
+        assert result.error is None and len(calls) == 1
+        record = read_epoch(ctx.workspace_id, ctx.session_id, ctx.extras["context_epochs"][0]["checkpoint_id"])
+        assert text in record["payload"]["messages"][1]["content"]
+        assert text not in calls[0]["messages"][1].content
 
 
 def test_input_telemetry_limit_does_not_shorten_valid_request():

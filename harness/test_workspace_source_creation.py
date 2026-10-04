@@ -79,3 +79,15 @@ def test_empty_source_content_is_valid_but_missing_content_is_not(client):
     assert SemanticValidator().validate([good]).valid
     assert not SemanticValidator().validate([missing]).valid
     assert create(client, "files/data/pkg/__init__.py", "")
+
+
+@pytest.mark.parametrize('bad', ['a\x00b', '\ud800'])
+def test_invalid_source_text_never_publishes_or_replaces(client, bad):
+    path = 'files/data/app/src/safe.ts'
+    assert not create(client, path, bad)
+    assert not (workspace_root('source_test') / path).exists()
+    assert create(client, path, 'const value = 1;\n')
+    result = client.invoke('workspace.file', {'action': 'edit', 'filepath': path,
+        'old_string': '1', 'new_string': bad}, context=ToolRuntimeContext(workspace_id='source_test', requested_by='turn_runner'))
+    assert result.status == 'failed'
+    assert (workspace_root('source_test') / path).read_text() == 'const value = 1;\n'

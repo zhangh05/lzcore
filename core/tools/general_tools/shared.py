@@ -229,7 +229,8 @@ def _shell_argv(command, shell: str = "/bin/bash", os_name: str | None = None):
 
 
 def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
-               env: dict = None, timeout: int = None, cancel_check=None) -> dict:
+               env: dict = None, timeout: int = None, cancel_check=None,
+               argv_override: list[str] | None = None) -> dict:
     """Execute a shell command with transport limits + process tree cleanup.
 
     Uses process group isolation (os.setsid on Unix, CREATE_NEW_PROCESS_GROUP
@@ -280,7 +281,7 @@ def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
     try:
         # The previous unconditional /bin/bash default made exec.run unusable
         # on Windows; choose the native shell at this final execution boundary.
-        argv = _shell_argv(command, shell=shell, os_name=_os.name)
+        argv = argv_override if argv_override is not None else _shell_argv(command, shell=shell, os_name=_os.name)
         proc = subprocess.Popen(argv, **popen_kwargs)
         deadline = time.monotonic() + float(actual_timeout)
         while True:

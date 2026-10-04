@@ -10,7 +10,7 @@ def _message(role: str, content: str) -> dict[str, str]:
 
 def test_short_repair_projects_complete_previous_exchange(monkeypatch):
     messages = [_message("user", "写一篇不少于800字的作文"), _message("assistant", "当前版本只有642字，需要继续补足。")]
-    monkeypatch.setattr("agent.runtime.ssot_runtime._load_context_messages", lambda *_a, **_k: messages)
+    monkeypatch.setattr("agent.runtime.ssot_context._load_context_messages", lambda *_a, **_k: messages)
     block = _build_history_block(SimpleNamespace(), user_input="补充")
     assert "不少于800字" in block and "642字" in block
 
@@ -22,7 +22,7 @@ def test_history_is_not_lexically_filtered(monkeypatch):
         _message("user", "查看未来十天长三角天气"),
         _message("assistant", "天气数据已返回。"),
     ]
-    monkeypatch.setattr("agent.runtime.ssot_runtime._load_context_messages", lambda *_a, **_k: messages)
+    monkeypatch.setattr("agent.runtime.ssot_context._load_context_messages", lambda *_a, **_k: messages)
     block = _build_history_block(SimpleNamespace(), user_input="继续")
     assert "OSPF" in block and "天气数据" in block
 

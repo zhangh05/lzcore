@@ -39,8 +39,11 @@ def _get_profile(profile_id: str) -> SubagentProfile | None:
 
 
 def _inv_session_id(inv: ToolInvocation) -> str:
-    args = inv.arguments or {}
-    return str(args.get("session_id") or getattr(inv, "session_id", "") or "").strip()
+    caller = str(getattr(inv, "session_id", "") or "").strip()
+    requested = str((inv.arguments or {}).get("session_id") or "").strip()
+    if caller and requested and caller != requested:
+        raise ValueError("subagent_session_id_mismatch")
+    return caller or requested
 
 
 def _inherit_parent_workbench_context(inv: ToolInvocation, workspace_id: str) -> dict:
@@ -95,7 +98,9 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
                           profile_id: str = "research_agent",
                           max_turns: int | None = None,
                           background: bool = False,
-                          workbench_context: dict | None = None) -> dict:
+                          workbench_context: dict | None = None,
+                          coding_assignment: dict | None = None,
+                          cancel_check=None) -> dict:
     from agent.runtime.durable.subagent import (
         create_subagent_task,
         start_subagent_task,
@@ -120,7 +125,7 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
             "retryable": False,
         }
 
-    effective_turns = min(max_turns or profile.max_steps, profile.max_steps)
+    effective_turns = max_turns or profile.max_steps
 
     created = create_subagent_task(
         parent_task_id=parent_task_id,
@@ -133,11 +138,14 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
         operation_id=(runtime_operation[1] if runtime_operation and runtime_operation[0] == workspace_id else ""),
         operation_call_id=(runtime_operation[2] if runtime_operation and runtime_operation[0] == workspace_id else ""),
         workbench_context=workbench_context,
+        coding_assignment=coding_assignment,
     )
     if not created.get("ok"):
         return {"ok": False, "error": created.get("error", "failed to create subagent task")}
 
     subtask_id = created["subtask_id"]
+    from agent.runtime.durable.subagent_control import register_parent_cancel
+    register_parent_cancel(workspace_id, subtask_id, cancel_check)
 
     if runtime_operation and runtime_operation[0] == workspace_id:
         from core.runtime_engine.operation_ledger import link_operation_resource
@@ -155,6 +163,7 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
         status = str(started.get("status") or "running")
         return {
             "ok": True, "subtask_id": subtask_id,
+            "parent_task_id": parent_task_id,
             "status": status,
             "background": True,
             "tracking": _subtask_tracking(subtask_id, status),
@@ -163,20 +172,22 @@ def _run_durable_subagent(*, instruction: str, workspace_id: str, session_id: st
         }
 
     result = run_subagent_task(subtask_id, workspace_id)
-    if result.get("ok") and result.get("status") == "succeeded":
+    if result.get("ok") and result.get("status") == "succeeded" and not result.get("coding"):
         merge_subagent_result(parent_task_id, subtask_id, workspace_id)
     return {
-        "ok": result.get("ok", False) and result.get("status") == "succeeded",
+        "ok": result.get("ok", False) and result.get("status") in {"succeeded", "created", "running"},
         "final_response": result.get("summary", ""),
         "summary": result.get("summary", ""),
         "subtask_id": subtask_id,
         "profile_id": profile_id,
+        "parent_task_id": parent_task_id,
         "agent_name": profile.name,
         "status": result.get("status", "unknown"),
         "findings": result.get("findings", []),
         "tool_results": result.get("tool_results", []),
         "errors": result.get("errors", []),
         "warnings": result.get("warnings", []),
+        "coding": result.get("coding", {}),
     }
 
 
@@ -227,9 +238,13 @@ def _spawn_agent(inv: ToolInvocation, profile_id: str) -> dict:
             max_turns=effective_turns,
             background=background,
             workbench_context=workbench_context,
+            coding_assignment=args.get("coding_assignment"),
+            cancel_check=getattr(inv, "cancel_check", None),
         )
         return _result(inv, result.get("ok", False), {
             **result,
+            "task_status": result.get("status", "unknown"),
+            **({"tracking": _subtask_tracking(result["subtask_id"], result["status"])} if result.get("subtask_id") and result.get("status") in {"created", "running"} else {}),
             "_hint": (
                 f"Subagent {profile_id} "
                 + ("已启动（后台）。" if background else f"完成，状态: {result.get('status')}。")
@@ -242,6 +257,20 @@ def _spawn_agent(inv: ToolInvocation, profile_id: str) -> dict:
 
 
 # ── Other action handlers ────────────────────────────────────────────
+
+
+def handle_agent_start(inv: ToolInvocation) -> dict:
+    """Start a dependency-ready assignment without spawning a duplicate."""
+    from agent.runtime.durable.subagent import _load_task, start_subagent_task
+    ws = _caller_workspace(inv)
+    subtask_id = str(inv.arguments.get("subtask_id") or "")
+    task = _load_task(ws, subtask_id)
+    if not task:
+        return _error_inv(inv, "subtask not found")
+    if task.coding and (task.parent_task_id != getattr(inv, "task_id", "") or task.session_id != _inv_session_id(inv)):
+        return _error_inv(inv, "coding_parent_identity_mismatch")
+    result = start_subagent_task(subtask_id, ws)
+    return {**result, "tracking": _subtask_tracking(subtask_id, result.get("status", "created"))}
 
 
 def handle_agent_spawn(inv: ToolInvocation) -> dict:
@@ -367,21 +396,30 @@ def handle_agent_cancel(inv: ToolInvocation) -> dict:
 
 
 def handle_agent_merge(inv: ToolInvocation) -> dict:
-    """Merge a completed subagent result into the parent task record."""
+    """Integrate only the current trusted parent's independently reviewed task."""
     args = inv.arguments or {}
     subtask_id = str(args.get("subtask_id") or "").strip()
-    parent_task_id = str(args.get("parent_task_id") or getattr(inv, "task_id", "") or "").strip()
     if not subtask_id:
         return _error_inv(inv, "subtask_id is required")
-    if not parent_task_id:
-        return _error_inv(inv, "parent_task_id is required")
     try:
         ws = _caller_workspace(inv)
-        validate_workspace_id(ws)
-        from agent.runtime.durable.subagent import merge_subagent_result
-        return merge_subagent_result(parent_task_id, subtask_id, ws)
-    except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        from agent.runtime.durable.subagent import _load_task, merge_subagent_result
+        task = _load_task(ws, subtask_id)
+        if task is None:
+            return _error_inv(inv, "subtask not found")
+        trusted_parent = str(getattr(inv, "task_id", "") or "").strip()
+        supplied_parent = str(args.get("parent_task_id") or "").strip()
+        if trusted_parent and supplied_parent and supplied_parent != trusted_parent:
+            return _error_inv(inv, "subtask parent mismatch")
+        parent = trusted_parent or supplied_parent
+        if task.coding:
+            if not parent or task.session_id != _inv_session_id(inv):
+                return _error_inv(inv, "coding_parent_identity_mismatch")
+        if not parent:
+            return _error_inv(inv, "parent_task_id is required")
+        return merge_subagent_result(parent, subtask_id, ws)
+    except Exception as exc:
+        return _error_inv(inv, str(exc)[:200])
 
 
 def handle_agent_status(inv: ToolInvocation) -> dict:

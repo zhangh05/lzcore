@@ -146,3 +146,49 @@ def test_archive_read_passes_the_canonical_runtime_with_zero_message_index(ctx):
 def test_checkpoint_identifiers_are_validated(ctx, cid):
     with pytest.raises(ValueError, match="invalid_context_checkpoint"):
         read_epoch(ctx.workspace_id, ctx.session_id, cid)
+
+
+def test_archives_discoverable_after_runtime_restart(ctx):
+    from storage.context_epoch_store import list_epochs
+    one = save_epoch(ctx.workspace_id, ctx.session_id, 'one', [asdict(LLMMessage('user', 'one'))], {})
+    two = save_epoch(ctx.workspace_id, ctx.session_id, 'two', [asdict(LLMMessage('user', 'two'))], {}, one['checkpoint_id'])
+    rows = list_epochs(ctx.workspace_id, ctx.session_id)['records']
+    assert {row['checkpoint_id'] for row in rows} == {one['checkpoint_id'], two['checkpoint_id']}
+    assert next(row for row in rows if row['checkpoint_id'] == two['checkpoint_id'])['parent_id'] == one['checkpoint_id']
+
+
+def test_signed_provider_blocks_count_toward_window_capacity():
+    plain = LLMMessage('assistant', 'response')
+    signed = LLMMessage('assistant', 'response', protocol={'anthropic': [{'type': 'thinking', 'thinking': 'x' * 10000, 'signature': 'signed'}]})
+    assert estimate_message_tokens([signed]) > estimate_message_tokens([plain]) + 1000
+
+
+def test_full_query_loop_three_hundred_tool_rounds(ctx):
+    """Deterministic provider, real graph executor and window lifecycle (not a live LLM)."""
+    import asyncio
+    from agent.llm.schemas import LLMResponse, LLMToolCall
+    from core.runtime_engine.budget_controller import BudgetController
+    from core.runtime_engine.models import SSOTRuntimeConfig
+    from core.runtime_engine.query_loop import QueryLoop
+    from core.runtime_engine.tool_runtime import ToolRuntime
+    config = SSOTRuntimeConfig(context_window_tokens=24000, max_input_tokens=20000, max_output_tokens=1000, context_safety_tokens=1000)
+    runtime = ToolRuntime(config)
+    executed = []
+    def read(arguments):
+        executed.append(int(arguments['index']))
+        return {'ok': True, 'index': arguments['index'], 'evidence': '事实' * 3000}
+    runtime.register('data.manage', read)
+    registry = {'data.manage': {'description': 'parse indexed data', 'args_schema': {'type': 'object', 'required': ['action', 'index'], 'properties': {'action': {'type': 'string'}, 'index': {'type': 'string'}, 'text': {'type': 'string'}}}}}
+    invocations = []
+    def model(**kwargs):
+        i = len(invocations)
+        invocations.append(estimate_message_tokens(kwargs['messages']))
+        assert ctx.user_input in kwargs['messages'][1].content
+        if i == 310:
+            return LLMResponse(content='310 indexed sources read, no write actions taken.')
+        return LLMResponse(tool_calls=[LLMToolCall(id=f'indexed-{i}', name='data__manage', arguments={'action': 'parse', 'index': str(i), 'text': f'item\n{i}'})])
+    result = asyncio.run(QueryLoop(config, registry, runtime, llm_invoke=model).run(ctx, BudgetController(config), None))
+    assert result.error is None, result.error
+    assert executed == list(range(310)), [(r.error, r.output) for r in result.tool_results[:1]]
+    assert len(ctx.extras['context_epochs']) > 20
+    assert max(invocations) < 22000

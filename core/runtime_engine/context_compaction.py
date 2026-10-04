@@ -1,4 +1,4 @@
-"""Conversation integrity helpers; runtime compaction is removed."""
+"""Conversation integrity helpers. Lossy compaction is disabled; durable model-window continuation lives in context_continuation."""
 from __future__ import annotations
 import json
 import re
@@ -30,7 +30,7 @@ def build_history_state_record(role: str, content: str, *, tool_context: Iterabl
 def estimate_chars(messages: Iterable[LLMMessage]) -> int:
     return sum(len(json.dumps(x.content, ensure_ascii=False, default=str)) if isinstance(x.content,list) else len(str(x.content or "")) for x in messages)
 def estimate_message_tokens(messages: Iterable[LLMMessage]) -> int:
-    return sum(4 + (estimate_json_tokens(x.content) if isinstance(x.content,list) else estimate_text_tokens(x.content)) + estimate_json_tokens(x.tool_calls or []) for x in messages)
+    return sum(4 + (estimate_json_tokens(x.content) if isinstance(x.content,list) else estimate_text_tokens(x.content)) + estimate_json_tokens(x.tool_calls or []) + estimate_json_tokens(getattr(x, "protocol", None) or {}) for x in messages)
 def assert_tool_protocol(messages: list[LLMMessage]) -> None:
     expected, seen = set(), set()
     for message in messages:

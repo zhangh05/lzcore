@@ -23,3 +23,6 @@
 为独立验收提供 Debug 独立模块（不取代正常规则）：源码 {{PROJECT_DIR}}/src/engine.js 或 engine.ts，导出 createGame({seed,debug})，返回 step(seconds)、snapshot()、command({type,unitIds,target})、debugScenario({friendly:100,enemy:100})、save()、load(state)。API 按实际引擎实现，snapshot 至少 {tick,units,buildings,resources,pathQueue,stats}。网页 expose 同一个引擎 window.game 仅当显式 ?debug=1，正常模式不暴露 debug 操作。可另有最小适配器，但不能独立造假验收状态。
 
 最终真实验证并逐项 PASS/FAIL/NOT VERIFIED：启动/构建、地图/相同Seed、Camera、选择/组、Move/AttackMove、工人采集/交回、资源守恒、放置/施工、生产/人口、寻路/队列/避障/编队/choke、战斗/投射物/重新索敌、Fog/小地图、AI经营/生产/侦察/进攻、科技/升级、胜败、保存恢复、100v100、200群移、长时间清理、控制台/性能。不要把自编测试成功当作所有外部验收成功。
+
+独立验收命令契约：command 的 type 使用 move/attack/attackMove/stop/hold/patrol/gather/build/train/research（允许内部转换命名）；target 为逻辑 Grid {x,y}，或具体目标 ID。snapshot.units 的 position 或 pos 为 Grid 坐标；owner 为 0/1；pathQueue 为待办数组或实际长度；snapshot.projectiles 为当前存活投射物数组。资源按 owner 提供包含 alloy/energy 的数组。getState() 为隔离 Debug 的完整只读观测，fogs 为每个阵营的 {explored,visible} 数组，save/load 必须完整保留。
+debugScenario({friendly,enemy}) 创建可真实交战的压力场景，不能只有摆放；friendly=200,enemy=0 可用于群移。Debug 数据使用同一寻路/战斗/经济/清理代码。Saved RNG 和 AI 状态必须支持同命令的确定性接续。所有 Debug 入口只在隔离测试模式启用。

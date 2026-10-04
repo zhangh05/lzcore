@@ -1,5 +1,8 @@
-import { DRAWING_DEFAULTS, linkDrawingAppearance } from "./topologyDrawingAppearance";
-import type { Topology, TopologyNode } from "./TopologyWorkspace";
+import {
+  DRAWING_DEFAULTS,
+  linkDrawingAppearance,
+} from "./topologyDrawingAppearance";
+import type { Topology, TopologyNode } from "./topologyDocument";
 
 export interface WhiteboardStrokeExport {
   id: string;
@@ -33,7 +36,10 @@ export function dataUriToBlob(dataUri: string): Blob {
   return new Blob([array], { type: mime });
 }
 
-export { downloadBlob, saveBlob as nativeSaveBlob } from "../../../../frontend/src/utils/saveBlob";
+export {
+  downloadBlob,
+  saveBlob as nativeSaveBlob,
+} from "../../../../frontend/src/utils/saveBlob";
 
 function escapeXml(unsafe: string): string {
   return (unsafe || "")
@@ -44,7 +50,10 @@ function escapeXml(unsafe: string): string {
     .replace(/'/g, "&apos;");
 }
 
-export function sanitizeColor(color?: string | null, fallback = "#3b82f6"): string {
+export function sanitizeColor(
+  color?: string | null,
+  fallback = "#3b82f6",
+): string {
   const val = (color || "").trim();
   if (!val) return fallback;
   if (/^#(?:[0-9a-fA-F]{3,8})$/.test(val)) return val;
@@ -53,7 +62,10 @@ export function sanitizeColor(color?: string | null, fallback = "#3b82f6"): stri
   return fallback;
 }
 
-export async function svgToPngDataUrl(svgString: string, scale = 2): Promise<string> {
+export async function svgToPngDataUrl(
+  svgString: string,
+  scale = 2,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     try {
       const parser = new DOMParser();
@@ -88,7 +100,9 @@ export async function svgToPngDataUrl(svgString: string, scale = 2): Promise<str
         return reject(new Error("canvas_context_failed"));
       }
 
-      const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const blob = new Blob([svgString], {
+        type: "image/svg+xml;charset=utf-8",
+      });
       const url = URL.createObjectURL(blob);
       const img = new Image();
       img.crossOrigin = "anonymous";
@@ -116,7 +130,10 @@ export async function svgToPngDataUrl(svgString: string, scale = 2): Promise<str
   });
 }
 
-export async function svgToPngBlob(svgString: string, scale = 2): Promise<Blob> {
+export async function svgToPngBlob(
+  svgString: string,
+  scale = 2,
+): Promise<Blob> {
   const dataUrl = await svgToPngDataUrl(svgString, scale);
   return dataUriToBlob(dataUrl);
 }
@@ -127,7 +144,7 @@ export function exportTopologyToSvg(
     whiteboardData?: ExportWhiteboardData | null;
     showInterfaces?: boolean;
     compactMode?: boolean;
-  } = {}
+  } = {},
 ): string {
   const nodes = topology.nodes || [];
   const links = topology.links || [];
@@ -183,12 +200,14 @@ export function exportTopologyToSvg(
   const vw = Math.ceil(bounds.maxX - bounds.minX + padding * 2);
   const vh = Math.ceil(bounds.maxY - bounds.minY + padding * 2);
 
-  const nodeMap = new Map<string, TopologyNode>(nodes.map((n) => [n.node_id, n]));
+  const nodeMap = new Map<string, TopologyNode>(
+    nodes.map((n) => [n.node_id, n]),
+  );
 
   const svgParts: string[] = [];
   svgParts.push(`<?xml version="1.0" encoding="UTF-8"?>`);
   svgParts.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="${vw}" height="${vh}" style="background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">`
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="${vw}" height="${vh}" style="background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">`,
   );
 
   // Defs for arrowheads and markers
@@ -205,7 +224,9 @@ export function exportTopologyToSvg(
   </defs>`);
 
   // Background
-  svgParts.push(`  <rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="#ffffff"/>`);
+  svgParts.push(
+    `  <rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="#ffffff"/>`,
+  );
 
   // 1. Groups & Canvas Items (Zones) in background layer
   canvasItems.forEach((item) => {
@@ -217,17 +238,21 @@ export function exportTopologyToSvg(
     const style = item.style || {};
     const fill = isText ? "none" : sanitizeColor(style.fill, "#dff5f0");
     const border = isText ? "#94a3b8" : sanitizeColor(style.border, "#58a99b");
-    const strokeDash = isText ? "stroke-dasharray=\"4,3\"" : "";
-    const borderWidth = isText ? 1.5 : Math.max(1, Math.min(20, Number((style as any).borderWidth) || 2));
-    const textColor = isText ? "#0f172a" : sanitizeColor(style.color, "#0f5149");
+    const strokeDash = isText ? 'stroke-dasharray="4,3"' : "";
+    const borderWidth = isText
+      ? 1.5
+      : Math.max(1, Math.min(20, Number((style as any).borderWidth) || 2));
+    const textColor = isText
+      ? "#0f172a"
+      : sanitizeColor(style.color, "#0f5149");
 
     if (item.kind === "ellipse") {
       svgParts.push(
-        `  <ellipse cx="${item.x}" cy="${item.y}" rx="${w / 2}" ry="${h / 2}" fill="${fill}" fill-opacity="0.35" stroke="${border}" stroke-width="${borderWidth}"/>`
+        `  <ellipse cx="${item.x}" cy="${item.y}" rx="${w / 2}" ry="${h / 2}" fill="${fill}" fill-opacity="0.35" stroke="${border}" stroke-width="${borderWidth}"/>`,
       );
     } else {
       svgParts.push(
-        `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" fill-opacity="${isText ? 0 : 0.35}" stroke="${border}" stroke-width="${borderWidth}" ${strokeDash}/>`
+        `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" fill-opacity="${isText ? 0 : 0.35}" stroke="${border}" stroke-width="${borderWidth}" ${strokeDash}/>`,
       );
     }
 
@@ -235,7 +260,7 @@ export function exportTopologyToSvg(
       const fontSize = isText ? 13 : 13;
       const textY = isText ? item.y + 4 : y + 22;
       svgParts.push(
-        `  <text x="${isText ? x + 12 : item.x}" y="${textY}" fill="${textColor}" font-size="${fontSize}" font-weight="600" text-anchor="${isText ? "start" : "middle"}">${escapeXml(item.text)}</text>`
+        `  <text x="${isText ? x + 12 : item.x}" y="${textY}" fill="${textColor}" font-size="${fontSize}" font-weight="600" text-anchor="${isText ? "start" : "middle"}">${escapeXml(item.text)}</text>`,
       );
     }
   });
@@ -249,10 +274,15 @@ export function exportTopologyToSvg(
     const appearance = linkDrawingAppearance(link);
     const strokeColor = sanitizeColor(appearance.color, DRAWING_DEFAULTS.link);
     const strokeWidth = appearance.width;
-    const strokeDash = appearance.lineStyle === "dotted" ? "stroke-dasharray=\"2,4\"" : appearance.lineStyle === "dashed" ? "stroke-dasharray=\"6,4\"" : "";
+    const strokeDash =
+      appearance.lineStyle === "dotted"
+        ? 'stroke-dasharray="2,4"'
+        : appearance.lineStyle === "dashed"
+          ? 'stroke-dasharray="6,4"'
+          : "";
 
     svgParts.push(
-      `  <line x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round" ${strokeDash}/>`
+      `  <line x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round" ${strokeDash}/>`,
     );
 
     // Link label in middle
@@ -262,10 +292,10 @@ export function exportTopologyToSvg(
     if (label) {
       const labelW = Math.max(48, label.length * 8 + 14);
       svgParts.push(
-        `  <rect x="${midX - labelW / 2}" y="${midY - 11}" width="${labelW}" height="18" rx="4" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" fill-opacity="0.95"/>`
+        `  <rect x="${midX - labelW / 2}" y="${midY - 11}" width="${labelW}" height="18" rx="4" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" fill-opacity="0.95"/>`,
       );
       svgParts.push(
-        `  <text x="${midX}" y="${midY + 2}" font-size="10" font-family="ui-monospace, monospace" font-weight="600" fill="#0f172a" text-anchor="middle">${escapeXml(label)}</text>`
+        `  <text x="${midX}" y="${midY + 2}" font-size="10" font-family="ui-monospace, monospace" font-weight="600" fill="#0f172a" text-anchor="middle">${escapeXml(label)}</text>`,
       );
     }
 
@@ -276,10 +306,10 @@ export function exportTopologyToSvg(
         const pY = s.y + (t.y - s.y) * 0.22;
         const pW = link.source_interface.length * 6.5 + 8;
         svgParts.push(
-          `  <rect x="${pX - pW / 2}" y="${pY - 9}" width="${pW}" height="16" rx="3" fill="#ffffff" fill-opacity="0.92" stroke="#e2e8f0" stroke-width="0.8"/>`
+          `  <rect x="${pX - pW / 2}" y="${pY - 9}" width="${pW}" height="16" rx="3" fill="#ffffff" fill-opacity="0.92" stroke="#e2e8f0" stroke-width="0.8"/>`,
         );
         svgParts.push(
-          `  <text x="${pX}" y="${pY + 2.5}" font-size="9" font-family="ui-monospace, monospace" font-weight="600" fill="#334155" text-anchor="middle">${escapeXml(link.source_interface)}</text>`
+          `  <text x="${pX}" y="${pY + 2.5}" font-size="9" font-family="ui-monospace, monospace" font-weight="600" fill="#334155" text-anchor="middle">${escapeXml(link.source_interface)}</text>`,
         );
       }
       if (link.target_interface) {
@@ -287,10 +317,10 @@ export function exportTopologyToSvg(
         const pY = s.y + (t.y - s.y) * 0.78;
         const pW = link.target_interface.length * 6.5 + 8;
         svgParts.push(
-          `  <rect x="${pX - pW / 2}" y="${pY - 9}" width="${pW}" height="16" rx="3" fill="#ffffff" fill-opacity="0.92" stroke="#e2e8f0" stroke-width="0.8"/>`
+          `  <rect x="${pX - pW / 2}" y="${pY - 9}" width="${pW}" height="16" rx="3" fill="#ffffff" fill-opacity="0.92" stroke="#e2e8f0" stroke-width="0.8"/>`,
         );
         svgParts.push(
-          `  <text x="${pX}" y="${pY + 2.5}" font-size="9" font-family="ui-monospace, monospace" font-weight="600" fill="#334155" text-anchor="middle">${escapeXml(link.target_interface)}</text>`
+          `  <text x="${pX}" y="${pY + 2.5}" font-size="9" font-family="ui-monospace, monospace" font-weight="600" fill="#334155" text-anchor="middle">${escapeXml(link.target_interface)}</text>`,
         );
       }
     }
@@ -304,7 +334,7 @@ export function exportTopologyToSvg(
 
     // Node body
     svgParts.push(
-      `  <rect x="${x}" y="${y}" width="${nodeW}" height="${nodeH}" rx="8" fill="#f8fafc" stroke="${DRAWING_DEFAULTS.nodeBorder}" stroke-width="${DRAWING_DEFAULTS.nodeBorderWidth}" filter="url(#shadow)"/>`
+      `  <rect x="${x}" y="${y}" width="${nodeW}" height="${nodeH}" rx="8" fill="#f8fafc" stroke="${DRAWING_DEFAULTS.nodeBorder}" stroke-width="${DRAWING_DEFAULTS.nodeBorderWidth}" filter="url(#shadow)"/>`,
     );
 
     // Inner icon badge
@@ -313,23 +343,23 @@ export function exportTopologyToSvg(
     const iconX = node.x - iconW / 2;
     const iconY = node.y - iconH / 2;
     svgParts.push(
-      `  <rect x="${iconX}" y="${iconY}" width="${iconW}" height="${iconH}" rx="5" fill="#1262aa"/>`
+      `  <rect x="${iconX}" y="${iconY}" width="${iconW}" height="${iconH}" rx="5" fill="#1262aa"/>`,
     );
     // Device symbol label inside badge
     const badgeText = (node.device_type || "SW").slice(0, 3).toUpperCase();
     svgParts.push(
-      `  <text x="${node.x}" y="${node.y + 4}" fill="#ffffff" font-size="10" font-weight="700" text-anchor="middle">${escapeXml(badgeText)}</text>`
+      `  <text x="${node.x}" y="${node.y + 4}" fill="#ffffff" font-size="10" font-weight="700" text-anchor="middle">${escapeXml(badgeText)}</text>`,
     );
 
     // Node name label below node
     svgParts.push(
-      `  <text x="${node.x}" y="${y + nodeH + 16}" fill="#0f172a" font-size="${compact ? 11 : 12}" font-weight="600" text-anchor="middle">${escapeXml(name)}</text>`
+      `  <text x="${node.x}" y="${y + nodeH + 16}" fill="#0f172a" font-size="${compact ? 11 : 12}" font-weight="600" text-anchor="middle">${escapeXml(name)}</text>`,
     );
 
     // Structured Network IP Address below node name!
     if (node.ip) {
       svgParts.push(
-        `  <text x="${node.x}" y="${y + nodeH + 29}" fill="#64748b" font-size="10" font-family="ui-monospace, monospace" text-anchor="middle">${escapeXml(node.ip)}</text>`
+        `  <text x="${node.x}" y="${y + nodeH + 29}" fill="#64748b" font-size="10" font-family="ui-monospace, monospace" text-anchor="middle">${escapeXml(node.ip)}</text>`,
       );
     }
   });
@@ -341,18 +371,21 @@ export function exportTopologyToSvg(
       if (!stroke.points || stroke.points.length < 1) return;
       const pts = stroke.points;
       const opacity = stroke.tool === "highlighter" ? 0.35 : 1.0;
-      const strokeWidth = stroke.tool === "highlighter" ? stroke.size * 2.8 : stroke.size;
+      const strokeWidth =
+        stroke.tool === "highlighter" ? stroke.size * 2.8 : stroke.size;
 
       const safeStrokeColor = sanitizeColor(stroke.color, "#3b82f6");
       if (stroke.tool === "pen" || stroke.tool === "highlighter") {
         if (pts.length === 1) {
           svgParts.push(
-            `  <circle cx="${pts[0].x}" cy="${pts[0].y}" r="${strokeWidth / 2}" fill="${safeStrokeColor}" opacity="${opacity}"/>`
+            `  <circle cx="${pts[0].x}" cy="${pts[0].y}" r="${strokeWidth / 2}" fill="${safeStrokeColor}" opacity="${opacity}"/>`,
           );
         } else {
-          const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x} ${p.y}`).join(" ");
+          const d = pts
+            .map((p, i) => `${i === 0 ? "M" : "L"}${p.x} ${p.y}`)
+            .join(" ");
           svgParts.push(
-            `  <path d="${d}" fill="none" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`
+            `  <path d="${d}" fill="none" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`,
           );
         }
       } else if (stroke.tool === "rect" && pts.length >= 2) {
@@ -363,13 +396,13 @@ export function exportTopologyToSvg(
         const rw = Math.abs(end.x - start.x);
         const rh = Math.abs(end.y - start.y);
         svgParts.push(
-          `  <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="none" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}"/>`
+          `  <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="none" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}"/>`,
         );
       } else if (stroke.tool === "arrow" && pts.length >= 2) {
         const start = pts[0];
         const end = pts[pts.length - 1];
         svgParts.push(
-          `  <line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round"/>`
+          `  <line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="${safeStrokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round"/>`,
         );
       }
     });
@@ -380,7 +413,7 @@ export function exportTopologyToSvg(
         `  <g transform="translate(${note.x}, ${note.y})">
           <rect width="180" height="74" rx="6" fill="${safeNoteColor}" fill-opacity="0.16" stroke="${safeNoteColor}" stroke-width="2"/>
           <text x="10" y="24" font-size="12" fill="#1e293b" font-weight="500">${escapeXml(note.text)}</text>
-        </g>`
+        </g>`,
       );
     });
   }

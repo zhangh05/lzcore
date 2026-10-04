@@ -25,6 +25,21 @@ class ContextContinuation:
         self.parent_id = ""
         self.epochs: list[dict] = []
 
+    def checkpoint_state(self) -> dict:
+        """Server-owned lifecycle state carried through an external pause."""
+        return {"anchors": [asdict(message) for message in self.anchors],
+                "parent_id": self.parent_id, "epochs": deepcopy(self.epochs)}
+
+    def restore_checkpoint_state(self, state: dict) -> None:
+        from .loop_messages import deserialize_loop_message
+        anchors = state.get("anchors") or []
+        if not anchors or any(not isinstance(item, dict) for item in anchors):
+            raise ContextContinuationError("invalid_continuation_checkpoint")
+        self.anchors = [deserialize_loop_message(item) for item in anchors]
+        assert_tool_protocol(self.anchors)
+        self.parent_id = str(state.get("parent_id") or "")
+        self.epochs = deepcopy(state.get("epochs") or [])
+
     def prepare(self, messages: list[LLMMessage], ctx, available_tokens: int) -> bool:
         if estimate_message_tokens(messages) <= available_tokens:
             return False

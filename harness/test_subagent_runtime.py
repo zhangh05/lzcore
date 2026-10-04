@@ -24,7 +24,7 @@ def _fake_run_turn(session, turn, **kwargs):
 class TestSubagentProfiles:
     def test_base_profiles_exist(self):
         assert set(BUILTIN_PROFILES) == {
-            "research_agent", "file_agent", "data_agent",
+            "research_agent", "file_agent", "data_agent", "coding_agent", "frontend_agent", "qa_agent",
         }
 
     def test_research_agent_profile_is_a_role_hint(self):

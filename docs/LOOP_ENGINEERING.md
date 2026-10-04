@@ -41,7 +41,7 @@ Provider 错误投影保留稳定错误码；`provider_recovery_events.diagnosti
 
 完全相同的连续工具失败、重复无变化修改和永久 Provider 拒绝可以触发收尾。同一模型批次的重复错误只计一次失败轮次，先把实际失败交回模型，再判断下一轮是否原样重复；成功观察或错误变化可重新打开恢复。拓扑连续三次明确 changed=false 会阻止无效提交，但不缩减合法节点数量或正在推进的编辑。取消保留证据，明确记录取消。
 
-历史和普通工具正文不静默截断。超过可用模型窗口返回 context_capacity_exceeded；不能反复提交同一超大请求。输出截断保留公开前缀与协议状态：未完成调用不执行，模型需重发完整原生调用，必要时拆为依赖有效的批次。正文续写不等于执行半段 JSON。Anthropic 原生历史中不合法的 tool input 在出站时保存为明确的无效参数对象，保留拒绝事实和原调用 ID；不能让反馈请求因历史参数不是 object 再次被拒绝，也不能将其变成可执行的空参数。Thinking/signature 等合法原生块原样保留。model_completed 的 finish_reason/output_truncated 区分容量与工具失败。
+历史和普通工具正文不静默截断。完整工具边界先保存可校验归档，再建立带原始约束、当前目标和回查引用的新窗口；审批接续同时保留窗口生命周期。只有治理约束本身无法容纳时返回 context_capacity_exceeded，归档失败返回 context_checkpoint_failed；不能反复提交同一不合法请求。输出截断保留公开前缀与协议状态：未完成调用不执行，模型需重发完整原生调用，必要时拆为依赖有效的批次。正文续写不等于执行半段 JSON。Anthropic 原生历史中不合法的 tool input 在出站时保存为明确的无效参数对象，保留拒绝事实和原调用 ID；不能让反馈请求因历史参数不是 object 再次被拒绝，也不能将其变成可执行的空参数。Thinking/signature 等合法原生块原样保留。model_completed 的 finish_reason/output_truncated 区分容量与工具失败。
 
 ## 计划和委派
 
@@ -56,3 +56,5 @@ agent.manage 用于值得分工的独立目标。工具面经 profile、父 Skil
 进程中断后的收尾对齐 job、会话消息和回合日志，幂等补齐中断结果，不重新执行工具。断线续流只读 turn_logs；页面离开不取消任务。控制与保留期见 [API](API.md)。
 
 验证应覆盖合法输入、无效调用、部分成功、依赖绑定、追踪、未知写入、审批恢复、中断及幂等收尾。不能仅验证最终措辞就宣称循环可靠。
+
+模块职责及编码团队的依赖/独立 QA/变更整合合同见 [Coding Runtime](architecture/CODING_RUNTIME.md)。

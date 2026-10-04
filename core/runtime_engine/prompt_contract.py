@@ -369,12 +369,17 @@ def build_turn_message(
     trusted_context_items: Iterable[TrustedPromptItem] = (),
 ) -> str:
     """Build a clearly delimited turn payload resistant to context confusion."""
+    from core.tools.project_execution import environment_for
+    execution_environment = environment_for(workspace_id)
+    runtime_os = "Linux" if execution_environment is not None else platform.system()
+    native_shell = "/bin/bash -c" if execution_environment is not None or os.name != "nt" else "cmd.exe /d /s /c"
     parts = [
         "<runtime_identity>\n"
         f"workspace_id: {_clean(workspace_id, 200)}\n"
         f"session_id: {_clean(session_id, 200)}\n"
-        f"host_os: {platform.system()}\n"
-        f"native_shell: {'cmd.exe /d /s /c' if os.name == 'nt' else '/bin/bash -c'}\n"
+        f"host_os: {runtime_os}\n"
+        f"native_shell: {native_shell}\n"
+        + (f"project_execution: {json.dumps(execution_environment.descriptor(), ensure_ascii=False)}\n" if execution_environment is not None else "") +
         "</runtime_identity>",
     ]
     if conversation_history.strip():

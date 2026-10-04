@@ -1,4 +1,5 @@
 from __future__ import annotations
+from extensions.network_operations import device_tools, network_inventory, network_execution, network_inspections
 
 from collections import deque
 from threading import Event
@@ -572,7 +573,7 @@ def test_semantic_collect_persists_detected_profile_and_returns_facts(monkeypatc
             },
         }
 
-    monkeypatch.setattr(service, "probe_target", fake_probe)
+    monkeypatch.setattr(device_tools, "probe_target", fake_probe)
     connection = service.save_connection(
         "default",
         {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"},
@@ -606,7 +607,7 @@ def test_multi_device_semantic_inspection_keeps_fact_plan(monkeypatch, tmp_path)
     _setup(monkeypatch, tmp_path)
     h3c = service.save_device("default", {"name": "H3C", "host": "10.0.0.1", "vendor": "h3c"})
     cisco = service.save_device("default", {"name": "Cisco", "host": "10.0.0.2", "vendor": "cisco"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True})
     first = service.save_connection("default", {"device_id": h3c["device_id"], "protocol": "telnet", "auth_method": "none"}, auto_test=False)
     second = service.save_connection("default", {"device_id": cisco["device_id"], "protocol": "telnet", "auth_method": "none"}, auto_test=False)
 
@@ -657,7 +658,7 @@ def test_semantic_inspection_uses_live_runtime_and_preserves_partial_evidence(mo
             }],
         }
 
-    monkeypatch.setattr(service, "test_connection", fake_live)
+    monkeypatch.setattr(network_execution, "test_connection", fake_live)
     service._execute_inspection(
         "default", task["task_id"], targets, None,
         service.collect_connection,
@@ -729,7 +730,7 @@ def test_raw_read_without_commands_never_contacts_device(monkeypatch, tmp_path):
     connection = service.save_connection("default", {
         "device_id": device["device_id"], "protocol": "telnet", "auth_method": "none",
     }, auto_test=False)
-    monkeypatch.setattr(service, "probe_target", lambda *_a, **_k: pytest.fail("implicit device IO"))
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_a, **_k: pytest.fail("implicit device IO"))
     for commands in (None, [], "display version"):
         result = device_manage(SimpleNamespace(workspace_id="default", arguments={
             "action": "read", "connection_id": connection["connection_id"], "commands": commands,
@@ -881,7 +882,7 @@ def test_raw_inspection_preserves_incomplete_command_diagnostics(monkeypatch, tm
         "default", [connection["connection_id"]], ["display current-configuration"], "",
     )
     service._store("default").save("inspections", task["task_id"], task)
-    monkeypatch.setattr(service, "probe_target", lambda *_a, **_k: {
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_a, **_k: {
         "ok": True, "read_ok": False, "output": {"display current-configuration": "partial config"},
         "command_results": [{"command": "display current-configuration", "complete": False,
                              "error_code": "connection_closed", "truncated": False}],

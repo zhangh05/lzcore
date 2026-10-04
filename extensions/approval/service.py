@@ -283,6 +283,7 @@ def attach_continuation_checkpoint(
     round_results: list[dict[str, Any]],
     interruption_ids: list[str],
     workbench_context: dict[str, Any],
+    context_window_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist an exact, resumable model boundary for a decision set.
 
@@ -301,6 +302,7 @@ def attach_continuation_checkpoint(
         "request_id": request_id,
         "user_input": user_input,
         "messages": messages,
+        "context_window_state": dict(context_window_state or {}),
         "tool_calls": tool_calls,
         "prior_results": prior_results,
         "round_results": round_results,

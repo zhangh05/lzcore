@@ -1,167 +1,65 @@
-"""SSOT Runtime adapter for the public AgentApp turn contract.
-
-This module is the bridge between the production-facing ``AgentResult``
-contract and the SSOT Runtime execution engine. SSOT Runtime owns QueryLoop
-planning, tool execution, bounded tracking, retry metadata, and result synthesis;
-the actual tool boundary remains ``ToolRuntimeClient``
-so manifest, policy, redaction and audit behavior are unchanged.
-"""
+"""SSOT runtime boundary; public orchestration remains in ssot_runtime."""
 
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
-from storage.principal import ContextThreadPoolExecutor
 import logging
 import time
 from types import SimpleNamespace
 from typing import Any
 
-from agent.llm.schemas import LLMMessage
 from agent.runtime.result import AgentResult
-from agent.runtime.turn_persistence import persist_run_record
 from agent.runtime.stream_emitter import build_trace_id
-from agent.runtime.utils import now_iso
+from agent.runtime.turn_persistence import persist_run_record
+
+from .ssot_context import (
+    _active_attachment_references,
+    _build_history_block,
+    _build_retrieved_context_block,
+    _load_context_messages,
+    _merge_attachment_references,
+    _recent_session_attachments,
+)
+from .ssot_memory import _record_experience_and_maybe_reflect
+from .ssot_metadata import _apply_runtime_control, _sanitize_caller_runtime_metadata
+from .ssot_persistence import (
+    _mark_run_record_persistence_failure,
+    _mark_task_state_persistence_failure,
+    _persist_inflight_user_message,
+    _sync_session_history,
+    _task_state_runtime_metadata,
+)
+from .ssot_projection import (
+    _event,
+    _final_response,
+    _project_events,
+    _project_tool_calls,
+    _timeline_summary,
+    _tool_decision,
+    _tool_result_fallback_from_projected_calls,
+)
+from .ssot_provider import (
+    _build_runtime_context_budget,
+    _current_model_name,
+    _current_provider_name,
+    _invoke_llm_for_ssot_runtime,
+    _run_async,
+)
+from .ssot_tools import _make_tool_handler
 
 _LOG = logging.getLogger(__name__)
-_MEMORY_WRITE_EXECUTOR = ContextThreadPoolExecutor(
-    max_workers=1,
-    thread_name_prefix="ssot-memory-write",
+from .ssot_catalog import build_runtime_catalog
+from .ssot_context import (
+    _append_context_message,
+    _attachment_reference_terms,
+    _history_overlap,
 )
-
-
-_CALLER_RESERVED_RUNTIME_METADATA_KEYS = frozenset({
-    "cognitive_state",
-    "conversation_history_block",
-    "operational_clarification",
-    "retrieved_context_block",
-    "task_continuation_contract",
-    "task_state_contract",
-    "trusted_prompt_items",
-    # Subagent controls become system-prompt text and tool-registry limits.
-    # They are accepted only from SubagentRuntimeControl below.
-    "subagent_profile",
-    "max_steps",
-    "max_tool_nodes",
-    "subtask_id",
-    "parent_session_id",
-    "workbench_context",
-    "approval_continuation_resume",
-    "cancel_check",
-})
-
-
-def _sanitize_caller_runtime_metadata(metadata: Any) -> dict[str, Any]:
-    """Keep caller metadata data-only before it enters the SSOT control plane."""
-    if not isinstance(metadata, dict):
-        return {}
-    sanitized = {
-        str(key): value
-        for key, value in metadata.items()
-        if isinstance(key, str)
-        and not key.startswith("__")
-        and key not in _CALLER_RESERVED_RUNTIME_METADATA_KEYS
-    }
-    raw_wb = metadata.get("workbench_context")
-    if (
-        isinstance(raw_wb, dict)
-        and raw_wb.get("source") == "server_validated_extension_context"
-    ):
-        sanitized["workbench_context"] = dict(raw_wb)
-    return sanitized
-
-
-def _apply_runtime_control(metadata: dict[str, Any], runtime_control: Any) -> None:
-    """Install only typed, server-created runtime control envelopes."""
-    from core.runtime_engine.models import ApprovalContinuationRuntimeControl, MainAgentRuntimeControl, SubagentRuntimeControl
-    if isinstance(runtime_control, MainAgentRuntimeControl):
-        if callable(runtime_control.cancel_check):
-            metadata["cancel_check"] = runtime_control.cancel_check
-        if isinstance(runtime_control.workbench_context, dict) and runtime_control.workbench_context:
-            metadata["workbench_context"] = dict(runtime_control.workbench_context)
-        return
-    if isinstance(runtime_control, ApprovalContinuationRuntimeControl):
-        metadata["approval_continuation_resume"] = dict(runtime_control.checkpoint or {})
-        if runtime_control.workbench_context:
-            metadata["workbench_context"] = dict(runtime_control.workbench_context)
-        return
-    if not isinstance(runtime_control, SubagentRuntimeControl):
-        return
-    profile = runtime_control.profile if isinstance(runtime_control.profile, dict) else {}
-    metadata.update({
-        "subagent_profile": dict(profile),
-        "max_steps": max(0, int(runtime_control.max_steps or 0)),
-        "max_tool_nodes": max(0, int(runtime_control.max_tool_nodes or 0)),
-        "subtask_id": str(runtime_control.subtask_id or ""),
-        "parent_session_id": str(runtime_control.parent_session_id or ""),
-    })
-    if isinstance(runtime_control.workbench_context, dict) and runtime_control.workbench_context:
-        metadata["workbench_context"] = dict(runtime_control.workbench_context)
-    if callable(runtime_control.cancel_check):
-        metadata["cancel_check"] = runtime_control.cancel_check
+from .ssot_memory import _log_memory_reflection_failure
+from .ssot_projection import _retry_event_summary, _tool_summary
 
 
 class _TaskStateResolutionFailure(RuntimeError):
     """Internal marker for a fail-closed TaskState read boundary."""
 
-
-def _persist_inflight_user_message(session, turn, user_input: str) -> None:
-    """Durably retain the original request before tools can run.
-
-    The terminal run persistence writes the same `(run_id, user)` projection
-    again, so this is idempotent.  An interrupted process therefore restores a
-    safe untrusted context for an explicit later resume.
-    """
-    if not user_input or isinstance((getattr(turn.op, "metadata", {}) or {}).get("approval_continuation_resume"), dict):
-        return
-    from agent.runtime.message_identity import (
-        user_message_storage_run_id,
-        workbench_message_metadata,
-    )
-    from core.runtime_engine.context_compaction import build_history_state_record
-    from storage.message_store import SessionMessageStore
-    metadata = dict(getattr(turn.op, "metadata", {}) or {})
-    message_run_id = user_message_storage_run_id(
-        str(metadata.get("client_request_id") or ""), turn.turn_id,
-    )
-    SessionMessageStore(session_id=session.session_id, ws_id=session.workspace_id).write_message(
-        message_run_id,
-        "user",
-        user_input,
-        metadata={
-            "created_at": now_iso(),
-            "client_request_id": str(metadata.get("client_request_id") or ""),
-            "attachments": list(metadata.get("attachments") or []),
-            **workbench_message_metadata(metadata),
-            "history_state": build_history_state_record(
-                "user", user_input, references=list(metadata.get("attachments") or [])
-            ),
-        },
-    )
-
-
-def _mark_task_state_persistence_failure(result: AgentResult, code: str) -> None:
-    """Expose state-store degradation without invalidating completed work.
-
-    TaskState is a durable projection of the agent loop, not the authority
-    that decides whether a tool result happened.  Reclassifying a completed
-    turn as failed here previously destroyed the model's response and made a
-    storage incident look like an Agent failure.
-    """
-    result.metadata["task_state_persistence"] = {
-        "stage": "commit", "status": "degraded", "code": code,
-    }
-    if code not in result.warnings:
-        result.warnings.append(code)
-
-
-def _mark_run_record_persistence_failure(result: AgentResult, code: str) -> None:
-    """Expose run-record degradation without rewriting the Agent outcome."""
-    result.metadata["run_record_persistence"] = {
-        "stage": "persist", "status": "degraded", "code": code,
-    }
-    if code not in result.warnings:
-        result.warnings.append(code)
 
 def run_ssot_turn(
     session,
@@ -181,8 +79,12 @@ def run_ssot_turn(
     """
     started = time.monotonic()
     trace_id = build_trace_id()
-    workspace_id = getattr(session, "workspace_id", "") or getattr(turn.op, "workspace_id", "")
-    session_id = getattr(session, "session_id", "") or getattr(turn.op, "session_id", "")
+    workspace_id = getattr(session, "workspace_id", "") or getattr(
+        turn.op, "workspace_id", ""
+    )
+    session_id = getattr(session, "session_id", "") or getattr(
+        turn.op, "session_id", ""
+    )
     user_input = (getattr(turn.op, "user_input", "") or "").strip()
     metadata_in = _sanitize_caller_runtime_metadata(
         getattr(turn.op, "metadata", {}) or {}
@@ -192,12 +94,15 @@ def run_ssot_turn(
 
     try:
         from backend.core.chat_attachments import build_attachment_runtime_guidance
+
         # Follow-up turns do not repeat an upload. Keep the latest managed file
         # references available as trusted runtime metadata so the model can reuse
         # the FileStore id instead of hallucinating a transient workspace path.
         current_attachments = list(metadata_in.get("attachments") or [])
         historical_attachments = (
-            [] if current_attachments else _recent_session_attachments(
+            []
+            if current_attachments
+            else _recent_session_attachments(
                 session,
                 user_input=user_input,
             )
@@ -205,8 +110,8 @@ def run_ssot_turn(
         known_attachments = _active_attachment_references(
             workspace_id,
             _merge_attachment_references(
-            current_attachments,
-            historical_attachments,
+                current_attachments,
+                historical_attachments,
             ),
         )
         if known_attachments:
@@ -214,6 +119,7 @@ def run_ssot_turn(
         attachment_guidance = build_attachment_runtime_guidance(known_attachments)
         if attachment_guidance:
             from core.runtime_engine.prompt_contract import trusted_prompt_item
+
             metadata_in.setdefault("trusted_prompt_items", []).append(
                 trusted_prompt_item("managed_attachment", attachment_guidance)
             )
@@ -224,6 +130,7 @@ def run_ssot_turn(
     if isinstance(workbench_context, dict):
         from core.runtime_engine.prompt_contract import trusted_prompt_item
         from extensions.runtime import render_workbench_prompt
+
         metadata_in.setdefault("trusted_prompt_items", []).append(
             trusted_prompt_item(
                 "workbench_skill",
@@ -237,6 +144,7 @@ def run_ssot_turn(
     ssot_registry = _build_ssot_runtime_tool_registry(allowed_tool_ids)
     if isinstance(workbench_context, dict):
         from extensions.runtime import apply_workbench_tool_boundary
+
         ssot_registry = apply_workbench_tool_boundary(ssot_registry, workbench_context)
     runtime_context_budget = _build_runtime_context_budget(ssot_registry)
 
@@ -292,8 +200,12 @@ def run_ssot_turn(
     task_state_contract: dict[str, Any] | None = None
     task_state_resolution_error: Exception | None = None
     try:
-        from agent.runtime.task_state import render_task_state_guidance, resolve_task_state
+        from agent.runtime.task_state import (
+            render_task_state_guidance,
+            resolve_task_state,
+        )
         from core.runtime_engine.prompt_contract import trusted_prompt_item
+
         task_state_contract = resolve_task_state(
             workspace_id=workspace_id,
             session_id=session_id,
@@ -318,6 +230,7 @@ def run_ssot_turn(
     if task_state_resolution_error is None:
         try:
             from agent.runtime.task_state import begin_task_state
+
             active_task_contract = begin_task_state(
                 workspace_id=workspace_id,
                 session_id=session_id,
@@ -332,16 +245,23 @@ def run_ssot_turn(
             metadata_in["__trusted_task_state_contract"] = active_task_contract
             trusted_items = list(metadata_in.get("trusted_prompt_items") or [])
             metadata_in["trusted_prompt_items"] = [
-                item for item in trusted_items
+                item
+                for item in trusted_items
                 if getattr(item, "source_kind", "") != "task_state"
             ]
-            from core.runtime_engine.prompt_contract import trusted_prompt_item
             from agent.runtime.task_state import render_task_state_guidance
+            from core.runtime_engine.prompt_contract import trusted_prompt_item
+
             metadata_in["trusted_prompt_items"].append(
-                trusted_prompt_item("task_state", render_task_state_guidance(active_task_contract))
+                trusted_prompt_item(
+                    "task_state", render_task_state_guidance(active_task_contract)
+                )
             )
             from agent.runtime.task_state import checkpoint_task_state_execution
-            def _task_state_execution_checkpoint(phase: str, manifest: list[dict[str, Any]]):
+
+            def _task_state_execution_checkpoint(
+                phase: str, manifest: list[dict[str, Any]]
+            ):
                 nonlocal task_state_contract
                 next_contract = checkpoint_task_state_execution(
                     workspace_id=workspace_id,
@@ -357,7 +277,10 @@ def run_ssot_turn(
                 metadata_in["task_state_contract"] = next_contract
                 metadata_in["__trusted_task_state_contract"] = next_contract
                 return next_contract
-            metadata_in["__task_state_execution_checkpoint"] = _task_state_execution_checkpoint
+
+            metadata_in["__task_state_execution_checkpoint"] = (
+                _task_state_execution_checkpoint
+            )
         except Exception as exc:
             task_state_resolution_error = exc
             _LOG.warning("task state begin checkpoint failed", exc_info=True)
@@ -367,9 +290,7 @@ def run_ssot_turn(
         task_id=turn.turn_id,
         user_input=user_input,
         max_tokens=runtime_context_budget.retrieved_context_tokens,
-        include_workspace_memory=not bool(
-            getattr(session, "is_sub_agent", False)
-        ),
+        include_workspace_memory=not bool(getattr(session, "is_sub_agent", False)),
     )
     if retrieved_context_block:
         metadata_in["retrieved_context_block"] = retrieved_context_block
@@ -415,6 +336,7 @@ def run_ssot_turn(
             workspace_id=workspace_id,
             session_id=session_id,
             run_id=turn.turn_id,
+            task_id=str((task_state_contract or {}).get("task_id") or turn.turn_id),
             trace_id=trace_id,
             allowed_tool_ids=allowed_tool_ids,
             requested_by=requested_by,
@@ -423,7 +345,9 @@ def run_ssot_turn(
             max_query_loop_iterations=metadata_in.get("max_steps"),
             max_tool_nodes=metadata_in.get("max_tool_nodes"),
             context_budget=runtime_context_budget,
-            workbench_context=workbench_context if isinstance(workbench_context, dict) else None,
+            workbench_context=workbench_context
+            if isinstance(workbench_context, dict)
+            else None,
         )
         runtime_result = _run_async(
             engine.run(
@@ -442,7 +366,9 @@ def run_ssot_turn(
             else:
                 final_response = "抱歉，服务暂时无法处理您的请求，请稍后重试。"
         events.extend(_project_events(runtime_result, trace_id, turn.turn_id))
-        events.append(_event("final", "final", trace_id, turn.turn_id, started_at=started))
+        events.append(
+            _event("final", "final", trace_id, turn.turn_id, started_at=started)
+        )
 
         timeline_summary = _timeline_summary(
             started=started,
@@ -454,7 +380,9 @@ def run_ssot_turn(
         # and, for multi-error paths, as `errors`. Preserve the ordered union
         # before projecting lifecycle facts; otherwise cancellation is visible
         # to the response but lost to TaskState terminal derivation.
-        runtime_errors = [str(item) for item in (runtime_result.errors or []) if str(item).strip()]
+        runtime_errors = [
+            str(item) for item in (runtime_result.errors or []) if str(item).strip()
+        ]
         terminal_error = str(getattr(runtime_result, "error", "") or "").strip()
         if terminal_error and terminal_error not in runtime_errors:
             runtime_errors.append(terminal_error)
@@ -492,10 +420,12 @@ def run_ssot_turn(
                 (runtime_result.metadata or {}).get("retry_events") or []
             ),
             "validation_correction_summary": dict(
-                (runtime_result.metadata or {}).get("validation_correction_summary") or {}
+                (runtime_result.metadata or {}).get("validation_correction_summary")
+                or {}
             ),
             "validation_correction_events": list(
-                (runtime_result.metadata or {}).get("validation_correction_events") or []
+                (runtime_result.metadata or {}).get("validation_correction_events")
+                or []
             ),
             "tool_recovery_events": list(
                 (runtime_result.metadata or {}).get("tool_recovery_events") or []
@@ -506,9 +436,7 @@ def run_ssot_turn(
             "recovery_goal_events": list(
                 (runtime_result.metadata or {}).get("recovery_goal_events") or []
             ),
-            "goal_loop": dict(
-                (runtime_result.metadata or {}).get("goal_loop") or {}
-            ),
+            "goal_loop": dict((runtime_result.metadata or {}).get("goal_loop") or {}),
             "orchestration_batches": list(
                 (runtime_result.metadata or {}).get("orchestration_batches") or []
             ),
@@ -527,15 +455,24 @@ def run_ssot_turn(
                 or {}
             ),
             "task_state_checkpoint_events": list(
-                (runtime_result.metadata or {}).get("task_state_checkpoint_events") or []
+                (runtime_result.metadata or {}).get("task_state_checkpoint_events")
+                or []
             ),
-            "context_compacted": bool((runtime_result.metadata or {}).get("context_compacted", False)),
+            "context_compacted": bool(
+                (runtime_result.metadata or {}).get("context_compacted", False)
+            ),
             "context_estimated_tokens": int(
                 (runtime_result.metadata or {}).get("context_estimated_tokens", 0) or 0
             ),
-            "context_budget": dict((runtime_result.metadata or {}).get("context_budget") or {}),
-            "context_epochs": list((runtime_result.metadata or {}).get("context_epochs") or []),
-            "context_continuation_error": str((runtime_result.metadata or {}).get("context_continuation_error") or ""),
+            "context_budget": dict(
+                (runtime_result.metadata or {}).get("context_budget") or {}
+            ),
+            "context_epochs": list(
+                (runtime_result.metadata or {}).get("context_epochs") or []
+            ),
+            "context_continuation_error": str(
+                (runtime_result.metadata or {}).get("context_continuation_error") or ""
+            ),
             "execution_outcome": str(
                 (runtime_result.metadata or {}).get("execution_outcome")
                 or ("complete" if runtime_result.success else "failed")
@@ -545,7 +482,11 @@ def run_ssot_turn(
             "runtime_errors": list(runtime_errors),
             "tool_execution_outcome": str(
                 (runtime_result.metadata or {}).get("tool_execution_outcome")
-                or ("complete" if runtime_result.success and not runtime_errors else "failed")
+                or (
+                    "complete"
+                    if runtime_result.success and not runtime_errors
+                    else "failed"
+                )
             ),
             "response_outcome": str(
                 (runtime_result.metadata or {}).get("response_outcome")
@@ -554,17 +495,23 @@ def run_ssot_turn(
             "synthesis_recovery": dict(
                 (runtime_result.metadata or {}).get("synthesis_recovery") or {}
             ),
-            "stage_outputs": list((runtime_result.metadata or {}).get("stage_outputs") or []),
+            "stage_outputs": list(
+                (runtime_result.metadata or {}).get("stage_outputs") or []
+            ),
             # Read-only terminal facts for API/UI consumers. QueryLoop remains
             # the only owner of execution, recovery and write fencing.
             "unknown_outcome": (
                 dict((runtime_result.metadata or {}).get("unknown_outcome") or {})
-                if isinstance((runtime_result.metadata or {}).get("unknown_outcome"), dict)
+                if isinstance(
+                    (runtime_result.metadata or {}).get("unknown_outcome"), dict
+                )
                 else {}
             ),
             "goal_assertions": (
                 dict((runtime_result.metadata or {}).get("goal_assertions") or {})
-                if isinstance((runtime_result.metadata or {}).get("goal_assertions"), dict)
+                if isinstance(
+                    (runtime_result.metadata or {}).get("goal_assertions"), dict
+                )
                 else {}
             ),
             "evidence": dict((runtime_result.metadata or {}).get("evidence") or {}),
@@ -578,7 +525,9 @@ def run_ssot_turn(
             ),
             "cognitive_events": (
                 list((runtime_result.metadata or {}).get("cognitive_events") or [])
-                if isinstance((runtime_result.metadata or {}).get("cognitive_events"), list)
+                if isinstance(
+                    (runtime_result.metadata or {}).get("cognitive_events"), list
+                )
                 else []
             ),
         }
@@ -612,12 +561,22 @@ def run_ssot_turn(
             metadata=metadata,
             error_type="" if runtime_result.success else "ssot_runtime_error",
             tool_decision=_tool_decision(runtime_result, tool_calls),
-            no_tool_reason="" if tool_calls else "SSOT Runtime planner selected no tools.",
+            no_tool_reason=""
+            if tool_calls
+            else "SSOT Runtime planner selected no tools.",
         )
 
     except _TaskStateResolutionFailure:
         elapsed_ms = int((time.monotonic() - started) * 1000)
-        events.append(_event("error", "TaskState resolution failed", trace_id, turn.turn_id, started_at=started))
+        events.append(
+            _event(
+                "error",
+                "TaskState resolution failed",
+                trace_id,
+                turn.turn_id,
+                started_at=started,
+            )
+        )
         result = AgentResult(
             ok=False,
             final_response=(
@@ -642,15 +601,27 @@ def run_ssot_turn(
                 },
             },
             error_type="task_state_resolution_failed",
-            tool_decision={"needed": False, "reason": "TaskState resolution failed before execution."},
+            tool_decision={
+                "needed": False,
+                "reason": "TaskState resolution failed before execution.",
+            },
             no_tool_reason="task_state_resolution_failed",
         )
     except Exception as exc:
         _LOG.exception("SSOT Runtime turn failed")
         from storage.redaction import redact_text
+
         safe_error = redact_text(str(exc))[:500] or "ssot_runtime_error"
         elapsed_ms = int((time.monotonic() - started) * 1000)
-        events.append(_event("error", "SSOT Runtime error", trace_id, turn.turn_id, started_at=started))
+        events.append(
+            _event(
+                "error",
+                "SSOT Runtime error",
+                trace_id,
+                turn.turn_id,
+                started_at=started,
+            )
+        )
         result = AgentResult(
             ok=False,
             final_response="运行时处理失败，系统已安全停止。请稍后重试。",
@@ -671,7 +642,10 @@ def run_ssot_turn(
                 },
             },
             error_type="ssot_runtime_error",
-            tool_decision={"needed": False, "reason": "SSOT Runtime failed before execution."},
+            tool_decision={
+                "needed": False,
+                "reason": "SSOT Runtime failed before execution.",
+            },
             no_tool_reason="ssot_runtime_error",
         )
 
@@ -689,6 +663,7 @@ def run_ssot_turn(
     task_state_commit_error = ""
     try:
         from agent.runtime.task_state import commit_task_state
+
         task_state_snapshot = commit_task_state(
             workspace_id=workspace_id,
             session_id=session_id,
@@ -755,100 +730,6 @@ def run_ssot_turn(
     return result
 
 
-def _task_state_runtime_metadata(result_metadata: dict[str, Any] | None) -> dict[str, Any]:
-    """Project only server-owned terminal facts into the TaskState commit.
-
-    ``ssot_runtime`` preserves raw QueryLoop metrics, while the adapter may
-    normalize lifecycle fields (notably a primary QueryLoop ``error`` into
-    ``runtime_errors``).  Passing the raw mirror alone splits TaskState from the
-    delivered AgentResult.  The fixed allow-list preserves the execution facts
-    without allowing caller-provided top-level metadata to influence state.
-    """
-    metadata = result_metadata if isinstance(result_metadata, dict) else {}
-    raw = metadata.get("ssot_runtime")
-    projected = dict(raw) if isinstance(raw, dict) else {}
-    for key in (
-        "execution_outcome",
-        "runtime_errors",
-        "tool_execution_outcome",
-        "unknown_outcome",
-        "goal_assertions",
-        "recovery_goals",
-        "recovery_goal_events",
-        "goal_loop",
-        "evidence",
-        "cognitive",
-        "cognitive_events",
-    ):
-        if key in metadata:
-            projected[key] = metadata[key]
-    return projected
-
-
-def _record_experience_and_maybe_reflect(
-    *,
-    workspace_id: str,
-    session_id: str,
-    task_id: str,
-    user_input: str,
-    assistant_response: str,
-    tool_calls: list[dict[str, Any]],
-    task_ok: bool,
-) -> None:
-    try:
-        from agent.runtime.memory_hooks import install_memory_governance_hooks
-        from agent.runtime.memory_write.commands import apply_memory_command, parse_memory_command
-        from agent.runtime.memory_write.consolidator import consolidate_experiences, should_consolidate
-        from agent.runtime.memory_write.event_log import (
-            append_experience,
-            mark_experiences_processed,
-            pending_experiences,
-        )
-        from storage.memory_governance import is_auto_memory_enabled
-
-        install_memory_governance_hooks()
-        if not is_auto_memory_enabled(workspace_id):
-            return
-        event = append_experience(
-            workspace_id=workspace_id,
-            session_id=session_id,
-            task_id=task_id,
-            user_input=user_input,
-            assistant_response=assistant_response,
-            tool_calls=tool_calls,
-            task_ok=task_ok,
-        )
-        command = parse_memory_command(user_input)
-        if command is not None:
-            apply_memory_command(
-                command,
-                workspace_id=workspace_id,
-                session_id=session_id,
-                task_id=task_id,
-            )
-            mark_experiences_processed(workspace_id, session_id, [str(event.get("event_id") or "")])
-            return
-        pending = pending_experiences(workspace_id, session_id, limit=12)
-        if should_consolidate(pending):
-            from storage.principal import bind_storage_principal
-            future = _MEMORY_WRITE_EXECUTOR.submit(
-                bind_storage_principal(consolidate_experiences),
-                workspace_id=workspace_id,
-                session_id=session_id,
-                task_id=task_id,
-            )
-            future.add_done_callback(_log_memory_reflection_failure)
-    except Exception:
-        _LOG.warning("experience journal write failed", exc_info=True)
-
-
-def _log_memory_reflection_failure(done: concurrent.futures.Future) -> None:
-    try:
-        done.result()
-    except Exception:
-        _LOG.warning("background memory reflection failed", exc_info=True)
-
-
 def _build_engine(
     *,
     workspace_id: str,
@@ -857,6 +738,7 @@ def _build_engine(
     trace_id: str,
     allowed_tool_ids=None,
     requested_by: str,
+    task_id: str = "",
     emitter: Any | None = None,
     prebuilt_registry: dict[str, dict[str, Any]] | None = None,
     max_query_loop_iterations: int | None = None,
@@ -887,16 +769,25 @@ def _build_engine(
         tracking_poll_interval_cap_seconds=5,
         max_query_loop_iterations=(
             max(0, int(max_query_loop_iterations))
-            if max_query_loop_iterations is not None else 0
+            if max_query_loop_iterations is not None
+            else 0
         ),
         max_nodes=(max(0, int(max_tool_nodes)) if max_tool_nodes is not None else 0),
         max_tool_calls_per_iteration=(
             max(0, int(max_tool_nodes)) if max_tool_nodes is not None else 0
         ),
-        context_window_tokens=int(getattr(context_budget, "context_window_tokens", 0) or 0),
-        max_input_tokens=int(getattr(context_budget, "max_input_tokens", 48_000) or 48_000),
-        max_output_tokens=int(getattr(context_budget, "reserved_output_tokens", 4096) or 4096),
-        context_safety_tokens=int(getattr(context_budget, "safety_tokens", 2048) or 2048),
+        context_window_tokens=int(
+            getattr(context_budget, "context_window_tokens", 0) or 0
+        ),
+        max_input_tokens=int(
+            getattr(context_budget, "max_input_tokens", 48_000) or 48_000
+        ),
+        max_output_tokens=int(
+            getattr(context_budget, "reserved_output_tokens", 4096) or 4096
+        ),
+        context_safety_tokens=int(
+            getattr(context_budget, "safety_tokens", 2048) or 2048
+        ),
     )
     registry = prebuilt_registry or _build_ssot_runtime_tool_registry(allowed_tool_ids)
     client = _tool_runtime_client()
@@ -919,10 +810,14 @@ def _build_engine(
                 workspace_id=workspace_id,
                 session_id=session_id,
                 run_id=run_id,
+                task_id=task_id,
                 trace_id=trace_id,
                 requested_by=requested_by,
                 skill_id=str((workbench_context or {}).get("skill_id") or ""),
-                skill_connection_ids=tuple(str(item) for item in ((workbench_context or {}).get("connection_ids") or [])),
+                skill_connection_ids=tuple(
+                    str(item)
+                    for item in ((workbench_context or {}).get("connection_ids") or [])
+                ),
             ),
             description=registry[tool_id].get("description", ""),
             args_schema=registry[tool_id].get("args_schema", {}),
@@ -930,981 +825,11 @@ def _build_engine(
     return engine
 
 
-
-def _build_ssot_runtime_tool_registry(allowed_tool_ids=None) -> dict[str, dict[str, Any]]:
-    client = _tool_runtime_client()
-    tools = {}
-    allowed = set(allowed_tool_ids or []) if allowed_tool_ids else None
-    action_profiles = {}
-    try:
-        from core.tools.catalog_snapshot import build_catalog_snapshot
-        action_profiles = {
-            item.get("tool_id"): item.get("action_profiles", [])
-            for item in build_catalog_snapshot().get("tools", [])
-            if isinstance(item, dict)
-        }
-    except Exception:
-        action_profiles = {}
-    try:
-        from core.tools.catalog_snapshot import build_action_profiles_for_tool
-    except Exception:
-        build_action_profiles_for_tool = None
-    for item in client.list_tools():
-        tool_id = str(item.get("tool_id") or "")
-        if not tool_id:
-            continue
-        if allowed is not None and tool_id not in allowed:
-            continue
-        if item.get("enabled") is False or item.get("callable_by_llm") is False:
-            continue
-        if item.get("forbidden") is True:
-            continue
-        args_schema = item.get("input_schema") or {}
-        profiles = action_profiles.get(tool_id, [])
-        if not profiles and build_action_profiles_for_tool:
-            try:
-                profiles = build_action_profiles_for_tool(
-                    tool_id,
-                    input_schema=args_schema,
-                    category=str(item.get("category") or ""),
-                    base_permission=str(item.get("permission_action") or "read"),
-                    action_contracts=(item.get("metadata") or {}).get("action_execution_contracts"),
-                )
-            except Exception:
-                profiles = []
-        tools[tool_id] = {
-            "description": str(item.get("description") or tool_id),
-            "args_schema": args_schema,
-            "category": item.get("category") or "",
-            "risk_level": item.get("risk_level") or "low",
-            "action_profiles": profiles,
-            "metadata": item.get("metadata") or {},
-        }
-    return tools
-
-
-def _build_runtime_context_budget(registry: dict[str, dict[str, Any]]):
-    from agent.llm.config import resolve_provider_config
-    from agent.llm.tool_adapter import tool_spec_to_openai_function
-    from core.runtime_engine.context_budget import RuntimeContextBudget
-
-    config = dict(resolve_provider_config() or {})
-    tool_definitions = [
-        tool_spec_to_openai_function({
-            "tool_id": tool_id,
-            "description": meta.get("description", ""),
-            "input_schema": meta.get("args_schema", {}),
-            "risk_level": meta.get("risk_level", "low"),
-            "action_profiles": meta.get("action_profiles", []),
-            "metadata": meta.get("metadata", {}),
-        })
-        for tool_id, meta in sorted(registry.items())
-    ]
-    return RuntimeContextBudget.build(
-        model=str(config.get("model") or ""),
-        tools=tool_definitions,
-        context_window_tokens=int(config.get("context_window_tokens") or 0),
-        max_input_tokens=int(config.get("max_input_tokens") or 48_000),
-        reserved_output_tokens=int(config.get("max_tokens") or 4096),
-    )
-
-
 def _tool_runtime_client():
     from core.tools.integration import get_default_tool_runtime_client
+
     return get_default_tool_runtime_client()
 
 
-def _invoke_llm_for_ssot_runtime(**kwargs):
-    from agent.llm.runtime import invoke_llm, resolve_invocation_candidates
-    from agent.runtime.token_tracker import record_llm_call
-
-    system = str(kwargs.get("system") or "")
-    user = str(kwargs.get("user") or "")
-    runtime_messages = kwargs.get("messages")
-    caller_extra = kwargs.get("extra") or {}
-    stream_scope = str(caller_extra.get("stream_scope") or "internal").lower()
-    is_planner = stream_scope == "planner"
-    # Preserve the exact tool list supplied by QueryLoop. QueryLoop keeps tools
-    # visible on response/synthesis turns; an empty list should only appear if a
-    # caller intentionally supplied one.
-    tools = kwargs.get("tools")
-    session_id = str(kwargs.get("session_id") or caller_extra.get("session_id") or "").strip()
-    workspace_id = str(kwargs.get("workspace_id") or caller_extra.get("workspace_id") or "").strip()
-
-    extra = {
-        "runtime_engine": "ssot_runtime",
-        "planner": is_planner,
-        "stream_to_user": not is_planner,
-        "stream_scope": stream_scope,
-    }
-    if caller_extra:
-        extra.update(caller_extra)
-
-    config_override = {}
-    timeout = kwargs.get("timeout")
-    if timeout is not None:
-        config_override["timeout"] = int(timeout)
-    temperature = kwargs.get("temperature")
-    if temperature is not None:
-        config_override["temperature"] = float(temperature)
-    max_tokens = kwargs.get("max_tokens")
-    if max_tokens is not None:
-        config_override["max_tokens"] = int(max_tokens)
-
-    messages = [
-        LLMMessage(
-            role=str(message.role),
-            content=message.content,
-            tool_call_id=message.tool_call_id,
-            tool_calls=list(message.tool_calls or []) or None,
-            protocol=message.protocol,
-        )
-        for message in runtime_messages
-    ] if isinstance(runtime_messages, list) and all(
-        isinstance(message, LLMMessage) for message in runtime_messages
-    ) else [
-        LLMMessage(role="system", content=system),
-        LLMMessage(role="user", content=user),
-    ]
-
-    # QueryLoop supplies only pending typed evidence. Original user images are
-    # delivered once on the planner call; images produced by tools are delivered
-    # once on the next continuation/synthesis call. Encoded bytes stay ephemeral
-    # inside this provider request and never enter metadata, history, or traces.
-    if caller_extra.get("evidence_parts"):
-        try:
-            from agent.llm.capabilities import supports_vision
-            effective_config = resolve_invocation_candidates(
-                "assistant_chat", config_override,
-            )[0]
-            if supports_vision(effective_config):
-                from agent.runtime.vision_inputs import build_vision_content
-                from core.runtime_engine.evidence import evidence_to_vision_references
-                image_parts: list[dict[str, Any]] = []
-                vision_warnings: list[str] = []
-                delivered_evidence_ids: list[str] = []
-                for evidence_part in caller_extra.get("evidence_parts") or []:
-                    references = evidence_to_vision_references([evidence_part])
-                    if not references:
-                        continue
-                    resolved_parts, resolved_warnings = build_vision_content(references, workspace_id)
-                    image_parts.extend(resolved_parts)
-                    vision_warnings.extend(resolved_warnings)
-                    if resolved_parts:
-                        delivered_evidence_ids.append(str(evidence_part.get("evidence_id") or ""))
-                if image_parts:
-                    for index in range(len(messages) - 1, -1, -1):
-                        if messages[index].role != "user":
-                            continue
-                        text_content = messages[index].content
-                        if not isinstance(text_content, str):
-                            text_content = user
-                        messages[index] = LLMMessage(
-                            role="user",
-                            content=[{"type": "text", "text": text_content}, *image_parts],
-                            tool_call_id=messages[index].tool_call_id,
-                            tool_calls=messages[index].tool_calls,
-                        )
-                        break
-                    extra["delivered_evidence_ids"] = delivered_evidence_ids
-                if vision_warnings:
-                    extra["vision_warnings"] = vision_warnings
-            else:
-                extra["vision_warnings"] = ["当前模型不支持图片识别，图片未发送给模型。"]
-        except Exception:
-            _LOG.warning("vision attachment preparation failed", exc_info=True)
-
-    resp = invoke_llm(
-        task="assistant_chat",
-        messages=messages,
-        tools=tools,
-        user_input=user,
-        extra=extra,
-        config_override=config_override,
-    )
-    if extra.get("delivered_evidence_ids"):
-        resp.metadata = {
-            **(resp.metadata or {}),
-            "delivered_evidence_ids": list(extra["delivered_evidence_ids"]),
-        }
-
-    # Track token usage
-    if workspace_id:
-        try:
-            usage = resp.usage or {}
-            logical_input = int(usage.get(
-                "logical_input_tokens",
-                usage.get("prompt_tokens", usage.get("input_tokens", 0)),
-            ) or 0)
-            cache_creation = int(usage.get("cache_creation_input_tokens", 0) or 0)
-            cache_read = int(usage.get("cache_read_input_tokens", 0) or 0)
-            prompt_profile = (resp.metadata or {}).get("prompt_assembly")
-            record_llm_call(
-                input_tokens=logical_input,
-                output_tokens=int(usage.get(
-                    "normalized_output_tokens",
-                    usage.get("completion_tokens", usage.get("output_tokens", 0)),
-                ) or 0),
-                cache_creation_input_tokens=cache_creation,
-                cache_read_input_tokens=cache_read,
-                session_id=session_id,
-                workspace_id=workspace_id,
-                model=resp.model or "",
-                provider=resp.provider or "",
-                prompt_cache_strategy=str((resp.metadata or {}).get("prompt_cache_strategy") or ""),
-                prompt_profile=prompt_profile if isinstance(prompt_profile, dict) else None,
-            )
-        except Exception:
-            _LOG.debug("record_llm_call failed", exc_info=True)
-
-    if resp.error:
-        # Preserve the provider's typed error for QueryLoop.  Raising here
-        # discarded distinctions such as disabled/misconfigured credentials
-        # and made the loop treat them as a recoverable generic outage.
-        # Partial stream content is already retained on this same response.
-        return resp
-    # Preserve finish_reason, usage, and truncation metadata. QueryLoop accepts
-    # only provider-native tool calls; plain JSON remains ordinary assistant text.
-    return resp
-
-
-def _run_async(awaitable):
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(awaitable)
-
-    box: dict[str, Any] = {}
-
-    def _target():
-        try:
-            box["result"] = asyncio.run(awaitable)
-        except Exception as exc:  # pragma: no cover - defensive branch
-            box["error"] = exc
-
-    import threading
-
-    from storage.principal import bind_storage_principal
-    thread = threading.Thread(target=bind_storage_principal(_target), daemon=True)
-    thread.start()
-    thread.join()
-    if "error" in box:
-        raise box["error"]
-    return box.get("result")
-
-
-def _final_response(runtime_result) -> str:
-    text = str(getattr(runtime_result, "final_response", "") or "").strip()
-
-    if text:
-        from agent.llm.runtime import sanitize_provider_output
-        text, _ = sanitize_provider_output(text)
-        text = text.strip()
-
-    # QueryLoop owns finalization. The transport adapter must not discard a
-    # valid answer based on phrases such as "已完成。" inside a full report.
-    if text:
-        return text
-    # No tool results and no text — return empty so caller can fall back.
-    return ""
-
-
-def _tool_result_fallback_from_projected_calls(tool_calls: list[dict[str, Any]]) -> str:
-    """Build a useful user-facing fallback from projected tool-call results."""
-    if not tool_calls:
-        return ""
-
-    ok_count = sum(1 for call in tool_calls if call.get("ok"))
-    fail_count = len(tool_calls) - ok_count
-    lines = [
-        f"工具结果已返回：成功 {ok_count} 个"
-        + (f"，失败 {fail_count} 个" if fail_count else "")
-    ]
-
-    for call in tool_calls:
-        tool_id = str(call.get("tool_id") or "tool")
-        status = "✅" if call.get("ok") else "❌"
-        summary = str(call.get("summary") or "").strip()
-        result = call.get("result") if isinstance(call.get("result"), dict) else {}
-        lines.append(f"\n### {status} {tool_id}")
-        if summary and summary not in {"Tool completed", "Tool failed"}:
-            lines.append(summary)
-        command = result.get("command") or result.get("description")
-        if command:
-            lines.append(f"> `{str(command)}`")
-        if result.get("exit_code") is not None:
-            lines.append(f"Exit: exit_code={result.get('exit_code')}")
-        stdout = str(result.get("stdout") or "").strip()
-        stderr = str(result.get("stderr") or "").strip()
-        if stdout:
-            lines.append(f"```\n{stdout}\n```")
-        if stderr:
-            lines.append(f"```\n{stderr}\n```")
-        artifacts = call.get("artifacts") if isinstance(call.get("artifacts"), list) else []
-        if artifacts:
-            ids = [
-                str(item.get("artifact_id") or item.get("title") or "").strip()
-                for item in artifacts
-                if isinstance(item, dict)
-            ]
-            ids = [value for value in ids if value]
-            if ids:
-                lines.append("产物：" + "、".join(ids))
-
-    return "\n".join(lines).strip()
-
-
-def _project_tool_calls(runtime_result) -> list[dict[str, Any]]:
-    calls = []
-    for node_id, tr in (runtime_result.node_results or {}).items():
-        data = tr.data if isinstance(tr.data, dict) else {"value": tr.data}
-        raw_ids = list(data.get("artifact_ids") or [])
-        # Normalise artifacts: frontend expects objects, not plain strings.
-        artifacts: list[dict[str, str]] = []
-        for aid in raw_ids:
-            if isinstance(aid, dict):
-                artifacts.append({
-                    "artifact_id": str(aid.get("artifact_id", aid.get("id", ""))),
-                    "artifact_type": str(aid.get("artifact_type", aid.get("type", ""))),
-                    "title": str(aid.get("title", aid.get("name", ""))),
-                })
-            elif isinstance(aid, str):
-                artifacts.append({
-                    "artifact_id": aid,
-                    "artifact_type": "",
-                    "title": aid,
-                })
-
-        calls.append({
-            "call_id": node_id,
-            "tool_id": tr.tool,
-            "ok": bool(tr.success),
-            "status": "succeeded" if tr.success else "failed",
-            "summary": _tool_summary(data, tr),
-            "result": data.get("output", data),
-            "duration_ms": tr.latency_ms,
-            "errors": list(data.get("errors") or ([tr.error] if tr.error else [])),
-            "warnings": list(data.get("warnings") or []),
-            "artifacts": artifacts,
-            "metadata": {
-                "runtime_engine": "ssot_runtime",
-                "node_id": node_id,
-                "duration_ms": tr.latency_ms,
-                "redacted": bool(data.get("redacted", True)),
-                "orchestration": dict(data.get("_orchestration") or {}),
-            },
-        })
-    return calls
-
-
-def _tool_summary(data: dict[str, Any], tr) -> str:
-    for key in ("summary", "message", "error"):
-        value = data.get(key)
-        if value:
-            return str(value)[:500]
-    if tr.error:
-        return str(tr.error)[:500]
-    return "Tool completed" if tr.success else "Tool failed"
-
-
-def _project_events(runtime_result, trace_id: str, turn_id: str) -> list[dict[str, Any]]:
-    events = []
-    for batch_index, batch in enumerate((runtime_result.metadata or {}).get("orchestration_batches") or []):
-        if not isinstance(batch, dict):
-            continue
-        parallel_steps_by_layer = list(batch.get("parallel_steps") or [])
-        for layer_index, steps in enumerate(batch.get("layers") or [], start=1):
-            parallel_steps = (
-                parallel_steps_by_layer[layer_index - 1]
-                if layer_index <= len(parallel_steps_by_layer)
-                and isinstance(parallel_steps_by_layer[layer_index - 1], list)
-                else []
-            )
-            events.append({
-                "event_id": f"orchestration-{turn_id}-{batch_index}-{layer_index}",
-                "event_type": "orchestration_layer_completed",
-                "type": "orchestration_layer_completed",
-                "name": "协同步骤执行完成",
-                "trace_id": trace_id,
-                "run_id": turn_id,
-                "timestamp": time.time(),
-                "status": "completed",
-                "summary": f"第 {layer_index} 组：{len(list(steps or []))} 个步骤",
-                "metadata": {
-                    "batch": batch_index + 1,
-                    "layer": layer_index,
-                    "steps": list(steps or []),
-                    "parallel": len(parallel_steps) > 1,
-                    "parallel_steps": list(parallel_steps),
-                },
-            })
-    for node_id, tr in (runtime_result.node_results or {}).items():
-        events.append({
-            "event_id": f"tool-start-{turn_id}-{node_id}",
-            "event_type": "tool_call",
-            "type": "tool_call",
-            "name": "tool_call",
-            "tool_id": tr.tool,
-            "node_id": node_id,
-            "call_id": node_id,
-            "trace_id": trace_id,
-            "run_id": turn_id,
-            "timestamp": time.time(),
-            "status": "started",
-        })
-        events.append({
-            "event_id": f"tool-result-{turn_id}-{node_id}",
-            "event_type": "tool_result",
-            "type": "tool_result",
-            "name": "tool_result",
-            "tool_id": tr.tool,
-            "node_id": node_id,
-            "call_id": node_id,
-            "trace_id": trace_id,
-            "run_id": turn_id,
-            "timestamp": time.time(),
-            "status": "success" if tr.success else "failed",
-            "ok": bool(tr.success),
-            "summary": _tool_summary(tr.data if isinstance(tr.data, dict) else {}, tr),
-            "duration_ms": tr.latency_ms,
-            "metadata": {"orchestration": dict(
-                (tr.data if isinstance(tr.data, dict) else {}).get("_orchestration") or {}
-            )},
-        })
-    for idx, ev in enumerate((runtime_result.metadata or {}).get("retry_events") or []):
-        if not isinstance(ev, dict):
-            continue
-        events.append({
-            "event_id": f"retry-{turn_id}-{idx}",
-            "event_type": "tool_retry",
-            "type": "tool_retry",
-            "name": "工具自动重试",
-            "status": ev.get("final_status") or ("succeeded" if ev.get("retry_allowed") else "blocked"),
-            "summary": _retry_event_summary(ev),
-            "tool_id": ev.get("tool_id", ""),
-            "node_id": ev.get("node_id", ""),
-            "trace_id": trace_id,
-            "run_id": turn_id,
-            "timestamp": time.time(),
-            "duration_ms": ev.get("duration_ms", 0),
-            "metadata": ev,
-        })
-    return events
-
-
-def _retry_event_summary(ev: dict[str, Any]) -> str:
-    tool_id = str(ev.get("tool_id") or ev.get("node_id") or "tool")
-    reason = str(ev.get("reason") or ev.get("error_code") or "")
-    if ev.get("retry_allowed"):
-        if str(ev.get("final_status") or "") == "succeeded":
-            return f"{tool_id} 首次失败后已自动重试并恢复"
-        return f"{tool_id} 已按策略重试，但仍未完成"
-    if ev.get("blocked_by_policy"):
-        if reason == "non_idempotent" or "side_effect_not_retryable" in reason or reason == "execute_command_not_retryable":
-            return f"{tool_id} 未原样重放，以避免重复副作用；模型可改用其他策略"
-        return f"{tool_id} 未自动重试：{reason or '策略禁止重试'}"
-    return f"{tool_id} 未触发重试：{reason or '不满足重试条件'}"
-
-
-def _event(event_type: str, name: str, trace_id: str, turn_id: str, *, started_at: float) -> dict[str, Any]:
-    return {
-        "type": event_type,
-        "name": name,
-        "trace_id": trace_id,
-        "run_id": turn_id,
-        "timestamp": time.time(),
-        "duration_ms": int((time.monotonic() - started_at) * 1000),
-    }
-
-
-def _timeline_summary(*, started: float, events: list, tool_calls: list, runtime_result) -> dict[str, Any]:
-    runtime_metadata = runtime_result.metadata or {}
-    return {
-        "node_count": max(len(events), 1),
-        "total_duration_ms": int((time.monotonic() - started) * 1000),
-        "artifact_saved_count": sum(len(c.get("artifacts") or []) for c in tool_calls),
-        "execution_duration_ms": int(getattr(runtime_result, "execution_latency_ms", 0) or 0),
-        "llm_calls": int(runtime_metadata.get("llm_calls", 0) or 0),
-        "llm_usage": dict(runtime_metadata.get("llm_usage") or {}),
-        "tool_calls": len(tool_calls),
-        "max_parallel_width": int(runtime_metadata.get("metrics", {}).get("max_parallel_width", 0) or 0),
-    }
-
-
-def _tool_decision(runtime_result, tool_calls: list) -> dict[str, Any]:
-    if not tool_calls:
-        return {"needed": False, "reason": "SSOT Runtime planner selected no tools.", "selected_tools": []}
-    return {
-        "needed": True,
-        "reason": "SSOT Runtime execution graph selected tool nodes.",
-        "selected_tools": [c["tool_id"] for c in tool_calls],
-        "tool_count": len(tool_calls),
-    }
-
-
-def _current_provider_name() -> str:
-    try:
-        from agent.llm.config import resolve_provider_config
-        return str(resolve_provider_config().get("provider") or "")
-    except Exception:
-        return ""
-
-
-def _current_model_name() -> str:
-    try:
-        from agent.llm.config import resolve_provider_config
-        return str(resolve_provider_config().get("model") or "")
-    except Exception:
-        return ""
-
-
-# ── Conversation history block builder ──────────────────────────────
-
-def _build_retrieved_context_block(
-    *, workspace_id: str, session_id: str, task_id: str, user_input: str,
-    max_tokens: int = 3000,
-    include_workspace_memory: bool = True,
-) -> str:
-    """Retrieve governed context without silently widening child-agent access.
-
-    A subagent has a restricted tool profile and an isolated child session.
-    Its automatic context must not reintroduce workspace/global memory that the
-    profile did not expose.  Workspace knowledge remains available when its
-    canonical tool profile permits research-oriented work.
-    """
-    if not workspace_id or not user_input.strip():
-        return ""
-    try:
-        from core.context.unified_retriever import get_retriever
-        from storage.memory_governance import MemoryStore
-
-        retriever = get_retriever(workspace_id)
-        if include_workspace_memory:
-            retrieved = retriever.retrieve_for_context(
-                user_input,
-                top_k_memory=3,
-                top_k_knowledge=2,
-                session_id=session_id,
-                task_id=task_id,
-            )
-        else:
-            retrieved = {
-                "memory_hits": [],
-                "knowledge_hits": retriever.search_knowledge(user_input, top_k=2),
-            }
-        from storage.redaction import redact_text
-
-        lines: list[str] = []
-        if include_workspace_memory:
-            core_store = MemoryStore()
-            core_rules = core_store.list_retrievable(
-                workspace_id,
-                memory_type="core_rule",
-                session_id=session_id,
-                task_id=task_id,
-                limit=0,
-            )
-            for rule in core_rules:
-                content = redact_text(str(rule.get("content") or rule.get("summary") or "")).strip()
-                if content:
-                    lines.append(f"[core-rule scope=workspace authority=explicit-user] {content}")
-            if core_store.load_errors():
-                lines.append(
-                    "[memory_load_warning] Some saved memory records could not be read; "
-                    "healthy records remain available. Do not assume unavailable records are absent."
-                )
-        for hit in retrieved.get("memory_hits", [])[:3]:
-            if str(hit.get("memory_type") or "") == "core_rule":
-                continue
-            content = redact_text(str(hit.get("content") or hit.get("summary") or "")).strip()
-            if content:
-                scope = str(hit.get("scope") or "workspace")
-                lines.append(f"[memory scope={scope}] {content}")
-        for hit in retrieved.get("knowledge_hits", [])[:2]:
-            content = redact_text(str(hit.get("content") or hit.get("summary") or "")).strip()
-            if content:
-                scope = str(hit.get("scope") or "workspace")
-                source_id = str(hit.get("source_id") or "")
-                chunk_id = str(hit.get("chunk_id") or hit.get("item_id") or "")
-                parent_chunk_id = str(hit.get("parent_chunk_id") or "")
-                title = str(hit.get("title") or "")
-                section = str(hit.get("chapter") or hit.get("section") or "")
-                lines.append(
-                    "[knowledge "
-                    f"scope={scope} source_id={source_id} chunk_id={chunk_id} "
-                    f"parent_chunk_id={parent_chunk_id} title={title!r} section={section!r}] "
-                    f"{content}"
-                )
-        return "\n".join(lines)
-    except Exception:
-        _LOG.debug("governed context retrieval failed", exc_info=True)
-        return "[context_load_failed] Memory/knowledge context could not be loaded. Do not assume there are no saved rules or facts; retry the relevant read tool and disclose any unresolved gap."
-
-
-def _build_history_block(
-    session,
-    *,
-    user_input: str = "",
-    max_tokens: int = 8000,
-    exclude_run_id: str = "",
-    exclude_client_request_id: str = "",
-) -> str:
-    """Build prompt-ready conversation context from the session message SSOT.
-
-    Source order:
-      1. ``SessionMessageStore`` full persisted messages
-      2. in-memory ``session.history`` entries not yet flushed
-
-    The block preserves every persisted conversation turn verbatim. Runtime
-    token accounting is telemetry only and must not decide which prior facts
-    the model may see.
-    """
-    try:
-        messages = _load_context_messages(
-            session,
-            exclude_run_id=exclude_run_id,
-            exclude_client_request_id=exclude_client_request_id,
-        )
-        if not messages:
-            return ""
-
-        return "RECENT CONVERSATION HISTORY:\n" + "\n".join(
-            f"  [{message['role']}] {message['content']}"
-            for message in messages
-        )
-    except Exception:
-        _LOG.debug("conversation history block build failed", exc_info=True)
-        return ""
-
-
-def _attachment_reference_terms(text: str) -> set[str]:
-    value = str(text or "").lower()
-    terms = (
-        "附件", "文件", "文档", "图片", "照片", "截图", "配置", "表格",
-        "pdf", "docx", "word", "xlsx", "excel", "ppt", "日志",
-    )
-    return {term for term in terms if term in value}
-
-
-def _recent_session_attachments(
-    session,
-    *,
-    user_input: str = "",
-    limit: int = 8,
-) -> list[dict[str, Any]]:
-    """Return recent user attachment references for a same-session follow-up.
-
-    Only FileStore metadata already persisted with a user message is reused.
-    This is not a filesystem lookup and never revives files from another
-    workspace or session.
-    """
-    workspace_id = str(getattr(session, "workspace_id", "") or "")
-    session_id = str(getattr(session, "session_id", "") or "")
-    if not workspace_id or not session_id:
-        return []
-    try:
-        from storage.message_store import SessionMessageStore
-
-        messages = SessionMessageStore(session_id=session_id, ws_id=workspace_id).get_messages()
-        attachment_message_index = -1
-        items: list[dict[str, Any]] = []
-        for index in range(len(messages) - 1, -1, -1):
-            message = messages[index]
-            if str(message.get("role") or "") != "user":
-                continue
-            raw = (message.get("metadata") or {}).get("attachments") or []
-            if isinstance(raw, list):
-                items = [item for item in raw if isinstance(item, dict)][:limit]
-            if items:
-                attachment_message_index = index
-                break
-        if not items:
-            return []
-
-        explicit_reference = bool(_attachment_reference_terms(user_input))
-        turns_after_attachment = len(messages) - attachment_message_index - 1
-        # Implicit reuse is intentionally limited to the immediate follow-up.
-        # Older managed files stay available in FileStore but are not injected
-        # into unrelated topics later in the same session.
-        if not explicit_reference and turns_after_attachment > 1:
-            return []
-        return items
-    except Exception:
-        _LOG.debug("recent attachment lookup failed", exc_info=True)
-        return []
-
-
-def _merge_attachment_references(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Deduplicate validated attachment metadata while retaining caller order."""
-    merged: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for group in groups:
-        for item in group:
-            file_id = str(item.get("file_id") or "").strip()
-            if not file_id or file_id in seen:
-                continue
-            seen.add(file_id)
-            merged.append(dict(item))
-            if len(merged) >= 8:
-                return merged
-    return merged
-
-
-def _active_attachment_references(
-    workspace_id: str,
-    attachments: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Keep only active, current-workspace FileStore records for reuse."""
-    if not workspace_id:
-        return []
-    try:
-        from backend.core.chat_attachments import normalize_chat_attachments
-
-        active: list[dict[str, Any]] = []
-        for attachment in attachments:
-            try:
-                active.extend(normalize_chat_attachments(workspace_id, [attachment]))
-            except ValueError:
-                # A historic message may reference a file the user removed.
-                # It must never become a stale trusted handle in a later turn.
-                continue
-        return active
-    except Exception:
-        _LOG.debug("attachment revalidation failed", exc_info=True)
-        return []
-
-
-def _load_context_messages(
-    session,
-    *,
-    exclude_run_id: str = "",
-    exclude_client_request_id: str = "",
-) -> list[dict[str, str]]:
-    persisted: list[dict[str, str]] = []
-    persisted_seen: set[str] = set()
-    ws_id = str(getattr(session, "workspace_id", "") or "")
-    session_id = str(getattr(session, "session_id", "") or "")
-    if ws_id and session_id:
-        try:
-            from storage.message_store import SessionMessageStore
-
-            for m in SessionMessageStore(session_id=session_id, ws_id=ws_id).get_messages():
-                metadata = m.get("metadata") if isinstance(m.get("metadata"), dict) else {}
-                if (
-                    exclude_client_request_id
-                    and str(metadata.get("client_request_id") or "") == exclude_client_request_id
-                ):
-                    continue
-                _append_context_message(persisted, persisted_seen, m)
-        except Exception:
-            _LOG.debug("SessionMessageStore history read failed for %s", session_id, exc_info=True)
-
-    memory: list[dict[str, str]] = []
-    memory_seen: set[str] = set()
-    for i, msg in enumerate(list(getattr(session, "history", None) or [])):
-        role = str(getattr(msg, "role", "") or "")
-        content = str(getattr(msg, "content", "") or "")
-        client_request_id = str(getattr(msg, "client_request_id", "") or "")
-        if exclude_client_request_id and client_request_id == exclude_client_request_id:
-            continue
-        _append_context_message(memory, memory_seen, {
-            "message_id": getattr(msg, "id", "") or getattr(msg, "message_id", "") or f"mem:{i}:{role}:{content[:40]}",
-            "run_id": getattr(msg, "run_id", "") or "",
-            "role": role,
-            "content": content,
-            "metadata": {"client_request_id": client_request_id},
-        })
-    overlap = _history_overlap(persisted, memory)
-    persisted_ids = {m["message_id"] for m in persisted}
-    persisted_runs = {(m["run_id"], m["role"]) for m in persisted if m.get("run_id")}
-    persisted_requests = {
-        (m["client_request_id"], m["role"]) for m in persisted if m.get("client_request_id")
-    }
-    merged = persisted + [
-        m for m in memory[overlap:]
-        if m["message_id"] not in persisted_ids
-        and (m.get("run_id"), m["role"]) not in persisted_runs
-        and (m.get("client_request_id"), m["role"]) not in persisted_requests
-    ]
-    excluded = str(exclude_run_id or "").strip()
-    if excluded:
-        merged = [
-            message for message in merged
-            if not str(message.get("message_id") or "").startswith(f"{excluded}:")
-        ]
-    return merged
-
-
-def _history_overlap(
-    persisted: list[dict[str, str]], memory: list[dict[str, str]],
-) -> int:
-    """Return the longest persisted suffix duplicated at memory's prefix."""
-    for size in range(min(len(persisted), len(memory)), 0, -1):
-        if all(
-            left.get("role") == right.get("role")
-            and (
-                (left.get("message_id") and left.get("message_id") == right.get("message_id"))
-                or left.get("source_content", left.get("content"))
-                == right.get("source_content", right.get("content"))
-            )
-            for left, right in zip(persisted[-size:], memory[:size])
-        ):
-            return size
-    return 0
-
-
-def _append_context_message(messages: list[dict[str, Any]], seen: set[str], raw: Any) -> None:
-    if not isinstance(raw, dict):
-        return
-    role = str(raw.get("role") or "")
-    content = str(raw.get("content") or "").strip()
-    source_content = content
-    if role not in ("user", "assistant") or not content:
-        return
-    key = str(raw.get("message_id") or raw.get("id") or raw.get("run_id") or f"{role}:{content[:80]}")
-    if key in seen:
-        return
-    seen.add(key)
-    # Public stage history and redacted tool facts remain complete. These
-    # are not native reasoning blocks and must not impersonate tool messages.
-    metadata = raw.get("metadata") or {}
-    if role == "assistant":
-        stages = [str(stage.get("text") or "") for stage in
-                  (metadata.get("stage_outputs") or []) if isinstance(stage, dict)]
-        stages = [stage for stage in stages if stage and stage.strip() != content]
-        if stages:
-            content = "[Earlier assistant stages]\n" + "\n\n".join(stages) + "\n\n[Final response]\n" + content
-    tool_context = (metadata.get("tool_context") or [])
-    if role == "assistant" and isinstance(tool_context, list):
-        facts = []
-        for item in tool_context:
-            if not isinstance(item, dict):
-                continue
-            tool_id = str(item.get("tool_id") or "tool")
-            status = "succeeded" if item.get("ok") else "failed"
-            summary = str(item.get("summary") or "").strip()
-            errors = "; ".join(str(error) for error in list(item.get("errors") or []))
-            detail = summary or errors
-            facts.append(f"- {tool_id}: {status}" + (f" — {detail}" if detail else ""))
-        if facts:
-            content += "\n\n[Tool execution summary]\n" + "\n".join(facts)
-    message: dict[str, Any] = {
-        "message_id": key,
-        "role": role,
-        "content": content,
-        "source_content": source_content,
-    }
-    history_state = metadata.get("history_state")
-    run_id = str(raw.get("run_id") or metadata.get("run_id") or "").strip()
-    if run_id:
-        message["run_id"] = run_id
-    client_request_id = str(metadata.get("client_request_id") or "").strip()
-    if client_request_id:
-        message["client_request_id"] = client_request_id
-    if isinstance(history_state, dict) and history_state.get("schema") == "runtime.history_state.v1":
-        from storage.redaction import redact_value
-
-        message["history_state"] = redact_value(history_state)
-    messages.append(message)
-
-
-
-# ── Session history sync ──────────────────────────────────────
-
-def _sync_session_history(
-    session,
-    user_input: str,
-    final_response: str,
-    *,
-    include_user: bool = True,
-    include_assistant: bool = True,
-    run_id: str = "",
-    client_request_id: str = "",
-) -> None:
-    """Append current turn to session.history for context in next turns."""
-    try:
-        from agent.protocol.message import UserMessage, AssistantMessage
-
-        history = getattr(session, "history", None)
-        if history is None:
-            history = []
-            session.history = history
-
-        # Dedup check: skip if last entries already match
-        if include_user and not include_assistant and history:
-            last = history[-1]
-            if getattr(last, "role", "") == "user" and getattr(last, "content", "") == user_input:
-                return
-        if include_assistant and not include_user and history:
-            last = history[-1]
-            if getattr(last, "role", "") == "assistant" and getattr(last, "content", "") == final_response:
-                return
-        if len(history) >= 2:
-            last_user = history[-2]
-            last_asst = history[-1]
-            if (getattr(last_user, "role", "") == "user"
-                and getattr(last_asst, "role", "") == "assistant"
-                and getattr(last_user, "content", "") == user_input
-                and getattr(last_asst, "content", "") == final_response):
-                return
-
-        if not final_response and not (include_user and user_input):
-            return
-
-        if include_user and user_input:
-            history.append(UserMessage(
-                content=user_input,
-                message_id=(f"{client_request_id}:user" if client_request_id else f"{run_id}:user"),
-                run_id=run_id,
-                client_request_id=client_request_id,
-            ))
-        if include_assistant and final_response:
-            history.append(AssistantMessage(
-                content=final_response,
-                message_id=f"{run_id}:assistant",
-                run_id=run_id,
-                client_request_id=client_request_id,
-            ))
-    except Exception:
-        logging.getLogger(__name__).warning("Failed to sync session history", exc_info=True)
-
-def _make_tool_handler(
-    *,
-    client,
-    tool_id: str,
-    workspace_id: str,
-    session_id: str,
-    run_id: str,
-    trace_id: str,
-    requested_by: str,
-    skill_id: str = "",
-    skill_connection_ids: tuple[str, ...] = (),
-):
-    async def _handler(args: dict[str, Any]) -> dict[str, Any]:
-        from core.tools.context import ToolRuntimeContext, get_runtime_cancel_check
-
-        args = client.canonicalize_arguments(tool_id, dict(args or {}))
-        ctx = ToolRuntimeContext(
-            workspace_id=workspace_id,
-            session_id=session_id,
-            run_id=run_id,
-            trace_id=trace_id,
-            requested_by=requested_by,
-            skill=skill_id or None,
-            skill_connection_ids=skill_connection_ids,
-            module="ssot_runtime",
-            cancel_check=get_runtime_cancel_check(),
-        )
-        result = await asyncio.to_thread(client.invoke, tool_id, args, context=ctx)
-        payload = dict(result.output or {})
-        payload.setdefault("status", result.status)
-        payload.setdefault("ok", result.status in ("succeeded", "dry_run"))
-        payload.setdefault("summary", result.summary or "")
-        payload.setdefault("artifact_ids", list(result.artifact_ids or []))
-        payload.setdefault("warnings", list(result.warnings or []))
-        payload.setdefault("errors", list(result.errors or []))
-        payload.setdefault("duration_ms", result.duration_ms)
-        payload.setdefault("redacted", bool(result.redacted))
-        return payload
-
-    return _handler
+def _build_ssot_runtime_tool_registry(allowed_tool_ids=None):
+    return build_runtime_catalog(_tool_runtime_client(), allowed_tool_ids)

@@ -1017,7 +1017,7 @@ def test_ssot_runtime_resumes_interrupted_contract_without_attestation(monkeypat
                 metadata={"execution_outcome": "complete", "cognitive": {"outcome": "stop_completed"}},
             )
 
-    monkeypatch.setattr("agent.runtime.ssot_runtime._load_context_messages", lambda *_args, **_kwargs: [
+    monkeypatch.setattr("agent.runtime.ssot_context._load_context_messages", lambda *_args, **_kwargs: [
         {"role": "user", "content": "写入审计文件。", "run_id": "run-original"},
     ])
     monkeypatch.setattr("agent.runtime.ssot_runtime._build_engine", lambda **_kwargs: FakeEngine())

@@ -72,6 +72,15 @@ def local_preview_allowed(url: str, scope: BrowserScope | None = None) -> bool:
     origin = _preview_origin(url)
     if origin is None:
         return False
+    active_scope = scope or current_browser_scope()
+    principal = current_storage_principal()
+    expected_owner = principal_storage_key(principal) if principal else "local"
+    if active_scope.owner == expected_owner:
+        from core.tools.project_execution import environment_for
+        environment = environment_for(active_scope.workspace)
+        if environment is not None and environment.started and not environment.closed:
+            if origin == ("http", "127.0.0.1", environment.port):
+                return True
     try:
         grants = json.loads(os.environ.get("LZCORE_BROWSER_LOCAL_PREVIEWS", "{}"))
     except (ValueError, TypeError):

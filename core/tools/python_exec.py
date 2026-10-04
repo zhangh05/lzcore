@@ -124,36 +124,16 @@ def execute_best_effort_python_code(
             "error": f"Syntax check failed: {e}",
         }
 
-    # ── 3. Validate and inject bounded structured input ──
+    from core.tools.python_program import build_program, decode_program_output
     try:
-        input_json = json.dumps(input_data if input_data is not None else {}, ensure_ascii=False, default=str)
+        program = build_program(code, input_data)
     except (TypeError, ValueError) as exc:
         return {
             "ok": False, "exit_code": -1, "stdout": "", "stderr": "",
             "timeout_seconds": timeout, "error": f"input_data is not JSON serializable: {exc}",
         }
-    # ── 4. Setup temp directory and script path ──
     safe_run_id = re.sub(r"[^a-zA-Z0-9_-]", "_", str(run_id) or "unknown") or "unknown"
-    # Add a preamble that sanitizes the environment
-    safe_preamble = (
-        "# Auto-generated sandbox preamble — best-effort local sandbox, not container isolation\n"
-        "# The selected runtime executes the model-provided code as written.\n"
-        "import json as _runtime_json\n"
-        f"input_data = _runtime_json.loads({input_json!r})\n"
-    )
-    safe_postamble = (
-        "\ntry:\n"
-        "    _runtime_structured = result\n"
-        "except NameError:\n"
-        "    _runtime_structured = None\n"
-        "if _runtime_structured is not None:\n"
-        "    print('__LIANZHI_STRUCTURED__' + _runtime_json.dumps(_runtime_structured, ensure_ascii=False, default=str))\n"
-    )
-    temp_dir, script_path = write_python_temp_script(
-        workspace_id,
-        safe_run_id,
-        safe_preamble + "\n" + code + safe_postamble,
-    )
+    temp_dir, script_path = write_python_temp_script(workspace_id, safe_run_id, program)
 
     # ── 5. Execute in subprocess with minimal environment ──
     try:
@@ -170,26 +150,14 @@ def execute_best_effort_python_code(
             (result.stdout or ""),
             (result.stderr or ""),
         )
-        structured_output = None
-        visible_lines = []
-        for line in stdout.splitlines():
-            if line.startswith("__LIANZHI_STRUCTURED__"):
-                try:
-                    structured_output = json.loads(line[len("__LIANZHI_STRUCTURED__"):])
-                except json.JSONDecodeError:
-                    stderr_out = (stderr_out + "\nstructured result serialization failed").strip()
-                continue
-            visible_lines.append(line)
-        stdout = "\n".join(visible_lines)
-        return {
+        return decode_program_output({
             "ok": result.returncode == 0,
             "exit_code": result.returncode,
             "stdout": stdout,
             "stderr": stderr_out,
-            "structured_output": structured_output,
             "timeout_seconds": timeout,
             "error": "" if result.returncode == 0 else (stderr_out or f"Python exited with code {result.returncode}"),
-        }
+        })
     except subprocess.TimeoutExpired:
         return {
             "ok": False,

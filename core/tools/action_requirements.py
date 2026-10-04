@@ -53,8 +53,9 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("skill.manage", "mcp_call"): ("provider_id", "tool_name"),
     ("agent.manage", "spawn"): ("instruction",),
     ("agent.manage", "cancel"): ("subtask_id",),
-    ("agent.manage", "merge"): ("parent_task_id",),
-    ("system.manage", "context_index"): ("checkpoint_id",),
+    ("agent.manage", "start"): ("subtask_id",),
+    ("agent.manage", "merge"): (),
+    ("system.manage", "context_index"): (),
     ("system.manage", "context_read"): ("checkpoint_id", "message_index"),
     ("system.manage", "run_get"): ("run_id",),
     ("system.manage", "session_get"): ("session_id",),
@@ -190,7 +191,7 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("delete",), 
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("references", "reconcile_trash_preview"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("import", "reconcile_trash"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("list", "get", "status"), _READ))
-ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("spawn", "cancel", "merge"), _EXECUTE))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("spawn", "start", "cancel", "merge"), _EXECUTE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("knowledge.manage", ("search", "read", "list", "chunk"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("knowledge.manage", ("import", "reindex"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("memory.manage", ("search", "get", "review", "profile_get"), _READ))

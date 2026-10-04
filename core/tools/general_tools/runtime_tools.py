@@ -264,6 +264,11 @@ def handle_runtime_local_info(inv: ToolInvocation) -> dict:
     import socket
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    from core.tools.project_execution import environment_for
+
+    isolated = environment_for(_caller_workspace(inv))
+    if isolated is not None:
+        return _ok(inv, "project execution environment collected", isolated.descriptor())
 
     timezone_name = str(
         os.environ.get("LZCORE_DISPLAY_TIMEZONE") or "Asia/Shanghai"

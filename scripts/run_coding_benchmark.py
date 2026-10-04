@@ -32,6 +32,7 @@ def main() -> int:
     parser.add_argument("--workspace-id")
     parser.add_argument("--session-id", help="Continue an existing benchmark session in --output's isolated storage")
     parser.add_argument("--prompt", type=Path, help="An explicit benchmark or acceptance-feedback prompt")
+    parser.add_argument("--require-coding-team", action="store_true", help="Independently require successful exact-candidate QA and actual integration")
     parser.add_argument("--deadline", type=int, default=1800)
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535 or args.deadline < 1:
@@ -60,6 +61,7 @@ def main() -> int:
     from core.runtime_engine.models import MainAgentRuntimeControl
     from core.tools.integration import get_default_tool_runtime_client
     from core.tools.context import ToolRuntimeContext
+    from core.tools.project_execution import isolated_project
 
     ws = validate_workspace_id(args.workspace_id or f"bench_{args.case}_{uuid.uuid4().hex[:10]}")
     ensure_workspace(ws)
@@ -72,6 +74,7 @@ def main() -> int:
         raise RuntimeError("A real enabled provider with loaded credentials is required")
     prompt_path = args.prompt or ROOT / "harness/fixtures/coding_bench" / f"{args.case}.md"
     prompt = prompt_path.read_text(encoding="utf-8").replace("{{PROJECT_DIR}}", f"files/data/{args.case}").replace("{{PREVIEW_ORIGIN}}", origin)
+    prompt += "\n执行环境是受系统隔离的 Linux 容器；仅工程目录可写，依赖通过专用 registry 代理获取。预览必须在容器内绑定 0.0.0.0，平台只向宿主的 127.0.0.1 发布指定端口。不要修改隔离环境或启动其他宿主服务。\n"
     session_id = args.session_id or create_session(ws, title=f"Coding benchmark: {args.case}")["session_id"]
     report = base / "reports" / ws / uuid.uuid4().hex[:10]
     report.mkdir(parents=True)
@@ -84,7 +87,7 @@ def main() -> int:
     # Dirty experimental sources are part of reproducibility, too. Limit this
     # inventory to code/test roots; user output and configuration are excluded.
     untracked = subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard", "-z", "--",
-                                        "agent", "core", "storage", "harness", "scripts"], cwd=ROOT)
+                                        "agent", "core", "storage", "harness", "scripts", "extensions", "frontend"], cwd=ROOT)
     metadata["untracked_source_sha256"] = {
         name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
         for name in untracked.decode().split("\0") if name and (ROOT / name).is_file()
@@ -104,9 +107,16 @@ def main() -> int:
             print(json.dumps({key: event[key] for key in ("type", "action", "ok", "iteration") if key in event}), flush=True)
 
     print(json.dumps({"report": str(report), "workspace": ws, "session": session_id}), flush=True)
-    StreamEmitter.set_realtime_callback(on_event)
-    timer.start()
+    project = workspace_root(ws) / "files/data" / args.case
+    environment_scope = isolated_project(ws, project, args.port)
+    environment = None
+    exit_code = 1
     try:
+        environment = environment_scope.__enter__()
+        metadata["execution_environment"] = environment.descriptor()
+        (report / "configuration.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        StreamEmitter.set_realtime_callback(on_event)
+        timer.start()
         result = AgentApp().submit_user_message(prompt, workspace_id=ws, session_id=session_id,
             metadata={"transport": "coding_benchmark"},
             runtime_control=MainAgentRuntimeControl(cancel_check=cancel.is_set))
@@ -116,13 +126,38 @@ def main() -> int:
         (report / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         print(json.dumps({"report": str(report), "runtime_ok": result.ok,
                           "independent_acceptance": "NOT VERIFIED", "duration_seconds": payload["benchmark_duration_seconds"]}), flush=True)
-        return 0 if result.ok else 1
+        team_ok = True
+        if args.require_coding_team:
+            from scripts.benchmark_team_acceptance import verify_team
+            try:
+                team_evidence = verify_team(ws, session_id, f"files/data/{args.case}")
+            except (AssertionError, ValueError, KeyError) as exc:
+                team_ok = False
+                team_evidence = {"status": "FAIL", "error": str(exc)}
+            (report / "team_acceptance.json").write_text(json.dumps(team_evidence, indent=2), encoding="utf-8")
+            print(json.dumps({"team_acceptance": team_evidence["status"]}), flush=True)
+        acceptance = subprocess.run([sys.executable, str(ROOT / "scripts/evaluate_coding_benchmark.py"),
+            "--case", args.case, "--project", str(project), "--origin", origin,
+            "--report", str(report / "acceptance.json"), "--runtime-container", environment.name,
+            "--runtime-image", environment.image_id, "--runtime-project", environment.mount_target],
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+        (report / "acceptance.log").write_text(acceptance.stdout + acceptance.stderr, encoding="utf-8")
+        print(json.dumps({"independent_acceptance_exit_code": acceptance.returncode}), flush=True)
+        exit_code = 0 if result.ok and acceptance.returncode == 0 and team_ok else 1
     finally:
         timer.cancel()
         StreamEmitter.clear_realtime_callback()
+        if environment is not None:
+            environment_scope.__exit__(None, None, None)
+            cleanup = environment.descriptor()
+            (report / "execution_cleanup.json").write_text(json.dumps(cleanup, indent=2), encoding="utf-8")
+            if not cleanup["cleanup_confirmed"]:
+                exit_code = 1
+                print(json.dumps({"execution_cleanup": "UNKNOWN", "automatic_retry_allowed": False}), flush=True)
         # Release precisely this Agent browser session, through normal policy.
         get_default_tool_runtime_client().invoke("browser.manage", {"action": "close"},
             context=ToolRuntimeContext(workspace_id=ws, session_id=session_id, requested_by="turn_runner"))
+    return exit_code
 
 
 if __name__ == "__main__":

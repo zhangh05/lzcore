@@ -1,3 +1,4 @@
+from extensions.network_operations import device_tools, network_inventory, network_execution, network_inspections
 import json
 from pathlib import Path
 
@@ -170,7 +171,7 @@ def test_network_read_tool_runs_through_default_tool_runtime():
 
 def test_network_configuration_requires_skill_authorization_before_opening_socket(monkeypatch):
     from extensions.network_operations import service
-    monkeypatch.setattr(service, "probe_target", lambda *_a, **_kw: pytest.fail("unauthorized write reached transport"))
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_a, **_kw: pytest.fail("unauthorized write reached transport"))
     reset_extension_cache_for_tests()
     reset_default_client_for_tests()
     result = get_default_tool_runtime_client().invoke(

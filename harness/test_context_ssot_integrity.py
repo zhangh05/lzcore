@@ -32,7 +32,7 @@ def test_recent_history_preserves_all_messages(monkeypatch):
         {"role": "user", "content": f"old-{index}-" + "x" * 500}
         for index in range(20)
     ]
-    monkeypatch.setattr("agent.runtime.ssot_runtime._load_context_messages", lambda *_a, **_k: messages)
+    monkeypatch.setattr("agent.runtime.ssot_context._load_context_messages", lambda *_a, **_k: messages)
     text = _build_history_block(object(), user_input="continue")
     assert "old-19-" in text
     assert "old-0-" in text

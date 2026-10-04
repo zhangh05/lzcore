@@ -1,3 +1,4 @@
+from extensions.network_operations import device_tools, network_inventory, network_execution, network_inspections
 """Isolated regressions for identity, endpoint transactions and late network IO."""
 from contextvars import ContextVar
 import threading
@@ -12,7 +13,7 @@ from storage.principal import ContextThreadPoolExecutor, current_storage_princip
 def isolated(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     monkeypatch.setenv("LZCORE_MASTER_KEY", "lifecycle-test-key")
-    monkeypatch.setattr(service, "resolve_source_address", lambda *_: "")
+    monkeypatch.setattr(device_tools, "resolve_source_address", lambda *_: "")
 
 
 def register(name="CE1", port=30001):
@@ -38,7 +39,7 @@ def test_six_authorized_devices_only_two_explicit_targets_are_contacted(monkeypa
             return {"ok": False, "error": "offline"}
         return {"ok": True, "read_ok": True, "output": {"display cur": "sysname CE"},
                 "command_results": [{"command": "display cur", "complete": True}]}
-    monkeypatch.setattr(service, "probe_target", probe)
+    monkeypatch.setattr(device_tools, "probe_target", probe)
     resolved = service.resolve_workbench_selection("default", {"skill_id": skill["skill_id"]})
     assert seen == []
     def invocation(arguments):
@@ -100,7 +101,7 @@ def test_probe_never_resurrects_or_overwrites_newer_state(monkeypatch, mutation)
             entered.set()
             assert release.wait(5), "management operation blocked on network IO"
             return {"ok": True, "duration_ms": 99}
-        monkeypatch.setattr(service, "probe_target", slow_probe)
+        monkeypatch.setattr(device_tools, "probe_target", slow_probe)
         with ContextThreadPoolExecutor(max_workers=2) as pool:
             pending = pool.submit(service.test_connection, "default", cid)
             try:
@@ -112,7 +113,7 @@ def test_probe_never_resurrects_or_overwrites_newer_state(monkeypatch, mutation)
                 elif mutation == "edit_host":
                     service.save_device("default", {**device, "host": "10.0.0.2"})
                 elif mutation == "newer_probe":
-                    monkeypatch.setattr(service, "probe_target", lambda *_a, **_k: {"ok": False, "error": "newest_failure"})
+                    monkeypatch.setattr(device_tools, "probe_target", lambda *_a, **_k: {"ok": False, "error": "newest_failure"})
                     # The next invocation can own the observation while its
                     # network IO waits for this endpoint's execution lock.
                     first_probe = service.get_connection("default", cid, include_secret=True)["probe_id"]
@@ -159,7 +160,7 @@ def test_on_demand_semantic_inspection_uses_authenticated_storage(monkeypatch):
         seen.append(current_storage_principal())
         return {"ok": True, "read_ok": True, "output": {"display version": "H3C"},
                 "command_results": [{"command": "display version", "complete": True}]}
-    monkeypatch.setattr(service, "probe_target", probe)
+    monkeypatch.setattr(device_tools, "probe_target", probe)
     with storage_principal("alice"):
         pairs = [register("CE1"), register("CE2", 30002)]
         ids = [connection["connection_id"] for _, connection in pairs]
@@ -225,7 +226,7 @@ def test_explicit_migration_preserves_shared_credentials_and_updates_skill_refs(
         assert service.reconcile_duplicate_connections("default") == 1
         assert service.reconcile_duplicate_connections("default") == 0
         assert service.ExtensionSecretStore.get(original["password_ref"]) == "shared-secret"
-        monkeypatch.setattr(service, "probe_target", lambda *_a, **_k: {"ok": True})
+        monkeypatch.setattr(device_tools, "probe_target", lambda *_a, **_k: {"ok": True})
         result = service.resolve_workbench_selection("default", {"skill_id": skill["skill_id"]})
         assert len(result["connection_ids"]) == 1
         assert service.delete_connection("default", result["connection_ids"][0])
@@ -274,7 +275,7 @@ def test_historical_asset_task_can_still_retry_through_durable_worker(monkeypatc
             return {"ok": True, "read_ok": True,
                     "output": {command: "historical-evidence" for command in commands},
                     "command_results": [{"command": command, "complete": True} for command in commands]}
-        monkeypatch.setattr(service, "collect_connection", collect)
+        monkeypatch.setattr(network_inspections, "collect_connection", collect)
         retried = service.retry_inspection("default", task["task_id"])
         run_job("default", retried["job_id"])
         assert service.get_inspection("default", retried["task_id"])["status"] == "succeeded"

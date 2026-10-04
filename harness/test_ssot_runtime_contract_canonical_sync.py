@@ -45,7 +45,7 @@ def test_agent_contract_exposes_current_runtime_actions():
 
     properties = get_contract("agent.manage").input_schema["properties"]
     actions = properties["action"]["enum"]
-    assert actions == ["spawn", "list", "get", "status", "cancel", "merge"]
+    assert actions == ["spawn", "start", "list", "get", "status", "cancel", "merge"]
     assert "instruction" in properties
     assert "profile_id" in properties
     assert properties["profile_id"]["enum"] == list(BUILTIN_PROFILES)
@@ -63,7 +63,7 @@ def test_llm_projection_preserves_complete_schema_constraints():
     assert weather["properties"]["locations"]["minItems"] == 2
     assert weather["properties"]["locations"]["maxItems"] == 10
     assert tools["agent__manage"]["parameters"]["properties"]["profile_id"]["enum"] == [
-        "research_agent", "file_agent", "data_agent",
+        "research_agent", "file_agent", "data_agent", "coding_agent", "frontend_agent", "qa_agent",
     ]
     assert "data_agent=" in tools["agent__manage"]["parameters"]["properties"]["profile_id"]["description"]
     assert "write_artifact=>filename+content" in tools["workspace__file"]["description"]
@@ -98,7 +98,7 @@ def test_semantic_validator_rejects_unknown_profile_and_array_cardinality():
     assert result.valid is False
     by_code = {error.code: error for error in result.errors}
     assert by_code["ARG_ENUM_INVALID"].details["allowed_values"] == [
-        "research_agent", "file_agent", "data_agent",
+        "research_agent", "file_agent", "data_agent", "coding_agent", "frontend_agent", "qa_agent",
     ]
     assert by_code["ARG_LENGTH_INVALID"].details["minItems"] == 2
     assert by_code["UNKNOWN_ARGUMENT"].details["field"] == "invented"

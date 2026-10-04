@@ -1,4 +1,5 @@
 from __future__ import annotations
+from extensions.network_operations import device_tools, network_inventory, network_execution, network_inspections
 
 import json
 import threading
@@ -54,7 +55,7 @@ def test_published_skill_has_configuration_capability_by_default(monkeypatch, tm
     inv = SimpleNamespace(workspace_id="default", skill=skill["skill_id"], skill_connection_ids=(conn["connection_id"],),
                           arguments={"action": "configure", "connection_id": conn["connection_id"], "commands": ["system-view", "return"]})
     calls = []
-    monkeypatch.setattr(service, "probe_target", lambda *a, **kw: calls.append(kw) or {"ok": True, "configuration_ok": True})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *a, **kw: calls.append(kw) or {"ok": True, "configuration_ok": True})
     snapshot = service.resolve_workbench_selection("default", {"skill_id": skill["skill_id"]})
     assert "capabilities" not in snapshot
     assert device_manage(inv)["configuration_ok"]
@@ -96,7 +97,7 @@ def test_configuration_scope_is_checked_once_at_the_tool_boundary(monkeypatch, t
     skill = service.save_skill("default", {
         "name": "scope", "device_ids": [conn["device_id"]], "connection_ids": [conn["connection_id"]],
     })
-    monkeypatch.setattr(service, "probe_target", lambda *a, **kw: pytest.fail("must not open a socket"))
+    monkeypatch.setattr(device_tools, "probe_target", lambda *a, **kw: pytest.fail("must not open a socket"))
     result = device_manage(SimpleNamespace(
         workspace_id="default", skill=skill["skill_id"], skill_connection_ids=(conn["connection_id"],),
         arguments={"action": "configure", "connection_id": other["connection_id"], "commands": ["system-view"]},
@@ -109,7 +110,7 @@ def test_configuration_failure_retains_unknown_effects(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     conn = _register_connection("default", {"name": "CE", "host": "127.0.0.1", "protocol": "telnet", "vendor": "h3c"})
     skill = service.save_skill("default", {"name": "test", "device_ids": [conn["device_id"]], "connection_ids": [conn["connection_id"]]})
-    monkeypatch.setattr(service, "probe_target", lambda *a, **kw: {"ok": False, "status": "unknown", "execution_may_continue": True, "error": "configuration_outcome_unknown"})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *a, **kw: {"ok": False, "status": "unknown", "execution_may_continue": True, "error": "configuration_outcome_unknown"})
     inv = SimpleNamespace(workspace_id="default", skill=skill["skill_id"], arguments={"action": "configure", "connection_id": conn["connection_id"], "commands": ["system-view"]})
     result = device_manage(inv)
     assert result["ok"] is False and result["status"] == "unknown"
@@ -162,7 +163,7 @@ def _run_inspection(monkeypatch, workspace_id, connection_ids=None, commands=Non
     from jobs.runner import run_job
     with monkeypatch.context() as scoped:
         if collector is not None:
-            scoped.setattr(service, "collect_connection", _execution_collector(collector))
+            scoped.setattr(network_inspections, "collect_connection", _execution_collector(collector))
         task = service.enqueue_connection_inspection(workspace_id, connection_ids, commands, script_id)
         run_job(workspace_id, task["job_id"])
         return service.get_inspection(workspace_id, task["task_id"])
@@ -205,7 +206,7 @@ def test_telnet_connection_supports_optional_credentials_custom_port_and_skill_b
     def fake_probe(target, **_kwargs):
         captured.update({"protocol": target.protocol, "port": target.port, "username": target.credential.username, "source_address": target.source_address})
         return {"ok": True, "status": "succeeded", "duration_ms": 4, "stages": []}
-    monkeypatch.setattr(service, "probe_target", fake_probe)
+    monkeypatch.setattr(device_tools, "probe_target", fake_probe)
     connection = service.save_connection("default", {"device_id": device["device_id"], "protocol": "telnet", "port": 2323, "auth_method": "none", "source_address": "100.64.0.10"})
     assert captured == {"protocol": "telnet", "port": 2323, "username": "", "source_address": "100.64.0.10"}
     assert connection["verified"] is True
@@ -236,7 +237,7 @@ def test_connection_rejects_invalid_source_address(monkeypatch, tmp_path):
 def test_same_device_protocol_and_port_update_one_logical_connection(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "CE1", "host": "100.117.194.25", "vendor": "h3c"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "status": "succeeded", "duration_ms": 3})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "status": "succeeded", "duration_ms": 3})
     first = service.save_connection("default", {
         "device_id": device["device_id"], "name": "首次登记", "protocol": "telnet", "port": 30001, "auth_method": "none",
     })
@@ -256,7 +257,7 @@ def test_same_device_protocol_and_port_update_one_logical_connection(monkeypatch
 
 def test_device_identity_requires_both_name_and_host(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "status": "succeeded"})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "status": "succeeded"})
 
     ce1 = service.save_device("default", {"name": "CE1", "host": "100.117.194.25", "vendor": "h3c"})
     ce2 = service.save_device("default", {"name": "CE2", "host": "100.117.194.25", "vendor": "h3c"})
@@ -282,7 +283,7 @@ def test_device_identity_requires_both_name_and_host(monkeypatch, tmp_path):
 def test_legacy_duplicate_connections_are_merged_without_dangling_skill_refs(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "CE1", "host": "100.117.194.25", "vendor": "h3c"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "status": "succeeded"})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "status": "succeeded"})
     canonical = service.save_connection("default", {
         "device_id": device["device_id"], "protocol": "telnet", "port": 30001, "auth_method": "none",
     })
@@ -322,7 +323,7 @@ def test_source_address_is_automatically_selected_for_vpn_scope(monkeypatch):
 def test_skill_keeps_configured_connection_when_last_probe_failed(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": False, "status": "failed", "error": "offline"})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": False, "status": "failed", "error": "offline"})
     connection = service.save_connection("default", {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"})
     skill = service.save_skill("default", {"name": "可主动重连", "device_ids": [device["device_id"]], "connection_ids": [connection["connection_id"]]})
 
@@ -338,7 +339,7 @@ def test_workbench_selection_is_pure_and_never_expands_explicit_empty_scope(monk
                                          "connection_ids": [c["connection_id"] for c in connections]})
     def forbidden_probe(*args, **kwargs):
         raise AssertionError("Skill selection must not open any connection")
-    monkeypatch.setattr(service, "probe_target", forbidden_probe)
+    monkeypatch.setattr(device_tools, "probe_target", forbidden_probe)
     before = service._raw_connections("default")
     for _ in range(3):
         resolved = service.resolve_workbench_selection("default", {"skill_id": skill["skill_id"]})
@@ -358,7 +359,7 @@ def test_workbench_selection_is_pure_and_never_expands_explicit_empty_scope(monk
 def test_workbench_selection_keeps_failed_history_without_claiming_current_failure(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
-    monkeypatch.setattr(service, "probe_target", lambda *_a, **_k: {"ok": False, "error": "offline"})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_a, **_k: {"ok": False, "error": "offline"})
     connection = service.save_connection("default", {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"})
     skill = service.save_skill("default", {"name": "offline", "device_ids": [device["device_id"]], "connection_ids": [connection["connection_id"]]})
     resolved = service.resolve_workbench_selection("default", {"skill_id": skill["skill_id"]})
@@ -507,7 +508,7 @@ def test_visible_connection_id_suffix_resolves_to_its_canonical_skill_connection
         "connection_ids": [connection["connection_id"]],
     })
     seen = {}
-    monkeypatch.setattr(service, "probe_target", lambda _target, **kwargs: seen.update(kwargs) or {
+    monkeypatch.setattr(device_tools, "probe_target", lambda _target, **kwargs: seen.update(kwargs) or {
         "ok": True, "configuration_ok": True,
     })
 
@@ -620,10 +621,10 @@ def test_device_manage_syntax_rejection_returns_model_guidance_without_runtime_c
 def test_device_manage_reconnects_expired_authorized_connection(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": False, "status": "failed", "error": "offline"})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": False, "status": "failed", "error": "offline"})
     connection = service.save_connection("default", {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"})
     skill = service.save_skill("default", {"name": "主动连接", "device_ids": [device["device_id"]], "connection_ids": [connection["connection_id"]]})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "status": "succeeded", "duration_ms": 4})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "status": "succeeded", "duration_ms": 4})
 
     result = device_manage(SimpleNamespace(
         workspace_id="default", skill=skill["skill_id"],
@@ -638,10 +639,10 @@ def test_device_manage_reconnects_expired_authorized_connection(monkeypatch, tmp
 def test_device_manage_returns_unavailable_connection_as_llm_decision_evidence(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     connection = service.save_connection("default", {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"})
     skill = service.save_skill("default", {"name": "主动连接", "device_ids": [device["device_id"]], "connection_ids": [connection["connection_id"]]})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": False, "status": "failed", "error": "timed out"})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": False, "status": "failed", "error": "timed out"})
 
     result = device_manage(SimpleNamespace(
         workspace_id="default", skill=skill["skill_id"],
@@ -659,7 +660,7 @@ def test_workbench_selected_connection_boundary_is_enforced(monkeypatch, tmp_pat
     _setup(monkeypatch, tmp_path)
     first = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
     second = service.save_device("default", {"name": "R2", "host": "10.0.0.2"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     first_connection = service.save_connection("default", {"device_id": first["device_id"], "protocol": "telnet", "auth_method": "none"})
     second_connection = service.save_connection("default", {"device_id": second["device_id"], "protocol": "telnet", "auth_method": "none"})
     skill = service.save_skill("default", {
@@ -680,7 +681,7 @@ def test_workbench_skill_scope_filters_inventory_skills_and_inspection_lifecycle
     _setup(monkeypatch, tmp_path)
     first = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
     second = service.save_device("default", {"name": "R2", "host": "10.0.0.2"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     first_connection = service.save_connection("default", {
         "device_id": first["device_id"], "protocol": "telnet", "auth_method": "none",
     })
@@ -739,7 +740,7 @@ def test_probe_requires_and_then_saves_host_key(monkeypatch, tmp_path):
             return {"ok": False, "status": "blocked", "fingerprint": "SHA256:test", "requires_host_key_acceptance": True}
         return {"ok": True, "status": "succeeded", "fingerprint": "SHA256:test", "stages": [{"name": "auth", "status": "ok"}]}
 
-    monkeypatch.setattr(service, "probe_target", fake_probe)
+    monkeypatch.setattr(device_tools, "probe_target", fake_probe)
     blocked = service.test_connection("default", asset["connection_id"])
     assert blocked["requires_host_key_acceptance"] is True
     accepted = service.test_connection("default", asset["connection_id"], accept_host_key=True)
@@ -840,7 +841,7 @@ def test_device_and_skill_catalog_use_current_entities(monkeypatch, tmp_path):
     second = service.save_device("default", {"name": "R2", "host": "10.0.0.2"})
     result = devices_read(SimpleNamespace(workspace_id="default", arguments={}))
     assert {item["device_id"] for item in result["devices"]} == {first["device_id"], second["device_id"]}
-    monkeypatch.setattr(service, "get_connection", lambda *_args, **_kwargs: {"connection_id": "connection_1", "device_id": first["device_id"], "verified": True})
+    monkeypatch.setattr(network_inventory, "get_connection", lambda *_args, **_kwargs: {"connection_id": "connection_1", "device_id": first["device_id"], "verified": True})
     skill = service.save_skill("default", {"name": "核心设备", "device_ids": [first["device_id"]], "connection_ids": ["connection_1"]})
     listed = skills_read(SimpleNamespace(workspace_id="default", arguments={}, skill=None))
     assert listed["skills"][0]["skill_id"] == skill["skill_id"]
@@ -935,10 +936,10 @@ def test_network_extension_llm_descriptions_expose_actions_and_arguments():
 def test_workbench_catalog_exposes_configured_resources_regardless_of_last_probe(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     connection = service.save_connection("default", {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"})
     skill = service.save_skill("default", {"name": "核心巡检", "device_ids": [device["device_id"]], "connection_ids": [connection["connection_id"]]})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": False, "error": "expired"})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": False, "error": "expired"})
     service.test_connection("default", connection["connection_id"])
     catalog = service.workbench_skill_catalog("default")
     assert catalog == [{
@@ -951,7 +952,7 @@ def test_workbench_catalog_exposes_configured_resources_regardless_of_last_probe
 def test_connection_inspection_keeps_connection_identity_end_to_end(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1", "vendor": "h3c"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     connection = service.save_connection(
         "default",
         {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"},
@@ -982,7 +983,7 @@ def test_connection_inspection_isolates_expired_target_failure(monkeypatch, tmp_
     _setup(monkeypatch, tmp_path)
     first = service.save_device("default", {"name": "R1", "host": "10.0.0.1", "vendor": "h3c"})
     second = service.save_device("default", {"name": "R2", "host": "10.0.0.2", "vendor": "h3c"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     first_connection = service.save_connection("default", {"device_id": first["device_id"], "protocol": "telnet", "auth_method": "none"})
     second_connection = service.save_connection("default", {"device_id": second["device_id"], "protocol": "telnet", "auth_method": "none"})
     second_record = service.get_connection("default", second_connection["connection_id"], include_secret=True)
@@ -1014,7 +1015,7 @@ def test_connection_inspection_isolates_expired_target_failure(monkeypatch, tmp_
 def test_hard_deleting_last_connection_removes_depleted_skill(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     connection = service.save_connection("default", {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"})
     skill = service.save_skill("default", {"name": "临时巡检", "device_ids": [device["device_id"]], "connection_ids": [connection["connection_id"]]})
     assert service.delete_connection("default", connection["connection_id"]) is True
@@ -1024,7 +1025,7 @@ def test_hard_deleting_last_connection_removes_depleted_skill(monkeypatch, tmp_p
 def test_skill_tool_allowlist_is_validated_and_enforced(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     connection = service.save_connection("default", {"device_id": device["device_id"], "protocol": "telnet", "auth_method": "none"})
     skill = service.save_skill("default", {
         "name": "仅巡检", "device_ids": [device["device_id"]],
@@ -1041,7 +1042,7 @@ def test_skill_base_tools_and_configuration_are_intrinsic(monkeypatch, tmp_path)
     _setup(monkeypatch, tmp_path)
     conn = _register_connection("default", {"name": "CE", "host": "127.0.0.1", "protocol": "telnet", "vendor": "h3c"})
     skill = service.save_skill("default", {"name": "test", "device_ids": [conn["device_id"]], "connection_ids": [conn["connection_id"]], "allowed_tool_ids": []})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True})
     assert skill["allowed_tool_ids"] == [
         service.SKILL_BASE_TOOL_ID,
         "network.operations.context_read",
@@ -1065,7 +1066,7 @@ def test_skill_base_tools_and_configuration_are_intrinsic(monkeypatch, tmp_path)
 def test_switching_connection_auth_removes_obsolete_secret_refs(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     device = service.save_device("default", {"name": "R1", "host": "10.0.0.1"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     connection = service.save_connection("default", {
         "device_id": device["device_id"], "protocol": "telnet", "auth_method": "password",
         "username": "ops", "password": "secret-value",
@@ -1084,7 +1085,7 @@ def test_device_identity_change_invalidates_connections_and_connection_cannot_mo
     _setup(monkeypatch, tmp_path)
     first = service.save_device("default", {"name": "R1", "host": "10.0.0.1", "vendor": "h3c"})
     second = service.save_device("default", {"name": "R2", "host": "10.0.0.2", "vendor": "h3c"})
-    monkeypatch.setattr(service, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_args, **_kwargs: {"ok": True, "duration_ms": 1})
     connection = service.save_connection(
         "default", {"device_id": first["device_id"], "protocol": "telnet", "auth_method": "none"},
     )
@@ -1213,7 +1214,7 @@ def test_connection_inspection_evidence_summary(monkeypatch, tmp_path):
 
 def test_user_inspection_uses_durable_job_worker_and_cancel(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(service, "collect_connection", _execution_collector(lambda _asset, commands: {command: "ok" for command in commands}))
+    monkeypatch.setattr(network_inspections, "collect_connection", _execution_collector(lambda _asset, commands: {command: "ok" for command in commands}))
     script = service.save_inspection_script("default", {
         "name": "持久 Worker 巡检", "vendors": ["h3c"], "commands": ["display version"],
     })
@@ -1258,7 +1259,7 @@ def test_durable_plans_require_explicit_commands_and_are_replayable(monkeypatch,
     asset = _register_connection("default", {
         "name": "Core-Plan", "host": "10.0.0.21", "username": "ops", "password": "secret", "vendor": "h3c",
     })
-    monkeypatch.setattr(service, "collect_connection", _execution_collector(lambda _asset, commands: {command: "ok" for command in commands}))
+    monkeypatch.setattr(network_inspections, "collect_connection", _execution_collector(lambda _asset, commands: {command: "ok" for command in commands}))
     from jobs.runner import run_job
 
     import pytest
@@ -1279,7 +1280,7 @@ def test_all_device_failures_fail_both_inspection_and_job(monkeypatch, tmp_path)
     asset = _register_connection("default", {
         "name": "Core-Fail", "host": "10.0.0.22", "username": "ops", "password": "secret", "vendor": "h3c",
     })
-    monkeypatch.setattr(service, "collect_connection", lambda _asset, _commands, **_kwargs: (_ for _ in ()).throw(RuntimeError("auth failed")))
+    monkeypatch.setattr(network_inspections, "collect_connection", lambda _asset, _commands, **_kwargs: (_ for _ in ()).throw(RuntimeError("auth failed")))
     task = service.enqueue_connection_inspection("default", [asset["connection_id"]], commands=["display version"])
     from jobs.runner import run_job
     from jobs.store import get_job
@@ -1414,7 +1415,7 @@ def test_evidence_failure_transitions_task_to_terminal_failure(monkeypatch, tmp_
     asset = _register_connection("default", {
         "name": "Core-Evidence", "host": "10.0.0.24", "username": "ops", "password": "secret", "vendor": "h3c",
     })
-    monkeypatch.setattr(service, "_save_evidence_artifact", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("disk full")))
+    monkeypatch.setattr(network_inspections, "_save_evidence_artifact", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("disk full")))
     failed = _run_inspection(monkeypatch,
         "default", [asset["connection_id"]], commands=["display version"], collector=lambda _asset, commands: {command: "ok" for command in commands}, background=False,
     )

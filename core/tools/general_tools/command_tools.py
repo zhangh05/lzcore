@@ -91,6 +91,11 @@ _DESTRUCTIVE_SHELL = (
 
 
 def _reject_unsafe_local_exec(inv: ToolInvocation, command: str) -> dict | None:
+    from core.tools.project_execution import environment_for
+    if inv.workspace_id and environment_for(_caller_workspace(inv)) is not None:
+        # The kernel-enforced environment owns file/network permissions.
+        # Host command-pattern policy must not restrict project-local builds.
+        return None
     if any(pattern.search(command) for pattern in _DESTRUCTIVE_SHELL):
         return _error_inv(inv, "destructive shell action is blocked")
     config_dir = os.environ.get("LZCORE_CONFIG_DIR", "").strip()
@@ -103,6 +108,12 @@ def _reject_unsafe_local_exec(inv: ToolInvocation, command: str) -> dict | None:
 
 
 def handle_command_exec(inv: ToolInvocation) -> dict:
+    from storage.project_changes import workspace_files_lock
+    with workspace_files_lock(_caller_workspace(inv)):
+        return _handle_command_exec(inv)
+
+
+def _handle_command_exec(inv: ToolInvocation) -> dict:
     """Run a local shell command through the native platform shell.
 
     Linux/macOS use ``/bin/bash -c``; Windows uses ``cmd.exe /d /s /c``.
@@ -155,7 +166,10 @@ def handle_command_exec(inv: ToolInvocation) -> dict:
             and not _is_sensitive_env_key(str(k))
         }
 
-    result = _run_shell(
+    from core.tools.project_execution import environment_for
+    isolated = environment_for(workspace_id)
+    runner = isolated.execute if isolated is not None else _run_shell
+    result = runner(
         command,
         cwd=cwd,
         env=env_vars,
@@ -170,6 +184,12 @@ def handle_command_exec(inv: ToolInvocation) -> dict:
     return _result(inv, result.pop("ok", False), result)
 
 def handle_powershell_script(inv: ToolInvocation) -> dict:
+    from storage.project_changes import workspace_files_lock
+    with workspace_files_lock(_caller_workspace(inv)):
+        return _handle_powershell_script(inv)
+
+
+def _handle_powershell_script(inv: ToolInvocation) -> dict:
     """PowerShell script execution on Windows.
 
     Accepts a PowerShell command string, executes via powershell -Command.
@@ -178,6 +198,9 @@ def handle_powershell_script(inv: ToolInvocation) -> dict:
     Security: subprocess uses a minimal safe environment (mirrors
     python_exec's P0-3 model) — no API keys, tokens, or proxy config.
     """
+    from core.tools.project_execution import environment_for
+    if inv.workspace_id and environment_for(_caller_workspace(inv)) is not None:
+        return _unavailable(inv, "isolated project uses Linux; use exec.run shell or python")
     import platform
     if platform.system() != "Windows":
         return _unavailable(inv, "PowerShell execution only available on Windows. Use exec.run on Linux/macOS.")
@@ -239,6 +262,9 @@ def handle_powershell_script(inv: ToolInvocation) -> dict:
 def handle_slash_run(inv: ToolInvocation) -> dict:
     """Execute a slash command via the command system."""
     args = inv.arguments
+    from core.tools.project_execution import environment_for
+    if inv.workspace_id and environment_for(_caller_workspace(inv)) is not None:
+        return _error_inv(inv, "platform slash commands do not run in isolated projects; use shell or python")
     command = str(args.get("command", "")).strip()
     cmd_args = str(args.get("args", "")).strip()
 
@@ -255,6 +281,12 @@ def handle_slash_run(inv: ToolInvocation) -> dict:
         return _error_inv(inv, str(e)[:200])
 
 def handle_python_exec(inv: ToolInvocation) -> dict:
+    from storage.project_changes import workspace_files_lock
+    with workspace_files_lock(_caller_workspace(inv)):
+        return _handle_python_exec(inv)
+
+
+def _handle_python_exec(inv: ToolInvocation) -> dict:
     """Execute Python data processing through the policy-selected runner.
 
     Runs Python in the selected execution environment. The runtime preserves
@@ -272,6 +304,12 @@ def handle_python_exec(inv: ToolInvocation) -> dict:
 
     try:
         validate_workspace_id(workspace_id)
+        from core.tools.project_execution import environment_for
+        isolated = environment_for(workspace_id)
+        if isolated is not None:
+            result = isolated.execute_python(code, input_data=input_data, timeout=timeout,
+                                             cancel_check=getattr(inv, "cancel_check", None))
+            return _result(inv, result.pop("ok", False), result)
         from core.tools.python_exec import execute_python_code
         result = execute_python_code(
             code=code,

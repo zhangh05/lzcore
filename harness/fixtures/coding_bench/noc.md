@@ -24,3 +24,7 @@ POST /api/test/stress → 使用同一个真实模拟引擎扩展到以上压力
 POST /api/test/step {seconds:10} 使用同一模拟引擎确定性推进，便于验证增量、故障与恢复。正常界面必须仍可持续实时运行，测试接口不能替代实际逻辑。
 
 自主验证重点：noBuffers 与低带宽高 PPS；核心/WAN 故障依赖根因与恢复；配置修改/Diff/审计/回滚；压力模式筛选/切页/图表/拓扑。最终逐项 PASS/FAIL/NOT VERIFIED：启动、构建、设备、接口、计数器、实时流、拓扑、曲线、PPS、CRC、noBuffers、丢包、规则、去重、恢复、Syslog、OSPF/BGP、故障、RCA、配置、Diff、审计、持久化、重连、压力、控制台、性能。未测不得宣称 PASS。Bonus：IPAM、Dashboard Builder。
+
+独立验收字段（同一引擎的真实数据，不能单独生成）：接口使用 id/deviceId/speed（bps）/rxBytes/txBytes/rxPackets/txPackets/rxBps/txBps/rxPps/txPps/crc/noBuffers/utilization（0～1）。告警使用 id/deviceId/interfaceId/rule/fingerprint/state/rootCauseDeviceId，状态字符串沿用上述定义。
+POST /api/alerts/:id/ack；GET /api/config/:deviceId → {content,versionId}；PUT 同路径 {content,reason} → 新版本；GET /api/config/:deviceId/diff?from=版本&to=版本 → {lines:[{kind:"added"|"removed"|"unchanged",text}]}；POST /api/config/:deviceId/rollback {versionId}。审计操作包含 deviceId/action（config.rollback）。
+仅隔离 Debug 测试模式 POST /api/test/identity {role:"viewer"|"operator"|"admin"} 返回 {token}，Bearer 鉴权由服务端统一处理。正常 UI 也必须使用同一权限判定，测试身份入口不得用于公开部署。

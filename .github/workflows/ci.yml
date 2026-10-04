@@ -109,6 +109,38 @@ jobs:
           python -m pip install pytest
           python -m pytest harness/integration/test_docker_runner_integration.py -q --tb=short
 
+  coding-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Build generated-project-only runtime
+        run: |
+          python -m pip install -r requirements.txt
+          scratch=$(mktemp -d)
+          cp scripts/coding-runtime.Dockerfile "$scratch/Dockerfile"
+          docker build -t lzcore-coding-runtime:local "$scratch"
+          rm -rf "$scratch"
+      - name: Exercise kernel isolation and independent evaluator separation
+        run: |
+          python scripts/verify_coding_isolation.py --output "$RUNNER_TEMP/coding-kernel" --rounds 3
+          python scripts/verify_benchmark_evaluator.py --output "$RUNNER_TEMP/coding-evaluator"
+      - name: Preserve kernel acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coding-kernel-validation
+          path: |
+            ${{ runner.temp }}/coding-kernel/report.json
+            ${{ runner.temp }}/coding-evaluator/report.json
+          retention-days: 14
+
   distributed-adapters:
     runs-on: ubuntu-latest
     services:

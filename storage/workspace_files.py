@@ -43,7 +43,19 @@ def is_current_workspace_write_path(workspace_id: str, target: Path) -> bool:
 
 
 def write_text_atomic(path: Path, content: str) -> None:
+    validate_source_text(content)
     atomic_write_text(path, content)
+
+
+def validate_source_text(content: str) -> None:
+    """Text source writes must remain readable by the text repository.
+
+    Binary attachments use FileStore. Reject malformed text before touching a
+    file rather than guessing replacements or publishing unreadable source.
+    """
+    if not isinstance(content, str) or '\x00' in content:
+        raise ValueError('source text contains a NUL byte; correct the text before writing; binary data belongs in FileStore')
+    content.encode('utf-8', errors='strict')
 
 
 def create_workspace_text(workspace_id: str, subpath: str, content: str) -> Path:
@@ -53,6 +65,7 @@ def create_workspace_text(workspace_id: str, subpath: str, content: str) -> Path
     to use FileStore. The hard link publishes atomically and fails if another
     writer has already created the target, including a dangling symlink.
     """
+    validate_source_text(content)
     if not subpath or Path(subpath).is_absolute() or "\\" in subpath:
         raise ValueError("source filepath must be workspace-relative using forward slashes")
     if ".." in Path(subpath).parts:
