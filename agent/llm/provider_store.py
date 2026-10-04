@@ -69,7 +69,7 @@ PROVIDER_PRESETS: dict = {
         "id": "anthropic",
         "label": "Anthropic",
         "base_url": "https://api.anthropic.com/v1",
-        "model": "claude-3-haiku-20240307",
+        "model": "",  # Enter a model available to this account or gateway.
         "hint": "api.anthropic.com",
     },
     "ollama": {

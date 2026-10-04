@@ -49,6 +49,16 @@ def test_named_vendors_survive_reload_and_keep_identity_on_rename(catalog):
     assert store.load_provider_config(second["provider"])["provider_type"] == "anthropic_messages"
 
 
+def test_anthropic_template_requires_account_model_and_preserves_saved_model(catalog):
+    client, store = catalog
+    store.save_provider_config("anthropic", {"model": "account-model"})
+    listed = client.get("/api/agent/llm/providers").get_json()
+    template = next(p for p in listed["templates"] if p["provider"] == "anthropic")
+    saved = next(p for p in listed["providers"] if p["provider"] == "anthropic")
+    assert template["model"] == ""
+    assert saved["model"] == "account-model"
+
+
 def test_activation_disable_and_delete_have_explicit_lifecycle(catalog, monkeypatch):
     client, store = catalog
     saved = add(client, protocol="anthropic_messages")
