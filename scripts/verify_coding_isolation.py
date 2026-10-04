@@ -73,6 +73,10 @@ def main() -> int:
             environment.configure_validation([rebuild, poison])
             probe("standard_rebuild_deletes_output_root_in_snapshot", {"action":"shell", "command":rebuild, "timeout":30}, True)
             checks.append({"name":"validated_output_promoted", "passed": (project / "dist/rebuilt.txt").is_file() and (project / "dist/rebuilt.txt").read_text() == "rebuilt"})
+            from scripts.benchmark_runtime import BenchmarkRuntime
+            independent = BenchmarkRuntime(environment.name, environment.image_id, project.resolve(), environment.mount_target)
+            independent_build = independent.generated_command(["node", "-e", "const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist');fs.writeFileSync('dist/evaluator.txt','checked');"], timeout=30)
+            checks.append({"name":"independent_acceptance_uses_shared_build_snapshot", "passed": independent_build.returncode == 0 and (project / "dist/evaluator.txt").is_file()})
             probe("validation_source_change_rejected", {"action":"shell", "command":poison, "timeout":30}, False)
             checks.append({"name":"validation_keeps_reviewed_source", "passed": (project / "owned.txt").read_text() == "scoped"})
             probe("coordinator_source_write_denied_by_kernel", {"action": "shell", "command": "printf 'unreviewed' > owned.txt"}, False)

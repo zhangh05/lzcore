@@ -6,6 +6,8 @@ import json
 import os
 import re
 import shutil
+import shlex
+from types import SimpleNamespace
 import subprocess
 import uuid
 from pathlib import Path, PurePosixPath
@@ -32,16 +34,23 @@ class BenchmarkRuntime:
         )
 
     def generated_command(self, argv: list[str], timeout=180):
-        # These are generated application commands, not privileged host commands.
-        return subprocess.run(
-            [*self.cli, "exec", "--workdir", self.target, self.container, *argv],
-            env=self.env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
+        # The evaluator uses the same immutable snapshot contract as runtime
+        # validation. It never rebuilds in the read-only coordinator mount.
+        from core.tools.project_validation import execute_validation
+        from storage.paths import workspace_root
+        workspace_id = self.project.parents[2].name
+        root = workspace_root(workspace_id).resolve()
+        if self.project.parents[2] != root or self.target != "/workspace/" + self.project.relative_to(root).as_posix():
+            raise ValueError("invalid_benchmark_project_scope")
+        owner = SimpleNamespace(
+            workspace_id=workspace_id, root=root, project=self.project,
+            mount_target=self.target, image_id=self.image_id, image=self.image_id,
+            started=True, closed=False, generated_paths=["dist"],
+            isolation_level="strong_container",
         )
+        result = execute_validation(owner, shlex.join(argv), str(self.project), timeout=timeout)
+        return subprocess.CompletedProcess(argv, 0 if result.get("ok") and result.get("exit_code") == 0 else 1,
+                                           result.get("stdout", ""), result.get("stderr") or result.get("error", ""))
 
     def independent_program(
         self, program: str, entry: str, scenario: str, seed: int, timeout=40

@@ -95,6 +95,27 @@ def test_engine_executes_only_in_worker_and_host_never_imports_generated_source(
         runtime.independent_program("", "../framework.py", "invalid", 17)
 
 
+def test_generated_checks_share_immutable_snapshot_execution(monkeypatch, tmp_path):
+    from storage.paths import workspace_root
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("LZCORE_CODING_DOCKER_COMMAND", '["docker"]')
+    project = workspace_root("bench") / "files/data/app"
+    calls = []
+    def execute(owner, command, cwd, **kwargs):
+        calls.append((owner, command, cwd))
+        return {"ok": True, "exit_code": 0, "stdout": "verified"}
+    monkeypatch.setattr("core.tools.project_validation.execute_validation", execute)
+    runtime = BenchmarkRuntime("lzcore-project-" + "1" * 32, "sha256:" + "a" * 64,
+                               project.resolve(), "/workspace/files/data/app")
+    assert runtime.generated_command(["npm", "run", "build"]).returncode == 0
+    owner, command, cwd = calls[0]
+    assert command == "npm run build" and owner.generated_paths == ["dist"]
+    assert owner.project == project.resolve() and cwd == str(project.resolve())
+    runtime.target = "/workspace/files/data/other"
+    with pytest.raises(ValueError, match="project_scope"):
+        runtime.generated_command(["npm", "test"])
+
+
 @pytest.mark.parametrize(
     "changes",
     [

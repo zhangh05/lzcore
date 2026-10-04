@@ -7,6 +7,7 @@ functional acceptance. Uncovered requirements remain NOT VERIFIED.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -161,7 +162,12 @@ def main() -> int:
             browser.close()
             return {"viewport": "1280x720", "page_errors": errors, "screenshot": str(screenshot)}
     check("independent_browser_interactions" if args.case == "counter" else "browser_boot_only", browser_checks)
-    payload = {"case": args.case, "seed": base_seed, "rounds": args.rounds, "checks": checks,
+    code_root = Path(__file__).resolve().parents[1]
+    evaluator_source = {
+        "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=code_root, text=True).strip(),
+        "diff_sha256": hashlib.sha256(subprocess.check_output(["git", "diff", "HEAD"], cwd=code_root)).hexdigest(),
+    }
+    payload = {"evaluator_source": evaluator_source, "case": args.case, "seed": base_seed, "rounds": args.rounds, "checks": checks,
                "full_benchmark_acceptance": "NOT VERIFIED",
                "note": "Only the named checks were independently executed; generated tests are not independent functional acceptance."}
     args.report.parent.mkdir(parents=True, exist_ok=True)
