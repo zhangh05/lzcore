@@ -327,6 +327,12 @@ def test_acceptance_replays_reviewed_updates_and_rejects_unreviewed_changes(team
     assert replay["coding"]["publication"]["publication_order"] == first_order
     assert len(verify_team("parent-ws", "parent-session", "files/data/app")["integrations"]) == 2
 
+    extra = workspace_root("parent-ws") / "files/data/app/src/unreviewed.py"
+    extra.write_text("VALUE = 'unreviewed new module'\n")
+    with pytest.raises(AssertionError, match="parent source changed"):
+        verify_team("parent-ws", "parent-session", "files/data/app")
+    extra.unlink()
+
     target = workspace_root("parent-ws") / "files/data/app/src/value.py"
     target.write_text("VALUE = 'unreviewed'\n")
     with pytest.raises(AssertionError, match="parent source changed"):

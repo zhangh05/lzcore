@@ -36,7 +36,9 @@ def verify_team(workspace_id: str, session_id: str, project_dir: str) -> dict:
             order = record.get("publication_order")
             assert type(order) is int and order > 0 and order not in publications, "invalid publication order"
             publications[order] = task
-        heads = {}
+        # Replay the complete reviewed source tree, including unchanged source
+        # and absence. Checking only edited paths misses an unreviewed new module.
+        heads = dict(publications[min(publications)]["coding"]["baseline"])
         for order, task in sorted(publications.items()):
             assignment = task["coding"]
             assert task["parent_task_id"], "missing trusted parent task identity"
@@ -57,8 +59,11 @@ def verify_team(workspace_id: str, session_id: str, project_dir: str) -> dict:
                 for item in checks
             )
             for path, change in assignment["change"]["files"].items():
-                assert path not in heads or heads[path] == change["before"], "reviewed publication chain is broken"
-                heads[path] = change["after"]
+                assert heads.get(path) == change["before"], "reviewed publication chain is broken"
+                if change["after"] is None:
+                    heads.pop(path, None)
+                else:
+                    heads[path] = change["after"]
             evidence.append(
                 {
                     "implementation": task["subtask_id"],
@@ -71,7 +76,7 @@ def verify_team(workspace_id: str, session_id: str, project_dir: str) -> dict:
                 }
             )
         current = source_manifest(project_path(workspace_id, project_dir), task["coding"].get("generated_paths"))
-        assert all(current.get(path) == expected for path, expected in heads.items()), "parent source changed after exact-candidate QA"
+        assert current == heads, "parent source changed after exact-candidate QA"
     return {
         "schema": "coding.team_acceptance.v1",
         "status": "PASS",

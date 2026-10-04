@@ -47,7 +47,7 @@ def main() -> int:
             checks.append({"name": name, "status": "PASS", "evidence": evidence,
                            "duration_seconds": round(time.monotonic() - start, 3)})
         except Exception as exc:
-            checks.append({"name": name, "status": "FAIL", "error": str(exc)[:1200]})
+            checks.append({"name": name, "status": "FAIL", "error": str(exc)[:1200] or type(exc).__name__})
     def command(arguments):
         result = runtime.generated_command(arguments)
         if result.returncode:
@@ -134,17 +134,21 @@ def main() -> int:
                 reset = page.get_by_role("button", name="Reset", exact=True)
                 increment = page.get_by_role("button", name="Increment", exact=True)
                 decrement = page.get_by_role("button", name="Decrement", exact=True)
-                reset.click(); assert value.inner_text() == "0"
+                def expect_value(expected, stage):
+                    observed = value.inner_text()
+                    numeric = observed if observed.isdecimal() and len(observed) <= 10 else "<non_numeric>"
+                    assert observed == expected, f"counter {stage}: expected {expected}, observed {numeric}"
+                reset.click(); expect_value("0", "initial reset")
                 for _ in range(20): increment.click()
-                assert value.inner_text() == "20"
+                expect_value("20", "20 increments")
                 page.reload(wait_until="networkidle")
-                assert value.inner_text() == "20"
+                expect_value("20", "persist after reload")
                 for _ in range(20): decrement.click()
-                assert value.inner_text() == "0"
+                expect_value("0", "20 decrements")
                 if decrement.is_enabled(): decrement.click()
-                assert value.inner_text() == "0"
-                increment.click(); reset.click(); assert value.inner_text() == "0"
-                page.reload(wait_until="networkidle"); assert value.inner_text() == "0"
+                expect_value("0", "floor at zero")
+                increment.click(); reset.click(); expect_value("0", "reset after increment")
+                page.reload(wait_until="networkidle"); expect_value("0", "persist reset after reload")
             else:
                 assert len(page.locator("body").inner_text()) > 40, "empty application"
                 assert page.get_by_role("button").count() >= 1, "no interactive controls"
