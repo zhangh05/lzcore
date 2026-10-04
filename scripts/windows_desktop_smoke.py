@@ -282,6 +282,28 @@ def run(exe: Path, mode: str, output: Path):
                 'exit_code': exit_code, 'exit_hex': f'0x{exit_code & 0xffffffff:08X}',
             }), encoding='utf-8')
             assert exit_code == 0, f'Native close failed: exit={exit_code} (0x{exit_code & 0xffffffff:08X})'
+        # Reopen the same persisted state twice. Native teardown failures were
+        # intermittent, so one successful process exit is insufficient.
+        for cycle in range(2):
+            report.unlink()
+            proc = subprocess.Popen([str(exe.resolve()), '--data-dir', str(data.resolve()), '--smoke-test', str(report.resolve())], env=env)
+            start = wait_until(lambda: json.loads(report.read_text(encoding='utf-8')) if report.exists() else None)
+            assert start['ok'] and start['tray'] and start['data_dir'] == str(data.resolve())
+            hwnd = wintypes.HWND(start['hwnd'])
+            wait_until(lambda: user32.IsWindowVisible(hwnd))
+            assert (data/'sentinel.txt').read_text(encoding='utf-8') == '卸载保留'
+            assert (history/'job_smoke_history.json').is_file()
+            assert user32.PostMessageW(hwnd, 0x0010, 0, 0)
+            exit_code = proc.wait(timeout=40)
+            (output/'result.json').write_text(json.dumps({
+                'ok': exit_code == 0, 'mode': mode, 'stage': 'native_close',
+                'close_cycles': cycle + 2, 'exit_code': exit_code,
+                'exit_hex': f'0x{exit_code & 0xffffffff:08X}',
+            }), encoding='utf-8')
+            assert exit_code == 0, f'Repeated native close failed: cycle={cycle + 2}, exit={exit_code}'
+        desktop_log = (data/'logs/desktop.log').read_text(encoding='utf-8')
+        for marker in ('Desktop controller cleaned up', 'Desktop server stopped', 'Desktop device sessions closed', 'Native host cleanup complete; exiting with code 0'):
+            assert desktop_log.count(marker) >= 3, marker
     finally:
         if proc.poll() is None:
             # Only the isolated CI process, on test failure.
@@ -301,7 +323,7 @@ def run(exe: Path, mode: str, output: Path):
                 details = diagnostic.stdout + diagnostic.stderr
                 (output/'native-errors.txt').write_text(details, encoding='utf-8')
                 print(details)
-    (output/'result.json').write_text(json.dumps({'ok':True,'mode':mode,'exe':str(exe),'platform':os.name,'data':str(data)}),encoding='utf-8')
+    (output/'result.json').write_text(json.dumps({'ok':True,'mode':mode,'exe':str(exe),'platform':os.name,'data':str(data),'close_cycles':3,'exit_code':0,'exit_hex':'0x00000000'}),encoding='utf-8')
     return data
 
 

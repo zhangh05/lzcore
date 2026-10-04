@@ -22,17 +22,60 @@ def test_web_only_spa_does_not_advertise_an_unavailable_native_bridge(tmp_path):
         assert ('window.__LZCORE_DESKTOP__' in html) is (bootstrap is not None)
 
 
-def test_native_runtime_unloads_explicitly_without_loading_it(monkeypatch):
+@pytest.mark.parametrize('platform,loaded', [('win32', False), ('darwin', True)])
+def test_non_native_exit_keeps_normal_python_finalization(monkeypatch, platform, loaded):
     import desktop
     from types import SimpleNamespace
+    monkeypatch.setattr(desktop.sys, 'platform', platform)
+    monkeypatch.setitem(desktop.sys.modules, 'pythonnet', SimpleNamespace(_LOADED=loaded))
+    with pytest.raises(SystemExit) as exc:
+        desktop.finish_process(7)
+    assert exc.value.code == 7
+
+
+@pytest.mark.parametrize('exit_code', [0, 1])
+def test_native_host_exit_flushes_cleanup_before_unsafe_finalization(tmp_path, exit_code):
+    import subprocess
+    import sys
+    # Real child process: an atexit hook represents the unsafe CLR teardown.
+    # Persisted cleanup and buffered logs must survive; the hook must not run.
+    code = '''
+import atexit, logging, sys
+from pathlib import Path
+from types import SimpleNamespace
+import desktop
+folder = Path(sys.argv[1])
+logging.basicConfig(filename=folder/'exit.log', level=logging.INFO)
+atexit.register(lambda: (folder/'unsafe-finalization').write_text('called'))
+sys.modules['pythonnet'] = SimpleNamespace(_LOADED=True)
+sys.platform = 'win32'
+try:
+    pass
+finally:
+    (folder/'cleanup').write_text('saved')
+    logging.info('cleanup finished')
+print('flushed output', end='')
+desktop.finish_process(int(sys.argv[2]))
+'''
+    result = subprocess.run([sys.executable, '-c', code, str(tmp_path), str(exit_code)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == exit_code
+    assert result.stdout == 'flushed output'
+    assert (tmp_path/'cleanup').read_text() == 'saved'
+    assert 'cleanup finished' in (tmp_path/'exit.log').read_text()
+    assert not (tmp_path/'unsafe-finalization').exists()
+
+
+def test_device_session_cleanup_does_not_load_unused_extension(monkeypatch):
+    import desktop
+    from types import SimpleNamespace
+    name = 'extensions.network_operations.device_tools'
+    monkeypatch.delitem(desktop.sys.modules, name, raising=False)
+    desktop.close_device_sessions()
+    assert name not in desktop.sys.modules
     calls = []
-    monkeypatch.setattr(desktop.sys, 'platform', 'win32')
-    monkeypatch.delitem(desktop.sys.modules, 'pythonnet', raising=False)
-    desktop.shutdown_native_runtime()
-    assert 'pythonnet' not in desktop.sys.modules
-    monkeypatch.setitem(desktop.sys.modules, 'pythonnet', SimpleNamespace(unload=lambda: calls.append('unload')))
-    desktop.shutdown_native_runtime()
-    assert calls == ['unload']
+    monkeypatch.setitem(desktop.sys.modules, name, SimpleNamespace(_SESSIONS=SimpleNamespace(close_all=lambda: calls.append('closed'))))
+    desktop.close_device_sessions()
+    assert calls == ['closed']
 
 
 def test_distribution_data_paths(tmp_path):

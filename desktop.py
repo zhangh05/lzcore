@@ -95,14 +95,29 @@ def configure_logging(paths):
         sys.stderr = LogStream()
 
 
-def shutdown_native_runtime():
-    # Python.NET normally unloads in atexit. Complete it while Python and its
-    # exception types are still alive, after all application threads stop.
+def close_device_sessions():
+    # This application-owned atexit resource also needs explicit cleanup when
+    # the Windows native host finishes without CPython/CLR finalization.
+    module = sys.modules.get('extensions.network_operations.device_tools')
+    if module is not None:
+        module._SESSIONS.close_all()
+
+
+def finish_process(exit_code):
     runtime = sys.modules.get('pythonnet') if sys.platform == 'win32' else None
-    if runtime is not None:
-        logging.getLogger('lzcore.desktop').info('Unloading native runtime')
-        runtime.unload()
-        logging.getLogger('lzcore.desktop').info('Native runtime unloaded')
+    if runtime is not None and getattr(runtime, '_LOADED', False):
+        # Only the entry point calls this, AFTER main's finally and any restart.
+        # Python.NET full_shutdown collects WinForms/WebView2 wrappers while
+        # removing its reflected types; native finalizers can re-enter those
+        # removed types. End the already-cleaned-up host instead of unloading
+        # this process-wide bridge (explicitly or via its atexit hook).
+        logging.getLogger('lzcore.desktop').info('Native host cleanup complete; exiting with code %s', exit_code)
+        for stream in (sys.stdout, sys.stderr):
+            if stream is not None:
+                stream.flush()
+        logging.shutdown()
+        os._exit(exit_code)
+    raise SystemExit(exit_code)
 
 
 def main():
@@ -215,8 +230,11 @@ def main():
         if server:
             server.stop()
             logging.getLogger('lzcore.desktop').info('Desktop server stopped')
-        guard.__exit__(None, None, None)
-        shutdown_native_runtime()
+        try:
+            close_device_sessions()
+            logging.getLogger('lzcore.desktop').info('Desktop device sessions closed')
+        finally:
+            guard.__exit__(None, None, None)
     if controller and controller.restart:
         command = [sys.executable] if frozen else [sys.executable, str(app_dir / 'desktop.py')]
         subprocess.Popen([*command, '--data-dir', str(paths.data)])
@@ -226,7 +244,7 @@ def main():
 if __name__ == '__main__':
     multiprocessing.freeze_support()
     try:
-        raise SystemExit(main())
+        finish_process(main())
     except Exception as exc:
         from storage.redaction import redact_text
         logging.exception('Desktop startup failed')
@@ -236,4 +254,4 @@ if __name__ == '__main__':
             ctypes.windll.user32.MessageBoxW(None, message, '联智中枢启动失败', 0x10)
         else:
             print(message, file=sys.stderr)
-        raise SystemExit(1)
+        finish_process(1)
