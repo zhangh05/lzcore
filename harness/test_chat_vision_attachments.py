@@ -115,6 +115,7 @@ def test_continuation_preserves_native_tool_messages_and_receives_derived_image(
     from agent.runtime.ssot_runtime import _invoke_llm_for_ssot_runtime
 
     captured = {}
+    monkeypatch.setattr("agent.llm.config.resolve_provider_config", lambda: {"model": "gpt-4o-mini"})
     monkeypatch.setattr(
         "agent.runtime.vision_inputs.build_vision_content",
         lambda *_: ([{"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}], []),

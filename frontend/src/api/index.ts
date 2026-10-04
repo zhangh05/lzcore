@@ -884,6 +884,8 @@ export const settingsApi = {
           model: body.model,
           api_key: body.api_key,
           provider: body.provider,
+          provider_type: body.provider_type,
+          clear_api_key: body.clear_api_key,
         },
       },
       signal,
@@ -896,6 +898,9 @@ export const settingsApi = {
 
   providerGet: (providerId: string, signal?: AbortSignal): Promise<ProviderSaveResponse> =>
     apiRequest<ProviderSaveResponse>({ method: "GET", url: `/agent/llm/providers/${providerId}` }, signal),
+
+  providerCreate: (config: Partial<ProviderConfig> & { api_key?: string }, signal?: AbortSignal): Promise<ProviderSaveResponse> =>
+    apiRequest<ProviderSaveResponse>({ method: "POST", url: "/agent/llm/providers", data: config }, signal),
 
   providerSave: (
     providerId: string,

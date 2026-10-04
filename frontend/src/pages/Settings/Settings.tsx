@@ -5,7 +5,7 @@
  * Each provider has its own config file; click to edit, "应用" to activate.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { settingsApi } from "../../api";
 import { Badge, EmptyState, LoadingState } from "../../components/common";
 import { Button, Input, Select, FormField } from "../../components/ui";
@@ -18,27 +18,15 @@ import { sanitizeAssistantText } from "../../utils/displayText";
 import { formatDate } from "../../utils/format";
 import { IconAlert, IconBolt, IconBrain, IconCheck, IconClock, IconProbe, IconSave, IconTrash } from "../../components/Icon";
 
-/* ──────────────────────── Provider Presets ──────────────────────── */
-
-interface ProviderPreset {
-  id: string;
-  label: string;
-  base_url: string;
-  model: string;
-  hint: string;
-}
-
-const PROVIDER_PRESETS: ProviderPreset[] = [
-  { id: "minimax", label: "MiniMax", base_url: "https://api.minimaxi.com/anthropic/v1", model: "MiniMax-M3", hint: "api.minimaxi.com" },
-  { id: "deepseek", label: "DeepSeek", base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", hint: "api.deepseek.com" },
-  { id: "ark", label: "方舟 (豆包)", base_url: "https://ark.cn-beijing.volces.com/api/coding/v3", model: "ark-code-latest", hint: "ark.volces.com" },
-  { id: "openai", label: "OpenAI", base_url: "https://api.openai.com/v1", model: "gpt-4o-mini", hint: "api.openai.com" },
-  { id: "anthropic", label: "Anthropic", base_url: "https://api.anthropic.com/v1", model: "claude-3-haiku-20240307", hint: "api.anthropic.com" },
-  { id: "ollama", label: "Ollama (本地)", base_url: "http://localhost:11434/v1", model: "llama3.1", hint: "localhost:11434" },
-  { id: "custom", label: "自定义", base_url: "", model: "", hint: "OpenAI 兼容 API" },
-];
-
-const presetMap = new Map(PROVIDER_PRESETS.map((p) => [p.id, p]));
+const NEW_PROVIDER = "__new__";
+const protocolLabel = (type?: ProviderConfig["provider_type"]) =>
+  type === "anthropic_messages" ? "Anthropic Messages" : "OpenAI 兼容";
+const emptyProvider = (): Partial<ProviderConfig> => ({
+  label: "", provider_type: "openai_compatible", enabled: true,
+  base_url: "", model: "", temperature: 0.2, max_tokens: 4096,
+  top_p: null, thinking: "provider_default", safe_mode: true,
+  prompt_cache_enabled: true, key_configured: false, is_active: false,
+});
 
 /* ──────────────────────── Settings Page ──────────────────────── */
 
@@ -48,6 +36,7 @@ export function Settings() {
 
   // ── State ──
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
+  const [templates, setTemplates] = useState<ProviderConfig[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<ProviderConfig> | null>(null);
@@ -61,7 +50,6 @@ export function Settings() {
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [apiKeyRevealed, setApiKeyRevealed] = useState(false);
   const [clearKeyOnSave, setClearKeyOnSave] = useState(false);
-  const aliveRef = useRef(true);
 
   // ── Workspace long-term memory setting ──
   const [memoryEnabled, setMemoryEnabled] = useState(true);
@@ -91,7 +79,6 @@ export function Settings() {
 
   // ── Load on mount ──
   useEffect(() => {
-    aliveRef.current = true;
     const ctrl = new AbortController();
     setLoading(true);
     settingsApi.providersList(ctrl.signal)
@@ -100,11 +87,13 @@ export function Settings() {
 
         const list = Array.isArray(res?.providers) ? res.providers : [];
         const active = res?.active ?? "";
+        setTemplates(res.templates ?? []);
 
         if (list.length === 0) {
           setProviders([]);
           setActiveId("");
-          setSelectedId("");
+          setSelectedId(NEW_PROVIDER);
+          setDraft(emptyProvider());
           setLoading(false);
           return;
         }
@@ -125,133 +114,100 @@ export function Settings() {
         if (!ctrl.signal.aborted) setLoading(false);
       });
     return () => {
-      aliveRef.current = false;
       ctrl.abort();
     };
   }, []);
 
-  // ── Select provider → load its config ──
-  const selectProvider = useCallback(async (providerId: string) => {
-    setSelectedId(providerId);
+  function resetKeyDraft() {
     setTestResult(null);
     setApiKeyDirty(false);
     setApiKeyDraft("");
     setClearKeyOnSave(false);
     setApiKeyRevealed(false);
-
-    // Check local cache first
-    const cached = providers.find((p) => p.provider === providerId);
-    if (cached) {
-      setDraft({ ...cached });
-      return;
-    }
-    // Fetch from server
-    try {
-      const res = await settingsApi.providerGet(providerId);
-      setDraft({ ...res.config });
-    } catch {
-      // Fallback to preset
-      const preset = presetMap.get(providerId);
-      if (preset) {
-        setDraft({
-          provider: preset.id,
-          label: preset.label,
-          enabled: false,
-          base_url: preset.base_url,
-          model: preset.model,
-          temperature: providerId === "minimax" ? 1 : 0.2,
-          max_tokens: providerId === "minimax" ? 8192 : 4096,
-          thinking: "provider_default",
-          top_p: null,
-          safe_mode: true,
-          prompt_cache_enabled: true,
-          key_configured: false,
-          is_active: false,
-        });
-      }
-    }
-  }, [providers]);
-
-  // ── Refresh single provider in list ──
-  const refreshProvider = useCallback((config: ProviderConfig) => {
-    setProviders((prev) =>
-      prev.map((p) => (p.provider === config.provider
-        ? { ...config, api_key: undefined } // never store key in state
-        : p))
-    );
-    setActiveId(config.is_active ? config.provider : activeId);
-  }, [activeId]);
-
-  // ── Actions ──
-
-  async function onSave() {
-    if (!draft || !selectedId) return;
-    setSaving(true);
-    try {
-      const payload: Record<string, unknown> = {
-        enabled: draft.enabled,
-        base_url: draft.base_url,
-        model: draft.model,
-        temperature: draft.temperature,
-        max_tokens: draft.max_tokens,
-        top_p: draft.top_p ?? null,
-        thinking: draft.thinking ?? "provider_default",
-        safe_mode: draft.safe_mode,
-        prompt_cache_enabled: draft.prompt_cache_enabled,
-      };
-      if (apiKeyDirty) {
-        if (clearKeyOnSave) payload.clear_api_key = true;
-        else if (apiKeyDraft) payload.api_key = apiKeyDraft;
-      }
-      const res = await settingsApi.providerSave(selectedId, payload);
-      refreshProvider(res.config);
-      setDraft({ ...res.config });
-      setApiKeyDirty(false);
-      setApiKeyDraft("");
-      setClearKeyOnSave(false);
-      setApiKeyRevealed(false);
-      toast({ kind: "success", title: `${draft.label ?? selectedId} 配置已保存` });
-    } catch (e: unknown) {
-      toast({ kind: "error", title: "保存失败", body: isApiError(e) ? e.message : String(e) });
-    } finally {
-      setSaving(false);
-    }
   }
 
-  async function onApply() {
+  function selectProvider(providerId: string) {
+    const cached = providers.find(p => p.provider === providerId);
+    if (!cached) return;
+    setSelectedId(providerId);
+    setDraft({ ...cached });
+    resetKeyDraft();
+  }
+
+  function addProvider() {
+    setSelectedId(NEW_PROVIDER);
+    setDraft(emptyProvider());
+    resetKeyDraft();
+  }
+
+  function updateConnection(change: Partial<ProviderConfig>) {
+    setDraft(previous => ({ ...previous, ...change }));
+    setTestResult(null);
+  }
+
+  function useTemplate(providerId: string) {
+    const template = templates.find(p => p.provider === providerId);
+    if (!template) return;
+    setDraft({ ...template, provider: undefined, is_builtin: false, label: template.label,
+      key_configured: false, key_preview: null, is_active: false });
+    resetKeyDraft();
+  }
+
+  const refreshProvider = useCallback((config: ProviderConfig) => {
+    setProviders(prev => {
+      const exists = prev.some(p => p.provider === config.provider);
+      const list = exists ? prev.map(p => p.provider === config.provider ? config : p) : [...prev, config];
+      return config.is_active ? list.map(p => ({ ...p, is_active: p.provider === config.provider })) : list;
+    });
+    if (config.is_active) setActiveId(config.provider);
+  }, []);
+
+  async function persistProvider(activate: boolean) {
     if (!draft || !selectedId) return;
-    setApplying(true);
+    if (!draft.label?.trim() || !draft.base_url?.trim() || !draft.model?.trim()) {
+      toast({ kind: "warning", title: "请填写厂商名称、服务地址和模型名称" });
+      return;
+    }
+    if (activate) setApplying(true); else setSaving(true);
     try {
-      const payload: Record<string, unknown> = {
-        enabled: draft.enabled,
-        base_url: draft.base_url,
-        model: draft.model,
-        temperature: draft.temperature,
-        max_tokens: draft.max_tokens,
-        top_p: draft.top_p ?? null,
-        thinking: draft.thinking ?? "provider_default",
-        safe_mode: draft.safe_mode,
-        prompt_cache_enabled: draft.prompt_cache_enabled,
+      const payload = {
+        label: draft.label.trim(), provider_type: draft.provider_type ?? "openai_compatible",
+        enabled: draft.enabled, base_url: draft.base_url.trim(), model: draft.model.trim(),
+        temperature: draft.temperature, max_tokens: draft.max_tokens,
+        top_p: draft.top_p ?? null, thinking: draft.thinking ?? "provider_default",
+        safe_mode: draft.safe_mode, prompt_cache_enabled: draft.prompt_cache_enabled,
+        ...(apiKeyDirty && clearKeyOnSave ? { clear_api_key: true } : {}),
+        ...(apiKeyDirty && apiKeyDraft ? { api_key: apiKeyDraft } : {}),
       };
-      if (apiKeyDirty) {
-        if (clearKeyOnSave) payload.clear_api_key = true;
-        else if (apiKeyDraft) payload.api_key = apiKeyDraft;
+      let providerId = selectedId;
+      if (providerId === NEW_PROVIDER) {
+        const created = await settingsApi.providerCreate(payload);
+        providerId = created.config.provider;
+        refreshProvider(created.config);
+        setSelectedId(providerId);
+        setDraft({ ...created.config });
+        resetKeyDraft();
+        if (!activate) {
+          toast({ kind: "success", title: `${created.config.label} 已添加` });
+          return;
+        }
       }
-      const res = await settingsApi.llmActivate(selectedId, payload);
+      const res = activate
+        ? await settingsApi.llmActivate(providerId, selectedId === NEW_PROVIDER ? undefined : payload)
+        : await settingsApi.providerSave(providerId, payload);
       refreshProvider(res.config);
       setDraft({ ...res.config });
-      setActiveId(selectedId);
-      setApiKeyDirty(false);
-      setApiKeyDraft("");
-      setClearKeyOnSave(false);
-      setApiKeyRevealed(false);
-      toast({ kind: "success", title: res.message ?? `已切换到 ${draft.label ?? selectedId}` });
+      resetKeyDraft();
+      toast({ kind: "success", title: activate ? `已应用 ${res.config.label}` : `${res.config.label} 配置已保存` });
     } catch (e: unknown) {
-      toast({ kind: "error", title: "应用失败", body: isApiError(e) ? e.message : String(e) });
+      toast({ kind: "error", title: activate ? "应用失败" : "保存失败", body: isApiError(e) ? e.message : String(e) });
     } finally {
+      setSaving(false);
       setApplying(false);
     }
   }
+  const onSave = () => persistProvider(false);
+  const onApply = () => persistProvider(true);
 
   async function onTest() {
     if (!draft || !selectedId) return;
@@ -262,7 +218,9 @@ export function Settings() {
         message: "Reply with OK.",
         base_url: draft.base_url ?? undefined,
         model: draft.model ?? undefined,
-        provider: selectedId,
+        provider: selectedId === NEW_PROVIDER ? "custom" : selectedId,
+        provider_type: draft.provider_type,
+        clear_api_key: clearKeyOnSave || (selectedId === NEW_PROVIDER && !apiKeyDraft),
         api_key: apiKeyDirty ? (clearKeyOnSave ? undefined : (apiKeyDraft || undefined)) : undefined,
       });
       setTestResult(res);
@@ -281,11 +239,24 @@ export function Settings() {
   async function onReset() {
     if (!selectedId) return;
     const label = draft?.label ?? selectedId;
-    const ok = await confirm({ title: `确认重置 ${label} 配置？`, body: "将恢复为默认值。", destructive: true, confirmLabel: "重置" });
+    const custom = draft?.is_builtin === false;
+    const ok = await confirm({ title: custom ? `确认删除 ${label}？` : `确认重置 ${label} 配置？`,
+      body: custom ? "删除厂商配置及保存的密钥。" : "将恢复为默认值，并清除保存的密钥。",
+      destructive: true, confirmLabel: custom ? "删除" : "重置" });
     if (!ok) return;
     setSaving(true);
     try {
       await settingsApi.providerDelete(selectedId);
+      if (custom) {
+        const remaining = providers.filter(p => p.provider !== selectedId);
+        setProviders(remaining);
+        const next = remaining.find(p => p.provider === activeId) ?? remaining[0];
+        setSelectedId(next?.provider ?? NEW_PROVIDER);
+        setDraft(next ? { ...next } : emptyProvider());
+        resetKeyDraft();
+        toast({ kind: "success", title: `${label} 已删除` });
+        return;
+      }
       const res = await settingsApi.providerGet(selectedId);
       refreshProvider(res.config);
       setDraft({ ...res.config });
@@ -325,7 +296,7 @@ export function Settings() {
       setMemorySaving(false);
     }
   }
-  const selectedPreset = selectedId ? presetMap.get(selectedId) : null;
+  const isNew = selectedId === NEW_PROVIDER;
   const isActiveProvider = selectedId === activeId;
   const isBusy = saving || applying || testing;
 
@@ -362,35 +333,39 @@ export function Settings() {
 
   return (
     <div className="page settings-page" data-testid="page-settings">
-      <PageHeader activeId={activeId} />
+      <PageHeader activeLabel={providers.find(p => p.provider === activeId)?.label} />
       <div className="page-body no-pad">
         <details className="settings-help">
           <summary>使用帮助</summary>
           <div className="settings-help-body">
-            左侧选择模型服务商 → 填写访问密钥和参数 → 保存生效。支持 DeepSeek、OpenAI、Anthropic 等。
+            添加模型厂商 → 选择接口协议 → 填写地址、密钥和模型 → 测试连接 → 保存或应用。保存保留配置，应用切换当前厂商。
           </div>
         </details>
         <div className="settings-layout">
           {/* ── Left: Provider sidebar ── */}
           <aside className="provider-sidebar" data-testid="provider-sidebar">
-            <div className="provider-sidebar-label">模型服务商</div>
-            {PROVIDER_PRESETS.map((preset) => {
-              const prov = providers.find((p) => p.provider === preset.id);
-              const active = preset.id === activeId;
-              const selected = preset.id === selectedId;
+            <div className="provider-sidebar-heading"><span>模型厂商</span>
+              <Button type="button" onClick={addProvider} disabled={isBusy} data-testid="btn-add-provider">＋ 添加厂商</Button>
+            </div>
+            <div className="provider-list">
+            {providers.map((prov) => {
+              const active = prov.provider === activeId;
+              const selected = prov.provider === selectedId;
               return (
                 <button
-                  key={preset.id}
+                  key={prov.provider}
                   type="button"
                   className={"provider-card" + (active ? " active" : "") + (selected ? " selected" : "")}
-                  onClick={() => selectProvider(preset.id)}
-                  data-testid={`provider-${preset.id}`}
+                  onClick={() => selectProvider(prov.provider)}
+                  disabled={isBusy}
+                  aria-pressed={selected}
+                  data-testid={`provider-${prov.provider}`}
                 >
                   <div className="provider-card-top">
-                    <span className="provider-card-label">{preset.label}</span>
+                    <span className="provider-card-label">{prov.label}</span>
                     {active && <Badge kind="ok">当前</Badge>}
                   </div>
-                  <div className="provider-card-hint">{preset.hint}</div>
+                  <div className="provider-card-hint">{protocolLabel(prov.provider_type)}</div>
                   <div className="provider-card-meta">
                     {prov?.key_configured ? (
                       <span className="success-text text-xs"><IconCheck size={12} aria-hidden="true" /> 密钥已配置</span>
@@ -401,22 +376,23 @@ export function Settings() {
                 </button>
               );
             })}
+            </div>
           </aside>
 
           {/* ── Right: Form panel ── */}
           <section className="settings-form-panel">
-            {selectedPreset && (
+            {draft && (
               <div className="settings-form-card" data-testid="form-card">
                 {/* Header */}
                 <div className="settings-form-header">
                   <div>
                     <h2 className="settings-form-title">
-                      {selectedPreset.label}
+                      {isNew ? "添加模型厂商" : draft.label}
                       {isActiveProvider && (
                         <span className="badge ok ml-2">当前活跃</span>
                       )}
                     </h2>
-                    <div className="muted text-xs">{selectedPreset.hint}</div>
+                    <div className="muted text-xs">{isNew ? "选择协议后，填写厂商的接入信息" : protocolLabel(draft.provider_type)}</div>
                   </div>
                   <div className="settings-toggle-row">
                     <ToggleField
@@ -424,18 +400,39 @@ export function Settings() {
                       hint={draft.enabled ? "模型服务已启用" : "模型服务已关闭"}
                       checked={!!draft.enabled}
                       onChange={(v) => setDraft({ ...draft, enabled: v })}
+                      disabled={isBusy}
                       testid="toggle-enabled"
                     />
                   </div>
                 </div>
 
+                <fieldset className="settings-fields" disabled={isBusy}>
+                {isNew && templates.length > 0 && <div className="settings-row">
+                  <FormField label="快速填入" hint="模板只填入接入信息；可修改名称和地址，添加独立厂商。">
+                    <Select aria-label="快速填入" value="" onChange={e => useTemplate(e.target.value)}>
+                      <option value="">手动填写</option>
+                      {templates.map(template => <option key={template.provider} value={template.provider}>{template.label}</option>)}
+                    </Select>
+                  </FormField>
+                </div>}
+                <div className="settings-row-grid">
+                  <TextField label="厂商名称" value={draft.label ?? ""} onChange={label => setDraft({ ...draft, label })}
+                    testid="field-provider-label" placeholder="例如：公司模型网关" />
+                  <FormField label="接口协议">
+                    <Select aria-label="接口协议" data-testid="field-provider-type" value={draft.provider_type ?? "openai_compatible"}
+                      onChange={e => updateConnection({ provider_type: e.target.value as ProviderConfig["provider_type"] })}>
+                      <option value="openai_compatible">OpenAI 兼容 · Chat Completions</option>
+                      <option value="anthropic_messages">Anthropic · Messages</option>
+                    </Select>
+                  </FormField>
+                </div>
                 {/* Fields */}
                 <div className="settings-row">
-                  <TextField label="服务地址" value={draft.base_url ?? ""} onChange={(v) => setDraft({ ...draft, base_url: v })} testid="field-base_url" placeholder="http:// 或 https://" />
+                  <TextField label="服务地址" value={draft.base_url ?? ""} onChange={(v) => updateConnection({ base_url: v })} testid="field-base_url" placeholder="https://网关地址/v1" />
                 </div>
 
                 <div className="settings-row">
-                  <TextField label="模型名称" value={draft.model ?? ""} onChange={(v) => setDraft({ ...draft, model: v,
+                  <TextField label="模型名称" value={draft.model ?? ""} onChange={(v) => updateConnection({ model: v,
                     thinking: v.toLowerCase().startsWith("minimax-m3.1") && draft.thinking === "disabled" ? "provider_default" : draft.thinking,
                   })} testid="field-model" placeholder="模型名称" />
                 </div>
@@ -447,10 +444,11 @@ export function Settings() {
                     revealed={apiKeyRevealed}
                     onRevealToggle={() => setApiKeyRevealed((v) => !v)}
                     draft={apiKeyDraft}
-                    onDraftChange={(v) => { setApiKeyDraft(v); setApiKeyDirty(true); setClearKeyOnSave(false); }}
+                    onDraftChange={(v) => { setApiKeyDraft(v); setApiKeyDirty(true); setClearKeyOnSave(false); setTestResult(null); }}
                     clearRequested={clearKeyOnSave}
                     onClearToggle={(v) => {
                       setClearKeyOnSave(v);
+                      setTestResult(null);
                       if (v) { setApiKeyDraft(""); setApiKeyDirty(true); }
                     }}
                   />
@@ -481,13 +479,15 @@ export function Settings() {
                 <div className="settings-row-grid">
                   <FormField label="Top P（留空使用服务商默认）"><Input type="number" min="0.01" max="1" step="0.05" aria-label="Top P"
                     value={draft.top_p ?? ""} onChange={e => setDraft({...draft, top_p: e.target.value === "" ? null : Number(e.target.value)})}/></FormField>
-                  {selectedId === "minimax" && draft.model?.toLowerCase().startsWith("minimax-m3") && <FormField label="模型思考" hint="复杂设计可启用；思考占用输出额度，通常会增加等待时间。">
+                  {draft.model?.toLowerCase().startsWith("minimax-m3") && <FormField label="模型思考" hint="复杂设计可启用；思考占用输出额度，通常会增加等待时间。">
                     <Select aria-label="模型思考" value={draft.thinking ?? "provider_default"}
                       onChange={e => setDraft({...draft, thinking: e.target.value as ProviderConfig["thinking"]})}>
                       <option value="provider_default">服务商默认</option><option value="adaptive">启用自适应思考</option>
                       {!draft.model?.toLowerCase().startsWith("minimax-m3.1") && <option value="disabled">关闭思考</option>}
                     </Select></FormField>}
                 </div>
+
+                </fieldset>
 
                 {/* Test result */}
                 {testResult && (
@@ -536,9 +536,10 @@ export function Settings() {
                   )}
                   <Button
                     type="button" variant="danger-ghost" onClick={onReset}
-                    disabled={isBusy} title="重置为默认值" data-testid="btn-reset-llm"
+                    disabled={isBusy || isNew || (draft.is_builtin === false && isActiveProvider)}
+                    title={draft.is_builtin === false && isActiveProvider ? "先应用其他厂商，再删除当前厂商" : undefined} data-testid="btn-reset-llm"
                   >
-                    <IconTrash size={15} aria-hidden="true" />重置
+                    <IconTrash size={15} aria-hidden="true" />{draft.is_builtin === false ? "删除厂商" : "重置"}
                   </Button>
                 </div>
               </div>
@@ -559,17 +560,16 @@ export function Settings() {
 
 /* ──────────────────────── Sub-components ──────────────────────── */
 
-function PageHeader({ activeId }: { activeId?: string }) {
-  const activePreset = activeId ? presetMap.get(activeId) : null;
+function PageHeader({ activeLabel }: { activeLabel?: string }) {
   return (
     <div className="page-header">
       <div>
         <h1>系统设置</h1>
         <div className="subtitle">
           配置模型服务、访问密钥和长期记忆
-          {activePreset && (
+          {activeLabel && (
             <span className="badge ok ml-2 text-xs">
-              {activePreset.label}
+              {activeLabel}
             </span>
           )}
         </div>
@@ -583,7 +583,7 @@ function TextField({ label, value, onChange, testid, placeholder }: {
 }) {
   return (
     <FormField label={label}>
-      <Input type="text" value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid} spellCheck={false} autoComplete="off" placeholder={placeholder} />
+      <Input type="text" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} data-testid={testid} spellCheck={false} autoComplete="off" placeholder={placeholder} />
     </FormField>
   );
 }
@@ -598,8 +598,8 @@ function NumberField({ label, value, min, max, step, onChange, testid }: {
   );
 }
 
-function ToggleField({ label, hint, checked, onChange, testid }: {
-  label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void; testid?: string;
+function ToggleField({ label, hint, checked, onChange, testid, disabled }: {
+  label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void; testid?: string; disabled?: boolean;
 }) {
   return (
     <FormField label={label}>
@@ -609,6 +609,7 @@ function ToggleField({ label, hint, checked, onChange, testid }: {
         onClick={() => onChange(!checked)}
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         data-testid={testid}
       >
         <span className="toggle-knob" />

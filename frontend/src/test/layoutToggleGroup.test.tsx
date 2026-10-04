@@ -39,6 +39,7 @@ describe("Unified Clean Layout & Sidebar Control", () => {
   });
 
   it("places sidebar toggle at top-left brand zone and keeps top-right header clean & invariant", async () => {
+    enqueue("/auth/status", { status: 200, data: { login_enabled: false, authenticated: false } });
     enqueue("/workspaces", {
       status: 200,
       data: {
@@ -66,7 +67,7 @@ describe("Unified Clean Layout & Sidebar Control", () => {
     });
 
     // 1. Sidebar toggle is in top-left brand-zone
-    const leftToggle = screen.getByTestId("btn-toggle-sidebar");
+    const leftToggle = await screen.findByTestId("btn-toggle-sidebar");
     expect(leftToggle).toBeInTheDocument();
     expect(leftToggle.closest(".brand-zone")).not.toBeNull();
 

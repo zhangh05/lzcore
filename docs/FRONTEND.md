@@ -18,6 +18,8 @@ React 18、TypeScript、Vite、Zustand 和 Phosphor Icons。入口 frontend/src/
 
 ## 传输与会话
 
+设置页从 Provider API 获取内置与自定义厂商；“添加厂商”使用同一配置表单，明确选择 OpenAI 兼容或 Anthropic Messages，名称仅展示，身份由服务端生成。无密钥模板可快速填入后再修改地址、模型和名称。保存与应用共用序列化流程，保存只保留配置，应用切换当前厂商。当前自定义厂商先切换后删除，内置厂商保持重置语义；运行操作期间锁定配置字段与厂商选择。测试连接使用当前草稿协议，修改地址、模型、协议或密钥会清除旧测试结果。920px 以下厂商列表横向滚动，表单保持独立滚动区，切换主题和窗口尺寸保留未保存草稿。
+
 应用级 turnTransport 持有 /ws/agent，页面只订阅。切页保持回合及缓冲；退出登录或切换用户/工作区释放旧所有权，后台任务不因路由切换取消。帧按 workspace/session/client_request_id 路由，旧身份回调不能回写新 store。
 
 streamSeq 与完整 streamDraft、过滤状态一起持久化；游标不能越过尚未缓存的字符。新回合与恢复共用 reducer。恢复先 mergeFromBackend：服务端终态消息优先于本地 streaming，确认终态后退出传输所有权；未终态才 resume。2.5 秒查询是断线终态兜底，不是正文或图纸主通道。

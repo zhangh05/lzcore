@@ -650,6 +650,8 @@ export interface LlmConfig {
 
 export interface ProviderConfig {
   provider: string;
+  provider_type?: "openai_compatible" | "anthropic_messages";
+  is_builtin?: boolean;
   label: string;
   enabled: boolean;
   base_url: string;
@@ -671,6 +673,7 @@ export interface ProviderListResponse {
   ok: boolean;
   providers: ProviderConfig[];
   active: string;
+  templates?: ProviderConfig[];
 }
 
 export interface ProviderSaveResponse {
@@ -746,6 +749,8 @@ export interface LlmTestRequest {
   model?: string;
   api_key?: string;
   provider?: string;
+  provider_type?: ProviderConfig["provider_type"];
+  clear_api_key?: boolean;
   signal?: AbortSignal;
 }
 

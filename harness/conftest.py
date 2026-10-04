@@ -29,6 +29,7 @@ _temp_rpts.mkdir(parents=True, exist_ok=True)
 # briefly exposed the real checkout to those threads while a live run existed.
 # Individual tests may override these paths, but undo must return to test data.
 os.environ["LZCORE_WORKSPACE_ROOT"] = str(_temp_ws)
+os.environ["LZCORE_CONFIG_DIR"] = str(_temp_base / "config")
 os.environ["LZCORE_WORKSPACE_DIR"] = str(_temp_ws)
 os.environ["LZCORE_MEMORY_DIR"] = str(_temp_mem)
 os.environ["LZCORE_REPORTS_DIR"] = str(_temp_rpts)

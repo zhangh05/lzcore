@@ -11,6 +11,7 @@ Active provider selection is tracked in:
 
 from pathlib import Path
 import os
+import uuid
 from typing import Optional
 
 from agent.runtime.utils import now_iso
@@ -21,10 +22,17 @@ from storage.provider_config_store import (
     read_provider_config,
     write_active_provider,
     write_provider_config,
+    list_provider_ids,
+    validate_provider_id,
 )
+from storage.locking import FileLock
+from agent.llm.protocols import resolve_protocol
 ROOT = Path(__file__).resolve().parent.parent.parent
-PROVIDERS_DIR = ROOT / "config" / "providers"
+PROVIDERS_DIR = Path(os.environ.get("LZCORE_CONFIG_DIR") or ROOT / "config").resolve() / "providers"
 ACTIVE_FILE = PROVIDERS_DIR / "_active"
+
+PROVIDER_EDIT_FIELDS = ("enabled", "base_url", "model", "temperature", "max_tokens",
+                        "safe_mode", "prompt_cache_enabled", "label", "top_p", "thinking", "provider_type")
 
 # ── Built-in provider presets ──
 
@@ -105,8 +113,7 @@ def _build_provider_config(provider_id: str, data: Optional[dict] = None) -> dic
         "updated_at": None,
     }
     if data:
-        for key in ("enabled", "base_url", "model", "temperature", "max_tokens",
-                     "safe_mode", "prompt_cache_enabled", "api_key", "secret_ref", "label", "top_p", "thinking"):
+        for key in PROVIDER_EDIT_FIELDS + ("api_key", "secret_ref"):
             if key in data:
                 cfg[key] = data[key]
         # A failed or manually restarted process can be missing the master key
@@ -128,6 +135,8 @@ def _build_provider_config(provider_id: str, data: Optional[dict] = None) -> dic
         and str(cfg.get("base_url") or "").rstrip("/") == "https://api.minimaxi.com/v1"
     ):
         cfg["base_url"] = "https://api.minimaxi.com/anthropic/v1"
+    cfg["provider_type"] = resolve_protocol(provider_id, cfg)
+    cfg["is_builtin"] = provider_id in PROVIDER_PRESETS
     return cfg
 
 
@@ -170,8 +179,9 @@ def _write_active(provider_id: str):
 def _sanitize(data: dict) -> dict:
     """Return a sanitized version for API responses (mask API key)."""
     key = data.get("api_key", "")
+    public = {key: value for key, value in data.items() if key != "secret_ref"}
     return {
-        **data,
+        **public,
         "key_configured": bool(key),
         "key_preview": _mask_key(key) if key else None,
         "api_key": None,  # never return the key
@@ -194,7 +204,7 @@ def list_providers() -> list[dict]:
     active = get_active_provider()
     result = []
 
-    for provider_id in PROVIDER_PRESETS:
+    for provider_id in list(PROVIDER_PRESETS) + [pid for pid in list_provider_ids(PROVIDERS_DIR) if pid not in PROVIDER_PRESETS]:
         cfg = load_provider_config(provider_id)
         sanitized = _sanitize(cfg)
         sanitized["is_active"] = (provider_id == active)
@@ -203,8 +213,45 @@ def list_providers() -> list[dict]:
     return result
 
 
+def provider_exists(provider_id: str) -> bool:
+    try:
+        validate_provider_id(provider_id)
+        return provider_id in PROVIDER_PRESETS or read_provider_config(PROVIDERS_DIR, provider_id) is not None
+    except ValueError:
+        return False
+
+
+def list_provider_templates() -> list[dict]:
+    """Public defaults come from one backend catalog, never saved credentials."""
+    return [{**_sanitize(_build_provider_config(pid)), "is_active": False} for pid in PROVIDER_PRESETS]
+
+
+def create_provider_config(data: dict) -> dict:
+    from agent.llm.settings import validate_llm_settings
+    provider_id = f"provider_{uuid.uuid4().hex}"
+    if not isinstance(data.get("provider_type"), str) or data["provider_type"] not in {"openai_compatible", "anthropic_messages"}:
+        raise ValueError("select a supported protocol")
+    if not isinstance(data.get("label"), str) or not data["label"].strip():
+        raise ValueError("provider label is required")
+    supplied = {key: value for key, value in data.items() if key in PROVIDER_EDIT_FIELDS + ("api_key",)}
+    cfg = _build_provider_config(provider_id, supplied)
+    cfg["label"] = cfg["label"].strip()
+    for field in ("base_url", "model"):
+        if isinstance(cfg.get(field), str):
+            cfg[field] = cfg[field].strip()
+    errors = validate_llm_settings(cfg, new_provider=True)
+    if errors:
+        raise ValueError("; ".join(errors))
+    _ensure_dir()
+    with FileLock(PROVIDERS_DIR / ".providers.lock"):
+        _write_json(provider_id, cfg)
+    return cfg
+
+
 def load_provider_config(provider_id: str) -> dict:
     """Load one provider's config. Falls back to preset defaults if no file exists."""
+    if not provider_exists(provider_id):
+        raise ValueError("unknown provider")
     _ensure_dir()
     stored = read_provider_config(PROVIDERS_DIR, provider_id)
     if stored:
@@ -215,13 +262,28 @@ def load_provider_config(provider_id: str) -> dict:
 
 def save_provider_config(provider_id: str, data: dict) -> dict:
     """Save one provider's config. Merges incoming fields with existing."""
+    _ensure_dir()
+    with FileLock(PROVIDERS_DIR / ".providers.lock"):
+        return _save_provider_config(provider_id, data)
+
+
+def _save_provider_config(provider_id: str, data: dict) -> dict:
     existing = load_provider_config(provider_id)
 
     # Merge allowed fields from incoming data
-    for key in ("enabled", "base_url", "model", "temperature", "max_tokens",
-                 "safe_mode", "prompt_cache_enabled", "label", "top_p", "thinking"):
+    for key in PROVIDER_EDIT_FIELDS:
         if key in data:
             existing[key] = data[key]
+    existing["provider_type"] = resolve_protocol(provider_id, existing)
+    if isinstance(existing.get("label"), str):
+        existing["label"] = existing["label"].strip()
+    for field in ("base_url", "model"):
+        if isinstance(existing.get(field), str):
+            existing[field] = existing[field].strip()
+    from agent.llm.settings import validate_llm_settings
+    errors = validate_llm_settings({**existing, **{key: data[key] for key in ("api_key", "clear_api_key") if key in data}})
+    if errors:
+        raise ValueError("; ".join(errors))
 
     # API key handling
     if "api_key" in data and data["api_key"]:
@@ -237,20 +299,26 @@ def save_provider_config(provider_id: str, data: dict) -> dict:
     return existing
 
 
+def provider_has_saved_config(provider_id: str) -> bool:
+    return provider_exists(provider_id) and read_provider_config(PROVIDERS_DIR, provider_id) is not None
+
+
 def get_active_provider() -> str:
     """Return the currently active provider id. Defaults to 'custom'."""
     _ensure_dir()
     pid = read_active_provider(PROVIDERS_DIR)
-    if pid in PROVIDER_PRESETS:
+    if provider_exists(pid):
         return pid
     return "custom"
 
 
 def set_active_provider(provider_id: str) -> bool:
     """Activate a provider. Saves its current config first, then marks it active."""
-    if provider_id not in PROVIDER_PRESETS:
-        return False
-    _write_active(provider_id)
+    _ensure_dir()
+    with FileLock(PROVIDERS_DIR / ".providers.lock"):
+        if not provider_exists(provider_id):
+            return False
+        _write_active(provider_id)
     return True
 
 
@@ -261,5 +329,16 @@ def get_active_config() -> dict:
 
 
 def delete_provider_config(provider_id: str) -> bool:
-    """Delete a provider's config file (reset to preset defaults)."""
-    return delete_provider_config_record(PROVIDERS_DIR, provider_id)
+    """Reset built-ins; remove custom entries only after switching away."""
+    _ensure_dir()
+    with FileLock(PROVIDERS_DIR / ".providers.lock"):
+        if not provider_exists(provider_id):
+            raise ValueError("unknown provider")
+        if provider_id not in PROVIDER_PRESETS and get_active_provider() == provider_id:
+            raise ValueError("switch to another provider before deleting the active provider")
+        stored = read_provider_config(PROVIDERS_DIR, provider_id) or {}
+        deleted = delete_provider_config_record(PROVIDERS_DIR, provider_id)
+        if stored.get("secret_ref"):
+            from storage.secret_store import delete_secret
+            delete_secret(stored["secret_ref"])
+        return deleted

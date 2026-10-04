@@ -328,3 +328,34 @@ describe("Settings — LLM Provider configuration v2", () => {
     });
   });
 });
+
+it("添加厂商使用独立身份与明确协议，保存后显示在列表中", async () => {
+  mockApi();
+  const added = { ...baseProvider, provider: "provider_unique", label: "公司网关", is_builtin: false,
+    provider_type: "anthropic_messages" as const, base_url: "https://company.example/v1", model: "company-model" };
+  const create = vi.spyOn(settingsApi, "providerCreate").mockResolvedValue({ ok: true, config: added });
+  render(<Settings />);
+  fireEvent.click(await screen.findByTestId("btn-add-provider"));
+  fireEvent.change(screen.getByTestId("field-provider-label"), { target: { value: "公司网关" } });
+  fireEvent.change(screen.getByTestId("field-provider-type"), { target: { value: "anthropic_messages" } });
+  fireEvent.change(screen.getByTestId("field-base_url"), { target: { value: "https://company.example/v1" } });
+  fireEvent.change(screen.getByTestId("field-model"), { target: { value: "company-model" } });
+  fireEvent.click(screen.getByTestId("btn-save-llm"));
+  expect(await screen.findByTestId("provider-provider_unique")).toHaveTextContent("公司网关");
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ label: "公司网关", provider_type: "anthropic_messages" }));
+  expect(settingsApi.providerSave).not.toHaveBeenCalled();
+});
+
+it("新厂商测试携带协议，未填写密钥时不借用旧自定义厂商的密钥", async () => {
+  const api = mockApi({ llmTest: vi.fn().mockResolvedValue({ llm_used: true, response: "OK", warnings: [] }) });
+  render(<Settings />);
+  fireEvent.click(await screen.findByTestId("btn-add-provider"));
+  fireEvent.change(screen.getByTestId("field-provider-type"), { target: { value: "anthropic_messages" } });
+  fireEvent.click(screen.getByTestId("btn-test-llm"));
+  await waitFor(() => expect(api.llmTest).toHaveBeenCalledWith(expect.objectContaining({
+    provider_type: "anthropic_messages", clear_api_key: true,
+  })));
+  await screen.findByTestId("test-result");
+  fireEvent.change(screen.getByTestId("field-base_url"), { target: { value: "https://another.example/v1" } });
+  expect(screen.queryByTestId("test-result")).not.toBeInTheDocument();
+});

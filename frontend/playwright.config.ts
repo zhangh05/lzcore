@@ -59,6 +59,9 @@ process.env.E2E_API_TOKEN = API_TOKEN;
 const commonEnv = {
   ...process.env,
   LZCORE_WORKSPACE_ROOT: STORAGE_ROOT,
+  LZCORE_CONFIG_DIR: path.join(STORAGE_ROOT, "config"),
+  LZCORE_OS_SECRET_STORE: "off",
+  LZCORE_MASTER_KEY: crypto.randomBytes(32).toString("hex"),
   LZCORE_RUNTIME_BIND_HOST: "127.0.0.1",
   LZCORE_TRUSTED_LOCAL_PYTHON_EXECUTION: "true",
   LZCORE_IDENTITY_ENABLED: "true",

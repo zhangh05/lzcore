@@ -150,18 +150,19 @@ class TestRequiredAPIs:
         )
 
     def test_minimax_m3_is_default(self):
-        """MiniMax-M3 must appear as default model."""
-        html = _html()
-        assert "MiniMax-M3" in html, (
-            "MiniMax-M3 not found — must be the default model in frontend"
-        )
+        """The catalog supplies defaults; the frontend does not duplicate them."""
+        from backend.main import create_app
+        response = create_app().test_client().get("/api/agent/llm/providers")
+        templates = {item["provider"]: item for item in response.get_json()["templates"]}
+        assert templates["minimax"]["model"] == "MiniMax-M3"
+        assert templates["minimax"]["provider_type"] == "anthropic_messages"
 
     def test_provider_enum_values(self):
-        """Provider presets must include the supported frontend choices."""
-        html = _html()
-        required = ["minimax", "openai", "deepseek", "ollama", "custom"]
-        for val in required:
-            assert val in html, f"Provider value '{val}' not found in frontend"
+        """The API catalog exposes the built-ins alongside added vendors."""
+        from backend.main import create_app
+        response = create_app().test_client().get("/api/agent/llm/providers")
+        ids = {item["provider"] for item in response.get_json()["providers"]}
+        assert {"minimax", "openai", "deepseek", "ollama", "custom"} <= ids
 
 
 class TestCurrentModules:

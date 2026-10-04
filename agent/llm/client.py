@@ -15,9 +15,11 @@ class LLMClient:
             cfg = resolve_provider_config()
         if overrides:
             cfg = {**cfg}
-            for k in ("base_url", "model", "api_key", "provider"):
+            for k in ("base_url", "model", "api_key", "provider", "provider_type"):
                 if overrides.get(k):
                     cfg[k] = overrides[k]
+            if overrides.get("clear_api_key"):
+                cfg["api_key"] = ""
         self._cfg = cfg
         # A default client follows task routing. Only a caller that selected
         # draft/provider settings pins generation to this resolved config.
@@ -41,7 +43,8 @@ class LLMClient:
         from agent.llm.provider import generate
         from agent.llm.schemas import LLMMessage, LLMRequest
 
-        probe_cfg = {**self._cfg, "temperature": 0.0, "max_tokens": 16}
+        from agent.llm.config import _llm_disabled_by_env
+        probe_cfg = {**self._cfg, "enabled": not _llm_disabled_by_env(), "temperature": 0.0, "max_tokens": 16}
         response = generate(LLMRequest(
             task="connection_probe",
             messages=[

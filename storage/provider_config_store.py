@@ -4,11 +4,32 @@ from __future__ import annotations
 
 import os
 import stat
+import re
 from pathlib import Path
 from typing import Any
 
 from storage.atomic_io import atomic_write_json, atomic_write_text, safe_read_json, safe_read_text
 from storage.locking import FileLock
+
+
+def validate_provider_id(provider_id: str) -> str:
+    if not isinstance(provider_id, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", provider_id):
+        raise ValueError("invalid provider id")
+    if provider_id in {"con", "prn", "aux", "nul"} or re.fullmatch(r"(?:com|lpt)[1-9]", provider_id):
+        raise ValueError("reserved provider id")
+    return provider_id
+
+
+def list_provider_ids(providers_dir: Path) -> list[str]:
+    ids = []
+    for path in ensure_provider_dir(providers_dir).glob("*.json"):
+        try:
+            validate_provider_id(path.stem)
+        except ValueError:
+            continue
+        if path.is_file() and not path.is_symlink() and isinstance(safe_read_json(path, default=None), dict):
+            ids.append(path.stem)
+    return sorted(ids)
 
 
 def ensure_provider_dir(providers_dir: Path) -> Path:
@@ -17,7 +38,10 @@ def ensure_provider_dir(providers_dir: Path) -> Path:
 
 
 def provider_config_path(providers_dir: Path, provider_id: str) -> Path:
-    return ensure_provider_dir(providers_dir) / f"{provider_id}.json"
+    path = ensure_provider_dir(providers_dir) / f"{validate_provider_id(provider_id)}.json"
+    if path.is_symlink():
+        raise ValueError("provider config cannot be a symlink")
+    return path
 
 
 def active_provider_path(providers_dir: Path) -> Path:
@@ -44,6 +68,7 @@ def read_active_provider(providers_dir: Path) -> str:
 
 
 def write_active_provider(providers_dir: Path, provider_id: str) -> None:
+    validate_provider_id(provider_id)
     path = active_provider_path(providers_dir)
     with FileLock(path.with_name(path.name + ".lock")):
         atomic_write_text(path, provider_id)

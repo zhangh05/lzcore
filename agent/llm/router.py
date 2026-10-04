@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from agent.llm.provider_store import PROVIDER_PRESETS
+from agent.llm.provider_store import provider_exists
 from agent.llm.settings import resolve_provider_llm_config
 
 
@@ -20,7 +20,7 @@ def resolve_model_candidates(task: str, active_config: dict) -> list[dict]:
     Invalid overrides are ignored rather than causing a request outage.
     """
     requested = _configured_provider(task)
-    if requested not in PROVIDER_PRESETS:
+    if not provider_exists(requested):
         return [{**active_config, "routing": {"task": task, "selected_by": "active_provider"}}]
     selected = resolve_provider_llm_config(requested)
     candidates = [{**selected, "routing": {"task": task, "selected_by": "task_policy"}}]

@@ -11,6 +11,16 @@
 """
 
 from unittest.mock import MagicMock, patch
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolated_mock_provider(monkeypatch):
+    # Policy tests must not depend on the developer's saved, enabled provider.
+    monkeypatch.setattr("agent.llm.config.resolve_provider_config", lambda *_: {
+        "enabled": True, "provider": "mock", "provider_type": "mock",
+        "model": "mock", "api_key": "test-only", "safe_mode": True,
+    })
 
 
 def _make_safe_context_with_secret():

@@ -18,7 +18,7 @@ from agent.llm.settings import (
 from agent.llm.provider_store import (
     list_providers, load_provider_config, save_provider_config,
     get_active_provider, set_active_provider, delete_provider_config,
-    PROVIDER_PRESETS,
+    provider_exists, create_provider_config, list_provider_templates, PROVIDER_EDIT_FIELDS,
 )
 
 
@@ -86,7 +86,10 @@ def handle_llm_config_post():
 
 
 def handle_llm_config_delete():
-    ok = delete_llm_settings()
+    try:
+        ok = delete_llm_settings()
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
     return jsonify({"ok": True, "deleted": ok})
 
 
@@ -120,15 +123,24 @@ def handle_llm_test():
     intentionally ignored for them.
     """
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "test config must be an object"}), 400
     message = data.get("message", "")
 
     is_platform_admin = probe_allows_draft_overrides()
 
     overrides = {}
-    allowed_override_keys = ("base_url", "model", "api_key", "provider") if is_platform_admin else ("provider",)
+    allowed_override_keys = ("base_url", "model", "api_key", "provider", "provider_type", "clear_api_key") if is_platform_admin else ("provider",)
     for k in allowed_override_keys:
         if data.get(k):
             overrides[k] = data[k]
+    if overrides.get("provider") and not provider_exists(overrides["provider"]):
+        return jsonify({"ok": False, "error": "unknown provider"}), 404
+    if is_platform_admin and overrides:
+        cfg = load_provider_config(overrides.get("provider") or get_active_provider())
+        errors = validate_llm_settings({**cfg, **overrides})
+        if errors:
+            return jsonify({"ok": False, "errors": errors}), 400
     client = LLMClient(overrides=overrides if overrides else None)
     output = client.probe(message or "Reply with OK.")
     try:
@@ -164,6 +176,7 @@ def _sanitize_provider(data: dict) -> dict:
     """Sanitize provider config for API response (mask API key)."""
     key = data.get("api_key", "")
     result = dict(data)
+    result.pop("secret_ref", None)
     result["key_configured"] = bool(key)
     result["key_preview"] = mask_key(key) if key else None
     result["api_key"] = None
@@ -188,12 +201,27 @@ def handle_providers_list():
         "ok": True,
         "providers": providers,
         "active": get_active_provider(),
+        "templates": list_provider_templates(),
     })
+
+
+def handle_provider_create():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "provider config must be an object"}), 400
+    try:
+        cfg = create_provider_config(data)
+        result = _sanitize_provider(cfg)
+        result["is_active"] = False
+        return jsonify({"ok": True, "config": result}), 201
+    except (ValueError, OSError, RuntimeError):
+        logging.getLogger(__name__).warning("Provider creation failed")
+        return jsonify({"ok": False, "error": "厂商配置无效或无法保存，请检查名称、协议、地址与模型"}), 400
 
 
 def handle_provider_get(provider_id: str):
     """GET /api/agent/llm/providers/<id> — get one provider config."""
-    if provider_id not in PROVIDER_PRESETS:
+    if not provider_exists(provider_id):
         return jsonify({"ok": False, "error": f"unknown provider: {provider_id}"}), 404
     cfg = load_provider_config(provider_id)
     result = _sanitize_provider(cfg)
@@ -203,10 +231,12 @@ def handle_provider_get(provider_id: str):
 
 def handle_provider_save(provider_id: str):
     """POST /api/agent/llm/providers/<id> — save one provider config."""
-    if provider_id not in PROVIDER_PRESETS:
+    if not provider_exists(provider_id):
         return jsonify({"ok": False, "error": f"unknown provider: {provider_id}"}), 404
 
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "provider config must be an object"}), 400
 
     errors = validate_llm_settings({**load_provider_config(provider_id), **data, "provider": provider_id})
     if errors:
@@ -226,15 +256,16 @@ def handle_provider_save(provider_id: str):
 def handle_llm_activate():
     """POST /api/agent/llm/activate — activate a provider (save + switch)."""
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "provider config must be an object"}), 400
     provider_id = data.get("provider", "")
 
-    if not provider_id or provider_id not in PROVIDER_PRESETS:
+    if not provider_id or not provider_exists(provider_id):
         return jsonify({"ok": False, "error": f"invalid provider: {provider_id}"}), 400
 
     # Optionally save config fields before activating
     save_fields = {}
-    for key in ("enabled", "base_url", "model", "temperature", "max_tokens",
-                 "safe_mode", "prompt_cache_enabled", "api_key", "top_p", "thinking"):
+    for key in PROVIDER_EDIT_FIELDS + ("api_key",):
         if key in data:
             save_fields[key] = data[key]
     if data.get("clear_api_key"):
@@ -258,7 +289,7 @@ def handle_llm_activate():
             "ok": True,
             "config": result,
             "active": provider_id,
-            "message": f"Switched to {PROVIDER_PRESETS[provider_id]['label']}",
+            "message": f"已切换到 {cfg['label']}",
         })
     except Exception as exc:
         import logging
@@ -268,7 +299,10 @@ def handle_llm_activate():
 
 def handle_provider_delete(provider_id: str):
     """DELETE /api/agent/llm/providers/<id> — reset provider to defaults."""
-    if provider_id not in PROVIDER_PRESETS:
+    if not provider_exists(provider_id):
         return jsonify({"ok": False, "error": f"unknown provider: {provider_id}"}), 404
-    ok = delete_provider_config(provider_id)
+    try:
+        ok = delete_provider_config(provider_id)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
     return jsonify({"ok": True, "deleted": ok})

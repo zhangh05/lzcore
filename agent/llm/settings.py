@@ -25,11 +25,11 @@ def load_llm_settings() -> Optional[dict]:
 
 
 def save_llm_settings(data: dict) -> dict:
-    from agent.llm.provider_store import PROVIDER_PRESETS, save_provider_config, set_active_provider
+    from agent.llm.provider_store import provider_exists, save_provider_config, set_active_provider
 
     data = dict(data or {})
     requested = data.get("provider") or "custom"
-    provider_id = requested if requested in PROVIDER_PRESETS else "custom"
+    provider_id = requested if provider_exists(requested) else "custom"
 
     if requested in ("openai_compatible", "ollama_compatible"):
         data["provider_type"] = requested
@@ -57,6 +57,7 @@ def sanitize_llm_settings(data: dict) -> dict:
     return {
         "enabled": data.get("enabled", False),
         "provider": data.get("provider", "disabled"),
+        "provider_type": _provider_type(data.get("provider", "custom"), data),
         "safe_mode": data.get("safe_mode", True),
         "prompt_cache_enabled": data.get("prompt_cache_enabled", True),
         "base_url": data.get("base_url", ""),
@@ -82,14 +83,14 @@ def resolve_effective_llm_config() -> dict:
     from agent.llm.config import load_llm_config
     from agent.llm.config import _disabled_provider_config, _llm_disabled_by_env
     from agent.llm.key_resolver import get_key_source, is_key_loaded, resolve_api_key
-    from agent.llm.provider_store import get_active_config, get_active_provider
+    from agent.llm.provider_store import get_active_config, get_active_provider, provider_has_saved_config
 
     if _llm_disabled_by_env():
         return _disabled_provider_config()
 
     active_id = get_active_provider()
     active_cfg = dict(get_active_config() or {})
-    if active_cfg.get("enabled") and active_cfg.get("model"):
+    if active_cfg.get("model") and (active_cfg.get("enabled") or provider_has_saved_config(active_id)):
         api_key = active_cfg.get("api_key", "")
         if not api_key:
             api_key = resolve_api_key(env_name=_provider_env_name(active_id))
@@ -142,11 +143,14 @@ def resolve_effective_llm_config() -> dict:
 
 def resolve_provider_llm_config(provider_id: str) -> dict:
     """Resolve one provider's runtime config without switching the active provider."""
+    from agent.llm.config import _disabled_provider_config, _llm_disabled_by_env
+    if _llm_disabled_by_env():
+        return _disabled_provider_config()
     from agent.llm.key_resolver import resolve_api_key
-    from agent.llm.provider_store import PROVIDER_PRESETS, load_provider_config
+    from agent.llm.provider_store import provider_exists, load_provider_config
 
-    if provider_id not in PROVIDER_PRESETS:
-        provider_id = "custom"
+    if not provider_exists(provider_id):
+        raise ValueError("unknown provider")
 
     provider_cfg = dict(load_provider_config(provider_id) or {})
     api_key = provider_cfg.get("api_key", "")
@@ -172,28 +176,19 @@ def _provider_runtime_config(provider_id: str, cfg: dict, api_key: str) -> dict:
         "api_key": api_key or "",
         "provider_type": _provider_type(provider_id, cfg),
         "config_source": SOURCE_UI_SETTINGS,
-        "key_loaded": bool(api_key) or is_key_loaded(),
+        "key_loaded": bool(api_key),
         "key_source": "ui_settings" if cfg.get("api_key") else "env" if api_key else "none",
         "default_provider": provider_id,
         "timeout": 90,
         "source": SOURCE_UI_SETTINGS,
-        "enabled_by_ui": True,
+        "enabled_by_ui": cfg.get("enabled", True),
         "key_fallback_used": not bool(cfg.get("api_key")) and bool(api_key),
     }
 
 
 def _provider_type(provider_id: str, cfg: dict) -> str:
-    if cfg.get("provider_type"):
-        return cfg["provider_type"]
-    if provider_id == "ollama":
-        return "ollama_compatible"
-    if provider_id == "anthropic":
-        return "anthropic_messages"
-    if provider_id == "minimax" and str(cfg.get("model") or "").lower().startswith("minimax-m3"):
-        return "anthropic_messages"
-    if provider_id in ("disabled", "mock"):
-        return provider_id
-    return "openai_compatible"
+    from agent.llm.protocols import resolve_protocol
+    return resolve_protocol(provider_id, cfg)
 
 
 def _provider_env_name(provider_id: str) -> str:
@@ -203,10 +198,15 @@ def _provider_env_name(provider_id: str) -> str:
         "deepseek": "DEEPSEEK_API_KEY",
         "ark": "ARK_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
-    }.get(provider_id, "MINIMAX_API_KEY")
+        "custom": "MINIMAX_API_KEY",  # legacy fallback; added vendors never borrow another vendor's key
+    }.get(provider_id, "")
 
 
-def validate_llm_settings(data: dict) -> list:
+def validate_llm_settings(data: dict, *, new_provider: bool = False) -> list:
+    from agent.llm.provider_store import provider_exists
+    from agent.llm.protocols import PROVIDER_PROTOCOLS
+    from storage.provider_config_store import validate_provider_id
+    from urllib.parse import urlsplit
     errors = []
     valid_providers = [
         "minimax", "disabled", "mock", "openai",
@@ -214,14 +214,41 @@ def validate_llm_settings(data: dict) -> list:
         "openai_compatible", "ollama_compatible",
         "ark", "anthropic",
     ]
-    if data.get("provider") not in valid_providers:
+    provider_id = data.get("provider")
+    try:
+        validate_provider_id(provider_id)
+        valid_id = new_provider or provider_exists(provider_id) or provider_id in valid_providers
+    except ValueError:
+        valid_id = False
+    if not valid_id:
         errors.append(f"invalid provider: {data.get('provider')}")
+    protocol = data.get("provider_type")
+    if protocol is not None and (not isinstance(protocol, str) or (protocol not in PROVIDER_PROTOCOLS and protocol != "ollama_compatible")):
+        errors.append("provider_type must be openai_compatible or anthropic_messages")
+    label = data.get("label")
+    if label is not None and (not isinstance(label, str) or not label.strip() or len(label.strip()) > 80):
+        errors.append("label must contain 1-80 characters")
     bu = data.get("base_url", "")
-    if bu and not (bu.startswith("http://") or bu.startswith("https://")):
-        errors.append("base_url must start with http:// or https://")
+    try:
+        parsed = urlsplit(bu)
+        if (bu or new_provider) and (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                                    or parsed.username or parsed.password or parsed.query or parsed.fragment):
+            errors.append("base_url must be an HTTP(S) address without credentials, query or fragment")
+        _ = parsed.port
+    except (TypeError, ValueError, AttributeError):
+        errors.append("invalid base_url")
+    for flag in ("enabled", "safe_mode", "clear_api_key"):
+        if flag in data and not isinstance(data[flag], bool):
+            errors.append(f"{flag} must be boolean")
+    if "api_key" in data and data["api_key"] is not None and not isinstance(data["api_key"], str):
+        errors.append("api_key must be a string")
     if not data.get("model") and data.get("provider") not in ("disabled", "mock"):
         if data.get("provider") not in ("minimax", "ollama_compatible"):
             errors.append("model is required")
+    if data.get("model") is not None and not isinstance(data["model"], str):
+        errors.append("model must be a string")
+    if new_provider and (not isinstance(data.get("model"), str) or not data["model"].strip()):
+        errors.append("model is required")
     temp = data.get("temperature", 0.7)
     if isinstance(temp, bool) or not isinstance(temp, (int, float)) or not 0 <= temp <= 2:
         errors.append("temperature must be 0-2")

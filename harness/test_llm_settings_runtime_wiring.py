@@ -49,7 +49,16 @@ class TestLLMProviderSettings:
         assert cfg["provider_type"] == "anthropic_messages"
 
     def test_env_fallback_when_no_active_provider(self, monkeypatch, tmp_path):
-        _isolate_provider_store(monkeypatch, tmp_path)
+        providers = _isolate_provider_store(monkeypatch, tmp_path)
+        providers.parent.mkdir(parents=True)
+        (providers.parent / "llm.yaml").write_text(
+            "llm:\n  enabled: true\n  default_provider: minimax\n  providers:\n"
+            "    minimax:\n      type: anthropic_messages\n      model: MiniMax-M3\n"
+            "      base_url: https://api.minimaxi.com/anthropic/v1\n      api_key_env: MINIMAX_API_KEY\n",
+            encoding="utf-8",
+        )
+        import agent.llm.config as config
+        monkeypatch.setattr(config, "CONFIG_DIR", providers.parent)
         monkeypatch.setenv("MINIMAX_API_KEY", "sk-env-key123456")
         monkeypatch.setenv("LZCORE_LLM_ENABLED", "true")
 
