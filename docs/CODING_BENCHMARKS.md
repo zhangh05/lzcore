@@ -54,3 +54,5 @@ Evaluator 的独立调用必须提供服务端已建立的容器身份、镜像 
 本轮架构、重复压力与真实模型结果见 [2026-10-05](CODING_BENCHMARK_RESULTS_2026-10-05.md)，包括失败、修复依据和未验证范围。
 
 Ling-3.0-flash 的六次真实诊断/修复重跑及归因见 [2026-10-06（本批结束，业务未通过）](CODING_BENCHMARK_RESULTS_2026-10-06.md)。
+
+RTS 独立引擎验收还核对 snapshot.projectiles、双方资源、每阵营 fogs.explored/visible 的地图覆盖与可见必探索，以及 debug:false 时 debugScenario 被拒绝且世界未改变。这些是接口和 Debug 边界的检查，不证明完整 Fog 渲染、AI、经济、科技或完整比赛；未覆盖清单仍保留。验证器对缺失字段、非法资源/可见关系、正常模式 Debug 放行及先改状态后拒绝均有反例控制，并通过三个 Seed 的真实隔离 RPC 核对。

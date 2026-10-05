@@ -51,11 +51,21 @@ def verify_team(workspace_id: str, session_id: str, project_dir: str) -> dict:
             )
             assert review["review_digest"] == assignment["change"]["digest"]
             assert qa["parent_task_id"] == task["parent_task_id"]
+            judgement = review.get("qa_review") or {}
+            assert (judgement.get("schema") == "coding.qa_review.v1"
+                    and judgement.get("verdict") == "pass"
+                    and judgement.get("blocking_findings") == []
+                    and judgement.get("candidate_digest") == assignment["qa_candidate_digest"] == assignment["candidate_digest"]
+                    and judgement.get("review_subtask_id") == task["subtask_id"]
+                    and isinstance(judgement.get("scope"), str) and judgement["scope"].strip()
+                    and isinstance(judgement.get("report"), str) and judgement["report"].strip()), "independent QA verdict is missing, failed or not bound to this candidate"
             checks = review.get("validation") or []
             assert len(checks) == len(assignment["validation_commands"]) > 0
             assert all(
                 item["result"]["runtime_status"] == "succeeded"
                 and item["result"]["exit_code"] == 0
+                and item["result"].get("execution_outcome") != "unknown"
+                and not item["result"].get("execution_may_continue")
                 for item in checks
             )
             for path, change in assignment["change"]["files"].items():

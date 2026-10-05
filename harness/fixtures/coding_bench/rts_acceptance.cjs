@@ -25,7 +25,40 @@ const { performance } = require('node:perf_hooks');
     }
   };
   let evidence = {seed};
-  if (scenario === 'seed_and_tick') {
+  if (scenario === 'snapshot_contract') {
+    assert(Array.isArray(initial.projectiles), 'snapshot.projectiles must expose live projectiles');
+    assert(Array.isArray(initial.resources) && initial.resources.length === 2, 'resources must cover both owners');
+    for (const resources of initial.resources) {
+      assert(Number.isFinite(resources.alloy) && resources.alloy >= 0);
+      assert(Number.isFinite(resources.energy) && resources.energy >= 0);
+    }
+    const details = await game.getState();
+    assert(Array.isArray(details.fogs) && details.fogs.length === 2, 'getState.fogs must cover both owners');
+    let cells = 0;
+    for (const fog of details.fogs) {
+      assert(fog && fog.explored && fog.visible, 'fog requires explored and visible observations');
+      const explored = Array.from(fog.explored).flat(Infinity);
+      const visible = Array.from(fog.visible).flat(Infinity);
+      assert(explored.length >= 128 * 128 && visible.length === explored.length, 'fog does not cover the required map');
+      for (let cell = 0; cell < explored.length; cell++) {
+        assert([0, 1, false, true].includes(explored[cell]) && [0, 1, false, true].includes(visible[cell]), 'invalid fog observation');
+        assert(!visible[cell] || explored[cell], 'visible cells must be explored');
+      }
+      cells = explored.length;
+    }
+    assert(initial.units.some(unit => unit.owner === 0) && initial.units.some(unit => unit.owner === 1), 'normal game has no opposing sides');
+    await validUnits(initial);
+    evidence = {seed, fogCellsPerOwner: cells, units: initial.units.length, projectiles: initial.projectiles.length};
+  } else if (scenario === 'normal_debug_guard') {
+    const normal = await engine.createGame({seed, debug: false});
+    const before = await normal.snapshot();
+    let rejected = false;
+    try { await normal.debugScenario({friendly: 100, enemy: 100}); }
+    catch { rejected = true; }
+    assert(rejected, 'normal-mode engine accepts debugScenario');
+    assert.deepEqual(await normal.snapshot(), before, 'rejected debug operation modified the normal world');
+    evidence = {seed, debugRejected: rejected, unchanged: true};
+  } else if (scenario === 'seed_and_tick') {
     const other = await engine.createGame({ seed, debug: true });
     assert.deepEqual(await other.snapshot(), initial, 'same-seed initial world differs');
     await game.step(2);

@@ -17,7 +17,7 @@ NOC_ROUND_CHECKS = (
     "independent_server_write_permissions",
 )
 RTS_SCENARIOS = (
-    "seed_and_tick", "save_load", "fog_save", "battle_100v100", "movement_200",
+    "snapshot_contract", "normal_debug_guard", "seed_and_tick", "save_load", "fog_save", "battle_100v100", "movement_200",
     "continuation_determinism", "long_run_cleanup",
 )
 

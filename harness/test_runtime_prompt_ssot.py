@@ -434,3 +434,13 @@ def test_workspace_file_schema_exposes_requested_filename():
     assert profiles["extract_document"]["permission_action"] == "read"
     assert profiles["write"]["permission_action"] == "write"
     assert profiles["write_artifact"]["permission_action"] == "write"
+
+
+def test_qa_system_prompt_uses_same_structured_contract_as_completion_gate():
+    from dataclasses import asdict
+    from agent.runtime.durable.subagent import get_profile
+    from agent.runtime.durable.coding_reviews import review_instruction
+    prompt=build_runtime_system_prompt({'subagent_profile':asdict(get_profile('qa_agent'))})
+    assert review_instruction() in prompt
+    assert 'coding.qa_review.v1' in prompt and 'machine-readable formats' in prompt
+    assert 'only when compatible with that contract' in prompt

@@ -133,6 +133,8 @@ BUILTIN_PROFILES: dict[str, SubagentProfile] = {
 # ── SubagentTask & Result ──
 
 # Coding roles are assignments, not a reduced tool authorization surface.
+from .coding_reviews import review_instruction
+
 for _profile_id, _name, _role in (
     ("coding_agent", "Coding Agent", "Implements and validates a delegated project change in an isolated branch."),
     ("frontend_agent", "Frontend Agent", "Implements accessible responsive frontend behavior in an isolated project branch."),
@@ -141,7 +143,9 @@ for _profile_id, _name, _role in (
     BUILTIN_PROFILES[_profile_id] = SubagentProfile(
         profile_id=_profile_id, name=_name, role=_role, can_modify_files=True,
         can_execute_commands=True, can_call_network=True, merge_strategy="report",
-        output_contract="Exact changed or reviewed scope, reproducible validation and unresolved issues. Integration is a separate runtime operation; never claim self-reported prose proves acceptance.")
+        output_contract=(review_instruction()
+                         if _profile_id == "qa_agent" else
+                         "Exact changed or reviewed scope, reproducible validation and unresolved issues. Integration is a separate runtime operation; never claim self-reported prose proves acceptance."))
 
 @dataclass
 class SubagentTask:

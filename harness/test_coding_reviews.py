@@ -101,3 +101,30 @@ def test_qa_rejected_source_is_inherited_and_repaired_before_fresh_qa_and_merge(
     assert team.spawn('qa_agent',review=candidate.subtask_id)['task_status']=='succeeded'
     assert subagent.merge_subagent_result('parent-task',candidate.subtask_id,'parent-ws')['ok']
     assert project_path('parent-ws','files/data/app').joinpath('src/value.py').read_text()=='VALUE = 43\n'
+
+
+def test_invalid_public_qa_proposal_is_preserved_without_validating_candidate(team,monkeypatch):
+    first=team.spawn()
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',lambda *a,**kw:
+       SimpleNamespace(ok=True,final_response='Public review with no structured verdict.',tool_calls=[]))
+    reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
+    assert qa.status=='failed' and qa.coding['qa_invalid_proposal']=='Public review with no structured verdict.'
+    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='changes_ready'
+
+
+@pytest.mark.parametrize('mutation',[
+    lambda review:review.pop('schema'),
+    lambda review:review.update(verdict='fail'),
+    lambda review:review.update(verdict='unknown'),
+    lambda review:review.update(blocking_findings=['Unresolved hard failure.']),
+    lambda review:review.update(candidate_digest='other-source'),
+])
+def test_independent_team_verifier_rejects_integration_with_invalid_qa_evidence(team,mutation):
+    from scripts.benchmark_team_acceptance import verify_team
+    first=team.spawn();reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    assert subagent.merge_subagent_result('parent-task',first['subtask_id'],'parent-ws')['ok']
+    assert verify_team('parent-ws','parent-session','files/data/app')['status']=='PASS'
+    qa=subagent._load_task('parent-ws',reviewed['subtask_id']);mutation(qa.coding['qa_review']);subagent._save_task(qa)
+    with pytest.raises(AssertionError,match='independent QA verdict'):
+        verify_team('parent-ws','parent-session','files/data/app')

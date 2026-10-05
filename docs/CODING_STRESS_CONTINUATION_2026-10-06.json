@@ -2256,6 +2256,152 @@
       "cleanup_confirmed": true,
       "full_goal_passed": false,
       "repair": "Typed QA judgement is checked by server completion observation, durable candidate phase and publication gate; failed QA source can be explicitly inherited by a stopped same-parent repair task."
+    },
+    {
+      "round": "large-20261006-ling-rts-5-resume-1",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-5/reports/bench_rts_00b989b88c/0153fe1028",
+      "configuration": {
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "timeout": 90,
+        "max_tokens": 16384,
+        "config_source": "ui_settings",
+        "case": "rts",
+        "session_id": "01f4ca1c6fff4def",
+        "workspace_id": "bench_rts_00b989b88c",
+        "workspace": "/private/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-5/storage/bench_rts_00b989b88c",
+        "preview_origin": "http://127.0.0.1:18961",
+        "deadline_seconds": 3600,
+        "prompt_sha256": "f2deab9d316c56ea10eb9cb0cde93a983f22ea2fbab591f55fb5cadbf994d149",
+        "source_commit": "811ffa73d174a9e70225097945fdd0a04ad0cf7d",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18961,
+          "preview_origin": "http://127.0.0.1:18961",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "operator_cancelled": true,
+      "duration_seconds": 350.47,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_normal_debug_guard_round_1",
+            "independent_engine_normal_debug_guard_round_2",
+            "independent_engine_normal_debug_guard_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "independent_engine_snapshot_contract_round_1",
+            "independent_engine_snapshot_contract_round_2",
+            "independent_engine_snapshot_contract_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "full_goal_passed": false,
+      "cleanup_confirmed": true,
+      "same_parent_task_id": "tsk_5031d9b9e4e96fc87aab",
+      "qa_tasks": [
+        {
+          "subtask_id": "sub-5a197c48",
+          "review_subtask_id": "sub-9a36a1a4",
+          "status": "failed",
+          "phase": "failed",
+          "error": "completion_proposal_invalid"
+        },
+        {
+          "subtask_id": "sub-d2fc7b69",
+          "review_subtask_id": "sub-9a36a1a4",
+          "status": "failed",
+          "phase": "failed",
+          "error": "completion_proposal_invalid"
+        },
+        {
+          "subtask_id": "sub-ff06cada",
+          "review_subtask_id": "sub-9a36a1a4",
+          "status": "failed",
+          "phase": "failed",
+          "error": "completion_proposal_invalid"
+        }
+      ],
+      "findings": {
+        "framework": "Trusted role system output contract was still generic Markdown-oriented while assignment completion required JSON. Role contract now uses the same QA contract and has explicit precedence over general presentation rules. Invalid public proposals will be preserved.",
+        "model": "Three real QA workers could not produce a valid structured proposal within three format-recovery attempts; no accepted QA judgement or source repair was produced. Exact invalid content was not persisted by the previous gate, so its content is not inferred.",
+        "source": "Existing 7-file candidate retained; no integration occurred.",
+        "provider": "No authentication or explicit balance exhaustion was observed in these failed QA tasks."
+      },
+      "evaluator_source_note": "Two independent checks were added while this stopped round was being evaluated; its acceptance report records the actual evaluator Git diff hash. All generated app checks failed because parent source was not integrated."
     }
   ],
   "framework_native_dependency_runtime": {
@@ -2812,5 +2958,18 @@
         "cleanup_confirmed": true
       }
     ]
+  },
+  "rts_contract_oracle_controls": {
+    "report": "/tmp/lzcore-strict-workspaces/rts-contract-verifier-kernel-20261006/report.json",
+    "status": "PASS",
+    "checks": 27,
+    "seeds": [
+      17,
+      59,
+      103
+    ],
+    "cleanup_confirmed": true,
+    "scope": "Trusted verifier positive/negative controls through real isolated engine RPC; not application acceptance.",
+    "unverified_requirements_removed": false
   }
 }

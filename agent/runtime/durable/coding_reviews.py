@@ -90,6 +90,8 @@ def review_qa_proposal(task, proposal):
                 or any(not isinstance(item, str) or not item.strip() for item in review["blocking_findings"])):
             raise ValueError("invalid_qa_review")
     except (ValueError, TypeError):
+        task.coding["qa_invalid_proposal"] = redact_value(proposal)
+        _save_task(task)
         return {"status": "failed", "proposal_invalid": True,
                 "recovery_instruction": review_instruction()}
     review = redact_value(review)

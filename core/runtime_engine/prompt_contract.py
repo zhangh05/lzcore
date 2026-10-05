@@ -355,6 +355,8 @@ def build_runtime_system_prompt(extras: Mapping[str, Any] | None = None) -> str:
 - Budget: {budget}.
   Single-call timeouts, provider capacity, cancellation and runtime policy still apply.
 - Deliverable: {output or 'A concise evidence-based result for the parent task.'}
+- Final deliverables obey this trusted output contract, including machine-readable formats.
+  General Markdown and presentation guidance applies only when compatible with that contract.
 - Return a compact evidence package that is easy for the parent to merge. Lead with
   the bounded result; identify actual coverage, failed or missing scope, material
   uncertainty, and verified source/artifact references. Use headings only when they
