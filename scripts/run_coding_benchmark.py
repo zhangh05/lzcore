@@ -217,6 +217,8 @@ def main() -> int:
         source_mode="coordinator" if args.require_coding_team else "implementation",
         generated_paths=["dist"] if args.require_coding_team else [])
     environment = None
+    acceptance_report = None
+    deadline_reached = False
     exit_code = 1
     agent_turn_ok, acceptance_exit_code, team_ok, cleanup_confirmed = (
         False,
@@ -240,9 +242,10 @@ def main() -> int:
             runtime_control=MainAgentRuntimeControl(cancel_check=cancel.is_set),
         )
         agent_turn_ok = result.ok
+        deadline_reached = cancel.is_set()
         payload = redact_value(result.to_dict())
         payload["benchmark_duration_seconds"] = round(time.monotonic() - started, 2)
-        payload["deadline_reached"] = cancel.is_set()
+        payload["deadline_reached"] = deadline_reached
         (report / "result.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
@@ -305,6 +308,12 @@ def main() -> int:
             flush=True,
         )
         acceptance_exit_code = acceptance.returncode
+        try:
+            acceptance_report = json.loads((report / "acceptance.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # A process return code without its complete independent evidence
+            # cannot authorize a benchmark PASS.
+            acceptance_report = None
     finally:
         cancel.set()
         timer.cancel()
@@ -348,7 +357,10 @@ def main() -> int:
         from scripts.benchmark_verdict import benchmark_verdict
 
         verdict = benchmark_verdict(
+            case=args.case,
+            acceptance_report=acceptance_report,
             agent_turn_ok=agent_turn_ok,
+            deadline_reached=deadline_reached,
             acceptance_exit_code=acceptance_exit_code,
             team_required=args.require_coding_team,
             team_ok=team_ok,

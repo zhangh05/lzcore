@@ -830,5 +830,40 @@
       "execution_cleanup_confirmed": true,
       "delegation_cleanup_confirmed": true
     }
+  ],
+  "takeover_preflight_controls": [
+    {
+      "case": "noc",
+      "report_id": "7fadea95ed",
+      "framework_commit": "63d95b7d7ae58e2d5b3246f533b343e6815f978a",
+      "framework_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "prompt_sha256": "b50474fbe46f1ad25c9aff76fbb109dafbe2c94613c29ea98cdcc4f91d35312d",
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "provider_type": "anthropic_messages",
+      "preflight": {
+        "schema": "coding.benchmark_preflight.v1",
+        "provider": "minimax",
+        "model": "MiniMax-M3",
+        "provider_type": "anthropic_messages",
+        "status": "BLOCKED",
+        "agent_started": false,
+        "http_status": 401,
+        "duration_seconds": 0.193,
+        "reason": "provider_authentication_failed"
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "status": "BLOCKED",
+        "stage": "provider_preflight",
+        "reason": "provider_authentication_failed",
+        "agent_started": false,
+        "named_acceptance_passed": null,
+        "execution_environment_started": false,
+        "cleanup_required": false,
+        "full_benchmark_acceptance": "NOT VERIFIED"
+      },
+      "note": "Provider prerequisite only; no Agent, project environment, or engineering implementation started."
+    }
   ]
 }

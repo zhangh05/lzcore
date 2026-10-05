@@ -118,7 +118,8 @@ def main() -> int:
             assert result.returncode == 0, (result.stdout + result.stderr)[-1200:]
             return json.loads(result.stdout.strip().splitlines()[-1])
         for round_index in range(args.rounds):
-            for scenario in ("seed_and_tick", "save_load", "fog_save", "battle_100v100", "movement_200", "continuation_determinism", "long_run_cleanup"):
+            from scripts.benchmark_coverage import RTS_SCENARIOS
+            for scenario in RTS_SCENARIOS:
                 check(f"independent_engine_{scenario}_round_{round_index+1}", lambda scenario=scenario, seed=base_seed+round_index: engine_check(scenario, seed))
     from playwright.sync_api import sync_playwright
     def browser_checks():
@@ -168,12 +169,14 @@ def main() -> int:
         "diff_sha256": hashlib.sha256(subprocess.check_output(["git", "diff", "HEAD"], cwd=code_root)).hexdigest(),
     }
     payload = {"evaluator_source": evaluator_source, "case": args.case, "seed": base_seed, "rounds": args.rounds, "checks": checks,
-               "full_benchmark_acceptance": "NOT VERIFIED",
                "note": "Only the named checks were independently executed; generated tests are not independent functional acceptance."}
+    from scripts.benchmark_coverage import acceptance_summary
+    scope = acceptance_summary(args.case, payload)
+    payload.update(acceptance_scope=scope, full_benchmark_acceptance=scope["full_benchmark_acceptance"])
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 1 if any(item["status"] == "FAIL" for item in checks) else 0
+    return {"PASS": 0, "FAIL": 1, "INCOMPLETE": 2}[scope["status"]]
 
 
 if __name__ == "__main__":

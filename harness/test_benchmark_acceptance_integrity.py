@@ -125,13 +125,20 @@ def test_generated_checks_share_immutable_snapshot_execution(monkeypatch, tmp_pa
         {"acceptance_exit_code": False},
         {"team_ok": False},
         {"cleanup_confirmed": False},
+        {"deadline_reached": True},
     ],
 )
 def test_turn_success_never_masks_failed_acceptance_or_unknown_cleanup(changes):
     from scripts.benchmark_verdict import benchmark_verdict
 
     arguments = dict(
+        case="counter",
+        acceptance_report={"case": "counter", "rounds": 3, "checks": [
+            {"name": name, "status": "PASS"} for name in (
+                "generated_test_suite", "production_build", "independent_browser_interactions")
+        ]},
         agent_turn_ok=True,
+        deadline_reached=False,
         acceptance_exit_code=0,
         team_required=True,
         team_ok=True,

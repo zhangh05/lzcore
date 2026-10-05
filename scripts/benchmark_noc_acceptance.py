@@ -7,8 +7,44 @@ PASS flags. Random target choices are recorded and replayable via the seed.
 from __future__ import annotations
 
 import math
+import json
 import random
 import urllib.error
+from collections import Counter
+
+
+def verify_line_diff(lines, before: str, after: str):
+    """Both sides must reconstruct exactly; finding one marker proves little."""
+    assert isinstance(lines, list) and lines, "missing line diff"
+    old, new = [], []
+    for line in lines:
+        assert isinstance(line, dict) and line.get("kind") in {"added", "removed", "unchanged"}, "invalid diff line"
+        assert isinstance(line.get("text"), str), "diff line has no text"
+        if line["kind"] != "added":
+            old.append(line["text"])
+        if line["kind"] != "removed":
+            new.append(line["text"])
+    assert old == before.splitlines(), "diff does not reconstruct original configuration"
+    assert new == after.splitlines(), "diff does not reconstruct saved configuration"
+
+
+def restore_configuration(api, path: str, before: dict, changed: str):
+    """Read back uncertain writes; never repeat PUT/rollback or erase other work."""
+    observed = api(path)
+    if observed["content"] == before["content"]:
+        return False
+    assert observed["content"] == changed, "configuration differs from this test's write; refusing automatic rollback"
+    try:
+        api(path + "/rollback", {"versionId": before["versionId"]})
+    except OSError as exc:
+        if isinstance(exc, urllib.error.HTTPError):
+            raise
+        # A lost rollback response is an unknown write. Resolve through a read,
+        # without sending the mutation a second time.
+        if api(path)["content"] != before["content"]:
+            raise
+    assert api(path)["content"] == before["content"], "rollback did not restore original content"
+    return True
 
 
 def run_noc_acceptance(api, array, check, seed):
@@ -44,9 +80,9 @@ def run_noc_acceptance(api, array, check, seed):
             for key in ("rxBps", "txBps", "rxPps", "txPps"):
                 value(after[identifier], key)
             row = after[identifier]
-            assert value(row, "rxBps") <= value(row, "speed") * 1.05, (
-                "RX rate exceeds line speed"
-            )
+            for key in ("rxBps", "txBps"):
+                assert value(row, key) <= value(row, "speed") * 1.05, "rate exceeds line speed"
+            assert value(row, "utilization") <= 1, "utilization outside 0..1"
         return {"seed": seed, "interfaces": ids, "verified_fields": keys}
 
     check("independent_interface_counters_and_rates", counters)
@@ -191,14 +227,21 @@ def run_noc_acceptance(api, array, check, seed):
         device = rng.choice(array("/api/devices", "devices"))["id"]
         path = "/api/config/" + str(device)
         before = api(path)
-        changed = str(before["content"]) + "\nacceptance-random-" + str(seed)
+        assert isinstance(before["content"], str)
+        original_lines = before["content"].splitlines()
+        changed_lines = ["acceptance-replaced-" + str(seed), *original_lines[1:], "acceptance-added-" + str(seed)]
+        changed = "\n".join(changed_lines)
+        audit_before = Counter(json.dumps(item, sort_keys=True) for item in array("/api/audit", "audit"))
+        restored = False
         try:
             saved = api(
                 path,
                 {"content": changed, "reason": "independent acceptance"},
                 method="PUT",
             )
-            assert api(path)["content"] == changed, "configuration write not read back"
+            observed = api(path)
+            assert observed["content"] == changed, "configuration write not read back"
+            assert observed["versionId"] == saved["versionId"] != before["versionId"], "configuration version did not advance"
             diff = api(
                 path
                 + "/diff?from="
@@ -206,20 +249,15 @@ def run_noc_acceptance(api, array, check, seed):
                 + "&to="
                 + str(saved["versionId"])
             )
-            assert any(
-                line["kind"] == "added" and str(seed) in line["text"]
-                for line in diff["lines"]
-            ), "line diff did not show actual addition"
+            verify_line_diff(diff["lines"], before["content"], changed)
         finally:
-            # Preserve the test application's original state even when the
-            # assertion exposes a bad Diff or a lost write response.
-            api(path + "/rollback", {"versionId": before["versionId"]})
-        assert api(path)["content"] == before["content"], (
-            "rollback did not restore original content"
-        )
+            restored = restore_configuration(api, path, before, changed)
+        assert restored, "configuration test made no reversible change"
         audit = array("/api/audit", "audit")
+        audit_after = Counter(json.dumps(item, sort_keys=True) for item in audit)
         assert any(
-            item.get("deviceId") == device and item.get("action") == "config.rollback"
+            audit_after[json.dumps(item, sort_keys=True)] > audit_before[json.dumps(item, sort_keys=True)]
+            and item.get("deviceId") == device and item.get("action") == "config.rollback"
             for item in audit
         ), "rollback omitted from audit"
         return {"device": device, "restored_version": before["versionId"]}
