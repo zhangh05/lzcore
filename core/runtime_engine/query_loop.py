@@ -370,6 +370,9 @@ class QueryLoop(
                 messages = self._append_turn_nudge(
                     messages, self._truncation_continuation(response)
                 )
+                stalled = await self._check_candidate_progress(ctx, messages)
+                if stalled:
+                    return finish(**stalled)
                 continue
 
             if response is None or response.error:
@@ -1091,8 +1094,7 @@ class QueryLoop(
                         "Additional tools remain available for a genuine unresolved evidence gap; never claim "
                         "visual details not present in the image.",
                     )
-                from .completion import observe_repair_progress
-                stalled = await observe_repair_progress(ctx, self._config.completion_unchanged_tool_round_limit)
+                stalled = await self._check_candidate_progress(ctx, messages)
                 if stalled:
                     return finish(**stalled)
                 continue

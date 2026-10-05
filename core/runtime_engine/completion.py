@@ -68,7 +68,8 @@ async def observe_repair_progress(ctx, limit):
     """Tool activity is not source repair; only a trusted digest resets recovery."""
     observation = ctx.extras.get("completion_observation") or {}
     digest_check = ctx.extras.get("__completion_source_digest")
-    if (observation.get("status") != "failed" or not callable(digest_check)
+    if (observation.get("status") == "unknown" or not callable(digest_check)
+            or not callable(ctx.extras.get("__completion_check"))
             or ctx.extras.get("unknown_outcome")):
         return None
     try:
@@ -81,7 +82,7 @@ async def observe_repair_progress(ctx, limit):
         ctx.extras.setdefault("completion_events", []).append(unknown)
         return terminal_completion(unknown)
     state = ctx.extras.get("__completion_progress_state") or {
-        "source_digest": observation.get("source_digest"), "unchanged_rounds": 0,
+        "source_digest": observation.get("source_digest", digest), "unchanged_rounds": 0,
     }
     rounds = state["unchanged_rounds"] + 1 if state["source_digest"] == digest else 0
     ctx.extras["__completion_progress_state"] = {"source_digest": digest, "unchanged_rounds": rounds}
@@ -91,9 +92,14 @@ async def observe_repair_progress(ctx, limit):
     # stopping. The check contract itself preserves any unknown operation.
     current = await observe_completion(ctx)
     if not current or current["status"] == "passed":
-        ctx.extras.pop("__completion_progress_state", None)
+        ctx.extras["__completion_progress_state"]["unchanged_rounds"] = 0
         return None
     if current["status"] == "failed":
+        if observation.get("status") != "failed":
+            # A worker need not propose completion to receive verified repair
+            # feedback. Give the same candidate a full recovery interval first.
+            ctx.extras["__completion_progress_state"]["unchanged_rounds"] = 0
+            return {"nudge": repair_instruction(current)}
         current = {**current, "repair_stalled": True, "stop_reason": "unchanged_candidate",
                    "unchanged_tool_rounds": rounds, "observed_source_digest": digest}
         ctx.extras["completion_observation"] = current

@@ -184,3 +184,64 @@ def test_stall_recheck_unknown_stops_without_retry():
     assert terminal['error']=='completion_outcome_unknown'
     assert asyncio.run(observe_repair_progress(ctx,1)) is None
     assert len(checks)==2
+
+
+@pytest.mark.parametrize('truncated', [False, True])
+def test_pre_final_source_stall_receives_real_checks_then_bounded_recovery(tmp_path, truncated):
+    import hashlib
+    candidate = tmp_path / 'engine.js'
+    candidate.write_text('broken implementation')
+    digest = lambda: hashlib.sha256(candidate.read_bytes()).hexdigest()
+    config = SSOTRuntimeConfig(max_llm_calls=10, completion_unchanged_tool_round_limit=2)
+    runtime = ToolRuntime(config)
+    reads, calls, checks = [], [], []
+    runtime.register('data.manage', lambda args: reads.append(args) or {'ok': True, 'rows': ['source observed']})
+    registry = {'data.manage': {'description': 'observe', 'args_schema': {'type': 'object', 'properties': {
+        'action': {'type': 'string'}, 'text': {'type': 'string'}}}}}
+
+    def model(**kwargs):
+        calls.append(kwargs)
+        if truncated:
+            return LLMResponse(finish_reason='length', metadata={'output_truncated': True})
+        return LLMResponse(tool_calls=[LLMToolCall(id=f'read{len(calls)}', name='data.manage',
+                                                 arguments={'action': 'parse', 'text': f'source section {len(calls)}'})])
+
+    def check():
+        checks.append(True)
+        return {'status': 'failed', 'source_digest': digest(), 'checks': [{'exit_code': 1}]}
+
+    ctx = StatelessContext('ws', 'pre-final', 'pre-final', 'Implement', extras={
+        '__completion_check': check, '__completion_source_digest': digest})
+    result = asyncio.run(QueryLoop(config, registry, runtime, llm_invoke=model).run(
+        ctx, BudgetController(config), None))
+    assert result.error == 'completion_repair_no_progress'
+    assert len(calls) == 4 and len(checks) == 2
+    assert len(result.tool_results) == (0 if truncated else 4)
+    assert len(reads) == (0 if truncated else 4)
+    assert any('[SERVER COMPLETION CONTRACT]' in (message.content or '')
+               for message in calls[2]['messages'])
+
+
+def test_pre_final_probe_unknown_stops_without_replay():
+    from core.runtime_engine.completion import observe_repair_progress
+    checks = []
+    def check():
+        checks.append(True)
+        return {'status': 'unknown', 'automatic_retry_allowed': False}
+    ctx = SimpleNamespace(extras={'__completion_check': check, '__completion_source_digest': lambda: 'source'})
+    terminal = asyncio.run(observe_repair_progress(ctx, 1))
+    assert terminal['error'] == 'completion_outcome_unknown'
+    assert asyncio.run(observe_repair_progress(ctx, 1)) is None
+    assert len(checks) == 1
+
+
+def test_successful_pre_final_probe_does_not_finish_business_goal():
+    from core.runtime_engine.completion import observe_repair_progress
+    checks = []
+    def check():
+        checks.append(True)
+        return {'status': 'passed', 'source_digest': 'source'}
+    ctx = SimpleNamespace(extras={'__completion_check': check, '__completion_source_digest': lambda: 'source'})
+    for _ in range(4):
+        assert asyncio.run(observe_repair_progress(ctx, 2)) is None
+    assert len(checks) == 2 and ctx.extras['completion_observation']['status'] == 'passed'

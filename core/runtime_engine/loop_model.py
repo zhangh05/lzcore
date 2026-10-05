@@ -31,6 +31,14 @@ _LOG = logging.getLogger(__name__)
 class LoopModelGateway:
     """Provider windows, context continuation, native protocols and final synthesis. Shared context belongs to the QueryLoop driver."""
 
+    async def _check_candidate_progress(self, ctx, messages):
+        from .completion import observe_repair_progress
+        observation = await observe_repair_progress(ctx, self._config.completion_unchanged_tool_round_limit)
+        if observation and "nudge" in observation:
+            messages[:] = self._append_turn_nudge(messages, observation["nudge"])
+            return None
+        return observation
+
     def _truncation_continuation(self, response: LLMResponse) -> str:
         """Continue incomplete native output without executing partial writes."""
         if response.tool_calls:
