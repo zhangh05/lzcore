@@ -29,6 +29,7 @@ vi.mock("../components/ConfirmDialog", async (importOriginal) => {
 
 const baseProvider: ProviderConfig = {
   provider: "minimax",
+  provider_type: "anthropic_messages",
   label: "MiniMax",
   enabled: false,
   base_url: "https://api.minimaxi.com/anthropic/v1",
@@ -57,6 +58,7 @@ function makeProviders(active: string = "minimax"): ProviderListResponse {
     active,
     providers: ids.map((id, i) => ({
       provider: id,
+      provider_type: id === "minimax" || id === "anthropic" ? "anthropic_messages" : "openai_compatible",
       label: labels[i],
       enabled: id === active,
       base_url: id === "minimax" ? "https://api.minimaxi.com/anthropic/v1" : "",
@@ -115,6 +117,39 @@ afterEach(() => {
 });
 
 describe("Settings — LLM Provider configuration v2", () => {
+  it("旧后端遗漏协议时明确提示重启，不猜测或提交 OpenAI 协议", async () => {
+    const providers = makeProviders();
+    delete providers.providers[0].provider_type;
+    const spy = mockApi({ providersList: providers });
+    render(<Settings />);
+    await screen.findByText("模型配置接口未返回有效的接口协议。请通过官方脚本重启后端服务，再刷新此页面。");
+    expect(screen.queryByTestId("field-provider-type")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-save-llm")).not.toBeInTheDocument();
+    expect(spy.providerSave).not.toHaveBeenCalled();
+    expect(spy.llmActivate).not.toHaveBeenCalled();
+  });
+
+  it("协议切换通过测试和保存传递，并在重新加载后保留服务端协议", async () => {
+    const providers = makeProviders();
+    const saved = { ...providers.providers[0], provider_type: "openai_compatible" as const };
+    const spy = mockApi({ providersList: providers,
+      providerSave: vi.fn().mockResolvedValue({ ok: true, config: saved }) });
+    const rendered = render(<Settings />);
+    const protocol = await screen.findByTestId("field-provider-type");
+    expect(protocol).toHaveValue("anthropic_messages");
+    fireEvent.change(protocol, { target: { value: "openai_compatible" } });
+    expect(protocol).toHaveValue("openai_compatible");
+    fireEvent.click(screen.getByTestId("btn-test-llm"));
+    await waitFor(() => expect(spy.llmTest).toHaveBeenCalledWith(expect.objectContaining({ provider_type: "openai_compatible" })));
+    await waitFor(() => expect(screen.getByTestId("btn-save-llm")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("btn-save-llm"));
+    await waitFor(() => expect(spy.providerSave).toHaveBeenCalledWith("minimax", expect.objectContaining({ provider_type: "openai_compatible" })));
+    rendered.unmount();
+    mockApi({ providersList: { ...providers, providers: [saved, ...providers.providers.slice(1)] } });
+    render(<Settings />);
+    expect(await screen.findByTestId("field-provider-type")).toHaveValue("openai_compatible");
+  });
+
   it("加载后渲染 provider sidebar + 表单", async () => {
     mockApi();
     render(<Settings />);

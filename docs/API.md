@@ -206,6 +206,8 @@ Anthropic 接入模板不预填模型 ID，添加时填写当前账户或网关�
 
 厂商身份与名称、协议独立。`POST /api/agent/llm/providers` 接受 `label`、`provider_type=openai_compatible|anthropic_messages`、`base_url`、`model` 和其余配置字段，返回 201 与服务端生成的 `provider_<uuid>`；同名或同协议可添加多家。GET 列表合并内置与已保存厂商，`templates` 只提供无密钥的接入默认值，前端不维护第二份厂商名单。保存、激活、连接测试、任务路由和实际生成共享这一配置目录。显式协议决定传输，不由厂商名称或地址猜测；旧配置缺少协议时兼容推断并在后续保存时写入。
 
+列表和模板返回的配置必须包含有效的 `provider_type`。前端遇到缺失或未知协议时明确提示重启服务，停止显示和提交猜测的协议；不把旧后端缺少字段误显示为 OpenAI 兼容。更新本地代码后须先运行 `./stop.sh` 再运行 `./start.sh` 完整重启，单独运行 `./start.sh` 会复用仍在运行的后端进程。
+
 厂商记录在 `LZCORE_CONFIG_DIR/providers`；未设置时使用仓库 `config/providers`。新增和已有记录使用同一密钥后端，API 不返回明文密钥或 secret_ref。新增厂商不借用其他厂商的环境密钥。连接测试可测试管理员的未保存协议/地址/模型/密钥草稿，`clear_api_key=true` 明确以无密钥测试；普通用户仍只能测试已保存配置。测试不保存或切换当前厂商。保存保留配置，激活切换当前厂商；显式关闭当前配置不会回退到其他厂商。DELETE 内置厂商恢复默认，DELETE 新增厂商移除配置及密钥；删除当前新增厂商返回 409，先切换后再删除。模型协议的本地 HTTP/SSE 合同检查不代表所有第三方厂商都已完成真实服务验收。
 
 保存/激活支持 top_p=null 或 0<值<=1，null 省略请求字段；thinking=provider_default|adaptive|disabled。MiniMax-M3 使用 Anthropic Messages 思考配置，M3.1 拒绝 disabled。新 MiniMax 默认 temperature=1/max_tokens=8192，其他初始值 0.2/4096；既有显式值保留，QueryLoop 不另覆盖。配置改写不暗中开启思考或扩大模型窗口。

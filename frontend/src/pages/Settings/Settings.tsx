@@ -87,7 +87,17 @@ export function Settings() {
 
         const list = Array.isArray(res?.providers) ? res.providers : [];
         const active = res?.active ?? "";
-        setTemplates(res.templates ?? []);
+        const templates = res.templates ?? [];
+        const hasProtocol = (provider: ProviderConfig) =>
+          provider.provider_type === "openai_compatible" || provider.provider_type === "anthropic_messages";
+        // The server resolves legacy configurations. Guessing a transport here
+        // can silently overwrite a working Messages configuration when a newer
+        // frontend talks to an older backend that ignores protocol changes.
+        if ([...list, ...templates].some(provider => !hasProtocol(provider))) {
+          setError("模型配置接口未返回有效的接口协议。请通过官方脚本重启后端服务，再刷新此页面。");
+          return;
+        }
+        setTemplates(templates);
 
         if (list.length === 0) {
           setProviders([]);
