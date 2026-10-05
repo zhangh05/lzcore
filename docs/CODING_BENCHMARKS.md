@@ -4,7 +4,7 @@
 
 ## 准备隔离运行环境
 
-先在专用 Docker daemon 构建 `scripts/coding-runtime.Dockerfile`；构建上下文只放该 Dockerfile，不发送框架仓库。镜像只包含 Node/Python 运行时。服务端通过 `LZCORE_CODING_EXECUTION_IMAGE` 指定镜像（默认 `lzcore-coding-runtime:local`），启动时记录不可变 image ID。Docker CLI 默认从 PATH 查找；`LZCORE_CODING_DOCKER_COMMAND` 可指定 JSON argv，用于明确的本地 VM 客户端。该设置不是模型工具参数。
+先在专用 Docker daemon 构建 `scripts/coding-runtime.Dockerfile`；构建上下文只放该 Dockerfile，不发送框架仓库。镜像包含 Node/Python、与 Node 同版本的本地头文件及 C/C++ 编译工具，npm_config_nodedir 指向镜像内头文件，使原生依赖无需下载外部头文件即可编译；包本身仍仅通过受限依赖出口安装。服务端通过 `LZCORE_CODING_EXECUTION_IMAGE` 指定镜像（默认 `lzcore-coding-runtime:local`），启动时记录不可变 image ID。Docker CLI 默认从 PATH 查找；`LZCORE_CODING_DOCKER_COMMAND` 可指定 JSON argv，用于明确的本地 VM 客户端。该设置不是模型工具参数。
 
 使用 VM/远程 daemon 时，`LZCORE_CODING_DOCKER_HOST_ROOT` 与 `LZCORE_CODING_DOCKER_GUEST_ROOT` 必须同时指定。VM 只能共享本轮 scratch 根，不能共享仓库、用户 HOME、Evaluator 或 Docker Socket。`--output` 必须位于该 scratch 根内。系统隔离不可用时拒绝运行，不回退宿主。
 
@@ -47,7 +47,7 @@ Evaluator 的独立调用必须提供服务端已建立的容器身份、镜像 
 
 `verify_benchmark_evaluator.py` 三个随机 Seed 证明生成引擎无法篡改宿主断言或读取验收程序，包含只读的 0600 源码。两种真实内核检查已加入 CI。
 
-`verify_coding_isolation.py` 经真实 ToolRuntime 压测越界、符号链接、受限出站、后台后代超时及关闭后迟到调用。`test_project_changes_stress.py` 重复竞争整合，断点恢复、候选变化、QA 失败、身份跨越和取消另见 `test_coding_team.py`。310 轮窗口测试是确定性 Provider 与真实 QueryLoop/ToolRuntime，不是 310 次真实模型交付。
+`verify_coding_isolation.py` 经真实 ToolRuntime 压测越界、符号链接、受限出站、后台后代超时及关闭后迟到调用；第一轮额外强制从源码编译 SQLite 依赖并运行真实 SQL，验证本地头文件/工具链而非下载预编译产物。`test_project_changes_stress.py` 重复竞争整合，断点恢复、候选变化、QA 失败、身份跨越和取消另见 `test_coding_team.py`。310 轮窗口测试是确定性 Provider 与真实 QueryLoop/ToolRuntime，不是 310 次真实模型交付。
 
 历史结果见 [2026-10-04](CODING_BENCHMARK_RESULTS_2026-10-04.md)，保留原失败与验证边界。本轮最终结果单独留证，不覆盖历史记录。
 

@@ -61,6 +61,14 @@ def main() -> int:
             probe("root_filesystem_readonly", {"action": "shell", "command": "touch /usr/local/host-escape"}, False)
             probe("cwd_traversal_denied", {"action": "shell", "working_dir": "../../", "command": "echo escaped"}, False)
             probe("registry_tls_dependency_allowed", {"action": "shell", "command": "npm view react version", "timeout": 30}, True)
+            if index == 0:
+                probe("native_dependency_compiles_using_image_headers", {"action": "shell", "command":
+                    "npm_config_build_from_source=true npm install better-sqlite3@13.0.3", "timeout": 180}, True)
+                probe("compiled_sqlite_runs_real_query", {"action": "shell", "command":
+                    "node -e \"const Database=require('better-sqlite3');const db=new Database(':memory:');"
+                    "db.exec('CREATE TABLE records (value INTEGER)');db.prepare('INSERT INTO records VALUES (?)').run(42);"
+                    "if(db.prepare('SELECT value FROM records').get().value!==42)process.exit(1);db.close();\"",
+                    "timeout": 30}, True)
             probe("unapproved_tls_origin_denied", {"action": "python", "code": "import urllib.request; result = urllib.request.urlopen('https://example.com', timeout=5).status", "timeout": 10}, False)
             probe("direct_network_cannot_bypass_proxy", {"action": "python", "code": "import socket; result = socket.create_connection(('1.1.1.1', 443), timeout=2).getpeername()", "timeout": 5}, False)
             # The escape probe must not become a valid reviewed build source.

@@ -1826,6 +1826,737 @@
       },
       "observed_failed_exec_operations": 16,
       "diagnosis": "Coordinator ignored explicit revision handoff and spawned fresh implementation (no rejected revision tool call observed). Actual source/tests/build contain interface/type failures. Native context retained actual failures; repeated read-only tools and output-limit responses did not change source. Existing material-progress gate only starts after final proposal, so pre-final stall escaped it. Operator stopped to repair this shared lifecycle gap; no QA/integration or full acceptance."
+    },
+    {
+      "round": "large-20261006-ling-noc-9",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-9/reports/bench_noc_663c3a30a4/084897ba75",
+      "configuration": {
+        "case": "noc",
+        "workspace_id": "bench_noc_663c3a30a4",
+        "session_id": "a765c17783c24249",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "source_commit": "c59722f1ad86b7979e71e53ffc14ac3d4003bdae",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "prompt_sha256": "cb98439add661bf357f0194246822d9a78bc2b157c8cce06d664221387be86a8",
+        "max_tokens": 16384
+      },
+      "duration_seconds": 342.04,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "operator_control": {
+        "requested_at": "2026-10-05T21:23:14.359616+00:00",
+        "reason": "Known failed implementation and native dependency compilation missing from runtime image: missing local Node headers/compiler, external prebuilt/header download denied. Stop before image repair; preserve source and original checks.",
+        "active_implementation_already_failed": true,
+        "action": "SIGINT normal benchmark cancellation/cleanup"
+      },
+      "task": {
+        "subtask_id": "sub-20c2f347",
+        "status": "failed",
+        "phase": "failed",
+        "source_files": 39,
+        "source_file_sha256": {
+          "package-lock.json": "43ac22a45fa76b0e74a7f65cff5225e83e9853c3477f5c578856094ca96d22b6",
+          "package.json": "c5e85b8b5f3b3c905267331a1510b9f26ed788d2b648c09817fab9e79c7714d6",
+          "tsconfig.json": "bdbe562387b7a16ff1ff7819ca169ff0e4223da7b5a0e628f663e23708cb7c03",
+          "vite.config.ts": "37b62b5d4ef11520fdc6fd5178985f229712f90c5fbe3b41f860c819f4499d72",
+          "src/middleware/auth.ts": "6cbaab6c88ea21cfaee8186d56f1c850853891f1b12d1521ac671a05414d5fb9",
+          "src/types/index.ts": "e2e7fca1a3902362285e96983fe08dfd0ac503bf3fdeda21b423b28330b1510a",
+          "src/frontend/index.html": "efbee23bbe705a611535cb3b2fbe3dca37e39027a0df0186f2e584691d0d9b45",
+          "src/frontend/main.ts": "06f914bd7401e24c9861f5e88782ba164e0f21d4431ab9016a8963af4ad91326",
+          "src/frontend/app.ts": "e100250062c6a26c648a9944f26549d0195ccc313fe33332f9754206085b5670",
+          "src/frontend/pages/inventory.ts": "b7f14bc85b000eb7b1ba6ff70122959edde92ae7c91ea2b4c50847f03dc08640",
+          "src/frontend/pages/devices.ts": "bf6772e51408a26c3f463c4bc877151a0f08b0d903b0b5b4251aaa8ff0ac472f",
+          "src/frontend/pages/performance.ts": "1495c146c4c97b78ced103c66928527d7f9894a2b424360052e2597008a86cbf",
+          "src/frontend/pages/login.ts": "6f7588a12a1e315acb3c63184d8d45ca7606a02e3eff220cab856a9c3baa757d",
+          "src/frontend/pages/topology.ts": "a0dbc26b902903969eec017192899983ba0a3a8e4692de9d1c4cb996ca0ed3e6",
+          "src/frontend/pages/settings.ts": "20e520792841fdcd8462e0081e550f1c0f2b42f650ecf94a3f995a21cde114d7",
+          "src/frontend/pages/syslog.ts": "e2a018e47e6c49496d02778ae6a886a1ac87674ebda02d5ba3f5100b59883da6",
+          "src/frontend/pages/routing.ts": "0767a7b707e6f6fa4d4be8b4a82a7c50b9ad46a9870e3d25a905cfba10d15c6e",
+          "src/frontend/pages/overview.ts": "57a233d0a29883c309b724d74808f91114a2fce991e29c0a39e9e5c58d822582",
+          "src/frontend/pages/automation.ts": "0420d23b9069239cb8940f1ea98f54c55abbbb4080ddb69dc8d05201b8897053",
+          "src/frontend/pages/events.ts": "46e28ab37ae061d9c122a39f88d68c92b21d88b860622968fb71d10b0bacbe53",
+          "src/frontend/pages/config.ts": "d0badb158f6fc0c091eafa57d3cab129589255bf4bf24a98e61ccdf6e846e9dd",
+          "src/frontend/pages/audit.ts": "de1501f9dcd506d64694fca18a2eb62024832a11613aebc3039a8bedfe2baf20",
+          "src/frontend/pages/interfaces.ts": "ae1fa26cd2ad898e5b372096b229b1c7b30ede47669be5585540ed23e3c70ec8",
+          "src/frontend/pages/alerts.ts": "e8b81ad0d3fc329073dac3c622a0f0c4667bbc92264373b2f9b94a03a260fde8",
+          "src/db/database.ts": "b0287e17b3fbbc0252b4e6f845c40695cff11ebceec2e26b2b9209e19b1261ee",
+          "src/engine/simulation.ts": "3ab74af0b27f0b4c09cba8aacf0bc0c3ea6533f681879e670ab608e56a15a1ec",
+          "src/routes/faults.ts": "9fdccf6b0f88ab518c991cdd418d9fd8bf760be8e9b7eede117c7efb38cfa40a",
+          "src/routes/devices.ts": "ad534634422a7dbae96723fabc9ef01db54e574f28ef3caf68e212e3605599c3",
+          "src/routes/topology.ts": "f77299c88677d43b59cf14189268afa74c8785f483a4361080012936b044ed33",
+          "src/routes/syslog.ts": "5d52d10c617a05ef6b26c8a19d1a6522c5424be29364f198790778580c46be0f",
+          "src/routes/stream.ts": "98f8d7b9ba758fad2872df9e7be731a19c3a830f078d8f96387e3d086674349b",
+          "src/routes/test.ts": "5e9a5f94f931f53ceec9c8902765e1ccf0fd76647314abf7af37d6eaf6594345",
+          "src/routes/events.ts": "2808bdb59f1e785b5f07072e313c31837969cbec7d1df1d22a8f6f86b920d7ca",
+          "src/routes/health.ts": "dd1f6247634e81db4d98eed077b5e4fff585c89dfd29dac75d2e726f33df5139",
+          "src/routes/config.ts": "26ad4e60af130facd745b6d6785be243fa76411385cfd6ff203ebfa77cd4ebc8",
+          "src/routes/audit.ts": "45cb673e0dda3818ea68cd39753f97549c0258f1fea31dd64123626266b1008d",
+          "src/routes/auth.ts": "6ab40d37c6de2c9922da666bdc6c481476af8b93a31104659166e0bee4af4c07",
+          "src/routes/interfaces.ts": "ccbc016c38ac1e43ba1ca523c97ec7cd9ed138ce2a4787a219fc12468548fc0a",
+          "src/routes/alerts.ts": "0a4d9d53fae8311b1f4829b1cd8816bd572e7f22516202f73d17c8ff738e6bc8"
+        },
+        "recorded_model_calls": 53,
+        "responses_at_output_allowance": 0,
+        "completion_status": "failed",
+        "completion_checks": [
+          {
+            "command": "npm test",
+            "exit_code": 1,
+            "runtime_status": "failed",
+            "execution_outcome": null
+          },
+          {
+            "command": "npm run build",
+            "exit_code": 2,
+            "runtime_status": "failed",
+            "execution_outcome": null
+          }
+        ],
+        "environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 57174,
+          "preview_origin": "http://127.0.0.1:57174",
+          "preview_bind_port": 8080,
+          "source_mode": "implementation",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": true,
+          "cleanup_confirmed": true,
+          "cleanup_errors": []
+        }
+      },
+      "diagnosis": "Source-progress validation triggered before final proposal and rejected actual failed tests/build. Native better-sqlite3 installation failed because runtime image lacks local Node headers/compiler and dependency-only egress correctly denied external prebuild/header downloads. Generated source also lacks complete tests/server and has build errors. Worker stopped failed; operator then stopped parent to repair runtime toolchain. No independent QA/integration/full acceptance; no output-cap responses in this worker."
     }
-  ]
+  ],
+  "framework_native_dependency_runtime": {
+    "scope": "framework_contract_only_not_noc_or_rts_acceptance",
+    "dockerfile_sha256": "4c1eeb5d6573d589a2f058a2f76fd86bf2b544c8905c008b9c752c551d8448e2",
+    "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+    "dependency": "better-sqlite3@13.0.3",
+    "forced_source_compilation": true,
+    "external_header_or_prebuilt_egress_added": false,
+    "kernel_report": "/tmp/lzcore-strict-workspaces/native-runtime-kernel-20261006/report.json",
+    "kernel_rounds": [
+      {
+        "round": 1,
+        "environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/project",
+          "project": "/workspace/files/data/project",
+          "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18941,
+          "preview_origin": "http://127.0.0.1:18941",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        },
+        "checks": [
+          {
+            "name": "authorized_default_project_source_write",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "default_write_in_project",
+            "passed": true
+          },
+          {
+            "name": "explicit_workspace_project_directory",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "python_default_matches_shell_project",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "framework_evaluator_socket_not_mounted",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "outside_project_canary_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "symlink_cannot_reach_host",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "root_filesystem_readonly",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "cwd_traversal_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "registry_tls_dependency_allowed",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "native_dependency_compiles_using_image_headers",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "compiled_sqlite_runs_real_query",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "unapproved_tls_origin_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "direct_network_cannot_bypass_proxy",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "standard_rebuild_deletes_output_root_in_snapshot",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "validated_output_promoted",
+            "passed": true
+          },
+          {
+            "name": "independent_acceptance_uses_shared_build_snapshot",
+            "passed": true
+          },
+          {
+            "name": "validation_source_change_rejected",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "validation_keeps_reviewed_source",
+            "passed": true
+          },
+          {
+            "name": "coordinator_source_write_denied_by_kernel",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "coordinator_source_delete_denied_by_kernel",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "coordinator_source_write_denied_by_api",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "governed_source_edit_denied",
+            "passed": true
+          },
+          {
+            "name": "declared_build_output_writable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "temporary_runtime_output_writable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "preview_bind_contract_stable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "preview_service_in_readonly_project",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "external_port_maps_stable_internal_preview",
+            "passed": true
+          },
+          {
+            "name": "timeout_stops_descendants",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "timeout_environment_stopped",
+            "passed": true
+          },
+          {
+            "name": "late_child_never_falls_back_to_host",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "late_write_absent",
+            "passed": true
+          },
+          {
+            "name": "kernel_cleanup_confirmed",
+            "passed": true
+          }
+        ]
+      },
+      {
+        "round": 2,
+        "environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/project",
+          "project": "/workspace/files/data/project",
+          "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18942,
+          "preview_origin": "http://127.0.0.1:18942",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        },
+        "checks": [
+          {
+            "name": "authorized_default_project_source_write",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "default_write_in_project",
+            "passed": true
+          },
+          {
+            "name": "explicit_workspace_project_directory",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "python_default_matches_shell_project",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "framework_evaluator_socket_not_mounted",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "outside_project_canary_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "symlink_cannot_reach_host",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "root_filesystem_readonly",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "cwd_traversal_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "registry_tls_dependency_allowed",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "unapproved_tls_origin_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "direct_network_cannot_bypass_proxy",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "standard_rebuild_deletes_output_root_in_snapshot",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "validated_output_promoted",
+            "passed": true
+          },
+          {
+            "name": "independent_acceptance_uses_shared_build_snapshot",
+            "passed": true
+          },
+          {
+            "name": "validation_source_change_rejected",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "validation_keeps_reviewed_source",
+            "passed": true
+          },
+          {
+            "name": "coordinator_source_write_denied_by_kernel",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "coordinator_source_delete_denied_by_kernel",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "coordinator_source_write_denied_by_api",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "governed_source_edit_denied",
+            "passed": true
+          },
+          {
+            "name": "declared_build_output_writable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "temporary_runtime_output_writable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "preview_bind_contract_stable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "preview_service_in_readonly_project",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "external_port_maps_stable_internal_preview",
+            "passed": true
+          },
+          {
+            "name": "timeout_stops_descendants",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "timeout_environment_stopped",
+            "passed": true
+          },
+          {
+            "name": "late_child_never_falls_back_to_host",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "late_write_absent",
+            "passed": true
+          },
+          {
+            "name": "kernel_cleanup_confirmed",
+            "passed": true
+          }
+        ]
+      },
+      {
+        "round": 3,
+        "environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/project",
+          "project": "/workspace/files/data/project",
+          "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18943,
+          "preview_origin": "http://127.0.0.1:18943",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        },
+        "checks": [
+          {
+            "name": "authorized_default_project_source_write",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "default_write_in_project",
+            "passed": true
+          },
+          {
+            "name": "explicit_workspace_project_directory",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "python_default_matches_shell_project",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "framework_evaluator_socket_not_mounted",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "outside_project_canary_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "symlink_cannot_reach_host",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "root_filesystem_readonly",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "cwd_traversal_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "registry_tls_dependency_allowed",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "unapproved_tls_origin_denied",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "direct_network_cannot_bypass_proxy",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "standard_rebuild_deletes_output_root_in_snapshot",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "validated_output_promoted",
+            "passed": true
+          },
+          {
+            "name": "independent_acceptance_uses_shared_build_snapshot",
+            "passed": true
+          },
+          {
+            "name": "validation_source_change_rejected",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "validation_keeps_reviewed_source",
+            "passed": true
+          },
+          {
+            "name": "coordinator_source_write_denied_by_kernel",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "coordinator_source_delete_denied_by_kernel",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "coordinator_source_write_denied_by_api",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "governed_source_edit_denied",
+            "passed": true
+          },
+          {
+            "name": "declared_build_output_writable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "temporary_runtime_output_writable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "preview_bind_contract_stable",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "preview_service_in_readonly_project",
+            "passed": true,
+            "runtime_status": "succeeded"
+          },
+          {
+            "name": "external_port_maps_stable_internal_preview",
+            "passed": true
+          },
+          {
+            "name": "timeout_stops_descendants",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "timeout_environment_stopped",
+            "passed": true
+          },
+          {
+            "name": "late_child_never_falls_back_to_host",
+            "passed": true,
+            "runtime_status": "failed"
+          },
+          {
+            "name": "late_write_absent",
+            "passed": true
+          },
+          {
+            "name": "kernel_cleanup_confirmed",
+            "passed": true
+          }
+        ]
+      }
+    ],
+    "evaluator_report": "/tmp/lzcore-strict-workspaces/native-runtime-evaluator-20261006/report.json",
+    "evaluator_checks": [
+      {
+        "seed": 17,
+        "positive_pass": true,
+        "positive_error": "",
+        "assertion_tamper_rejected": true,
+        "verifier_not_exposed": true
+      },
+      {
+        "seed": 59,
+        "positive_pass": true,
+        "positive_error": "",
+        "assertion_tamper_rejected": true,
+        "verifier_not_exposed": true
+      },
+      {
+        "seed": 103,
+        "positive_pass": true,
+        "positive_error": "",
+        "assertion_tamper_rejected": true,
+        "verifier_not_exposed": true
+      },
+      {
+        "cleanup_confirmed": true
+      }
+    ]
+  }
 }
