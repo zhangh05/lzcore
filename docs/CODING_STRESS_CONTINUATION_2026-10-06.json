@@ -3687,16 +3687,51 @@
     "unchanged_semantic_failure_recopied_still_rejected": true
   },
   "offline_fix_validation": {
-    "targeted_tests_passed": 128,
-    "backend_tests_passed": 2215,
+    "targeted_tests_passed": 130,
+    "backend_tests_passed": 2217,
     "backend_tests_skipped": 11,
     "docs_runtime_consistency": "PASS",
     "ruff_ci_rules": "PASS",
-    "real_kernel_rounds": 3,
-    "real_kernel_controls": 6,
+    "real_kernel_rounds": 6,
+    "real_kernel_controls": 12,
     "paid_provider_after_fix": "NOT VERIFIED: explicit balance insufficient; no paid request retried.",
     "production_deployed": false,
     "tag_changed": false,
     "release_changed": false
+  },
+  "revision_publication_legacy_controls": {
+    "report": "/tmp/lzcore-strict-workspaces/revision-publication-kernel-20261006/report.json",
+    "status": "PASS",
+    "rounds": 3,
+    "controls": 6,
+    "paid_model_requests": 0,
+    "scope": "Real isolated kernel with deterministic legacy-regression fixtures; no paid model or application acceptance.",
+    "checks": [
+      {
+        "round": 1,
+        "legacy_merge_rejected": true,
+        "legacy_false_publication_rejected_by_independent_verifier": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      },
+      {
+        "round": 2,
+        "legacy_merge_rejected": true,
+        "legacy_false_publication_rejected_by_independent_verifier": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      },
+      {
+        "round": 3,
+        "legacy_merge_rejected": true,
+        "legacy_false_publication_rejected_by_independent_verifier": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      }
+    ],
+    "source_sha256": {
+      "agent/runtime/durable/coding_team.py": "c05b17859ad31160d5eee12f5b160b1db1879734e9bb196c5222ab0980b7f1a7",
+      "scripts/benchmark_team_acceptance.py": "f43ce7392f1f2274e775f600dc8318ac687481833c8b792f5678612c311737ed"
+    }
   }
 }

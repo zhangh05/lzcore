@@ -101,6 +101,8 @@ def test_qa_rejected_source_is_inherited_and_repaired_before_fresh_qa_and_merge(
     assert team.spawn('qa_agent',review=candidate.subtask_id)['task_status']=='succeeded'
     assert subagent.merge_subagent_result('parent-task',candidate.subtask_id,'parent-ws')['ok']
     assert project_path('parent-ws','files/data/app').joinpath('src/value.py').read_text()=='VALUE = 43\n'
+    from scripts.benchmark_team_acceptance import verify_team
+    assert verify_team('parent-ws','parent-session','files/data/app')['status']=='PASS'
 
 
 def test_invalid_public_qa_proposal_is_preserved_without_validating_candidate(team,monkeypatch):
@@ -268,3 +270,28 @@ def test_cached_passing_checks_cannot_bypass_revision_evidence_or_replay_unknown
     task.coding['completion_validation']=unknown
     project_path(task.coding['branch_workspace'],'files/data/app').joinpath('src/value.py').write_text('changed')
     assert coding_team.check_implementation(task)==unknown
+
+
+@pytest.mark.parametrize('legacy_publication',[False,True])
+def test_pre_fix_unchanged_revision_is_blocked_at_merge_and_independent_verification(team,monkeypatch,legacy_publication):
+    from scripts.benchmark_team_acceptance import verify_team
+    first=team.spawn()
+    with monkeypatch.context() as old_runtime:
+        old_runtime.setattr('agent.runtime.durable.coding_revisions.revision_readiness',lambda a,v:v)
+        qa_runtime(old_runtime)
+        copied=team.client.invoke('agent.manage',{'action':'spawn','profile_id':'coding_agent',
+            'instruction':'Old unchanged proposal','background':False,'coding_assignment':{
+                'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
+                'revision_subtask_id':first['subtask_id']}},context=team.parent).output
+        assert copied['task_status']=='succeeded'
+        assert team.spawn('qa_agent',review=copied['subtask_id'])['task_status']=='succeeded'
+        if legacy_publication:
+            assert subagent.merge_subagent_result('parent-task',copied['subtask_id'],'parent-ws')['ok']
+    if legacy_publication:
+        with pytest.raises(AssertionError,match='source revision has no actual change'):
+            verify_team('parent-ws','parent-session','files/data/app')
+    else:
+        result=subagent.merge_subagent_result('parent-task',copied['subtask_id'],'parent-ws')
+        assert not result['ok'] and result['error']=='coding_revision_incomplete'
+        assert not result['automatic_retry_allowed']
+        assert not project_path('parent-ws','files/data/app').joinpath('src/value.py').exists()

@@ -463,6 +463,15 @@ def integrate(task) -> dict:
     if not accepted_review(qa, assignment.get("qa_candidate_digest")):
         return {"ok": False, "error": "coding_qa_verdict_required",
                 "phase": assignment.get("phase"), "automatic_retry_allowed": False}
+    if assignment.get("revision_subtask_id"):
+        from .coding_revisions import revision_readiness
+        readiness = revision_readiness(assignment, assignment.get("completion_validation") or {})
+        if readiness.get("status") != "passed":
+            # Reassess durable pre-fix proposals without executing checks or
+            # rewriting their historical result. QA cannot supply source repair.
+            return {"ok": False, "error": "coding_revision_incomplete",
+                    "readiness_gap": readiness.get("readiness_gap"),
+                    "automatic_retry_allowed": False}
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
     if (
         manifest_digest(source_manifest(branch, assignment.get("generated_paths")))
