@@ -27,7 +27,7 @@ _GENERIC_CONTINUATION_RE = re.compile(
     r"^(?:请)?\s*(?:继续|接着|下一步|然后|继续完成|继续处理|恢复|再查|再验证|再分析|再试)\b",
     re.IGNORECASE,
 )
-_TASK_RESUMABLE = frozenset({"active", "completed", "partial", "replan_required", "waiting_user", "interrupted"})
+_TASK_RESUMABLE = frozenset({"active", "completed", "partial", "replan_required", "waiting_user", "interrupted", "cancelled"})
 
 
 def _now_iso() -> str:
@@ -312,6 +312,8 @@ def resolve_task_state(
         return None
     relation = _continuation_relation(user_input)
     if relation is None:
+        return None
+    if task.get("status") == "cancelled" and relation.get("kind") != "resume":
         return None
     latest_user, latest_assistant = _latest_complete_exchange(messages)
     if str(task.get("status") or "") == "interrupted":

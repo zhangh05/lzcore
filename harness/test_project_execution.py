@@ -224,3 +224,10 @@ def test_path_diagnostics_do_not_suggest_escaping_or_closed_project(environment,
     environment.closed = True
     result = client.invoke('workspace.file', {'action':'create','filepath':'src/main.ts','content':'unsafe'}, context=ctx)
     assert 'active_project_dir' not in result.output['error_details']
+
+
+def test_container_shell_uses_same_pipeline_status_contract(environment, monkeypatch):
+    observed = []
+    monkeypatch.setattr(environment, '_execute', lambda argv, *a, **kw: observed.append(argv))
+    environment.execute('false | tail -1', str(environment.project))
+    assert observed == [['/bin/bash', '-o', 'pipefail', '-c', 'false | tail -1']]

@@ -712,3 +712,63 @@ def test_unknown_check_with_source_changes_is_never_replayed(team, monkeypatch):
     (branch / 'src/value.py').write_text('VALUE = 44\n')
     assert coding_team.check_implementation(task) == validation
     assert len(calls) == 1
+
+
+def test_failed_revision_preserves_source_then_requires_exact_qa_and_merge(team, monkeypatch):
+    monkeypatch.setattr(DockerProjectEnvironment, 'execute', lambda *a, **kw: {'ok':False,'exit_code':1})
+    first = team.spawn()
+    original = subagent._load_task('parent-ws', first['subtask_id'])
+    assert original.status == 'failed' and original.coding['environment']['cleanup_confirmed']
+    original_source = project_changes.project_path(original.coding['branch_workspace'], 'files/data/app')
+    monkeypatch.setattr(DockerProjectEnvironment, 'execute', lambda *a, **kw: {'ok':True,'exit_code':0})
+
+    def repair_runtime(session, turn, **kwargs):
+        control = turn.op.runtime_control
+        if control.profile['profile_id'] != 'qa_agent':
+            source = project_changes.project_path(session.workspace_id, 'files/data/app')
+            assert (source / 'src/value.py').read_text() == 'VALUE = 42\n'
+            assert original_source != source
+            result = team.client.invoke('workspace.file', {'action':'edit', 'filepath':'files/data/app/src/value.py',
+                'old_string':'42','new_string':'43'}, context=ToolRuntimeContext(
+                    workspace_id=session.workspace_id,session_id=session.session_id,requested_by='subagent'))
+            assert result.status == 'succeeded'
+        return SimpleNamespace(ok=True,final_response='Repaired or independently reviewed',tool_calls=[])
+
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn', repair_runtime)
+    repaired = team.client.invoke('agent.manage', {'action':'spawn','profile_id':'coding_agent','instruction':'Repair confirmed failure',
+        'background':False,'coding_assignment':{'project_dir':'files/data/app','responsibilities':['src'],
+            'validation_commands':['true'],'revision_subtask_id':first['subtask_id']}}, context=team.parent)
+    assert repaired.output['task_status'] == 'succeeded', repaired.output
+    task = subagent._load_task('parent-ws', repaired.output['subtask_id'])
+    assert task.coding['validation_commands'] == original.coding['validation_commands']
+    assert task.coding['baseline'] == original.coding['baseline'] == {}
+    assert task.coding['change']['files']['src/value.py']['before'] is None
+    assert original_source.joinpath('src/value.py').read_text() == 'VALUE = 42\n'
+    assert not subagent.merge_subagent_result('parent-task', task.subtask_id, 'parent-ws')['ok']
+    reviewed = team.spawn('qa_agent', review=task.subtask_id)
+    assert reviewed['task_status'] == 'succeeded'
+    assert subagent.merge_subagent_result('parent-task', task.subtask_id, 'parent-ws')['ok']
+    assert project_changes.project_path('parent-ws','files/data/app').joinpath('src/value.py').read_text() == 'VALUE = 43\n'
+
+
+@pytest.mark.parametrize('unknown', [False, True])
+def test_revision_rejects_unknown_outcome_or_changed_source(team, monkeypatch, unknown):
+    from agent.runtime.durable.coding_revisions import seed_revision
+    monkeypatch.setattr(DockerProjectEnvironment, 'execute', lambda *a, **kw: {
+        'ok':False,'exit_code':1,'execution_may_continue':unknown})
+    first = team.spawn()
+    target = subagent._load_task('parent-ws',first['subtask_id'])
+    task = subagent.SubagentTask(parent_task_id='parent-task', workspace_id='parent-ws',session_id='parent-session',profile_id='coding_agent')
+    assignment={'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
+                'revision_subtask_id':target.subtask_id}
+    if unknown:
+        with pytest.raises(ValueError,match='stopped_known_failed'):
+            coding_team.create_assignment(task,assignment)
+        return
+    coding_team.create_assignment(task,assignment)
+    source=project_changes.project_path(target.coding['branch_workspace'],'files/data/app')
+    source.joinpath('src/value.py').write_text('changed after revision planning')
+    branch=project_changes.project_path(task.coding['branch_workspace'],'files/data/app')
+    with pytest.raises(ValueError,match='revision_source_changed'):
+        seed_revision(task,branch)
+    assert not branch.exists()

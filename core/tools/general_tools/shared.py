@@ -225,7 +225,8 @@ def _shell_argv(command, shell: str = "/bin/bash", os_name: str | None = None):
     if (os_name or _os.name) == "nt":
         command_shell = _os.environ.get("COMSPEC") or "cmd.exe"
         return [command_shell, "/d", "/s", "/c", command]
-    return [shell, "-c", command]
+    options = ["-o", "pipefail"] if Path(shell).name == "bash" else []
+    return [shell, *options, "-c", command]
 
 
 def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",

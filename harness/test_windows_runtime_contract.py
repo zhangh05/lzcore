@@ -214,3 +214,20 @@ def test_job_and_turn_claim_handles_chinese_characters_without_job_unavailable(m
     assert rec.status == "running"
     assert "交换机" in rec.title or "测试图纸" in rec.title
 
+
+
+def test_bash_pipeline_preserves_upstream_failure_through_governed_exec(tmp_path, monkeypatch):
+    import pytest
+    if os.name == 'nt':
+        pytest.skip('Bash pipeline contract; native cmd contract is separate')
+    from core.tools.context import ToolRuntimeContext
+    from core.tools.integration import get_default_tool_runtime_client
+    monkeypatch.setenv('LZCORE_WORKSPACE_ROOT', str(tmp_path))
+    client = get_default_tool_runtime_client()
+    context = ToolRuntimeContext(workspace_id='pipeline', session_id='failure', requested_by='turn_runner')
+    failed = client.invoke('exec.run', {'action':'shell', 'command':"{ printf 'upstream failed\\n'; exit 7; } | tail -1"}, context=context)
+    assert failed.status == 'failed' and failed.output['exit_code'] == 7
+    assert failed.output['stdout'].strip() == 'upstream failed'
+    handled = client.invoke('exec.run', {'action':'shell', 'command':"{ exit 7; } | cat || printf 'handled\\n'"}, context=context)
+    assert handled.status == 'succeeded' and handled.output['exit_code'] == 0
+    assert handled.output['stdout'].strip() == 'handled'

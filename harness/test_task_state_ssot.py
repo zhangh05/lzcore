@@ -1318,3 +1318,21 @@ def test_queryloop_uncertain_write_checkpoint_keeps_telemetry_without_fence(monk
     assert settled[0][0]["execution_may_continue"] is True
     persisted = load_task_state(workspace_id, session_id)
     assert "pending_mutation_keys" not in persisted["task"]
+
+
+def test_cancelled_parent_requires_explicit_resume_to_keep_identity(monkeypatch, tmp_path):
+    monkeypatch.setenv('LZCORE_WORKSPACE_ROOT', str(tmp_path))
+    from agent.runtime.task_state import commit_task_state, resolve_task_state, begin_task_state
+    initial=commit_task_state(workspace_id='cancel-resume',session_id='session',run_id='cancelled-run',
+        user_input='实现完整工程',final_response='任务已取消',run_ok=False,
+        runtime_metadata={**_metadata(), 'runtime_errors':['cancelled_by_user']},tool_calls=[])
+    assert initial['task']['status']=='cancelled'
+    messages=[{'role':'user','content':'实现完整工程','run_id':'cancelled-run'},
+              {'role':'assistant','content':'任务已取消','run_id':'cancelled-run'}]
+    for text in ('写一首诗', '把字体改大'):
+        assert resolve_task_state(workspace_id='cancel-resume',session_id='session',user_input=text,messages=messages) is None
+    contract=resolve_task_state(workspace_id='cancel-resume',session_id='session',user_input='继续。修复之前的工程。',messages=messages)
+    assert contract and contract['task_id']==initial['task']['task_id']
+    resumed=begin_task_state(workspace_id='cancel-resume',session_id='session',run_id='resumed-run',
+        user_input='继续。修复之前的工程。',continuation_contract=contract)
+    assert resumed['task_id']==initial['task']['task_id']

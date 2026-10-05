@@ -203,6 +203,7 @@ def create_assignment(task, supplied: dict) -> dict:
         "depends_on": dependencies,
         "validation_commands": commands,
         "review_subtask_id": review_id,
+        "revision_subtask_id": str(supplied.get("revision_subtask_id") or ""),
         "branch_workspace": "coding-" + uuid.uuid4().hex,
         "phase": "assigned",
         "parent_contract_refs": [{"run_id": item["run_id"], "sha256": item["sha256"]}
@@ -214,6 +215,8 @@ def create_assignment(task, supplied: dict) -> dict:
         if dependency.profile_id == "qa_agent":
             raise ValueError("coding_dependency_requires_implementation_candidate")
     if task.profile_id == "qa_agent":
+        if assignment["revision_subtask_id"]:
+            raise ValueError("coding_revision_requires_implementation_profile")
         if not review_id:
             raise ValueError("coding_qa_review_target_required")
         target = _related(task, review_id)
@@ -225,6 +228,9 @@ def create_assignment(task, supplied: dict) -> dict:
         assignment["generated_paths"] = list(target.coding.get("generated_paths", []))
     elif review_id:
         raise ValueError("coding_review_target_requires_qa_profile")
+    elif assignment["revision_subtask_id"]:
+        from .coding_revisions import configure_revision
+        configure_revision(task)
     from core.tools.project_execution import environment_for
     parent_environment = environment_for(task.workspace_id)
     if parent_environment is not None:
@@ -297,6 +303,9 @@ def coding_run(task):
         assignment["review_digest"] = target.coding["change"]["digest"]
         assignment["review_candidate_digest"] = target.coding["candidate_digest"]
         copy_sources(source, branch, baseline)
+    elif assignment.get("revision_subtask_id"):
+        from .coding_revisions import seed_revision
+        baseline = seed_revision(task, branch)
     else:
         with quiescent_project(task.workspace_id):
             source = project_path(task.workspace_id, assignment["project_dir"])
@@ -329,7 +338,8 @@ def coding_run(task):
                     "preview_bind_port": environment.descriptor()["preview_bind_port"],
                     "validation_commands": assignment["validation_commands"],
                     "review_subtask_id": assignment["review_subtask_id"],
-                    "initial_source_paths": sorted(baseline),
+                    "initial_source_paths": sorted(source_manifest(branch, assignment.get("generated_paths"))),
+                    "revision_observation": assignment.get("revision_observation"),
                     "tool_path_bases": {
                         "workspace.file": {"basis": "workspace_root", "project_prefix": assignment["project_dir"],
                                            "example": assignment["project_dir"] + "/src/main.ts"},

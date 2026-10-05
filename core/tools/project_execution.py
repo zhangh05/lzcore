@@ -336,7 +336,7 @@ class DockerProjectEnvironment:
             from core.tools.project_validation import execute_validation
             return execute_validation(self, command, cwd, env=env, timeout=timeout, cancel_check=cancel_check)
         return self._execute(
-            ["/bin/bash", "-c", command],
+            ["/bin/bash", "-o", "pipefail", "-c", command],
             cwd,
             env=env,
             timeout=timeout,
