@@ -69,10 +69,6 @@ ORDER = ("runtime, base, shell, console, workbench, typography, pages, "
 SINGLE_ORDER = "product, extension, responsive"
 
 
-def _doc(text: str) -> str:
-    return text.format(order="{order}")
-
-
 SPLIT_HEADER = """/**
  * Cascade layer order — the single place that decides which stylesheet wins.
  *

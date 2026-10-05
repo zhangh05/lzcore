@@ -20,7 +20,7 @@ HTTP / WebSocket -> AgentApp -> SSOTRuntimeEngine -> QueryLoop
 - 模型编排经过 `ToolRuntime.execute_node()`；外部调用和审批经过 `ToolRuntimeClient.invoke()`。不能直接调 handler。
 - 参数、调用方、workspace_id、策略和扩展范围在服务端检查；执行结果经过脱敏、审计及账本记录。
 - `/api/tools/dry-run` 是策略和元数据预览，不执行 handler；工具调用级 dry_run 只在声明支持时生效，不支持则拒绝。
-- Shell/PowerShell 在宿主机执行并拦截破坏性命令；Python 根据隔离配置使用本地子进程或 Docker。要求强隔离时，容器不可用就拒绝。部署配置见 [生产运行](docs/PRODUCTION.md)。
+- 普通 Shell/PowerShell 与 Python 按执行配置运行；绑定 coding_project 时统一进入项目隔离环境，协调者和 QA 使用只读源码，构建使用一次性可写快照。要求强隔离时，容器不可用就拒绝，不能退回宿主机。部署配置见 [生产运行](docs/PRODUCTION.md)和[编码运行时](docs/architecture/CODING_RUNTIME.md)。
 
 网络语义属于 `extensions/network_operations/`：注册设备和连接由发布 Skill 实时核定，设备账号决定最终命令权限。命令分类以服务端 `command_semantics.py` 为准，不能靠填写 action 伪装只读。可选审批在执行前冻结调用；决策结果回到原 checkpoint，不制造新的用户回合。
 
@@ -30,7 +30,7 @@ HTTP / WebSocket -> AgentApp -> SSOTRuntimeEngine -> QueryLoop
 
 QueryLoop 逐轮维护目标、证据和缺口。`goal_loop`、`plan_goal_ids` 与 `runtime_recoveries` 关联恢复工作，运行时核对证据再关闭目标。持续有进展的普通回合不按固定总轮数或累计墙钟截断；单次调用超时、上下文容量、取消和无进展检测仍存在。详细规则见 [Loop](docs/LOOP_ENGINEERING.md)。
 
-历史和工具正文保持完整，不静默丢弃；超过模型容量时返回结构化容量错误。局部绘图上下文和差量收据是有明确完整度标识的投影，不能冒充完整图纸。更多提示词约束见 [提示词与 Skill](docs/SKILL_PROMPT_ARCHITECTURE.md)。
+历史和工具正文完整归档；模型窗口接近容量时，在完整工具交互边界归档并续接有界新窗口。归档失败保留原窗口；初始约束或不可再缩减的治理内容超出容量时返回结构化错误。局部绘图上下文和差量收据是有明确完整度标识的投影，不能冒充完整图纸。更多提示词约束见 [提示词与 Skill](docs/SKILL_PROMPT_ARCHITECTURE.md)。
 
 ## 图纸与真实设备
 

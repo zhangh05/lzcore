@@ -22,46 +22,40 @@ def test_api_docs_only_list_registered_backend_routes():
 
     root = Path(__file__).resolve().parents[1]
     docs = (root / "docs" / "API.md").read_text(encoding="utf-8")
-    actual_shapes = {
-        re.sub(r"<[^>]+>", "<var>", str(rule))
-        for rule in app.url_map.iter_rules()
-    }
+    actual = set()
+    for rule in app.url_map.iter_rules():
+        if not str(rule).startswith(("/api/", "/ws/")) and str(rule) != "/metrics":
+            continue
+        shape = re.sub(r"<[^>]+>", "<var>", str(rule))
+        actual.update((method, shape) for method in rule.methods if method not in {"HEAD", "OPTIONS"})
     documented = []
     for line in docs.splitlines():
         if not line.startswith("|"):
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) < 2:
+        methods, paths = cells[:2]
+        methods = methods.strip("`")
+        if not re.fullmatch(r"(?:GET|POST|PUT|PATCH|DELETE|WS)(?:/(?:GET|POST|PUT|PATCH|DELETE))*", methods):
             continue
-        method = cells[0].strip("`")
-        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "WS"}:
-            continue
-        # API reference tables can group several complete paths in one cell.
-        # Extract each absolute route rather than treating a comma-separated
-        # explanation as one fictitious Flask rule.
+        routes = re.findall(r"`(/[^`]+)`", paths)
+        assert routes and all(path.startswith(("/api/", "/ws/")) or path == "/metrics" for path in routes), \
+            f"Document complete API paths so every method can be checked: {line}"
         documented.extend(
-            re.findall(r"/(?:api|ws)/[A-Za-z0-9_./<>-]+", cells[1])
+            ("GET" if method == "WS" else method, re.sub(r"<[^>]+>", "<var>", path))
+            for method in methods.split("/")
+            for path in routes
         )
 
-    # Check that documented routes are actually registered
-    missing_from_backend = [
-        path
-        for path in documented
-        if re.sub(r"<[^>]+>", "<var>", path) not in actual_shapes
-    ]
-    assert not missing_from_backend, f"Invalid documented routes: {missing_from_backend}"
+    assert documented, "API route extraction must not pass on an empty selection"
+    assert not (set(documented) - actual), f"Invalid documented route methods: {set(documented) - actual}"
+    assert not (actual - set(documented)), f"Undocumented API route methods: {actual - set(documented)}"
 
 
 def test_frontend_docs_match_navigation_routes():
     root = Path(__file__).resolve().parents[1]
     docs = (root / "docs" / "FRONTEND.md").read_text(encoding="utf-8")
-    app_text = (root / "frontend" / "src" / "app" / "App.tsx").read_text(encoding="utf-8")
-    nav_routes = re.findall(r'to:\s*"([^"]+)"', app_text)
-
-    # FRONTEND.md describes pages conceptually, not route-by-route
-    # Just verify it references the main pages
+    nav_text = (root / "frontend" / "src" / "config" / "nav.ts").read_text(encoding="utf-8")
+    nav_routes = re.findall(r'to:\s*"([^"]+)"', nav_text)
+    assert nav_routes, "Navigation extraction must not pass on an empty selection"
     for route in nav_routes:
-        route_name = route.strip("/").split("/")[0] or "workbench"
-        # Each nav route should have a corresponding mention in docs
-        assert route_name.lower() in docs.lower() or route in docs, \
-            f"Route '{route}' not mentioned in FRONTEND.md"
+        assert route in docs, f"Route '{route}' not mentioned in FRONTEND.md"

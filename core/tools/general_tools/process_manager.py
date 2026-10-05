@@ -1,7 +1,7 @@
 """
 Process tree management for exec.run — cancel / kill-tree / orphan cleanup.
 
-OpenCode-level subprocess hygiene: when a command times out or is
+Subprocess hygiene: when a command times out or is
 cancelled, we kill the entire process group (not just the parent)
 so no orphaned child processes leak resources.
 
@@ -34,12 +34,6 @@ RUNNING_PROCESSES: dict[str, dict] = {}
 _RUNNING_LOCK = threading.Lock()
 
 
-def _cleanup_entry(key: str) -> None:
-    """Remove a process entry from the registry."""
-    with _RUNNING_LOCK:
-        RUNNING_PROCESSES.pop(key, None)
-
-
 def start_process(key: str, proc: subprocess.Popen) -> None:
     """Register a running process for cancellation / monitoring."""
     with _RUNNING_LOCK:
@@ -55,7 +49,7 @@ def _kill_tree_linux(pid: int) -> None:
 
     Strategy:
         1. Send SIGTERM to the entire process group (os.killpg)
-        2. Wait 2 seconds for graceful shutdown
+        2. Wait 0.5 seconds for graceful shutdown
         3. If still alive, send SIGKILL to the process group
         4. Fallback: pgrep/pkill for any remaining children
     """

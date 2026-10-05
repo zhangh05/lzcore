@@ -18,13 +18,12 @@ def client(temp_dirs):
     return _flask_app.test_client()
 
 class TestRenderer:
-    def test_module_exists(self):
-        from prompts.renderer import render_prompt
-        assert callable(render_prompt)
-
     def test_render_reads_template(self):
         from prompts.renderer import render_prompt
         r = render_prompt("response_compose", {"intent": "test"}, "hello")
+        from prompts import RenderedPrompt
+        assert isinstance(r, RenderedPrompt)
+        assert r.as_dict()["version"] == "v4"
         assert isinstance(r.text, str)
         assert len(r.text) > 20
 
@@ -88,10 +87,6 @@ class TestRenderer:
         assert "你好" not in messages[0].content
 
 class TestSafeGenerateWiring:
-    def test_safe_gen_imports_renderer(self):
-        content = (PROJECT_ROOT / "agent" / "llm" / "runtime.py").read_text()
-        assert "from prompts.renderer import" in content
-
     def test_safe_gen_no_old_prompts_default(self):
         content = (PROJECT_ROOT / "agent" / "llm" / "runtime.py").read_text()
         assert "prompts.renderer" in content
@@ -107,14 +102,6 @@ class TestSafeGenerateWiring:
         })
         out = safe_generate("response_compose")
         assert out.llm_used is False
-
-    def test_metadata_has_rendered_prompt_used(self):
-        from agent.llm.runtime import safe_generate
-        out = safe_generate("response_compose")
-        # When disabled, metadata may be empty. When enabled, should have the flag.
-        meta = out.metadata or {}
-        # Disabled path doesn't render, so this is fine
-        assert isinstance(meta, dict)
 
     def test_client_passes_user_question_as_user_input(self, monkeypatch):
         from agent.llm.client import LLMClient

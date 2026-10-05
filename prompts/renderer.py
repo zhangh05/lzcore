@@ -4,22 +4,8 @@
 import json
 import re
 from pathlib import Path
-from dataclasses import dataclass, field
+from prompts.schemas import RenderedPrompt
 from core.context.prompt_text import escape_prompt_data
-
-
-@dataclass
-class RenderedPrompt:
-    prompt_id: str = ""
-    task: str = ""
-    version: str = "v1"
-    text: str = ""
-    context_chars: int = 0
-    citation_ids: list = field(default_factory=list)
-    warnings: list = field(default_factory=list)
-    metadata: dict = field(default_factory=dict)
-
-    def as_dict(self): return self.__dict__.copy()
 
 
 def render_prompt(task: str, safe_context: dict = None, user_input: str = "",
@@ -31,9 +17,7 @@ def render_prompt(task: str, safe_context: dict = None, user_input: str = "",
     citations = list(citations or [])
     merged_context = dict(safe_context or {})
     merged_context.update(dict(extra or {}))
-    ctx, policy_warnings = _apply_context_policy(
-        merged_context, citations, spec
-    )
+    ctx = merged_context
     vars_ctx = dict(ctx)
     vars_ctx["user_input"] = user_input
     vars_ctx["citations"] = citations
@@ -59,7 +43,7 @@ def render_prompt(task: str, safe_context: dict = None, user_input: str = "",
         prompt_id=spec.prompt_id, task=task, version=spec.version,
         text=text, context_chars=len(_safe_json(ctx)),
         citation_ids=[c.get("citation_id", "") for c in citations],
-        warnings=policy_warnings,
+        warnings=[],
         metadata={
             "context_policy_applied": True,
             "max_context_chars": int(spec.input_policy.get("max_context_chars", 8000)),
@@ -157,15 +141,6 @@ def _summary_only(value) -> str:
                 return str(safe.get(key))
         return _safe_json(safe)
     return str(value)
-
-
-def _apply_context_policy(ctx: dict, citations: list, spec) -> tuple[dict, list[str]]:
-    """Preserve every rendered context item and citation.
-
-    Registry budgets remain provider-capacity telemetry only; they do not
-    authorize deleting context before the model can reason over it.
-    """
-    return dict(ctx), []
 
 
 def _stringify(value) -> str:

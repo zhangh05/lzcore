@@ -160,8 +160,6 @@ def resolve_provider_llm_config(provider_id: str) -> dict:
 
 
 def _provider_runtime_config(provider_id: str, cfg: dict, api_key: str) -> dict:
-    from agent.llm.key_resolver import is_key_loaded
-
     return {
         "enabled": cfg.get("enabled", True),
         "provider": provider_id,

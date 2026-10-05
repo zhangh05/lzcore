@@ -93,7 +93,7 @@ def test_http_duplicate_client_request_skips_agent_execution(monkeypatch, tmp_pa
         "metadata": {"client_request_id": "request-http-idempotent"},
     }
     with app.test_request_context("/api/agent/message", method="POST", json=payload):
-        first = agent_routes.agent_message()
+        agent_routes.agent_message()
     with app.test_request_context("/api/agent/message", method="POST", json=payload):
         second = agent_routes.agent_message()
 

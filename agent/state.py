@@ -74,7 +74,7 @@ class AgentState:
     trace_events: List[Dict[str, Any]] = field(default_factory=list)
     node_timings: Dict[str, float] = field(default_factory=dict)
 
-    # ── v3.1.1: Reference context item (Codex pattern) ──
+    # ── Reference context item ──
     # The id of the first non-system message kept after the last compaction.
     # Frontend can render this as a "📍 context anchor" marker so users see
     # where LLM's visible context begins.

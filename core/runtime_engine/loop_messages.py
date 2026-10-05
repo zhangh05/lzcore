@@ -107,20 +107,10 @@ def _redact_tool_error(error: Any) -> str:
 
 
 def _json_compact(value: Any, **_: Any) -> str:
-    """Serialize an entire model-visible payload without truncation.
-
-    Serialized-prefix truncation is deliberately forbidden here.  A prefix can
-    retain the first inspected resource while silently removing later ones,
-    which makes a complete multi-device run look like partial evidence to the
-    model.  Token projection keeps dictionaries parseable and gives list
-    members a fair share of the available budget.
-    """
+    """Serialize the complete model-visible payload without truncation."""
     return json.dumps(
         value,
         ensure_ascii=False,
-        # Dict compaction deliberately inserts control fields first. Preserve
-        # that order so task/status/report references survive the final hard
-        # cap even when a payload also contains very large evidence fields.
         sort_keys=False,
         separators=(",", ":"),
         default=str,

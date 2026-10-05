@@ -965,7 +965,7 @@ def _emit_event(ws_id: str, parent_task_id: str, session_id: str, event_type: st
             type=event_type, status="ok",
             title=event_type, summary=summary[:200],
         ))
-    except Exception as e:
+    except Exception:
         # best-effort: event emission failure is logged, not propagated
         import logging
         logging.getLogger(__name__).debug("subagent event emission failed", exc_info=True)

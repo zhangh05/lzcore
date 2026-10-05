@@ -5,7 +5,7 @@ import zipfile
 import hashlib
 import pytest
 from agent.runtime.local_lifecycle import LocalLifecycle, install_local_lifecycle
-from desktop_app.environment import resolve_paths, prepare_paths, migrate_legacy, copy_verified
+from desktop_app.environment import resolve_paths, migrate_legacy
 from desktop_app.window import fit_window, DesktopState
 from desktop_app.backup import create_backup, stage_restore, queue_restore, apply_pending_restore, read_backup
 

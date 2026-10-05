@@ -166,7 +166,6 @@ class PreExecutionRepairEngine:
             node_id = getattr(error, "node_id", "")
             code = getattr(error, "code", "")
             message = getattr(error, "message", "")
-            details = getattr(error, "details", {})
 
             node = self._find_node(nodes, node_id)
             if node is None:

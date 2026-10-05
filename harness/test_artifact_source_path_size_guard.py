@@ -35,7 +35,6 @@ class TestSourcePathSizeGuard:
         assert big_file.stat().st_size > _get_max_size()
 
         # Monkeypatch read_text to fail if called
-        original_read = big_file.__class__.read_text
         read_called = []
 
         class _BigPath(type(Path())):

@@ -1,6 +1,5 @@
 """Execution bindings are server-owned, fail closed, and preserve uncertainty."""
 import subprocess
-from pathlib import Path
 
 import pytest
 

@@ -11,6 +11,7 @@
 | `GET` | `/api/health`, `/api/ready`, `/api/version` | Liveness, readiness and version projection. |
 | `GET` | `/api/metrics`, `/metrics` | JSON and Prometheus metrics. |
 | `GET` | `/api/auth/status` | Safe current-session projection. |
+| `GET` | `/api/local-token` | Local browser bootstrap with Host/Origin checks; authentication-enabled modes return 404 `local_token_unused`. |
 | `POST` | `/api/auth/login`, `/api/auth/logout` | Password-session lifecycle. |
 | `GET` | `/api/auth/oidc/start`, `/api/auth/oidc/callback` | Optional OIDC flow. |
 | `POST` | `/api/agent/message` | Run one Agent turn. |
@@ -48,8 +49,8 @@ topology_updated 仅带 workspace_id/topology_id/version；job_updated 合并最
 | --- | --- | --- |
 | `GET` | `/api/runtime/summary`, `/api/runtime/health`, `/api/runtime/selfcheck` | Runtime catalog and health/self-check. |
 | `GET` | `/api/runtime/tasks`, `/api/runtime/tasks/<task_id>` | Durable runtime task list/detail. |
-| `GET` | `/api/runtime/tasks/<task_id>/events`, `/checkpoints` | Task event and checkpoint history. |
-| `POST` | `/api/runtime/tasks/<task_id>/cancel`, `/resume`, `/checkpoint` | Task lifecycle control. |
+| `GET` | `/api/runtime/tasks/<task_id>/events`, `/api/runtime/tasks/<task_id>/checkpoints` | Task event and checkpoint history. |
+| `POST` | `/api/runtime/tasks/<task_id>/cancel`, `/api/runtime/tasks/<task_id>/resume`, `/api/runtime/tasks/<task_id>/checkpoint` | Task lifecycle control. |
 | `POST` | `/api/runtime/tasks/<task_id>/steps/<step_id>/retry` | Retry a safe failed step. |
 | `GET/POST` | `/api/runtime/tasks/<task_id>/audit-report` | Read/create task audit report. |
 | `GET` | `/api/runtime/trajectories`, `/api/runtime/trajectories/<traj_id>` | Runtime trajectory projections. |
@@ -76,16 +77,16 @@ must display these server values, not synthesize them.
 | `GET/POST` | `/api/sessions` | Session list/create. |
 | `GET/PUT/DELETE` | `/api/sessions/<session_id>` | Session detail/update/hard delete. |
 | `GET` | `/api/sessions/<session_id>/messages`, `/api/sessions/default` | Durable messages/default session. |
-| `POST` | `/api/sessions/<session_id>/archive`, `/restore` | Archive/restore a session. |
+| `POST` | `/api/sessions/<session_id>/archive`, `/api/sessions/<session_id>/restore` | Archive/restore a session. |
 | `GET` | `/api/runs/recent`, `/api/runs/<run_id>` | Recent run list/run detail. |
 | `GET/POST` | `/api/workspaces` | Workspace list/create. |
 | `DELETE` | `/api/workspaces/<ws_id>` | Delete a workspace. |
 | `POST` | `/api/workspaces/<ws_id>/rename` | Rename a workspace. |
-| `GET` | `/api/workspaces/<ws_id>/state`, `/status`, `/history`, `/runs`, `/traces` | Workspace state/history/run/trace projections. |
-| `GET` | `/api/workspaces/<ws_id>/runs/<run_id>`, `/artifacts`, `/trace` | One run and its evidence/trace projections. |
+| `GET` | `/api/workspaces/<ws_id>/state`, `/api/workspaces/<ws_id>/status`, `/api/workspaces/<ws_id>/history`, `/api/workspaces/<ws_id>/runs`, `/api/workspaces/<ws_id>/traces` | Workspace state/history/run/trace projections. |
+| `GET` | `/api/workspaces/<ws_id>/runs/<run_id>`, `/api/workspaces/<ws_id>/runs/<run_id>/artifacts`, `/api/workspaces/<ws_id>/runs/<run_id>/trace` | One run and its evidence/trace projections. |
 | `POST` | `/api/workspaces/<ws_id>/runs/<run_id>/report` | Create a run report. |
-| `GET` | `/api/workspaces/<ws_id>/reports`, `/reports/<artifact_id>/content` | Report list/content. |
-| `GET` | `/api/workspaces/<ws_id>/selfcheck`, `/storage/health` | Workspace checks. |
+| `GET` | `/api/workspaces/<ws_id>/reports`, `/api/workspaces/<ws_id>/reports/<artifact_id>/content` | Report list/content. |
+| `GET` | `/api/workspaces/<ws_id>/selfcheck`, `/api/workspaces/<ws_id>/storage/health` | Workspace checks. |
 | `PUT` | `/api/workspaces/<ws_id>/settings` | Workspace settings. |
 | `POST` | `/api/workspaces/batch-delete` | Explicit batch workspace deletion. |
 
@@ -107,15 +108,17 @@ included. The field is optional for records produced by older versions.
 | --- | --- | --- |
 | `GET/POST` | `/api/workspaces/<ws_id>/artifacts` | Artifact list/create. |
 | `GET/DELETE` | `/api/workspaces/<ws_id>/artifacts/<artifact_id>` | Artifact detail/hard delete. |
-| `GET` | `/content`, `/review-items`, `/summarize` below one artifact | Artifact content, review items and summary. |
-| `POST` | `/promote` below one artifact; `/artifacts/upload`, `/artifacts/batch-delete` | Promote/upload/explicit batch delete. |
-| `GET` | `/api/storage/overview`, `/files`, `/events` | Managed-file storage projections. |
-| `GET/DELETE` | `/api/storage/files/<file_id>` | Managed-file detail/hard delete. |
-| `GET` | `/content`, `/preview`, `/relations` below one managed file | File content/preview/relations. |
-| `GET` | `/api/knowledge/sources`, `/search`, `/chunks/<chunk_id>` | Knowledge sources/search/chunk. |
-| `POST` | `/api/knowledge/upload`, `/sources/from-artifact`, `/sources/<source_id>/reindex` | Knowledge ingestion/reindex. |
+| `GET` | `/api/workspaces/<ws_id>/artifacts/<artifact_id>/content`, `/api/workspaces/<ws_id>/artifacts/<artifact_id>/review-items`, `/api/workspaces/<ws_id>/artifacts/<artifact_id>/summarize` | Artifact content, review items and summary. |
+| `POST` | `/api/workspaces/<ws_id>/artifacts/<artifact_id>/promote`; `/api/workspaces/<ws_id>/artifacts/upload`, `/api/workspaces/<ws_id>/artifacts/batch-delete` | Promote/upload/explicit batch delete. |
+| `GET` | `/api/storage/overview`, `/api/storage/files`, `/api/storage/events` | Managed-file storage projections. |
+| `DELETE` | `/api/storage/files/<file_id>` | Managed-file hard delete; metadata is returned by `/api/storage/files`. |
+| `GET` | `/api/storage/files/<file_id>/content`, `/api/storage/files/<file_id>/preview`, `/api/storage/files/<file_id>/relations` | File content/preview/relations. |
+| `GET` | `/api/knowledge/sources`, `/api/knowledge/search`, `/api/knowledge/chunks/<chunk_id>` | Knowledge sources/search/chunk. |
+| `POST` | `/api/knowledge/upload`, `/api/knowledge/sources/from-artifact`, `/api/knowledge/sources/<source_id>/reindex` | Knowledge ingestion/reindex. |
 | `GET/PATCH/DELETE` | `/api/knowledge/sources/<source_id>` | Knowledge source lifecycle. |
-| `GET` | `/api/memory/status`, `/list`; `POST /search`, `/write`, `/confirm`, `/reject`, `/batch-delete`; `DELETE /<memory_id>` | Governed memory lifecycle. |
+| `GET` | `/api/memory/status`, `/api/memory/list` | Governed memory projections. |
+| `POST` | `/api/memory/search`, `/api/memory/write`, `/api/memory/confirm`, `/api/memory/reject`, `/api/memory/batch-delete` | Governed memory operations. |
+| `DELETE` | `/api/memory/<memory_id>` | Memory hard delete. |
 | `POST` | `/api/reports/create` | Create a report. |
 | `PUT` | `/api/review-items/<item_id>` | Update a review item. |
 | `GET/POST` | `/api/workspaces/<ws_id>/review-items` | Workspace review-item lifecycle. |
@@ -133,8 +136,9 @@ selfcheck continues to report other missing references.
 | --- | --- | --- |
 | `GET/POST` | `/api/jobs` | Job list/create. |
 | `GET/DELETE` | `/api/jobs/<job_id>` | Job detail/hard delete. |
-| `POST` | `/api/jobs/<job_id>/cancel`, `/retry` | Cancel/retry. |
-| `GET` | `/api/jobs/<job_id>/events`, `/logs`, `/artifacts` | Job evidence projections. |
+| `DELETE` | `/api/jobs/batch-delete` | Explicit batch job deletion. |
+| `POST` | `/api/jobs/<job_id>/cancel`, `/api/jobs/<job_id>/retry` | Cancel/retry. |
+| `GET` | `/api/jobs/<job_id>/events`, `/api/jobs/<job_id>/logs`, `/api/jobs/<job_id>/artifacts` | Job evidence projections. |
 | `POST` | `/api/jobs/worker/run-once` | Run one worker iteration (admin only in identity mode). |
 | `GET` | `/api/jobs/worker/status` | Worker status (admin only in identity mode). |
 
@@ -150,35 +154,46 @@ return conflict; cancel and wait for a terminal state first.
 | `POST` | `/api/tools/dry-run` | Side-effect-free policy and invocation metadata preview; it does not call the handler. |
 | `GET` | `/api/capabilities`, `/api/workbench/skills` | Capability catalog and server-projected workbench Skills. |
 | `GET` | `/api/extensions`, `/api/extensions/repository` | Installed extension and repository catalog. |
-| `POST` | `/api/extensions/<extension_id>/enable`, `/disable`, `/migrate`, `/uninstall` | Extension lifecycle. Mutating calls require loopback or an authenticated caller (`remote_admin_write_denied` otherwise). |
+| `POST` | `/api/extensions/<extension_id>/enable`, `/api/extensions/<extension_id>/disable`, `/api/extensions/<extension_id>/migrate`, `/api/extensions/<extension_id>/uninstall` | Extension lifecycle. Mutating calls require loopback or an authenticated caller (`remote_admin_write_denied` otherwise). |
 | `GET` | `/api/extensions/<extension_id>/quota` | Extension quota projection. |
-| `POST` | `/api/extensions/repository/publish`, `/repository/<extension_id>/<version>/install` | Package publishing/install. |
+| `POST` | `/api/extensions/repository/publish`, `/api/extensions/repository/<extension_id>/<version>/install` | Package publishing/install. |
 
 `network.operations` owns its namespaced business objects:
 
 | Method | Path |
 | --- | --- |
-| `GET/POST` | `/api/extensions/network.operations/regions`, `/devices`, `/connections`, `/skills`, `/scripts`, `/inspections`, `/topologies` |
-| `GET/PUT/DELETE` | `/api/extensions/network.operations/regions/<region_id>`, `/devices/<device_id>`, `/connections/<connection_id>`, `/skills/<skill_id>`, `/scripts/<script_id>`, `/topologies/<topology_id>` |
+| `GET/POST` | `/api/extensions/network.operations/regions`, `/api/extensions/network.operations/devices`, `/api/extensions/network.operations/connections`, `/api/extensions/network.operations/skills`, `/api/extensions/network.operations/scripts`, `/api/extensions/network.operations/inspections`, `/api/extensions/network.operations/topologies` |
+| `PUT/DELETE` | `/api/extensions/network.operations/regions/<region_id>` |
+| `GET/PUT/DELETE` | `/api/extensions/network.operations/devices/<device_id>`, `/api/extensions/network.operations/connections/<connection_id>`, `/api/extensions/network.operations/skills/<skill_id>`, `/api/extensions/network.operations/scripts/<script_id>`, `/api/extensions/network.operations/topologies/<topology_id>` |
 | `GET` | `/api/extensions/network.operations/topologies/<topology_id>/overlay` |
+| `GET/PUT` | `/api/extensions/network.operations/topologies/<topology_id>/annotations` |
 | `PUT/DELETE` | `/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>/binding` |
 | `DELETE` | `/api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>` |
 | `GET` | `/api/extensions/network.operations/topologies/<topology_id>/revisions` |
 | `GET` | `/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/edit` |
 | `GET` | `/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/diff` |
 | `POST` | `/api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/restore` |
-| `POST` | `/connections/<connection_id>/test`, `/inspections/<task_id>/cancel`, `/inspections/<task_id>/retry` |
-| `GET` | `/inspections/<task_id>`, `/inspections/<task_id>/evidence` |
-| `GET` | `/context` |
-| `POST` | `/references/<reference_id>` with `action=confirm|invalidate` |
+| `POST` | `/api/extensions/network.operations/connections/<connection_id>/test`, `/api/extensions/network.operations/inspections/<task_id>/cancel`, `/api/extensions/network.operations/inspections/<task_id>/retry` |
+| `GET` | `/api/extensions/network.operations/inspections/<task_id>`, `/api/extensions/network.operations/inspections/<task_id>/evidence` |
+| `GET` | `/api/extensions/network.operations/context` |
+| `POST` | `/api/extensions/network.operations/references/<reference_id>` with `action=confirm|invalidate` |
+| `DELETE` | `/api/extensions/network.operations/observations/<observation_id>`, `/api/extensions/network.operations/observations/batch-delete`, `/api/extensions/network.operations/references/<reference_id>`, `/api/extensions/network.operations/references/batch-delete`, `/api/extensions/network.operations/command-experience/<experience_id>`, `/api/extensions/network.operations/command-experience/batch-delete` |
 
-The relative paths in the last table are under
-`/api/extensions/network.operations`. Device, connection and Skill deletion are
+Device, connection and Skill deletion are
 their domain lifecycle operations; Skill selection is only an authorization
 scope and performs no device I/O. `/context` only returns bounded source-labelled
 history, references and advisory syntax outcomes; it performs no network I/O.
 Inspection completion creates an Observation and may create a candidate
 Reference. Only a complete candidate can be explicitly confirmed.
+
+可选审批扩展的资源入口：
+
+| Method | Path |
+| --- | --- |
+| `GET` | `/api/extensions/approval/operations`, `/api/extensions/approval/operations/<operation_id>` |
+| `POST` | `/api/extensions/approval/operations/<operation_id>/decision` |
+
+审批开关、冻结与恢复合同见 [审批](APPROVAL_EXTENSION.md)。
 
 ### 图纸选择、读取与修改
 
@@ -249,88 +264,27 @@ reporting the record as actively pending forever.
 
 重试先核对执行状态、幂等和未知写入；不要把错误响应当作操作未发生。
 
-## 补充路由清单
+## 补充入口
 
-以下补充清单用于定位分组表中省略的路径；不是第二套 API 定义。methods 中 | 表示同一路径注册的方法。
+其余已注册入口如下；字段和授权以路由/schema 为准。
 
-```text
-POST        /api/ecosystem/import/apply
-POST        /api/ecosystem/import/preview
-GET         /api/ecosystem/providers
-POST        /api/extensions/<extension_id>/disable
-POST        /api/extensions/<extension_id>/migrate
-POST        /api/extensions/<extension_id>/uninstall
-GET|POST    /api/extensions/network.operations/connections
-DELETE|GET|PUT /api/extensions/network.operations/connections/<connection_id>
-POST        /api/extensions/network.operations/connections/<connection_id>/test
-GET|POST    /api/extensions/network.operations/devices
-DELETE|GET|PUT /api/extensions/network.operations/devices/<device_id>
-GET|POST    /api/extensions/network.operations/inspections
-GET         /api/extensions/network.operations/inspections/<task_id>
-POST        /api/extensions/network.operations/inspections/<task_id>/cancel
-GET         /api/extensions/network.operations/inspections/<task_id>/evidence
-POST        /api/extensions/network.operations/inspections/<task_id>/retry
-GET         /api/extensions/network.operations/context
-POST        /api/extensions/network.operations/references/<reference_id>
-GET|POST    /api/extensions/network.operations/scripts
-DELETE|GET|PUT /api/extensions/network.operations/scripts/<script_id>
-GET|POST    /api/extensions/network.operations/skills
-DELETE|GET|PUT /api/extensions/network.operations/skills/<skill_id>
-GET|POST    /api/extensions/network.operations/topologies
-DELETE|GET|PUT /api/extensions/network.operations/topologies/<topology_id>
-DELETE      /api/extensions/network.operations/topologies/<topology_id>/nodes/<node_id>
-GET         /api/extensions/network.operations/topologies/<topology_id>/revisions
-GET         /api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/edit
-GET         /api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/diff
-POST        /api/extensions/network.operations/topologies/<topology_id>/revisions/<revision_id>/restore
-POST        /api/extensions/repository/<extension_id>/<version>/install
-GET         /api/jobs/<job_id>/artifacts
-GET         /api/jobs/<job_id>/logs
-POST        /api/jobs/<job_id>/retry
-GET         /api/knowledge/chunks/<chunk_id>
-GET         /api/knowledge/search
-POST        /api/knowledge/sources/<source_id>/reindex
-POST        /api/knowledge/sources/from-artifact
-DELETE      /api/memory/<memory_id>
-POST        /api/memory/batch-delete
-POST        /api/memory/confirm
-GET         /api/memory/list
-POST        /api/memory/reject
-POST        /api/memory/search
-POST        /api/memory/write
-POST        /api/runtime/tasks/<task_id>/checkpoint
-GET         /api/runtime/tasks/<task_id>/checkpoints
-POST        /api/runtime/tasks/<task_id>/resume
-POST        /api/sessions/<session_id>/restore
-GET         /api/storage/events
-GET         /api/storage/files/<file_id>/content
-GET         /api/storage/files/<file_id>/preview
-GET         /api/storage/files/<file_id>/relations
-POST        /api/workspaces/<ws_id>/archive/apply
-GET         /api/workspaces/<ws_id>/archive/audits
-GET         /api/workspaces/<ws_id>/archive/audits/<audit_id>
-GET         /api/workspaces/<ws_id>/archive/preview
-POST        /api/workspaces/<ws_id>/archive/restore
-GET         /api/workspaces/<ws_id>/artifacts/<artifact_id>/content
-POST        /api/workspaces/<ws_id>/artifacts/<artifact_id>/promote
-GET         /api/workspaces/<ws_id>/artifacts/<artifact_id>/review-items
-GET         /api/workspaces/<ws_id>/artifacts/<artifact_id>/summarize
-POST        /api/workspaces/<ws_id>/artifacts/batch-delete
-POST        /api/workspaces/<ws_id>/artifacts/upload
-GET         /api/workspaces/<ws_id>/history
-GET         /api/workspaces/<ws_id>/jobs
-GET         /api/workspaces/<ws_id>/jobs/<job_id>
-GET         /api/workspaces/<ws_id>/reports/<artifact_id>/content
-POST        /api/workspaces/<ws_id>/retention/apply
-GET         /api/workspaces/<ws_id>/retention/audits
-GET         /api/workspaces/<ws_id>/retention/audits/<audit_id>
-GET         /api/workspaces/<ws_id>/retention/preview
-GET         /api/workspaces/<ws_id>/runs/<run_id>/artifacts
-GET         /api/workspaces/<ws_id>/runs/<run_id>/trace
-GET         /api/workspaces/<ws_id>/status
-GET         /api/workspaces/<ws_id>/storage/health
-GET         /api/workspaces/<ws_id>/traces
-```
+| Method | Path |
+| --- | --- |
+| `POST` | `/api/ecosystem/import/apply` |
+| `POST` | `/api/ecosystem/import/preview` |
+| `GET` | `/api/ecosystem/providers` |
+| `GET` | `/api/workspaces/<ws_id>/archive/items` |
+| `POST` | `/api/workspaces/<ws_id>/archive/apply` |
+| `GET` | `/api/workspaces/<ws_id>/archive/audits` |
+| `GET` | `/api/workspaces/<ws_id>/archive/audits/<audit_id>` |
+| `GET` | `/api/workspaces/<ws_id>/archive/preview` |
+| `POST` | `/api/workspaces/<ws_id>/archive/restore` |
+| `GET` | `/api/workspaces/<ws_id>/jobs` |
+| `GET` | `/api/workspaces/<ws_id>/jobs/<job_id>` |
+| `POST` | `/api/workspaces/<ws_id>/retention/apply` |
+| `GET` | `/api/workspaces/<ws_id>/retention/audits` |
+| `GET` | `/api/workspaces/<ws_id>/retention/audits/<audit_id>` |
+| `GET` | `/api/workspaces/<ws_id>/retention/preview` |
 
 ### 图纸批注
 

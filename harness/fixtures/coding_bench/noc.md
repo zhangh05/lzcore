@@ -1,6 +1,6 @@
 实现 NEXUS NOC：真正运行的网络运维中心，从零创建完整工程在 {{PROJECT_DIR}}，不读取、复制或修改 LZCore 仓库、凭据或服务配置。优先 TypeScript/React/Vite、Node、持久化数据库、SSE；允许选择等价方案，但不允许静态 Dashboard、固定指标或假 PASS。
 
-工程必须有 npm test 和 npm run build，后台启动预览 {{PREVIEW_ORIGIN}}，PID 写 server.pid；常驻进程标准输入输出重定向，不能阻塞工具。逐阶段保持能运行，测试出错自行修复；使用 browser.manage 真实操作页面、检查控制台。遇到运行时策略限制如实报告，禁止自行扩大权限。
+工程必须有 npm test 和 npm run build，后台启动预览 {{PREVIEW_ORIGIN}}，PID 写 /tmp/lzcore-bench-server.pid；常驻进程标准输入输出重定向，不能阻塞工具。逐阶段保持能运行，测试出错自行修复；使用 browser.manage 真实操作页面、检查控制台。遇到运行时策略限制如实报告，禁止自行扩大权限。
 
 功能和规则：
 - Overview、Topology、Devices、Interfaces、Alerts、Events、Syslog、Performance、Routing、Configuration、Inventory、Automation、Audit、Settings 14 个可用页面。深色专业紧凑 UI，1280×720 能操作；表格排序、筛选、搜索。

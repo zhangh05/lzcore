@@ -1,12 +1,10 @@
 # agent/protocol/tool_result.py
 """ToolResult — tool execution result, the runtime / LLM contract.
 
-v0.8.2 enhancement: ToolResult now carries the v0.7.1 capability fields
-(artifacts, source_count, manual_review_count, metadata, data) as
-**structured** fields, and gains `from_module_result()` to project a
-ModuleResult into a ToolResult. The `content` field is a serialized
+ToolResult carries structured artifacts, counts, metadata and data;
+`from_module_result()` projects a ModuleResult into this contract. The `content` field is a serialized
 projection for callers that still read text payloads; QueryLoop owns the
-single LLM-injection bound.
+model-visible evidence projection.
 
 Three contracts (intentionally distinct):
   - ModuleResult  : business output contract, produced by a Module
@@ -41,9 +39,9 @@ class ToolResult:
     summary: str = ""
     # Serialized text preview for display-oriented callers.
     content: str = ""
-    # Structured payload (ModuleResult.data). v0.8.2 NEW.
+    # Structured payload (ModuleResult.data).
     data: dict = field(default_factory=dict)
-    # v0.7.1 capability fields, now first-class on the dataclass
+    # Capability references and counts
     artifacts: list = field(default_factory=list)
     source_count: Optional[int] = None
     manual_review_count: Optional[int] = None

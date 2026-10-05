@@ -113,7 +113,7 @@ def handle_session_detail(session_id):
     if include_messages:
         result["messages"] = get_session_messages(session_id, ws_id)
 
-    # v3.10: Attach session context from most recent run
+    # Attach session context from most recent run
     try:
         from storage.run_record_store import list_runs
         recent_runs = [r for r in list_runs(ws_id, limit=10) if r.get("session_id") == session_id]

@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
-import pytest
 
-from core.resolution.location_models import LocationCandidate, LocationResolution
+from core.resolution.location_models import LocationCandidate
 from core.resolution.location_service import LocationResolver
-from core.resolution.location_providers import LocationProviderUnavailable
 
 
 class SlowMockProvider:

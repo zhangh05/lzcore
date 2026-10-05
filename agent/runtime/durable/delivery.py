@@ -203,7 +203,7 @@ def git_commit(ws_id: str, message: str = "", confirm: bool = False) -> dict:
     try:
         import subprocess
         repo_dir = _resolve_repo_dir(ws_id)
-        r = subprocess.run(
+        subprocess.run(
             ["git", "add", "-A"],
             capture_output=True, text=True, timeout=30, cwd=repo_dir,
         )

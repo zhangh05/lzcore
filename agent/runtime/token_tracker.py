@@ -155,7 +155,7 @@ def get_usage(workspace_id: str = "default", session_id: str = "") -> dict:
     if not rows:
         return _empty_usage(workspace_id, session_id)
 
-    input_t, output_t, total_t, cost, count = 0, 0, 0, 0.0, 0
+    input_t, output_t, cost, count = 0, 0, 0.0, 0
     cache_creation_t, cache_read_t = 0, 0
     latest = ""
     latest_prompt_profile: dict = {}

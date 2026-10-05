@@ -268,15 +268,10 @@ class SSOTRuntimeEngine:
                 extras=dict(extras or {}),
             )
 
-            diag_id = session_id or "none"
-
             # ── v10: contract boundary — engine_entry check ───────
             from .runtime_contracts import ContractBoundary
             ContractBoundary.validate_all(ctx)
 
-            # ── init result variables before contract validation ──
-            errors: list = errors
-            node_results: dict = node_results
             final_response = ""
 
             # ── v4.2: self-healing contract validation ─────────

@@ -13,7 +13,6 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 # 确保在 Windows 控制台或 CI (cp1252/gbk) 环境下中文日志输出不报错

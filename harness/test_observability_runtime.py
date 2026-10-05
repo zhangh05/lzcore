@@ -222,7 +222,6 @@ class TestAgentTrace:
             },
         })
         data = resp.get_json()
-        trace_id = data.get("trace_id", "")
 
         # Get trace API
         resp2 = client.get(f"/api/workspaces/test_nodes_ag/runs/{data['run_id']}/trace")

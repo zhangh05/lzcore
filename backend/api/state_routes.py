@@ -1,5 +1,5 @@
 # backend/api/state_routes.py
-"""Runtime State API — Phase 2 endpoints.
+"""Runtime state, control, trajectory, ecosystem and audit APIs.
 
 GET  /api/runtime/tasks?workspace_id=&session_id=
 GET  /api/runtime/tasks/<task_id>?workspace_id=
@@ -97,7 +97,7 @@ def register_state_routes(app):
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)[:200]}), 500
 
-    # ── Phase 3: Control endpoints (POST) ──
+    # ── Control endpoints (POST) ──
 
     @app.route("/api/runtime/tasks/<task_id>/checkpoint", methods=["POST"])
     def api_task_checkpoint(task_id):
@@ -171,7 +171,7 @@ def register_state_routes(app):
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)[:200]}), 500
 
-    # ── Phase 10: Trajectory endpoints ──
+    # ── Trajectory endpoints ──
 
     @app.route("/api/runtime/trajectories")
     def api_trajectories():
@@ -201,7 +201,7 @@ def register_state_routes(app):
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)[:200]}), 500
 
-    # ── Phase 11: Ecosystem endpoints ──
+    # ── Ecosystem endpoints ──
 
     @app.route("/api/ecosystem/providers")
     def api_ecosystem_providers():
@@ -247,7 +247,7 @@ def register_state_routes(app):
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)[:200]}), 500
 
-    # ── Phase 12: Audit report ──
+    # ── Audit report ──
 
     @app.route("/api/runtime/tasks/<task_id>/audit-report", methods=["POST"])
     def api_audit_report_generate(task_id):

@@ -36,13 +36,21 @@ def markdown_links(text: str) -> list[str]:
     ]
 
 
+def documentation_paths() -> list[Path]:
+    """First-party docs, authoring templates and complete benchmark contracts."""
+    return sorted({
+        *ROOT.glob("*.md"),
+        *(path for directory in ("docs", "prompts", "harness", "packaging")
+          for path in ROOT.joinpath(directory).rglob("*.md")),
+        ROOT / "frontend/README.md",
+    })
+
+
 def main() -> int:
+    failures.clear()
     from core.tools.manifest_registry import MANIFESTS
     from core.tools.canonical_registry import CANONICAL_REGISTRY
 
-    # v3.9.2: 21-tool Codex-style registry; v3.9.13 added
-    # The dynamic
-    # assertion catches accidental drift without pinning the number.
     _registered = len(CANONICAL_REGISTRY)
     _manifests = len(MANIFESTS)
     check(
@@ -67,28 +75,26 @@ def main() -> int:
         check((ROOT / path).is_file(), f"{path} exists")
 
     # Check the whole first-party documentation surface, not just README links.
-    doc_paths = [*ROOT.glob("*.md"), *ROOT.joinpath("docs").rglob("*.md"),
-                 ROOT / "frontend/README.md", ROOT / "packaging/inno/README.md"]
+    doc_paths = documentation_paths()
     broken_links = []
     for path in doc_paths:
         for target in markdown_links(path.read_text(encoding="utf-8")):
             relative = target.split("#", 1)[0].split("?", 1)[0]
             if relative and not (path.parent / relative).exists():
                 broken_links.append(f"{path.relative_to(ROOT)} -> {target}")
-    check(not broken_links, f"all documentation links resolve: {broken_links}")
+    check(not broken_links, f"all {len(doc_paths)} documentation/template links resolve: {broken_links}")
 
-    from prompts.loader import load_prompt_registry
+    from prompts.loader import load_prompt_registry, validate_prompt_registry
     from prompts.renderer import render_prompt
 
     prompt_docs = read("docs/SKILL_PROMPT_ARCHITECTURE.md")
+    registry = validate_prompt_registry()
+    check(registry["valid"], f"prompt registry contracts are valid: {registry['errors']}")
     for spec in load_prompt_registry():
         if spec.status == "enabled":
             check(spec.task in prompt_docs, f"documents prompt task: {spec.task}")
             check(bool(render_prompt(spec.task).text), f"prompt template renders: {spec.task}")
 
-    readme = read("README.md")
-    for target in markdown_links(readme):
-        check((ROOT / target).exists(), f"README link exists: {target}")
 
     combined_docs = "\n".join(read(path) for path in required_docs)
     design = read("DESIGN.md")
@@ -100,10 +106,6 @@ def main() -> int:
         "/api/agent/message",
         "WebSocket",
         "Zustand",
-        # v3.9.14: removed "Virtuoso" — the frontend dropped the
-        # Virtuoso virtual-list dependency when the Run History panel
-        # was rewritten in v3.9.x. We do not require the dead term
-        # to appear in docs any more.
         "manifest_registry.py",
         "workspace_id",
         "goal_loop",

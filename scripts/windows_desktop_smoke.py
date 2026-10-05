@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 import socket
 import subprocess
-import tempfile
 import time
 import urllib.request
 from datetime import datetime, timezone

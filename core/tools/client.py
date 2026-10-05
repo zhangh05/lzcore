@@ -100,7 +100,7 @@ class ToolRuntimeClient:
             cancel_check=getattr(context, "cancel_check", None) if context else None,
         )
 
-        # ── v3.10 Phase 6: Single manifest lookup (caller + existence) ──
+        # ── Single manifest lookup (caller + existence) ──
         try:
             from core.tools.manifest_registry import get_manifest
         except Exception:

@@ -866,8 +866,6 @@ def _anthropic_messages_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
         )
 
     try:
-        import requests as _requests
-
         url = _anthropic_messages_url(cfg)
         body = _to_anthropic_messages_request(req, cfg)
         headers = {
@@ -1117,7 +1115,6 @@ def _parse_anthropic_messages_response(data: dict, cfg: dict) -> LLMResponse:
 
 
 def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
-    import requests as _requests
     content_parts, blocks, usage, model, stop_reason = [], {}, None, cfg.get("model", ""), ""
     try:
         response = _post_llm(url, json=body, headers=headers, timeout=_llm_timeout_tuple(cfg), stream=True)

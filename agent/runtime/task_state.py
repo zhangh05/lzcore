@@ -528,7 +528,6 @@ def _evolve_task(
     tool_calls: list[dict[str, Any]],
     continuation_contract: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    now = _now_iso()
     if continuation_contract and previous_task:
         task = deepcopy(previous_task)
         relationship = dict(continuation_contract.get("relationship") or {})

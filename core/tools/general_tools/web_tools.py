@@ -285,17 +285,14 @@ def handle_web_search(inv: ToolInvocation) -> dict:
 
     search_query = _build_web_search_query(query, domains)
 
-    # ── Depth-based backend selection ──
+    # ── Depth-based result and time budgets ──
     if depth == "fast":
-        backends = "google"
         backend_limit = min(count, 5)
         provider_timeout = 6
     elif depth == "deep":
-        backends = "google,bing,duckduckgo,brave"
         backend_limit = min(count * 4, 30)
         provider_timeout = 10
     else:  # balanced (default)
-        backends = "google,bing"
         backend_limit = min(count * 3, 15)
         provider_timeout = 7
 

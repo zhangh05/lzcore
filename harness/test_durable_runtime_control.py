@@ -63,7 +63,6 @@ class TestCheckpoint:
         from agent.runtime.durable.control import checkpoint_task as cp_with_action
         cp = cp_with_action(task.task_id, ws,
                            pending_action={"tool": "exec.run", "api_key": "sk-secret", "cmd": "ls"})
-        snapshot = cp.state_snapshot
         # pending_action.api_key should be redacted in stored payload
         pa = cp.pending_action
         assert pa is not None

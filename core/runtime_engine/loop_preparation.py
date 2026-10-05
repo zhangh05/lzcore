@@ -453,23 +453,6 @@ class LoopToolPreparation:
                 extra_results.append(r)
                 continue
             tool_payload = _model_tool_payload(r)
-            canonical_tool_name = r.tool_name.replace("__", ".")
-            is_complete_text_artifact = (
-                tool_payload.get("content_complete") is True
-                and tool_payload.get("artifact_type")
-                in {
-                    "input_data",
-                    "output_data",
-                    "report",
-                }
-                and (
-                    canonical_tool_name == "workspace.artifact"
-                    or (
-                        canonical_tool_name == "agent.manage"
-                        and tool_payload.get("subagent_result_complete") is True
-                    )
-                )
-            )
             output_str = _json_compact(tool_payload)
             new_msgs.append(
                 LLMMessage(

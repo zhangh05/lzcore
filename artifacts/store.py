@@ -227,8 +227,6 @@ def _report_display_key(rec: ArtifactRecord, named_days: set[str]) -> tuple | No
     if rec.artifact_type != "report":
         return ("artifact", rec.artifact_id)
 
-    metadata = rec.metadata if isinstance(rec.metadata, dict) else {}
-    report_format = str(metadata.get("report_format") or metadata.get("format") or rec.file_ext or "")
     day = _report_day(rec)
     title = _normalized_title(rec.title)
     if _is_generic_report_title(rec.title):

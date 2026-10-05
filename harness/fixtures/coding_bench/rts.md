@@ -1,6 +1,6 @@
 实现原创大型可玩 RTS：IRON DOMINION。从零创建工程在 {{PROJECT_DIR}}，不读取、复制或修改 LZCore 仓库、凭据或服务配置。优先 TypeScript/React/Vite/Three.js，允许 Canvas/WebGL。React 仅做 UI；独立固定步长模拟引擎，不要每单位高频 React 组件。不能做动画冒充玩法或因困难删除核心能力。
 
-必须有 npm test 和 npm run build，后台预览 {{PREVIEW_ORIGIN}}，PID 写 server.pid；常驻进程标准输入输出重定向，不能阻塞工具。阶段性保持可运行，测试失败自主修复。实际 browser.manage 验证操作及控制台，策略拦截必须报告且禁止扩大权限。
+必须有 npm test 和 npm run build，后台预览 {{PREVIEW_ORIGIN}}，PID 写 /tmp/lzcore-bench-server.pid；常驻进程标准输入输出重定向，不能阻塞工具。阶段性保持可运行，测试失败自主修复。实际 browser.manage 验证操作及控制台，策略拦截必须报告且禁止扩大权限。
 
 完整 Skirmish vs AI 闭环：采集→建造→生产→扩张→科技→侦察→战斗→摧毁敌方核心→胜利，自己的核心摧毁→失败。
 - 至少 128×128 逻辑 Grid；固定测试地图和 Seed 程序地图（同 Seed 一致），公平出生点、资源距离、通路连通、地形 Ground/Rock/Water或Hazard/Cliff/ResourceField、狭窄通道。

@@ -247,7 +247,7 @@ class MemoryStore:
     def delete_file(self, ws_id: str, memory_id: str) -> bool:
         """Physically delete a memory record file."""
         ws_id = self._validated_ws_id(ws_id)
-        record = self.get(ws_id, memory_id)
+        self.get(ws_id, memory_id)
         try:
             p = self._path(ws_id, memory_id)
         except ValueError:

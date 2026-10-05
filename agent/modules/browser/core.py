@@ -471,13 +471,10 @@ def _parse_snapshot(node: dict, page: Any | None = None, depth: int = 0) -> list
     if role in actionable or name:
         ref = f"e{len(_state().refs) + 1}"
 
-        # Build a CSS selector via Playwright locator
-        selector = ""
+        # Validate the role locator before recording a semantic reference.
         if page and role and name:
             try:
-                locator = page.get_by_role(role, name=name)
-                # We can't easily get the CSS, but we can store the locator
-                # For ref-based targeting, we'll use get_by_role approach
+                page.get_by_role(role, name=name)
                 _state().refs[ref] = f"role:{role}:{name}"
             except Exception:
                 _state().refs[ref] = ""

@@ -7,7 +7,6 @@ opt-in, while exposed deployments use the isolated container runner.
 """
 
 import ast
-import json
 import os
 import shutil
 import subprocess

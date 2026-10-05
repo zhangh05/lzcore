@@ -201,7 +201,7 @@ def build_catalog_snapshot() -> dict:
     from core.tools.tool_namespace import category_tree_from_specs, metadata_for_tool
 
     tools = []
-    # v3.10 Phase 5: enrich with Capability Manifest fields
+    # Enrich with Capability Manifest fields
     try:
         from core.tools.manifest_registry import get_manifest as _gm
     except Exception:
@@ -235,7 +235,7 @@ def build_catalog_snapshot() -> dict:
             "governance_status": meta["governance_status"],
             "planner_visible": bool(meta["planner_visible"]),
             "capability_actions": [canonical_id],  # v3.9.3: 1:1 with canonical
-            # v3.10 Phase 5: Capability Manifest fields
+            # Capability Manifest fields
             "destructive": manifest.destructive if manifest else False,
             "idempotency": manifest.idempotency if manifest else "unknown",
             "side_effects": manifest.side_effects if manifest else "none",

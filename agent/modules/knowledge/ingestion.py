@@ -238,7 +238,7 @@ def import_file(
                 "summary": f"invalid scope: {scope}",
                 "errors": ["invalid_scope"]}
 
-    # v1.0.1.1 — Path security check (only when source is a path).
+    # Path security check (only when source is a path).
     # If file_id is provided, resolve via FileStore and bypass allowlist.
     source_file_id = (file_id or "").strip()
     if source_file_id:
@@ -253,28 +253,8 @@ def import_file(
                 "errors": ["invalid_file_id"],
             }
 
-    is_path_like = isinstance(source, (str, Path)) and not (
-        isinstance(source, str) and (
-            source.startswith("ksrc_") or len(source) < 4096
-        ) and (
-            # Heuristic: treat a str source as a path only if it
-            # looks like one (has a path separator OR ends in a
-            # known extension). Otherwise, treat as raw content.
-            "/" in str(source) or "\\" in str(source)
-            or str(source).lower().endswith((
-                ".md", ".markdown", ".txt", ".html", ".htm",
-                ".docx", ".pdf",
-            ))
-        )
-    )
-    raw_path = None
-    if isinstance(source, (str, Path)) and not isinstance(source, bytes):
-        raw_path = str(source)
-        # Skip validation only for content-typed str (we want to
-        # reject paths that look like content). The above heuristic
-        # is too coarse; we will validate ANY str/Path that came
-        # through the LLM-callable tool path. Test code that passes
-        # raw bytes is unaffected.
+    raw_path = str(source) if isinstance(source, (str, Path)) else None
+    # Paths supplied by tools require allowlist validation; raw bytes do not.
     if raw_path is not None:
         check = _validate_import_path(workspace_id, raw_path)
         if not check.get("ok"):
@@ -439,7 +419,7 @@ def import_file(
         )
 
     # 8. Save chunks AFTER metadata is complete
-    n = _index.replace_chunks(workspace_id, source_id, parents + children)
+    _index.replace_chunks(workspace_id, source_id, parents + children)
 
     # ReferenceIndex: link source/normalized files to knowledge source
     try:
@@ -538,7 +518,7 @@ def reindex_source(workspace_id: str, source_id: str) -> dict:
         c.metadata.update(base_meta)
     for c in children:
         c.metadata.update(base_meta)
-    n = _index.replace_chunks(workspace_id, source_id, parents + children)
+    _index.replace_chunks(workspace_id, source_id, parents + children)
     return {
         "ok": True,
         "summary": f"Reindexed {source_id}: {len(parents)} parents, {len(children)} children",
