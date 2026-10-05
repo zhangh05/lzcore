@@ -16,6 +16,10 @@
 
 生产消息顺序是：runtime_identity、conversation_history（如有）、governed_context（如有）、可信指导、current_user_request。稳定前缀不包含本轮历史、当前时间或选区。动态状态必须保留真实数值，不能为了缓存固定它们。
 
+能力手册的英文触发按整词及常用词形匹配，避免 small/install 被当作 all、topology/catalog 被当作 log。通用 temperature/温度不单独触发天气指导。这是补充提示选择，不是完整意图分类，也不修改工具可见性；没有触发手册的任务仍可使用相应工具。
+
+子 Agent 的正值预算明确显示上限，零值表示无累计回合/节点/墙钟上限；单次超时、供应商容量、取消与运行时策略仍有效。profile action classes 是职责提示，授权来自实际父范围和治理代码。
+
 只有服务端创建的类型化 TrustedPromptItem 能进入可信指导。其内部的设备名称、图纸描述、Skill 自有说明仍可能来自用户；嵌套数据标识不能把这些文字提升为系统政策。外部文档中的指令不授权执行工具。
 
 ## 数据边界的作用和限制
@@ -23,6 +27,8 @@
 保留提示词专用标签时，对插入数据中的同名开闭标签进行转义，避免伪造 current_user_request/runtime_guidance 等边界。普通 `<`、`>`、`&`、管道和 CLI 文本不被全部 HTML 转义，避免破坏技术语法。
 
 模板先解析作者写的语法，再替换数据，插入的 `{{...}}`、`{%...%}` 保持字面内容，不进行二次渲染。解析器支持变量、简单 if/else、列表 for 和 allowlisted summary_only/upper 过滤器；不是 Jinja2，也不执行 Python 表达式。无效模板明确失败，不选用另一个任务模板。
+
+工作台 Skill 的范围和自有说明完整进入渲染及可信外层的数据边界，不再按 40000 字符裁掉末尾或提前拒绝。实际模型容量由既有 QueryLoop 窗口机制核算；不可容纳的初始约束明确失败并保留原文，不能通过截断获得表面成功。
 
 辅助解释模板的固定规则放在 system 消息，provided_context 与 current_user_request 放在 user 消息，当前请求不重复注入。记忆反思单独提供 system 合同和 JSON experience payload。模板的完整 render 文本仍可由 API 检查。
 

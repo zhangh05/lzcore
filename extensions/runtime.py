@@ -426,7 +426,8 @@ def render_workbench_prompt(context: dict[str, Any]) -> str:
 
     The caller must pass the server-resolved context, never the raw browser
     selection.  Extensions own domain behavior while the platform keeps the
-    trust boundary, size bound and injection lifecycle uniform.
+    trust boundary and injection lifecycle uniform. QueryLoop accounts for the
+    complete prompt against the actual model capacity; renderers must not clip it.
     """
     if not isinstance(context, dict):
         raise ValueError("workbench_context_required")
@@ -442,8 +443,6 @@ def render_workbench_prompt(context: dict[str, Any]) -> str:
     rendered = extension.workbench_prompt_renderer(dict(context))
     if not isinstance(rendered, str) or not rendered.strip():
         raise ExtensionValidationError("workbench prompt renderer must return non-empty text")
-    if len(rendered) > 40_000:
-        raise ExtensionValidationError("workbench prompt exceeds 40000 characters")
     return rendered.strip()
 
 

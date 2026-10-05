@@ -13,6 +13,7 @@ from core.runtime_engine.prompt_contract import (
     trusted_prompt_item,
 )
 from core.runtime_engine.query_loop import QueryLoop
+import pytest
 
 
 def test_runtime_prompt_is_compact_capable_and_destructive_only():
@@ -145,6 +146,46 @@ def test_capability_playbooks_are_additive_and_do_not_change_tool_visibility():
     assert "never guess a local path" in content
     assert "All/every/全部/所有" in content
     assert "workspace__file" in content
+
+
+@pytest.mark.parametrize("user_text", [
+    "make a small app", "install dependencies", "explain topology",
+    "read the catalog", "a concurrent calculation", "check CPU temperature",
+])
+def test_substrings_and_ambiguous_temperature_do_not_inject_unrelated_playbooks(user_text):
+    from core.runtime_engine.prompt_contract import resolve_capability_playbooks
+
+    assert not resolve_capability_playbooks(user_text)
+
+
+@pytest.mark.parametrize("user_text, label", [
+    ("search current vendor documentation", "external_research"),
+    ("generate reports from documents", "document_or_report"),
+    ("inspect configuration and logs", "structured_operations"),
+    ("diagnostics for failed commands", "structured_operations"),
+    ("check every device", "large_scope"),
+    ("batch process all devices", "large_scope"),
+    ("weather forecast for cities", "weather"),
+    ("resolve addresses and coordinates", "location_resolution"),
+    ("上海气温和降雨预报", "weather"),
+    ("分析全部配置文件", "large_scope"),
+])
+def test_explicit_capability_requests_keep_their_guidance(user_text, label):
+    from core.runtime_engine.prompt_contract import resolve_capability_playbooks
+
+    assert label in {item.label for item in resolve_capability_playbooks(user_text)}
+
+
+def test_zero_subagent_budgets_match_the_actual_unbounded_profile():
+    from dataclasses import asdict
+    from agent.runtime.durable.subagent import get_profile
+
+    prompt = build_runtime_system_prompt({"subagent_profile": asdict(get_profile("coding_agent"))})
+    assert "no aggregate reasoning-turn limit" in prompt
+    assert "no aggregate tool-node limit" in prompt
+    assert "no aggregate runtime deadline" in prompt
+    assert "Single-call timeouts" in prompt
+    assert "profile-defined" not in prompt
 
 
 def test_untyped_trusted_context_is_rejected():

@@ -76,6 +76,32 @@ def test_selected_skill_prompt_does_not_silently_drop_large_resource_scope():
     assert "network.operations.inspection" in item.content
 
 
+def test_public_skill_prompt_preserves_long_instructions_and_checks_real_capacity():
+    from core.runtime_engine.context_compaction import estimate_message_tokens
+    from core.runtime_engine.context_continuation import ContextContinuation, ContextContinuationError
+    from core.runtime_engine.models import StatelessContext
+    from core.runtime_engine.prompt_contract import trusted_prompt_item
+    from core.runtime_engine.query_loop import QueryLoop
+
+    instructions = "分阶段执行；" + "完整约束 " * 9000 + "末尾必须单独核验并按原条件回滚。"
+    rendered = render_workbench_prompt({
+        "extension_id": "network.operations", "skill_id": "long-skill",
+        "instructions": instructions,
+    })
+    assert instructions in rendered
+    assert len(rendered) > 40_000
+    ctx = StatelessContext("ws", "session", "request", "执行当前 Skill", extras={
+        "trusted_prompt_items": [trusted_prompt_item("workbench_skill", rendered)],
+    })
+    messages = QueryLoop.__new__(QueryLoop)._build_initial(ctx)
+    assert instructions in messages[1].content
+    before = [message.content for message in messages]
+    with pytest.raises(ContextContinuationError):
+        ContextContinuation(messages).prepare(messages, ctx, 2000)
+    assert [message.content for message in messages] == before
+    assert not ContextContinuation(messages).prepare(messages, ctx, estimate_message_tokens(messages) + 1000)
+
+
 def test_network_workflow_templates_are_owned_by_the_extension():
     reset_extension_cache_for_tests()
     loaded = load_extensions(refresh=True)

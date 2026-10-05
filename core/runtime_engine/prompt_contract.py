@@ -219,19 +219,20 @@ def resolve_capability_playbooks(
     attachment_list = [item for item in attachments if isinstance(item, Mapping)]
     if attachment_list:
         selected.append("managed_attachment")
-    if re.search(r"搜索|查找|联网|最新|当前|官网|资料|research|search|latest|current", lowered):
+    if re.search(r"搜索|查找|联网|最新|当前|官网|资料|\b(?:research|search|latest|current)\b", lowered):
         selected.append("external_research")
-    if attachment_list or re.search(r"文档|文件|报告|表格|制品|产物|pdf|docx|xlsx|report|document|artifact", lowered):
+    if attachment_list or re.search(r"文档|文件|报告|表格|制品|产物|\b(?:pdf|docx|xlsx|reports?|documents?|artifacts?)\b", lowered):
         selected.append("document_or_report")
-    if re.search(r"日志|配置|运行状态|故障|诊断|命令|log|config|diagnos|command", lowered):
+    if re.search(r"日志|配置|运行状态|故障|诊断|命令|\b(?:logs?|configs?|configurations?|diagnose|diagnosis|diagnostic(?:s)?|commands?)\b", lowered):
         selected.append("structured_operations")
-    if re.search(r"全部|所有|每个|全量|批量|all|every|batch", lowered):
+    if re.search(r"全部|所有|每个|全量|批量|\b(?:all|every|batch)\b", lowered):
         selected.append("large_scope")
-    if re.search(r"天气|气温|温度|降雨|下雨|weather|forecast|temperature", lowered):
+    # Generic temperature may describe hardware; guidance requires weather intent.
+    if re.search(r"天气|气温|降雨|下雨|\b(?:weather|forecasts?)\b", lowered):
         selected.append("weather")
-    if re.search(r"地点|地址|坐标|经纬度|省份|城市|区县|机房|站点|location|address|coordinate|latitude|longitude", lowered):
+    if re.search(r"地点|地址|坐标|经纬度|省份|城市|区县|机房|站点|\b(?:locations?|addresses|address|coordinates?|latitudes?|longitudes?)\b", lowered):
         selected.append("location_resolution")
-    if re.search(r"本机|主机|操作系统|ip地址|当前时间|local host|operating system", lowered):
+    if re.search(r"本机|主机|操作系统|ip地址|当前时间|\b(?:local host|operating system)\b", lowered):
         selected.append("system_facts")
     return tuple(
         trusted_prompt_item("capability_playbook", CAPABILITY_PLAYBOOKS[key], label=key)
@@ -332,6 +333,11 @@ def build_runtime_system_prompt(extras: Mapping[str, Any] | None = None) -> str:
     max_steps = _clean(profile.get("max_steps"), 20)
     max_tool_nodes = _clean(profile.get("max_tool_nodes"), 20)
     max_seconds = _clean(profile.get("max_runtime_seconds"), 20)
+    budget = ", ".join((
+        f"at most {max_steps} reasoning turns" if max_steps else "no aggregate reasoning-turn limit",
+        f"at most {max_tool_nodes} executable tool nodes" if max_tool_nodes else "no aggregate tool-node limit",
+        f"at most {max_seconds} seconds" if max_seconds else "no aggregate runtime deadline",
+    ))
     action_classes = ", ".join(
         _clean(value, 40) for value in profile.get("allowed_action_classes", [])
     )
@@ -340,11 +346,11 @@ def build_runtime_system_prompt(extras: Mapping[str, Any] | None = None) -> str:
 ## Subagent assignment
 - Identity: {name or 'specialist subagent'}.
 - Role: {role or 'Complete the delegated goal independently.'}
-- Scope: only the tools exposed to this call and action classes
-  [{action_classes or 'profile-defined'}]. Do not spawn another subagent.
-- Budget: at most {max_steps or 'profile-defined'} reasoning turns,
-  {max_tool_nodes or 'profile-defined'} executable tool nodes, and
-  {max_seconds or 'profile-defined'} seconds.
+- Scope: use exposed tools within inherited parent, workspace and Skill policy.
+  Assignment action hints [{action_classes or 'inherited scope'}] are not authorization.
+  Do not spawn another subagent.
+- Budget: {budget}.
+  Single-call timeouts, provider capacity, cancellation and runtime policy still apply.
 - Deliverable: {output or 'A concise evidence-based result for the parent task.'}
 - Return a compact evidence package that is easy for the parent to merge. Lead with
   the bounded result; identify actual coverage, failed or missing scope, material

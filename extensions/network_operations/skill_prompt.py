@@ -12,7 +12,7 @@ from extensions.network_operations.command_semantics import (
 )
 
 
-NETWORK_SKILL_PROMPT_VERSION = "network.operations.skill.v4"
+NETWORK_SKILL_PROMPT_VERSION = "network.operations.skill.v5"
 
 NETWORK_SKILL_OPERATING_CONTRACT = """## Selected network Skill operating contract
 - The selected Skill defines the registered device, connection and tool scope.
@@ -23,7 +23,7 @@ NETWORK_SKILL_OPERATING_CONTRACT = """## Selected network Skill operating contra
   or assume historical status is live. Other exposed tools may supply relevant evidence.
 - {raw_command_guidance}
 - Use `probe` for reachability, `read` for targeted raw observations and `collect` for supported
-  facts. For a known fact, prefer `device.manage(action="collect", facts=[...])`; the
+  facts. For a known fact, prefer `network__operations__device__manage(action="collect", facts=[...])`; the
   detected driver selects vendor syntax from semantic_catalog. Do not guess vendor syntax or append modifiers such as brief. Use network.operations.inspection for deliberate multi-device collection;
   poll it to a terminal result rather than starting a duplicate.
 - Resolve stale IDs with network.operations.devices_read and use canonical connection_id.
@@ -94,13 +94,4 @@ def render_network_skill_prompt(context: dict[str, Any]) -> str:
     ]
     if owner_instructions:
         parts.append(_authored_instructions_block(owner_instructions))
-    rendered = "\n\n".join(parts)
-    if len(rendered) <= 40_000 or not owner_instructions:
-        return rendered
-    overhead = len(rendered) - len(escape_prompt_data(owner_instructions))
-    note = "\n[工作台提示已截断过长的自有说明；已保存的 Skill 原文未改。]"
-    room = 40_000 - overhead - len(note)
-    if room <= 0:
-        return rendered
-    trimmed = _authored_instructions_block(escape_prompt_data(owner_instructions)[:room] + note)
-    return "\n\n".join([*parts[:-1], trimmed])
+    return "\n\n".join(parts)

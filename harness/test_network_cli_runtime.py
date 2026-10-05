@@ -682,7 +682,7 @@ def test_selected_skill_prompt_explains_semantic_collect_without_raw_pager_comma
         "network_runtime_version": "network.cli.v2",
     })
     assert "`collect`" in prompt
-    assert "prefer `device.manage(action=\"collect\", facts=[...])`" in prompt
+    assert "prefer `network__operations__device__manage(action=\"collect\", facts=[...])`" in prompt
     assert "Do not guess vendor syntax" in prompt
     assert "poll it to a terminal result" in prompt
     assert "semantic_catalog" in prompt

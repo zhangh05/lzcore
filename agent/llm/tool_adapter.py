@@ -71,22 +71,20 @@ def tool_spec_to_openai_function(tool: dict) -> dict:
         "plan_step_id": {
             "type": "string",
             "description": (
-                "Optional stable logical step id for multi-tool coordination. "
-                "A failed step may reuse its id only with corrected arguments; "
-                "a successful step id is immutable."
+                "Optional logical step id. Successful ids are immutable; "
+                "reuse a failed id only with corrected arguments."
             ),
         },
         "plan_depends_on": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Step ids that must finish successfully before this call can run.",
+            "description": "Prerequisite step ids; all must succeed before this call runs.",
         },
         "plan_bindings": {
             "type": "object",
             "description": (
-                "Optional destination-argument to source-result references. "
-                "Use steps.<id>.output for the whole successful output, or a source tool's "
-                "published referenceable field such as steps.<id>.output.rows."
+                "Map destination arguments to steps.<id>.output (whole successful result) "
+                "or steps.<id>.output.<published_field>; use declared safe bindings only."
             ),
         },
         "plan_failure": {
@@ -94,18 +92,16 @@ def tool_spec_to_openai_function(tool: dict) -> dict:
             "enum": ["replan", "stop", "continue"],
             "default": "replan",
             "description": (
-                "Failure policy: replan corrects or replaces the failed step, "
-                "continue runs only independent branches, and stop ends tool execution. "
-                "Runtime still enforces safety."
+                "On failure: replan=correct/replace; continue=independent branches only; "
+                "stop=end tool execution. Runtime safety still applies."
             ),
         },
         "plan_goal_ids": {
             "type": "array",
             "items": {"type": "string"},
             "description": (
-                "Runtime goal ids addressed by this corrected or alternative call. "
-                "Copy ids exactly from a RUNTIME GOAL LOOP message so cross-tool "
-                "recovery evidence can be reconciled."
+                "Exact ids from RUNTIME GOAL LOOP addressed by this corrected/alternative call; "
+                "runtime reconciles evidence, not self-reported completion."
             ),
         },
     })
