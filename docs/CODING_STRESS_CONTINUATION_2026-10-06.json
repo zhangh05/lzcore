@@ -1118,6 +1118,190 @@
       ],
       "parent_recorded_model_calls": 4,
       "diagnosis": "Observer retained one worker without model cancellation; candidate build passed but tests had no test files. Same worker continued. Actual workspace__file src/persistence/repository.ts creates were rejected for wrong path basis, followed by reads of absent sources. Operator interrupted for shared path diagnostics repair."
+    },
+    {
+      "round": "large-20261006-ling-noc-8",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-8/reports/bench_noc_a5884ccda3/7cea903a42",
+      "configuration": {
+        "case": "noc",
+        "workspace_id": "bench_noc_a5884ccda3",
+        "session_id": "b445c1a16ee14714",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "source_commit": "b99f6b4a410c7d702a33484d131b63827e94075c",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "prompt_sha256": "df8cd26647ed1bc30e2f300538b804346896b87804ff58b9e8f43e5a9e2d07c6",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18885,
+          "preview_origin": "http://127.0.0.1:18885",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "duration_seconds": 297.74,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "operator_control": {
+        "timestamp": "2026-10-05T20:23:31.043363+00:00",
+        "action": "stop_after_repeated_no_action_completion_proposals",
+        "reason": "After real build/test failures the same worker repeatedly announced continuation without any tool action or source change. Repair generic no-action completion recovery before a fresh decomposed run.",
+        "active_tasks_interrupted_by_operator": [
+          "sub-6ccbe23d"
+        ],
+        "user_goal_paused": false
+      },
+      "tasks": [
+        {
+          "subtask_id": "sub-6ccbe23d",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-a1020840ae20408a81a1fea74778f589",
+          "parent_contract_refs": [
+            {
+              "run_id": "7b643168-ffdf-42d9-ab38-20d644b70def",
+              "sha256": "0d9b3597017078f5e2ecc9f0c7abf1bf7f5328b61aad46279e5dcc0f4444d022"
+            }
+          ],
+          "source_files": 7,
+          "source_file_sha256": {
+            "package-lock.json": "3e7fecf6cfbb824f1e18566ea4f6fe2dd30357ed40f38bd2058e7922c710ea91",
+            "package.json": "abcf3d8a233fafe2519815fe1d366d9bb59fcad61f2cb3077ce3bdb5a5376493",
+            "tsconfig.json": "19b7a505659223ab0a69eb2d7f36ecf03d3a24b04a07f9bbe99e9286a6c00ac7",
+            "vite.config.ts": "9b4af245b4b41c3b42769b8f6af612a6f5862f79a4f92ab2e545c1510a00d6c0",
+            "src/frontend/index.html": "2ef96ba676bbaeec7107b03c8cc400a34154b7c9cd3d96bfbde073715d688fee",
+            "src/backend/types.ts": "6da12d7dc6974ba57c222e17e48bcbbe46c4e3e4e590a96c81d7d1c76e406e74",
+            "src/backend/db.ts": "9eca2b4ec714deb894ed4325bcc3f9b7688c07ce1647682b816635bc426c5ec6"
+          },
+          "recorded_model_calls": 34,
+          "completion_validation": {
+            "status": "failed",
+            "source_digest": "bbbe6f602701d3681339045c65c96f4e9905010338a056b928c1dd9c9227cd4b",
+            "automatic_retry_allowed": true,
+            "checks": [
+              {
+                "command": "npm test",
+                "runtime_status": "failed",
+                "exit_code": 1,
+                "ok": false,
+                "execution_outcome": null
+              },
+              {
+                "command": "npm run build",
+                "runtime_status": "failed",
+                "exit_code": 1,
+                "ok": false,
+                "execution_outcome": null
+              }
+            ]
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 52661,
+            "preview_origin": "http://127.0.0.1:52661",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        }
+      ],
+      "parent_recorded_model_calls": 1,
+      "diagnosis": "Generated dependency version and build configuration failures. After failed completion checks, repeated public final proposals announced continuation without tool calls or source changes; operator stopped for a generic no-action recovery repair and smaller verified stages."
     }
   ]
 }

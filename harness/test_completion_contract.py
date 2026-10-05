@@ -79,3 +79,39 @@ def test_invalid_completion_is_unknown_not_passed(observation):
     ctx = SimpleNamespace(extras={"__completion_check": lambda: observation})
     result = asyncio.run(observe_completion(ctx))
     assert result["status"] == "unknown" and not result["automatic_retry_allowed"]
+
+
+def test_repeated_completion_promises_stop_without_replaying_checks():
+    config = SSOTRuntimeConfig(max_llm_calls=10)
+    model_calls, checks = [], []
+
+    def model(**kwargs):
+        model_calls.append(kwargs)
+        return LLMResponse(content='Continuing implementation and fixing the build.')
+
+    def check():
+        checks.append(True)
+        return {'status': 'failed', 'checks': [{'exit_code': 1}]}
+
+    ctx = StatelessContext('ws', 'no-action', 'completion', 'Complete implementation', extras={
+        '__completion_check': check})
+    result = asyncio.run(QueryLoop(config, {}, object(), llm_invoke=model).run(
+        ctx, BudgetController(config), None))
+    assert result.error == 'completion_no_action'
+    assert result.metrics['execution_outcome'] == 'failed'
+    assert len(model_calls) == 3 and len(checks) == 1
+    assert not result.tool_results
+    assert ctx.extras['completion_events'][-1]['repair_stalled']
+
+
+def test_real_tool_observation_resets_no_action_recovery():
+    checks = []
+    def check():
+        checks.append(True)
+        return {'status': 'failed'}
+    ctx = SimpleNamespace(extras={'__completion_check': check})
+    asyncio.run(observe_completion(ctx, 0))
+    assert asyncio.run(observe_completion(ctx, 0))['no_action_replies'] == 1
+    assert not asyncio.run(observe_completion(ctx, 1)).get('repair_stalled')
+    assert asyncio.run(observe_completion(ctx, 1))['no_action_replies'] == 1
+    assert len(checks) == 2

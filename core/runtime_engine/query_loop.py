@@ -1156,16 +1156,12 @@ class QueryLoop(
                 )
                 continue
 
-            from .completion import observe_completion, repair_instruction
+            from .completion import observe_completion, repair_instruction, terminal_completion
 
-            completion = await observe_completion(ctx)
-            if completion and completion["status"] == "unknown":
-                return finish(
-                    final_response="完成验证的结果尚未确认，已保留工程与证据；未知操作没有自动重放。",
-                    tool_results=all_results, iterations=iterations,
-                    total_tool_calls=len(all_results), llm_calls=budget.llm_calls,
-                    error="completion_outcome_unknown",
-                )
+            completion = await observe_completion(ctx, len(all_results))
+            terminal = terminal_completion(completion)
+            if terminal:
+                return finish(**terminal)
             if completion and completion["status"] != "passed":
                 messages = [*messages, response.assistant_message([]), LLMMessage(
                     role="user",
