@@ -366,21 +366,9 @@ class QueryLoop(
                 # is emitted to the user.
                 if response.content or response.protocol:
                     messages.append(response.assistant_message([]))
-                if response.tool_calls:
-                    continuation = (
-                        "The preceding response ended while producing tool calls. None of those partial calls "
-                        "was executed. Issue new complete native tool calls with the published function name "
-                        "and a complete JSON object; do not continue a partial JSON argument across messages. "
-                        "Use smaller independently valid calls where the tool contract permits, preserving "
-                        "existing objects and earlier evidence. Do not replay any earlier write with an unknown outcome."
-                    )
-                else:
-                    continuation = (
-                        "The preceding model response ended before completion. Continue from its exact final "
-                        "content without repeating prior text; complete the original task and keep the full "
-                        "answer in this conversation."
-                    )
-                messages = self._append_turn_nudge(messages, continuation)
+                messages = self._append_turn_nudge(
+                    messages, self._truncation_continuation(response)
+                )
                 continue
 
             if response is None or response.error:

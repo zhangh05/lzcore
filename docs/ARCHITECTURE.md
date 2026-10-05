@@ -20,7 +20,7 @@
 
 稳定系统提示和工具定义组成可缓存前缀；时间、任务、历史、Skill、证据和用户输入随回合装配。QueryLoop 的普通 planner、continuation、response 阶段使用同一生产提示词。辅助解释与记忆整理使用已注册模板，不替换生产工具循环。
 
-Provider 适配保留其支持的协议块供当前循环继续推理：Anthropic content/thinking/signature，兼容协议 reasoning 字段，以及 MiniMax 累积流处理。公开 stage_outputs 只保存公开模型文本，不能用于重建未公开的推理。输出截断时未完成的工具 JSON 不执行，下一轮需重新发完整调用。
+Provider 适配保留其支持的协议块供当前循环继续推理：Anthropic content/thinking/signature，兼容协议 reasoning 字段，以及 MiniMax 累积流处理。公开 stage_outputs 只保存公开模型文本，不能用于重建未公开的推理。输出截断时未完成的工具 JSON 不执行，下一轮需重新发完整调用。统一调用先判断输出截断，再判断空响应；推理耗尽输出上限但未产生正文或工具调用时，保留原生状态进入既有续接，不作为 Provider 空响应重复发送原请求。正常结束却没有正文或工具调用的响应仍按空响应错误处理，真实传输和认证错误仍走原有错误路径。真实绘图验证及边界见 [第二轮绘图诊断](DRAWING_CONTINUATION_2026-10-05.md)。
 
 ## 实时与记录
 

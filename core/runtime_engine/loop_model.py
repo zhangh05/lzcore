@@ -31,6 +31,33 @@ _LOG = logging.getLogger(__name__)
 class LoopModelGateway:
     """Provider windows, context continuation, native protocols and final synthesis. Shared context belongs to the QueryLoop driver."""
 
+    @staticmethod
+    def _truncation_continuation(response: LLMResponse) -> str:
+        """Continue incomplete native output without executing partial writes."""
+        if response.tool_calls:
+            continuation = (
+                "The preceding response ended while producing tool calls. None of those partial calls "
+                "was executed. Issue new complete native tool calls with the published function name "
+                "and a complete JSON object; do not continue a partial JSON argument across messages. "
+                "Use smaller independently valid calls where the tool contract permits, preserving "
+                "existing objects and earlier evidence. Do not replay any earlier write with an unknown outcome."
+            )
+        elif not response.content:
+            continuation = (
+                "The preceding response reached its output limit before emitting visible text or "
+                "a complete tool call. Its native protocol state is retained. Complete the original "
+                "task with complete native tool calls, using smaller independently valid calls "
+                "where the tool contract permits. Preserve existing objects and collected evidence. "
+                "Do not replay an earlier write with an unknown outcome."
+            )
+        else:
+            continuation = (
+                "The preceding model response ended before completion. Continue from its exact final "
+                "content without repeating prior text; complete the original task and keep the full "
+                "answer in this conversation."
+            )
+        return continuation
+
     def _build_initial(
         self, ctx: StatelessContext, *, include_history: bool = True
     ) -> list[LLMMessage]:

@@ -17,9 +17,9 @@ from extensions.network_operations import backend, topology_service as drawings
 TOOL_NAME = "network__operations__topology"
 
 
-def _stream(monkeypatch, deltas):
+def _stream(monkeypatch, deltas, finish_reason="tool_calls"):
     chunks = [{"choices": [{"delta": delta, "finish_reason": None}]} for delta in deltas]
-    chunks.append({"choices": [{"delta": {}, "finish_reason": "tool_calls"}]})
+    chunks.append({"choices": [{"delta": {}, "finish_reason": finish_reason}]})
     lines = ["data: " + json.dumps(chunk) for chunk in chunks] + ["data: [DONE]"]
     response = SimpleNamespace(status_code=200, encoding=None, iter_lines=lambda **_kwargs: iter(lines))
     monkeypatch.setattr(provider, "_post_llm", lambda *_args, **_kwargs: response)
@@ -27,6 +27,80 @@ def _stream(monkeypatch, deltas):
         "https://provider.invalid/v1/chat/completions", {}, {"api_key": "test", "provider": "test"},
         LLMRequest(task="assistant_chat", tools=[{"type": "function", "function": {"name": TOOL_NAME}}]),
     )
+
+
+@pytest.mark.parametrize("finish_reason", ["length", "max_tokens", "content_length", "stream_truncated"])
+def test_reasoning_only_truncation_survives_unified_invocation(monkeypatch, finish_reason):
+    from agent.llm.runtime import invoke_llm
+    from agent.llm.schemas import LLMMessage
+
+    calls = []
+
+    def generate(request, config):
+        calls.append(request)
+        return _stream(monkeypatch, [{"reasoning_content": "private continuation"}], finish_reason)
+
+    monkeypatch.setattr(provider, "generate", generate)
+    monkeypatch.setattr("agent.llm.runtime.resolve_invocation_candidates", lambda *_args: [{
+        "enabled": True, "provider": "test", "model": "test", "provider_type": "openai_compatible",
+    }])
+    result = invoke_llm("assistant_chat", messages=[LLMMessage(role="user", content="增加设备")])
+
+    assert result.error is None
+    assert len(calls) == 1
+    assert result.metadata["output_truncated"] is True
+    assert result.content == ""
+    assert result.protocol["openai"]["reasoning_content"] == "private continuation"
+
+
+def test_second_drawing_turn_continues_reasoning_limit_through_agent_app(monkeypatch):
+    from agent.app.facade import AgentApp
+
+    workspace = "drawing-second-turn"
+    topo = drawings.save_topology(workspace, {"name": "数据中心架构", "nodes": [], "links": []})
+    requests = []
+
+    def generate(request, config):
+        if request.task != "assistant_chat":
+            return LLMResponse(error="LLM disabled")
+        index = len(requests)
+        requests.append(request)
+        if index >= 6:
+            return LLMResponse(error="LLM disabled")
+        if index in (1, 5):
+            return _stream(monkeypatch, [{"content": "已按要求更新图纸。"}], "stop")
+        if index == 3:
+            return _stream(monkeypatch, [{"reasoning_content": "private continuation"}], "length")
+        current = drawings.get_topology(workspace, topo["topology_id"])
+        args = {"action": "read"} if index == 2 else {
+            "action": "patch", "version": current["version"],
+            "nodes": [{"node_id": f"n{i}", "display_name": f"设备 {i}"} for i in range(2 if index == 0 else 3)],
+        }
+        return _stream(monkeypatch, [{"tool_calls": [{"index": 0, "id": f"call-{index}",
+            "function": {"name": TOOL_NAME, "arguments": json.dumps(args)}}]}])
+
+    config = {"enabled": True, "provider": "test", "model": "test", "provider_type": "openai_compatible"}
+    monkeypatch.setattr(provider, "generate", generate)
+    monkeypatch.setattr("agent.llm.runtime.resolve_invocation_candidates", lambda *_args: [config])
+    monkeypatch.setattr("agent.llm.config.resolve_provider_config", lambda: config)
+    selection = {"extension_id": "network.operations", "skill_id": f"drawing:{topo['topology_id']}",
+                 "resource_ids": [topo["topology_id"]], "allow_edit": True}
+    app = AgentApp()
+    first = app.submit_user_message("设计数据中心", workspace, "drawing-session",
+                                    metadata={"workbench_selection": selection})
+    second = app.submit_user_message("多一点设备，太少了", workspace, "drawing-session",
+                                     metadata={"workbench_selection": selection})
+
+    assert first.ok and second.ok
+    saved = drawings.get_topology(workspace, topo["topology_id"])
+    assert len(saved["nodes"]) == 3 and saved["version"] == topo["version"] + 2
+    assert len(requests) == 6
+    continuation = requests[4].messages
+    assert any(message.protocol.get("openai", {}).get("reasoning_content") == "private continuation"
+               for message in continuation)
+    assert "output limit" in continuation[-1].content
+    assert "已按要求更新图纸" in str(requests[2].messages)
+    assert "private continuation" not in second.final_response
 
 
 def _drawing_registry():

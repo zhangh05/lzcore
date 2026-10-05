@@ -1,0 +1,924 @@
+{
+  "base_commit": "e0cd647ca408b2138cc386ab757b723910e8044c",
+  "model": "Ling-3.0-flash",
+  "provider_type": "openai_compatible",
+  "max_tokens": 4096,
+  "method": "Real AgentApp and ToolRuntime; isolated copy of original 18-node/19-link drawing; independent persisted graph read-back; actual HTTP provider; no application source or provider credentials serialized. Diagnostic cancellation at 300 seconds per turn.",
+  "runs": [
+    {
+      "round": 1,
+      "baseline": {
+        "nodes": 18,
+        "links": 19,
+        "version": 1
+      },
+      "turns": [
+        {
+          "turn": 1,
+          "seconds": 6.89,
+          "nodes": 18,
+          "links": 19,
+          "version": 1,
+          "checks": {
+            "agent_ok": true,
+            "nodes_increased": true,
+            "original_nodes_preserved": true,
+            "original_links_preserved": true,
+            "original_regions_preserved": true,
+            "region_references_valid": true,
+            "persisted_version": true
+          },
+          "errors": [],
+          "run_id": "59066ce4-9f8d-4866-80e3-13750cc5f58d"
+        },
+        {
+          "turn": 2,
+          "seconds": 157.31,
+          "nodes": 30,
+          "links": 39,
+          "version": 2,
+          "checks": {
+            "agent_ok": true,
+            "nodes_increased": true,
+            "original_nodes_preserved": true,
+            "original_links_preserved": true,
+            "original_regions_preserved": true,
+            "region_references_valid": true,
+            "persisted_version": true,
+            "links_increased": true
+          },
+          "errors": [],
+          "run_id": "1ae91b36-4a21-4b2d-93cd-7493cddb8464"
+        },
+        {
+          "turn": 3,
+          "seconds": 14.35,
+          "nodes": 35,
+          "links": 44,
+          "version": 3,
+          "checks": {
+            "agent_ok": true,
+            "nodes_increased": true,
+            "original_nodes_preserved": true,
+            "original_links_preserved": true,
+            "original_regions_preserved": true,
+            "region_references_valid": true,
+            "persisted_version": true,
+            "links_increased": true
+          },
+          "errors": [],
+          "run_id": "78798227-fb93-4e95-a3a8-75cc4ce21b37"
+        }
+      ],
+      "final_graph_checks": {
+        "unique_nodes": true,
+        "unique_links": true,
+        "unique_items": true,
+        "valid_endpoints": true,
+        "no_isolated_nodes": true,
+        "valid_region_references": true
+      },
+      "calls": [
+        {
+          "turn": 1,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 1.36,
+          "usage": {
+            "completion_tokens": 235,
+            "prompt_tokens": 5333,
+            "total_tokens": 5568,
+            "prompt_tokens_details": {
+              "cached_tokens": 3904
+            },
+            "logical_input_tokens": 5333,
+            "uncached_input_tokens": 1429,
+            "cache_read_input_tokens": 3904,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 235,
+            "cache_hit_ratio": 0.732
+          }
+        },
+        {
+          "turn": 1,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "stop",
+          "error": false,
+          "visible_chars": 780,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 5.34,
+          "usage": {
+            "completion_tokens": 1178,
+            "prompt_tokens": 9322,
+            "total_tokens": 10500,
+            "prompt_tokens_details": {
+              "cached_tokens": 5376
+            },
+            "logical_input_tokens": 9322,
+            "uncached_input_tokens": 3946,
+            "cache_read_input_tokens": 5376,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 1178,
+            "cache_hit_ratio": 0.5767
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 1.3,
+          "usage": {
+            "completion_tokens": 153,
+            "prompt_tokens": 6740,
+            "total_tokens": 6893,
+            "prompt_tokens_details": {
+              "cached_tokens": 3904
+            },
+            "logical_input_tokens": 6740,
+            "uncached_input_tokens": 2836,
+            "cache_read_input_tokens": 3904,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 153,
+            "cache_hit_ratio": 0.5792
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 11.97,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 10650,
+            "total_tokens": 14746,
+            "logical_input_tokens": 10650,
+            "uncached_input_tokens": 10650,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.0
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 15.14,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 14823,
+            "total_tokens": 18919,
+            "prompt_tokens_details": {
+              "cached_tokens": 14592
+            },
+            "logical_input_tokens": 14823,
+            "uncached_input_tokens": 231,
+            "cache_read_input_tokens": 14592,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9844
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 11.59,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 18996,
+            "total_tokens": 23092,
+            "prompt_tokens_details": {
+              "cached_tokens": 18688
+            },
+            "logical_input_tokens": 18996,
+            "uncached_input_tokens": 308,
+            "cache_read_input_tokens": 18688,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9838
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 11.44,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 22560,
+            "total_tokens": 26656,
+            "prompt_tokens_details": {
+              "cached_tokens": 18944
+            },
+            "logical_input_tokens": 22560,
+            "uncached_input_tokens": 3616,
+            "cache_read_input_tokens": 18944,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.8397
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 11.9,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 26733,
+            "total_tokens": 30829,
+            "prompt_tokens_details": {
+              "cached_tokens": 26624
+            },
+            "logical_input_tokens": 26733,
+            "uncached_input_tokens": 109,
+            "cache_read_input_tokens": 26624,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9959
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 12.44,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 30906,
+            "total_tokens": 35002,
+            "prompt_tokens_details": {
+              "cached_tokens": 30720
+            },
+            "logical_input_tokens": 30906,
+            "uncached_input_tokens": 186,
+            "cache_read_input_tokens": 30720,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.994
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 13.05,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 35079,
+            "total_tokens": 39175,
+            "prompt_tokens_details": {
+              "cached_tokens": 34816
+            },
+            "logical_input_tokens": 35079,
+            "uncached_input_tokens": 263,
+            "cache_read_input_tokens": 34816,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9925
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 12.61,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 39252,
+            "total_tokens": 43348,
+            "prompt_tokens_details": {
+              "cached_tokens": 39168
+            },
+            "logical_input_tokens": 39252,
+            "uncached_input_tokens": 84,
+            "cache_read_input_tokens": 39168,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9979
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 1.15,
+          "usage": {
+            "completion_tokens": 143,
+            "prompt_tokens": 6501,
+            "total_tokens": 6644,
+            "prompt_tokens_details": {
+              "cached_tokens": 3904
+            },
+            "logical_input_tokens": 6501,
+            "uncached_input_tokens": 2597,
+            "cache_read_input_tokens": 3904,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 143,
+            "cache_hit_ratio": 0.6005
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 70,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 15.3,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 10399,
+            "total_tokens": 14495,
+            "prompt_tokens_details": {
+              "cached_tokens": 4288
+            },
+            "logical_input_tokens": 10399,
+            "uncached_input_tokens": 6111,
+            "cache_read_input_tokens": 4288,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.4123
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 14.79,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 14140,
+            "total_tokens": 18236,
+            "prompt_tokens_details": {
+              "cached_tokens": 10368
+            },
+            "logical_input_tokens": 14140,
+            "uncached_input_tokens": 3772,
+            "cache_read_input_tokens": 10368,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.7332
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 11.34,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 18313,
+            "total_tokens": 22409,
+            "prompt_tokens_details": {
+              "cached_tokens": 18176
+            },
+            "logical_input_tokens": 18313,
+            "uncached_input_tokens": 137,
+            "cache_read_input_tokens": 18176,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9925
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 9.14,
+          "usage": {
+            "completion_tokens": 3159,
+            "prompt_tokens": 20683,
+            "total_tokens": 23842,
+            "prompt_tokens_details": {
+              "cached_tokens": 18304
+            },
+            "logical_input_tokens": 20683,
+            "uncached_input_tokens": 2379,
+            "cache_read_input_tokens": 18304,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 3159,
+            "cache_hit_ratio": 0.885
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "stop",
+          "error": false,
+          "visible_chars": 879,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 3.51,
+          "usage": {
+            "completion_tokens": 786,
+            "prompt_tokens": 27180,
+            "total_tokens": 27966,
+            "prompt_tokens_details": {
+              "cached_tokens": 23808
+            },
+            "logical_input_tokens": 27180,
+            "uncached_input_tokens": 3372,
+            "cache_read_input_tokens": 23808,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 786,
+            "cache_hit_ratio": 0.8759
+          }
+        },
+        {
+          "turn": 3,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 1.4,
+          "usage": {
+            "completion_tokens": 196,
+            "prompt_tokens": 7529,
+            "total_tokens": 7725,
+            "prompt_tokens_details": {
+              "cached_tokens": 4288
+            },
+            "logical_input_tokens": 7529,
+            "uncached_input_tokens": 3241,
+            "cache_read_input_tokens": 4288,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 196,
+            "cache_hit_ratio": 0.5695
+          }
+        },
+        {
+          "turn": 3,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 73,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 10.57,
+          "usage": {
+            "completion_tokens": 3486,
+            "prompt_tokens": 14101,
+            "total_tokens": 17587,
+            "prompt_tokens_details": {
+              "cached_tokens": 7680
+            },
+            "logical_input_tokens": 14101,
+            "uncached_input_tokens": 6421,
+            "cache_read_input_tokens": 7680,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 3486,
+            "cache_hit_ratio": 0.5446
+          }
+        },
+        {
+          "turn": 3,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "stop",
+          "error": false,
+          "visible_chars": 510,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 2.18,
+          "usage": {
+            "completion_tokens": 474,
+            "prompt_tokens": 19352,
+            "total_tokens": 19826,
+            "prompt_tokens_details": {
+              "cached_tokens": 14080
+            },
+            "logical_input_tokens": 19352,
+            "uncached_input_tokens": 5272,
+            "cache_read_input_tokens": 14080,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 474,
+            "cache_hit_ratio": 0.7276
+          }
+        }
+      ],
+      "verdict": "PASS",
+      "runtime_sha256": {
+        "agent/llm/runtime.py": "760b9eefb1711015d6053be695f0ff85f50da6822843ef8b2a43ab68a280afdf",
+        "core/runtime_engine/query_loop.py": "c6dd3231ff1ce9854b7c1292da03b76102761bfbabeeb54f81fe234a3ce3c581",
+        "core/runtime_engine/loop_model.py": "79eae3045e8a019cdd04da2002a5982e8212115fdc036744c59733b0a353f597"
+      },
+      "runtime_snapshot": "Before extraction of the identical continuation instruction into LoopModelGateway."
+    },
+    {
+      "round": 2,
+      "baseline": {
+        "nodes": 18,
+        "links": 19,
+        "version": 1
+      },
+      "turns": [
+        {
+          "turn": 1,
+          "seconds": 6.76,
+          "nodes": 18,
+          "links": 19,
+          "version": 1,
+          "checks": {
+            "agent_ok": true,
+            "nodes_increased": true,
+            "original_nodes_preserved": true,
+            "original_links_preserved": true,
+            "original_regions_preserved": true,
+            "region_references_valid": true,
+            "persisted_version": true
+          },
+          "errors": [],
+          "run_id": "bfd0ab1f-0a4c-4f3c-a3a1-8695427c9a3c"
+        },
+        {
+          "turn": 2,
+          "seconds": 31.75,
+          "nodes": 28,
+          "links": 34,
+          "version": 2,
+          "checks": {
+            "agent_ok": true,
+            "nodes_increased": true,
+            "original_nodes_preserved": true,
+            "original_links_preserved": true,
+            "original_regions_preserved": true,
+            "region_references_valid": true,
+            "persisted_version": true,
+            "links_increased": true
+          },
+          "errors": [],
+          "run_id": "1852dd26-df34-448c-b974-3020fe826658"
+        },
+        {
+          "turn": 3,
+          "seconds": 14.47,
+          "nodes": 33,
+          "links": 39,
+          "version": 3,
+          "checks": {
+            "agent_ok": true,
+            "nodes_increased": true,
+            "original_nodes_preserved": true,
+            "original_links_preserved": true,
+            "original_regions_preserved": true,
+            "region_references_valid": true,
+            "persisted_version": true,
+            "links_increased": true
+          },
+          "errors": [],
+          "run_id": "8dda1591-90ed-40e6-ae6d-9977fe602c70"
+        }
+      ],
+      "final_graph_checks": {
+        "unique_nodes": true,
+        "unique_links": true,
+        "unique_items": true,
+        "valid_endpoints": true,
+        "no_isolated_nodes": true,
+        "valid_region_references": true
+      },
+      "calls": [
+        {
+          "turn": 1,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 1.22,
+          "usage": {
+            "completion_tokens": 204,
+            "prompt_tokens": 5333,
+            "total_tokens": 5537,
+            "prompt_tokens_details": {
+              "cached_tokens": 4288
+            },
+            "logical_input_tokens": 5333,
+            "uncached_input_tokens": 1045,
+            "cache_read_input_tokens": 4288,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 204,
+            "cache_hit_ratio": 0.8041
+          }
+        },
+        {
+          "turn": 1,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "stop",
+          "error": false,
+          "visible_chars": 1067,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 5.41,
+          "usage": {
+            "completion_tokens": 1318,
+            "prompt_tokens": 9297,
+            "total_tokens": 10615,
+            "prompt_tokens_details": {
+              "cached_tokens": 5376
+            },
+            "logical_input_tokens": 9297,
+            "uncached_input_tokens": 3921,
+            "cache_read_input_tokens": 5376,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 1318,
+            "cache_hit_ratio": 0.5783
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 1.19,
+          "usage": {
+            "completion_tokens": 141,
+            "prompt_tokens": 6899,
+            "total_tokens": 7040,
+            "prompt_tokens_details": {
+              "cached_tokens": 4288
+            },
+            "logical_input_tokens": 6899,
+            "uncached_input_tokens": 2611,
+            "cache_read_input_tokens": 4288,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 141,
+            "cache_hit_ratio": 0.6215
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "length",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 12.38,
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 10800,
+            "total_tokens": 14896,
+            "prompt_tokens_details": {
+              "cached_tokens": 6912
+            },
+            "logical_input_tokens": 10800,
+            "uncached_input_tokens": 3888,
+            "cache_read_input_tokens": 6912,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.64
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 1.36,
+          "usage": {
+            "completion_tokens": 130,
+            "prompt_tokens": 14973,
+            "total_tokens": 15103,
+            "prompt_tokens_details": {
+              "cached_tokens": 14848
+            },
+            "logical_input_tokens": 14973,
+            "uncached_input_tokens": 125,
+            "cache_read_input_tokens": 14848,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 130,
+            "cache_hit_ratio": 0.9917
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 51,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 11.91,
+          "usage": {
+            "completion_tokens": 3573,
+            "prompt_tokens": 18860,
+            "total_tokens": 22433,
+            "prompt_tokens_details": {
+              "cached_tokens": 14912
+            },
+            "logical_input_tokens": 18860,
+            "uncached_input_tokens": 3948,
+            "cache_read_input_tokens": 14912,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 3573,
+            "cache_hit_ratio": 0.7907
+          }
+        },
+        {
+          "turn": 2,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "stop",
+          "error": false,
+          "visible_chars": 804,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 4.66,
+          "usage": {
+            "completion_tokens": 906,
+            "prompt_tokens": 25026,
+            "total_tokens": 25932,
+            "logical_input_tokens": 25026,
+            "uncached_input_tokens": 25026,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 906,
+            "cache_hit_ratio": 0.0
+          }
+        },
+        {
+          "turn": 3,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 0,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 1.19,
+          "usage": {
+            "completion_tokens": 151,
+            "prompt_tokens": 7633,
+            "total_tokens": 7784,
+            "prompt_tokens_details": {
+              "cached_tokens": 4352
+            },
+            "logical_input_tokens": 7633,
+            "uncached_input_tokens": 3281,
+            "cache_read_input_tokens": 4352,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 151,
+            "cache_hit_ratio": 0.5702
+          }
+        },
+        {
+          "turn": 3,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "tool_calls",
+          "error": false,
+          "visible_chars": 65,
+          "tool_calls": 1,
+          "has_native_state": true,
+          "seconds": 10.64,
+          "usage": {
+            "completion_tokens": 3413,
+            "prompt_tokens": 13430,
+            "total_tokens": 16843,
+            "prompt_tokens_details": {
+              "cached_tokens": 7680
+            },
+            "logical_input_tokens": 13430,
+            "uncached_input_tokens": 5750,
+            "cache_read_input_tokens": 7680,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 3413,
+            "cache_hit_ratio": 0.5719
+          }
+        },
+        {
+          "turn": 3,
+          "task": "assistant_chat",
+          "model": "Ling-3.0-flash",
+          "finish_reason": "stop",
+          "error": false,
+          "visible_chars": 631,
+          "tool_calls": 0,
+          "has_native_state": true,
+          "seconds": 2.46,
+          "usage": {
+            "completion_tokens": 530,
+            "prompt_tokens": 18382,
+            "total_tokens": 18912,
+            "prompt_tokens_details": {
+              "cached_tokens": 13376
+            },
+            "logical_input_tokens": 18382,
+            "uncached_input_tokens": 5006,
+            "cache_read_input_tokens": 13376,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 530,
+            "cache_hit_ratio": 0.7277
+          }
+        }
+      ],
+      "verdict": "PASS",
+      "runtime_sha256": {
+        "agent/llm/runtime.py": "760b9eefb1711015d6053be695f0ff85f50da6822843ef8b2a43ab68a280afdf",
+        "core/runtime_engine/query_loop.py": "8178ccdb427bf84bca703a70a470b6f53b90c5c3d89e21db45cc4463d60b2380",
+        "core/runtime_engine/loop_model.py": "ecadfbfb7be56b45d1ae3dfdc71171a61f57b7fe84f1296328bc7ccc569c01c2"
+      },
+      "runtime_snapshot": "Final refactored runtime; entrypoint budget passes."
+    }
+  ],
+  "limitations": [
+    "No native Windows real-provider repetition in this evidence.",
+    "No browser layout/visual quality acceptance in this evidence.",
+    "No NOC/RTS acceptance in this evidence."
+  ]
+}

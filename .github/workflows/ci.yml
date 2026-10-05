@@ -312,6 +312,6 @@ jobs:
             )
             if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
           }
-          python -m pytest harness/test_windows_runtime_contract.py harness/test_desktop_app.py harness/test_windows_desktop_update.py -q
+          python -m pytest harness/test_windows_runtime_contract.py harness/test_desktop_app.py harness/test_windows_desktop_update.py harness/test_llm_stream_tool_calls.py harness/test_synthesis_recovery.py -q
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\start.ps1 -NoBrowser -ValidateOnly

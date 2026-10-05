@@ -202,20 +202,23 @@ def invoke_llm(
         **policy_metadata,
     }
 
-    finish_reason = str(resp.finish_reason or "").lower()
-    if finish_reason in {"length", "max_tokens", "content_length"}:
-        resp.metadata = {
-            **(resp.metadata or {}),
-            "output_truncated": True,
-            "truncation_reason": "length",
-        }
-    elif finish_reason == "stream_truncated":
-        resp.metadata = {
-            **(resp.metadata or {}),
-            "output_truncated": True,
-            "truncation_reason": "timeout",
-        }
     return resp
+
+
+def _mark_output_truncation(resp: LLMResponse) -> None:
+    """Classify unfinished generation before empty-response retry or fallback.
+
+    Reasoning-capable models can exhaust output capacity before producing
+    visible text or tools. Their private native state belongs to continuation,
+    not to a repeated identical request classified as a provider outage.
+    """
+    finish_reason = str(resp.finish_reason or "").lower()
+    if finish_reason in {"length", "max_tokens", "content_length", "stream_truncated"}:
+        resp.metadata = {
+            **(resp.metadata or {}),
+            "output_truncated": True,
+            "truncation_reason": "timeout" if finish_reason == "stream_truncated" else "length",
+        }
 
 
 def _generate_with_retry(req: LLMRequest, cfg: dict, max_retries: int = 3) -> LLMResponse:
@@ -231,6 +234,9 @@ def _generate_with_retry(req: LLMRequest, cfg: dict, max_retries: int = 3) -> LL
                 continue
             return LLMResponse(error=error_msg, metadata={"error_type": ERROR_TYPE_PROVIDER_TIMEOUT, "error_detail": error_msg[:200], "http_status": None, "retryable": True, "retries_exhausted": True})
         if not resp.error:
+            _mark_output_truncation(resp)
+            if (resp.metadata or {}).get("output_truncated"):
+                return resp
             # A transport-level 200 with neither text nor tool calls is not a
             # successful agent response.  Classify it here so the configured
             # provider fallback chain can run instead of leaking an empty turn
