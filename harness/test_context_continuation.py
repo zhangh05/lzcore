@@ -110,6 +110,40 @@ def test_signed_native_tool_group_is_carried_intact(ctx):
     assert_tool_protocol(messages)
 
 
+def test_rollover_keeps_latest_handles_for_multiple_producers_without_replay(ctx):
+    anchors = [LLMMessage("user", ctx.user_input)]
+    lifecycle = ContextContinuation(anchors)
+    ctx.extras["tracking_events"] = [
+        {"tool": "agent.manage", "call_id": "spawn", "tracking": {
+            "task_id": "sub-1", "status": "running", "done": False,
+            "poll_arguments": {"action": "get", "subtask_id": "sub-1"}}},
+        {"tool": "agent.manage", "call_id": "poll", "tracking": {
+            "task_id": "sub-1", "status": "running", "done": False,
+            "auto_polling": "stopped", "stop_reason": "tracking_no_progress",
+            "poll_arguments": {"action": "get", "subtask_id": "sub-1"},
+            "raw": {"private_data": "do not project"}}},
+        {"tool": "exec.run", "call_id": "other", "tracking": {
+            "task_id": "job-2", "status": "completed", "done": True,
+            "poll_arguments": {"action": "get", "job_id": "job-2"}}},
+    ]
+    for n in range(2):
+        messages = [*anchors, *round_messages(f"read-{n}", 9000)]
+        assert lifecycle.prepare(messages, ctx, 2000)
+        state = read_epoch(ctx.workspace_id, ctx.session_id, lifecycle.parent_id)["payload"]["state"]
+        observations = state["tracking_observations"]
+        assert len(observations) == 2
+        pending, completed = observations
+        assert pending["task_id"] == "sub-1" and pending["status"] == "running"
+        assert pending["done"] is False and pending["source_call_id"] == "poll"
+        assert pending["auto_polling"] == "stopped"
+        assert pending["poll_arguments"] == {"action": "get", "subtask_id": "sub-1"}
+        assert completed["task_id"] == "job-2" and completed["done"] is True
+        assert all("raw" not in item for item in observations)
+        assert "do not project" not in messages[1].content
+        assert '"sub-1"' in messages[1].content and '"job-2"' in messages[1].content
+        assert not any(message.tool_calls for message in messages)
+
+
 def test_oversized_single_result_is_archived_with_an_explicit_source_reference(ctx):
     anchors = [LLMMessage("user", ctx.user_input)]
     messages = [*anchors, *round_messages("huge", 9000)]

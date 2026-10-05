@@ -1,0 +1,739 @@
+{
+  "schema": "coding.stress_observations.v1",
+  "status": "in_progress",
+  "scope": "Full NOC and RTS contracts; no business PASS from tool or child success",
+  "production_provider_modified": false,
+  "unknown_writes_replayed": false,
+  "rounds": [
+    {
+      "round": "large-20261006-ling-noc-1",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-1/reports/bench_noc_1bab5feb20/7acc15658b",
+      "configuration": {
+        "case": "noc",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "workspace_id": "bench_noc_1bab5feb20",
+        "session_id": "bdfd87eb11cf4771",
+        "source_commit": "ee4229972267e2b10829f80de8ff9b464ecc7369",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "prompt_sha256": "6b14ea88bd8c1e77b49497816d6b84e13e657b86ffb89ff799eb49edb1407ac4",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18871,
+          "preview_origin": "http://127.0.0.1:18871",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "parameters": {
+        "model": "Ling-3.0-flash",
+        "provider": "custom",
+        "provider_type": "openai_compatible",
+        "saved_output_budget": 4096,
+        "test_output_budget": 8192,
+        "production_settings_modified": false,
+        "full_fixture_preserved": true
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [],
+          "invalid_evidence": [
+            "missing_or_mismatched_acceptance_report"
+          ]
+        }
+      },
+      "duration_seconds": null,
+      "operator_cancelled": null,
+      "deadline_reached": null,
+      "tasks": [],
+      "usage": {
+        "bench_noc_1bab5feb20": {
+          "recorded_calls": 84,
+          "output_limit_reached_calls": 4,
+          "input_tokens": 2912926,
+          "output_tokens": 84644
+        }
+      },
+      "source_manifests": {
+        "bench_noc_1bab5feb20": {
+          "file_count": 0,
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "files": {}
+        }
+      },
+      "execution_cleanup": {
+        "isolation_level": "strong_container",
+        "os": "Linux",
+        "cwd": "/workspace/files/data/noc",
+        "project": "/workspace/files/data/noc",
+        "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+        "network": "internal_with_dependency_only_tls_egress",
+        "preview_port": 18871,
+        "preview_origin": "http://127.0.0.1:18871",
+        "preview_bind_port": 8080,
+        "source_mode": "coordinator",
+        "generated_paths": [
+          "dist"
+        ],
+        "closed": true,
+        "cleanup_confirmed": true,
+        "cleanup_errors": []
+      },
+      "delegation_cleanup": {
+        "confirmed": true,
+        "remaining_subtasks": []
+      },
+      "team_acceptance": null
+    },
+    {
+      "round": "large-20261006-ling-noc-2",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-2/reports/bench_noc_a85f7a5f31/4893b67caa",
+      "configuration": {
+        "case": "noc",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "workspace_id": "bench_noc_a85f7a5f31",
+        "session_id": "ae8b0c76429a4006",
+        "source_commit": "98422ceb3d145e5ceaed68e30388e954339c3287",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "prompt_sha256": "40ab6b29b1eae5e2bd773597f8d1d0b73cc6229333cd57ac85adb6dea223063e",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18873,
+          "preview_origin": "http://127.0.0.1:18873",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "parameters": {
+        "model": "Ling-3.0-flash",
+        "provider": "custom",
+        "provider_type": "openai_compatible",
+        "saved_output_budget": 4096,
+        "test_output_budget": 8192,
+        "production_settings_modified": false,
+        "full_fixture_preserved": true,
+        "runner_sha256": "fca0163500259beb12d52509896b41e40b9aed7dd0a9d02a9d6ccdced22e0460"
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "duration_seconds": 283.51,
+      "operator_cancelled": false,
+      "deadline_reached": false,
+      "tasks": [
+        {
+          "subtask_id": "sub-277dc740",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-1fb17434bcc04ee0a1c18b08d0a54244",
+          "cleanup_confirmed": true
+        }
+      ],
+      "usage": {
+        "bench_noc_a85f7a5f31": {
+          "recorded_calls": 88,
+          "output_limit_reached_calls": 0,
+          "input_tokens": 3016661,
+          "output_tokens": 49604
+        },
+        "coding-1fb17434bcc04ee0a1c18b08d0a54244": {
+          "recorded_calls": 9,
+          "output_limit_reached_calls": 0,
+          "input_tokens": 206818,
+          "output_tokens": 4267
+        }
+      },
+      "source_manifests": {
+        "bench_noc_a85f7a5f31": {
+          "file_count": 0,
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "files": {}
+        },
+        "coding-1fb17434bcc04ee0a1c18b08d0a54244": {
+          "file_count": 5,
+          "sha256": "475ecfe49f25a7eb3139611c3f400b15228167b770485f2ff95c456020cf9313",
+          "files": {
+            "index.html": "6fdb8a4fe2d88fa2f2f6be309fb62c90a36b237d2b909ceceaf55d5e6b73967b",
+            "package.json": "16017cb6ad46ac4b31fdd3f4aca4ce9c10301ce611648ebe41e38a48b8148f7e",
+            "tsconfig.json": "31dbf070a0109d03997fcf86d4a602dd432be2ae1fc8b986a25508123d80d6a6",
+            "tsconfig.node.json": "358e2231c1e2fd1ab4658eadd50dd9744d09ba7d9e13da88886c42f0fc3994c6",
+            "vite.config.ts": "91fd77756afe1b1335ddcaa88ea5538957616f8b1eae324c1e20d5e4efab0009"
+          }
+        }
+      },
+      "execution_cleanup": {
+        "isolation_level": "strong_container",
+        "os": "Linux",
+        "cwd": "/workspace/files/data/noc",
+        "project": "/workspace/files/data/noc",
+        "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+        "network": "internal_with_dependency_only_tls_egress",
+        "preview_port": 18873,
+        "preview_origin": "http://127.0.0.1:18873",
+        "preview_bind_port": 8080,
+        "source_mode": "coordinator",
+        "generated_paths": [
+          "dist"
+        ],
+        "closed": true,
+        "cleanup_confirmed": true,
+        "cleanup_errors": []
+      },
+      "delegation_cleanup": {
+        "confirmed": true,
+        "remaining_subtasks": []
+      },
+      "team_acceptance": {
+        "status": "FAIL",
+        "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
+      }
+    },
+    {
+      "round": "large-20261006-ling-noc-3",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-3/reports/bench_noc_4b51be95d8/3ad6fab10d",
+      "configuration": {
+        "case": "noc",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "workspace_id": "bench_noc_4b51be95d8",
+        "session_id": "c17cbf8d7fe04640",
+        "source_commit": "c1e6fdcb84f4c07fec43bb6dbfb6e5cf9a68be5f",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "prompt_sha256": "5ddb2b5ad2729aeb5d18527a2d8d4ee8587877c82a6f797f003482327d689981",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18875,
+          "preview_origin": "http://127.0.0.1:18875",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "parameters": {
+        "model": "Ling-3.0-flash",
+        "provider": "custom",
+        "provider_type": "openai_compatible",
+        "saved_output_budget": 4096,
+        "test_output_budget": 8192,
+        "production_settings_modified": false,
+        "full_fixture_preserved": true,
+        "runner_sha256": "fca0163500259beb12d52509896b41e40b9aed7dd0a9d02a9d6ccdced22e0460"
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "duration_seconds": 329.65,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "tasks": [
+        {
+          "subtask_id": "sub-15724fc9",
+          "profile_id": "coding_agent",
+          "status": "succeeded",
+          "phase": "changes_ready",
+          "branch_workspace": "coding-1bdc01c2c3ec48b0a1abd5bb0b00537d",
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-a37a53ec",
+          "profile_id": "frontend_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-ff3a35cb83164a67a0b7c25c9b385ff7",
+          "cleanup_confirmed": true
+        }
+      ],
+      "usage": {
+        "bench_noc_4b51be95d8": {
+          "recorded_calls": 77,
+          "output_limit_reached_calls": 1,
+          "input_tokens": 2874304,
+          "output_tokens": 53163
+        },
+        "coding-1bdc01c2c3ec48b0a1abd5bb0b00537d": {
+          "recorded_calls": 15,
+          "output_limit_reached_calls": 1,
+          "input_tokens": 418118,
+          "output_tokens": 23201
+        },
+        "coding-ff3a35cb83164a67a0b7c25c9b385ff7": {
+          "recorded_calls": 37,
+          "output_limit_reached_calls": 4,
+          "input_tokens": 1246802,
+          "output_tokens": 84575
+        }
+      },
+      "source_manifests": {
+        "bench_noc_4b51be95d8": {
+          "file_count": 0,
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "files": {}
+        },
+        "coding-1bdc01c2c3ec48b0a1abd5bb0b00537d": {
+          "file_count": 4,
+          "sha256": "de4b0e78312760a158c87b3a1716c9227a88ef41772cf5c63e28ce4a0c6fe391",
+          "files": {
+            "package.json": "5c8963996d1c52ad643662480c11b223a796499bbffda13a87c51a97f754148a",
+            "src/db/database.ts": "a38af61613318101e5fce6b5042a60044380eb0b44a2f1b0b29498d9ce2a4306",
+            "src/types.ts": "ff356d18856cec817103970dee35f2c427d19edb27208b0538108a76036c11e5",
+            "tsconfig.json": "9b0d3248c37d6fc9d109219b77e284b174085da5e184ce99c5bd453e87a4ed8b"
+          }
+        },
+        "coding-ff3a35cb83164a67a0b7c25c9b385ff7": {
+          "file_count": 29,
+          "sha256": "acfcb1d1e5e668c24e6bc057d173bc75b0176e3d1641789baee1fd92e07cea22",
+          "files": {
+            "index.html": "263692fdd9a4673046a9e948de30aa502ccf8550d9d17e6a920cb23275c50ab1",
+            "package.json": "50c11052b3053eda7e584b05fb13faaf85f085ee42228d34e99ce1f350c55a68",
+            "src/App.tsx": "08a9381308ff875e3159468feb1817d7ee4d8f2cc944221c5f3cb5d5edd0f5b2",
+            "src/components/Layout.tsx": "3af9221ce20ac07067fbb0f520787814acc0cca3868fb7b83312f887758c2086",
+            "src/context/AuthContext.tsx": "ba54f7c21f59442153f06fc5ba761b81b1467c34148ff0a55082b97e482e1405",
+            "src/context/SSEContext.tsx": "91345378cfb23d3cb1158d2aa244ee3df86dfb37d77877c01b75d3ddea8fb998",
+            "src/hooks/useDebounce.ts": "631af474dccd7bcf294e485f742d978d39e9aad89c4be3bf7caf6b1da70bbda2",
+            "src/hooks/usePolling.ts": "4d6044e5a65ca27606be0ef085308f14c054c1eb03aa8e34e5f98d754ed1de33",
+            "src/index.css": "babc262503cb6c48ad7069d769de8f70af608775dbd9e2ef2ce24bbba5a57035",
+            "src/main.tsx": "6d06262ef44987d685ddeeee5ddd32744eb050cbd44fbe5051bec23329f4439c",
+            "src/pages/AlertsPage.tsx": "c0ea8d0fdcc10973903638a651414a9208ec0ee62d658a44939f093f77dfbec3",
+            "src/pages/AuditPage.tsx": "967f5c57638560594c7d7fdb833ae9d451ce7237f2741d377252b245d64e3451",
+            "src/pages/AutomationPage.tsx": "87a314e45ed9f16fa07548482316f537a95a503186dbef4322cfae15bcfbc58c",
+            "src/pages/ConfigPage.tsx": "2eda24bfa922baa1ab5a26cf630b29604dd67849331fe46c9f9a4863f631b3c3",
+            "src/pages/DevicesPage.tsx": "5b0a6635d4908661ab4474e3da8da593558a417a1c520c0837acd228e0467891",
+            "src/pages/EventsPage.tsx": "095d61a68f1e5b29eb21a679a4e8bd22fcbed01e92326d3d7263081d813c03d5",
+            "src/pages/InterfacesPage.tsx": "fdc32e85bddaf2c6504d19c22f55ba9cd2e6bb4572aa9fe3c677b3e352cb2b86",
+            "src/pages/InventoryPage.tsx": "25eda839341594de764682ddfc05dff77ea90215adf55e8ca8b07285f132cdcd",
+            "src/pages/OverviewPage.tsx": "6684684d966b1fe0b5972e5392bcbb6283d6e35d95129ce20c5b30de7e472ee7",
+            "src/pages/PerformancePage.tsx": "d3c83f907142bfadeff47d00d7761fd2680c20973105e4eeeb4e166981530263",
+            "src/pages/RoutingPage.tsx": "5dda3b0fd160e6a4957ddbd11f75c7236e8150aee414a60f4ffaee81d77d52f8",
+            "src/pages/SettingsPage.tsx": "a5143710f7f516670956a951460923c2636348c64f4ee9f29f465ddf35d011ed",
+            "src/pages/SyslogPage.tsx": "d8a54a827636a2cfd35c8a180e04902272ff0144bb06ef9916c75157b74de94a",
+            "src/pages/TopologyPage.tsx": "f9595d0b5849eec7a70abf8b425a5d8cdd8dc456bd423d7271f57e1f5574156a",
+            "src/services/api.ts": "402c09b3efb5a87d362621a6df2bb8ec93ba3a54a31a1d32026561aa5c7903e8",
+            "src/services/sse.ts": "aa17092890b81cf1298794539f4112571b098cf6f16cfb7e94c8c0c42c22da57",
+            "tsconfig.json": "1706ed0a76c8ec13717fb23bd6059112b35888e7a77d82cf0aec33b7e8f85cae",
+            "tsconfig.node.json": "9e2abb169ea87b7190613a1d4da57ca608463a453bd4231fa3aeee5e308370dd",
+            "vite.config.ts": "399d271645123ea4005a043b48ecd907c823c1221510be2818ad9059a0ee8be6"
+          }
+        }
+      },
+      "execution_cleanup": {
+        "isolation_level": "strong_container",
+        "os": "Linux",
+        "cwd": "/workspace/files/data/noc",
+        "project": "/workspace/files/data/noc",
+        "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+        "network": "internal_with_dependency_only_tls_egress",
+        "preview_port": 18875,
+        "preview_origin": "http://127.0.0.1:18875",
+        "preview_bind_port": 8080,
+        "source_mode": "coordinator",
+        "generated_paths": [
+          "dist"
+        ],
+        "closed": true,
+        "cleanup_confirmed": true,
+        "cleanup_errors": []
+      },
+      "delegation_cleanup": {
+        "confirmed": true,
+        "remaining_subtasks": []
+      },
+      "team_acceptance": {
+        "status": "FAIL",
+        "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
+      }
+    },
+    {
+      "round": "large-20261006-ling-rts-1",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-1/reports/bench_rts_6597a8909c/9bf26e68fc",
+      "configuration": {
+        "case": "rts",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "workspace_id": "bench_rts_6597a8909c",
+        "session_id": "925444f075dc4a46",
+        "source_commit": "98422ceb3d145e5ceaed68e30388e954339c3287",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "prompt_sha256": "fe810a8fa91688dda52d4d548ea82e37f890e6f4194159f89ed5913dd258957b",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18872,
+          "preview_origin": "http://127.0.0.1:18872",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "parameters": {
+        "model": "Ling-3.0-flash",
+        "provider": "custom",
+        "provider_type": "openai_compatible",
+        "saved_output_budget": 4096,
+        "test_output_budget": 8192,
+        "production_settings_modified": false,
+        "full_fixture_preserved": true,
+        "runner_sha256": "fca0163500259beb12d52509896b41e40b9aed7dd0a9d02a9d6ccdced22e0460"
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "duration_seconds": 87.64,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "tasks": [
+        {
+          "subtask_id": "sub-b5d526b9",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-39aece02328d4ba485b58fe74bad5b45",
+          "cleanup_confirmed": true
+        }
+      ],
+      "usage": {
+        "coding-39aece02328d4ba485b58fe74bad5b45": {
+          "recorded_calls": 10,
+          "output_limit_reached_calls": 0,
+          "input_tokens": 259573,
+          "output_tokens": 7505
+        },
+        "bench_rts_6597a8909c": {
+          "recorded_calls": 22,
+          "output_limit_reached_calls": 0,
+          "input_tokens": 646846,
+          "output_tokens": 14186
+        }
+      },
+      "source_manifests": {
+        "coding-39aece02328d4ba485b58fe74bad5b45": {
+          "file_count": 6,
+          "sha256": "298513aa4fa7e85aba40a702679128c94086c181a213c1bef9ce5c46952edd9d",
+          "files": {
+            "index.html": "b5ea747d4512a8a5a4f01ba2c4a77390666d54593ed2404694f4d622c0359f99",
+            "package.json": "7f5c804344a23bf7a6af580c867e281e82958e59b593f60576cb81da8bcec771",
+            "src/engine/grid.ts": "1ee7540f4e74bc87071dd4f5d337a1e319c34fa1c390de395659c57d74b4b849",
+            "tsconfig.json": "c011466e21bb9fb3a891c887eaa58367fa4b40a2f426ccc9a7d52f9717d36c9c",
+            "vite.config.ts": "c07869b4f7d02bfd427ea10670ff88bf8d6f4237be2a8c44252360d28f611db3",
+            "vitest.config.ts": "ae0e837abaa974ed0c0727d7ca5d60ddfb243debd53683ce23dba2f39c88c055"
+          }
+        },
+        "bench_rts_6597a8909c": {
+          "file_count": 0,
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "files": {}
+        }
+      },
+      "execution_cleanup": {
+        "isolation_level": "strong_container",
+        "os": "Linux",
+        "cwd": "/workspace/files/data/rts",
+        "project": "/workspace/files/data/rts",
+        "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+        "network": "internal_with_dependency_only_tls_egress",
+        "preview_port": 18872,
+        "preview_origin": "http://127.0.0.1:18872",
+        "preview_bind_port": 8080,
+        "source_mode": "coordinator",
+        "generated_paths": [
+          "dist"
+        ],
+        "closed": true,
+        "cleanup_confirmed": true,
+        "cleanup_errors": []
+      },
+      "delegation_cleanup": {
+        "confirmed": true,
+        "remaining_subtasks": []
+      },
+      "team_acceptance": {
+        "status": "FAIL",
+        "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
+      }
+    }
+  ]
+}

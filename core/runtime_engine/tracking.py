@@ -92,3 +92,26 @@ def normalize_tracking_payload(tracking: dict[str, Any]) -> dict[str, Any]:
         "stop_reason": tracking.get("stop_reason", ""),
         "raw": tracking.get("raw", tracking),
     }
+
+
+def latest_tracking_observations(events: list[dict]) -> list[dict]:
+    """Project existing observations for continuation, without refreshing tasks.
+
+    These are last observed producer facts, not live state or completion proof.
+    Keep all task identities, but no repetitive poll history or raw tool data.
+    """
+    latest = {}
+    fields = ("task_id", "domain", "status", "done", "terminal", "progress",
+              "observation_token", "poll_action", "poll_arguments",
+              "next_poll_seconds", "auto_polling", "stop_reason")
+    for event in events:
+        tracking = event.get("tracking")
+        tool = event.get("tool")
+        if not tool or not isinstance(tracking, dict) or not tracking.get("task_id"):
+            continue
+        normalized = normalize_tracking_payload(tracking)
+        latest[(tool, normalized["task_id"])] = {
+            "tool": tool, "source_call_id": event.get("call_id", ""),
+            **{key: normalized[key] for key in fields},
+        }
+    return list(latest.values())
