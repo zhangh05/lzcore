@@ -8,6 +8,7 @@ from storage.ids import validate_workspace_id
 from storage.workspace_files import (
     create_workspace_text,
     is_current_workspace_write_path,
+    managed_write_roots,
     write_text_atomic,
 )
 
@@ -17,6 +18,25 @@ from core.tools.general_tools.shared import _caller_workspace, _error_inv, _gene
 
 def _is_current_workspace_write_path(ws: str, target: Path) -> bool:
     return is_current_workspace_write_path(ws, target)
+
+
+def source_path_error(inv, environment=None):
+    """Diagnose a rejected path without remapping it or granting permissions."""
+    filepath = str(inv.arguments.get("filepath") or "")
+    details = {"field": "filepath", "path_basis": "workspace_root",
+               "managed_write_roots": list(managed_write_roots())}
+    if environment is not None and environment.started and not environment.closed:
+        project = environment.project.relative_to(environment.root).as_posix()
+        details["active_project_dir"] = project
+        safe = filepath and "\\" not in filepath and ".." not in Path(filepath).parts
+        if safe and filepath.startswith(environment.mount_target + "/"):
+            details["suggested_filepath"] = project + filepath[len(environment.mount_target):]
+        elif safe and not Path(filepath).is_absolute() and not filepath.startswith("workspace/"):
+            details["suggested_filepath"] = project + "/" + filepath
+    result = _error_inv(inv, "filepath is relative to the workspace root, not the exec.run working directory; supply an explicit managed path and replan.",
+                        error_code="FILE_PATH_OUTSIDE_MANAGED_STORAGE", details=details)
+    result.update(executed=False, automatic_retry_allowed=False)
+    return result
 
 
 def handle_file_create(inv: ToolInvocation) -> dict:

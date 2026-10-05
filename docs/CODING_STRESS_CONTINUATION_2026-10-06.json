@@ -1,0 +1,1123 @@
+{
+  "schema": "coding.stress_continuation.v1",
+  "status": "continuing_no_business_pass_yet",
+  "production_provider_modified": false,
+  "unknown_writes_replayed": false,
+  "rounds": [
+    {
+      "round": "large-20261006-ling-noc-5",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-5/reports/bench_noc_41f3fb52d3/8d33d5b24f",
+      "configuration": {
+        "case": "noc",
+        "workspace_id": "bench_noc_41f3fb52d3",
+        "session_id": "dfbd53cb270645a8",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "source_commit": "c80aae6526df536d4cddcc09529adf0a7f21695d",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "prompt_sha256": "a209f5461b74ad3acfdedda3417a2f4838435acfce50bbe6f2e57ae67cfd1d72",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18879,
+          "preview_origin": "http://127.0.0.1:18879",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "duration_seconds": 449.61,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "operator_control": {
+        "timestamp": "2026-10-05T19:15:27.637858+00:00",
+        "action": "stop_nonprogressing_coordinator_after_model_cancelled_workers",
+        "reason": "Model cancelled all active implementations, then repeatedly attempted coordinator shell operations; preserve failed run and start another after contract review.",
+        "user_goal_paused": false
+      },
+      "tasks": [
+        {
+          "subtask_id": "sub-5c32081c",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "created_at": "2026-10-05T19:08:32.871976+00:00",
+          "started_at": "2026-10-05T19:08:33.056445+00:00",
+          "finished_at": "2026-10-05T19:10:36.907054+00:00",
+          "phase": "failed",
+          "branch_workspace": "coding-772bc30f15d0431cac3de9b7ebad81c8",
+          "completion_status": null,
+          "parent_contract_refs": [],
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-c3ac8ac7",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "created_at": "2026-10-05T19:12:33.078243+00:00",
+          "started_at": "2026-10-05T19:12:33.263959+00:00",
+          "finished_at": "2026-10-05T19:12:57.105281+00:00",
+          "phase": "failed",
+          "branch_workspace": "coding-d89ea9d0da6744789ae099fbd13e9762",
+          "completion_status": null,
+          "parent_contract_refs": [],
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-3d9c23ac",
+          "profile_id": "frontend_agent",
+          "status": "failed",
+          "created_at": "2026-10-05T19:08:47.518044+00:00",
+          "started_at": "",
+          "finished_at": "",
+          "phase": "dependency_failed",
+          "branch_workspace": "coding-1fb5cbd5aad64f69827344a2c6db287b",
+          "completion_status": null,
+          "parent_contract_refs": [],
+          "cleanup_confirmed": null
+        },
+        {
+          "subtask_id": "sub-2b102708",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "created_at": "2026-10-05T19:10:53.718245+00:00",
+          "started_at": "2026-10-05T19:10:53.896921+00:00",
+          "finished_at": "2026-10-05T19:11:27.109529+00:00",
+          "phase": "failed",
+          "branch_workspace": "coding-820b7b650cea46e39639a655412eb0eb",
+          "completion_status": null,
+          "parent_contract_refs": [],
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-75fae6ba",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "created_at": "2026-10-05T19:11:35.743547+00:00",
+          "started_at": "2026-10-05T19:11:35.913665+00:00",
+          "finished_at": "2026-10-05T19:12:16.766752+00:00",
+          "phase": "failed",
+          "branch_workspace": "coding-7c667b9066064634a290994f2bb17c05",
+          "completion_status": null,
+          "parent_contract_refs": [],
+          "cleanup_confirmed": true
+        }
+      ],
+      "usage": {
+        "bench_noc_41f3fb52d3": {
+          "calls": 96,
+          "input_tokens": 3556194,
+          "output_tokens": 55777
+        },
+        "coding-820b7b650cea46e39639a655412eb0eb": {
+          "calls": 9,
+          "input_tokens": 206099,
+          "output_tokens": 9611
+        },
+        "coding-7c667b9066064634a290994f2bb17c05": {
+          "calls": 9,
+          "input_tokens": 221892,
+          "output_tokens": 11997
+        },
+        "coding-d89ea9d0da6744789ae099fbd13e9762": {
+          "calls": 9,
+          "input_tokens": 214129,
+          "output_tokens": 4297
+        },
+        "coding-772bc30f15d0431cac3de9b7ebad81c8": {
+          "calls": 21,
+          "input_tokens": 596293,
+          "output_tokens": 35790
+        }
+      },
+      "source_manifests": {
+        "bench_noc_41f3fb52d3": {
+          "file_count": 0,
+          "files": {},
+          "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        "coding-820b7b650cea46e39639a655412eb0eb": {
+          "file_count": 16,
+          "files": {
+            "package.json": "e8905c3e749d1d79888a87a4cc9da401fb14969185f50a0eb9a9f463c2023d8d",
+            "tsconfig.json": "efbfe49cd37db8cee46d43e5fba85b8730bb656943cc39a26c43fa553abbbc27",
+            "vite.config.ts": "0adb1b88e7b8f205eb2da976ea82bb98ed6b133fdb9d68e394c3f2fb470d30e3",
+            "src/backend/server.ts": "79335f245189f537a7274c42323d863e19939926217bdc15b5cd1aed29229082",
+            "src/backend/auth/roles.ts": "08fbf8e67e3ac8a335197b9ddaaf184f316bd0892cf0b5b60ef55d6e557d32b0",
+            "src/backend/simulation/fault.ts": "8cd4f113e3622ea1aba66c1a38adf30ef972f8b0e08558c860625b57fbe347e1",
+            "src/backend/simulation/alert.ts": "ed7a4debec84b59a882d98887acab61503620fc510e222e3aa4cbbc03e1f6ba9",
+            "src/backend/simulation/topology.ts": "08ec3442c42e38116b7096aeef39deed2c5c8294cbd8dfac357b9b83ef645623",
+            "src/backend/simulation/syslog.ts": "7fe2c1eb8e12b26d6d407e634d3a90cabf6d47892caedeca5c17d74059aa355d",
+            "src/backend/simulation/interface.ts": "3bebc4ffacbe21a9c6eac2325c849ed894e08efc15b4d86ed4c447fa7a37fce8",
+            "src/backend/simulation/device.ts": "5885ba5f79506530ba6a43a21dcbcebcc7d5dba0b8606c20cff1c459a3197699",
+            "src/backend/simulation/config.ts": "7934650c0784c695b2781d58c995eb39dff817e79d38de1a07c9abd877069044",
+            "src/backend/simulation/event.ts": "d8144497dbbc7774a094195421035b891efd0fa1b67490b01b286dc0b1cb185d",
+            "src/backend/db/database.ts": "010dbdf3aac69e9958b5b423316e18dd3fe7c2fedb28976a7d819af305d32e0e",
+            "src/backend/api/routes.ts": "599babe70d05b78b5aedf3ee0c1982bd7904e778b6aa6151696af6f257208464",
+            "src/backend/api/sse.ts": "a1fe4f55ac070fd614599504759152f678ccac0b8e3e150fb288924de68e3e46"
+          },
+          "digest": "32cad76a41ee169b027a4ad8a1c18ec668d5c70bc2426e8cdf7d920d1d89d2b2"
+        },
+        "coding-7c667b9066064634a290994f2bb17c05": {
+          "file_count": 9,
+          "files": {
+            "package.json": "228289082ed30789fee73d2cc70e50ee48b0942bc203722387f595ca049d8758",
+            "tsconfig.json": "eee1cea2f54ddba162c92105658a6ec040a597f28086af4a72c39213aca7b4bb",
+            "vite.config.ts": "7982bf56dacba4b9a4ee819f93ad42e7667c705104ddfcaff3ae331202227655",
+            "src/frontend/public": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "src/frontend/src": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "src/backend/auth": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "src/backend/simulation": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "src/backend/db": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "src/backend/api": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "digest": "140dd46f82322814eb956d4307badfb20d83249b247465334c21e2a46e86d6ab"
+        },
+        "coding-d89ea9d0da6744789ae099fbd13e9762": {
+          "file_count": 1,
+          "files": {
+            "package.json": "f75ecbeadd810900fadedaf7d4bfc47d6f5065baeeed3c4365782b51829de809"
+          },
+          "digest": "d19c786ce2fd1cd87efe11bf3fdd63f604d89152199a29a76e262a2c80c54266"
+        },
+        "coding-772bc30f15d0431cac3de9b7ebad81c8": {
+          "file_count": 16,
+          "files": {
+            "index.html": "ac2c8628689e92f4084267b8bd223a60c6f3d9e07c4497e67bf650c37134829f",
+            "package.json": "da7152156007651a55bd1cfe9f6f48a35ce38a0d28042216296d24925b1173e2",
+            "tsconfig.json": "510aac66d346892f1a95dacbad62c2101d88cbdba5e30fd6cc57a2bdde16cb57",
+            "vite.config.ts": "946083137724785b4426845bf7d3b3341df6ba2eec4d9d7edb77e47558f17e0d",
+            "src/backend/auth/roles.ts": "f9223426fa1f141b8312bf32a705dd06ea9d76cdc6e79baeb39d7bc6976f7cc3",
+            "src/backend/simulation/fault.ts": "1732b2170663ecb32bccaf7401d60956777d1201970d3a88c83a5ccc3729a16b",
+            "src/backend/simulation/alert.ts": "293e67cd3b4cdd82d56988b58b45e8ac458785728858956651a48fa238929dfe",
+            "src/backend/simulation/ospf.ts": "d6f57e4bae406e77f33fd90bd3138a48ae50fc8d33466f88346d866716bf6a4a",
+            "src/backend/simulation/topology.ts": "32cd050a116acfd2656d7ca0013faa2de166160261b946a64dc0737eedee92ed",
+            "src/backend/simulation/syslog.ts": "331567c595b59514fbc0de3f3e7a6f7ea0f8002b4abe269e641a8685e2e84df6",
+            "src/backend/simulation/interface.ts": "52187f2f1b31cbd5bd81df4d18221a207d0560992bdebe7e485a46eb1fa62776",
+            "src/backend/simulation/device.ts": "0d58605ece1c4c365139e6b90139461016e3aaf9edb3c20ad51ecc04180412a3",
+            "src/backend/simulation/bgp.ts": "1f80633987b2ef28b12c7a03e0d9d84694a64496fdb10e8d53012e8adea9886c",
+            "src/backend/simulation/config.ts": "67853264e66ddfe55c7e809b05fe2e8dd1c04bdb1c314f3930a7078c2f248efb",
+            "src/backend/simulation/event.ts": "d12d9c5af9178eed883daebe69e8d800fe8208abb64aca40b90d6d2686a02b21",
+            "src/backend/db/database.ts": "ac68bfacfd431bb785acb86c1796ed07f1c46ded550a558cb64ac52a24924d1b"
+          },
+          "digest": "ad1a595a7702f5e3bc59b2f66e8e4fffc6a91dd8c0c2fbe4d07bb9b10af4b620"
+        }
+      },
+      "model_cancel_proposals": [
+        {
+          "call_id": "call_17591ae764f54df1bf03619c",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-75fae6ba",
+          "archive": "ctx_8f3ff2e4166e0e74274e2d2d6b3fa466"
+        },
+        {
+          "call_id": "call_3de5809065174dd88c85ec93",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-5c32081c",
+          "archive": "ctx_62f24674a2b265b4ef3cfadb6a7dc581"
+        },
+        {
+          "call_id": "call_de824f3fb5764ee891102ebd",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-c3ac8ac7",
+          "archive": "ctx_703d9b85aaa8c186c5a420fdd708b950"
+        },
+        {
+          "call_id": "call_99ec43e6511546d7a232e339",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-2b102708",
+          "archive": "ctx_1442eaa34085f3ecf88ef99e225f169e"
+        }
+      ],
+      "executed_cancel_call_ids": [
+        "call_3de5809065174dd88c85ec93",
+        "call_99ec43e6511546d7a232e339",
+        "call_17591ae764f54df1bf03619c",
+        "call_de824f3fb5764ee891102ebd"
+      ],
+      "execution_cleanup": {
+        "isolation_level": "strong_container",
+        "os": "Linux",
+        "cwd": "/workspace/files/data/noc",
+        "project": "/workspace/files/data/noc",
+        "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+        "network": "internal_with_dependency_only_tls_egress",
+        "preview_port": 18879,
+        "preview_origin": "http://127.0.0.1:18879",
+        "preview_bind_port": 8080,
+        "source_mode": "coordinator",
+        "generated_paths": [
+          "dist"
+        ],
+        "closed": true,
+        "cleanup_confirmed": true,
+        "cleanup_errors": []
+      },
+      "delegation_cleanup": {
+        "confirmed": true,
+        "remaining_subtasks": []
+      },
+      "team_acceptance": {
+        "status": "FAIL",
+        "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
+      }
+    },
+    {
+      "round": "large-20261006-ling-rts-3",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-3/reports/bench_rts_fa2d85ea5b/7154e021bd",
+      "configuration": {
+        "case": "rts",
+        "workspace_id": "bench_rts_fa2d85ea5b",
+        "session_id": "bd14b10de46b4929",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "source_commit": "625c79e9b1aef306967e99f26c569122ea470706",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "prompt_sha256": "244e0be1d508735ad50b86063df92ff4b156ffd51441373a49d3f38f9cfb30e2",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18876,
+          "preview_origin": "http://127.0.0.1:18876",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "duration_seconds": 459.16,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "operator_control": {
+        "timestamp": "2026-10-05T19:25:35.146808+00:00",
+        "action": "stop_nonprogressing_coordinator_after_model_cancelled_workers",
+        "reason": "Both implementations were cancelled by model tool calls before completion; coordinator then repeatedly attempted Python execution in readonly parent.",
+        "user_goal_paused": false
+      },
+      "tasks": [
+        {
+          "subtask_id": "sub-2d9e0ce5",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "created_at": "2026-10-05T19:18:30.370510+00:00",
+          "started_at": "2026-10-05T19:18:30.540002+00:00",
+          "finished_at": "2026-10-05T19:19:55.900588+00:00",
+          "phase": "failed",
+          "branch_workspace": "coding-6ed3caa25a7c4eacb3207d0eaf034d3c",
+          "completion_status": null,
+          "parent_contract_refs": [
+            {
+              "run_id": "6723a3c4-a90b-4263-9024-ec5c08d2b1a4",
+              "sha256": "1f00067c31b3eb2bebe0579903252f5459760f47cb62bf659a5ee3cbf570e4e1"
+            }
+          ],
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-93b85f54",
+          "profile_id": "frontend_agent",
+          "status": "cancelled",
+          "created_at": "2026-10-05T19:18:49.016200+00:00",
+          "started_at": "2026-10-05T19:18:49.182595+00:00",
+          "finished_at": "2026-10-05T19:19:55.906350+00:00",
+          "phase": "failed",
+          "branch_workspace": "coding-35e43bf9a3704b3eab9c3f68079d2ad7",
+          "completion_status": null,
+          "parent_contract_refs": [
+            {
+              "run_id": "6723a3c4-a90b-4263-9024-ec5c08d2b1a4",
+              "sha256": "1f00067c31b3eb2bebe0579903252f5459760f47cb62bf659a5ee3cbf570e4e1"
+            }
+          ],
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-bd9f41d4",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "created_at": "2026-10-05T19:23:14.841363+00:00",
+          "started_at": "2026-10-05T19:23:15.022892+00:00",
+          "finished_at": "2026-10-05T19:24:03.599461+00:00",
+          "phase": "failed",
+          "branch_workspace": "coding-4af300a529044d02a303d229f958473f",
+          "completion_status": null,
+          "parent_contract_refs": [
+            {
+              "run_id": "6723a3c4-a90b-4263-9024-ec5c08d2b1a4",
+              "sha256": "1f00067c31b3eb2bebe0579903252f5459760f47cb62bf659a5ee3cbf570e4e1"
+            }
+          ],
+          "cleanup_confirmed": true
+        }
+      ],
+      "usage": {
+        "coding-4af300a529044d02a303d229f958473f": {
+          "calls": 9,
+          "input_tokens": 241348,
+          "output_tokens": 10003
+        },
+        "coding-35e43bf9a3704b3eab9c3f68079d2ad7": {
+          "calls": 8,
+          "input_tokens": 192518,
+          "output_tokens": 18902
+        },
+        "bench_rts_fa2d85ea5b": {
+          "calls": 81,
+          "input_tokens": 2876546,
+          "output_tokens": 101606
+        },
+        "coding-6ed3caa25a7c4eacb3207d0eaf034d3c": {
+          "calls": 6,
+          "input_tokens": 130620,
+          "output_tokens": 1864
+        }
+      },
+      "source_manifests": {
+        "coding-4af300a529044d02a303d229f958473f": {
+          "file_count": 8,
+          "files": {
+            "index.html": "0193da7b288c5b0abf31cfee6de3b26718ed17fd9bab8de42cfa957956638cc2",
+            "package.json": "d52ba22002f8d841c1f1f1d5cb931410932e52f2160a6f2d9d66fb776490941a",
+            "tsconfig.json": "0f5fbc5eef292f12eca971c23518577134a91339d515913386d07d95972a4121",
+            "vite.config.ts": "36d0828dad8805467e0ef535cf2d936bad65626899dd048006b0394e13b50b17",
+            "vitest.config.ts": "aeebedfda225b72c7873113f3d7077315ae6c9b02c680295da88fb14337c58bd",
+            "public/index.html": "5de22c268b69303a229da8a8be5ce1b89995ba73a470cb2e73f11f075aca02d9",
+            "src/utils.ts": "7c441f151f88f3e47f5753cd2a06b37834851fb841e48fa25fe332529630100a",
+            "src/types.ts": "d3ff44a6c81caa1fcd73d16a0b200eb4f30b2280d529a2bf83053a41008c0143"
+          },
+          "digest": "11854ce0c9e7daceb7bcd8c1110396798777044b3ba87c8a949717ef52f30372"
+        },
+        "coding-35e43bf9a3704b3eab9c3f68079d2ad7": {
+          "file_count": 4,
+          "files": {
+            "index.html": "a637170e572ecb5a9aafa4877c05125033dbdcf240ce20b1a3faff43fd0c1773",
+            "package.json": "e5252e999bae635de9566f0cc575d8270745cba23cee7e8701d3a193b2b3747f",
+            "tsconfig.json": "e56b5783dfe2bfb5bdc8b8be27cbda9783e7afd77c8f7091ba1504ec6fa50340",
+            "vite.config.ts": "ad7987e42b5d6bc21e9632365a8d5c62ef778c4e1c0ca2336c275eb5a9c07a4d"
+          },
+          "digest": "80061aeea6074f9bb454848551589d1c8e4c6e24bfc59d7e420f039d413428de"
+        },
+        "bench_rts_fa2d85ea5b": {
+          "file_count": 0,
+          "files": {},
+          "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        "coding-6ed3caa25a7c4eacb3207d0eaf034d3c": {
+          "file_count": 5,
+          "files": {
+            "jest.config.js": "e399fe7b17f46ef76bdf4828bd5ec5ef9c8e9b4700101ed03fdcf6705ea508ff",
+            "package-lock.json": "b7c43ab88a3fa28611a459906f72902bd00257bb3fb7bfdf002180107b191c57",
+            "package.json": "a1e9213aee5a943b097d1945529519d0154f9de067aa21e6d5b46bf166291967",
+            "tsconfig.json": "ac813bb44937eb8477e8cdc54ed573bdedc083ceb7afc26045b0c5acc276712d",
+            "vite.config.ts": "5a7e0fbc3121ff4abe427261ab3c7db1df63a8313ba8fd945ee96395656d633b"
+          },
+          "digest": "e4daff4b86bfff1e019d009551f2d70d0347e38388c3cdea41d12aaeed91a668"
+        }
+      },
+      "model_cancel_proposals": [
+        {
+          "call_id": "call_63666b661ed447e0abd65188",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-2d9e0ce5",
+          "archive": "ctx_c1be7661497b69abe6d9c1278d9eafff"
+        },
+        {
+          "call_id": "call_1be3c548cc6e4f209cd98cd0",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-93b85f54",
+          "archive": "ctx_c1be7661497b69abe6d9c1278d9eafff"
+        },
+        {
+          "call_id": "call_63666b661ed447e0abd65188",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-2d9e0ce5",
+          "archive": "ctx_a57dce0d41e6ee7d7228cce7e409e0e0"
+        },
+        {
+          "call_id": "call_1be3c548cc6e4f209cd98cd0",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-93b85f54",
+          "archive": "ctx_a57dce0d41e6ee7d7228cce7e409e0e0"
+        },
+        {
+          "call_id": "call_2294b0f0de154d59b05c1c9e",
+          "native_name": "agent__manage",
+          "subtask_id": "sub-bd9f41d4",
+          "archive": "ctx_0b8008d6d109be81782a5beff4638192"
+        }
+      ],
+      "executed_cancel_call_ids": [
+        "call_63666b661ed447e0abd65188",
+        "call_1be3c548cc6e4f209cd98cd0",
+        "call_2294b0f0de154d59b05c1c9e"
+      ],
+      "execution_cleanup": {
+        "isolation_level": "strong_container",
+        "os": "Linux",
+        "cwd": "/workspace/files/data/rts",
+        "project": "/workspace/files/data/rts",
+        "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+        "network": "internal_with_dependency_only_tls_egress",
+        "preview_port": 18876,
+        "preview_origin": "http://127.0.0.1:18876",
+        "preview_bind_port": 8080,
+        "source_mode": "coordinator",
+        "generated_paths": [
+          "dist"
+        ],
+        "closed": true,
+        "cleanup_confirmed": true,
+        "cleanup_errors": []
+      },
+      "delegation_cleanup": {
+        "confirmed": true,
+        "remaining_subtasks": []
+      },
+      "team_acceptance": {
+        "status": "FAIL",
+        "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
+      }
+    },
+    {
+      "round": "large-20261006-ling-noc-6",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-6/reports/bench_noc_7623fb99e2/8cd9eb9957",
+      "configuration": {
+        "case": "noc",
+        "workspace_id": "bench_noc_7623fb99e2",
+        "session_id": "4ed3a82d42724f97",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "source_commit": "625c79e9b1aef306967e99f26c569122ea470706",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "prompt_sha256": "e52cda18ac3aae556551b278fff4ae4e7f83ffee2359f61f4d3cd90fbe477c2c",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18881,
+          "preview_origin": "http://127.0.0.1:18881",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "duration_seconds": 700.66,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "operator_control": {
+        "timestamp": "2026-10-05T19:37:39.278854+00:00",
+        "action": "stop_prompt_control_after_repeated_model_cancellations",
+        "reason": "Actual model messages contained increasing source/model progress and explicit isolation hints, yet coordinator repeatedly cancelled implementations. Inspect observer wait contract before next fresh run.",
+        "active_tasks_interrupted_by_operator": [
+          "sub-0be1e0c4"
+        ],
+        "user_goal_paused": false
+      },
+      "tasks": [
+        {
+          "subtask_id": "sub-0be1e0c4",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-c4c280e3cefc436f8ba5ebd0aeb3fd08",
+          "parent_contract_refs": [
+            {
+              "run_id": "0a3c1fba-6b69-4b8d-bade-b438ea72cccf",
+              "sha256": "1f46297daf2a8c4e44b6d3bfcbfb3cf68daea15863ba60615dd1412c18840b9b"
+            }
+          ],
+          "source_files": 8,
+          "source_file_sha256": {
+            "jest.config.js": "b288142d45671d69c55d6340754c0d4f74f5356a2a6c075dd61aecf49b161d67",
+            "package-lock.json": "48c7f2175d004fc3c6a5d7d2aa0bbdd10c2bdc7ef4acb4213f8d51bf6f298410",
+            "package.json": "eefac041415f4242e9859e3c324fa4441f31936f0adf1c172535a44b032a594a",
+            "tsconfig.json": "8a3bf002a5df48f4e7bfc378706b6b6464e62396a2c4a4ffd210d7a746ab3574",
+            "src/api.ts": "f989060a447aef9c084e7571262aa2514cedac708d6066b2800516f0048445f9",
+            "src/sim-engine.ts": "19d7d7a27a97c8c5a2371b1769ab82159566c108bc88a1fe46f0efb338738981",
+            "src/index.ts": "d9afda48487764c3298f28618aa1818c3dcbc6ce37bb426e993ee2b01329add1",
+            "src/__tests__/sim-engine.test.ts": "aa5f90c6fdae32d0cef4b0af1b2d6e2fb8e423ef1f70188ed1e2799f51ed32b0"
+          },
+          "recorded_model_calls": 38,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "automatic_retry_allowed": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 49346,
+            "preview_origin": "http://127.0.0.1:49346",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-2ada8f09",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-5cecf0f1af0241ccb3bdd822a28f493f",
+          "parent_contract_refs": [
+            {
+              "run_id": "0a3c1fba-6b69-4b8d-bade-b438ea72cccf",
+              "sha256": "1f46297daf2a8c4e44b6d3bfcbfb3cf68daea15863ba60615dd1412c18840b9b"
+            }
+          ],
+          "source_files": 3,
+          "source_file_sha256": {
+            "package.json": "6c6d34080876703beb5a7194b355491a7685f66545d9b02ed4c09d5a282edf47",
+            "src/models/types.ts": "90c5423a05097a8bd02f053075de503f6ab17f7671688e730e0bef3928aeb073",
+            "src/data/store.ts": "ee98c20f334c6d90bd132e368cd20d8f348ec8effa35b634ad412ee64a0ecfa1"
+          },
+          "recorded_model_calls": 10,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "automatic_retry_allowed": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 49269,
+            "preview_origin": "http://127.0.0.1:49269",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-72ad2532",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-e91f0c2c5fef480290220369b19e5388",
+          "parent_contract_refs": [
+            {
+              "run_id": "0a3c1fba-6b69-4b8d-bade-b438ea72cccf",
+              "sha256": "1f46297daf2a8c4e44b6d3bfcbfb3cf68daea15863ba60615dd1412c18840b9b"
+            }
+          ],
+          "source_files": 20,
+          "source_file_sha256": {
+            "package.json": "5f7e544741f9dadbb92d96a4c3418e0874dcc8f54000983ecc757f70a3ed8323",
+            "tsconfig.json": "742de85eeb7ae620409cd1a8907170645be9962dd8d6505fc3ea719affb5b3cf",
+            "tests/engine.test.ts": "3ead27b445f7c1ce2ca70cf79736051088acb207eb1e86c02aec60bc4f75d480",
+            "tests/routes.test.ts": "fb87ba4f6693dda58c54b79de3b104fb5335e6770fc34b545e77f96daa64d14a",
+            "src/middleware.ts": "fe1207d66de86879431d8e9c95f3131647cc7f6f8d8098b1379713881be6d962",
+            "src/index.ts": "82cc3d640e34dee270db8ef50a8ae334125f59d9021f957708395cb75f28d35a",
+            "src/auth/auth.ts": "3269ca734dc4ee038a4124e1fd0e4f1f1e829f1809cf477e0ab394f99030545c",
+            "src/models/types.ts": "d60bea29f8f83c5f8036462a59381a3f3c46cfae14995b8e37e30724a7f273f9",
+            "src/engine/simulator.ts": "5fc872fd148b14c6892fc0ada309c87152109b4735aa74495aa5f6d5063020d4",
+            "src/engine/persistence.ts": "243fe3013ed352a9ea438c3d88f097782800eb42e6a69af2ed2383462d45f910",
+            "src/routes/faults.ts": "ed87b51e95bc888110bd6561c25dfd0fef1707f163fdd895174faa74b4ffeaa9",
+            "src/routes/devices.ts": "b9c1bb5731a1c2994438bc9d58e4316d077f5d995e3aa937b33e7e75dcbf625c",
+            "src/routes/topology.ts": "aa592b8206df3bc04a4c7e26f21491cfd40cdefeeda739a8e1270e6bf16f6b54",
+            "src/routes/syslog.ts": "5a379a7bbdb441a32cd4945977d8cbf98969096a2b91534e3bc348cbe0cc6694",
+            "src/routes/test.ts": "d8422c93debe8d1989f4ef21b697efb4fe7c16e0ecef3333a8ff9ca1b67aee13",
+            "src/routes/config.ts": "cad9e0f3ff331dd928659b9dd8ec4159317b0f5e4ae464990fcf744ff5d4fe6e",
+            "src/routes/audit.ts": "5c372eac25501080edd9985237bc0665ade51dd265ae3adee2696c7396cb4948",
+            "src/routes/auth.ts": "4f54b17c63d05911e6fd3e6163959495f500b3a7fb0838d68b9e243e2745716a",
+            "src/routes/interfaces.ts": "3c5d5dd81d2797fc6487859f3b7df7376716fb8c5665d90e0fde29545f314f4d",
+            "src/routes/alerts.ts": "549fd990f2610635b954e6d2c768eda97624d334972f7c3c01c1096ac3f6e831"
+          },
+          "recorded_model_calls": 63,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "automatic_retry_allowed": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 65168,
+            "preview_origin": "http://127.0.0.1:65168",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        }
+      ],
+      "parent_recorded_model_calls": 113,
+      "diagnosis": "Coordinator cancelled two progressing workers despite real progress and isolation hints; operator interrupted the third to repair quiet polling."
+    },
+    {
+      "round": "large-20261006-ling-noc-7",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-7/reports/bench_noc_e17c9e33fb/3b05afce95",
+      "configuration": {
+        "case": "noc",
+        "workspace_id": "bench_noc_e17c9e33fb",
+        "session_id": "0ee9175550e745ad",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "source_commit": "aa535aa6a602dcd655b13c57e4f6c47d4493cbc3",
+        "source_diff_sha256": "61ab14787596d5c99a1a5df95a224fd0652487dd24db48af14d21fea005095ed",
+        "prompt_sha256": "25fce07b7bbe13bb930103adb9f045e11f9f2b6ccc7c7a43c01aca9dd52d3742",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18883,
+          "preview_origin": "http://127.0.0.1:18883",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "duration_seconds": 1699.79,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "operator_control": {
+        "timestamp": "2026-10-05T20:10:56.730195+00:00",
+        "action": "stop_after_reproduced_file_path_basis_failures",
+        "reason": "Observer wait and same-worker completion repair now function. Actual native source writes repeatedly used project-relative src paths against workspace-relative API, received managed-directory rejection, then worker read missing files. Improve shared path contract diagnostics before a fresh run.",
+        "active_tasks_interrupted_by_operator": [
+          "sub-2c8b1ccf"
+        ],
+        "user_goal_paused": false
+      },
+      "tasks": [
+        {
+          "subtask_id": "sub-2c8b1ccf",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-8a3b4376468641a3a5142596aa763a66",
+          "parent_contract_refs": [
+            {
+              "run_id": "5864baf9-6e08-4a31-8bb4-6f270f067ccb",
+              "sha256": "860a2434a0214913df4ed321debba59c520651781aceee4baa1a6b7d2765bc6a"
+            }
+          ],
+          "source_files": 31,
+          "source_file_sha256": {
+            "package-lock.json": "338ed500931ebca0b22eb11412b12ea8aa28861c11d77f613ab2155126eb14dc",
+            "package.json": "dd1f37183b5a1e599ff1d2942436b53ea4aaaa1c4a3a2b7ab5fd18cc15b211f3",
+            "tsconfig.json": "7b8d08bddb82a0b5fbb11f3010813c170733995e83e12c278d4a1bdfc5555e4f",
+            "vite.config.ts": "729e92ea85fd307ee22119bb90df3216160d84bf57680daea6bf6997ac159b95",
+            "tests/unit/auth.test.ts": "dd9e763b45ba09804304b865acf6c9865430780bfdcb105ef4faf3cb398a48cd",
+            "tests/unit/persistence.test.ts": "43801ff79e1a827dba828a2f37b77d6040e38f5d111c922320cf842e30546c52",
+            "tests/unit/simulation.test.ts": "1897ca314fa756696c839da50e5c62f7fc6f692776e92f874f64139eeb1fd663",
+            "tests/unit/api.test.ts": "0928b6ca5233df49ef3a4018a4939bf7d44f1965702f5b5a2d107bd2a19d6791",
+            "tests/integration/api.test.ts": "59c87944dd8bce82fa158f3321b3d1056ed0cacb2b19b0fe253dad8893c256f8",
+            "src/sse.ts": "3577b39023c516b66769586f64a76901a1024b8b53d0ec725cc626428b2b7209",
+            "src/index.ts": "d9a2dbc0140c1881223bc1efb58c8517a59b1df6fc603a3982077feec4c4bcf9",
+            "src/middleware/sse.ts": "f0bf69c51ec412688c0984ed00ddd1bfed515af63fe0c703a5513a1a6df47439",
+            "src/middleware/auth.ts": "3b9d05dbe6646ce619763dcdf5fc9291645e6f331c266773b7f078349838cf6e",
+            "src/auth/tokens.ts": "efdd44e56f284f655ba300227372c77216917f3b6a675f59e467a6372b93798a",
+            "src/auth/roles.ts": "6dc836c7878ae3bd6ed47552bca7d9267d7796fafb2c093134f2326274c1b8c8",
+            "src/simulation/engine.ts": "d0e214912c5f46b98265fa26c86cca212d4c0d1d619e1e74ac4437b8c3997f46",
+            "src/utils/helpers.ts": "d6367f0acfd25160db0eac1714f4f544a6983a222cce136c77a9498afcc6a5ec",
+            "src/utils/id.ts": "f5f64d3cbd62b926a1904ae9780bba558dcf58a857c3bc6e4e4eb489bfb87831",
+            "src/models/types.ts": "053f04ef34b3c3510364e55dcfdcf4c8a29faa8aab80075bf57aebddb790bc5e",
+            "src/persistence/repository.ts": "a3a12063a91fbc268887182f59bab384af969bb5f5cef400cac83a81b4e3ce10",
+            "src/persistence/storage.ts": "8fbd016d7dad2545b6c2ca741b9a1276a42bc6ee396564a353631a1b636515a9",
+            "src/routes/faults.ts": "651a25ed9f5e827fdfa9ab994affedd53a91467826fd09e45bd84739911f14cb",
+            "src/routes/devices.ts": "dfdc0c9073002322ec4f251e795193a7fc55191d6425df7987a91c6bf7e3760e",
+            "src/routes/topology.ts": "be2656db728a8022907c5281f660fdab51405f15383c9742dd8d455b337410f9",
+            "src/routes/syslog.ts": "921d2cd98a62dc4f439161c631dbe0978f4de5d099d97789bb77c87e466c6036",
+            "src/routes/health.ts": "7d568b7c4cab7b3b64752d0cebf8daf5f3d9723a79155729fe5613649b8f9aa3",
+            "src/routes/index.ts": "a55ac435e9d46ae7b810cb08b1cf5d45deda11e1d17bc38a02882703ba65314d",
+            "src/routes/config.ts": "3cc16710d5b04bf8559d2f94c79a6c408aa7aad354fef536f1de3d66a669493f",
+            "src/routes/audit.ts": "0e73d89f99d1e13920988aee3212ec0e4b9017c7a99a7707a0c1a498dd97fdba",
+            "src/routes/interfaces.ts": "daa00f5e0ac1cf63e14354d5901c6fe2ed722b2604e1c98c2bf19fa6eb0f2116",
+            "src/routes/alerts.ts": "6d626301760e1384f5b744797b5731929413b82cdfe427404f5d4a145244c13c"
+          },
+          "recorded_model_calls": 298,
+          "completion_validation": {
+            "status": "failed",
+            "source_digest": "bc4eb29cd41eabe7dabf539572f34796d3c7ab8c9cbd26a9df3a05aadec2a5c0",
+            "automatic_retry_allowed": true,
+            "checks": [
+              {
+                "command": "npm test",
+                "runtime_status": "failed",
+                "exit_code": 1,
+                "ok": false,
+                "execution_outcome": null
+              },
+              {
+                "command": "npm run build",
+                "runtime_status": "failed",
+                "exit_code": 2,
+                "ok": false,
+                "execution_outcome": null
+              }
+            ]
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 50321,
+            "preview_origin": "http://127.0.0.1:50321",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        }
+      ],
+      "parent_recorded_model_calls": 4,
+      "diagnosis": "Observer retained one worker without model cancellation; candidate build passed but tests had no test files. Same worker continued. Actual workspace__file src/persistence/repository.ts creates were rejected for wrong path basis, followed by reads of absent sources. Operator interrupted for shared path diagnostics repair."
+    }
+  ]
+}

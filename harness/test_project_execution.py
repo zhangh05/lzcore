@@ -179,3 +179,48 @@ def test_ownership_restart_failure_closes_execution_instead_of_restoring_writer(
         environment.coordinate(['dist'])
     assert environment.closed and environment.cleanup_confirmed
     assert not environment.execute('touch unsafe', str(environment.project))['executed']
+
+
+def test_governed_source_path_feedback_requires_explicit_correction(environment, monkeypatch):
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.context import ToolRuntimeContext
+    environment.started = True
+    monkeypatch.setitem(environments._BINDINGS, str(environment.root), environment)
+    client = get_default_tool_runtime_client()
+    ctx = ToolRuntimeContext(workspace_id='isolated', session_id='path-contract', requested_by='subagent')
+    for path in ('src/main.ts', environment.mount_target + '/src/main.ts'):
+        rejected = client.invoke('workspace.file', {'action':'create','filepath':path,'content':'export const value = 1;'}, context=ctx)
+        assert rejected.status == 'failed'
+        assert rejected.output['error_code'] == 'FILE_PATH_OUTSIDE_MANAGED_STORAGE'
+        details = rejected.output['error_details']
+        assert details['path_basis'] == 'workspace_root'
+        assert details['suggested_filepath'] == 'files/data/project/src/main.ts'
+        assert rejected.output['executed'] is False
+        assert not (environment.project / 'src/main.ts').exists()
+    corrected = client.invoke('workspace.file', {'action':'create','filepath':details['suggested_filepath'],'content':'export const value = 1;'}, context=ctx)
+    assert corrected.status == 'succeeded'
+    edited = client.invoke('workspace.file', {'action':'edit','filepath':details['suggested_filepath'],
+                           'old_string':'value = 1','new_string':'value = 2'}, context=ctx)
+    assert edited.status == 'succeeded'
+    assert (environment.project / 'src/main.ts').read_text() == 'export const value = 2;'
+    environment.source_mode = 'review'
+    denied = client.invoke('workspace.file', {'action':'edit','filepath':details['suggested_filepath'],
+                           'old_string':'value = 2','new_string':'value = 3'}, context=ctx)
+    assert denied.output['error_code'] == 'CODING_SOURCE_OWNED_BY_IMPLEMENTATION'
+    assert (environment.project / 'src/main.ts').read_text() == 'export const value = 2;'
+
+
+def test_path_diagnostics_do_not_suggest_escaping_or_closed_project(environment, monkeypatch):
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.context import ToolRuntimeContext
+    environment.started = True
+    monkeypatch.setitem(environments._BINDINGS, str(environment.root), environment)
+    client = get_default_tool_runtime_client()
+    ctx = ToolRuntimeContext(workspace_id='isolated', session_id='escaping', requested_by='subagent')
+    for path in ('../../outside.txt', '/host/private.txt', 'src\\\\main.ts'):
+        result = client.invoke('workspace.file', {'action':'create','filepath':path,'content':'unsafe'}, context=ctx)
+        assert result.status == 'failed'
+        assert 'suggested_filepath' not in result.output.get('error_details', {})
+    environment.closed = True
+    result = client.invoke('workspace.file', {'action':'create','filepath':'src/main.ts','content':'unsafe'}, context=ctx)
+    assert 'active_project_dir' not in result.output['error_details']

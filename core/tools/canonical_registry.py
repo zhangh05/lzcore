@@ -534,6 +534,15 @@ def _handle_workspace_file(inv: ToolInvocation) -> dict:
         from core.tools.general_tools.shared import _workspace_path
         environment = environment_for(_caller_workspace(inv))
         filepath = (inv.arguments or {}).get("filepath")
+        if filepath and _action(inv) in {"create", "edit", "patch", "delete"}:
+            from storage.workspace_files import is_current_workspace_write_path
+            from core.tools.general_tools.file_tools import source_path_error
+            try:
+                target = _workspace_path(_caller_workspace(inv), filepath)
+            except ValueError:
+                return source_path_error(inv, environment)
+            if not is_current_workspace_write_path(_caller_workspace(inv), target):
+                return source_path_error(inv, environment)
         if environment is not None and filepath and _action(inv) in {"create", "edit", "patch", "delete"}:
             if environment.source_protected(_workspace_path(_caller_workspace(inv), filepath)):
                 return {"ok": False, "error_code": "CODING_SOURCE_OWNED_BY_IMPLEMENTATION",
@@ -814,7 +823,7 @@ _SYSTEM_ARGS = {
 }
 
 _WORKSPACE_FILE_ARGS = {
-    "filepath": {"type": "string", "description": "Workspace-relative path for create/read/edit/patch/delete."},
+    "filepath": {"type": "string", "description": "Path relative to the workspace root for create/read/edit/patch/delete, never relative to exec.run cwd. In coding assignments include project_dir, e.g. files/data/project/src/main.ts. Container /workspace paths belong to exec.run only."},
     "content": {"type": "string", "description": "Text content for create/write/write_artifact."},
     "limit": {"type": "integer", "minimum": 1},
     "offset": {"type": "integer", "minimum": 0}, "subdir": {"type": "string"},

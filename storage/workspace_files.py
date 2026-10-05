@@ -23,6 +23,11 @@ _IMPORT_ROOTS = (
 )
 
 
+def managed_write_roots() -> tuple[str, ...]:
+    """Canonical workspace-relative roots for source mutations."""
+    return _WRITE_DIRS
+
+
 def resolve_workspace_path(workspace_id: str, subpath: str = "") -> Path:
     root = workspace_root(workspace_id).resolve()
     target = (root / str(subpath or "").lstrip("/").lstrip("\\")).resolve()

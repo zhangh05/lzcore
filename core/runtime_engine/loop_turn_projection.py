@@ -131,7 +131,9 @@ class LoopTurnProjection:
         )
         reconciliation = ctx.extras.get("unknown_outcome_reconciliation")
         projected_metrics["execution_outcome"] = (
-            "complete"
+            "unknown"
+            if (ctx.extras.get("completion_observation") or {}).get("status") == "unknown"
+            else "complete"
             if isinstance(reconciliation, dict)
             and reconciliation.get("status") == "reconciled"
             else "unknown"

@@ -60,6 +60,7 @@ def test_unknown_completion_stops_without_retry_or_a_second_model_call():
     result = asyncio.run(QueryLoop(config, {}, object(), llm_invoke=model).run(
         ctx, BudgetController(config), None))
     assert result.error == "completion_outcome_unknown" and len(calls) == 1
+    assert result.metrics["execution_outcome"] == "unknown"
 
 
 def test_caller_cannot_forge_completion_callback():

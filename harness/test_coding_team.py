@@ -692,3 +692,23 @@ def test_cancel_probe_reads_durable_marker_without_a_process_local_signal(monkey
     assert not event.is_set()
     assert cancellation_probe('cancel-ws',identity,event)()
     assert event.is_set()
+
+
+def test_unknown_check_with_source_changes_is_never_replayed(team, monkeypatch):
+    calls = []
+
+    def execute(environment, *args, **kwargs):
+        calls.append(args)
+        (environment.project / 'src/value.py').write_text('VALUE = 43\n')
+        return {'ok': False, 'execution_outcome': 'unknown', 'execution_may_continue': True}
+
+    monkeypatch.setattr(DockerProjectEnvironment, 'execute', execute)
+    item = team.spawn()
+    task = subagent._load_task('parent-ws', item['subtask_id'])
+    validation = task.coding['completion_validation']
+    assert validation['source_changed_during_checks']
+    assert validation['status'] == 'unknown' and not validation['automatic_retry_allowed']
+    branch = project_changes.project_path(task.coding['branch_workspace'], 'files/data/app')
+    (branch / 'src/value.py').write_text('VALUE = 44\n')
+    assert coding_team.check_implementation(task) == validation
+    assert len(calls) == 1

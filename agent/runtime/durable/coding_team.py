@@ -114,7 +114,10 @@ def check_implementation(task, cancel_check=None) -> dict:
     baseline = source_manifest(branch, assignment.get("generated_paths"))
     digest = manifest_digest(baseline)
     cached = assignment.get("completion_validation") or {}
-    if cached.get("source_digest") == digest and cached.get("status") in {"passed", "unknown"}:
+    if cached.get("status") == "unknown":
+        # Source changes cannot reconcile an execution whose outcome is unknown.
+        return cached
+    if cached.get("source_digest") == digest and cached.get("status") == "passed":
         return cached
     evidence = []
     assignment["phase"] = "verifying"
@@ -139,9 +142,11 @@ def check_implementation(task, cancel_check=None) -> dict:
             break
         if observed.status != "succeeded" or not output.get("ok", True) or output.get("exit_code") != 0:
             status = "failed"
-    if source_manifest(branch, assignment.get("generated_paths")) != baseline:
+    source_changed = source_manifest(branch, assignment.get("generated_paths")) != baseline
+    if source_changed and status != "unknown":
         status = "failed"
     result = {"status": status, "source_digest": digest, "checks": evidence,
+              "source_changed_during_checks": source_changed,
               "automatic_retry_allowed": status != "unknown"}
     assignment.update(phase="executing", completion_validation=result)
     _save_task(task)
@@ -325,6 +330,11 @@ def coding_run(task):
                     "validation_commands": assignment["validation_commands"],
                     "review_subtask_id": assignment["review_subtask_id"],
                     "initial_source_paths": sorted(baseline),
+                    "tool_path_bases": {
+                        "workspace.file": {"basis": "workspace_root", "project_prefix": assignment["project_dir"],
+                                           "example": assignment["project_dir"] + "/src/main.ts"},
+                        "exec.run": {"basis": "container_cwd", "cwd": environment.descriptor()["cwd"]},
+                    },
                     "constraints": "Work only in this isolated project branch. Dependencies are already integrated. Bind preview to HOST/PORT from the process environment, never the browser origin port. Implementation owns writable source; QA and coordinator source mounts are read-only. Run assigned validation commands exactly from the project directory. Reviewed read-only projects use disposable build snapshots and only promote declared outputs; other commands retain their role's source mount mode. Logs/PID/temporary checks belong under /tmp. Source revisions require implementation and exact QA, then governed integration.",
                 },
                 ensure_ascii=False,
