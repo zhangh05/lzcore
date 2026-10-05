@@ -53,4 +53,4 @@ Evaluator 的独立调用必须提供服务端已建立的容器身份、镜像 
 
 本轮架构、重复压力与真实模型结果见 [2026-10-05](CODING_BENCHMARK_RESULTS_2026-10-05.md)，包括失败、修复依据和未验证范围。
 
-Ling-3.0-flash 后续运行及归因见 [2026-10-06（进行中）](CODING_BENCHMARK_RESULTS_2026-10-06.md)。
+Ling-3.0-flash 的六次真实诊断/修复重跑及归因见 [2026-10-06（本批结束，业务未通过）](CODING_BENCHMARK_RESULTS_2026-10-06.md)。

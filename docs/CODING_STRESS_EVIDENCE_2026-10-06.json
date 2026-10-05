@@ -1,6 +1,6 @@
 {
   "schema": "coding.stress_observations.v1",
-  "status": "in_progress",
+  "status": "batch_complete_no_business_pass",
   "scope": "Full NOC and RTS contracts; no business PASS from tool or child success",
   "production_provider_modified": false,
   "unknown_writes_replayed": false,
@@ -129,7 +129,35 @@
         "confirmed": true,
         "remaining_subtasks": []
       },
-      "team_acceptance": null
+      "team_acceptance": null,
+      "observer_stops": [],
+      "context_continuations": [
+        {
+          "checkpoint_id": "ctx_5775d9231e7a0b77ceeca2820666fba8",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_783a5abd632ab25cbce8c9dfc182f2c1",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_bbc4fb5839e7d49e5f56c5791dc5d36c",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_145bf511cd0e26ae3bc476e874434529",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_5695d48cccc9287b2d1d14b3407b09f5",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_364f5ec5fc2d9f28a146730a9d1af536",
+          "observations": null
+        }
+      ],
+      "archived_agent_call_shapes": []
     },
     {
       "round": "large-20261006-ling-noc-2",
@@ -316,7 +344,122 @@
       "team_acceptance": {
         "status": "FAIL",
         "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
-      }
+      },
+      "observer_stops": [
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-277dc740",
+          "status": "tracking_no_progress",
+          "done": true,
+          "terminal": true
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-277dc740",
+          "status": "tracking_no_progress",
+          "done": true,
+          "terminal": true
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-277dc740",
+          "status": "tracking_no_progress",
+          "done": true,
+          "terminal": true
+        }
+      ],
+      "context_continuations": [
+        {
+          "checkpoint_id": "ctx_924b7c5bb300cab3e25c33adc51e523d",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_7d9bf3fdab63e2c886bacc184f610592",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_81e2fc00bb045d173b49ce5212951829",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_9a7fb83b8bda2cbea9744659b0cc4827",
+          "observations": null
+        }
+      ],
+      "archived_agent_call_shapes": [
+        {
+          "call_id": "call_106711c6e7714b96a7865a28",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": "failed",
+          "operation_planned_at": "2026-10-05T18:27:35.339192+00:00"
+        },
+        {
+          "call_id": "call_a5dbb1bab22e47b4939ac9e8",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": "failed",
+          "operation_planned_at": "2026-10-05T18:27:39.597865+00:00"
+        },
+        {
+          "call_id": "call_f94f51441242442698ff858b",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": "failed",
+          "operation_planned_at": "2026-10-05T18:27:55.747118+00:00"
+        },
+        {
+          "call_id": "call_cb04d41a064d4f3ab24b8c4f",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": "failed",
+          "operation_planned_at": "2026-10-05T18:28:02.583746+00:00"
+        },
+        {
+          "call_id": "call_d2212288a7934fc2a0e512b5",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": true,
+          "operation_status": "succeeded",
+          "operation_planned_at": "2026-10-05T18:28:06.985094+00:00"
+        },
+        {
+          "call_id": "call_5c0259999d344578a10191be",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-277dc740",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_104975c4601d404490b8ff25",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-277dc740",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_bbb04f877c81440eb9d78998",
+          "action": "cancel",
+          "profile_id": null,
+          "subtask_id": "sub-277dc740",
+          "coding_assignment_present": false,
+          "operation_status": "succeeded",
+          "operation_planned_at": "2026-10-05T18:28:32.997643+00:00"
+        }
+      ]
     },
     {
       "round": "large-20261006-ling-noc-3",
@@ -526,6 +669,11 @@
           }
         }
       },
+      "operator_control": {
+        "reason": "confirmed context continuation omits existing long-task handles; stop diagnostic before repair rerun",
+        "action": "SIGINT through runtime cancel gate",
+        "unknown_writes_replayed": false
+      },
       "execution_cleanup": {
         "isolation_level": "strong_container",
         "os": "Linux",
@@ -551,7 +699,866 @@
       "team_acceptance": {
         "status": "FAIL",
         "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
-      }
+      },
+      "observer_stops": [
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-15724fc9",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-15724fc9",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-a37a53ec",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-15724fc9",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-a37a53ec",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-15724fc9",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-a37a53ec",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-15724fc9",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-a37a53ec",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-15724fc9",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-a37a53ec",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        }
+      ],
+      "context_continuations": [
+        {
+          "checkpoint_id": "ctx_3d9d6d0da8a2880deca3669e706c135b",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_7c7e9fa16ef3b45fec14ec933801cd4b",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_2f8c9856e80a078af5d4ff78eb69a0f1",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_d4fcec8cb345152432da75d9459653d3",
+          "observations": null
+        },
+        {
+          "checkpoint_id": "ctx_5890ad2da4b04702b37bd724b2eb32be",
+          "observations": null
+        }
+      ],
+      "archived_agent_call_shapes": [
+        {
+          "call_id": "call_4c6dfbd72e3c4c4e95743f81",
+          "action": "list",
+          "profile_id": null,
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_3fb59661a2ac4776a79d73fe",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": "failed",
+          "operation_planned_at": "2026-10-05T18:36:00.988079+00:00"
+        },
+        {
+          "call_id": "call_caac1bc60e2542f981c7e06a",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": true,
+          "operation_status": "succeeded",
+          "operation_planned_at": "2026-10-05T18:36:06.786542+00:00"
+        },
+        {
+          "call_id": "call_6cc3af75af5049deb00f35b0",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-15724fc9",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_dc2a2e21226446799cf777c8",
+          "action": "spawn",
+          "profile_id": "frontend_agent",
+          "subtask_id": null,
+          "coding_assignment_present": true,
+          "operation_status": "succeeded",
+          "operation_planned_at": "2026-10-05T18:36:21.648866+00:00"
+        },
+        {
+          "call_id": "call_e3cdb48fdc7f42689c204bb2",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-15724fc9",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_8282c4bbb431495dba8ecc14",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-a37a53ec",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_488b9f078b5047219c0aca92",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-15724fc9",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_14a72601f20c402fa59e475d",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-a37a53ec",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_76f7a816539c4fe6ae7a127e",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-15724fc9",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_a562c9986fde4d40ada2d17d",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-a37a53ec",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_b0c839a81ab24075b060b103",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-15724fc9",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_923a9bf647e447b08bb66adf",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-a37a53ec",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        }
+      ]
+    },
+    {
+      "round": "large-20261006-ling-noc-4",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-4/reports/bench_noc_c5c79408c7/6b117cfd78",
+      "configuration": {
+        "case": "noc",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "workspace_id": "bench_noc_c5c79408c7",
+        "session_id": "69481b763d93491b",
+        "source_commit": "263a3cbdeb6d4feb7eb76ab7591822d9860acd44",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "prompt_sha256": "f99d6d6cd3516dbef6933d1528fa1cae319e8f07b5cc0a8db9cda899e8b6e601",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18877,
+          "preview_origin": "http://127.0.0.1:18877",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "parameters": {
+        "model": "Ling-3.0-flash",
+        "provider": "custom",
+        "provider_type": "openai_compatible",
+        "saved_output_budget": 4096,
+        "test_output_budget": 8192,
+        "production_settings_modified": false,
+        "full_fixture_preserved": true,
+        "runner_sha256": "fca0163500259beb12d52509896b41e40b9aed7dd0a9d02a9d6ccdced22e0460"
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "duration_seconds": 218.64,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "tasks": [
+        {
+          "subtask_id": "sub-14a6c418",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "branch_workspace": "coding-3dae34cfe65b409cb40c4e1ec009d773",
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-d70e61f9",
+          "profile_id": "frontend_agent",
+          "status": "failed",
+          "phase": "dependency_failed",
+          "branch_workspace": "coding-90c75326c40b47b383bfb8ae027d0316",
+          "cleanup_confirmed": null
+        }
+      ],
+      "usage": {
+        "bench_noc_c5c79408c7": {
+          "recorded_calls": 50,
+          "output_limit_reached_calls": 0,
+          "input_tokens": 1785934,
+          "output_tokens": 30161
+        },
+        "coding-3dae34cfe65b409cb40c4e1ec009d773": {
+          "recorded_calls": 12,
+          "output_limit_reached_calls": 0,
+          "input_tokens": 333567,
+          "output_tokens": 27463
+        }
+      },
+      "source_manifests": {
+        "bench_noc_c5c79408c7": {
+          "file_count": 0,
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "files": {}
+        },
+        "coding-3dae34cfe65b409cb40c4e1ec009d773": {
+          "file_count": 26,
+          "sha256": "00d738878c1dfac15337a26dc323f3c42ded9a40c0d72ed3f6506ec7ef95948e",
+          "files": {
+            "package.json": "5519f0533f6777cbcb576cbb3a0dbc2fd679fb62e3cff231308aee942f237be3",
+            "src/server/api/alerts.ts": "0ff1164af3cc4af6e74e4c9740f46adc45b831c9cc92e4eaf0a6c0b74a9887cd",
+            "src/server/api/auth.ts": "fe8548afab0079f8196d89025c5583f4bcb374f591370d3e1344ac678aec4ad2",
+            "src/server/api/config.ts": "5de5a6e99b0a74f1745a481a0d16189985049bf87e1fbeb83512a542476244d2",
+            "src/server/api/devices.ts": "6d478be3db85b6c581b477249740675f6a079f4628601451f34e3efcff360e2f",
+            "src/server/api/health.ts": "d4bf3affa5c5618dad2a49edc128f4ada7cca1efd4594828ee6e61ef8e3cfcce",
+            "src/server/api/interfaces.ts": "67b8776b9fdf86645cc56ca1dddf297ff9941a037fff37deac4d48911eb4164c",
+            "src/server/api/links.ts": "a1ff7692eea89763b3fa21f67b1720270bfe2ded1e0b9ccbe7b35ab8f1e86d79",
+            "src/server/api/simulation.ts": "bef154d8c4f2f492e60e6662c191120c0e1add682122e50aa4072b75ea9746d0",
+            "src/server/api/sites.ts": "8e3782cb9a4ca0648bf3a03ea1cc6278d85d4cfbfd5835da6adee805a653018e",
+            "src/server/api/syslog.ts": "ba12d5c27430d0d4001466cb863173d9324ff542feac2d5c23b860840d74c670",
+            "src/server/auth/index.ts": "728476c148f7dd96b60f10a16f75b738452d506e9b5f6a1eda2efa014b852367",
+            "src/server/auth/middleware.ts": "92fb206a6e31b60ac7ed633649fc8cda2eeb195a82bde23c912b07988bb1e6b1",
+            "src/server/persistence/alerts.ts": "5b45c34a044f5fea5cfb124a96e950d8e8dbaca4e71f3b4c8fd921a93ce80a0c",
+            "src/server/persistence/config.ts": "4a7aec8e6b38964c5d47ecdc1ab64de5c8d34903ecfdf0912055b2ad922cc6e5",
+            "src/server/persistence/database.ts": "f2942a67b73acdf3cfa5d0cb43f48d720d7e3e004621bc3689549ee4547cc9b0",
+            "src/server/persistence/devices.ts": "b981066f735736c5157f070a903d4cf2915c7d19ef7209900a471dc28f9b8bcc",
+            "src/server/persistence/interfaces.ts": "07a498ed5703c2edad9aaffb3113b323f938901affceb20e5ab3ce6cac5b4fc6",
+            "src/server/persistence/links.ts": "e2fa8d7b328f7512fd1fbdd931466629cd853212776c1d971d605d4552c63142",
+            "src/server/persistence/sites.ts": "164b0141cff4620a8282b50dc6c43c9e295628610a69c052f3cc1fdfd1cd4171",
+            "src/server/persistence/syslog.ts": "185c453a481adbd55119abb2319d1643cb32525f23979cf8c4d54567657eb39e",
+            "src/server/simulationEngine.ts": "1cfafa9f444745d5f0629c4d4f3c783c397040a56925bac03ff2c445ccc657a2",
+            "src/shared/config.ts": "ca9c6f2b36182bed9ae4f0737ba856010e13da91ba785733733ba5d6b4176815",
+            "src/shared/types.ts": "5c3037eba3c1dd18fe8a05aa21caa75deabf75932507c22ec5d0ee0e1371ac34",
+            "tsconfig.json": "ab09a927dccfbb355a5602efe00dd05fb2dbf53e12b4eb729380e20f194565bc",
+            "vite.config.ts": "86afb5aaa05e112474f55741e69c78c796286b8c4ec571df1751d034540403b0"
+          }
+        }
+      },
+      "operator_control": {
+        "reason": "model explicitly cancelled still-progressing implementation; dependent frontend failed; no active implementation or QA, repeated empty-parent readbacks",
+        "action": "SIGINT through runtime cancel gate",
+        "unknown_writes_replayed": false
+      },
+      "execution_cleanup": {
+        "isolation_level": "strong_container",
+        "os": "Linux",
+        "cwd": "/workspace/files/data/noc",
+        "project": "/workspace/files/data/noc",
+        "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+        "network": "internal_with_dependency_only_tls_egress",
+        "preview_port": 18877,
+        "preview_origin": "http://127.0.0.1:18877",
+        "preview_bind_port": 8080,
+        "source_mode": "coordinator",
+        "generated_paths": [
+          "dist"
+        ],
+        "closed": true,
+        "cleanup_confirmed": true,
+        "cleanup_errors": []
+      },
+      "delegation_cleanup": {
+        "confirmed": true,
+        "remaining_subtasks": []
+      },
+      "team_acceptance": {
+        "status": "FAIL",
+        "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
+      },
+      "observer_stops": [
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-d70e61f9",
+          "status": "created",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-d70e61f9",
+          "status": "created",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-14a6c418",
+          "status": "running",
+          "done": false,
+          "terminal": false
+        }
+      ],
+      "context_continuations": [
+        {
+          "checkpoint_id": "ctx_ab26e594142126c0a8083820f8615d91",
+          "observations": [
+            {
+              "tool": "agent.manage",
+              "source_call_id": "call_df2ea256f21040008643595a_track_1",
+              "task_id": "sub-14a6c418",
+              "domain": "subagent",
+              "status": "running",
+              "done": false,
+              "terminal": false,
+              "progress": {},
+              "observation_token": "[REDACTED_SECRET]",
+              "poll_action": "get",
+              "poll_arguments": {
+                "action": "get",
+                "subtask_id": "sub-14a6c418"
+              },
+              "next_poll_seconds": 2,
+              "auto_polling": "stopped",
+              "stop_reason": "tracking_no_progress"
+            },
+            {
+              "tool": "agent.manage",
+              "source_call_id": "call_e1196f6f313b4a578b41d4a1_track_1",
+              "task_id": "sub-d70e61f9",
+              "domain": "subagent",
+              "status": "created",
+              "done": false,
+              "terminal": false,
+              "progress": {},
+              "observation_token": "[REDACTED_SECRET]",
+              "poll_action": "get",
+              "poll_arguments": {
+                "action": "get",
+                "subtask_id": "sub-d70e61f9"
+              },
+              "next_poll_seconds": 2,
+              "auto_polling": "stopped",
+              "stop_reason": "tracking_no_progress"
+            }
+          ]
+        },
+        {
+          "checkpoint_id": "ctx_4a06049d866c29da490bdd2aa970feb5",
+          "observations": [
+            {
+              "tool": "agent.manage",
+              "source_call_id": "call_1f593026043f485b93ed9531_track_1",
+              "task_id": "sub-14a6c418",
+              "domain": "subagent",
+              "status": "running",
+              "done": false,
+              "terminal": false,
+              "progress": {},
+              "observation_token": "[REDACTED_SECRET]",
+              "poll_action": "get",
+              "poll_arguments": {
+                "action": "get",
+                "subtask_id": "sub-14a6c418"
+              },
+              "next_poll_seconds": 2,
+              "auto_polling": "stopped",
+              "stop_reason": "tracking_no_progress"
+            },
+            {
+              "tool": "agent.manage",
+              "source_call_id": "call_e1196f6f313b4a578b41d4a1_track_1",
+              "task_id": "sub-d70e61f9",
+              "domain": "subagent",
+              "status": "created",
+              "done": false,
+              "terminal": false,
+              "progress": {},
+              "observation_token": "[REDACTED_SECRET]",
+              "poll_action": "get",
+              "poll_arguments": {
+                "action": "get",
+                "subtask_id": "sub-d70e61f9"
+              },
+              "next_poll_seconds": 2,
+              "auto_polling": "stopped",
+              "stop_reason": "tracking_no_progress"
+            }
+          ]
+        },
+        {
+          "checkpoint_id": "ctx_23bb649fc35c6b2b2561584c67da2437",
+          "observations": [
+            {
+              "tool": "agent.manage",
+              "source_call_id": "call_7706dcfeff0f4abd83e65232_track_1",
+              "task_id": "sub-14a6c418",
+              "domain": "subagent",
+              "status": "running",
+              "done": false,
+              "terminal": false,
+              "progress": {},
+              "observation_token": "[REDACTED_SECRET]",
+              "poll_action": "get",
+              "poll_arguments": {
+                "action": "get",
+                "subtask_id": "sub-14a6c418"
+              },
+              "next_poll_seconds": 2,
+              "auto_polling": "stopped",
+              "stop_reason": "tracking_no_progress"
+            },
+            {
+              "tool": "agent.manage",
+              "source_call_id": "call_e1196f6f313b4a578b41d4a1_track_1",
+              "task_id": "sub-d70e61f9",
+              "domain": "subagent",
+              "status": "created",
+              "done": false,
+              "terminal": false,
+              "progress": {},
+              "observation_token": "[REDACTED_SECRET]",
+              "poll_action": "get",
+              "poll_arguments": {
+                "action": "get",
+                "subtask_id": "sub-d70e61f9"
+              },
+              "next_poll_seconds": 2,
+              "auto_polling": "stopped",
+              "stop_reason": "tracking_no_progress"
+            }
+          ]
+        }
+      ],
+      "archived_agent_call_shapes": [
+        {
+          "call_id": "call_7706dcfeff0f4abd83e65232",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_df2ea256f21040008643595a",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_317ce9f7c5804ffda2e2eb19",
+          "action": "cancel",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": "succeeded",
+          "operation_planned_at": "2026-10-05T18:46:07.429673+00:00"
+        },
+        {
+          "call_id": "call_60cb36389d83409ba6388634",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_72df2bb19fbc4786914da851",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": "failed",
+          "operation_planned_at": "2026-10-05T18:44:35.869408+00:00"
+        },
+        {
+          "call_id": "call_e5cdf61732a4416c93590f2c",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": true,
+          "operation_status": "succeeded",
+          "operation_planned_at": "2026-10-05T18:44:39.083536+00:00"
+        },
+        {
+          "call_id": "call_8a33e7181b714059952f6cad",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_e6e9c36278d84316bd0237b4",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_27b64bac359544a6894f127b",
+          "action": "spawn",
+          "profile_id": "frontend_agent",
+          "subtask_id": null,
+          "coding_assignment_present": true,
+          "operation_status": "succeeded",
+          "operation_planned_at": "2026-10-05T18:44:55.150043+00:00"
+        },
+        {
+          "call_id": "call_1f593026043f485b93ed9531",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_e1196f6f313b4a578b41d4a1",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-d70e61f9",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_aac96ee3a9564c5ea3cd21e9",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_80927c9d202141c9a4e4f2a0",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_8033af756bf9408892f5809b",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_6677cfe99b514d2eaa22ec16",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_86491249550f491c981ef0ac",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_c4c689492c484b12a45db87b",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_d19341bd291c4ca4b5a4141c",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_a70f9ddbb1db4bbc9b271b41",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-14a6c418",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        }
+      ]
     },
     {
       "round": "large-20261006-ling-rts-1",
@@ -708,6 +1715,11 @@
           "files": {}
         }
       },
+      "operator_control": {
+        "reason": "confirmed runtime auto-poll pause falsely marks producer running task terminal; stop before clean repair rerun",
+        "action": "SIGINT through runtime cancel gate",
+        "unknown_writes_replayed": false
+      },
       "execution_cleanup": {
         "isolation_level": "strong_container",
         "os": "Linux",
@@ -733,7 +1745,241 @@
       "team_acceptance": {
         "status": "FAIL",
         "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
-      }
+      },
+      "observer_stops": [
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-b5d526b9",
+          "status": "tracking_no_progress",
+          "done": true,
+          "terminal": true
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-b5d526b9",
+          "status": "tracking_no_progress",
+          "done": true,
+          "terminal": true
+        },
+        {
+          "reason": "tracking_no_progress",
+          "task_id": "sub-b5d526b9",
+          "status": "tracking_no_progress",
+          "done": true,
+          "terminal": true
+        }
+      ],
+      "context_continuations": [
+        {
+          "checkpoint_id": "ctx_dc7bf843916ba212bf00b4d21cce5dd4",
+          "observations": null
+        }
+      ],
+      "archived_agent_call_shapes": [
+        {
+          "call_id": "call_16c79dc1b3ae407abc4af2c5",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": "failed",
+          "operation_planned_at": "2026-10-05T18:31:20.939063+00:00"
+        },
+        {
+          "call_id": "call_0527c10c257f48aeaaf42171",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": false,
+          "operation_status": "failed",
+          "operation_planned_at": "2026-10-05T18:31:27.317613+00:00"
+        },
+        {
+          "call_id": "call_531d8852280e450f978ef805",
+          "action": "spawn",
+          "profile_id": "coding_agent",
+          "subtask_id": null,
+          "coding_assignment_present": true,
+          "operation_status": "succeeded",
+          "operation_planned_at": "2026-10-05T18:31:35.581950+00:00"
+        },
+        {
+          "call_id": "call_8371dc5a7a9e492dadb8c3bd",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-b5d526b9",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        },
+        {
+          "call_id": "call_340fc8bf8ff9438aab8bdbe0",
+          "action": "get",
+          "profile_id": null,
+          "subtask_id": "sub-b5d526b9",
+          "coding_assignment_present": false,
+          "operation_status": null,
+          "operation_planned_at": null
+        }
+      ]
+    },
+    {
+      "round": "large-20261006-ling-rts-2",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-2/reports/bench_rts_38c837041b/05fbb54e29",
+      "configuration": {
+        "case": "rts",
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "max_tokens": 8192,
+        "workspace_id": "bench_rts_38c837041b",
+        "session_id": "2d86212148944fc7",
+        "source_commit": "263a3cbdeb6d4feb7eb76ab7591822d9860acd44",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "prompt_sha256": "76510b5ac58163badf2f07e5557ab53eca7dd5eac787f40b0b882cae2f7ffd6b",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18874,
+          "preview_origin": "http://127.0.0.1:18874",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "parameters": {
+        "model": "Ling-3.0-flash",
+        "provider": "custom",
+        "provider_type": "openai_compatible",
+        "saved_output_budget": 4096,
+        "test_output_budget": 8192,
+        "production_settings_modified": false,
+        "full_fixture_preserved": true,
+        "runner_sha256": "fca0163500259beb12d52509896b41e40b9aed7dd0a9d02a9d6ccdced22e0460"
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "duration_seconds": 33.21,
+      "operator_cancelled": false,
+      "deadline_reached": false,
+      "tasks": [],
+      "usage": {
+        "bench_rts_38c837041b": {
+          "recorded_calls": 8,
+          "output_limit_reached_calls": 0,
+          "input_tokens": 226207,
+          "output_tokens": 7031
+        }
+      },
+      "source_manifests": {
+        "bench_rts_38c837041b": {
+          "file_count": 0,
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "files": {}
+        }
+      },
+      "execution_cleanup": {
+        "isolation_level": "strong_container",
+        "os": "Linux",
+        "cwd": "/workspace/files/data/rts",
+        "project": "/workspace/files/data/rts",
+        "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+        "network": "internal_with_dependency_only_tls_egress",
+        "preview_port": 18874,
+        "preview_origin": "http://127.0.0.1:18874",
+        "preview_bind_port": 8080,
+        "source_mode": "coordinator",
+        "generated_paths": [
+          "dist"
+        ],
+        "closed": true,
+        "cleanup_confirmed": true,
+        "cleanup_errors": []
+      },
+      "delegation_cleanup": {
+        "confirmed": true,
+        "remaining_subtasks": []
+      },
+      "team_acceptance": {
+        "status": "FAIL",
+        "error": "no coding candidate was actually integrated; child success or a rebuilt parent is insufficient"
+      },
+      "observer_stops": [],
+      "context_continuations": [],
+      "archived_agent_call_shapes": []
     }
   ]
 }
