@@ -68,7 +68,7 @@ def test_unknown_qa_checks_are_sticky_and_cannot_seed_source_repair(team,monkeyp
     repeated=team.spawn('qa_agent',review=first['subtask_id'])
     assert repeated['task_status']=='failed' and len(calls)==1
     repair=subagent.SubagentTask(parent_task_id='parent-task',workspace_id='parent-ws',session_id='parent-session',profile_id='coding_agent')
-    with pytest.raises(ValueError,match='stopped_known_failed'):
+    with pytest.raises(ValueError,match='stopped_known'):
         coding_team.create_assignment(repair,{'project_dir':'files/data/app','responsibilities':['src'],
             'validation_commands':['true'],'revision_subtask_id':first['subtask_id']})
 
@@ -168,3 +168,46 @@ def test_known_qa_rejection_has_review_summary_instead_of_provider_failure(team,
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
     assert qa.status=='failed' and qa.coding['phase']=='qa_rejected'
     assert 'Independent QA verdict fail' in qa.summary and 'LLM call failed' not in qa.summary
+
+
+def test_ready_unpublished_proposal_can_be_explicitly_revised_without_a_prior_qa_pass(team,monkeypatch):
+    first=team.spawn();original=subagent._load_task('parent-ws',first['subtask_id'])
+    assert original.coding['phase']=='changes_ready' and original.coding['completion_validation']['status']=='passed'
+    source=project_path(original.coding['branch_workspace'],'files/data/app')
+    def repair(session,turn,**kw):
+        if turn.op.runtime_control.profile['profile_id']!='qa_agent':
+            branch=project_path(session.workspace_id,'files/data/app')
+            assert branch.joinpath('src/value.py').read_text()=='VALUE = 42\n'
+            result=team.client.invoke('workspace.file',{'action':'edit','filepath':'files/data/app/src/value.py',
+                'old_string':'42','new_string':'43'},context=ToolRuntimeContext(
+                    workspace_id=session.workspace_id,session_id=session.session_id,requested_by='subagent'))
+            assert result.status=='succeeded'
+        return SimpleNamespace(ok=True,final_response=report(),tool_calls=[])
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',repair)
+    repaired=team.client.invoke('agent.manage',{'action':'spawn','profile_id':'coding_agent','instruction':'Repair independently observed semantic failure',
+        'background':False,'coding_assignment':{'project_dir':'files/data/app','responsibilities':['src'],
+            'validation_commands':['true'],'revision_subtask_id':first['subtask_id']}},context=team.parent).output
+    assert repaired['task_status']=='succeeded',repaired
+    candidate=subagent._load_task('parent-ws',repaired['subtask_id'])
+    assert candidate.coding['revision_observation']['completion_validation']['status']=='passed'
+    assert candidate.coding['baseline']==original.coding['baseline']=={}
+    assert source.joinpath('src/value.py').read_text()=='VALUE = 42\n'
+    assert not project_path('parent-ws','files/data/app').joinpath('src/value.py').exists()
+    assert not subagent.merge_subagent_result('parent-task',candidate.subtask_id,'parent-ws')['ok']
+    assert team.spawn('qa_agent',review=candidate.subtask_id)['task_status']=='succeeded'
+    assert subagent.merge_subagent_result('parent-task',candidate.subtask_id,'parent-ws')['ok']
+    assert project_path('parent-ws','files/data/app').joinpath('src/value.py').read_text()=='VALUE = 43\n'
+
+
+@pytest.mark.parametrize('mutation',['source','unknown','active','integrated'])
+def test_ready_revision_rejects_tampered_unknown_active_or_published_proposals(team,mutation):
+    first=team.spawn();original=subagent._load_task('parent-ws',first['subtask_id'])
+    if mutation=='source':project_path(original.coding['branch_workspace'],'files/data/app').joinpath('src/value.py').write_text('tampered')
+    elif mutation=='unknown':original.coding['completion_validation']['status']='unknown'
+    elif mutation=='active':original.coding['environment']['closed']=False
+    else:original.coding['phase']='integrated'
+    subagent._save_task(original)
+    task=subagent.SubagentTask(parent_task_id='parent-task',workspace_id='parent-ws',session_id='parent-session',profile_id='coding_agent')
+    with pytest.raises(ValueError,match='candidate_changed|stopped_known'):
+        coding_team.create_assignment(task,{'project_dir':'files/data/app','responsibilities':['src'],
+            'validation_commands':['true'],'revision_subtask_id':first['subtask_id']})

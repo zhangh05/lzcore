@@ -767,7 +767,7 @@ def test_revision_rejects_unknown_outcome_or_changed_source(team, monkeypatch, u
     assignment={'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
                 'revision_subtask_id':target.subtask_id}
     if unknown:
-        with pytest.raises(ValueError,match='stopped_known_failed'):
+        with pytest.raises(ValueError,match='stopped_known'):
             coding_team.create_assignment(task,assignment)
         return
     coding_team.create_assignment(task,assignment)
@@ -794,5 +794,5 @@ def test_explicit_revision_can_copy_cancelled_source_only_with_known_failed_chec
     assert task.coding['revision_source_digest']
     assert subagent._load_task('parent-ws',stopped.subtask_id).status=='cancelled'
     stopped.coding['completion_validation']['status']='unknown';subagent._save_task(stopped)
-    with pytest.raises(ValueError,match='stopped_known_failed'):
+    with pytest.raises(ValueError,match='stopped_known'):
         coding_team.create_assignment(task,supplied)
