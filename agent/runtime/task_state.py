@@ -27,7 +27,11 @@ _GENERIC_CONTINUATION_RE = re.compile(
     r"^(?:请)?\s*(?:继续|接着|下一步|然后|继续完成|继续处理|恢复|再查|再验证|再分析|再试)\b",
     re.IGNORECASE,
 )
-_TASK_RESUMABLE = frozenset({"active", "completed", "partial", "replan_required", "waiting_user", "interrupted", "cancelled"})
+_SAME_TASK_CONTINUATION_RE = re.compile(
+    r"^(?:请)?\s*(?:继续|接着|恢复)\s*(?:同一(?:个)?|原有|原来|当前|现有|上述|之前|这个|该)"
+    r"[^。！!？?\n]{0,80}?(?:任务|目标|工程|项目|对话|会话|工作)(?=[\s，,。；;：:！!？?]|$)"
+)
+_TASK_RESUMABLE = frozenset({"active", "completed", "partial", "replan_required", "waiting_user", "interrupted", "cancelled", "failed"})
 
 
 def _now_iso() -> str:
@@ -313,7 +317,7 @@ def resolve_task_state(
     relation = _continuation_relation(user_input)
     if relation is None:
         return None
-    if task.get("status") == "cancelled" and relation.get("kind") != "resume":
+    if task.get("status") in {"cancelled", "failed"} and relation.get("kind") != "resume":
         return None
     latest_user, latest_assistant = _latest_complete_exchange(messages)
     if str(task.get("status") or "") == "interrupted":
@@ -743,7 +747,8 @@ def _continuation_relation(user_input: str) -> dict[str, Any] | None:
     relation = classify_task_relation(str(user_input or ""))
     if isinstance(relation, dict):
         return dict(relation)
-    if _GENERIC_CONTINUATION_RE.search(str(user_input or "").strip()):
+    if (_GENERIC_CONTINUATION_RE.search(str(user_input or "").strip())
+            or _SAME_TASK_CONTINUATION_RE.search(str(user_input or "").strip())):
         return {"kind": "resume"}
     return None
 

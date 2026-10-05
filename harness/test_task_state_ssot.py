@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 
 def _metadata(*, execution_outcome: str = "complete", assertion_status: str = "not_required", decision: str = "stop_completed") -> dict:
     return {
@@ -1336,3 +1338,33 @@ def test_cancelled_parent_requires_explicit_resume_to_keep_identity(monkeypatch,
     resumed=begin_task_state(workspace_id='cancel-resume',session_id='session',run_id='resumed-run',
         user_input='继续。修复之前的工程。',continuation_contract=contract)
     assert resumed['task_id']==initial['task']['task_id']
+
+
+@pytest.mark.parametrize('status', ['cancelled', 'failed'])
+@pytest.mark.parametrize('continuation_text', ['继续同一 NOC 完整目标。修订失败候选。',
+                                    '恢复当前工程，修复构建。', '接着这个任务。'])
+def test_explicit_same_task_chinese_resume_preserves_terminal_parent(monkeypatch, tmp_path, status, continuation_text):
+    monkeypatch.setenv('LZCORE_WORKSPACE_ROOT', str(tmp_path))
+    from agent.runtime.task_state import commit_task_state, resolve_task_state, begin_task_state
+    initial = commit_task_state(workspace_id='same-task-resume', session_id='session', run_id='stopped',
+        user_input='实现完整工程', final_response='保留失败候选', run_ok=False,
+        runtime_metadata={**_metadata(), 'runtime_errors': ['cancelled_by_user' if status == 'cancelled'
+                                                        else 'no_progress_repeated_tool_calls']}, tool_calls=[])
+    assert initial['task']['status'] == status
+    messages = [{'role': 'user', 'content': '实现完整工程', 'run_id': 'stopped'},
+                {'role': 'assistant', 'content': '保留失败候选', 'run_id': 'stopped'}]
+    for unrelated in ('继续创建新的项目。', '继续分析另一家公司。', '修复新的工程。'):
+        assert resolve_task_state(workspace_id='same-task-resume', session_id='session',
+                                  user_input=unrelated, messages=messages) is None
+    contract = resolve_task_state(workspace_id='same-task-resume', session_id='session',
+                                  user_input=continuation_text, messages=messages)
+    assert contract['task_id'] == initial['task']['task_id']
+    resumed = begin_task_state(workspace_id='same-task-resume', session_id='session', run_id='resumed',
+                              user_input=continuation_text, continuation_contract=contract)
+    assert resumed['task_id'] == initial['task']['task_id']
+    from agent.runtime.task_state import load_task_state
+    assert load_task_state('same-task-resume', 'session')['task']['objective_run_id'] == 'stopped'
+    stale = [{'role': 'user', 'content': '另一目标', 'run_id': 'other'},
+             {'role': 'assistant', 'content': '另一结果', 'run_id': 'other'}]
+    assert resolve_task_state(workspace_id='same-task-resume', session_id='session',
+                              user_input=continuation_text, messages=stale) is None

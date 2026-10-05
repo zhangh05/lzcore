@@ -2001,7 +2001,122 @@
           "cleanup_errors": []
         }
       },
-      "diagnosis": "Source-progress validation triggered before final proposal and rejected actual failed tests/build. Native better-sqlite3 installation failed because runtime image lacks local Node headers/compiler and dependency-only egress correctly denied external prebuild/header downloads. Generated source also lacks complete tests/server and has build errors. Worker stopped failed; operator then stopped parent to repair runtime toolchain. No independent QA/integration/full acceptance; no output-cap responses in this worker."
+      "diagnosis": "Source-progress validation triggered before final proposal and rejected actual failed tests/build. Native better-sqlite3 installation failed because runtime image lacks local Node headers/compiler and dependency-only egress correctly denied external prebuild/header downloads. Generated source also lacks complete tests/server and has build errors. Worker stopped failed; operator then stopped parent to repair runtime toolchain. No independent QA/integration/full acceptance; no output-cap responses in this worker.",
+      "operator_control_observation": {
+        "already_failed_subtask_id": "sub-20c2f347",
+        "active_tasks_interrupted_by_operator": [
+          "sub-13925285"
+        ],
+        "replacement_created_at": "2026-10-05T21:22:52.111782+00:00",
+        "replacement_finished_at": "2026-10-05T21:23:15.329555+00:00",
+        "replacement_source_files": 2,
+        "correction": "Parent had spawned a replacement after the original worker failed, before the operator stop. Its cancellation is operator cleanup, not a model cancellation in the next resume."
+      }
+    },
+    {
+      "round": "large-20261006-ling-noc-9-resume-1",
+      "run_mode": "attempted_same_session_resume_created_new_parent_identity",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-noc-9/reports/bench_noc_663c3a30a4/ae94edabc9",
+      "configuration": {
+        "case": "noc",
+        "workspace_id": "bench_noc_663c3a30a4",
+        "session_id": "a765c17783c24249",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "source_commit": "f90e862f45351ca8c36eb581e20e975c4bd22442",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "prompt_sha256": "1f2be6af1abe6d9990b31e056df50c512d6c4108b34faa67e4dd4e4991f0f1e9",
+        "max_tokens": 16384
+      },
+      "duration_seconds": 85.43,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "agent_error_type": "ssot_runtime_error",
+      "new_implementation_tasks": [],
+      "parent_task_starts": [
+        {
+          "task_id": "tsk_ee88decb96aec7101b70",
+          "run_id": "db30cd65-6cc5-43f5-8540-92438b783d07",
+          "relationship": "initial",
+          "at": "2026-10-05T21:17:33.963363+00:00"
+        },
+        {
+          "task_id": "tsk_56ecedeb76a2bae23690",
+          "run_id": "4ad7308b-b0a2-4119-902d-6de97fbf3eb1",
+          "relationship": "initial",
+          "at": "2026-10-05T21:28:21.702604+00:00"
+        }
+      ],
+      "diagnosis": "Explicit Chinese same-task continuation lacked a word boundary after 继续, so lifecycle resolver created a new parent identity. Old failed source remains preserved but cannot pass same-parent revision guard under new identity. Model repeatedly read empty integrated parent; real repeated-call guard stopped turn. No new child, QA or integration. Prior sub-13925285 belonged to the previous run and was cancelled by operator cleanup, not this model turn. No quota exhaustion response observed."
     }
   ],
   "framework_native_dependency_runtime": {
