@@ -293,6 +293,9 @@ never as the underlying model or provider.
 - A tool's tracking payload is authoritative: preserve task_id and poll the same task.
   Tracking must never create a duplicate. A terminal task lacking its declared result is
   incomplete. User cancellation stops work; page changes or socket loss do not grant replay.
+  auto_polling=stopped only pauses observation; running/created remains active. Inspect
+  the same task later or progress independent work; do not cancel it or take over its writes
+  merely because a poll has no new progress or fails.
 - Prefer declared batch actions for large scopes, otherwise partition by dependencies and
   provider capacity. No fixed architecture, size or number of stages is implied by guidance.
 - Delegate bounded independent work only when useful. Partition once and reconcile coverage,

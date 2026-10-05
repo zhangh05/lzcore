@@ -84,5 +84,11 @@ def normalize_tracking_payload(tracking: dict[str, Any]) -> dict[str, Any]:
         "poll_arguments": dict(poll_arguments),
         "progress": progress,
         "summary": summary,
-        "raw": tracking,
+        "observation_token": str(
+            tracking.get("observation_token") or tracking.get("revision")
+            or tracking.get("updated_at") or ""
+        ),
+        "auto_polling": tracking.get("auto_polling", ""),
+        "stop_reason": tracking.get("stop_reason", ""),
+        "raw": tracking.get("raw", tracking),
     }

@@ -27,3 +27,11 @@ Benchmark 操作员信号现在接入既有 runtime cancel_check，按正常回�
 这一阶段后端全量 2116 通过、11 跳过，文档一致性与 CI 使用的 Ruff 检查通过；容器往返验证 PASS 并确认清理。前一提交 ee42299 的 GitHub CI 37351870465 全部九项成功，不能外推为本阶段新增源码的 CI 或大型业务验收。
 
 本记录不是最终压测报告。修复后 NOC、RTS 的模型表现、源码指纹、准确候选 QA、整合、启动、独立行为验收、可操作性与清理将在各自实际完成后补充；未生成源码或未验证的项目不计通过。
+
+## 第二阶段诊断
+
+NOC `large-20261006-ling-noc-2`：源码提交 98422ceb3d145e5ceaed68e30388e954339c3287，workspace bench_noc_a85f7a5f31、session ae8b0c76429a4006，283.51 秒、88 次协调者模型调用。运行自然结束，operator_cancelled=false、deadline_reached=false。前期多次在只读父工程尝试写源码或使用错误文件路径；后期成功启动 coding_agent sub-277dc740，但主 Agent 随后取消它并继续尝试自己写父工程，最终连续错误门禁停止。候选留下五个脚手架文件，没有准确 QA 或整合；父工程仅有 dist/package.json，不能作为业务源码。独立命名检查实际执行并失败，完整业务未验证；委派和环境清理确认完成。
+
+RTS `large-20261006-ling-rts-1`：同一源码提交，87.64 秒后由操作员通过取消门禁停止，operator_cancelled=true、deadline_reached=false。模型启动 coding_agent sub-b5d526b9，候选留下六个文件，包括实际 grid.ts，但没有准确 QA、整合或可启动工程。独立命名检查实际执行并失败，清理确认完成；取消控制原因保存在该轮 operator_control.json。
+
+两轮均出现明确的框架合同错误：生产者仍返回 running/done=false，但自动轮询因没有新进度，将模型可见结果改为 tracking_no_progress/done=true/terminal=true。NOC 和 RTS 各出现三次这种错误投影。它使观察暂停与任务结束矛盾，不能据此把取消或接管源码全部归因于模型能力。修复覆盖无新进度、观察失败、缺失跟踪及异常：轮询退出独立控制，不改写生产者生命周期，并保留真正终态；同一任务的新 revision 也不会被规范化丢弃。保留这些失败证据，修复后新建轮次回归，不重放未知写入。

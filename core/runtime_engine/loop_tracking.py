@@ -21,6 +21,8 @@ class LoopTracking:
         """Track every producer-declared long task within runtime budgets."""
         if tracking.get("done"):
             return False
+        if tracking.get("auto_polling") == "stopped":
+            return False
         action = str(tracking.get("suggested_next_action") or "").lower()
         if action and action != "poll_get":
             return False
@@ -105,11 +107,37 @@ class LoopTracking:
 
         state_by_source = {state["result"].call_id: state for state in states}
 
+        def stop_polling(state, poll_result, reason):
+            # Observer control is separate from producer lifecycle. A quiet or
+            # unavailable poll never proves that the underlying task ended.
+            tracking = dict(state["tracking"])
+            payload = dict(poll_result.output or {})
+            payload["tracking"] = {
+                **tracking,
+                "auto_polling": "stopped",
+                "stop_reason": reason,
+            }
+            payload["tracking_prior_state"] = tracking
+            poll_result.output = payload
+            state["auto_polling_stopped"] = True
+            state["tracking"] = payload["tracking"]
+            ctx.extras["tracking_summary"] = payload["tracking"]
+            ctx.extras["tracking_events"].append({
+                "tool": state["tool_name"],
+                "call_id": poll_result.call_id,
+                "tracking": payload["tracking"],
+                "source": "auto_polling_stopped",
+                "poll_index": state["poll_index"],
+                "reason": reason,
+            })
+
         # Poll the earliest-due task first, then requeue it.  A valid running
         # producer may continue indefinitely; cancellation and a changed poll
         # outcome are the only exits owned by the runtime.
         while states and not self._is_cancelled(ctx):
-            states = [state for state in states if not state["tracking"].get("done")]
+            states = [state for state in states if not (
+                state["tracking"].get("done") or state.get("auto_polling_stopped")
+            )]
             if not states:
                 break
             state = min(states, key=lambda item: float(item["due_at"]))
@@ -178,28 +206,7 @@ class LoopTracking:
                         if not poll_result.ok
                         else "tracking_contract_missing"
                     )
-                    payload = dict(poll_result.output or {})
-                    payload["tracking"] = {
-                        **dict(tracking or {}),
-                        "done": True,
-                        "terminal": True,
-                        "status": reason,
-                        "auto_polling": "stopped",
-                        "stop_reason": reason,
-                    }
-                    payload["tracking_prior_state"] = dict(tracking or {})
-                    poll_result.output = payload
-                    state["tracking"] = payload["tracking"]
-                    ctx.extras["tracking_events"].append(
-                        {
-                            "tool": tool_name,
-                            "call_id": poll_call_id,
-                            "tracking": payload["tracking"],
-                            "source": "auto_polling_stopped",
-                            "poll_index": poll_index,
-                            "reason": reason,
-                        }
-                    )
+                    stop_polling(state, poll_result, reason)
                     continue
                 observation_key = self._tracking_observation_key(tracking)
                 if (
@@ -211,28 +218,7 @@ class LoopTracking:
                     # automatic poller to act on. Preserve it for the model,
                     # then let the model decide whether to wait, inspect a
                     # different signal, or make another explicit poll.
-                    payload = dict(poll_result.output or {})
-                    payload["tracking"] = {
-                        **dict(tracking),
-                        "done": True,
-                        "terminal": True,
-                        "status": "tracking_no_progress",
-                        "auto_polling": "stopped",
-                        "stop_reason": "tracking_no_progress",
-                    }
-                    payload["tracking_prior_state"] = dict(tracking)
-                    poll_result.output = payload
-                    state["tracking"] = payload["tracking"]
-                    ctx.extras["tracking_events"].append(
-                        {
-                            "tool": tool_name,
-                            "call_id": poll_call_id,
-                            "tracking": payload["tracking"],
-                            "source": "auto_polling_stopped",
-                            "poll_index": poll_index,
-                            "reason": "tracking_no_progress",
-                        }
-                    )
+                    stop_polling(state, poll_result, "tracking_no_progress")
                     continue
                 state["observation_key"] = observation_key
                 state["due_at"] = time.monotonic() + self._tracking_wait(
@@ -242,32 +228,12 @@ class LoopTracking:
                 poll_result = StreamingToolResult(
                     tool_name=tool_name,
                     call_id=poll_call_id,
-                    output={
-                        "tracking": {
-                            **dict(tracking or {}),
-                            "done": True,
-                            "terminal": True,
-                            "status": "tracking_poll_crash",
-                            "auto_polling": "stopped",
-                            "stop_reason": "tracking_poll_crash",
-                        },
-                        "tracking_prior_state": dict(tracking or {}),
-                    },
+                    output={},
                     ok=False,
                     error="poll_crash: " + _redact_tool_error(e),
                 )
                 tracked_results.append(poll_result)
-                state["tracking"] = dict(poll_result.output["tracking"])
-                ctx.extras["tracking_events"].append(
-                    {
-                        "tool": tool_name,
-                        "call_id": poll_call_id,
-                        "tracking": state["tracking"],
-                        "source": "auto_polling_stopped",
-                        "poll_index": poll_index,
-                        "reason": "tracking_poll_crash",
-                    }
-                )
+                stop_polling(state, poll_result, "tracking_poll_crash")
 
         for result in tracked_results:
             if not isinstance(result.output, dict):

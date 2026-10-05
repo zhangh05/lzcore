@@ -567,6 +567,9 @@ def test_tracking_failure_returns_to_llm_without_internal_spin(monkeypatch):
     assert exposed[0].ok is False
     assert exposed[0].output["tracking"]["auto_polling"] == "stopped"
     assert exposed[0].output["tracking"]["stop_reason"] == "tracking_poll_failed"
+    assert exposed[0].output["tracking"]["status"] == "running"
+    assert exposed[0].output["tracking"]["done"] is False
+    assert exposed[0].output["tracking"]["terminal"] is False
 
 
 def test_tracking_without_new_observation_returns_control_to_llm(monkeypatch):
@@ -616,6 +619,13 @@ def test_tracking_without_new_observation_returns_control_to_llm(monkeypatch):
     assert exposed[0].output["tracking"]["auto_polling"] == "stopped"
     assert exposed[0].output["tracking"]["stop_reason"] == "tracking_no_progress"
     assert exposed[0].output["tracking_prior_state"]["status"] == "running"
+    from core.runtime_engine.tracking import extract_tracking_payload
+    tracking = extract_tracking_payload(exposed[0].output)
+    assert tracking["status"] == "running"
+    assert tracking["done"] is False
+    assert tracking["terminal"] is False
+    assert ctx.extras["tracking_summary"]["done"] is False
+    assert loop._should_poll_tracking(ctx.user_input, tracking) is False
 
 
 def test_agent_get_exposes_terminal_failure_as_failed_tool_result(monkeypatch):
