@@ -402,6 +402,7 @@ class QueryLoop(
                 # already-collected evidence and a typed operator-facing state.
                 if provider_error in {
                     "llm_auth_failed",
+                    "llm_balance_insufficient",
                     "llm_configuration_error",
                     "llm_request_rejected",
                     "llm_empty_response",
@@ -413,7 +414,7 @@ class QueryLoop(
                         if all_results
                         else _llm_failure_message(provider_error)
                     )
-                    if all_results and provider_error == "context_capacity_exceeded":
+                    if all_results and provider_error in {"context_capacity_exceeded", "llm_balance_insufficient"}:
                         final_response = (
                             _llm_failure_message(provider_error)
                             + "\n\n"
@@ -421,7 +422,7 @@ class QueryLoop(
                         )
                     ctx.extras["response_outcome"] = (
                         provider_error
-                        if provider_error in {"context_capacity_exceeded", "llm_empty_response"}
+                        if provider_error in {"context_capacity_exceeded", "llm_empty_response", "llm_balance_insufficient"}
                         else "llm_configuration_unavailable"
                     )
                     return finish(

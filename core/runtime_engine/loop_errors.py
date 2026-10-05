@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 
-def _normalize_llm_error(error: Any) -> str:
+def _normalize_llm_error(error: Any, http_status=None) -> str:
     """Convert provider-specific failures into stable, safe runtime codes."""
     value = str(error or "").strip().lower()
     if value in {
         "llm_call_timeout",
         "llm_rate_limited",
         "llm_auth_failed",
+        "llm_balance_insufficient",
         "llm_configuration_error",
         "llm_request_rejected",
         "llm_provider_error",
@@ -23,6 +24,9 @@ def _normalize_llm_error(error: Any) -> str:
         return value
     if value == "provider_empty_response":
         return "llm_empty_response"
+    from agent.llm.errors import is_balance_insufficient
+    if is_balance_insufficient(value, http_status):
+        return "llm_balance_insufficient"
     if "timeout" in value or "timed out" in value:
         return "llm_call_timeout"
     if "429" in value or "rate limit" in value or "too many request" in value:
@@ -84,6 +88,7 @@ def _llm_failure_message(error_code: str) -> str:
         "llm_call_timeout": "模型响应超时，请稍后重试。",
         "llm_rate_limited": "模型服务当前繁忙，请稍后重试。",
         "llm_auth_failed": "模型服务认证失败，请联系管理员检查模型配置。",
+        "llm_balance_insufficient": "模型服务明确返回余额或额度不足，已停止自动请求；已有源码和证据保留，恢复额度后再继续。",
         "llm_configuration_error": "模型服务配置不可用，请联系管理员检查配置。",
         "llm_request_rejected": "模型服务拒绝了当前请求；保留的上下文和证据未丢失，但需要修正请求或模型约束后才能继续。",
         "llm_empty_response": "模型服务连续返回空响应，没有正文或完整工具调用；已停止重复请求，保留历史和已有证据，请检查模型响应后继续。",

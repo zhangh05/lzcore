@@ -211,3 +211,60 @@ def test_ready_revision_rejects_tampered_unknown_active_or_published_proposals(t
     with pytest.raises(ValueError,match='candidate_changed|stopped_known'):
         coding_team.create_assignment(task,{'project_dir':'files/data/app','responsibilities':['src'],
             'validation_commands':['true'],'revision_subtask_id':first['subtask_id']})
+
+
+def test_unchanged_passing_revision_cannot_publish_a_future_work_promise(team,monkeypatch):
+    first=team.spawn()
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',lambda *a,**kw:
+        SimpleNamespace(ok=True,final_response='I will edit the source next.',tool_calls=[]))
+    repaired=team.client.invoke('agent.manage',{'action':'spawn','profile_id':'coding_agent',
+        'instruction':'Repair observed semantic defects','background':False,'coding_assignment':{
+            'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
+            'revision_subtask_id':first['subtask_id']}},context=team.parent).output
+    task=subagent._load_task('parent-ws',repaired['subtask_id'])
+    observed=task.coding['completion_validation']
+    assert task.status=='failed' and task.coding['phase']=='failed'
+    assert observed['status']=='failed' and observed['readiness_gap']=='unchanged_source_proposal'
+    assert all(check['result']['exit_code']==0 for check in observed['checks'])
+    assert observed['source_digest']==task.coding['revision_source_digest']
+    assert task.coding['environment']['cleanup_confirmed']
+    assert not subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
+    # Re-copying this semantic failure cannot pretend that old passing checks
+    # recovered a dependency failure and thereby validate identical source.
+    repeated=team.client.invoke('agent.manage',{'action':'spawn','profile_id':'coding_agent',
+        'instruction':'Repair same proposal','background':False,'coding_assignment':{
+            'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
+            'revision_subtask_id':task.subtask_id}},context=team.parent).output
+    again=subagent._load_task('parent-ws',repeated['subtask_id'])
+    assert again.status=='failed' and again.coding['completion_validation']['readiness_gap']=='unchanged_source_proposal'
+
+
+def test_revision_recovery_of_known_failed_checks_can_keep_source_unchanged(team,monkeypatch):
+    monkeypatch.setattr(DockerProjectEnvironment,'execute',lambda *a,**kw:{'ok':False,'exit_code':1})
+    first=team.spawn()
+    monkeypatch.setattr(DockerProjectEnvironment,'execute',lambda *a,**kw:{'ok':True,'exit_code':0})
+    qa_runtime(monkeypatch)
+    repaired=team.client.invoke('agent.manage',{'action':'spawn','profile_id':'coding_agent',
+        'instruction':'Repair dependency environment','background':False,'coding_assignment':{
+            'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
+            'revision_subtask_id':first['subtask_id']}},context=team.parent).output
+    task=subagent._load_task('parent-ws',repaired['subtask_id'])
+    assert task.status=='succeeded' and task.coding['candidate_digest']==task.coding['revision_source_digest']
+    assert task.coding['completion_validation']['revision_evidence']=={
+        'source_changed':False,'previous_checks_recovered':True}
+    assert not subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
+    assert team.spawn('qa_agent',review=task.subtask_id)['task_status']=='succeeded'
+    assert subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
+
+
+def test_cached_passing_checks_cannot_bypass_revision_evidence_or_replay_unknown(team,monkeypatch):
+    first=team.spawn();task=subagent._load_task('parent-ws',first['subtask_id'])
+    task.coding.update(revision_subtask_id='prior',revision_source_digest=task.coding['candidate_digest'],
+        revision_observation={'completion_validation':{'status':'passed'}})
+    def unexpected(*a,**kw):raise AssertionError('Cached checks must not execute again')
+    monkeypatch.setattr(DockerProjectEnvironment,'execute',unexpected)
+    assert coding_team.check_implementation(task)['readiness_gap']=='unchanged_source_proposal'
+    unknown={'status':'unknown','automatic_retry_allowed':False}
+    task.coding['completion_validation']=unknown
+    project_path(task.coding['branch_workspace'],'files/data/app').joinpath('src/value.py').write_text('changed')
+    assert coding_team.check_implementation(task)==unknown

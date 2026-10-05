@@ -263,7 +263,9 @@ def _generate_with_retry(req: LLMRequest, cfg: dict, max_retries: int = 3) -> LL
                 )
             return resp
         error_lower = resp.error.lower()
-        retryable = any(key in error_lower for key in ("rate_limit", "rate limit", "overload", "429", "503", "timeout", "timed out"))
+        from agent.llm.errors import is_balance_insufficient
+        balance_insufficient = is_balance_insufficient(resp.error, (resp.metadata or {}).get("http_status"))
+        retryable = not balance_insufficient and any(key in error_lower for key in ("rate_limit", "rate limit", "overload", "429", "503", "timeout", "timed out"))
         if attempt < max_retries and retryable:
             time.sleep(2.0 ** attempt)
             continue

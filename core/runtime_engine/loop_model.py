@@ -361,7 +361,7 @@ class LoopModelGateway:
                         )[:100],
                         "request_structure": (response.metadata or {}).get("request_structure", {}),
                     }
-                    response.error = _normalize_llm_error(response.error)
+                    response.error = _normalize_llm_error(response.error, (response.metadata or {}).get("http_status"))
                 else:
                     mark_evidence_delivered(
                         ctx.extras,

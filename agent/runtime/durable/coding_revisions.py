@@ -67,3 +67,32 @@ def seed_revision(task, branch):
         review = _related(task, target.coding['qa_rejection_subtask_id'])
         assignment['revision_observation']['qa_review'] = review.coding['qa_review']
     return baseline
+
+
+def revision_readiness(assignment, validation):
+    """A copied passing proposal is not a completed source revision.
+
+    Dependency/environment repair may recover failed checks without editing
+    source. Inherited passing checks alone cannot evidence a new revision;
+    semantic correctness still requires exact independent QA in either case.
+    Unknown execution always retains its original reconciliation boundary.
+    """
+    if not assignment.get('revision_subtask_id') or validation.get('status') != 'passed':
+        return validation
+    previous = (assignment.get('revision_observation') or {}).get('completion_validation') or {}
+    changed = validation['source_digest'] != assignment.get('revision_source_digest')
+    recovered = previous.get('status') == 'failed' and any(
+        (type(check.get('result', {}).get('exit_code')) is int
+         and check['result']['exit_code'] != 0)
+        or check.get('result', {}).get('runtime_status') == 'failed'
+        for check in previous.get('checks', [])
+    )
+    evidence = {'source_changed': changed, 'previous_checks_recovered': recovered}
+    if changed or recovered:
+        return {**validation, 'revision_evidence': evidence}
+    return {**validation, 'status': 'failed', 'revision_evidence': evidence,
+            'readiness_gap': 'unchanged_source_proposal',
+            'recovery_instruction': '[SERVER COMPLETION CONTRACT]\nThe assigned source revision is unchanged. '
+            'Its inherited executable checks already passed; passing them again does not repair the assigned defects. '
+            'Use actual available tools to revise the source and preserve the full goal and tests. '
+            'A future-work promise cannot complete this assignment. Exact independent QA and integration remain required.'}

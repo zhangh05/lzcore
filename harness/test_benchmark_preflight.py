@@ -31,6 +31,7 @@ def test_missing_or_synthetic_provider_never_starts_probe(monkeypatch, changes):
 @pytest.mark.parametrize("status,reason", [
     (401, "provider_authentication_failed"),
     (403, "provider_access_denied"),
+    (402, "provider_balance_insufficient"),
     (429, "provider_rate_or_quota_limit"),
     (400, "provider_request_failed"),
 ])
@@ -73,3 +74,11 @@ def test_accepted_reasoning_budget_is_not_an_authentication_failure(monkeypatch)
     monkeypatch.setattr("agent.llm.provider.generate", lambda *args: LLMResponse(
         content="", finish_reason="length", usage={"completion_tokens": 16}))
     assert provider_preflight(CONFIG)["status"] == "READY"
+
+
+def test_explicit_quota_exhaustion_is_not_transient_rate_limit(monkeypatch):
+    monkeypatch.setattr('agent.llm.provider.generate',lambda *a:LLMResponse(
+        error='provider_http_429: insufficient_quota private-canary',metadata={'http_status':429}))
+    result=provider_preflight(CONFIG)
+    assert result['reason']=='provider_balance_insufficient' and result['status']=='BLOCKED'
+    assert not result['agent_started'] and 'private-canary' not in json.dumps(result)

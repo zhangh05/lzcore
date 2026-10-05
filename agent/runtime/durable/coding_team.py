@@ -114,6 +114,7 @@ def check_implementation(task, cancel_check=None) -> dict:
     from storage.redaction import redact_value
 
     from .subagent import _save_task
+    from .coding_revisions import revision_readiness
 
     assignment = task.coding
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
@@ -124,7 +125,11 @@ def check_implementation(task, cancel_check=None) -> dict:
         # Source changes cannot reconcile an execution whose outcome is unknown.
         return cached
     if cached.get("source_digest") == digest and cached.get("status") == "passed":
-        return cached
+        result = revision_readiness(assignment, cached)
+        if result != cached:
+            assignment.update(phase="executing", completion_validation=result)
+            _save_task(task)
+        return result
     evidence = []
     assignment["phase"] = "verifying"
     _save_task(task)
@@ -154,6 +159,7 @@ def check_implementation(task, cancel_check=None) -> dict:
     result = {"status": status, "source_digest": digest, "checks": evidence,
               "source_changed_during_checks": source_changed,
               "automatic_retry_allowed": status != "unknown"}
+    result = revision_readiness(assignment, result)
     assignment.update(phase="executing", completion_validation=result)
     _save_task(task)
     return result

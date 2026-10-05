@@ -61,11 +61,15 @@ def provider_preflight(config: dict) -> dict:
         duration_seconds=round(time.monotonic() - started, 3),
     )
     if response.error:
+        from agent.llm.errors import is_balance_insufficient
         reason = {
             401: "provider_authentication_failed",
+            402: "provider_balance_insufficient",
             403: "provider_access_denied",
             429: "provider_rate_or_quota_limit",
         }.get(status, "provider_request_failed")
+        if is_balance_insufficient(response.error, status):
+            reason = "provider_balance_insufficient"
         return {**evidence, "reason": reason}
     # A reasoning model may spend this tiny probe's entire output budget on
     # reasoning. A real accepted response with usage is still readiness, not a

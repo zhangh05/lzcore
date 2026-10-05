@@ -47,6 +47,31 @@ def test_failed_completion_keeps_same_worker_open_for_governed_repair():
     assert len(result.tool_results) == 1  # Server observations are not invented model tool results.
 
 
+def test_revision_readiness_keeps_worker_open_until_real_source_edit(tmp_path):
+    import hashlib
+    from agent.runtime.durable.coding_revisions import revision_readiness
+    source=tmp_path/'engine.js';source.write_text('original proposal')
+    digest=lambda:hashlib.sha256(source.read_bytes()).hexdigest()
+    assignment={'revision_subtask_id':'original','revision_source_digest':digest(),
+                'revision_observation':{'completion_validation':{'status':'passed'}}}
+    config=SSOTRuntimeConfig(max_llm_calls=5)
+    runtime=ToolRuntime(config)
+    runtime.register('data.manage',lambda args:source.write_text('actual repair') and {'ok':True})
+    registry={'data.manage':{'description':'repair fixture','args_schema':{'type':'object',
+        'properties':{'action':{'type':'string'}}}}}
+    replies=[LLMResponse(content='I will repair next'),LLMResponse(tool_calls=[
+        LLMToolCall(id='edit',name='data.manage',arguments={'action':'parse','text':'edit'})]),
+        LLMResponse(content='Edited and checked')]
+    calls=[]
+    def model(**kwargs):calls.append(kwargs);return replies.pop(0)
+    ctx=StatelessContext('ws','revision','revision','Repair source',extras={
+        '__completion_check':lambda:revision_readiness(assignment,{'status':'passed','source_digest':digest()})})
+    result=asyncio.run(QueryLoop(config,registry,runtime,llm_invoke=model).run(ctx,BudgetController(config),None))
+    assert result.error is None and len(calls)==3 and len(result.tool_results)==1
+    assert ctx.extras['completion_events'][0]['readiness_gap']=='unchanged_source_proposal'
+    assert ctx.extras['completion_events'][-1]['revision_evidence']['source_changed']
+
+
 def test_unknown_completion_stops_without_retry_or_a_second_model_call():
     config = SSOTRuntimeConfig(max_llm_calls=5)
     calls = []

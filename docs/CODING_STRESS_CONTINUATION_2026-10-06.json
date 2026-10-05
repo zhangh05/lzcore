@@ -1,6 +1,6 @@
 {
   "schema": "coding.stress_continuation.v1",
-  "status": "continuing_no_business_pass_yet",
+  "status": "blocked_provider_balance_insufficient_no_business_pass",
   "production_provider_modified": false,
   "unknown_writes_replayed": false,
   "rounds": [
@@ -2777,6 +2777,279 @@
         "framework": "Copying a stopped known-passed unpublished proposal unnecessarily required a prior failed completion or accepted failed QA. Explicit revision now accepts the sealed known proposal, retaining original baseline and new QA/publication gates. Unknown results and active/integrated/tampered proposals remain rejected.",
         "coordinator": "After failed QA parent performed many shell operations instead of delegation; no implementation revision or integration occurred. Source ownership protection remained active."
       }
+    },
+    {
+      "round": "large-20261006-ling-rts5-resume-4",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-5/reports/bench_rts_00b989b88c/9aa7401af8",
+      "configuration": {
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "timeout": 90,
+        "max_tokens": 16384,
+        "config_source": "ui_settings",
+        "case": "rts",
+        "session_id": "01f4ca1c6fff4def",
+        "workspace_id": "bench_rts_00b989b88c",
+        "workspace": "/private/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-5/storage/bench_rts_00b989b88c",
+        "preview_origin": "http://127.0.0.1:18965",
+        "deadline_seconds": 3600,
+        "prompt_sha256": "82810d7fcbd5b84478e473203443fee7fa7220f89c98ef8fa0bed9996a125a8f",
+        "source_commit": "6b88880ad741aecad4778aac0e765b74ff0dde4b",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18965,
+          "preview_origin": "http://127.0.0.1:18965",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "operator_cancelled": false,
+      "duration_seconds": 758.18,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_normal_debug_guard_round_1",
+            "independent_engine_normal_debug_guard_round_2",
+            "independent_engine_normal_debug_guard_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "independent_engine_snapshot_contract_round_1",
+            "independent_engine_snapshot_contract_round_2",
+            "independent_engine_snapshot_contract_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "cleanup_confirmed": true,
+      "full_goal_passed": false,
+      "implementation_revisions": [
+        {
+          "subtask_id": "sub-cf929a8e",
+          "profile": "coding_agent",
+          "status": "succeeded",
+          "phase": "changes_ready",
+          "revision_subtask_id": "sub-9a36a1a4",
+          "model_calls": 32,
+          "candidate_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "revision_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "validation_status": "passed",
+          "validation_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "checks": [
+            {
+              "command": "npm test",
+              "exit_code": 0,
+              "runtime_status": "succeeded"
+            },
+            {
+              "command": "npm run build",
+              "exit_code": 0,
+              "runtime_status": "succeeded"
+            }
+          ],
+          "environment_closed": true,
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-7a9fafc0",
+          "profile": "coding_agent",
+          "status": "failed",
+          "phase": "failed",
+          "revision_subtask_id": "sub-9a36a1a4",
+          "model_calls": 30,
+          "candidate_digest": null,
+          "revision_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "validation_status": "failed",
+          "validation_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "checks": [
+            {
+              "command": "npm test",
+              "exit_code": 0,
+              "runtime_status": "succeeded"
+            },
+            {
+              "command": "npm run build",
+              "exit_code": 127,
+              "runtime_status": "failed"
+            }
+          ],
+          "environment_closed": true,
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-e62cc08f",
+          "profile": "coding_agent",
+          "status": "failed",
+          "phase": "failed",
+          "revision_subtask_id": "sub-9a36a1a4",
+          "model_calls": 26,
+          "candidate_digest": null,
+          "revision_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "validation_status": "failed",
+          "validation_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "checks": [
+            {
+              "command": "npm test",
+              "exit_code": 0,
+              "runtime_status": "succeeded"
+            },
+            {
+              "command": "npm run build",
+              "exit_code": 127,
+              "runtime_status": "failed"
+            }
+          ],
+          "environment_closed": true,
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-1831c5e7",
+          "profile": "coding_agent",
+          "status": "failed",
+          "phase": "failed",
+          "revision_subtask_id": "sub-9a36a1a4",
+          "model_calls": 20,
+          "candidate_digest": null,
+          "revision_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "validation_status": "failed",
+          "validation_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "checks": [
+            {
+              "command": "npm test",
+              "exit_code": 0,
+              "runtime_status": "succeeded"
+            },
+            {
+              "command": "npm run build",
+              "exit_code": 127,
+              "runtime_status": "failed"
+            }
+          ],
+          "environment_closed": true,
+          "cleanup_confirmed": true
+        },
+        {
+          "subtask_id": "sub-9881da47",
+          "profile": "coding_agent",
+          "status": "failed",
+          "phase": "failed",
+          "revision_subtask_id": "sub-9a36a1a4",
+          "model_calls": 67,
+          "candidate_digest": null,
+          "revision_source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+          "validation_status": "passed",
+          "validation_source_digest": "29fe331b696578561206573be424ec99ee3c679ee49be756966cd53a1262f799",
+          "checks": [
+            {
+              "command": "npm test",
+              "exit_code": 0,
+              "runtime_status": "succeeded"
+            },
+            {
+              "command": "npm run build",
+              "exit_code": 0,
+              "runtime_status": "succeeded"
+            }
+          ],
+          "environment_closed": true,
+          "cleanup_confirmed": true
+        }
+      ],
+      "provider_failure_observation": {
+        "http_402_events": 11,
+        "error_categories_before_fix": [
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_provider_error",
+          "llm_request_rejected"
+        ],
+        "stable_category_after_offline_fix": "llm_balance_insufficient",
+        "paid_runtime_after_fix_verified": false
+      },
+      "findings": [
+        "sub-cf929a8e made 32 real model calls but preserved the exact original source digest; inherited passing checks incorrectly made it changes_ready. Fixed by source/check recovery readiness evidence; exact QA and merge still mandatory.",
+        "Later sub-9881da47 actually changed build output to ESM and updated the dependency version, but did not repair the engine contracts or complete independent QA/integration before balance depletion.",
+        "Six file-read result projections retained 44156, 21160, 8572, 1418, 407 and 4989 public preview characters. The summary alone saying no structured output was not loss of file contents.",
+        "Missing required tool action errors were observed; provider argument-fragment shapes were not captured, so model-versus-adapter attribution for those calls remains unverified.",
+        "Eleven parent recovery events carried HTTP 402. Generic recovery retried depleted balance and eventually misclassified a numeric identifier as request rejection. Shared explicit billing classification now stops retries and preserves evidence.",
+        "No new typed QA pass, actual integration or full business acceptance. The preserved FAIL verdict is not rewritten as a preflight-only BLOCKED attempt."
+      ]
     }
   ],
   "framework_native_dependency_runtime": {
@@ -3346,5 +3619,84 @@
     "cleanup_confirmed": true,
     "scope": "Trusted verifier positive/negative controls through real isolated engine RPC; not application acceptance.",
     "unverified_requirements_removed": false
+  },
+  "financial_blocker": {
+    "provider": "custom",
+    "model": "Ling-3.0-flash",
+    "http_status": 402,
+    "provider_error_type": "balance_insufficient",
+    "confirmed_by": "Actual parent provider_recovery_events and live provider response during resume 4.",
+    "automatic_paid_requests_stopped": true,
+    "recharge_or_provider_switch_performed": false,
+    "balance_yuan_not_measured": true,
+    "pre_existing_failures_preserved": true
+  },
+  "revision_readiness_runtime_controls": {
+    "report": "/tmp/lzcore-strict-workspaces/revision-readiness-kernel-20261006-2/report.json",
+    "status": "PASS",
+    "rounds": 3,
+    "controls": 6,
+    "cleanup_confirmed": true,
+    "paid_model_requests": 0,
+    "readiness_code_sha256": "7cc84f6ab4fafb3577123a94337e8aab655971861d508a435eab019b6c889adf",
+    "scope": "Real Docker and governed ToolRuntime lifecycle, deterministic role fixture; no paid model or generated application acceptance.",
+    "checks": [
+      {
+        "round": 1,
+        "control": "unchanged_pass_rejected_actual_edit_exact_qa_merge",
+        "passed": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      },
+      {
+        "round": 1,
+        "control": "unchanged_source_known_failed_dependency_recovered_qa_required",
+        "passed": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      },
+      {
+        "round": 2,
+        "control": "unchanged_pass_rejected_actual_edit_exact_qa_merge",
+        "passed": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      },
+      {
+        "round": 2,
+        "control": "unchanged_source_known_failed_dependency_recovered_qa_required",
+        "passed": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      },
+      {
+        "round": 3,
+        "control": "unchanged_pass_rejected_actual_edit_exact_qa_merge",
+        "passed": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      },
+      {
+        "round": 3,
+        "control": "unchanged_source_known_failed_dependency_recovered_qa_required",
+        "passed": true,
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "cleanup_confirmed": true
+      }
+    ],
+    "unchanged_semantic_failure_recopied_still_rejected": true
+  },
+  "offline_fix_validation": {
+    "targeted_tests_passed": 128,
+    "backend_tests_passed": 2215,
+    "backend_tests_skipped": 11,
+    "docs_runtime_consistency": "PASS",
+    "ruff_ci_rules": "PASS",
+    "real_kernel_rounds": 3,
+    "real_kernel_controls": 6,
+    "paid_provider_after_fix": "NOT VERIFIED: explicit balance insufficient; no paid request retried.",
+    "production_deployed": false,
+    "tag_changed": false,
+    "release_changed": false
   }
 }
