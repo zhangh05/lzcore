@@ -772,3 +772,22 @@ def test_revision_rejects_unknown_outcome_or_changed_source(team, monkeypatch, u
     with pytest.raises(ValueError,match='revision_source_changed'):
         seed_revision(task,branch)
     assert not branch.exists()
+
+
+def test_explicit_revision_can_copy_cancelled_source_only_with_known_failed_checks(team, monkeypatch):
+    from copy import deepcopy
+    monkeypatch.setattr(DockerProjectEnvironment,'execute',lambda *a,**kw:{'ok':False,'exit_code':1})
+    first=team.spawn();target=subagent._load_task('parent-ws',first['subtask_id'])
+    # A stopped worker can have confirmed failed readiness observations before
+    # operator cancellation. Preserve that terminal fact, never resurrect it.
+    stopped=subagent.SubagentTask(parent_task_id='parent-task',workspace_id='parent-ws',session_id='parent-session',
+        profile_id='coding_agent',status='cancelled',coding=deepcopy(target.coding))
+    subagent._save_task(stopped)
+    task=subagent.SubagentTask(parent_task_id='parent-task',workspace_id='parent-ws',session_id='parent-session',profile_id='coding_agent')
+    supplied={'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],'revision_subtask_id':stopped.subtask_id}
+    coding_team.create_assignment(task,supplied)
+    assert task.coding['revision_source_digest']
+    assert subagent._load_task('parent-ws',stopped.subtask_id).status=='cancelled'
+    stopped.coding['completion_validation']['status']='unknown';subagent._save_task(stopped)
+    with pytest.raises(ValueError,match='stopped_known_failed'):
+        coding_team.create_assignment(task,supplied)

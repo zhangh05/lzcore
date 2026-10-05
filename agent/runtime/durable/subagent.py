@@ -394,10 +394,12 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         from core.runtime_engine.models import SubagentRuntimeControl
 
         completion_check = None
+        completion_source_digest = None
         if task.coding and task.profile_id != "qa_agent":
-            from .coding_team import check_implementation
+            from .coding_team import check_implementation, implementation_source_digest
 
             completion_check = lambda: check_implementation(task, cancel_check)
+            completion_source_digest = lambda: implementation_source_digest(task)
 
         op = AgentOp(
             user_input=instruction,
@@ -420,6 +422,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 workbench_context=inherited_workbench_context,
                 cancel_check=cancel_check,
                 completion_check=completion_check,
+                completion_source_digest=completion_source_digest,
             ),
         )
         turn = AgentTurn.from_op(op)

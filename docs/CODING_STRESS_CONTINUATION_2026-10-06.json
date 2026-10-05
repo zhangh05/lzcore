@@ -1550,6 +1550,148 @@
       ],
       "parent_recorded_model_calls": 12,
       "diagnosis": "First phased worker produced engine, UI entry and 30 tests, with 29 tests passing and compile failures. Piped build/test commands returned last tail exit zero while retaining actual errors; exact readiness checks rejected it. No-action recovery failed worker at 71 model calls. Coordinator source writes were denied, then replacement branch started empty. Operator stopped replacement for pipeline status and known-failed revision handoff repair."
+    },
+    {
+      "round": "large-20261006-ling-rts-4-resume-1",
+      "run_mode": "same_session_known_failed_revision",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-4/reports/bench_rts_1409e2a671/1c828dfc38",
+      "configuration": {
+        "case": "rts",
+        "workspace_id": "bench_rts_1409e2a671",
+        "session_id": "d52ad093455544b7",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "source_commit": "eeb37e328f0169bb3d01bc5d5052f30af6be684b",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "prompt_sha256": "5f4cecf5f570e38d02a89fa33885c65e72d921da96b0af80709e744bcee76859",
+        "max_tokens": 8192
+      },
+      "duration_seconds": 634.2,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "operator_control": {
+        "timestamp": "2026-10-05T20:57:13.451460+00:00",
+        "action": "stop_verified_candidate_read_only_stall",
+        "reason": "Actual known failed completion checks followed by dozens of tool reads without candidate source change. Tool-call presence is not repair progress. Preserve stopped revision source for a source-based bounded recovery contract.",
+        "active_tasks_interrupted_by_operator": [
+          "sub-6cd5fbd1"
+        ],
+        "user_goal_paused": false
+      },
+      "task": {
+        "subtask_id": "sub-6cd5fbd1",
+        "status": "cancelled",
+        "phase": "failed",
+        "revision_subtask_id": "sub-36cf3178",
+        "revision_source_digest": "4ea6c782ebe2466dc7d8fa184b2b95292bcfdf04892ecb383fc84193692f0a4e",
+        "source_files": 20,
+        "source_file_sha256": {
+          "tsconfig.node.json": "11c9def9a77ab4f3c077f254761c3864bd3f84f14c93af4689b7311591973898",
+          "index.html": "51a3d31c0578a7b66895ad39c844c90fb71a2cfaadd820755bf24165d73a20f9",
+          "vite.config.d.ts": "4b96dd19fd2949d28ce80e913412b0026dc421e5bf6c31d87c7b5eb11b5753b4",
+          "vitest.config.d.ts": "4b96dd19fd2949d28ce80e913412b0026dc421e5bf6c31d87c7b5eb11b5753b4",
+          "tsconfig.tsbuildinfo": "9525bfdd088413807b2e32d8357eebe3bf73982b01e0eb938125a2c28f65ebb6",
+          "vite.config.js": "cec6c0d0ea3350f41514e48706906240c9dd3bd7d062813831b20368e713771b",
+          "vitest.config.js": "80cd887d354684bd52123b1256dc8aa1dd865191160704d34b6c1850ac0a5772",
+          "package-lock.json": "6221939faf2a12643e8510acdb5b00e83691f45e45159937c3842a66864c7776",
+          "package.json": "9f1d97bdaad995126178e484f574cf7bd3f99f35b587b4364ab7a23cc297afa5",
+          "tsconfig.json": "4e976d2c6a9a3c3491cfcd720268013a7d6d92a2a1f31d3d13ef029bfd518178",
+          "vite.config.ts": "c07869b4f7d02bfd427ea10670ff88bf8d6f4237be2a8c44252360d28f611db3",
+          "vitest.config.ts": "f92a4be73a5ee29711e209489708eeca07b5b9ecf20feb3c7e1a76e20e1378cc",
+          "tsconfig.node.tsbuildinfo": "d94800af2f9f55dda176ab58b5dcb1fc2627fe7faf47fc728eb02229ac822f27",
+          "tests/engine.test.ts": "07be90c39f8e464af3ea5625e185c3586c9ee4e023adae4482f2b97a6e07b3ca",
+          "src/main.tsx": "05598185d50b92d97109c912b9ae755bf494f56231b3fc4c74df21447f7059df",
+          "src/engine.ts": "5581c1d892facf2e14c7070cb8354a19818c6269ca965f2aa444d674405a8c89",
+          "src/index.css": "a0be527f0365dc16d5cb96f5240605b7af6c532aef187d6362cbf68e90813d4f",
+          "src/map.ts": "b97c08fb12c671f4ef428bcb84e9d22e27e06b4b093fb8785d1101bd661ab431",
+          "src/types.ts": "02950e50bec68f2167924e4b4895f2875c4ea1c16976114a7d22643eee6ac672",
+          "src/GameCanvas.tsx": "70e5cacaf03d2413453980a83222f243713284d19896dfeb3ffd2772d9f86f73"
+        },
+        "recorded_model_calls": 100,
+        "completion_status": "failed",
+        "environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "image_id": "sha256:e15481d76d029df08e1897c0e6452e4b0ae12c0e3fd747483852ccd0f2aa1beb",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 54901,
+          "preview_origin": "http://127.0.0.1:54901",
+          "preview_bind_port": 8080,
+          "source_mode": "implementation",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": true,
+          "cleanup_confirmed": true,
+          "cleanup_errors": []
+        }
+      },
+      "diagnosis": "Source revision handoff inherited 18 files and original baseline. Worker added GameCanvas/CSS but introduced undefined map and Canvas/type regressions; real tests/build rejected candidate. Many later reads did not modify candidate source. Operator stopped for trusted source-progress recovery instead of tool-count progress."
     }
   ]
 }

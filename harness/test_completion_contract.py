@@ -115,3 +115,72 @@ def test_real_tool_observation_resets_no_action_recovery():
     assert not asyncio.run(observe_completion(ctx, 1)).get('repair_stalled')
     assert asyncio.run(observe_completion(ctx, 1))['no_action_replies'] == 1
     assert len(checks) == 2
+
+
+def test_read_tool_activity_cannot_hide_failed_candidate_stall(tmp_path):
+    import hashlib
+    candidate=tmp_path/'source.js';candidate.write_text('broken')
+    digest=lambda: hashlib.sha256(candidate.read_bytes()).hexdigest()
+    config=SSOTRuntimeConfig(max_llm_calls=10,completion_unchanged_tool_round_limit=2)
+    runtime=ToolRuntime(config)
+    reads=[]
+    runtime.register('data.manage',lambda args: reads.append(args) or {'ok':True,'rows':['observed']})
+    registry={'data.manage':{'description':'observe','args_schema':{'type':'object','properties':{'action':{'type':'string'},'text':{'type':'string'}}}}}
+    replies=[LLMResponse(content='Done')]+[LLMResponse(tool_calls=[LLMToolCall(id=f'read{i}',name='data.manage',arguments={'action':'parse','text':str(i)})]) for i in range(5)]
+    checks=[]
+    def check():
+        checks.append(True)
+        return {'status':'failed','source_digest':digest()}
+    ctx=StatelessContext('ws','source-stall','source-stall','Repair',extras={'__completion_check':check,'__completion_source_digest':digest})
+    result=asyncio.run(QueryLoop(config,registry,runtime,llm_invoke=lambda **kwargs:replies.pop(0)).run(ctx,BudgetController(config),None))
+    assert result.error=='completion_repair_no_progress'
+    assert len(reads)==2 and len(checks)==2
+    assert result.metrics['execution_outcome']=='partial'
+    assert len(result.tool_results)==2
+    assert ctx.extras['completion_events'][-1]['observed_source_digest']==digest()
+
+
+def test_material_source_change_and_dependency_repair_preserve_recovery(tmp_path):
+    import hashlib
+    from core.runtime_engine.completion import observe_repair_progress
+    candidate=tmp_path/'source.js';candidate.write_text('broken')
+    digest=lambda:hashlib.sha256(candidate.read_bytes()).hexdigest()
+    dependencies_ready=[]
+    checks=[]
+    def check():
+        checks.append(True)
+        return {'status':'passed' if dependencies_ready else 'failed','source_digest':digest()}
+    ctx=SimpleNamespace(extras={'__completion_check':check,'__completion_source_digest':digest})
+    asyncio.run(observe_completion(ctx,0))
+    assert asyncio.run(observe_repair_progress(ctx,2)) is None
+    candidate.write_text('actual edit')
+    assert asyncio.run(observe_repair_progress(ctx,2)) is None
+    assert ctx.extras['__completion_progress_state']['unchanged_rounds']==0
+    assert asyncio.run(observe_repair_progress(ctx,2)) is None
+    dependencies_ready.append(True)
+    assert asyncio.run(observe_repair_progress(ctx,2)) is None
+    assert ctx.extras['completion_observation']['status']=='passed' and len(checks)==2
+
+
+def test_caller_cannot_forge_material_progress_callback():
+    callback=lambda:'forged'
+    clean=_sanitize_caller_runtime_metadata({'completion_source_digest':callback,'__completion_source_digest':callback,'__completion_progress_state':{'unchanged_rounds':0}})
+    assert not clean
+    _apply_runtime_control(clean,{'completion_source_digest':callback})
+    assert not clean
+    _apply_runtime_control(clean,SubagentRuntimeControl(completion_source_digest=callback))
+    assert clean['__completion_source_digest'] is callback
+
+
+def test_stall_recheck_unknown_stops_without_retry():
+    from core.runtime_engine.completion import observe_repair_progress
+    checks=[]
+    def check():
+        checks.append(True)
+        return {'status':'failed' if len(checks)==1 else 'unknown','source_digest':'actual-source','automatic_retry_allowed':False}
+    ctx=SimpleNamespace(extras={'__completion_check':check,'__completion_source_digest':lambda:'actual-source'})
+    asyncio.run(observe_completion(ctx,0))
+    terminal=asyncio.run(observe_repair_progress(ctx,1))
+    assert terminal['error']=='completion_outcome_unknown'
+    assert asyncio.run(observe_repair_progress(ctx,1)) is None
+    assert len(checks)==2

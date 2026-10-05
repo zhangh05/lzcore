@@ -97,6 +97,12 @@ def observe_progress(task) -> dict:
             "completion_status": (assignment.get("completion_validation") or {}).get("status", "pending")}
 
 
+def implementation_source_digest(task):
+    assignment = task.coding
+    branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
+    return manifest_digest(source_manifest(branch, assignment.get("generated_paths")))
+
+
 def check_implementation(task, cancel_check=None) -> dict:
     """Observe declared checks on current source through governed execution.
 

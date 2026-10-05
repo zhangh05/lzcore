@@ -1091,6 +1091,10 @@ class QueryLoop(
                         "Additional tools remain available for a genuine unresolved evidence gap; never claim "
                         "visual details not present in the image.",
                     )
+                from .completion import observe_repair_progress
+                stalled = await observe_repair_progress(ctx, self._config.completion_unchanged_tool_round_limit)
+                if stalled:
+                    return finish(**stalled)
                 continue
 
             # No tool calls is only a proposed final response. Runtime-owned

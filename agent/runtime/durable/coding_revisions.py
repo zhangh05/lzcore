@@ -11,7 +11,7 @@ def _target(task):
     validation = assignment.get('completion_validation') or {}
     environment = assignment.get('environment') or {}
     if (target.profile_id not in {'coding_agent', 'frontend_agent'}
-            or target.status != 'failed' or assignment.get('phase') != 'failed'
+            or target.status not in {'failed', 'cancelled'} or assignment.get('phase') != 'failed'
             or validation.get('status') != 'failed'
             or not environment.get('closed') or not environment.get('cleanup_confirmed')
             or assignment['project_dir'] != task.coding['project_dir']):
