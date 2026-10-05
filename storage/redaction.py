@@ -6,6 +6,7 @@ import workspace or agent modules.
 
 from __future__ import annotations
 
+import posixpath
 import re
 
 _KEYWORD_PATTERNS = [
@@ -51,11 +52,20 @@ _ABSOLUTE_PATH_PATTERNS = [
 ]
 
 
-def redact_text(text: str) -> str:
+def is_container_temporary_path(path: str) -> bool:
+    """A public container tmpfs reference, never a host-path exception."""
+    return path.startswith("/tmp/") and posixpath.normpath(path).startswith("/tmp/")
+
+
+def redact_text(text: str, *, container_paths: bool = False) -> str:
     if not text:
         return text
     for pattern in _ABSOLUTE_PATH_PATTERNS:
-        text = pattern.sub(PATH_MASK, text)
+        text = pattern.sub(
+            lambda match: match.group(0)
+            if container_paths and is_container_temporary_path(match.group(0))
+            else PATH_MASK, text,
+        )
     for pattern in _KEYWORD_PATTERNS:
         text = re.sub(pattern, lambda m: m.group(1) + " " + MASK, text, flags=re.IGNORECASE)
     for pattern in _FULL_MASK_PATTERNS:
@@ -63,16 +73,16 @@ def redact_text(text: str) -> str:
     return text
 
 
-def redact_value(value):
+def redact_value(value, *, container_paths: bool = False):
     """Recursively redact secrets and local absolute paths before persistence."""
     if isinstance(value, dict):
-        return redact_dict(value)
+        return redact_dict(value, container_paths=container_paths)
     if isinstance(value, list):
-        return [redact_value(item) for item in value]
+        return [redact_value(item, container_paths=container_paths) for item in value]
     if isinstance(value, tuple):
-        return [redact_value(item) for item in value]
+        return [redact_value(item, container_paths=container_paths) for item in value]
     if isinstance(value, str):
-        return redact_text(value)
+        return redact_text(value, container_paths=container_paths)
     return value
 
 
@@ -86,7 +96,7 @@ def is_sensitive_field(key: str) -> bool:
     return normalized in _SENSITIVE_FIELD_NAMES or normalized.endswith(_SENSITIVE_FIELD_SUFFIXES)
 
 
-def redact_dict(data: dict) -> dict:
+def redact_dict(data: dict, *, container_paths: bool = False) -> dict:
     if not data:
         return data
     result = {}
@@ -95,7 +105,7 @@ def redact_dict(data: dict) -> dict:
         if is_sensitive_field(normalized_key):
             result[key] = MASK
         else:
-            result[key] = redact_value(value)
+            result[key] = redact_value(value, container_paths=container_paths)
     return result
 
 

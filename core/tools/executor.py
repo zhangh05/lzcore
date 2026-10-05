@@ -135,7 +135,16 @@ class ToolExecutor:
             )
 
         # ── 7. Redact output ──
-        output = redact_tool_output(raw) if isinstance(raw, dict) else redact_tool_output({"output": str(raw)})
+        from core.tools.project_execution import public_container_temp_paths
+
+        container_paths = public_container_temp_paths(
+            invocation.workspace_id, invocation.tool_id,
+            str(invocation.arguments.get("action") or ""),
+        )
+        output = redact_tool_output(
+            raw if isinstance(raw, dict) else {"output": str(raw)},
+            container_paths=container_paths,
+        )
 
         duration = int((time.time() - start_time) * 1000)
 

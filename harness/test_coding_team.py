@@ -590,9 +590,12 @@ def test_request_wait_returns_same_running_worker_without_cancelling(team, monke
     try:
         result=team.spawn()
         identity=result['subtask_id']
-        assert entered.is_set() and result['task_status']=='running' and result['deferred']
+        assert result['task_status']=='running' and result['deferred']
         assert subagent.subagent_worker_alive('parent-ws',identity)
         assert subagent._load_task('parent-ws',identity).status=='running'
+        # A 10 ms request wait can expire before worker setup reaches the
+        # mocked runtime. Synchronize on entry instead of racing the scheduler.
+        assert entered.wait(2)
     finally:
         release.set()
     result=original_wait(identity,'parent-ws',2)

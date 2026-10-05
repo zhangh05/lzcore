@@ -100,9 +100,9 @@ def deserialize_streaming_tool_result(value: dict[str, Any]) -> StreamingToolRes
     )
 
 
-def _redact_tool_error(error: Any) -> str:
+def _redact_tool_error(error: Any, *, container_paths: bool = False) -> str:
     """Return complete, redacted tool or orchestration error text for model context."""
-    value = redact_tool_output({"error": str(error or "")}).get("error")
+    value = redact_tool_output({"error": str(error or "")}, container_paths=container_paths).get("error")
     return str(value or "tool execution failed")
 
 
@@ -117,15 +117,15 @@ def _json_compact(value: Any, **_: Any) -> str:
     )
 
 
-def _model_tool_payload(result: Any) -> dict[str, Any]:
+def _model_tool_payload(result: Any, *, container_paths: bool = False) -> dict[str, Any]:
     """Return the complete tool result for the next model turn."""
-    payload = redact_tool_output(dict(result.output or {}))
+    payload = redact_tool_output(dict(result.output or {}), container_paths=container_paths)
     payload.pop("_evidence_projection", None)
     payload.pop("_evidence_content_digest", None)
     if result.error:
         payload["ok"] = False
         errors = list(payload.get("errors") or [])
-        error = _redact_tool_error(result.error)
+        error = _redact_tool_error(result.error, container_paths=container_paths)
         if error not in errors:
             errors.append(error)
         payload["errors"] = errors

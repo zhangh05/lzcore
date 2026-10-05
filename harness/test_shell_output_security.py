@@ -122,13 +122,15 @@ def test_run_shell_redacts_subprocess_output():
 def test_run_shell_redacts_without_truncating_output():
     """Shell output is redacted but is not length-truncated for the model."""
     import sys
-    sys.path.insert(0, str(PROJECT_ROOT))
-
     from core.tools.general_tools import shared
-    src = Path(shared.__file__).read_text(encoding="utf-8")
-    stdout_redact_idx = src.index('stdout = redact_tool_output(stdout or "")')
-    assert '[:_SHELL_MAX_OUTPUT]' not in src
-    assert stdout_redact_idx >= 0
+
+    program = "print('L' * 14000); print('api_key=fictional_shell_canary_value'); print('/tmp/private-host-file'); print('R' * 14000)"
+    result = shared._run_shell("output security check", argv_override=[sys.executable, "-c", program])
+    assert result["ok"], result
+    assert result["stdout"].count("L") >= 14000
+    assert result["stdout"].count("R") >= 14000
+    assert "fictional_shell_canary_value" not in result["stdout"]
+    assert "/tmp/private-host-file" not in result["stdout"]
 
 
 def test_exec_defaults_to_current_workspace(monkeypatch, tmp_path):
@@ -314,4 +316,3 @@ def test_redactor_masks_private_key_blocks_and_jwt_tokens():
     assert dict_output["private_key"] == "[REDACTED]"
     assert dict_output["token"] == "[REDACTED]"
     assert "[JWT_REDACTED]" in dict_output["nested"]["output"]
-

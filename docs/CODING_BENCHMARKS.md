@@ -41,6 +41,8 @@ Evaluator 的独立调用必须提供服务端已建立的容器身份、镜像 
 
 ## 证据与回归
 
+运行 Agent 时的 SIGINT/SIGTERM 接入同一 runtime cancel_check，回合结果记录 operator_cancelled，再按原流程取消委派和核验清理。操作员取消与 deadline_reached 分开记录，不把中止算成能力验收成功，也不重放未知写入。
+
 报告保存脱敏提示词、Provider 公共字段、Git 提交、已跟踪差量/未跟踪源码指纹、事件、运行结果、独立结果、清理结果。`agent_turn_ok` 只是 Agent 回合/传输结果（旧报告字段为 `runtime_ok`）；最终 `verdict.json` 独立核定命名验收、团队门禁与确认清理，任何失败或未知清理都为 FAIL。累计 Provider 输入包含重复上下文，不是任务唯一内容规模。用户 output、凭据及配置不进入源码指纹目录。
 
 `verify_benchmark_evaluator.py` 三个随机 Seed 证明生成引擎无法篡改宿主断言或读取验收程序，包含只读的 0600 源码。两种真实内核检查已加入 CI。
@@ -50,3 +52,5 @@ Evaluator 的独立调用必须提供服务端已建立的容器身份、镜像 
 历史结果见 [2026-10-04](CODING_BENCHMARK_RESULTS_2026-10-04.md)，保留原失败与验证边界。本轮最终结果单独留证，不覆盖历史记录。
 
 本轮架构、重复压力与真实模型结果见 [2026-10-05](CODING_BENCHMARK_RESULTS_2026-10-05.md)，包括失败、修复依据和未验证范围。
+
+Ling-3.0-flash 后续运行及归因见 [2026-10-06（进行中）](CODING_BENCHMARK_RESULTS_2026-10-06.md)。

@@ -41,6 +41,19 @@ def environment_for(workspace_id: str):
         return _BINDINGS.get(str(workspace_root(workspace_id).resolve()))
 
 
+def public_container_temp_paths(workspace_id: str, tool_id: str, action: str = "") -> bool:
+    """Resolve operational path visibility from a server-owned live binding."""
+    if tool_id != "exec.run" and not (
+        tool_id == "system.manage" and action in {"context_index", "context_read"}
+    ):
+        return False
+    if not workspace_id:
+        return False
+    environment = environment_for(workspace_id)
+    return bool(isinstance(environment, DockerProjectEnvironment)
+                and environment.started and environment.image_id and not environment.closed)
+
+
 def _client_configuration():
     raw = os.environ.get("LZCORE_CODING_DOCKER_COMMAND", "")
     cli = json.loads(raw) if raw else [shutil.which("docker") or ""]
@@ -384,6 +397,7 @@ class DockerProjectEnvironment:
                 timeout=timeout,
                 cancel_check=cancel_check,
                 argv_override=[*args, self.name, *argv],
+                container_paths=True,
             )
         finally:
             with self._execution_lock:

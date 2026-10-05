@@ -247,6 +247,7 @@ class QueryLoop(
                 messages,
                 prefetch_calls,
                 prefetch_results,
+                workspace_id=ctx.workspace_id,
             )
             if self._has_complete_analysis_artifact(prefetch_results):
                 messages = self._append_turn_nudge(
@@ -632,7 +633,8 @@ class QueryLoop(
                     ]
                     all_results.extend(fake_results)
                     messages = self._append_tool_round(
-                        messages, tool_calls, fake_results, response=response
+                        messages, tool_calls, fake_results, response=response,
+                        workspace_id=ctx.workspace_id,
                     )
                     # Don't count these as successful tool calls
                     continue
@@ -972,7 +974,8 @@ class QueryLoop(
 
                 # Append assistant message (with tool_calls) + tool results
                 messages = self._append_tool_round(
-                    messages, model_tool_calls, results, response=response
+                    messages, model_tool_calls, results, response=response,
+                    workspace_id=ctx.workspace_id,
                 )
                 # New observed evidence reopens normal recovery planning.  A
                 # final-text-only response after a nudge is handled below as a

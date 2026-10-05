@@ -78,8 +78,11 @@ class ContextContinuation:
         if estimate_message_tokens(selected) > available_tokens:
             raise ContextContinuationError("context_continuation_anchors_exceed_capacity")
         # Publication must succeed before replacing the active window.
+        from core.tools.project_execution import public_container_temp_paths
+
         record = save_epoch(ctx.workspace_id, ctx.session_id, ctx.request_id,
-                            [asdict(message) for message in messages], state, self.parent_id)
+                            [asdict(message) for message in messages], state, self.parent_id,
+                            container_paths=public_container_temp_paths(ctx.workspace_id, "exec.run"))
         reference["checkpoint_id"] = record["checkpoint_id"]
         selected = window(reference, recent)
         assert_tool_protocol(selected)

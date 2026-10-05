@@ -8,6 +8,12 @@ Handles dict, list, and string inputs recursively.
 import copy
 import re
 
+from storage.redaction import is_container_temporary_path
+
+_ABSOLUTE_PATH_PATTERN = re.compile(
+    r'(^|[\s`(])/(?:home|Users|root|tmp|etc|var|opt|usr)/[^\s"\'`<>]*', re.MULTILINE,
+)
+
 # ── Secret patterns ──
 _SECRET_PATTERNS = [
     # Key-like (sk- prefix — OpenAI, Anthropic, etc.)
@@ -44,7 +50,7 @@ _SECRET_PATTERNS = [
     (re.compile(r'\beyJ[A-Za-z0-9+/=_-]{20,}\b'),
      '[JWT_REDACTED]'),
     # Absolute paths (Unix style)
-    (re.compile(r'(^|[\s`(])/(?:home|Users|root|tmp|etc|var|opt|usr)/[^\s"\'`<>]*', re.MULTILINE),
+    (_ABSOLUTE_PATH_PATTERN,
      lambda m: m.group(1) + '[PATH_REDACTED]'),
 ]
 
@@ -66,9 +72,14 @@ _SENSITIVE_KEY_PATTERNS = (
 )
 
 
-def redact_string(text: str) -> str:
+def redact_string(text: str, *, container_paths: bool = False) -> str:
     """Apply regex-based redaction to a single string."""
     for pattern, replacement in _SECRET_PATTERNS:
+        if container_paths and pattern is _ABSOLUTE_PATH_PATTERN:
+            text = pattern.sub(lambda match: match.group(0)
+                if is_container_temporary_path(match.group(0)[len(match.group(1)):])
+                else match.group(1) + '[PATH_REDACTED]', text)
+            continue
         if callable(replacement):
             text = pattern.sub(replacement, text)
         else:
@@ -94,50 +105,50 @@ def _is_sensitive_key(key: str) -> bool:
     return False
 
 
-def redact_dict(data: dict) -> dict:
+def redact_dict(data: dict, *, container_paths: bool = False) -> dict:
     """Deep-redact a dict: mask sensitive keys, then regex-redact all string values."""
     result = {}
     for key, value in data.items():
         if _is_sensitive_key(key):
             result[key] = '[REDACTED]'
         elif isinstance(value, dict):
-            result[key] = redact_dict(value)
+            result[key] = redact_dict(value, container_paths=container_paths)
         elif isinstance(value, list):
-            result[key] = redact_list(value)
+            result[key] = redact_list(value, container_paths=container_paths)
         elif isinstance(value, str):
-            result[key] = redact_string(value)
+            result[key] = redact_string(value, container_paths=container_paths)
         else:
             result[key] = value
     return result
 
 
-def redact_list(data: list) -> list:
+def redact_list(data: list, *, container_paths: bool = False) -> list:
     """Deep-redact a list."""
     result = []
     for item in data:
         if isinstance(item, dict):
-            result.append(redact_dict(item))
+            result.append(redact_dict(item, container_paths=container_paths))
         elif isinstance(item, list):
-            result.append(redact_list(item))
+            result.append(redact_list(item, container_paths=container_paths))
         elif isinstance(item, str):
-            result.append(redact_string(item))
+            result.append(redact_string(item, container_paths=container_paths))
         else:
             result.append(item)
     return result
 
 
-def redact_tool_output(data: any) -> any:
+def redact_tool_output(data: any, *, container_paths: bool = False) -> any:
     """Main entry: redact any Python structure deeply.
 
     Returns a deep copy — does not mutate the original.
     All dict keys, string values, and nested structures are processed.
     """
     if isinstance(data, dict):
-        return redact_dict(copy.deepcopy(data))
+        return redact_dict(copy.deepcopy(data), container_paths=container_paths)
     elif isinstance(data, list):
-        return redact_list(copy.deepcopy(data))
+        return redact_list(copy.deepcopy(data), container_paths=container_paths)
     elif isinstance(data, str):
-        return redact_string(data)
+        return redact_string(data, container_paths=container_paths)
     return data
 
 

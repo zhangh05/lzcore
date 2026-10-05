@@ -20,6 +20,65 @@ from storage.redaction import redact_value
 SCHEMA = "runtime.context_epoch.v1"
 
 
+def _container_tool_call(call: dict) -> bool:
+    function = call.get("function") or {}
+    name = str(function.get("name") or "").replace("__", ".")
+    if name == "exec.run":
+        return True
+    if name != "system.manage":
+        return False
+    try:
+        arguments = json.loads(function.get("arguments") or "{}")
+    except (TypeError, ValueError):
+        return False
+    return isinstance(arguments, dict) and arguments.get("action") in {"context_index", "context_read"}
+
+
+def _redact_json_text(value, container_paths: bool):
+    if not isinstance(value, str):
+        return redact_value(value, container_paths=container_paths)
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return redact_value(value, container_paths=container_paths)
+    safe = redact_value(parsed, container_paths=container_paths)
+    return value if safe == parsed else json.dumps(safe, ensure_ascii=False)
+
+
+def _redact_messages(messages: list[dict], container_paths: bool) -> list[dict]:
+    safe = redact_value(messages)
+    public_calls = set()
+    for original, projected in zip(messages, safe):
+        if original.get("role") == "assistant":
+            calls = original.get("tool_calls") or []
+            public_calls.update(call.get("id") for call in calls if container_paths and _container_tool_call(call))
+            for call, safe_call in zip(calls, projected.get("tool_calls") or []):
+                safe_call["function"]["arguments"] = _redact_json_text(
+                    call["function"].get("arguments", ""),
+                    container_paths and _container_tool_call(call),
+                )
+            native = (original.get("protocol") or {}).get("openai", {}).get("tool_calls") or []
+            safe_native = (projected.get("protocol") or {}).get("openai", {}).get("tool_calls") or []
+            for call, safe_call in zip(native, safe_native):
+                safe_call["function"]["arguments"] = _redact_json_text(
+                    call["function"].get("arguments", ""),
+                    container_paths and _container_tool_call(call),
+                )
+            native_blocks = (original.get("protocol") or {}).get("anthropic") or []
+            safe_blocks = (projected.get("protocol") or {}).get("anthropic") or []
+            for block, safe_block in zip(native_blocks, safe_blocks):
+                if block.get("type") != "tool_use":
+                    continue
+                call = {"function": {"name": block.get("name"),
+                    "arguments": json.dumps(block.get("input") or {})}}
+                safe_block["input"] = redact_value(block.get("input"),
+                    container_paths=container_paths and _container_tool_call(call))
+        elif original.get("role") == "tool":
+            projected["content"] = _redact_json_text(original.get("content"),
+                original.get("tool_call_id") in public_calls)
+    return safe
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -46,6 +105,8 @@ def save_epoch(
     messages: list[dict],
     state: dict,
     parent_id: str = "",
+    *,
+    container_paths: bool = False,
 ) -> dict:
     if parent_id:
         read_epoch(workspace_id, session_id, parent_id)
@@ -60,6 +121,7 @@ def save_epoch(
             "state": state,
         }
     )
+    payload["messages"] = _redact_messages(messages, container_paths)
     digest = hashlib.sha256(_json(payload).encode("utf-8")).hexdigest()
     checkpoint_id = "ctx_" + digest[:32]
     record = {"checkpoint_id": checkpoint_id, "sha256": digest, "payload": payload}

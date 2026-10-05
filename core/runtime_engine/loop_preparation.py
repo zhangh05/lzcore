@@ -413,6 +413,8 @@ class LoopToolPreparation:
         tool_calls: list[LLMToolCall],
         results: list[StreamingToolResult],
         response: LLMResponse | None = None,
+        *,
+        workspace_id: str = "",
     ) -> list[LLMMessage]:
         """Append assistant tool_calls + tool results to messages.
 
@@ -444,6 +446,14 @@ class LoopToolPreparation:
         )
 
         original_call_ids = {tc.id for tc in tool_calls}
+        from core.tools.project_execution import public_container_temp_paths
+
+        public_tmp = {
+            tc.id: public_container_temp_paths(
+                workspace_id, (tc.name or "").replace("__", "."),
+                str(tc.arguments.get("action") or ""),
+            ) for tc in tool_calls
+        }
         extra_results: list[StreamingToolResult] = []
 
         # Tool result messages for model-requested calls only. Auto-tracking
@@ -452,7 +462,7 @@ class LoopToolPreparation:
             if r.call_id not in original_call_ids:
                 extra_results.append(r)
                 continue
-            tool_payload = _model_tool_payload(r)
+            tool_payload = _model_tool_payload(r, container_paths=public_tmp.get(r.call_id, False))
             output_str = _json_compact(tool_payload)
             new_msgs.append(
                 LLMMessage(

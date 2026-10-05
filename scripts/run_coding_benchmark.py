@@ -9,9 +9,11 @@ and are neither copied nor included in reports.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
+import signal
 import socket
 from pathlib import Path
 import subprocess
@@ -23,6 +25,24 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+
+@contextmanager
+def signal_cancellation(cancel: threading.Event, requested: threading.Event):
+    """Operator signals use the real runtime cancel gate and normal cleanup."""
+    previous = {}
+    if threading.current_thread() is threading.main_thread():
+        def stop(_signal, _frame):
+            requested.set()
+            cancel.set()
+        for kind in (signal.SIGINT, signal.SIGTERM):
+            previous[kind] = signal.getsignal(kind)
+            signal.signal(kind, stop)
+    try:
+        yield
+    finally:
+        for kind, handler in previous.items():
+            signal.signal(kind, handler)
 
 
 def main() -> int:
@@ -182,7 +202,14 @@ def main() -> int:
         print(json.dumps({"report": str(report), **blocked}), flush=True)
         return 2
     cancel = threading.Event()
-    timer = threading.Timer(args.deadline, cancel.set)
+    deadline_expired = threading.Event()
+    operator_cancelled = threading.Event()
+
+    def expire():
+        deadline_expired.set()
+        cancel.set()
+
+    timer = threading.Timer(args.deadline, expire)
     timer.daemon = True
     started = time.monotonic()
     lock = threading.Lock()
@@ -234,18 +261,20 @@ def main() -> int:
         )
         StreamEmitter.set_realtime_callback(on_event)
         timer.start()
-        result = AgentApp().submit_user_message(
-            prompt,
-            workspace_id=ws,
-            session_id=session_id,
-            metadata={"transport": "coding_benchmark"},
-            runtime_control=MainAgentRuntimeControl(cancel_check=cancel.is_set),
-        )
+        with signal_cancellation(cancel, operator_cancelled):
+            result = AgentApp().submit_user_message(
+                prompt,
+                workspace_id=ws,
+                session_id=session_id,
+                metadata={"transport": "coding_benchmark"},
+                runtime_control=MainAgentRuntimeControl(cancel_check=cancel.is_set),
+            )
         agent_turn_ok = result.ok
-        deadline_reached = cancel.is_set()
+        deadline_reached = deadline_expired.is_set()
         payload = redact_value(result.to_dict())
         payload["benchmark_duration_seconds"] = round(time.monotonic() - started, 2)
         payload["deadline_reached"] = deadline_reached
+        payload["operator_cancelled"] = operator_cancelled.is_set()
         (report / "result.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",

@@ -230,7 +230,8 @@ def _shell_argv(command, shell: str = "/bin/bash", os_name: str | None = None):
 
 def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
                env: dict = None, timeout: int = None, cancel_check=None,
-               argv_override: list[str] | None = None) -> dict:
+               argv_override: list[str] | None = None,
+               container_paths: bool = False) -> dict:
     """Execute a shell command with transport limits + process tree cleanup.
 
     Uses process group isolation (os.setsid on Unix, CREATE_NEW_PROCESS_GROUP
@@ -318,8 +319,8 @@ def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
                 continue
 
         from core.tools.redaction import redact_tool_output
-        stdout = redact_tool_output(stdout or "")
-        stderr = redact_tool_output(stderr or "")
+        stdout = redact_tool_output(stdout or "", container_paths=container_paths)
+        stderr = redact_tool_output(stderr or "", container_paths=container_paths)
         ok = proc.returncode == 0
         result = {
             "ok": ok,
