@@ -184,11 +184,12 @@ class SSOTRuntimeConfig:
     max_orchestration_evidence_tokens: int = 60_000
     tracking_enabled: bool = True
     # Tracking is an extension of the Agent loop.  It has no runtime-owned
-    # poll or wall-clock completion limit; user cancellation or a changed
-    # producer observation returns control to the LLM.
+    # poll or wall-clock completion limit. An inactivity grace only pauses
+    # this observer; it never terminates the producer.
     tracking_max_polls: int = 0
     tracking_max_seconds: int = 0
     tracking_poll_interval_cap_seconds: float = 2.0
+    tracking_no_progress_grace_seconds: float = 120.0
 
     # One input-budget contract for the active runtime. Tool definitions remain
     # fully visible and are deducted before message/history/tool-result budgets.

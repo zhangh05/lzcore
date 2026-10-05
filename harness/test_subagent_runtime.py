@@ -583,7 +583,7 @@ def test_tracking_without_new_observation_returns_control_to_llm(monkeypatch):
             return name == "agent.manage"
 
     loop = QueryLoop(
-        SSOTRuntimeConfig(tracking_poll_interval_cap_seconds=0),
+        SSOTRuntimeConfig(tracking_poll_interval_cap_seconds=0, tracking_no_progress_grace_seconds=0),
         {"agent.manage": {"description": "", "args_schema": {"type": "object", "properties": {}}}},
         _Runtime(),
     )

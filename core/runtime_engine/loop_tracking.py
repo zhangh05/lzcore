@@ -50,6 +50,9 @@ class LoopTracking:
         cap_seconds = float(
             getattr(self._config, "tracking_poll_interval_cap_seconds", 2.0)
         )
+        grace_seconds = max(0.0, float(
+            getattr(self._config, "tracking_no_progress_grace_seconds", 120.0)
+        ))
         deadline = float("inf")
         user_input = ctx.user_input or ""
         states: list[dict[str, Any]] = []
@@ -94,12 +97,11 @@ class LoopTracking:
                     "tool_name": tool_name,
                     "poll_index": 0,
                     "last_error_count": 0,
-                    # Automatic polling is only a convenience, never an agent
-                    # decision loop. Keep going only while its producer exposes a
-                    # new observation; an identical queued/running observation is
-                    # returned to the LLM for the next decision instead of being
-                    # polled by the runtime forever.
+                    # Quiet intervals are normal while a producer computes or
+                    # waits for a model/tool. Require sustained inactivity before
+                    # handing the same live state back to another LLM round.
                     "observation_key": self._tracking_observation_key(tracking),
+                    "last_progress_at": time.monotonic(),
                     "due_at": time.monotonic()
                     + self._tracking_wait(tracking, cap_seconds, deadline),
                 }
@@ -132,8 +134,8 @@ class LoopTracking:
             })
 
         # Poll the earliest-due task first, then requeue it.  A valid running
-        # producer may continue indefinitely; cancellation and a changed poll
-        # outcome are the only exits owned by the runtime.
+        # producer may continue while progress arrives; sustained inactivity
+        # pauses only this observer. Cancellation and failed reads stay prompt.
         while states and not self._is_cancelled(ctx):
             states = [state for state in states if not (
                 state["tracking"].get("done") or state.get("auto_polling_stopped")
@@ -209,17 +211,18 @@ class LoopTracking:
                     stop_polling(state, poll_result, reason)
                     continue
                 observation_key = self._tracking_observation_key(tracking)
+                observed_at = time.monotonic()
                 if (
                     not tracking.get("done")
                     and observation_key == state["observation_key"]
+                    and observed_at - state["last_progress_at"] >= grace_seconds
                 ):
-                    # This is not a timeout or a call-count limit. We have an
-                    # exact, successful observation with no new state for the
-                    # automatic poller to act on. Preserve it for the model,
-                    # then let the model decide whether to wait, inspect a
-                    # different signal, or make another explicit poll.
+                    # This is an observer pause, not a producer deadline. Keep
+                    # exact lifecycle facts and allow a later explicit read.
                     stop_polling(state, poll_result, "tracking_no_progress")
                     continue
+                if observation_key != state["observation_key"]:
+                    state["last_progress_at"] = observed_at
                 state["observation_key"] = observation_key
                 state["due_at"] = time.monotonic() + self._tracking_wait(
                     state["tracking"], cap_seconds, deadline
