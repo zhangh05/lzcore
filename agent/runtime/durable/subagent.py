@@ -456,7 +456,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
 
         if cancel_check():
             result.status = "cancelled"
-            result.summary = "Subagent cancelled by user"
+            result.summary = "Subagent cancelled"
         elif is_ok and final_resp:
             # Preserve the unabridged child response as a workspace-scoped,
             # governed artifact. The parent may receive a compact status
@@ -528,7 +528,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
             cancel_check()
         ):
             result.status = "cancelled"
-            result.summary = "Subagent cancelled by user"
+            result.summary = "Subagent cancelled"
         _sanitize_terminal_result(result)
         task.status = result.status
         task.summary = result.summary
@@ -698,7 +698,7 @@ def cancel_subagent_task(subtask_id: str, ws_id: str) -> dict:
     if task.status not in {"succeeded", "failed", "cancelled"}:
         task.status = "cancelled"
         task.finished_at = _now()
-        task.summary = "Subagent cancelled by user"
+        task.summary = "Subagent cancelled"
         _save_task(task)
     if task.status != "cancelled":
         return {"ok": False, "error": f"subtask is already {task.status}", "status": task.status}

@@ -386,6 +386,7 @@ def _new_task(run_id: str, user_input: str) -> dict[str, Any]:
     now = _now_iso()
     return {
         "task_id": _task_id(run_id, user_input),
+        "objective_run_id": run_id,
         "objective": _bounded_text(user_input, 1200),
         "constraints": [],
         "relationship": {"kind": "initial"},

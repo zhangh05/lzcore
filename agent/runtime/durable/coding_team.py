@@ -7,6 +7,7 @@ are independent; successful child prose alone never authorizes publication.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shlex
 import socket
@@ -28,6 +29,42 @@ from storage.project_changes import (
 )
 
 CODING_PROFILES = frozenset({"coding_agent", "frontend_agent", "qa_agent"})
+
+
+def parent_contract(task, references=None):
+    """Resolve complete user messages from the same server-owned parent task.
+
+    A coordinator's rewritten instruction is a scope proposal, not a lossless
+    copy of the user's requirements. References retain canonical provenance.
+    """
+    from agent.runtime.task_state import load_task_state
+    from storage.message_store import SessionMessageStore
+
+    if references is None:
+        state = load_task_state(task.workspace_id, task.session_id).get("task") or {}
+        if state.get("task_id") != task.parent_task_id:
+            return []
+        first = state.get("objective_run_id") or state.get("source_run_id")
+        messages = SessionMessageStore(task.session_id, task.workspace_id).get_messages()
+        users = [item for item in messages if item.get("role") == "user"]
+        start = next((i for i, item in enumerate(users) if item.get("run_id") == first), None)
+        if start is None:
+            raise ValueError("coding_parent_contract_unavailable")
+        selected = users[start:]
+    else:
+        messages = SessionMessageStore(task.session_id, task.workspace_id).get_messages()
+        users = {item["run_id"]: item for item in messages if item.get("role") == "user"}
+        selected = [users.get(reference["run_id"]) for reference in references]
+    result = []
+    for index, item in enumerate(selected):
+        if not item or item.get("artifact_unavailable"):
+            raise ValueError("coding_parent_contract_unavailable")
+        content = item.get("content", "")
+        digest = hashlib.sha256(content.encode()).hexdigest()
+        if references is not None and digest != references[index]["sha256"]:
+            raise ValueError("coding_parent_contract_changed")
+        result.append({"run_id": item["run_id"], "sha256": digest, "content": content})
+    return result
 
 
 def observe_progress(task) -> dict:
@@ -163,6 +200,8 @@ def create_assignment(task, supplied: dict) -> dict:
         "review_subtask_id": review_id,
         "branch_workspace": "coding-" + uuid.uuid4().hex,
         "phase": "assigned",
+        "parent_contract_refs": [{"run_id": item["run_id"], "sha256": item["sha256"]}
+                                 for item in parent_contract(task)],
     }
     task.coding = assignment
     for subtask_id in dependencies:
@@ -269,6 +308,11 @@ def coding_run(task):
         assignment["environment"] = environment.descriptor()
         instruction = (
             task.goal
+            + "\n\n[PARENT USER CONTRACT: CONTEXT FOR THIS DELEGATED PHASE]\n"
+            + "Preserve the following complete user requirements and interface contracts. "
+            "Work on the delegated phase above; a phase is not completion of the entire parent goal. "
+            "Coordinator-only workflow instructions do not change this worker's role or permissions.\n"
+            + json.dumps(parent_contract(task, assignment.get("parent_contract_refs", [])), ensure_ascii=False)
             + "\n\n[SERVER CODING ASSIGNMENT]\n"
             + json.dumps(
                 {
@@ -280,7 +324,8 @@ def coding_run(task):
                     "preview_bind_port": environment.descriptor()["preview_bind_port"],
                     "validation_commands": assignment["validation_commands"],
                     "review_subtask_id": assignment["review_subtask_id"],
-                    "constraints": "Work only in this isolated project branch. Dependencies are already integrated. Bind preview to HOST/PORT from the process environment, never the browser origin port. Implementation owns writable source; QA and coordinator source mounts are read-only. Run assigned validation commands exactly from the project directory: the server executes them in disposable build snapshots and only promotes declared outputs. Other commands retain read-only source mounts. Logs/PID/temporary checks belong under /tmp. Source revisions require a new implementation and exact QA, then governed integration.",
+                    "initial_source_paths": sorted(baseline),
+                    "constraints": "Work only in this isolated project branch. Dependencies are already integrated. Bind preview to HOST/PORT from the process environment, never the browser origin port. Implementation owns writable source; QA and coordinator source mounts are read-only. Run assigned validation commands exactly from the project directory. Reviewed read-only projects use disposable build snapshots and only promote declared outputs; other commands retain their role's source mount mode. Logs/PID/temporary checks belong under /tmp. Source revisions require implementation and exact QA, then governed integration.",
                 },
                 ensure_ascii=False,
             )

@@ -417,6 +417,14 @@ def handle_agent_get_result(inv: ToolInvocation) -> dict:
             payload.setdefault("subtask_id", subtask_id)
             payload.setdefault("preview", str(persisted.get("summary") or ""))
             payload.setdefault("artifact_id", "")
+            if persisted.get("coding"):
+                payload["_hint"] = (
+                    "Implementation source is in its isolated branch and will not appear in the parent "
+                    "project before exact independent QA and merge. running/created are live states; "
+                    "use progress and dependency phase, not an empty parent directory, to assess work. "
+                    "Keep observing this handle while it is progressing. An observer polling pause "
+                    "is not a worker deadline or failure."
+                )
             artifact_id = str(persisted.get("result_artifact_id") or "").strip()
             if status == "succeeded" and artifact_id:
                 # This remains inside the registered agent.manage handler. The

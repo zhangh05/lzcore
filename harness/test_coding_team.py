@@ -190,6 +190,32 @@ def test_coding_spawn_requires_explicit_assignment_before_side_effects(team):
     assert "coding_assignment" in str(result.output)
 
 
+def test_parent_contract_preserves_full_original_request_and_scope(tmp_path, monkeypatch):
+    from agent.runtime.task_state import begin_task_state, load_task_state
+    from storage.message_store import SessionMessageStore
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    store = SessionMessageStore("parent-session", "parent-ws")
+    store.write_message("old", "user", "Unrelated previous task", metadata={"created_at": "1"})
+    original = "complete requirements " * 3000 + " exact final API field: noBuffers"
+    store.write_message("initial", "user", original, metadata={"created_at": "2"})
+    begin_task_state(workspace_id="parent-ws", session_id="parent-session", run_id="initial",
+                     user_input=original)
+    state = load_task_state("parent-ws", "parent-session")["task"]
+    task = SimpleNamespace(workspace_id="parent-ws", session_id="parent-session",
+                           parent_task_id=state["task_id"])
+    messages = coding_team.parent_contract(task)
+    assert len(state["objective"]) == 1200
+    assert len(messages) == 1 and messages[0]["content"] == original
+    refs = [{k: item[k] for k in ("run_id", "sha256")} for item in messages]
+    assert coding_team.parent_contract(task, refs) == messages
+    task.parent_task_id = "other-task"
+    assert coding_team.parent_contract(task) == []
+    store.write_message("initial", "user", "tampered requirements")
+    with pytest.raises(ValueError, match="coding_parent_contract_changed"):
+        coding_team.parent_contract(task, refs)
+
+
 def test_qa_dependency_consumes_completed_candidate_before_publication(team):
     first = team.spawn()
     review = team.spawn("qa_agent", review=first["subtask_id"], depends=[first["subtask_id"]])
