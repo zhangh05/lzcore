@@ -102,9 +102,9 @@ def temp_dirs(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def protect_llm_config():
-    """Backup and restore real LLM config to prevent test pollution."""
-    providers_dir = Path(__file__).resolve().parent.parent / "config" / "providers"
+def restore_test_provider_config():
+    """Restore only isolated provider data; never move a live service's config."""
+    providers_dir = Path(os.environ["LZCORE_CONFIG_DIR"]) / "providers"
     lock_file = providers_dir.parent / ".providers-test.lock"
     lock_file.parent.mkdir(parents=True, exist_ok=True)
     lock_fh = lock_file.open("a+")

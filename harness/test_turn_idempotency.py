@@ -5,6 +5,75 @@ import os
 from pathlib import Path
 
 
+def test_http_cancel_reaches_actual_agent_and_projects_live_stages(monkeypatch, tmp_path):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    from flask import Flask
+    from backend.api import agent_routes
+    from agent.app.facade import AgentApp
+    from agent.llm.schemas import LLMResponse
+    import agent.app.service as service
+    from jobs.manager import cancel_job
+    from jobs.store import get_job, list_jobs
+
+    calls = []
+
+    def generate(_request, _config):
+        calls.append(1)
+        job = get_job("http-cancel", list_jobs(ws_id="http-cancel")[0]["job_id"])
+        assert job.metadata["active_turn"]["stage"] == "model_started"
+        cancel_job("http-cancel", job.job_id, expected_client_request_id="request-cancel")
+        return LLMResponse(content="A late answer must not override cancellation", finish_reason="stop")
+
+    monkeypatch.setattr("agent.llm.provider.generate", generate)
+    monkeypatch.setattr("agent.llm.runtime.resolve_invocation_candidates", lambda *_args: [{
+        "enabled": True, "provider": "test", "model": "test", "provider_type": "openai_compatible",
+    }])
+    monkeypatch.setattr(service, "get_default_agent_app", lambda: AgentApp())
+    app = Flask(__name__)
+    with app.test_request_context("/api/agent/message", method="POST", json={
+        "message": "create an SVG animation", "workspace_id": "http-cancel",
+        "session_id": "session-cancel", "metadata": {"client_request_id": "request-cancel"},
+    }):
+        result = agent_routes.agent_message().get_json()
+
+    assert calls == [1]
+    assert not result["ok"]
+    assert "cancelled_by_user" in str(result["errors"])
+    assert "late answer" not in result["final_response"]
+    job = get_job("http-cancel", list_jobs(ws_id="http-cancel")[0]["job_id"])
+    assert get_job("http-cancel", job.job_id).status == "cancelled"
+
+
+def test_http_turn_callbacks_restore_and_reject_reused_job(monkeypatch, tmp_path):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    from backend.core.agent_turn import claimed_turn_runtime
+    from agent.runtime.stream_emitter import StreamEmitter
+    from jobs.lifecycle import claim_session_turn
+    from jobs.store import get_job, update_job
+
+    claim = claim_session_turn("http-scoped", "session-scoped", "original", client_request_id="request-original")
+    previous = lambda _event: None
+    StreamEmitter.set_realtime_callback(previous)
+    try:
+        with claimed_turn_runtime("http-scoped", "session-scoped", claim.job_id, "request-original") as control:
+            callback = StreamEmitter._get_realtime()
+            assert not control.cancel_check()
+            StreamEmitter().emit("model_started", {"stream_scope": "planner"})
+            job = get_job("http-scoped", claim.job_id)
+            assert job.metadata["active_turn"]["stage"] == "model_started"
+            metadata = dict(job.metadata)
+            metadata["active_turn"] = {**metadata["active_turn"], "client_request_id": "request-new"}
+            update_job("http-scoped", claim.job_id, {"metadata": metadata})
+            assert control.cancel_check()
+            callback({"type": "tool_call", "tool_id": "workspace.file", "call_id": "late"})
+            assert get_job("http-scoped", claim.job_id).metadata["active_turn"] == metadata["active_turn"]
+        assert StreamEmitter._get_realtime() is previous
+        callback({"type": "model_completed"})
+        assert get_job("http-scoped", claim.job_id).metadata["active_turn"] == metadata["active_turn"]
+    finally:
+        StreamEmitter.clear_realtime_callback()
+
+
 def test_client_request_claim_is_durable_and_terminal(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
     import jobs.lifecycle as lifecycle

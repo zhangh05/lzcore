@@ -15,11 +15,14 @@ def _normalize_llm_error(error: Any) -> str:
         "llm_configuration_error",
         "llm_request_rejected",
         "llm_provider_error",
+        "llm_empty_response",
         "no_response",
         "context_capacity_exceeded",
         "context_checkpoint_failed",
     }:
         return value
+    if value == "provider_empty_response":
+        return "llm_empty_response"
     if "timeout" in value or "timed out" in value:
         return "llm_call_timeout"
     if "429" in value or "rate limit" in value or "too many request" in value:
@@ -83,6 +86,7 @@ def _llm_failure_message(error_code: str) -> str:
         "llm_auth_failed": "模型服务认证失败，请联系管理员检查模型配置。",
         "llm_configuration_error": "模型服务配置不可用，请联系管理员检查配置。",
         "llm_request_rejected": "模型服务拒绝了当前请求；保留的上下文和证据未丢失，但需要修正请求或模型约束后才能继续。",
+        "llm_empty_response": "模型服务连续返回空响应，没有正文或完整工具调用；已停止重复请求，保留历史和已有证据，请检查模型响应后继续。",
         "context_capacity_exceeded": "完整上下文的估算大小超过当前模型的可用容量，已停止重复请求。历史和工具结果仍保留，请使用容量更大的模型或在新会话中继续。",
         "context_checkpoint_failed": "上下文接续归档未成功，任务已停止；历史和已执行结果保留，请恢复存储后继续，不要重复未知结果的写入。",
     }

@@ -1,0 +1,499 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-06",
+  "prompt": "创建一个HTML，内容是SVG绘制一个鹈鹕骑自行车的2D动画",
+  "prompt_sha256": "d1d1d34e919cf708a16b27ba1b37e93d2c69b5c9f9a66b34297c8f67827fdeda",
+  "base_commit": "b5bc5e133e0cefc5a80b1b343f3e8c93ef9901a1",
+  "provider": {
+    "provider": "custom",
+    "model": "Ling-3.0-flash",
+    "provider_type": "openai_compatible",
+    "max_tokens": 4096
+  },
+  "production_output_budget_changed": false,
+  "scope": "Real single-file SVG Agent diagnostic; not NOC/RTS or strict Coding Team benchmark",
+  "cases": [
+    {
+      "case": "http-1",
+      "entry": "POST /api/agent/message",
+      "max_tokens": 4096,
+      "workspace_id": "svg_pelican_20261006_371021b7",
+      "session_id": "ed08ca83f8254cff",
+      "client_request_id": "pelican-test-3427ca3d6f2e405983d61b4cedc8cb1f",
+      "job_id": "job_d914987e",
+      "outcome": "failed_hung",
+      "artifact_count": 0,
+      "executed_tool_count": 0,
+      "cleanup": "Cancellation recorded, execution continued; official stop/start ended owned HTTP execution, no replay"
+    },
+    {
+      "case": "http-2",
+      "entry": "POST /api/agent/message",
+      "max_tokens": 4096,
+      "workspace_id": "svg_pelican_20261006_b10b5bc6",
+      "session_id": "af368b54388841a3",
+      "client_request_id": "pelican-test-351d2d72c8464b6f833fea857206ffec",
+      "job_id": "job_3e87f921",
+      "run_id": "17113bd1-cf6e-4de7-a58f-997d5934e620",
+      "tracked_diff_sha256": "c28f3ba10cd81f8db203654ad8bd1e3fda815b4b3640a5239c676a68901c7856",
+      "diff_scope_note": "git diff captured tracked changes; newly added runtime helper was not included in that historical fingerprint",
+      "seconds": 62.09,
+      "outcome": "failed",
+      "errors": [
+        "llm_empty_response"
+      ],
+      "executed_tool_count": 0,
+      "artifact_count": 0,
+      "cleanup": "Request returned terminal failure; no replay"
+    },
+    {
+      "case": "http-3",
+      "entry": "POST /api/agent/message",
+      "max_tokens": 4096,
+      "workspace_id": "svg_pelican_20261006_e02bbb59",
+      "session_id": "079da8ca371e43d7",
+      "client_request_id": "pelican-test-bbfcf49f5c484baaaec15f92d76c87d2",
+      "job_id": "job_9d6fab93",
+      "run_id": "2fd0ecb1-9195-49ca-87ea-3ea1671fabaf",
+      "tracked_diff_sha256": "47326b0c691af7a48b1c6a195ec1611b349aafcf931ffcaa572bfe6240b4c973",
+      "diff_scope_note": "git diff captured tracked changes; newly added runtime helper was not included in that historical fingerprint",
+      "seconds": 24.6,
+      "outcome": "invalid_test_environment_interference",
+      "errors": [
+        "llm_auth_failed"
+      ],
+      "executed_tool_count": 0,
+      "artifact_count": 0,
+      "cleanup": "Request returned terminal failure; no replay"
+    },
+    {
+      "case": "http-4",
+      "entry": "POST /api/agent/message",
+      "max_tokens": 4096,
+      "workspace_id": "svg_pelican_20261006_85adaca4",
+      "session_id": "b48e176773ae443c",
+      "client_request_id": "pelican-test-d6b6009a738945729bd2a9f64c990372",
+      "job_id": "job_2e21c32d",
+      "run_id": "519956b7-5c1a-42ae-a364-4b023dd1619d",
+      "tracked_diff_sha256": "ca1ff5caec79c61f9e03c124fe099f8d9060e26613665159b4ca46dbdf9a736d",
+      "diff_scope_note": "git diff captured tracked changes; newly added runtime helper was not included in that historical fingerprint",
+      "seconds": 64.09,
+      "outcome": "failed",
+      "errors": [
+        "llm_empty_response"
+      ],
+      "executed_tool_count": 0,
+      "artifact_count": 0,
+      "cleanup": "Request returned terminal failure; no replay"
+    },
+    {
+      "case": "native",
+      "entry": "AgentApp.submit_user_message through actual ToolRuntime and real Provider",
+      "max_tokens": 4096,
+      "run_id": "44970585-c898-42c9-815a-a5645ed7761c",
+      "seconds": 73.4,
+      "ok": false,
+      "errors": [
+        "llm_empty_response"
+      ],
+      "outcome": "failed",
+      "source_provenance_note": "Base commit known; no full working-tree fingerprint captured at invocation. Final runtime file hashes are recorded separately, not presented as invocation-time fingerprints.",
+      "assistant_calls": [
+        {
+          "task": "assistant_chat",
+          "finish_reason": "length",
+          "error": null,
+          "content_chars": 0,
+          "calls": [
+            {
+              "name": "workspace__file",
+              "args_type": "dict",
+              "args_chars": 98
+            }
+          ],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 20040,
+            "total_tokens": 24136,
+            "prompt_tokens_details": {
+              "cached_tokens": 19520
+            },
+            "logical_input_tokens": 20040,
+            "uncached_input_tokens": 520,
+            "cache_read_input_tokens": 19520,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9741
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "length",
+          "error": null,
+          "content_chars": 0,
+          "calls": [
+            {
+              "name": "workspace__file",
+              "args_type": "dict",
+              "args_chars": 98
+            }
+          ],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 20226,
+            "total_tokens": 24322,
+            "prompt_tokens_details": {
+              "cached_tokens": 20032
+            },
+            "logical_input_tokens": 20226,
+            "uncached_input_tokens": 194,
+            "cache_read_input_tokens": 20032,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9904
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "length",
+          "error": null,
+          "content_chars": 0,
+          "calls": [
+            {
+              "name": "workspace__file",
+              "args_type": "dict",
+              "args_chars": 98
+            }
+          ],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 20433,
+            "total_tokens": 24529,
+            "prompt_tokens_details": {
+              "cached_tokens": 20096
+            },
+            "logical_input_tokens": 20433,
+            "uncached_input_tokens": 337,
+            "cache_read_input_tokens": 20096,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9835
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "length",
+          "error": null,
+          "content_chars": 0,
+          "calls": [
+            {
+              "name": "workspace__file",
+              "args_type": "dict",
+              "args_chars": 98
+            }
+          ],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 20651,
+            "total_tokens": 24747,
+            "prompt_tokens_details": {
+              "cached_tokens": 20288
+            },
+            "logical_input_tokens": 20651,
+            "uncached_input_tokens": 363,
+            "cache_read_input_tokens": 20288,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9824
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "length",
+          "error": null,
+          "content_chars": 0,
+          "calls": [
+            {
+              "name": "workspace__file",
+              "args_type": "dict",
+              "args_chars": 98
+            }
+          ],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 20865,
+            "total_tokens": 24961,
+            "prompt_tokens_details": {
+              "cached_tokens": 20544
+            },
+            "logical_input_tokens": 20865,
+            "uncached_input_tokens": 321,
+            "cache_read_input_tokens": 20544,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.9846
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "length",
+          "error": null,
+          "content_chars": 0,
+          "calls": [
+            {
+              "name": "workspace__file",
+              "args_type": "dict",
+              "args_chars": 98
+            }
+          ],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 4096,
+            "prompt_tokens": 21079,
+            "total_tokens": 25175,
+            "prompt_tokens_details": {
+              "cached_tokens": 19520
+            },
+            "logical_input_tokens": 21079,
+            "uncached_input_tokens": 1559,
+            "cache_read_input_tokens": 19520,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 4096,
+            "cache_hit_ratio": 0.926
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "stop",
+          "error": null,
+          "content_chars": 0,
+          "calls": [],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 129,
+            "prompt_tokens": 21293,
+            "total_tokens": 21422,
+            "prompt_tokens_details": {
+              "cached_tokens": 21056
+            },
+            "logical_input_tokens": 21293,
+            "uncached_input_tokens": 237,
+            "cache_read_input_tokens": 21056,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 129,
+            "cache_hit_ratio": 0.9889
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "stop",
+          "error": null,
+          "content_chars": 0,
+          "calls": [],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 129,
+            "prompt_tokens": 21293,
+            "total_tokens": 21422,
+            "prompt_tokens_details": {
+              "cached_tokens": 21184
+            },
+            "logical_input_tokens": 21293,
+            "uncached_input_tokens": 109,
+            "cache_read_input_tokens": 21184,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 129,
+            "cache_hit_ratio": 0.9949
+          }
+        }
+      ],
+      "cleanup": "Independent process exited; generated artifact retained, no replay"
+    },
+    {
+      "case": "native-8192",
+      "entry": "AgentApp.submit_user_message through actual ToolRuntime and real Provider",
+      "max_tokens": 8192,
+      "run_id": "9924ba47-86a3-48b6-90ba-48c0881900fa",
+      "seconds": 29.04,
+      "ok": true,
+      "errors": [],
+      "outcome": "generated_browser_verified_with_visual_limitations",
+      "source_provenance_note": "Base commit known; no full working-tree fingerprint captured at invocation. Final runtime file hashes are recorded separately, not presented as invocation-time fingerprints.",
+      "assistant_calls": [
+        {
+          "task": "assistant_chat",
+          "finish_reason": "tool_calls",
+          "error": null,
+          "content_chars": 0,
+          "calls": [
+            {
+              "name": "workspace__file",
+              "args_type": "dict",
+              "args_chars": 16928
+            }
+          ],
+          "native_calls": [
+            {
+              "name": "workspace__file",
+              "args_chars": 18378
+            }
+          ],
+          "usage": {
+            "completion_tokens": 7772,
+            "prompt_tokens": 20047,
+            "total_tokens": 27819,
+            "prompt_tokens_details": {
+              "cached_tokens": 16384
+            },
+            "logical_input_tokens": 20047,
+            "uncached_input_tokens": 3663,
+            "cache_read_input_tokens": 16384,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 7772,
+            "cache_hit_ratio": 0.8173
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "tool_calls",
+          "error": null,
+          "content_chars": 14,
+          "calls": [
+            {
+              "name": "workspace__file",
+              "args_type": "dict",
+              "args_chars": 77
+            }
+          ],
+          "native_calls": [
+            {
+              "name": "workspace__file",
+              "args_chars": 77
+            }
+          ],
+          "usage": {
+            "completion_tokens": 78,
+            "prompt_tokens": 28125,
+            "total_tokens": 28203,
+            "prompt_tokens_details": {
+              "cached_tokens": 19520
+            },
+            "logical_input_tokens": 28125,
+            "uncached_input_tokens": 8605,
+            "cache_read_input_tokens": 19520,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 78,
+            "cache_hit_ratio": 0.694
+          }
+        },
+        {
+          "task": "assistant_chat",
+          "finish_reason": "stop",
+          "error": null,
+          "content_chars": 464,
+          "calls": [],
+          "native_calls": [],
+          "usage": {
+            "completion_tokens": 338,
+            "prompt_tokens": 28535,
+            "total_tokens": 28873,
+            "prompt_tokens_details": {
+              "cached_tokens": 28160
+            },
+            "logical_input_tokens": 28535,
+            "uncached_input_tokens": 375,
+            "cache_read_input_tokens": 28160,
+            "cache_creation_input_tokens": 0,
+            "normalized_output_tokens": 338,
+            "cache_hit_ratio": 0.9869
+          }
+        }
+      ],
+      "cleanup": "Independent process exited; generated artifact retained, no replay"
+    }
+  ],
+  "browser": {
+    "structure": {
+      "title": "鹈鹕骑自行车 - Pelican Riding a Bicycle",
+      "svgCount": 1,
+      "viewBox": "0 0 800 500",
+      "animationCount": 13,
+      "duplicateIds": [],
+      "unresolvedReferences": [],
+      "dependencies": []
+    },
+    "before": {
+      ".wheel-left": "matrix(1, 0, 0, 1, 0, 0)",
+      ".wheel-right": "matrix(1, 0, 0, 1, 0, 0)",
+      ".pedal-group": "matrix(1, 0, 0, 1, 0, 0)",
+      ".pelican-body": "matrix(1, 0, 0, 1, 0, 0)",
+      ".wing-left": "matrix(0.984808, -0.173648, 0.173648, 0.984808, 0, 0)",
+      ".pelican-rider": "matrix(0.99863, -0.052336, 0.052336, 0.99863, 0, 0)"
+    },
+    "after": {
+      ".wheel-left": "matrix(-0.748097, 0.66359, -0.66359, -0.748097, 0, 0)",
+      ".wheel-right": "matrix(-0.748097, 0.66359, -0.66359, -0.748097, 0, 0)",
+      ".pedal-group": "matrix(-0.748097, 0.66359, -0.66359, -0.748097, 0, 0)",
+      ".pelican-body": "matrix(1, 0, 0, 1, 0, -5.34127)",
+      ".wing-left": "matrix(0.848664, -0.528933, 0.528933, 0.848664, 0, 0)",
+      ".pelican-rider": "matrix(0.999797, -0.0201615, 0.0201615, 0.999797, 0, 0)"
+    },
+    "movingSelectors": [
+      ".wheel-left",
+      ".wheel-right",
+      ".pedal-group",
+      ".pelican-body",
+      ".wing-left",
+      ".pelican-rider"
+    ],
+    "pageErrors": [],
+    "externalRequests": [],
+    "mobile": {
+      "width": 375,
+      "documentWidth": 375,
+      "svg": {
+        "x": 0,
+        "y": 288.8125,
+        "width": 375,
+        "height": 234.375
+      }
+    },
+    "visual_limitations": [
+      "Pelican bill proportion is short and species features are weak",
+      "Legs and feet do not strictly follow the rotating pedals"
+    ]
+  },
+  "artifact": {
+    "bytes": 16480,
+    "sha256": "f4b8e6a2e3973f71c150b1de0220d7dba49a2b116cd475d349160e90a0ff0808",
+    "edited_by_tester": false,
+    "delivered_copy_matches": true
+  },
+  "final_runtime_file_sha256": {
+    "agent/llm/provider.py": "9fd6f3108e704a9ab867fdff047a8202f5600c763d3298e5a0cbecfc4f3dce46",
+    "backend/api/agent_routes.py": "7e309e9885b631f37e113b25d28b9ef96861712faad5f15f010cc0bb928f7a69",
+    "backend/core/agent_turn.py": "1d13002d54832a93e7ddd3f1e7d64ae2385a610df26b1390aafd82d77a2542c6",
+    "core/runtime_engine/loop_errors.py": "4051dbe8b9b86e224fb3b562877f6062ed751c3d878c550a0922074e464d1121",
+    "core/runtime_engine/loop_model.py": "292edfced30b36969ae00f4ce4eda0e61b058af49972eaa78688a3a3773a9023",
+    "core/runtime_engine/query_loop.py": "0ad1ee68371163c62945af44366b90f0c38312b76ef4677ba7b7347e040cb9e9"
+  },
+  "regression": {
+    "backend_passed": 2111,
+    "backend_skipped": 11,
+    "docs_runtime_consistency": "passed",
+    "ruff_ci_selection": "E9,F821,F811 passed"
+  },
+  "boundaries": {
+    "production_4096_svg_complete": false,
+    "windows_native_this_revision_tested": false,
+    "tag_changed": false,
+    "release_or_windows_assets_changed": false,
+    "server_deployed": false,
+    "noc_rts_resumed": false
+  }
+}

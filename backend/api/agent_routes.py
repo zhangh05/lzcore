@@ -164,12 +164,19 @@ def agent_message():
         # All intents flow through LLM agentic loop
         from agent.app.service import get_default_agent_app
         app = get_default_agent_app()
-        result = app.submit_user_message(
-            user_input=user_input,
-            session_id=session_id,
-            workspace_id=ws_id,
-            metadata=metadata,
-        )
+        from backend.core.agent_turn import claimed_turn_runtime
+        with claimed_turn_runtime(
+            ws_id, session_id,
+            turn_claim.job_id if session_id and client_request_id else "",
+            client_request_id,
+        ) as runtime_control:
+            result = app.submit_user_message(
+                user_input=user_input,
+                session_id=session_id,
+                workspace_id=ws_id,
+                metadata=metadata,
+                runtime_control=runtime_control,
+            )
         if result is None:
             return jsonify({"ok": False, "error": "agent_no_result"}), 500
         result_payload = result.to_dict()

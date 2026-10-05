@@ -25,6 +25,10 @@
 | `POST` | `/api/agent/llm/activate`, `/api/agent/llm/test` | Activate or test an LLM configuration. |
 | `GET` | `/api/agent/llm/status` | Safe LLM availability projection. |
 
+HTTP message 带 session_id 和 client_request_id 时，实际 Agent 运行绑定已认领的 session job：阶段事件更新该回合，取消检查读取同一作业。回合结束恢复原事件回调，过期回调不更新后续请求。HTTP 响应仍是整轮结果，不因此提供 token 续流。
+
+Provider 的有界空响应重试及候选回退耗尽后，返回 `llm_empty_response`，用户目标记为失败；QueryLoop 不再无限重发。输出截断走原有续接，未完成的工具参数不执行，不能把截断或空响应记为成功。
+
 ### WebSocket 与持久回合
 
 /ws/agent 接受 ping、message、resume。message 发起一次请求，resume 带 workspace_id/session_id/client_request_id/stream_seq，只读取 seq 大于游标的日志帧，不重新提交消息或执行工具。done/error 也占正文序号，心跳不入日志。

@@ -715,8 +715,14 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     # Build final response
     content = "".join(content_parts)
     tool_calls = []
+    native_tool_calls = []
     for tc_acc in tool_calls_accum:
         if tc_acc:
+            native_tool_calls.append({
+                "id": tc_acc.get("id", ""), "type": "function",
+                "function": {"name": tc_acc.get("name", ""),
+                             "arguments": tc_acc.get("arguments", "{}")},
+            })
             args = _decode_tool_arguments(tc_acc.get("arguments", "{}"))
             # Retain nameless proposals so planning can report the missing
             # tool identity instead of treating the provider output as final.
@@ -746,7 +752,8 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
         usage=usage,
         finish_reason=finish_reason,
         tool_calls=tool_calls if not isinstance(tool_calls, list) else _fix_tool_calls_format(tool_calls),
-        protocol={"openai": {"content": content, **reasoning_fields}},
+        protocol={"openai": {"content": content, **reasoning_fields,
+                            **({"tool_calls": native_tool_calls} if native_tool_calls else {})}},
     )
 
 

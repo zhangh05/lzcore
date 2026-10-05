@@ -53,6 +53,23 @@ def test_reasoning_only_truncation_survives_unified_invocation(monkeypatch, fini
     assert result.protocol["openai"]["reasoning_content"] == "private continuation"
 
 
+def test_truncated_stream_keeps_original_arguments_but_never_projects_partial_call(monkeypatch):
+    from agent.llm.protocol_projection import openai_assistant_state
+
+    partial = '{"action":"create","content":"<svg>unfinished'
+    response = _stream(monkeypatch, [{"tool_calls": [{"index": 0, "id": "partial-call",
+        "function": {"name": TOOL_NAME, "arguments": partial}}]}], "length")
+    assert response.protocol["openai"]["tool_calls"][0]["function"]["arguments"] == partial
+    assert "__invalid_tool_arguments_json__" in response.tool_calls[0].arguments
+    message = response.assistant_message([])
+    assert "tool_calls" not in openai_assistant_state(message, message.protocol)
+    assert message.protocol["openai"]["tool_calls"][0]["function"]["arguments"] == partial
+    loop = QueryLoop(SSOTRuntimeConfig(), {}, None)
+    instruction = loop._truncation_continuation(response)
+    assert "scaffold" in instruction and "verify" in instruction
+    assert str(loop._context_budget.reserved_output_tokens) in instruction
+
+
 def test_second_drawing_turn_continues_reasoning_limit_through_agent_app(monkeypatch):
     from agent.app.facade import AgentApp
 

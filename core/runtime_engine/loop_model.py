@@ -31,8 +31,7 @@ _LOG = logging.getLogger(__name__)
 class LoopModelGateway:
     """Provider windows, context continuation, native protocols and final synthesis. Shared context belongs to the QueryLoop driver."""
 
-    @staticmethod
-    def _truncation_continuation(response: LLMResponse) -> str:
+    def _truncation_continuation(self, response: LLMResponse) -> str:
         """Continue incomplete native output without executing partial writes."""
         if response.tool_calls:
             continuation = (
@@ -55,6 +54,15 @@ class LoopModelGateway:
                 "The preceding model response ended before completion. Continue from its exact final "
                 "content without repeating prior text; complete the original task and keep the full "
                 "answer in this conversation."
+            )
+        if response.tool_calls or not response.content:
+            continuation += (
+                f" The configured per-response output allowance is {self._context_budget.reserved_output_tokens} "
+                "tokens, shared by reasoning and tool arguments. Plan each complete call within it. "
+                "For large file content, where published tools support create/write and edit/patch, "
+                "first create a scaffold with stable anchors, then assemble the complete artifact "
+                "using separate valid edits or patches. Do not omit requested features or treat "
+                "a scaffold as the completed task. Read back and verify the assembled artifact."
             )
         return continuation
 

@@ -28,6 +28,8 @@ Provider 适配保留其支持的协议块供当前循环继续推理：Anthropi
 
 turn_logs 记录回合帧，session job 记录阶段，会话消息/run 记录终态和证据。三者是不同投影；启动和周期收尾修复缺失终态，记为中断，不补造成功或重跑未知写入。topology_updated 只广播资源 ID 与版本；job_updated 是任务快照。
 
+HTTP 已认领回合通过 backend/core/agent_turn.py 接入同一 session job 的取消检查与阶段更新。正常结束的连续空响应在既有 Provider 重试和回退耗尽后以 llm_empty_response 收尾，不进入无界恢复。兼容协议的流式工具参数同时保留原始原生提案与解码结果；续接时明确屏蔽未执行的部分调用。容量与真实文件生成的验证边界见 [SVG Agent 诊断](SVG_AGENT_DIAGNOSTIC_2026-10-06.md)。
+
 Agent 会话 SSE 路由已注册，但没有接入运行时生产者。其他 SSE 功能不受此限制。不要把它作为与 WebSocket 等价的续流路径。
 
 ## 数据与部署

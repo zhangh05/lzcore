@@ -141,6 +141,26 @@ def test_provider_rejection_preserves_safe_diagnostic_and_stable_code():
     assert "private-token" not in str(diagnostic)
 
 
+def test_exhausted_empty_provider_response_is_terminal_without_a_turn_cap():
+    calls = []
+
+    def empty_provider(**_kwargs):
+        calls.append(1)
+        return LLMResponse(error="provider_empty_response", metadata={
+            "error_type": "provider_empty_response", "retries_exhausted": True,
+        })
+
+    config = SSOTRuntimeConfig(max_query_loop_iterations=0)
+    loop = QueryLoop(config, {}, None, llm_invoke=empty_provider)
+    ctx = StatelessContext(workspace_id="default", session_id="empty-session",
+        request_id="empty-request", user_input="create SVG")
+    result = asyncio.run(loop.run(ctx, BudgetController(config), None))
+
+    assert calls == [1]
+    assert result.error == "llm_empty_response"
+    assert "连续返回空响应" in result.final_response
+
+
 def test_provider_exception_retains_redacted_diagnostic():
     def broken_provider(**_kwargs):
         raise RuntimeError("HTTP 422 invalid request password=private-password")

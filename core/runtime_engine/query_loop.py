@@ -400,6 +400,7 @@ class QueryLoop(
                     "llm_auth_failed",
                     "llm_configuration_error",
                     "llm_request_rejected",
+                    "llm_empty_response",
                     "context_capacity_exceeded",
                     "context_checkpoint_failed",
                 }:
@@ -415,8 +416,8 @@ class QueryLoop(
                             + final_response
                         )
                     ctx.extras["response_outcome"] = (
-                        "context_capacity_exceeded"
-                        if provider_error == "context_capacity_exceeded"
+                        provider_error
+                        if provider_error in {"context_capacity_exceeded", "llm_empty_response"}
                         else "llm_configuration_unavailable"
                     )
                     return finish(
