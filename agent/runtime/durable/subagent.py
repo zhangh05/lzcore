@@ -395,11 +395,15 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
 
         completion_check = None
         completion_source_digest = None
+        completion_proposal_check = None
         if task.coding and task.profile_id != "qa_agent":
             from .coding_team import check_implementation, implementation_source_digest
 
             completion_check = lambda: check_implementation(task, cancel_check)
             completion_source_digest = lambda: implementation_source_digest(task)
+        elif task.coding:
+            from .coding_reviews import review_qa_proposal
+            completion_proposal_check = lambda proposal: review_qa_proposal(task, proposal)
 
         op = AgentOp(
             user_input=instruction,
@@ -423,6 +427,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 cancel_check=cancel_check,
                 completion_check=completion_check,
                 completion_source_digest=completion_source_digest,
+                completion_proposal_check=completion_proposal_check,
             ),
         )
         turn = AgentTurn.from_op(op)
@@ -444,7 +449,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
 
         if task.coding:
             from .coding_team import finish_assignment
-            finish_assignment(task, coding_environment, is_ok and bool(final_resp) and not cancel_check())
+            finish_assignment(task, coding_environment, is_ok and bool(final_resp) and not cancel_check(), final_resp)
 
         # AgentResult.tool_calls is the canonical one-row-per-action projection.
         for te in (getattr(llm_result, "tool_calls", []) or []) if llm_result is not None else []:

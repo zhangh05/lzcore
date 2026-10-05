@@ -1164,7 +1164,7 @@ class QueryLoop(
 
             from .completion import observe_completion, repair_instruction, terminal_completion
 
-            completion = await observe_completion(ctx, len(all_results))
+            completion = await observe_completion(ctx, len(all_results), str(response.content or ""))
             terminal = terminal_completion(completion)
             if terminal:
                 return finish(**terminal)

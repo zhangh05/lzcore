@@ -2117,6 +2117,145 @@
         }
       ],
       "diagnosis": "Explicit Chinese same-task continuation lacked a word boundary after 继续, so lifecycle resolver created a new parent identity. Old failed source remains preserved but cannot pass same-parent revision guard under new identity. Model repeatedly read empty integrated parent; real repeated-call guard stopped turn. No new child, QA or integration. Prior sub-13925285 belonged to the previous run and was cancelled by operator cleanup, not this model turn. No quota exhaustion response observed."
+    },
+    {
+      "round": "large-20261006-ling-rts-5",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-5/reports/bench_rts_00b989b88c/d26adf2f94",
+      "configuration": {
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "timeout": 90,
+        "max_tokens": 16384,
+        "config_source": "ui_settings",
+        "case": "rts",
+        "session_id": "01f4ca1c6fff4def",
+        "workspace_id": "bench_rts_00b989b88c",
+        "workspace": "/private/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-5/storage/bench_rts_00b989b88c",
+        "preview_origin": "http://127.0.0.1:18880",
+        "deadline_seconds": 3600,
+        "prompt_sha256": "5bfe6b89ee01472cca6ae3ae74600b8af2001ffbed97210c0c835370e8363c1c",
+        "source_commit": "29bce78ba576c728e8f7b1146c41aa8b93dd8e0a",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18880,
+          "preview_origin": "http://127.0.0.1:18880",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "candidate": {
+        "subtask_id": "sub-9a36a1a4",
+        "branch_workspace": "coding-b4ddc736b79b47ed8dbbd203a5a820e4",
+        "source_files": 7,
+        "source_bytes": 94759,
+        "model_calls": 35,
+        "generated_test_count": 44,
+        "generated_tests_passed": 44,
+        "production_build_exit_code": 0,
+        "integrated": false
+      },
+      "qa": {
+        "subtask_id": "sub-dadedb00",
+        "review_subtask_id": "sub-9a36a1a4",
+        "model_calls": 29,
+        "public_report_sha256": "0c9c29509830c1e57b099d55657c9ce6d2576fd7585bef712fe49a2a70b09cd4",
+        "public_verdict": "two hard failures and one deviation",
+        "legacy_runtime_phase": "validated",
+        "confirmed_findings": [
+          "Browser IIFE build does not export required engine module API.",
+          "getState exposes raw fog instead of owner-specific fogs explored/visible.",
+          "snapshot.projectiles missing."
+        ]
+      },
+      "root_cause": {
+        "framework": "Independent QA judgement was ignored by finish_assignment; passed declared checks and Agent.ok incorrectly validated a public failed review.",
+        "application": "Agent generated source has engine export and snapshot-contract defects; tester did not rewrite application source.",
+        "coordinator": "After failed review coordinator attempted denied source writes and created alternate files under declared dist output. Parent source tree remained empty; generated paths are not integration."
+      },
+      "cleanup_confirmed": true,
+      "full_goal_passed": false,
+      "repair": "Typed QA judgement is checked by server completion observation, durable candidate phase and publication gate; failed QA source can be explicitly inherited by a stopped same-parent repair task."
     }
   ],
   "framework_native_dependency_runtime": {

@@ -245,3 +245,35 @@ def test_successful_pre_final_probe_does_not_finish_business_goal():
     for _ in range(4):
         assert asyncio.run(observe_repair_progress(ctx, 2)) is None
     assert len(checks) == 2 and ctx.extras['completion_observation']['status'] == 'passed'
+
+
+def test_structured_proposal_can_correct_format_in_same_worker_without_fake_tools():
+    config=SSOTRuntimeConfig(max_llm_calls=5)
+    replies=iter(['unstructured report','{"verdict":"pass"}'])
+    proposals=[]
+    def check(proposal):
+        proposals.append(proposal)
+        return ({'status':'passed'} if proposal.startswith('{') else
+                {'status':'failed','proposal_invalid':True,'recovery_instruction':'Return structured judgement.'})
+    ctx=StatelessContext('ws','qa-format','qa','Review',extras={'__completion_proposal_check':check})
+    result=asyncio.run(QueryLoop(config,{},object(),llm_invoke=lambda **kw:LLMResponse(content=next(replies))).run(ctx,BudgetController(config),None))
+    assert result.error is None and len(proposals)==2 and not result.tool_results
+
+
+def test_repeated_invalid_proposals_stop_after_bounded_format_recovery():
+    config=SSOTRuntimeConfig(max_llm_calls=10);calls=[]
+    def check(proposal):
+        calls.append(proposal)
+        return {'status':'failed','proposal_invalid':True,'recovery_instruction':'Return structured judgement.'}
+    ctx=StatelessContext('ws','qa-invalid','qa','Review',extras={'__completion_proposal_check':check})
+    result=asyncio.run(QueryLoop(config,{},object(),llm_invoke=lambda **kw:LLMResponse(content='prose')).run(ctx,BudgetController(config),None))
+    assert result.error=='completion_proposal_invalid' and len(calls)==3
+
+
+def test_untrusted_metadata_cannot_install_a_proposal_gate():
+    callback=lambda proposal:{'status':'passed'}
+    clean=_sanitize_caller_runtime_metadata({'completion_proposal_check':callback,'__completion_proposal_check':callback})
+    _apply_runtime_control(clean,{'completion_proposal_check':callback})
+    assert not clean
+    _apply_runtime_control(clean,SubagentRuntimeControl(completion_proposal_check=callback))
+    assert clean['__completion_proposal_check'] is callback

@@ -10,9 +10,16 @@ def _target(task):
     assignment = target.coding
     validation = assignment.get('completion_validation') or {}
     environment = assignment.get('environment') or {}
+    failed_source = (target.status in {'failed', 'cancelled'} and assignment.get('phase') == 'failed'
+                     and validation.get('status') == 'failed')
+    if assignment.get('phase') == 'qa_rejected':
+        review = _related(task, assignment.get('qa_rejection_subtask_id', ''))
+        failed_source = (review.status == 'failed' and review.coding.get('phase') == 'qa_rejected'
+                         and (review.coding.get('qa_review') or {}).get('verdict') == 'fail'
+                         and (review.coding.get('environment') or {}).get('closed')
+                         and (review.coding.get('environment') or {}).get('cleanup_confirmed'))
     if (target.profile_id not in {'coding_agent', 'frontend_agent'}
-            or target.status not in {'failed', 'cancelled'} or assignment.get('phase') != 'failed'
-            or validation.get('status') != 'failed'
+            or not failed_source
             or not environment.get('closed') or not environment.get('cleanup_confirmed')
             or assignment['project_dir'] != task.coding['project_dir']):
         raise ValueError('coding_revision_requires_stopped_known_failed_implementation')
@@ -34,6 +41,7 @@ def configure_revision(task):
 
 def seed_revision(task, branch):
     """Copy proposed source, retaining its original integrated publication base."""
+    from .coding_team import _related
     target = _target(task)
     assignment = task.coding
     baseline = dict(target.coding['baseline'])
@@ -50,4 +58,7 @@ def seed_revision(task, branch):
         'subtask_id': target.subtask_id, 'source_digest': assignment['revision_source_digest'],
         'completion_validation': target.coding['completion_validation'],
     }
+    if target.coding.get('phase') == 'qa_rejected':
+        review = _related(task, target.coding['qa_rejection_subtask_id'])
+        assignment['revision_observation']['qa_review'] = review.coding['qa_review']
     return baseline

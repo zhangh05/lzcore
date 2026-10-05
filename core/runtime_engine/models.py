@@ -130,6 +130,7 @@ class SubagentRuntimeControl:
     cancel_check: Any = None
     completion_check: Any = None
     completion_source_digest: Any = None
+    completion_proposal_check: Any = None
 
 
 @dataclass

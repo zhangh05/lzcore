@@ -25,6 +25,7 @@ _CALLER_RESERVED_RUNTIME_METADATA_KEYS = frozenset(
         "cancel_check",
         "completion_check",
         "completion_source_digest",
+        "completion_proposal_check",
     }
 )
 
@@ -99,3 +100,5 @@ def _apply_runtime_control(metadata: dict[str, Any], runtime_control: Any) -> No
 
     if callable(runtime_control.completion_source_digest):
         metadata["__completion_source_digest"] = runtime_control.completion_source_digest
+    if callable(runtime_control.completion_proposal_check):
+        metadata["__completion_proposal_check"] = runtime_control.completion_proposal_check

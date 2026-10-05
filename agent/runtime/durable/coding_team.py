@@ -261,7 +261,9 @@ def ready(task) -> bool:
             assignment["phase"] = "dependency_failed"
             task.summary = "Coding dependency identity is unavailable"
             return False
-        if target.status in {"failed", "cancelled"}:
+        review_target = task.profile_id == "qa_agent" and subtask_id == assignment["review_subtask_id"]
+        rejected_phase = target.coding.get("phase") in {"qa_rejected", "qa_incomplete", "qa_unknown"}
+        if target.status in {"failed", "cancelled"} or (rejected_phase and not review_target) or target.coding.get("phase") == "qa_unknown":
             task.status = "failed"
             assignment["phase"] = "dependency_failed"
             task.summary = "Coding dependency did not complete successfully"
@@ -270,7 +272,7 @@ def ready(task) -> bool:
         # requiring publication here creates an impossible dependency cycle.
         phase = "candidate" if task.profile_id == "qa_agent" and subtask_id == assignment["review_subtask_id"] else "publication"
         available = target.status == "succeeded" and (
-            target.coding.get("phase") in {"changes_ready", "validated"}
+            target.coding.get("phase") in {"changes_ready", "validated", "qa_rejected", "qa_incomplete"}
             if phase == "candidate" else target.coding.get("phase") == "integrated"
         )
         if not available:
@@ -356,6 +358,9 @@ def coding_run(task):
                 ensure_ascii=False,
             )
         )
+        if task.profile_id == "qa_agent":
+            from .coding_reviews import review_instruction
+            instruction += "\n\n" + review_instruction()
         try:
             yield branch_ws, instruction, environment
         finally:
@@ -376,66 +381,22 @@ def coding_run(task):
                 raise RuntimeError("coding_branch_cleanup_unconfirmed")
 
 
-def finish_assignment(task, environment, runtime_ok: bool) -> None:
+def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -> None:
     from .subagent import _save_task
 
     assignment = task.coding
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
     if not runtime_ok:
-        assignment["phase"] = "failed"
+        if assignment.get("phase") not in {"qa_rejected", "qa_incomplete", "qa_unknown"}:
+            assignment["phase"] = "failed"
         _save_task(task)
         return
     if task.profile_id == "qa_agent":
-        if (
-            source_manifest(branch, assignment.get("generated_paths"))
-            != assignment["baseline"]
-        ):
-            raise ValueError("coding_qa_modified_reviewed_source")
-        evidence = []
-        for command in assignment["validation_commands"]:
-            from core.tools.context import ToolRuntimeContext
-            from core.tools.integration import get_default_tool_runtime_client
-
-            from .subagent import _cancel_event
-            from .subagent_control import cancellation_probe
-
-            observed = get_default_tool_runtime_client().invoke(
-                "exec.run",
-                {
-                    "action": "shell",
-                    "command": command,
-                    "working_dir": assignment["project_dir"],
-                    "timeout": 180,
-                },
-                context=ToolRuntimeContext(
-                    workspace_id=assignment["branch_workspace"],
-                    session_id=task.subtask_id,
-                    task_id=task.parent_task_id,
-                    requested_by="subagent",
-                    cancel_check=cancellation_probe(
-                        task.workspace_id,
-                        task.subtask_id,
-                        _cancel_event(task.workspace_id, task.subtask_id),
-                    ),
-                ),
-            )
-            output = {**observed.output, "runtime_status": observed.status}
-            output["ok"] = observed.status == "succeeded" and bool(
-                output.get("ok", True)
-            )
-            # Runtime results, not the Agent's final answer, determine checks.
-            from storage.redaction import redact_value
-
-            evidence.append({"command": command, "result": redact_value(output)})
-            if not output.get("ok") or output.get("exit_code") != 0:
-                assignment.update(phase="qa_failed", validation=evidence)
-                _save_task(task)
-                raise ValueError("coding_independent_validation_failed")
-        if (
-            source_manifest(branch, assignment.get("generated_paths"))
-            != assignment["baseline"]
-        ):
-            raise ValueError("coding_validation_modified_reviewed_source")
+        from .coding_reviews import review_qa_proposal
+        review = review_qa_proposal(task, proposal)
+        if review["status"] != "passed":
+            raise ValueError("coding_qa_review_not_accepted")
+        evidence = assignment["validation"]
         assignment.update(phase="validated", validation=evidence)
         target = _related(task, assignment["review_subtask_id"])
         if target.coding["change"]["digest"] != assignment["review_digest"]:
@@ -492,6 +453,10 @@ def integrate(task) -> dict:
         or qa.coding.get("review_digest") != assignment["change"]["digest"]
     ):
         return {"ok": False, "error": "coding_qa_not_successful"}
+    from .coding_reviews import accepted_review
+    if not accepted_review(qa, assignment.get("qa_candidate_digest")):
+        return {"ok": False, "error": "coding_qa_verdict_required",
+                "phase": assignment.get("phase"), "automatic_retry_allowed": False}
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
     if (
         manifest_digest(source_manifest(branch, assignment.get("generated_paths")))

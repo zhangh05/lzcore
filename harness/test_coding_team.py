@@ -1,6 +1,7 @@
 """Coding team lifecycle, identity, conflicts and crash recovery contracts."""
 
 from types import SimpleNamespace
+import json
 
 import pytest
 
@@ -99,7 +100,9 @@ def team(monkeypatch, tmp_path):
             assert result.status == "succeeded"
         return SimpleNamespace(
             ok=True,
-            final_response="Implemented" if role != "qa_agent" else "Reviewed",
+            final_response="Implemented" if role != "qa_agent" else json.dumps({
+                "schema": "coding.qa_review.v1", "verdict": "pass", "scope": "assigned source",
+                "blocking_findings": [], "report": "Reviewed exact candidate and declared checks."}),
             tool_calls=[],
         )
 
@@ -732,7 +735,9 @@ def test_failed_revision_preserves_source_then_requires_exact_qa_and_merge(team,
                 'old_string':'42','new_string':'43'}, context=ToolRuntimeContext(
                     workspace_id=session.workspace_id,session_id=session.session_id,requested_by='subagent'))
             assert result.status == 'succeeded'
-        return SimpleNamespace(ok=True,final_response='Repaired or independently reviewed',tool_calls=[])
+        return SimpleNamespace(ok=True,final_response=('Repaired' if control.profile['profile_id'] != 'qa_agent'
+            else json.dumps({'schema':'coding.qa_review.v1','verdict':'pass','scope':'source repair',
+                             'blocking_findings':[],'report':'Independently reviewed repaired source.'})),tool_calls=[])
 
     monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn', repair_runtime)
     repaired = team.client.invoke('agent.manage', {'action':'spawn','profile_id':'coding_agent','instruction':'Repair confirmed failure',
