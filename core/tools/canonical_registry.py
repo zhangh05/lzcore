@@ -891,7 +891,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         "instruction": {"type": "string", "description": "Required for spawn: an outcome-oriented task preserving the user's scope, evidence requirements, and output constraints. Let the subagent choose from its published tools; do not invent provider limits or force one-call-per-item execution unless the user explicitly requires that method."},
         "profile_id": _subagent_profile_schema(),
         "coding_assignment": _schema({
-            "project_dir": {"type": "string", "description": "Generated project directory under files/data."},
+            "project_dir": {"type": "string", "description": "Workspace-relative generated project path, e.g. files/data/app. Never an absolute container path or just app."},
             "responsibilities": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "Relative files or directory prefixes this assignment may change; . covers the project."},
             "generated_paths": {"type": "array", "items": {"type": "string"}, "maxItems": 20, "description": "Explicit reproducible output paths excluded from source snapshots, e.g. dist. Default empty: build/dist directories are source unless declared. Never list source code or build scripts. QA inherits this contract from the implementation."},
             "depends_on": {"type": "array", "items": {"type": "string"}},

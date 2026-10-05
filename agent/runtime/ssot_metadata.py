@@ -23,6 +23,7 @@ _CALLER_RESERVED_RUNTIME_METADATA_KEYS = frozenset(
         "workbench_context",
         "approval_continuation_resume",
         "cancel_check",
+        "completion_check",
     }
 )
 
@@ -92,3 +93,5 @@ def _apply_runtime_control(metadata: dict[str, Any], runtime_control: Any) -> No
         metadata["workbench_context"] = dict(runtime_control.workbench_context)
     if callable(runtime_control.cancel_check):
         metadata["cancel_check"] = runtime_control.cancel_check
+    if callable(runtime_control.completion_check):
+        metadata["__completion_check"] = runtime_control.completion_check

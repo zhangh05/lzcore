@@ -138,6 +138,58 @@ def test_dependencies_do_not_run_or_merge_before_ready(team):
     )["ok"]
 
 
+@pytest.mark.parametrize("unknown", [False, True])
+def test_implementation_cannot_publish_when_declared_check_fails(team, monkeypatch, unknown):
+    monkeypatch.setattr(DockerProjectEnvironment, "execute", lambda *a, **kw: {
+        "ok": False, "exit_code": 1, "execution_may_continue": unknown})
+    item = team.spawn()
+    task = subagent._load_task("parent-ws", item["subtask_id"])
+    assert task.status == "failed"
+    validation = task.coding["completion_validation"]
+    assert validation["status"] == ("unknown" if unknown else "failed")
+    assert validation["automatic_retry_allowed"] is not unknown
+    assert task.coding["phase"] != "changes_ready"
+    assert not subagent.merge_subagent_result("parent-task", task.subtask_id, "parent-ws")["ok"]
+
+
+def test_progress_prunes_dependencies_and_declared_outputs(team):
+    item = team.spawn(generated_paths=["dist"])
+    task = subagent._load_task("parent-ws", item["subtask_id"])
+    branch = project_changes.project_path(task.coding["branch_workspace"], "files/data/app")
+    for directory in ("node_modules/pkg", "dist", ".git"):
+        (branch / directory).mkdir(parents=True, exist_ok=True)
+        (branch / directory / "ignored").write_text("cache")
+    observed = subagent.get_subagent_task("parent-ws", task.subtask_id)["progress"]
+    assert observed["source_files"] == 1 and observed["source_bytes"] == len("VALUE = 42\n")
+    assert observed["completion_status"] == "passed"
+    assert "percent" not in observed
+
+
+def test_changed_source_invalidates_completion_evidence(team, monkeypatch):
+    item = team.spawn()
+    task = subagent._load_task("parent-ws", item["subtask_id"])
+    before = task.coding["completion_validation"]["source_digest"]
+    branch = project_changes.project_path(task.coding["branch_workspace"], "files/data/app")
+    (branch / "src/value.py").write_text("VALUE = 43\n")
+    calls = []
+
+    def execute(*args, **kwargs):
+        calls.append(args)
+        return {"ok": False, "exit_code": 1}
+
+    monkeypatch.setattr(DockerProjectEnvironment, "execute", execute)
+    validation = coding_team.check_implementation(task)
+    assert validation["source_digest"] != before and validation["status"] == "failed"
+    assert len(calls) == 1
+
+
+def test_coding_spawn_requires_explicit_assignment_before_side_effects(team):
+    result = team.client.invoke("agent.manage", {"action": "spawn", "profile_id": "coding_agent",
+                                "instruction": "Implement"}, context=team.parent)
+    assert result.status != "succeeded"
+    assert "coding_assignment" in str(result.output)
+
+
 def test_qa_dependency_consumes_completed_candidate_before_publication(team):
     first = team.spawn()
     review = team.spawn("qa_agent", review=first["subtask_id"], depends=[first["subtask_id"]])

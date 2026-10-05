@@ -7,10 +7,12 @@ are independent; successful child prose alone never authorizes publication.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import socket
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
 
 from storage.paths import ensure_workspace_storage_dirs
 from storage.project_changes import (
@@ -26,6 +28,87 @@ from storage.project_changes import (
 )
 
 CODING_PROFILES = frozenset({"coding_agent", "frontend_agent", "qa_agent"})
+
+
+def observe_progress(task) -> dict:
+    """Expose source and provider observations, never a fabricated percent."""
+    from storage.project_changes import IGNORED
+    from storage.usage_store import read_usage
+
+    assignment = task.coding
+    branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
+    files, size = 0, 0
+    generated = assignment.get("generated_paths") or []
+    for directory, dirs, names in os.walk(branch, followlinks=False):
+        relative = os.path.relpath(directory, branch)
+        dirs[:] = [name for name in dirs if name not in IGNORED and not any(
+            (name if relative == "." else relative + "/" + name) == output
+            for output in generated
+        )]
+        for name in names:
+            path = Path(directory) / name
+            try:
+                if not path.is_symlink():
+                    size += path.stat().st_size
+                    files += 1
+            except FileNotFoundError:
+                continue
+    usage = read_usage(assignment["branch_workspace"])
+    return {"phase": assignment.get("phase"), "source_files": files, "source_bytes": size,
+            "recorded_model_calls": len(usage),
+            "last_model_response_at": usage[-1].get("created_at", "") if usage else "",
+            "completion_status": (assignment.get("completion_validation") or {}).get("status", "pending")}
+
+
+def check_implementation(task, cancel_check=None) -> dict:
+    """Observe declared checks on current source through governed execution.
+
+    Failed checks keep the same implementation loop open. This is a candidate
+    readiness check; exact independent QA remains mandatory for publication.
+    """
+    from core.tools.context import ToolRuntimeContext
+    from core.tools.integration import get_default_tool_runtime_client
+    from storage.redaction import redact_value
+
+    from .subagent import _save_task
+
+    assignment = task.coding
+    branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
+    baseline = source_manifest(branch, assignment.get("generated_paths"))
+    digest = manifest_digest(baseline)
+    cached = assignment.get("completion_validation") or {}
+    if cached.get("source_digest") == digest and cached.get("status") in {"passed", "unknown"}:
+        return cached
+    evidence = []
+    assignment["phase"] = "verifying"
+    _save_task(task)
+    status = "passed" if baseline else "failed"
+    for command in assignment["validation_commands"]:
+        if callable(cancel_check) and cancel_check():
+            status = "unknown"
+            break
+        observed = get_default_tool_runtime_client().invoke(
+            "exec.run", {"action": "shell", "command": command,
+                         "working_dir": assignment["project_dir"], "timeout": 180},
+            context=ToolRuntimeContext(
+                workspace_id=assignment["branch_workspace"], session_id=task.subtask_id,
+                task_id=task.parent_task_id, requested_by="subagent", cancel_check=cancel_check,
+            ),
+        )
+        output = redact_value({**observed.output, "runtime_status": observed.status})
+        evidence.append({"command": command, "result": output})
+        if output.get("execution_outcome") == "unknown" or output.get("execution_may_continue"):
+            status = "unknown"
+            break
+        if observed.status != "succeeded" or not output.get("ok", True) or output.get("exit_code") != 0:
+            status = "failed"
+    if source_manifest(branch, assignment.get("generated_paths")) != baseline:
+        status = "failed"
+    result = {"status": status, "source_digest": digest, "checks": evidence,
+              "automatic_retry_allowed": status != "unknown"}
+    assignment.update(phase="executing", completion_validation=result)
+    _save_task(task)
+    return result
 
 
 def _related(task, subtask_id: str):
@@ -293,11 +376,20 @@ def finish_assignment(task, environment, runtime_ok: bool) -> None:
         )
         _save_task(target)
     else:
+        from .subagent import _cancel_event
+        from .subagent_control import cancellation_probe
+
+        validation = check_implementation(task, cancellation_probe(
+            task.workspace_id, task.subtask_id, _cancel_event(task.workspace_id, task.subtask_id)))
+        if validation["status"] != "passed":
+            raise ValueError("coding_implementation_validation_incomplete")
         # Stop all descendants before hashing the output. Detached generators
         # cannot mutate a candidate after it has been declared changes_ready.
         if not environment.close():
             raise RuntimeError("coding_candidate_processes_not_stopped")
         current = source_manifest(branch, assignment.get("generated_paths"))
+        if manifest_digest(current) != validation["source_digest"]:
+            raise ValueError("coding_candidate_changed_after_validation")
         assignment.update(
             change=changeset(
                 assignment["baseline"], current, assignment["responsibilities"]

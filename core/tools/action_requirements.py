@@ -85,6 +85,22 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("workspace.filestore", "import"): ("filepath",),
 }
 
+# Requirements selected by another published argument, shared by planning and
+# tool governance. They do not invent missing values or change permissions.
+ACTION_REQUIRED_WHEN = {
+    ("agent.manage", "spawn"): (
+        ("profile_id", ("coding_agent", "frontend_agent", "qa_agent"), ("coding_assignment",)),
+    ),
+}
+
+
+def required_action_arguments(tool_id: str, action: str, arguments: dict) -> tuple:
+    required = list(ACTION_REQUIRED_ALL.get((tool_id, action), ()))
+    for field, values, fields in ACTION_REQUIRED_WHEN.get((tool_id, action), ()):
+        if arguments.get(field) in values:
+            required.extend(fields)
+    return tuple(dict.fromkeys(required))
+
 # Presence and a valid string type are sufficient for an empty source file.
 # Other required text (paths, identifiers, commands) must remain non-empty.
 ACTION_ALLOW_EMPTY: dict[tuple[str, str], frozenset[str]] = {

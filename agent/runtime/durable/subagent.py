@@ -393,6 +393,12 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         from agent.runtime.ssot_runtime import run_ssot_turn
         from core.runtime_engine.models import SubagentRuntimeControl
 
+        completion_check = None
+        if task.coding and task.profile_id != "qa_agent":
+            from .coding_team import check_implementation
+
+            completion_check = lambda: check_implementation(task, cancel_check)
+
         op = AgentOp(
             user_input=instruction,
             workspace_id=execution_ws,
@@ -413,6 +419,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 parent_session_id=task.session_id,
                 workbench_context=inherited_workbench_context,
                 cancel_check=cancel_check,
+                completion_check=completion_check,
             ),
         )
         turn = AgentTurn.from_op(op)
@@ -737,6 +744,8 @@ def get_subagent_task(ws_id: str, subtask_id: str) -> Optional[dict]:
     task = _load_task(ws_id, subtask_id)
     if task is None:
         return None
+    from .coding_team import observe_progress
+
     return {
         "subtask_id": task.subtask_id,
         "status": task.status,
@@ -746,6 +755,7 @@ def get_subagent_task(ws_id: str, subtask_id: str) -> Optional[dict]:
         "result_artifact_id": task.result_artifact_id,
         "result_total_chars": int(task.result_total_chars or len(task.summary or "")),
         "coding": task.coding,
+        "progress": observe_progress(task) if task.coding else {},
         "errors": list(task.errors),
         "warnings": list(task.warnings),
         "created_at": task.created_at,

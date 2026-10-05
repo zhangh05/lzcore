@@ -492,6 +492,8 @@ class SSOTRuntimeEngine:
                 "tool_recovery_events": ctx.extras.get("tool_recovery_events", []),
                 "tracking_summary": ctx.extras.get("tracking_summary", {}),
                 "tracking_events": ctx.extras.get("tracking_events", []),
+                "completion_observation": ctx.extras.get("completion_observation", {}),
+                "completion_events": ctx.extras.get("completion_events", []),
                 "provider_recovery_events": ctx.extras.get("provider_recovery_events", []),
                 "task_state_checkpoint_events": ctx.extras.get("task_state_checkpoint_events", []),
             },

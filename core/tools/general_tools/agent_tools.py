@@ -14,7 +14,7 @@ from agent.runtime.durable.subagent import BUILTIN_PROFILES, SubagentProfile
 _TERMINAL_SUBTASK_STATUSES = {"succeeded", "failed", "cancelled", "canceled"}
 
 
-def _subtask_tracking(subtask_id: str, status: str) -> dict:
+def _subtask_tracking(subtask_id: str, status: str, progress=None) -> dict:
     normalized_status = str(status or "running").strip().lower()
     done = normalized_status in _TERMINAL_SUBTASK_STATUSES
     return {
@@ -22,6 +22,7 @@ def _subtask_tracking(subtask_id: str, status: str) -> dict:
         "domain": "subagent",
         "task_id": subtask_id,
         "status": normalized_status,
+        "progress": dict(progress or {}),
         "done": done,
         "terminal": done,
         "next_poll_seconds": 2,
@@ -270,6 +271,14 @@ def _spawn_agent(inv: ToolInvocation, profile_id: str) -> dict:
         )
 
     workspace_id = _caller_workspace(inv)
+    from core.tools.action_requirements import required_action_arguments
+
+    missing = [field for field in required_action_arguments("agent.manage", "spawn", {
+        **args, "profile_id": profile_id,
+    }) if not args.get(field)]
+    if missing:
+        return _error_inv(inv, "Missing required spawn arguments: " + ", ".join(missing),
+                          error_code="MISSING_REQUIRED_ARG", details={"fields": missing})
     # Omission means "use the selected profile's budget". A hidden generic
     # default previously reduced every profile to five turns and made valid
     # delegated research fail before synthesis.
@@ -403,7 +412,7 @@ def handle_agent_get_result(inv: ToolInvocation) -> dict:
                 # Preserve the child's independent lifecycle under a stable
                 # name even when _ok projects status='ok'.
                 "task_status": status,
-                "tracking": _subtask_tracking(subtask_id, status),
+                "tracking": _subtask_tracking(subtask_id, status, persisted.get("progress")),
             }
             payload.setdefault("subtask_id", subtask_id)
             payload.setdefault("preview", str(persisted.get("summary") or ""))

@@ -128,6 +128,7 @@ class SubagentRuntimeControl:
     parent_session_id: str = ""
     workbench_context: dict[str, Any] = field(default_factory=dict)
     cancel_check: Any = None
+    completion_check: Any = None
 
 
 @dataclass
