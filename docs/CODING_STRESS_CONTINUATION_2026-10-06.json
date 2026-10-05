@@ -2402,6 +2402,253 @@
         "provider": "No authentication or explicit balance exhaustion was observed in these failed QA tasks."
       },
       "evaluator_source_note": "Two independent checks were added while this stopped round was being evaluated; its acceptance report records the actual evaluator Git diff hash. All generated app checks failed because parent source was not integrated."
+    },
+    {
+      "round": "large-20261006-ling-rts-5-resume-2",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-5/reports/bench_rts_00b989b88c/3236cf8239",
+      "configuration": {
+        "provider": "custom",
+        "model": "Ling-3.0-flash",
+        "provider_type": "openai_compatible",
+        "timeout": 90,
+        "max_tokens": 16384,
+        "config_source": "ui_settings",
+        "case": "rts",
+        "session_id": "01f4ca1c6fff4def",
+        "workspace_id": "bench_rts_00b989b88c",
+        "workspace": "/private/tmp/lzcore-strict-workspaces/large-20261006-ling-rts-5/storage/bench_rts_00b989b88c",
+        "preview_origin": "http://127.0.0.1:18962",
+        "deadline_seconds": 3600,
+        "prompt_sha256": "aa0d125fd957de27ce0b7714ba71c1f60e5bbbe14b7a878c6a515a2bb02de7d9",
+        "source_commit": "525c04f1e9e549c7ea058285ad4816db564b9a1a",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "untracked_source_sha256": {},
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 18962,
+          "preview_origin": "http://127.0.0.1:18962",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "operator_cancelled": true,
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_normal_debug_guard_round_1",
+            "independent_engine_normal_debug_guard_round_2",
+            "independent_engine_normal_debug_guard_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "independent_engine_snapshot_contract_round_1",
+            "independent_engine_snapshot_contract_round_2",
+            "independent_engine_snapshot_contract_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "cleanup_confirmed": true,
+      "same_parent_task_id": "tsk_5031d9b9e4e96fc87aab",
+      "full_goal_passed": false,
+      "qa_observations": [
+        {
+          "subtask_id": "sub-b3441264",
+          "status": "failed",
+          "error": "llm_empty_response",
+          "classification": "Provider returned neither visible text nor complete tools; no QA verdict. Not a quota/authentication finding."
+        },
+        {
+          "subtask_id": "sub-7de5201e",
+          "status": "failed",
+          "error": "completion_proposal_invalid",
+          "public_proposal_sha256": "90f809e4c25a5555d1f1e4dccf6de296abfed9cd554080febd849c55618b3886",
+          "public_verdict": "fail",
+          "blocking_findings": [
+            {
+              "id": "F1",
+              "severity": "blocking",
+              "area": "ESM export",
+              "title": "dist/engine.js is IIFE with no ESM exports",
+              "evidence": "Build output dist/engine.js starts with (() => { and ends with })(); last line is var engine_default = { createGame };. No export or module.exports statement exists in the bundle. The source has export { createGame } and export default { createGame } but esbuild --platform=browser bundles them into IIFE scope without exposing ESM exports. import { createGame } from dist/engine.js fails at runtime.",
+              "contract": "dist/engine.js must be independently ESM-importable, exporting createGame"
+            },
+            {
+              "id": "F2",
+              "severity": "blocking",
+              "area": "getState fog structure",
+              "title": "getState returns fog raw grid instead of fogs per-owner explored/visible",
+              "evidence": "getState() returns fog: state.fog (raw 3D Uint8Array grid of 0/1/2 values). The contract requires getState().fogs to be each owner array of {explored, visible} grids. The field name is also wrong (fog vs fogs) and the structure is wrong (raw grid vs per-owner explored/visible).",
+              "contract": "getState().fogs must be each owner {explored: boolean[][], visible: boolean[][]}"
+            },
+            {
+              "id": "F3",
+              "severity": "blocking",
+              "area": "snapshot projectiles",
+              "title": "snapshot() missing projectiles field; no projectile code exists",
+              "evidence": "grep for projectile in src/engine.js returns exit code 1 (no matches). snapshot() returns fogs, tick, units, buildings, resources, pathQueue, stats but has no projectiles field. The contract requires snapshot.projectiles as current alive projectiles array.",
+              "contract": "snapshot.projectiles must be current alive projectiles array"
+            },
+            {
+              "id": "F4",
+              "severity": "blocking",
+              "area": "snapshot fogs structure",
+              "title": "snapshot.fogs is raw fog grid not per-owner explored/visible",
+              "evidence": "snapshot.fogs is state.fog.map(f => f.map(row => [...row])) which is the raw 3D fog grid (0/1/2 values), not per-owner {explored, visible} structure.",
+              "contract": "snapshot.fogs must be each owner {explored, visible} arrays"
+            },
+            {
+              "id": "F5",
+              "severity": "blocking",
+              "area": "save/load fog structure",
+              "title": "save/load preserve raw fog grid not fogs explored/visible structure",
+              "evidence": "save() stores fog: state.fog.map(f => f.map(row => [...row])). load() restores state.fog = data.fog.map(f => f.map(row => new Uint8Array(row))). Both use raw fog grid, not {explored, visible} per-owner structure.",
+              "contract": "save/load must preserve fogs per-owner explored/visible structure"
+            },
+            {
+              "id": "F6",
+              "severity": "blocking",
+              "area": "window.game debug exposure",
+              "title": "No window.game exposure in debug mode",
+              "evidence": "grep for window.game in src/engine.js, index.html, server.js returns exit code 1 (no matches). The contract requires window.game to expose the engine when ?debug=1 is present.",
+              "contract": "window.game must expose engine when debug mode is active via ?debug=1"
+            }
+          ],
+          "classification": "Framework underspecified prompt/schema: valid JSON with rich title/evidence findings was rejected by undisclosed strings-only validator. A shared schema now permits both meaningful text and evidence objects, and every blocking finding still rejects PASS."
+        }
+      ],
+      "candidate_independent_diagnostic": {
+        "scope": "One-seed independent diagnostics of unintegrated candidate, not team or full application acceptance.",
+        "source_subtask_id": "sub-9a36a1a4",
+        "source_digest": "3f42c8a0baac8494d25b1319bbb654c1e16a41dd5c4115234e34d438d1e7c932",
+        "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+        "seed": 651829235,
+        "checks": [
+          {
+            "scenario": "snapshot_contract",
+            "status": "FAIL",
+            "stdout": "",
+            "error": "snapshot.projectiles must expose live projectiles\n"
+          },
+          {
+            "scenario": "normal_debug_guard",
+            "status": "PASS",
+            "stdout": "{\"scenario\":\"normal_debug_guard\",\"seed\":651829235,\"evidence\":{\"seed\":651829235,\"debugRejected\":true,\"unchanged\":true}}\n",
+            "error": ""
+          },
+          {
+            "scenario": "seed_and_tick",
+            "status": "FAIL",
+            "stdout": "",
+            "error": "(intermediate value).resources.every is not a function\n"
+          },
+          {
+            "scenario": "save_load",
+            "status": "PASS",
+            "stdout": "{\"scenario\":\"save_load\",\"seed\":651829235,\"evidence\":{\"restoredTick\":80}}\n",
+            "error": ""
+          },
+          {
+            "scenario": "fog_save",
+            "status": "FAIL",
+            "stdout": "",
+            "error": "Cannot read properties of undefined (reading 'map')\n"
+          },
+          {
+            "scenario": "battle_100v100",
+            "status": "FAIL",
+            "stdout": "",
+            "error": "100v100 units never actually fought\n"
+          },
+          {
+            "scenario": "movement_200",
+            "status": "FAIL",
+            "stdout": "",
+            "error": "invalid live unit\n"
+          },
+          {
+            "scenario": "continuation_determinism",
+            "status": "FAIL",
+            "stdout": "",
+            "error": "       0,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n          0,\n          0,\n          0,\n          0,\n          0,\n...\n          0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0\n        ],\n        [\n          0,\n          0,\n          0,\n...\n          0,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n-         2,\n          0,\n          0,\n          0,\n          0,\n          0,\n...\n          0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0,\n+         0\n        ],\n        [\n          0,\n          0,\n          0,\n...\n          0,\n-         2,\n-         2,\n-         2,\n-         2,\n          0,\n          0,\n          0,\n          0,\n          0,\n...\n          0,\n+         0,\n+         0,\n+         0,\n+         0\n        ],\n        [\n          0,\n          0,\n          0,\n...\n      ],\n+     commandsProcessed: 0,\n-     commandsProcessed: 3,\n      pathsFailed: 0,\n      pathsFound: 0,\n      resourcesGathered: [\n        0,\n        0\n\n"
+          },
+          {
+            "scenario": "long_run_cleanup",
+            "status": "FAIL",
+            "stdout": "",
+            "error": "invalid live unit\n"
+          }
+        ],
+        "source_unchanged": true,
+        "cleanup_confirmed": true
+      },
+      "failure_boundary": "Battle/movement diagnostics cannot establish underlying gameplay correctness while canonical positions/resources/fog/projectiles are mismatched; failures remain real interface-contract failures. Existing source remains unintegrated and unchanged."
     }
   ],
   "framework_native_dependency_runtime": {

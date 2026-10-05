@@ -128,3 +128,43 @@ def test_independent_team_verifier_rejects_integration_with_invalid_qa_evidence(
     qa=subagent._load_task('parent-ws',reviewed['subtask_id']);mutation(qa.coding['qa_review']);subagent._save_task(qa)
     with pytest.raises(AssertionError,match='independent QA verdict'):
         verify_team('parent-ws','parent-session','files/data/app')
+
+
+@pytest.mark.parametrize('verdict',['fail','pass'])
+def test_structured_blocking_evidence_is_preserved_and_always_rejects_candidate(team,monkeypatch,verdict):
+    first=team.spawn()
+    finding={'id':'F1','severity':'critical','area':'browser','title':'Missing ESM exports',
+             'evidence':'index.html imports createGame; build emits an IIFE.','contract':'Actual preview must boot.'}
+    qa_runtime(monkeypatch,verdict,[finding])
+    reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
+    assert qa.coding['qa_review']['blocking_findings']==[finding]
+    assert qa.coding['qa_review']['verdict']=='fail' and qa.coding['phase']=='qa_rejected'
+    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='qa_rejected'
+    assert not subagent.merge_subagent_result('parent-task',first['subtask_id'],'parent-ws')['ok']
+
+
+@pytest.mark.parametrize('finding',[None,False,{}, {'title':'missing evidence'},
+    {'title':'','evidence':'observed'},{'title':'observed','evidence':'  '}])
+def test_malformed_blocking_evidence_cannot_be_accepted_or_inferred(team,monkeypatch,finding):
+    first=team.spawn();qa_runtime(monkeypatch,'fail',[finding])
+    reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
+    assert qa.status=='failed' and not qa.coding.get('qa_review')
+    assert qa.coding['qa_invalid_proposal']==report('fail',[finding])
+    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='changes_ready'
+
+
+def test_known_qa_rejection_has_review_summary_instead_of_provider_failure(team,monkeypatch):
+    first=team.spawn()
+    def runtime(session,turn,**kw):
+        observed=turn.op.runtime_control.completion_proposal_check(report('fail',['Real interface defect.']))
+        # The real QueryLoop terminates with ok=False on a known review rejection.
+        assert observed['terminal_error']=='coding_qa_review_rejected'
+        return SimpleNamespace(ok=False,final_response=report('fail',['Real interface defect.']),
+             tool_calls=[],errors=['coding_qa_review_rejected'])
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',runtime)
+    reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
+    assert qa.status=='failed' and qa.coding['phase']=='qa_rejected'
+    assert 'Independent QA verdict fail' in qa.summary and 'LLM call failed' not in qa.summary

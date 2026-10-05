@@ -6,14 +6,30 @@ from storage.project_changes import manifest_digest, project_path, source_manife
 from storage.redaction import redact_value
 
 QA_SCHEMA = "coding.qa_review.v1"
+_TEXT = {"type": "string", "minLength": 1}
+QA_REVIEW_SCHEMA = {
+    "type": "object",
+    "required": ["schema", "verdict", "scope", "blocking_findings", "report"],
+    "properties": {
+        "schema": {"type": "string", "enum": [QA_SCHEMA]},
+        "verdict": {"type": "string", "enum": ["pass", "fail", "unknown"]},
+        "scope": _TEXT, "report": _TEXT,
+        "blocking_findings": {"type": "array", "items": {"oneOf": [
+            _TEXT, {"type": "object", "required": ["title", "evidence"],
+                    "properties": {"title": _TEXT, "evidence": _TEXT}},
+        ]}},
+    },
+}
 
 
 def review_instruction():
     return (
-        "[SERVER QA REVIEW CONTRACT]\nReturn one complete JSON object, without Markdown fences: "
-        '{"schema":"coding.qa_review.v1","verdict":"pass|fail|unknown",'
-        '"scope":"the delegated phase reviewed","blocking_findings":[],"report":"full QA report"}. '
-        "Use fail for any blocking finding, unknown for unverified required evidence. "
+        "[SERVER QA REVIEW CONTRACT]\nReturn one complete JSON object, without Markdown fences. "
+        "Use this same server validation schema (all text must be nonempty): "
+        + json.dumps(QA_REVIEW_SCHEMA, separators=(",", ":"))
+        + "\nUse fail for any blocking finding, unknown for unverified required evidence. "
+        "Blocking findings may be nonempty strings or evidence objects with nonempty title/evidence; "
+        "retain useful severity/location/contract fields. Any blocking item prevents PASS. "
         "A successful test/build or Agent turn cannot override your failed judgement. "
         "Keep the complete report, concrete findings and phase boundaries. Do not change source."
     )
@@ -82,13 +98,14 @@ def review_qa_proposal(task, proposal):
     from .subagent import _save_task
     try:
         review = json.loads(proposal)
-        if (not isinstance(review, dict) or review.get("schema") != QA_SCHEMA
-                or review.get("verdict") not in {"pass", "fail", "unknown"}
-                or not isinstance(review.get("scope"), str) or not review["scope"].strip()
-                or not isinstance(review.get("report"), str) or not review["report"].strip()
-                or not isinstance(review.get("blocking_findings"), list)
-                or any(not isinstance(item, str) or not item.strip() for item in review["blocking_findings"])):
+        from core.tools.executor import validate_schema_value
+        if validate_schema_value("qa_review", review, QA_REVIEW_SCHEMA):
             raise ValueError("invalid_qa_review")
+        texts = [review["scope"], review["report"]]
+        for finding in review["blocking_findings"]:
+            texts.extend([finding] if isinstance(finding, str) else [finding["title"], finding["evidence"]])
+        if any(not text.strip() for text in texts):
+            raise ValueError("empty_qa_review_text")
     except (ValueError, TypeError):
         task.coding["qa_invalid_proposal"] = redact_value(proposal)
         _save_task(task)

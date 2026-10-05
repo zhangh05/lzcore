@@ -512,7 +512,9 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 result.summary = "Subagent result persistence failed"
         else:
             result.status = "failed"
-            result.summary = "Subagent LLM call failed"
+            review = task.coding.get("qa_review") if task.profile_id == "qa_agent" else None
+            result.summary = (f"Independent QA verdict {review['verdict']}; candidate not accepted. See coding.qa_review for full evidence."
+                              if review else "Subagent LLM call failed")
             llm_errors = list(getattr(llm_result, "errors", []) or []) if llm_result is not None else []
             if llm_errors:
                 result.errors.extend(str(error)[:300] for error in llm_errors[:10])
