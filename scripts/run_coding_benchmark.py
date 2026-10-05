@@ -88,10 +88,6 @@ def main() -> int:
     # This never enables private-network or arbitrary JS evaluation switches.
     os.environ["LZCORE_BROWSER_LOCAL_PREVIEWS"] = json.dumps({f"local/{ws}": [origin]})
     config = resolve_provider_config()
-    if not config.get("enabled") or not config.get("key_loaded"):
-        raise RuntimeError(
-            "A real enabled provider with loaded credentials is required"
-        )
     prompt_path = (
         args.prompt or ROOT / "harness/fixtures/coding_bench" / f"{args.case}.md"
     )
@@ -162,6 +158,29 @@ def main() -> int:
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     (report / "prompt.md").write_text(prompt, encoding="utf-8")
+    from scripts.benchmark_preflight import provider_preflight
+
+    readiness = provider_preflight(config)
+    (report / "preflight.json").write_text(
+        json.dumps(readiness, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if readiness["status"] != "READY":
+        blocked = {
+            "schema": "coding.benchmark_verdict.v1",
+            "status": "BLOCKED",
+            "stage": "provider_preflight",
+            "reason": readiness["reason"],
+            "agent_started": False,
+            "named_acceptance_passed": None,
+            "execution_environment_started": False,
+            "cleanup_required": False,
+            "full_benchmark_acceptance": "NOT VERIFIED",
+        }
+        (report / "verdict.json").write_text(
+            json.dumps(blocked, indent=2), encoding="utf-8"
+        )
+        print(json.dumps({"report": str(report), **blocked}), flush=True)
+        return 2
     cancel = threading.Event()
     timer = threading.Timer(args.deadline, cancel.set)
     timer.daemon = True
