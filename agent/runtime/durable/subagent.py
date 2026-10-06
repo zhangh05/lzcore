@@ -173,6 +173,7 @@ class SubagentTask:
     result_artifact_id: str = ""
     result_total_chars: int = 0
     coding: dict = field(default_factory=dict)
+    observations: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.created_at:
@@ -398,6 +399,13 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         from core.runtime_engine.models import SubagentRuntimeControl
 
         completion_check = None
+        fact_projector = None
+        if task.coding:
+            from .coding_project import for_session, guidance
+            from core.runtime_engine.prompt_contract import trusted_prompt_item
+            def fact_projector():
+                return [trusted_prompt_item("project_state", guidance(for_session(
+                    task.workspace_id, task.session_id, task.parent_task_id)))]
         if task.coding and task.profile_id != "qa_agent":
             from .coding_team import check_implementation
 
@@ -408,6 +416,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
             workspace_id=execution_ws,
             session_id=subagent_session_id,
             runtime_control=SubagentRuntimeControl(
+                fact_projector=fact_projector,
                 profile={
                     "profile_id": profile.profile_id,
                     "name": profile.name,
@@ -762,6 +771,13 @@ def get_subagent_task(ws_id: str, subtask_id: str) -> Optional[dict]:
     if task is None:
         return None
     from .coding_team import observe_progress
+    domain = {}
+    if task.coding:
+        from .coding_state import candidate, review
+        from .coding_project import project_id, snapshot
+        domain = {"candidate": candidate(task) if task.profile_id != "qa_agent" else None,
+                  "review": review(task) if task.profile_id == "qa_agent" else None,
+                  "project": snapshot(ws_id, project_id(task))}
 
     return {
         "subtask_id": task.subtask_id,
@@ -773,6 +789,8 @@ def get_subagent_task(ws_id: str, subtask_id: str) -> Optional[dict]:
         "result_total_chars": int(task.result_total_chars or len(task.summary or "")),
         "coding": task.coding,
         "progress": observe_progress(task) if task.coding else {},
+        "domain_state": domain,
+        "observations": dict(task.observations),
         "errors": list(task.errors),
         "warnings": list(task.warnings),
         "created_at": task.created_at,
@@ -838,7 +856,7 @@ def merge_subagent_result(parent_task_id: str, subtask_id: str, ws_id: str) -> d
         return {"ok": False, "error": "workspace mismatch"}
     if task.parent_task_id != parent_task_id:
         return {"ok": False, "error": "subtask parent mismatch"}
-    if task.status != "succeeded":
+    if task.status != "succeeded" and not task.coding:
         return {
             "ok": False,
             "error": f"subtask is {task.status}; only succeeded tasks can merge",
@@ -869,6 +887,22 @@ def _save_task(task: SubagentTask):
     saved = save_subagent(task.workspace_id, task.subtask_id, asdict(task))
     for field in ("status", "summary", "finished_at", "errors", "warnings"):
         setattr(task, field, saved[field])
+    if task.coding:
+        from .coding_project import record_task
+        try:
+            record_task(task)
+            if "project_state" in task.observations:
+                task.observations.pop("project_state")
+                save_subagent(task.workspace_id, task.subtask_id, asdict(task))
+        except Exception:
+            # A factual index must not erase the worker's durable outcome.
+            # Its availability is reported by the project-state projection.
+            import logging
+            logging.getLogger(__name__).warning("coding project index unavailable for %s", task.subtask_id)
+            from core.runtime_engine.failure_attribution import observation
+            task.observations["project_state"] = observation("coding_project_state_unavailable",
+                stage="project_state", reference=task.subtask_id)
+            save_subagent(task.workspace_id, task.subtask_id, asdict(task))
 
 def _load_task(ws_id: str, subtask_id: str) -> Optional[SubagentTask]:
     from storage.subagent_store import read_subagent
@@ -880,7 +914,11 @@ def _load_task(ws_id: str, subtask_id: str) -> Optional[SubagentTask]:
     try:
         raw = read_subagent(ws_id, subtask_id)
         if not raw: return None
-        return SubagentTask(**{k:v for k,v in raw.items() if k in SubagentTask.__dataclass_fields__})
+        task = SubagentTask(**{k:v for k,v in raw.items() if k in SubagentTask.__dataclass_fields__})
+        if task.coding:
+            from .coding_state import project_task
+            project_task(task)
+        return task
     except Exception: return None
 
 

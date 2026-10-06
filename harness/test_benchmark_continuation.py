@@ -8,7 +8,7 @@ from scripts.benchmark_continuation import continuation_preflight
 from storage.message_store import SessionMessageStore
 
 
-def test_continuation_requires_known_parent_and_compatible_current_request(monkeypatch, tmp_path):
+def test_continuation_requires_known_parent_without_interpreting_prompt_language(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
     state = commit_task_state(
         workspace_id="owned", session_id="session", run_id="run-original",
@@ -22,11 +22,13 @@ def test_continuation_requires_known_parent_and_compatible_current_request(monke
     before = load_task_state("owned", "session")
     valid = continuation_preflight("owned", "session", "继续同一工程，先准确QA。", task_id)
     assert valid["status"] == "READY" and valid["resolved_task_id"] == task_id
+    for prompt in ["纠正上一轮结论并继续原任务。" + "Detailed contract. " * 100,
+                   "Create a different new application"]:
+        assert continuation_preflight("owned", "session", prompt, task_id)["status"] == "READY"
+        assert load_task_state("owned", "session") == before
     for expected, prompt, reason in [
         ("", "继续同一工程。", "explicit_parent_task_identity_required"),
         ("another-parent", "继续同一工程。", "parent_task_identity_mismatch"),
-        (task_id, "纠正上一轮结论并继续原任务。" + "Detailed contract. " * 100, "request_would_start_another_task"),
-        (task_id, "Create a different new application", "request_would_start_another_task"),
     ]:
         result = continuation_preflight("owned", "session", prompt, expected)
         assert result["status"] == "BLOCKED" and result["reason"] == reason

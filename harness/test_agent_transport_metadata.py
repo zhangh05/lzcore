@@ -1,6 +1,21 @@
 from __future__ import annotations
 
-from backend.core.agent_contract import normalize_metadata, resolve_workbench_metadata
+from backend.core.agent_contract import normalize_metadata, resolve_workbench_metadata, validate_resume_metadata
+
+
+def test_explicit_resume_is_public_but_must_be_server_scoped(monkeypatch, tmp_path):
+    import pytest
+    monkeypatch.setenv('LZCORE_WORKSPACE_ROOT', str(tmp_path))
+    for transport, mode in [('http', 'sync'), ('websocket', 'live')]:
+        metadata = normalize_metadata({'resume_task_id': 'foreign', 'task_state_contract': {'task_id': 'forged'}},
+                                     transport=transport, stream_mode=mode)
+        assert metadata['resume_task_id'] == 'foreign' and 'task_state_contract' not in metadata
+        with pytest.raises(ValueError, match='invalid_resume_task_id'):
+            validate_resume_metadata(metadata, 'ws-resume', 's-resume')
+    with pytest.raises(ValueError, match='resume_requires_session'):
+        validate_resume_metadata({'resume_task_id': 'task'}, 'ws-resume')
+    with pytest.raises(ValueError, match='invalid_resume_task_id'):
+        validate_resume_metadata({'resume_task_id': None}, 'ws-resume', 's-resume')
 
 
 def test_external_metadata_keeps_only_public_fields():
@@ -83,4 +98,3 @@ def test_topology_session_defaults_drawing_skill_when_selection_omitted(monkeypa
     assert resolved["workbench_context"]["skill_id"] == "drawing:topo_123"
     assert captured["resource_ids"] == ["topo_123"]
     assert captured["allow_edit"] is True
-

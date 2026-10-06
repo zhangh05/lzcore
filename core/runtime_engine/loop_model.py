@@ -196,6 +196,34 @@ class LoopModelGateway:
         to guarantee a hard timeout and prevent event-loop blocking.
         """
         try:
+            projector = ctx.extras.get("__runtime_fact_projector")
+            if callable(projector):
+                try:
+                    from .prompt_contract import TrustedPromptItem
+                    items = projector()
+                    if any(not isinstance(item, TrustedPromptItem) for item in items):
+                        raise ValueError("invalid_runtime_fact_projection")
+                    kinds = {item.source_kind for item in items}
+                    previous = ctx.extras.get("trusted_prompt_items") or []
+                    ctx.extras["trusted_prompt_items"] = [item for item in previous
+                        if getattr(item, "source_kind", "") not in kinds] + items
+                    ctx.extras["runtime_fact_projection"] = {"status": "available"}
+                except Exception as exc:
+                    # Observation degradation is not a new planning or model
+                    # completion gate. Preserve it for diagnostics.
+                    ctx.extras["runtime_fact_projection"] = {"status": "unavailable", "cause": type(exc).__name__}
+                    from .prompt_contract import trusted_prompt_item
+                    ctx.extras["trusted_prompt_items"] = [item for item in ctx.extras.get("trusted_prompt_items", [])
+                        if getattr(item, "source_kind", "") != "project_state"] + [trusted_prompt_item(
+                            "project_state", "Recorded project facts are currently unavailable; previous phase facts may be stale.")]
+                from .prompt_contract import render_trusted_prompt_item
+                rendered = "\n".join(render_trusted_prompt_item(item) for item in
+                    ctx.extras.get("trusted_prompt_items", []) if getattr(item, "source_kind", "") == "project_state")
+                if rendered and rendered != ctx.extras.get("_runtime_fact_projection"):
+                    # Append observations in causal order, as for cognitive
+                    # facts. Do not rewrite historic messages or tool pairs.
+                    messages.append(LLMMessage(role="user", content=rendered))
+                    ctx.extras["_runtime_fact_projection"] = rendered
             provider_timeout_seconds = max(
                 1.0, self._config.llm_call_timeout_ms / 1000.0
             )

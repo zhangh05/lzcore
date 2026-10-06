@@ -10,6 +10,8 @@ from agent.runtime.durable.coding_reviews import check_qa, review_qa_proposal
 from core.tools.context import ToolRuntimeContext
 from core.tools.project_execution import DockerProjectEnvironment
 from storage.project_changes import project_path
+from harness.coding_record_fixtures import corrupt_record
+from agent.runtime.durable.coding_state import candidate_id, review_id
 
 
 def report(verdict='pass', findings=None):
@@ -49,7 +51,7 @@ def test_public_qa_failure_blocks_publication_even_when_all_checks_pass(team,mon
 def test_legacy_test_only_qa_cannot_publish_without_typed_judgement(team):
     first=team.spawn();reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
-    del qa.coding['qa_review'];subagent._save_task(qa)
+    corrupt_record('parent-ws', 'reviews', review_id(qa.subtask_id), lambda r: r.update(judgement=None))
     result=subagent.merge_subagent_result('parent-task',first['subtask_id'],'parent-ws')
     assert result['error']=='coding_qa_verdict_required' and not result['automatic_retry_allowed']
 
@@ -127,7 +129,8 @@ def test_independent_team_verifier_rejects_integration_with_invalid_qa_evidence(
     first=team.spawn();reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     assert subagent.merge_subagent_result('parent-task',first['subtask_id'],'parent-ws')['ok']
     assert verify_team('parent-ws','parent-session','files/data/app')['status']=='PASS'
-    qa=subagent._load_task('parent-ws',reviewed['subtask_id']);mutation(qa.coding['qa_review']);subagent._save_task(qa)
+    qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
+    corrupt_record('parent-ws','reviews',review_id(qa.subtask_id),lambda r:mutation(r['judgement']))
     with pytest.raises(AssertionError,match='independent QA verdict'):
         verify_team('parent-ws','parent-session','files/data/app')
 
@@ -201,10 +204,11 @@ def test_ready_unpublished_proposal_can_be_explicitly_revised_without_a_prior_qa
 def test_ready_revision_rejects_tampered_unknown_active_or_published_proposals(team,mutation):
     first=team.spawn();original=subagent._load_task('parent-ws',first['subtask_id'])
     if mutation=='source':project_path(original.coding['branch_workspace'],'files/data/app').joinpath('src/value.py').write_text('tampered')
-    elif mutation=='unknown':original.coding['completion_validation']['status']='unknown'
-    elif mutation=='active':original.coding['environment']['closed']=False
-    else:original.coding['phase']='integrated'
-    subagent._save_task(original)
+    elif mutation=='unknown':corrupt_record('parent-ws','candidates',candidate_id(original.subtask_id),lambda r:r['validation'].update(status='unknown'))
+    elif mutation=='active':corrupt_record('parent-ws','candidates',candidate_id(original.subtask_id),lambda r:r['resources'].update(closed=False))
+    else:
+        assert team.spawn('qa_agent',review=original.subtask_id)['task_status']=='succeeded'
+        assert subagent.merge_subagent_result('parent-task',original.subtask_id,'parent-ws')['ok']
     task=subagent.SubagentTask(parent_task_id='parent-task',workspace_id='parent-ws',session_id='parent-session',profile_id='coding_agent')
     with pytest.raises(ValueError,match='candidate_changed|stopped_known'):
         coding_team.create_assignment(task,{'project_dir':'files/data/app','responsibilities':['src'],

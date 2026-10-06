@@ -344,6 +344,16 @@ def archive_session(session_id: str, ws_id: str = "default") -> Optional[Dict[st
     return update_session(session_id, ws_id, status="archived")
 
 
+def session_is_deleted(session_id: str, ws_id: str) -> bool:
+    """A durable tombstone forbids late writers from recreating session facts."""
+    return _session_is_tombstoned_unlocked(validate_session_id(session_id), validate_workspace_id(ws_id))
+
+
+def session_record_lock(session_id: str, ws_id: str):
+    """Shared lifecycle lock for records that must not outlive hard deletion."""
+    return _session_lock(validate_session_id(session_id), validate_workspace_id(ws_id))
+
+
 def delete_session_permanently(
     session_id: str, ws_id: str = "default", confirm: bool = False
 ) -> bool:
@@ -428,6 +438,11 @@ def delete_session_permanently(
                     ws_id,
                     type(exc).__name__,
                 )
+        try:
+            from storage.coding_state_store import delete_session_records
+            delete_session_records(ws_id, safe_id)
+        except (OSError, TypeError, ValueError):
+            failures.append("coding_state_delete_failed")
         complete = not path.exists() and not msg_dir.exists() and not request_registry_dir.exists()
         if failures or not complete:
             _LOG.error(

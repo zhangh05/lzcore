@@ -23,6 +23,34 @@ def register_state_routes(app):
         except Exception:
             return "", (jsonify({"ok": False, "error": "invalid_workspace_id"}), 400)
 
+    @app.route("/api/runtime/sessions/<session_id>/coding-projects")
+    def api_coding_projects(session_id):
+        from flask import request, jsonify
+        from storage.ids import validate_session_id
+        ws_id, error = _validated_ws_id(request.args.get("workspace_id", ""))
+        if error:
+            return error
+        try:
+            session_id = validate_session_id(session_id)
+            from agent.runtime.durable.coding_project import for_session
+            return jsonify({"ok": True, "projects": for_session(ws_id, session_id)})
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @app.route("/api/runtime/sessions/<session_id>/task-state")
+    def api_session_task_state(session_id):
+        from flask import request, jsonify
+        from storage.ids import validate_session_id
+        ws_id, error = _validated_ws_id(request.args.get("workspace_id", ""))
+        if error:
+            return error
+        try:
+            session_id = validate_session_id(session_id)
+            from agent.runtime.task_state import load_task_state
+            return jsonify({"ok": True, "task_state": load_task_state(ws_id, session_id)})
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
     @app.route("/api/runtime/tasks")
     def api_runtime_tasks():
         from flask import request, jsonify

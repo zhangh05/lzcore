@@ -558,9 +558,10 @@ def register_ws_routes(app):
                 from backend.core.agent_contract import normalize_metadata
                 metadata = normalize_metadata(metadata, transport="websocket", stream_mode="live")
                 try:
-                    from backend.core.agent_contract import resolve_workbench_metadata
+                    from backend.core.agent_contract import resolve_workbench_metadata, validate_resume_metadata
                     from storage.principal import storage_principal
                     with storage_principal(authenticated_username):
+                        validate_resume_metadata(metadata, workspace_id, session_id)
                         metadata = resolve_workbench_metadata(metadata, workspace_id, session_id=session_id)
                 except ValueError as exc:
                     ws.send(json.dumps({"type": "error", "message": str(exc)}, ensure_ascii=True))

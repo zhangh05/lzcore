@@ -27,6 +27,8 @@
 
 HTTP message 带 session_id 和 client_request_id 时，实际 Agent 运行绑定已认领的 session job：阶段事件更新该回合，取消检查读取同一作业。回合结束恢复原事件回调，过期回调不更新后续请求。HTTP 响应仍是整轮结果，不因此提供 token 续流。
 
+HTTP `/api/agent/message` 和 WebSocket `message` 均接受 `metadata.resume_task_id`。工作台“继续任务”先读取当前会话的 TaskState，再显式传该 ID；任务身份按认证主体、workspace、session 核对，缺失、跨会话或已被新任务替换的 ID 被拒绝。SSOT 在执行前重新核对并用 revision CAS 开始同一任务。显式续接不判断请求语言；只有未提供此字段时才使用自然语言续接 fallback。字段不授权工具、不自动恢复子任务，也不重放未知写入。WebSocket `type=resume` 仍只恢复传输日志，与任务续接不同。
+
 Provider 的有界空响应重试及候选回退耗尽后，返回 `llm_empty_response`，用户目标记为失败；QueryLoop 不再无限重发。输出截断走原有续接，未完成的工具参数不执行，不能把截断或空响应记为成功。
 
 ### WebSocket 与持久回合
@@ -53,6 +55,7 @@ topology_updated 仅带 workspace_id/topology_id/version；job_updated 合并最
 | --- | --- | --- |
 | `GET` | `/api/runtime/summary`, `/api/runtime/health`, `/api/runtime/selfcheck` | Runtime catalog and health/self-check. |
 | `GET` | `/api/runtime/tasks`, `/api/runtime/tasks/<task_id>` | Durable runtime task list/detail. |
+| `GET` | `/api/runtime/sessions/<session_id>/task-state`, `/api/runtime/sessions/<session_id>/coding-projects` | Principal/workspace-scoped generic task and project/phase facts; requires workspace_id. |
 | `GET` | `/api/runtime/tasks/<task_id>/events`, `/api/runtime/tasks/<task_id>/checkpoints` | Task event and checkpoint history. |
 | `POST` | `/api/runtime/tasks/<task_id>/cancel`, `/api/runtime/tasks/<task_id>/resume`, `/api/runtime/tasks/<task_id>/checkpoint` | Task lifecycle control. |
 | `POST` | `/api/runtime/tasks/<task_id>/steps/<step_id>/retry` | Retry a safe failed step. |
@@ -73,6 +76,8 @@ A failed tool attempt alone does not determine the user-task result. `partial`
 means some coverage is verified but required coverage remains blocked; `unknown`
 means an external write or long-running work cannot yet be confirmed. Clients
 must display these server values, not synthesize them.
+
+`metadata.failure_attributions` 保存 `runtime.failure.v1` 观察：code/category/condition/stage/reference/detail/cause。工具失败、回合失败、已恢复的 Provider/只读重试失败均保留观察；未知错误归为 unknown，不强猜根因。`cause=unresolved` 不代表已证实模型或框架有缺陷。认证失败不等于密钥过期；HTTP 400、应用检查失败不等于模型能力不足。该字段不参与规划、权限、重试或验收。候选和评审记录另保存准确检查与资源事实的分类。
 
 ## 会话、运行与工作区
 
@@ -303,6 +308,8 @@ feedback.regions 提供 members、unassigned_node_ids、missing_region_refs、ou
 ## Coding Team
 
 `agent.manage` 提供 spawn/start/list/get/status/cancel/merge。角色含 coding_agent/frontend_agent/qa_agent；角色提示不注册工具或授予权限。编码 spawn 必须带 `coding_assignment`：project_dir（files/data 下工程）、responsibilities（明确文件/目录前缀，`.` 为整个工程）、depends_on（同父任务前置 subtask_id）、validation_commands（1–12 个程序及字面参数）、review_subtask_id（QA 必需）。无领域 Skill 绑定的编码任务才可创建独立工程副本，不能静默扩大 Skill 范围。
+
+`coding_assignment.phase_id` 可声明阶段归组，省略时按实现任务分配；QA 和源码修订默认继承目标阶段。Project 保存声明、依赖和 Task/Candidate/Review 引用，不生成计划或权限。`agent.manage(get).domain_state` 返回独立 candidate/review/project 事实。`coding.phase` 仅为兼容投影；源码候选及发布由 CandidateState FSM 管理，QA 裁决、检查及资源由 Review 对象管理，Task 只表示 worker 生命周期。所有接受的并行 reviewer 都必须通过；一次 PASS 不能覆盖同批 reviewer 的失败。新显式复审保留旧记录。正式状态、事件、旧记录迁移与未知发布回查详见 `docs/architecture/CODING_RUNTIME.md`。
 
 `agent.review` 是独立 QA 的裁决保存工具，输入 review 包含 schema=coding.qa_review.v1、verdict=pass/fail/unknown、scope、blocking_findings 和完整 report。仅 subagent caller 可调用，服务端核对活动 QA 环境与会话并绑定准确候选；实现者、父任务、其他会话及关闭环境不能代交裁决。它不修改或发布源码，最终文字回复可自由表达。缺少裁决或阻断发现仍不能整合，实际检查未知仍禁止重放。
 

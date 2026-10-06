@@ -284,7 +284,8 @@ def main() -> int:
                 prompt,
                 workspace_id=ws,
                 session_id=session_id,
-                metadata={"transport": "coding_benchmark"},
+                metadata={"transport": "coding_benchmark", **({"resume_task_id": args.resume_task_id}
+                    if args.resume_task_id else {})},
                 runtime_control=MainAgentRuntimeControl(cancel_check=cancel.is_set),
             )
         agent_turn_ok = result.ok

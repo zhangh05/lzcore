@@ -19,6 +19,7 @@ import { TaskProgressPanel } from "./components/TaskProgressPanel";
 import { WorkbenchHeader } from "./components/WorkbenchHeader";
 import { WorkbenchComposer, type WorkbenchSkill } from "./components/WorkbenchComposer";
 import { WorkbenchEmptyState } from "./components/WorkbenchEmptyState";
+import { TaskResumeControl } from "./components/TaskResumeControl";
 
 const RuntimeEventTimeline = lazy(() => import("../../components/RuntimeEventTimeline").then((m) => ({ default: m.RuntimeEventTimeline })));
 
@@ -95,10 +96,15 @@ export function TaskWorkbench() {
   }, [isSkillLocked, selectedSkill, workbenchSkills]);
   const sending = useWorkbenchStore((s) => Boolean(currentSessionId && s.activeTurns?.[currentSessionId]));
   const sessionListVersion = useSessionStore(s => s.sessionListVersion);
-  const lastUserInput = useWorkbenchStore((s) => s.lastUserInput);
   const visibleHistory = useWorkbenchStore(
     (s) => s.bySession?.[currentSessionId ?? "_scratch"] ?? EMPTY_CHAT_MESSAGES,
   );
+  const lastUserInput = useMemo(() => {
+    for (let index = visibleHistory.length - 1; index >= 0; index--) {
+      if (visibleHistory[index].role === "user") return visibleHistory[index].text;
+    }
+    return "";
+  }, [visibleHistory]);
   const switchSession = useWorkbenchStore((s) => s.switchSession);
   const mergeFromBackend = useWorkbenchStore((s) => s.mergeFromBackend);
 
@@ -676,7 +682,17 @@ export function TaskWorkbench() {
               <IconAlert size={13} />
               <span>{humanFailure(lastResult.error_type, lastResult.errors?.[0] ?? "请求失败").msg}</span>
               {humanFailure(lastResult.error_type, lastResult.errors?.[0] ?? "").retryable ? (
-                <button type="button" onClick={() => onSendRef.current(lastUserInput)} data-testid="retry-btn">
+                <button type="button" onClick={() => {
+                  void apiRequest<{ task_state: { task?: { task_id: string } } }>({
+                    url: `/runtime/sessions/${encodeURIComponent(currentSessionId)}/task-state`,
+                    params: { workspace_id: currentWorkspaceId },
+                  }).then(({ task_state }) => {
+                    const current = useSessionStore.getState();
+                    if (current.currentSessionId !== currentSessionId || current.currentWorkspaceId !== currentWorkspaceId) return;
+                    if (!task_state.task?.task_id) throw new Error("task_state_unavailable");
+                    onSendRef.current(lastUserInput, { resume_task_id: task_state.task.task_id });
+                  }).catch(() => toast({ kind: "warning", title: "无法续接任务", body: "当前任务身份未能读取，请刷新后核对。" }));
+                }} data-testid="retry-btn">
                   <IconRefresh size={13} />重试
                 </button>
               ) : null}
@@ -684,6 +700,9 @@ export function TaskWorkbench() {
           );
         })()}
 
+        <TaskResumeControl workspaceId={currentWorkspaceId} sessionId={currentSessionId}
+          running={turnRunning} turnId={latestAssistant?.run_id}
+          onResume={(text, metadata) => onSendRef.current(text, metadata)} />
         <WorkbenchComposer
           currentSessionId={currentSessionId}
           turnRunning={turnRunning}

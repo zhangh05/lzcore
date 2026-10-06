@@ -129,6 +129,7 @@ class SubagentRuntimeControl:
     workbench_context: dict[str, Any] = field(default_factory=dict)
     cancel_check: Any = None
     completion_check: Any = None
+    fact_projector: Any = None
 
 
 @dataclass
@@ -152,6 +153,11 @@ class ToolResult:
     # provenance.
     error_code_raw: str = ""
     error_code_norm: str = ""
+
+    def __post_init__(self):
+        if not self.success:
+            from .failure_attribution import collect
+            self.metadata["failure_attributions"] = collect(tool_calls=[self])
 
 
 @dataclass

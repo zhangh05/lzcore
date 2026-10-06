@@ -24,6 +24,7 @@ _TRUSTED_SOURCE_KINDS = frozenset({
     "managed_attachment",
     "workbench_skill",
     "task_continuation",
+    "project_state",
     "task_state",
     "operational_guard",
     "capability_playbook",

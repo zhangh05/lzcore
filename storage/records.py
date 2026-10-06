@@ -198,6 +198,27 @@ def read_json_record(workspace_id: str, parts: Iterable[str]) -> dict[str, Any] 
     return data if isinstance(data, dict) else None
 
 
+def mutate_json_record(
+    workspace_id: str, parts: Iterable[str],
+    mutator: Callable[[dict[str, Any] | None], tuple[dict[str, Any], Any]],
+) -> Any:
+    """Serialize a JSON record read/modify/write across threads and processes.
+
+    A corrupt existing record must not be treated as a missing record: doing
+    so would reset its revision and erase recovery evidence.
+    """
+    path = workspace_record_file(workspace_id, *tuple(parts))
+    with _lock_for(path), _file_lock(path):
+        current = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        if current is not None and not isinstance(current, dict):
+            raise ValueError("non_object_json_record")
+        replacement, result = mutator(current)
+        if not isinstance(replacement, dict):
+            raise ValueError("non_object_json_record")
+        atomic_write_json(path, replacement)
+        return result
+
+
 def read_json_record_path(path: Path) -> dict[str, Any] | None:
     """Read a dict JSON record from an explicit storage-owned path."""
     if not path.is_file():

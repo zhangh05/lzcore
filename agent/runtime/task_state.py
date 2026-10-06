@@ -304,6 +304,7 @@ def resolve_task_state(
     session_id: str,
     user_input: str,
     messages: Iterable[dict[str, Any]],
+    resume_task_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Resolve a resumable generic task using a recent complete exchange guard.
 
@@ -312,6 +313,12 @@ def resolve_task_state(
     """
     state = load_task_state(workspace_id, session_id)
     task = state.get("task") if isinstance(state.get("task"), dict) else None
+    if resume_task_id is not None:
+        if (not isinstance(resume_task_id, str) or not resume_task_id
+                or not task or task.get("task_id") != resume_task_id
+                or str(task.get("status") or "") not in _TASK_RESUMABLE):
+            raise ValueError("invalid_resume_task_id")
+        return _contract_from_state(state, task, relationship={"kind": "resume", "source": "explicit_task_id"})
     if not task or str(task.get("status") or "") not in _TASK_RESUMABLE:
         return None
     relation = _continuation_relation(user_input)

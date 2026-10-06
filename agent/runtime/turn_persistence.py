@@ -398,7 +398,8 @@ def _safe_metadata(value, max_depth: int = 3):
         for key, item in value.items():
             if _is_sensitive_key(str(key)):
                 continue
-            out[str(key)] = _safe_metadata(item, max_depth=max_depth - 1)
+            depth = 16 if key in {"project_state", "task_state", "failure_attributions"} else max_depth - 1
+            out[str(key)] = _safe_metadata(item, max_depth=depth)
         return out
     if isinstance(value, (list, tuple)):
         return [_safe_metadata(item, max_depth=max_depth - 1) for item in value]

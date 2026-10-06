@@ -14,6 +14,8 @@ _CALLER_RESERVED_RUNTIME_METADATA_KEYS = frozenset(
         "retrieved_context_block",
         "task_continuation_contract",
         "task_state_contract",
+        "project_state",
+        "failure_attributions",
         "trusted_prompt_items",
         # Subagent controls become system-prompt text and tool-registry limits.
         # They are accepted only from SubagentRuntimeControl below.
@@ -101,6 +103,8 @@ def _apply_runtime_control(metadata: dict[str, Any], runtime_control: Any) -> No
         metadata["cancel_check"] = runtime_control.cancel_check
     if callable(runtime_control.completion_check):
         metadata["__completion_check"] = runtime_control.completion_check
+    if callable(runtime_control.fact_projector):
+        metadata["__runtime_fact_projector"] = runtime_control.fact_projector
 
 
 

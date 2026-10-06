@@ -24,4 +24,5 @@ def build_trace_metadata_from_tool_result(result: ToolResult) -> dict:
         "policy_reason": (policy.reason[:200] if policy and policy.reason else ""),
         "risk_level": policy.risk_level if policy else "",
         "artifact_ids": list(result.artifact_ids or [])[:50],
+        "failure_attributions": list(result.failure_attributions),
     }

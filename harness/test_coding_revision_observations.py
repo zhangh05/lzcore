@@ -8,6 +8,8 @@ from core.tools.context import ToolRuntimeContext
 from harness.test_coding_reviews import qa_runtime, report
 from harness.test_coding_team import team as team_fixture
 from storage.project_changes import project_path
+from harness.coding_record_fixtures import corrupt_record
+from agent.runtime.durable.coding_state import review_id
 
 
 @pytest.fixture
@@ -67,17 +69,18 @@ def test_incomplete_judgement_preserves_known_source_for_explicit_revision(team,
 @pytest.mark.parametrize('boundary', ['active_review', 'cleanup', 'unknown_execution', 'identity', 'digest'])
 def test_incomplete_judgement_does_not_relax_review_or_execution_boundaries(team, monkeypatch, boundary):
     source, qa = incomplete_candidate(team, monkeypatch)
-    if boundary == 'active_review':
-        qa.coding['environment']['closed'] = False
-    elif boundary == 'cleanup':
-        qa.coding['environment']['cleanup_confirmed'] = False
-    elif boundary == 'unknown_execution':
-        qa.coding['qa_validation'] = {'status': 'unknown'}
-    elif boundary == 'identity':
-        qa.coding['review_subtask_id'] = 'different-candidate'
-    else:
-        qa.coding['review_candidate_digest'] = 'different-digest'
-    subagent._save_task(qa)
+    def corrupt(record):
+        if boundary == 'active_review':
+            record['resources']['closed'] = False
+        elif boundary == 'cleanup':
+            record['resources']['cleanup_confirmed'] = False
+        elif boundary == 'unknown_execution':
+            record['validation'] = {'status': 'unknown'}
+        elif boundary == 'identity':
+            record['candidate_id'] = 'different-candidate'
+        else:
+            record['candidate_digest'] = 'different-digest'
+    corrupt_record('parent-ws', 'reviews', review_id(qa.subtask_id), corrupt)
     task = subagent.SubagentTask(parent_task_id='parent-task', workspace_id='parent-ws',
         session_id='parent-session', profile_id='coding_agent')
     with pytest.raises(ValueError, match='stopped_known'):

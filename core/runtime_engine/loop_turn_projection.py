@@ -196,4 +196,10 @@ class LoopTurnProjection:
         values.setdefault("iterations", iterations)
         values.setdefault("total_tool_calls", len(all_results))
         values.setdefault("llm_calls", llm_calls)
+        from .failure_attribution import collect
+        projected_metrics["failure_attributions"] = collect(
+            errors=[values.get("error")], tool_calls=all_results, run_id=ctx.request_id,
+            failed=bool(values.get("error")), provider_events=ctx.extras.get("provider_recovery_events", []),
+            retry_events=ctx.extras.get("retry_events", []))
+        projected_metrics["runtime_fact_projection"] = ctx.extras.get("runtime_fact_projection", {})
         return QueryLoopResult(metrics=projected_metrics, **values)

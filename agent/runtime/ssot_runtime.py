@@ -216,6 +216,7 @@ def run_ssot_turn(
             session_id=session_id,
             user_input=user_input,
             messages=context_messages,
+            resume_task_id=metadata_in.get("resume_task_id"),
         )
         if task_state_contract:
             metadata_in["task_state_contract"] = task_state_contract
@@ -263,6 +264,14 @@ def run_ssot_turn(
                 )
             )
             from agent.runtime.task_state import checkpoint_task_state_execution
+            from agent.runtime.durable.coding_project import for_session, guidance
+
+            def _project_facts():
+                projects = for_session(workspace_id, session_id,
+                                       str((task_state_contract or {}).get("task_id") or ""))
+                return [trusted_prompt_item("project_state", guidance(projects))]
+
+            metadata_in.setdefault("__runtime_fact_projector", _project_facts)
 
             def _task_state_execution_checkpoint(
                 phase: str, manifest: list[dict[str, Any]]
@@ -713,6 +722,22 @@ def run_ssot_turn(
         except Exception:
             _LOG.warning("task continuation commit failed", exc_info=True)
 
+    try:
+        from agent.runtime.durable.coding_project import for_session
+        result.metadata["project_state"] = for_session(workspace_id, session_id,
+            str((task_state_contract or {}).get("task_id") or ""))
+    except Exception:
+        result.metadata["project_state_status"] = "unavailable"
+    from core.runtime_engine.failure_attribution import collect
+    result.metadata["failure_attributions"] = collect(errors=result.errors,
+        tool_calls=result.tool_calls, run_id=turn.turn_id, failed=not result.ok,
+        provider_events=result.metadata.get("provider_recovery_events", []),
+        retry_events=result.metadata.get("retry_events", []))
+    for key in ("task_state_persistence", "run_record_persistence"):
+        code = (result.metadata.get(key) or {}).get("code")
+        if code:
+            from core.runtime_engine.failure_attribution import observation
+            result.metadata["failure_attributions"].append(observation(code, stage="persistence", reference=turn.turn_id))
     run_record_persisted = persist_run_record(session, turn, result, context)
     if run_record_persisted is False:
         _mark_run_record_persistence_failure(result, "run_record_persistence_failed")

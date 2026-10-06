@@ -412,7 +412,10 @@ class SSOTRuntimeEngine:
 
         m = metrics.snapshot()
 
+        from .failure_attribution import collect
         base_meta = {
+            "failure_attributions": collect(errors=[e.to_dict() for e in errors],
+                tool_calls=list(node_results.values()), run_id=ctx.request_id, failed=bool(errors)),
             "route": "",
             "planner_skipped": False,
             "used_tools": len(node_results) > 0,

@@ -51,7 +51,7 @@ _STREAM_CONTRACTS = {
 # deliberately small: runtime-only fields such as runtime_guidance,
 # subagent_profile, history/retrieval blocks, cancellation callbacks and
 # iteration budgets must only be created by server-side code.
-_EXTERNAL_METADATA_KEYS = frozenset({"attachments", "client_request_id", "workbench_selection"})
+_EXTERNAL_METADATA_KEYS = frozenset({"attachments", "client_request_id", "workbench_selection", "resume_task_id"})
 
 
 def normalize_metadata(metadata: dict | None, *, transport: str, stream_mode: str) -> dict:
@@ -75,6 +75,20 @@ def normalize_metadata(metadata: dict | None, *, transport: str, stream_mode: st
     if contract:
         normalized["stream_contract"] = contract
     return normalized
+
+
+def validate_resume_metadata(metadata: dict, workspace_id: str, session_id: str | None = None) -> None:
+    """Validate public resume identity in the authenticated storage scope."""
+    if "resume_task_id" not in metadata:
+        return
+    identity = metadata["resume_task_id"]
+    if not isinstance(identity, str) or not identity:
+        raise ValueError("invalid_resume_task_id")
+    if not session_id:
+        raise ValueError("resume_requires_session")
+    from agent.runtime.task_state import resolve_task_state
+    resolve_task_state(workspace_id=workspace_id, session_id=session_id,
+                       user_input="", messages=[], resume_task_id=identity)
 
 
 def resolve_workbench_metadata(metadata: dict, workspace_id: str, session_id: str | None = None) -> dict:
@@ -155,6 +169,10 @@ def normalize_agent_result(result: dict, workspace_id: str) -> dict:
     result.setdefault("warnings", [])
     result.setdefault("errors", [])
     result.setdefault("metadata", {})
+    from core.runtime_engine.failure_attribution import collect
+    result["metadata"].setdefault("failure_attributions", collect(
+        errors=result["errors"], tool_calls=result["tool_calls"],
+        run_id=result["run_id"], failed=not result["ok"]))
     result.setdefault("cognitive", {})
     result.setdefault("cognitive_events", [])
     result.setdefault("report_artifacts", [])

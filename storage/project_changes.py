@@ -340,3 +340,28 @@ def publish_changes(
                     "automatic_retry_allowed": False,
                 }
         return {"ok": record["phase"] == "integrated", **record}
+
+
+def reconcile_publication(workspace_id, project_relative, change_id, change, *, generated_paths=None):
+    """Read back an uncertain publication without replacing any source file."""
+    transaction = _transaction_root(workspace_id, change_id)
+    project = project_path(workspace_id, project_relative)
+    with quiescent_project(workspace_id):
+        journal = transaction / "journal.json"
+        if not journal.exists():
+            return {"ok": False, "phase": "unknown", "automatic_retry_allowed": False,
+                    "reason": "publication_journal_unavailable"}
+        record = json.loads(journal.read_text(encoding="utf-8"))
+        if (record["project"] != project_relative or record["digest"] != change["digest"]
+                or record["files"] != change["files"]
+                or record.get("generated_paths", []) != validate_generated_paths(generated_paths)):
+            raise ValueError("coding_transaction_identity_mismatch")
+        observed = {path: _hash(project / path) for path in record["files"]}
+        if all(observed[path] == item["after"] for path, item in record["files"].items()):
+            record["phase"] = "integrated"
+        elif all(observed[path] == item["before"] for path, item in record["files"].items()):
+            record["phase"] = "rolled_back"
+        else:
+            record.update(phase="unknown", observed=observed)
+        atomic_write_json(journal, record)
+        return {"ok": record["phase"] == "integrated", **record, "automatic_retry_allowed": False}

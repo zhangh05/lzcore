@@ -112,6 +112,11 @@ def agent_message():
     from backend.core.agent_contract import normalize_metadata
     metadata = normalize_metadata(metadata, transport="http", stream_mode=stream_mode)
     try:
+        from backend.core.agent_contract import validate_resume_metadata
+        validate_resume_metadata(metadata, ws_id, session_id)
+    except ValueError as exc:
+        return _json_error("INVALID_RESUME_TASK", str(exc), 400)
+    try:
         from backend.core.agent_contract import resolve_workbench_metadata
         metadata = resolve_workbench_metadata(metadata, ws_id, session_id=session_id)
     except ValueError as exc:

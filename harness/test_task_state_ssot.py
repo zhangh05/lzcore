@@ -3,6 +3,26 @@ from __future__ import annotations
 import pytest
 
 
+def test_product_resume_uses_scoped_identity_without_language_or_exchange_guess(monkeypatch, tmp_path):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    from agent.runtime.task_state import commit_task_state, resolve_task_state, begin_task_state
+    initial = commit_task_state(workspace_id="ws-explicit", session_id="s-explicit", run_id="r-one",
+        user_input="build", final_response="partial", run_ok=False, runtime_metadata=_metadata(), tool_calls=[])
+    identity = initial['task']['task_id']
+    contract = resolve_task_state(workspace_id="ws-explicit", session_id="s-explicit",
+        user_input="任意语言 etap następny", messages=[], resume_task_id=identity)
+    assert contract['relationship'] == {'kind': 'resume', 'source': 'explicit_task_id'}
+    resumed = begin_task_state(workspace_id="ws-explicit", session_id="s-explicit", run_id="r-two",
+        user_input="next", continuation_contract=contract)
+    assert resumed['task_id'] == identity
+    for workspace, session, target in [('other-ws', 's-explicit', identity),
+                                        ('ws-explicit', 'other-session', identity),
+                                        ('ws-explicit', 's-explicit', 'foreign-task')]:
+        with pytest.raises(ValueError, match='invalid_resume_task_id'):
+            resolve_task_state(workspace_id=workspace, session_id=session, user_input="继续",
+                               messages=[], resume_task_id=target)
+
+
 def _metadata(*, execution_outcome: str = "complete", assertion_status: str = "not_required", decision: str = "stop_completed") -> dict:
     return {
         "execution_outcome": execution_outcome,

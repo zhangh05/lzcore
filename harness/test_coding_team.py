@@ -11,6 +11,8 @@ from core.tools.integration import get_default_tool_runtime_client
 from core.tools.project_execution import DockerProjectEnvironment
 from storage import project_changes
 from storage.paths import workspace_root
+from harness.coding_record_fixtures import corrupt_record
+from agent.runtime.durable.coding_state import candidate_id
 
 
 @pytest.fixture
@@ -384,7 +386,9 @@ def test_cancelled_dependency_propagates_through_waiting_dag(team):
     second = team.spawn(depends=[implementation["subtask_id"]])
     third = team.spawn(depends=[second["subtask_id"]])
     target = subagent._load_task("parent-ws", implementation["subtask_id"])
-    # Simulate a predecessor's durable failed result without running a provider.
+    # Candidate facts, rather than a worker-only terminal flag, block the DAG.
+    corrupt_record("parent-ws", "candidates", candidate_id(target.subtask_id),
+                   lambda r: r.update(state="validation_failed"))
     target.status = "failed"
     atomic_save_json("parent-ws", ("subagents", f"{target.subtask_id}.json"), asdict(target))
     dispatch_dependents(target)
@@ -565,8 +569,8 @@ def test_acceptance_replays_reviewed_updates_and_rejects_unreviewed_changes(team
         verify_team("parent-ws", "parent-session", "files/data/app")
     target.write_text("VALUE = 99\n")
     task = subagent._load_task("parent-ws", second["subtask_id"])
-    task.coding["publication"]["publication_order"] = first_order
-    subagent._save_task(task)
+    corrupt_record("parent-ws", "candidates", candidate_id(task.subtask_id),
+                   lambda r: r["publication"].update(publication_order=first_order))
     with pytest.raises(AssertionError, match="durable journal"):
         verify_team("parent-ws", "parent-session", "files/data/app")
 
@@ -836,6 +840,6 @@ def test_explicit_revision_can_copy_cancelled_source_only_with_known_failed_chec
     coding_team.create_assignment(task,supplied)
     assert task.coding['revision_source_digest']
     assert subagent._load_task('parent-ws',stopped.subtask_id).status=='cancelled'
-    stopped.coding['completion_validation']['status']='unknown';subagent._save_task(stopped)
+    corrupt_record('parent-ws','candidates',candidate_id(stopped.subtask_id),lambda r:r['validation'].update(status='unknown'))
     with pytest.raises(ValueError,match='stopped_known'):
         coding_team.create_assignment(task,supplied)

@@ -148,16 +148,22 @@ class ToolResult:
     redacted: bool = False
     policy_decision: Optional[PolicyDecision] = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    failure_attributions: list = field(default_factory=list)
 
     def __post_init__(self):
         if self.status not in VALID_TOOL_STATUSES:
             raise ValueError(f"Invalid status: {self.status}")
+        if self.status in {"failed", "blocked"}:
+            from core.runtime_engine.failure_attribution import observation
+            self.failure_attributions = [observation(code, stage="tool", reference=self.invocation_id,
+                detail=self.summary) for code in (self.errors or ["unclassified_tool_failure"])]
 
     def as_dict(self) -> dict:
         return {
             "invocation_id": self.invocation_id,
             "tool_id": self.tool_id,
             "status": self.status,
+            "failure_attributions": self.failure_attributions,
             "summary": self.summary[:500],
             "artifact_ids": self.artifact_ids,
             "warnings": self.warnings[:20],

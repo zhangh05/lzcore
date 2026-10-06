@@ -6,72 +6,38 @@ from storage.project_changes import (
 
 def _target(task):
     from .coding_team import _related
+    from .coding_state import ensure_candidate, revision_source
     target = _related(task, task.coding['revision_subtask_id'])
-    assignment = target.coding
-    validation = assignment.get('completion_validation') or {}
-    environment = assignment.get('environment') or {}
-    failed_source = (target.status in {'failed', 'cancelled'} and assignment.get('phase') == 'failed'
-                     and validation.get('status') == 'failed')
-    ready_proposal = (target.status == 'succeeded' and assignment.get('phase') in {'changes_ready', 'validated'}
-                      and validation.get('status') == 'passed'
-                      and validation.get('source_digest') == assignment.get('candidate_digest'))
-    if assignment.get('phase') == 'qa_incomplete':
-        review = _related(task, assignment.get('qa_rejection_subtask_id', ''))
-        judgement = review.coding.get('qa_review') or {}
-        # Missing judgement evidence is not an unknown execution. Copying the
-        # already checked source preserves that gap; it neither accepts the
-        # review nor retries its operations. Both branches must be quiescent.
-        ready_proposal = (
-            target.status == 'succeeded' and validation.get('status') == 'passed'
-            and validation.get('source_digest') == assignment.get('candidate_digest')
-            and review.status == 'failed' and review.coding.get('phase') == 'qa_incomplete'
-            and judgement.get('verdict') == 'unknown'
-            and review.coding.get('review_subtask_id') == target.subtask_id
-            and judgement.get('review_subtask_id') == target.subtask_id
-            and judgement.get('candidate_digest') == assignment.get('candidate_digest')
-            and review.coding.get('review_candidate_digest') == assignment.get('candidate_digest')
-            and (review.coding.get('qa_validation') or {}).get('status') != 'unknown'
-            and (review.coding.get('environment') or {}).get('closed')
-            and (review.coding.get('environment') or {}).get('cleanup_confirmed')
-        )
-    if assignment.get('phase') == 'qa_rejected':
-        review = _related(task, assignment.get('qa_rejection_subtask_id', ''))
-        failed_source = (review.status == 'failed' and review.coding.get('phase') == 'qa_rejected'
-                         and (review.coding.get('qa_review') or {}).get('verdict') == 'fail'
-                         and (review.coding.get('environment') or {}).get('closed')
-                         and (review.coding.get('environment') or {}).get('cleanup_confirmed'))
-    if (target.profile_id not in {'coding_agent', 'frontend_agent'}
-            or not (failed_source or ready_proposal)
-            or not environment.get('closed') or not environment.get('cleanup_confirmed')
-            or assignment['project_dir'] != task.coding['project_dir']):
+    record = ensure_candidate(target)
+    if (target.profile_id not in {'coding_agent', 'frontend_agent'} or not revision_source(record)
+            or record['project_dir'] != task.coding['project_dir']):
         raise ValueError('coding_revision_requires_stopped_known_implementation')
-    return target
+    return target, record
 
 
 def configure_revision(task):
-    target = _target(task)
+    target, proposal = _target(task)
     assignment = task.coding
-    if assignment['responsibilities'] != target.coding['responsibilities']:
+    if assignment['responsibilities'] != proposal['responsibilities']:
         raise ValueError('coding_revision_must_preserve_source_responsibilities')
-    assignment['validation_commands'] = list(target.coding['validation_commands'])
-    assignment['generated_paths'] = list(target.coding.get('generated_paths', []))
-    source = project_path(target.coding['branch_workspace'], assignment['project_dir'])
-    with quiescent_project(target.coding['branch_workspace']):
+    assignment['validation_commands'] = list(proposal['validation_commands'])
+    assignment['generated_paths'] = list(proposal['generated_paths'])
+    source = project_path(proposal['branch_workspace'], assignment['project_dir'])
+    with quiescent_project(proposal['branch_workspace']):
         digest = manifest_digest(source_manifest(source, assignment['generated_paths']))
-        if target.coding.get('candidate_digest') and digest != target.coding['candidate_digest']:
+        if digest != proposal['source_digest']:
             raise ValueError('coding_revision_candidate_changed')
     assignment['revision_source_digest'] = digest
 
 
 def seed_revision(task, branch):
     """Copy proposed source, retaining its original integrated publication base."""
-    from .coding_team import _related
-    target = _target(task)
+    target, proposal = _target(task)
     assignment = task.coding
-    baseline = dict(target.coding['baseline'])
-    source = project_path(target.coding['branch_workspace'], assignment['project_dir'])
+    baseline = dict(proposal['baseline'])
+    source = project_path(proposal['branch_workspace'], assignment['project_dir'])
     parent = project_path(task.workspace_id, assignment['project_dir'])
-    with quiescent_project(task.workspace_id), quiescent_project(target.coding['branch_workspace']):
+    with quiescent_project(task.workspace_id), quiescent_project(proposal['branch_workspace']):
         if source_manifest(parent, assignment['generated_paths']) != baseline:
             raise ValueError('coding_revision_integrated_baseline_changed')
         proposed = source_manifest(source, assignment['generated_paths'])
@@ -80,9 +46,10 @@ def seed_revision(task, branch):
         copy_sources(source, branch, proposed)
     assignment['revision_observation'] = {
         'subtask_id': target.subtask_id, 'source_digest': assignment['revision_source_digest'],
-        'completion_validation': target.coding['completion_validation'],
+        'completion_validation': proposal['validation'],
     }
-    if target.coding.get('phase') in {'qa_rejected', 'qa_incomplete'}:
-        review = _related(task, target.coding['qa_rejection_subtask_id'])
-        assignment['revision_observation']['qa_review'] = review.coding['qa_review']
+    if proposal['review_ids']:
+        from storage.coding_state_store import read
+        review = read(task.workspace_id, 'reviews', proposal['review_ids'][-1])
+        assignment['revision_observation']['qa_review'] = review.get('judgement') or {}
     return baseline

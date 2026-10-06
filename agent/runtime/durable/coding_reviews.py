@@ -54,6 +54,8 @@ def record_qa_review(task, review):
     if review["verdict"] == "pass" and review["blocking_findings"]:
         review.update(proposed_verdict="pass", verdict="fail")
     task.coding["qa_review"] = review
+    from .coding_state import record_judgement
+    record_judgement(task, review)
     _save_task(task)
     return {"ok": True, "review": review}
 
@@ -67,7 +69,9 @@ def check_qa(task):
     assignment = task.coding
     source = project_path(assignment["branch_workspace"], assignment["project_dir"])
     digest = manifest_digest(source_manifest(source, assignment.get("generated_paths")))
-    cached = assignment.get("qa_validation") or {}
+    from .coding_state import review, record_review_validation
+    recorded = review(task)
+    cached = (recorded or {}).get("validation") or assignment.get("qa_validation") or {}
     if cached.get("status") == "unknown":
         return cached
     if cached.get("source_digest") == digest and cached.get("status") == "passed":
@@ -98,21 +102,17 @@ def check_qa(task):
     result = {"status": status, "source_digest": digest, "checks": checks,
               "automatic_retry_allowed": status != "unknown"}
     assignment.update(qa_validation=result, validation=checks)
+    record_review_validation(task, result)
     _save_task(task)
     return result
 
 
 def _reject(task, observation):
-    from .coding_team import _related
     from .subagent import _save_task
     phase = ("qa_unknown" if observation["status"] == "unknown" else
              "qa_incomplete" if observation.get("review_verdict") == "unknown" else "qa_rejected")
     task.coding["phase"] = phase
     _save_task(task)
-    target = _related(task, task.coding["review_subtask_id"])
-    if target.coding.get("candidate_digest") == task.coding["review_candidate_digest"]:
-        target.coding.update(phase=phase, qa_rejection_subtask_id=task.subtask_id)
-        _save_task(target)
     return observation
 
 
@@ -146,11 +146,3 @@ def review_qa_proposal(task, proposal):
         _save_task(task)
         return _reject(task, {**validation, "terminal_error": "coding_independent_validation_failed"})
     return {**validation, "review_verdict": "pass"}
-
-
-def accepted_review(task, candidate_digest):
-    review = task.coding.get("qa_review") or {}
-    return (review.get("schema") == QA_SCHEMA and review.get("verdict") == "pass"
-            and review.get("blocking_findings") == [] and review.get("candidate_digest") == candidate_digest
-            and review.get("review_subtask_id") == task.coding.get("review_subtask_id")
-            and bool(review.get("scope")) and bool(review.get("report")))

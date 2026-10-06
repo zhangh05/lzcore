@@ -77,6 +77,8 @@ def _mark_run_record_persistence_failure(result: AgentResult, code: str) -> None
     }
     if code not in result.warnings:
         result.warnings.append(code)
+    from core.runtime_engine.failure_attribution import observation
+    result.metadata.setdefault("failure_attributions", []).append(observation(code, stage="persistence", reference=result.turn_id))
 
 
 def _task_state_runtime_metadata(

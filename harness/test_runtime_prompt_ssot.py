@@ -16,6 +16,30 @@ from core.runtime_engine.query_loop import QueryLoop
 import pytest
 
 
+def test_live_fact_projector_refreshes_each_model_call_and_reports_unavailability():
+    import asyncio
+    from agent.llm.schemas import LLMMessage, LLMResponse
+    from core.runtime_engine.models import SSOTRuntimeConfig
+    seen = []
+    import copy
+    loop = QueryLoop(SSOTRuntimeConfig(), {}, object(), llm_invoke=lambda **kw: seen.append(copy.deepcopy(kw)) or LLMResponse(content='done'))
+    version = [1]
+    def project():
+        if version[0] == 3:
+            raise OSError('unavailable')
+        return [trusted_prompt_item('project_state', f'phase-fact-{version[0]}')]
+    ctx = StatelessContext('ws', 's', 'r', 'work', extras={'__runtime_fact_projector': project})
+    messages = [LLMMessage(role='user', content='work')]
+    for number in [1, 2, 3]:
+        version[0] = number
+        asyncio.run(loop._call_llm(messages, ctx))
+    assert 'phase-fact-1' in seen[0]['messages'][-1].content
+    assert 'phase-fact-2' in seen[1]['messages'][-1].content
+    assert 'unavailable' in seen[2]['messages'][-1].content
+    assert messages[0].content == 'work' and 'phase-fact-1' in messages[1].content
+    assert ctx.extras['runtime_fact_projection']['status'] == 'unavailable'
+
+
 def test_runtime_prompt_is_compact_capable_and_destructive_only():
     prompt = " ".join(RUNTIME_SYSTEM_PROMPT.split())
     playbooks = "\n".join(CAPABILITY_PLAYBOOKS.values())
