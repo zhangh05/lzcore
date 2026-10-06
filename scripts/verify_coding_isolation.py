@@ -5,14 +5,15 @@ Uses exclusively owned scratch storage; never creates a host execution
 fallback. Docker image/client configuration is identical to the benchmark.
 """
 from __future__ import annotations
+
 import argparse
 import json
 import os
-from pathlib import Path
 import sys
-import uuid
 import time
 import urllib.request
+import uuid
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -44,7 +45,7 @@ def main() -> int:
         (project / "host-link").symlink_to(canary)
         context = ToolRuntimeContext(workspace_id=ws, session_id="kernel-session", requested_by="subagent")
         checks = []
-        def probe(name: str, arguments: dict, success: bool):
+        def probe(name: str, arguments: dict, success: bool, *, context=context, checks=checks):
             result = client.invoke("exec.run", arguments, context=context)
             passed = (result.status == "succeeded") == success
             checks.append({"name": name, "passed": passed, "runtime_status": result.status})
@@ -62,6 +63,9 @@ def main() -> int:
             probe("cwd_traversal_denied", {"action": "shell", "working_dir": "../../", "command": "echo escaped"}, False)
             probe("registry_tls_dependency_allowed", {"action": "shell", "command": "npm view react version", "timeout": 30}, True)
             if index == 0:
+                from scripts.benchmark_native_addon_probe import verify_native_addon_gc
+
+                checks.extend(verify_native_addon_gc(client, context, "files/data/project"))
                 probe("native_dependency_compiles_using_image_headers", {"action": "shell", "command":
                     "npm_config_build_from_source=true npm install better-sqlite3@13.0.3", "timeout": 180}, True)
                 probe("compiled_sqlite_runs_real_query", {"action": "shell", "command":

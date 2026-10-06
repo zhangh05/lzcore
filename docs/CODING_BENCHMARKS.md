@@ -4,7 +4,7 @@
 
 ## 准备隔离运行环境
 
-先在专用 Docker daemon 构建 `scripts/coding-runtime.Dockerfile`；构建上下文只放该 Dockerfile，不发送框架仓库。镜像包含 Node/Python、与 Node 同版本的本地头文件及 C/C++ 编译工具，npm_config_nodedir 指向镜像内头文件，使原生依赖无需下载外部头文件即可编译；包本身仍仅通过受限依赖出口安装。服务端通过 `LZCORE_CODING_EXECUTION_IMAGE` 指定镜像（默认 `lzcore-coding-runtime:local`），启动时记录不可变 image ID。Docker CLI 默认从 PATH 查找；`LZCORE_CODING_DOCKER_COMMAND` 可指定 JSON argv，用于明确的本地 VM 客户端。该设置不是模型工具参数。
+先在专用 Docker daemon 构建 `scripts/coding-runtime.Dockerfile`；构建上下文只放该 Dockerfile，不发送框架仓库。镜像包含固定版本和摘要的 Node 22 LTS/Python、与 Node 同版本的本地头文件及 C/C++ 编译工具，npm_config_nodedir 指向镜像内头文件，使原生依赖无需下载外部头文件即可编译；包本身仍仅通过受限依赖出口安装。更换镜像后须运行隔离验证，包含经典原生模块的 GC/正常退出及 N-API SQL 查询；单一依赖安装成功不能排除运行时崩溃。服务端通过 `LZCORE_CODING_EXECUTION_IMAGE` 指定镜像（默认 `lzcore-coding-runtime:local`），启动时记录不可变 image ID。Docker CLI 默认从 PATH 查找；`LZCORE_CODING_DOCKER_COMMAND` 可指定 JSON argv，用于明确的本地 VM 客户端。该设置不是模型工具参数。
 
 使用 VM/远程 daemon 时，`LZCORE_CODING_DOCKER_HOST_ROOT` 与 `LZCORE_CODING_DOCKER_GUEST_ROOT` 必须同时指定。VM 只能共享本轮 scratch 根，不能共享仓库、用户 HOME、Evaluator 或 Docker Socket。`--output` 必须位于该 scratch 根内。系统隔离不可用时拒绝运行，不回退宿主。
 

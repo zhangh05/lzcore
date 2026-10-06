@@ -86,6 +86,6 @@ Provider 明确返回 HTTP 402 或余额/额度耗尽时，传输和 QueryLoop �
 
 实现进度从服务端注入的 completion_source_digest 回调读取实际分支源码摘要，调用者不能伪造。completion_unchanged_tool_round_limit 默认 12：连续工具或输出截断轮次不改变源码时运行真实声明检查；尚未提出完成或上次通过的候选若检查失败，先向同一实现者反馈失败并给予完整纠错窗口；明确失败后再次达到窗口仍无源码变化，重验仍失败才以 completion_repair_no_progress 停止并保存分支。实际源码变化重置窗口，检查通过允许继续但不宣告业务完成。依赖安装可能使同源码通过，所以不能仅靠摘要判失败；未知检查结果终止且不重放。仅有服务端编码完成/摘要回调的实现者启用，普通绘图不受此约束，不设置工程总时长或总实现轮数。
 
-专用编码镜像提供与 Node 同版本的本地头文件及 C/C++ 工具链，npm_config_nodedir=/usr/local；原生 npm 依赖从受限包出口获取源码并在工程内编译，不要求扩大预编译产物/头文件下载权限。镜像仍不包含框架、Evaluator、宿主凭据或 Docker Socket；每个环境记录实际不可变 image ID。verify_coding_isolation.py 强制原生依赖源码编译及 SQL 查询，并重复检查只读源码、受限网络、后代清理和独立验收隔离。
+专用编码镜像使用固定版本和摘要的 Node 22 LTS，提供同版本本地头文件及 C/C++ 工具链，npm_config_nodedir=/usr/local；原生 npm 依赖从受限包出口获取源码并在工程内编译，不要求扩大预编译产物/头文件下载权限。Node 24.21 对经典 ObjectWrap 模块的 GC 崩溃已在独立控制工程复现，不能只用 N-API 依赖安装成功判断工具链可用（[上游问题](https://github.com/nodejs/node/issues/65446)）。本机源码开发的 Node 版本要求与隔离编码镜像分开。镜像仍不包含框架、Evaluator、宿主凭据或 Docker Socket；每个环境记录实际不可变 image ID。verify_coding_isolation.py 强制原生依赖源码编译及 SQL 查询，并通过 benchmark_native_addon_probe.py 验证经典原生模块分配触发的 GC 和三次正常退出；还重复检查只读源码、受限网络、后代清理和独立验收隔离。
 
 明确的中文同一/当前/原有任务续接不依赖汉字后的词边界；cancelled/failed 父任务只有明确 resume 才保留身份，仍核对最近完整交换与服务端 CAS。不会自动恢复终态子任务、放宽同父源码修订或重放未知写入。
