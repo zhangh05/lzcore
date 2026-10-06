@@ -63,11 +63,14 @@ from .loop_tool_catalog import (
     _tool_meta_get,
     _tool_registry_signature,
 )
+from .loop_stage_events import LoopStageEvents
+from .execution_readiness import observe_execution_readiness
 from .loop_tracking import LoopTracking
 from .loop_turn_projection import LoopTurnProjection
 
 
 class QueryLoop(
+    LoopStageEvents,
     LoopApprovalContinuation,
     LoopTurnProjection,
     LoopModelGateway,
@@ -107,34 +110,6 @@ class QueryLoop(
         )
         self._llm_call_count = 0
         self._context_continuation = None
-
-    def _emit_stage(
-        self,
-        stage: str,
-        t_turn_started: float,
-        *,
-        stage_started_at: float | None = None,
-        **extra: Any,
-    ) -> None:
-        """Emit a semantic QueryLoop boundary with monotonic timing fields."""
-        if self._emitter is None:
-            return
-        try:
-            now = time.monotonic()
-            turn_elapsed_ms = int((now - t_turn_started) * 1000)
-            stage_elapsed_ms = int((now - (stage_started_at or t_turn_started)) * 1000)
-            self._emitter.emit(
-                stage,
-                {
-                    "stage": stage,
-                    "elapsed_ms": turn_elapsed_ms,
-                    "turn_elapsed_ms": turn_elapsed_ms,
-                    "stage_elapsed_ms": stage_elapsed_ms,
-                    **extra,
-                },
-            )
-        except Exception:
-            _LOG.debug("stream stage emit failed: %s", stage, exc_info=True)
 
     async def run(
         self,
@@ -281,6 +256,9 @@ class QueryLoop(
                     final_response="任务已取消。",
                     error="cancelled_by_user",
                 )
+            unavailable = await observe_execution_readiness(ctx)
+            if unavailable:
+                return finish(tool_results=all_results, llm_calls=budget.llm_calls, **unavailable)
             iterations += 1
 
             # The counter is telemetry only.  A model-directed task has no
@@ -357,6 +335,10 @@ class QueryLoop(
                     llm_calls=budget.llm_calls,
                     error="cancelled_by_user",
                 )
+
+            unavailable = await observe_execution_readiness(ctx)
+            if unavailable:
+                return finish(tool_results=all_results, llm_calls=budget.llm_calls, **unavailable)
 
             if response is not None and (response.metadata or {}).get(
                 "output_truncated"

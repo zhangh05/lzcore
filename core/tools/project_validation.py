@@ -7,13 +7,19 @@ return, after stopping descendants and proving that source stayed identical.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import uuid
 from pathlib import Path
 
-from storage.project_changes import copy_sources, source_manifest, manifest_digest, quiescent_project
 from storage.paths import workspace_root
+from storage.project_changes import (
+    copy_sources,
+    manifest_digest,
+    quiescent_project,
+    source_manifest,
+)
 
 
 def _check_tree(path: Path, boundary: Path, *, links: bool) -> None:
@@ -22,6 +28,22 @@ def _check_tree(path: Path, boundary: Path, *, links: bool) -> None:
             if not links:
                 raise ValueError("validation_output_symlink_forbidden")
             item.resolve(strict=True).relative_to(boundary)
+
+
+def _copy_dependency_cache(original: Path, destination: Path, project: Path, stage: Path) -> None:
+    """Retain package executable layout without carrying host-addressed links."""
+    if original.is_symlink():
+        raise ValueError("validation_cache_root_symlink_forbidden")
+    _check_tree(original, project, links=True)
+    targets = {
+        item.relative_to(original): stage / item.resolve(strict=True).relative_to(project)
+        for item in original.rglob("*") if item.is_symlink()
+    }
+    shutil.copytree(original, destination, symlinks=True)
+    for relative, target in targets.items():
+        link = destination / relative
+        link.unlink()
+        link.symlink_to(os.path.relpath(target, link.parent))
 
 
 def execute_validation(owner, command, cwd, *, env=None, timeout=None, cancel_check=None):
@@ -55,8 +77,7 @@ def execute_validation(owner, command, cwd, *, env=None, timeout=None, cancel_ch
             for cache in ("node_modules", ".venv"):
                 original = owner.project / cache
                 if original.exists():
-                    _check_tree(original, owner.project, links=True)
-                    shutil.copytree(original, stage / cache, symlinks=False)
+                    _copy_dependency_cache(original, stage / cache, owner.project, stage)
             with socket.socket() as listener:
                 listener.bind(("127.0.0.1", 0))
                 port = listener.getsockname()[1]

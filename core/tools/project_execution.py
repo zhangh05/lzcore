@@ -350,6 +350,16 @@ class DockerProjectEnvironment:
             cancel_check=cancel_check,
         )
 
+    def execution_readiness(self):
+        """Server-owned lifecycle facts; never reopens or repeats execution."""
+        available = self.started and not self.closed
+        return {
+            "status": "ready" if available else "unavailable",
+            "reason": "" if available else "isolated_environment_closed" if self.closed else "isolated_environment_not_started",
+            "cleanup_confirmed": self.cleanup_confirmed,
+            "execution_may_continue": bool(self.closed and self.started and not self.cleanup_confirmed),
+        }
+
     def _execute(
         self, argv: list[str], cwd: str, *, env=None, timeout=None, cancel_check=None
     ):

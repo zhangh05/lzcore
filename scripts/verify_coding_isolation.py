@@ -73,6 +73,8 @@ def main() -> int:
                     "db.exec('CREATE TABLE records (value INTEGER)');db.prepare('INSERT INTO records VALUES (?)').run(42);"
                     "if(db.prepare('SELECT value FROM records').get().value!==42)process.exit(1);db.close();\"",
                     "timeout": 30}, True)
+                probe("dependency_executable_installed", {"action": "shell", "command":
+                    "npm install typescript@5.9.3", "timeout": 180}, True)
             probe("unapproved_tls_origin_denied", {"action": "python", "code": "import urllib.request; result = urllib.request.urlopen('https://example.com', timeout=5).status", "timeout": 10}, False)
             probe("direct_network_cannot_bypass_proxy", {"action": "python", "code": "import socket; result = socket.create_connection(('1.1.1.1', 443), timeout=2).getpeername()", "timeout": 5}, False)
             # The escape probe must not become a valid reviewed build source.
@@ -82,7 +84,10 @@ def main() -> int:
             descriptor = environment.descriptor()
             rebuild = "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist');fs.writeFileSync('dist/rebuilt.txt','rebuilt');\""
             poison = "node -e \"require('fs').writeFileSync('owned.txt','tampered');\""
-            environment.configure_validation([rebuild, poison])
+            compiler_probe = "node_modules/.bin/tsc --version"
+            environment.configure_validation([rebuild, poison, compiler_probe])
+            if index == 0:
+                probe("dependency_bin_link_preserved_in_validation_snapshot", {"action":"shell", "command":compiler_probe, "timeout":30}, True)
             probe("standard_rebuild_deletes_output_root_in_snapshot", {"action":"shell", "command":rebuild, "timeout":30}, True)
             checks.append({"name":"validated_output_promoted", "passed": (project / "dist/rebuilt.txt").is_file() and (project / "dist/rebuilt.txt").read_text() == "rebuilt"})
             from scripts.benchmark_runtime import BenchmarkRuntime

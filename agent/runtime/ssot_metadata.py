@@ -26,6 +26,8 @@ _CALLER_RESERVED_RUNTIME_METADATA_KEYS = frozenset(
         "completion_check",
         "completion_source_digest",
         "completion_proposal_check",
+        "execution_readiness_check",
+        "execution_readiness",
     }
 )
 
@@ -102,3 +104,12 @@ def _apply_runtime_control(metadata: dict[str, Any], runtime_control: Any) -> No
         metadata["__completion_source_digest"] = runtime_control.completion_source_digest
     if callable(runtime_control.completion_proposal_check):
         metadata["__completion_proposal_check"] = runtime_control.completion_proposal_check
+
+
+def _bind_execution_readiness(metadata: dict[str, Any], workspace_id: str) -> None:
+    """Resolve the same server binding for main, coding, frontend and QA turns."""
+    from core.tools.project_execution import environment_for
+
+    environment = environment_for(workspace_id)
+    if environment is not None:
+        metadata["__execution_readiness_check"] = environment.execution_readiness

@@ -90,6 +90,9 @@ def run_ssot_turn(
         getattr(turn.op, "metadata", {}) or {}
     )
     _apply_runtime_control(metadata_in, getattr(turn.op, "runtime_control", None))
+    from .ssot_metadata import _bind_execution_readiness
+
+    _bind_execution_readiness(metadata_in, workspace_id)
     task_continuation_contract: dict[str, Any] | None = None
 
     try:

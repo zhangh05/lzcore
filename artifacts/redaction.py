@@ -23,6 +23,18 @@ SECRET_PATTERNS = [
     r'snmp-server\s+community\s+\S+',                  # SNMP community strings
 ]
 MASK = "[REDACTED_SECRET]"
+_MASKED_CREDENTIAL = re.compile(
+    r"(?:password|secret|community|api[_-]?key|Bearer|Authorization(?:\s+Bearer)?|"
+    r"MINIMAX_API_KEY|OPENAI_API_KEY|DEEPSEEK_API_KEY|private[_-]?key|token|"
+    r"snmp-server\s+community)(?:\s+|[=:]\s*)"
+    r"\[REDACTED(?:_SECRET)?\][\"'`,.;:)}\]]*",
+    re.IGNORECASE,
+)
+
+
+def _is_secret_match(match: re.Match) -> bool:
+    """Known whole-value masks are evidence, not credentials or exemptions."""
+    return _MASKED_CREDENTIAL.fullmatch(match.group()) is None
 
 
 def _is_sensitive_metadata_key(key: object) -> bool:
@@ -47,7 +59,8 @@ def redact_artifact_content(content: str) -> str:
     if not content:
         return content
     for pat in SECRET_PATTERNS:
-        content = re.sub(pat, MASK, content, flags=re.IGNORECASE)
+        content = re.sub(pat, lambda match: MASK if _is_secret_match(match) else match.group(),
+                         content, flags=re.IGNORECASE)
     return content
 
 
@@ -55,7 +68,7 @@ def contains_secret(content: str) -> bool:
     if not content:
         return False
     for pat in SECRET_PATTERNS:
-        if re.search(pat, content, re.IGNORECASE):
+        if any(_is_secret_match(match) for match in re.finditer(pat, content, re.IGNORECASE)):
             return True
     return False
 
