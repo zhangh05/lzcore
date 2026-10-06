@@ -91,11 +91,6 @@ def resolve_provider_config(llm_config: dict = None) -> dict:
     result["base_url"] = provider_cfg.get("base_url", "")
     result["model"] = provider_cfg.get("model", "")
 
-    # SETTINGS MIGRATION: Migrate MiniMax-M1 → M3 (user may have old config).
-    # MiniMax-M1 is a prohibited default. Current default is MiniMax-M3.
-    if result["model"] == "MiniMax-M1":
-        result["model"] = "MiniMax-M3"
-
     result["temperature"] = provider_cfg.get("temperature", 0.2)
     result["max_tokens"] = provider_cfg.get("max_tokens", 4096)
     result["top_p"] = provider_cfg.get("top_p")

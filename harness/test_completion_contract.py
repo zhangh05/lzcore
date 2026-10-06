@@ -1,4 +1,4 @@
-"""A proposed final answer must satisfy trusted completion observations."""
+"""Final checks report physical outcomes without imposing a model work cadence."""
 
 import asyncio
 from types import SimpleNamespace
@@ -14,291 +14,76 @@ from core.runtime_engine.query_loop import QueryLoop
 from core.runtime_engine.tool_runtime import ToolRuntime
 
 
-def test_failed_completion_keeps_same_worker_open_for_governed_repair():
+@pytest.mark.parametrize('status,error', [('passed', None), ('failed', 'completion_check_failed'),
+                                        ('unknown', 'completion_outcome_unknown')])
+def test_final_checks_preserve_model_reply_and_actual_outcome(status, error):
     config = SSOTRuntimeConfig(max_llm_calls=5)
-    runtime = ToolRuntime(config)
-    repaired = []
-
-    def repair(_args):
-        repaired.append(True)
-        return {"ok": True, "rows": ["repaired"]}
-
-    runtime.register("data.manage", repair)
-    registry = {"data.manage": {"description": "repair", "args_schema": {
-        "type": "object", "properties": {"action": {"type": "string"}}}}}
-    responses = [LLMResponse(content="I will finish later"),
-                 LLMResponse(tool_calls=[LLMToolCall(id="repair", name="data.manage",
-                             arguments={"action": "parse", "text": "repair"})]),
-                 LLMResponse(content="Completed after repair")]
-    calls = []
+    calls, checks = [], []
 
     def model(**kwargs):
         calls.append(kwargs)
-        return responses.pop(0)
+        return LLMResponse(content='Model report with its own wording.')
 
-    ctx = StatelessContext("ws", "same-worker", "completion", "Finish the task", extras={
-        "__completion_check": lambda: {"status": "passed" if repaired else "failed",
-                                        "checks": [{"exit_code": 0 if repaired else 1}]}})
-    result = asyncio.run(QueryLoop(config, registry, runtime, llm_invoke=model).run(
-        ctx, BudgetController(config), None))
-    assert result.error is None and result.final_response == "Completed after repair"
-    assert len(repaired) == 1 and len(calls) == 3
-    assert [event["status"] for event in ctx.extras["completion_events"]] == ["failed", "passed"]
-    assert len(result.tool_results) == 1  # Server observations are not invented model tool results.
+    def check():
+        checks.append(True)
+        return {'status': status, 'automatic_retry_allowed': status != 'unknown'}
 
-
-def test_revision_readiness_keeps_worker_open_until_real_source_edit(tmp_path):
-    import hashlib
-    from agent.runtime.durable.coding_revisions import revision_readiness
-    source=tmp_path/'engine.js';source.write_text('original proposal')
-    digest=lambda:hashlib.sha256(source.read_bytes()).hexdigest()
-    assignment={'revision_subtask_id':'original','revision_source_digest':digest(),
-                'revision_observation':{'completion_validation':{'status':'passed'}}}
-    config=SSOTRuntimeConfig(max_llm_calls=5)
-    runtime=ToolRuntime(config)
-    runtime.register('data.manage',lambda args:source.write_text('actual repair') and {'ok':True})
-    registry={'data.manage':{'description':'repair fixture','args_schema':{'type':'object',
-        'properties':{'action':{'type':'string'}}}}}
-    replies=[LLMResponse(content='I will repair next'),LLMResponse(tool_calls=[
-        LLMToolCall(id='edit',name='data.manage',arguments={'action':'parse','text':'edit'})]),
-        LLMResponse(content='Edited and checked')]
-    calls=[]
-    def model(**kwargs):calls.append(kwargs);return replies.pop(0)
-    ctx=StatelessContext('ws','revision','revision','Repair source',extras={
-        '__completion_check':lambda:revision_readiness(assignment,{'status':'passed','source_digest':digest()})})
-    result=asyncio.run(QueryLoop(config,registry,runtime,llm_invoke=model).run(ctx,BudgetController(config),None))
-    assert result.error is None and len(calls)==3 and len(result.tool_results)==1
-    assert ctx.extras['completion_events'][0]['readiness_gap']=='unchanged_source_proposal'
-    assert ctx.extras['completion_events'][-1]['revision_evidence']['source_changed']
-
-
-def test_unknown_completion_stops_without_retry_or_a_second_model_call():
-    config = SSOTRuntimeConfig(max_llm_calls=5)
-    calls = []
-
-    def model(**kwargs):
-        calls.append(kwargs)
-        return LLMResponse(content="Done")
-
-    ctx = StatelessContext("ws", "unknown", "unknown", "Finish", extras={
-        "__completion_check": lambda: {"status": "unknown", "automatic_retry_allowed": False}})
+    ctx = StatelessContext('ws', 'final', 'final', 'Implement', extras={'__completion_check': check})
     result = asyncio.run(QueryLoop(config, {}, object(), llm_invoke=model).run(
         ctx, BudgetController(config), None))
-    assert result.error == "completion_outcome_unknown" and len(calls) == 1
-    assert result.metrics["execution_outcome"] == "unknown"
+    assert result.error == error
+    assert result.final_response == 'Model report with its own wording.'
+    assert len(calls) == len(checks) == 1
+    assert ctx.extras['completion_events'][0]['status'] == status
+    if status == 'unknown':
+        assert result.metrics['execution_outcome'] == 'unknown'
 
 
-def test_caller_cannot_forge_completion_callback():
-    callback = lambda: {"status": "passed"}
-    clean = _sanitize_caller_runtime_metadata({"completion_check": callback,
-                                              "__completion_check": callback})
+@pytest.mark.parametrize('outcome', ['read', 'failure', 'noop', 'truncated'])
+def test_working_rounds_do_not_trigger_checks_or_count_based_stops(outcome):
+    config = SSOTRuntimeConfig(max_llm_calls=25)
+    runtime = ToolRuntime(config)
+    runtime.register('data.manage', lambda args: ({'ok': False, 'error': 'same error'}
+        if outcome == 'failure' else {'ok': True, 'rows': ['observed'], 'changed': False}))
+    registry = {'data.manage': {'description': 'observe', 'args_schema': {'type': 'object',
+        'properties': {'action': {'type': 'string'}, 'text': {'type': 'string'}}}}}
+    calls, checks = [], []
+
+    def model(**kwargs):
+        calls.append(kwargs)
+        if len(calls) > 15:
+            return LLMResponse(content='Done in my chosen sequence.')
+        if outcome == 'truncated':
+            return LLMResponse(finish_reason='length', metadata={'output_truncated': True})
+        return LLMResponse(tool_calls=[LLMToolCall(id=f'call-{len(calls)}', name='data.manage',
+            arguments={'action': 'parse', 'text': 'same requested observation'})])
+
+    def check():
+        checks.append(len(calls))
+        return {'status': 'passed'}
+
+    ctx = StatelessContext('ws', outcome, outcome, 'Implement', extras={'__completion_check': check})
+    result = asyncio.run(QueryLoop(config, registry, runtime, llm_invoke=model).run(
+        ctx, BudgetController(config), None))
+    assert result.error is None and len(calls) == 16 and checks == [16]
+    assert len(result.tool_results) == (0 if outcome == 'truncated' else 15)
+
+
+def test_caller_cannot_forge_completion_control_or_removed_callbacks():
+    callback = lambda: {'status': 'passed'}
+    clean = _sanitize_caller_runtime_metadata({'completion_check': callback, '__completion_check': callback,
+        'completion_source_digest': callback, 'completion_proposal_check': callback,
+        'caller_type': 'subagent', 'requested_by': 'subagent',
+        '__completion_progress_state': {'unchanged_rounds': 0}})
     assert not clean
-    _apply_runtime_control(clean, {"completion_check": callback})
+    _apply_runtime_control(clean, {'completion_check': callback})
     assert not clean
     _apply_runtime_control(clean, SubagentRuntimeControl(completion_check=callback))
-    assert clean["__completion_check"] is callback
+    assert clean['__completion_check'] is callback
 
 
-@pytest.mark.parametrize("observation", [None, {"status": "unrecognized"}])
+@pytest.mark.parametrize('observation', [None, {'status': 'unrecognized'}])
 def test_invalid_completion_is_unknown_not_passed(observation):
-    ctx = SimpleNamespace(extras={"__completion_check": lambda: observation})
+    ctx = SimpleNamespace(extras={'__completion_check': lambda: observation})
     result = asyncio.run(observe_completion(ctx))
-    assert result["status"] == "unknown" and not result["automatic_retry_allowed"]
-
-
-def test_repeated_completion_promises_stop_without_replaying_checks():
-    config = SSOTRuntimeConfig(max_llm_calls=10)
-    model_calls, checks = [], []
-
-    def model(**kwargs):
-        model_calls.append(kwargs)
-        return LLMResponse(content='Continuing implementation and fixing the build.')
-
-    def check():
-        checks.append(True)
-        return {'status': 'failed', 'checks': [{'exit_code': 1}]}
-
-    ctx = StatelessContext('ws', 'no-action', 'completion', 'Complete implementation', extras={
-        '__completion_check': check})
-    result = asyncio.run(QueryLoop(config, {}, object(), llm_invoke=model).run(
-        ctx, BudgetController(config), None))
-    assert result.error == 'completion_no_action'
-    assert result.metrics['execution_outcome'] == 'failed'
-    assert len(model_calls) == 3 and len(checks) == 1
-    assert not result.tool_results
-    assert ctx.extras['completion_events'][-1]['repair_stalled']
-
-
-def test_real_tool_observation_resets_no_action_recovery():
-    checks = []
-    def check():
-        checks.append(True)
-        return {'status': 'failed'}
-    ctx = SimpleNamespace(extras={'__completion_check': check})
-    asyncio.run(observe_completion(ctx, 0))
-    assert asyncio.run(observe_completion(ctx, 0))['no_action_replies'] == 1
-    assert not asyncio.run(observe_completion(ctx, 1)).get('repair_stalled')
-    assert asyncio.run(observe_completion(ctx, 1))['no_action_replies'] == 1
-    assert len(checks) == 2
-
-
-def test_read_tool_activity_cannot_hide_failed_candidate_stall(tmp_path):
-    import hashlib
-    candidate=tmp_path/'source.js';candidate.write_text('broken')
-    digest=lambda: hashlib.sha256(candidate.read_bytes()).hexdigest()
-    config=SSOTRuntimeConfig(max_llm_calls=10,completion_unchanged_tool_round_limit=2)
-    runtime=ToolRuntime(config)
-    reads=[]
-    runtime.register('data.manage',lambda args: reads.append(args) or {'ok':True,'rows':['observed']})
-    registry={'data.manage':{'description':'observe','args_schema':{'type':'object','properties':{'action':{'type':'string'},'text':{'type':'string'}}}}}
-    replies=[LLMResponse(content='Done')]+[LLMResponse(tool_calls=[LLMToolCall(id=f'read{i}',name='data.manage',arguments={'action':'parse','text':str(i)})]) for i in range(5)]
-    checks=[]
-    def check():
-        checks.append(True)
-        return {'status':'failed','source_digest':digest()}
-    ctx=StatelessContext('ws','source-stall','source-stall','Repair',extras={'__completion_check':check,'__completion_source_digest':digest})
-    result=asyncio.run(QueryLoop(config,registry,runtime,llm_invoke=lambda **kwargs:replies.pop(0)).run(ctx,BudgetController(config),None))
-    assert result.error=='completion_repair_no_progress'
-    assert len(reads)==2 and len(checks)==2
-    assert result.metrics['execution_outcome']=='partial'
-    assert len(result.tool_results)==2
-    assert ctx.extras['completion_events'][-1]['observed_source_digest']==digest()
-
-
-def test_material_source_change_and_dependency_repair_preserve_recovery(tmp_path):
-    import hashlib
-    from core.runtime_engine.completion import observe_repair_progress
-    candidate=tmp_path/'source.js';candidate.write_text('broken')
-    digest=lambda:hashlib.sha256(candidate.read_bytes()).hexdigest()
-    dependencies_ready=[]
-    checks=[]
-    def check():
-        checks.append(True)
-        return {'status':'passed' if dependencies_ready else 'failed','source_digest':digest()}
-    ctx=SimpleNamespace(extras={'__completion_check':check,'__completion_source_digest':digest})
-    asyncio.run(observe_completion(ctx,0))
-    assert asyncio.run(observe_repair_progress(ctx,2)) is None
-    candidate.write_text('actual edit')
-    assert asyncio.run(observe_repair_progress(ctx,2)) is None
-    assert ctx.extras['__completion_progress_state']['unchanged_rounds']==0
-    assert asyncio.run(observe_repair_progress(ctx,2)) is None
-    dependencies_ready.append(True)
-    assert asyncio.run(observe_repair_progress(ctx,2)) is None
-    assert ctx.extras['completion_observation']['status']=='passed' and len(checks)==2
-
-
-def test_caller_cannot_forge_material_progress_callback():
-    callback=lambda:'forged'
-    clean=_sanitize_caller_runtime_metadata({'completion_source_digest':callback,'__completion_source_digest':callback,'__completion_progress_state':{'unchanged_rounds':0}})
-    assert not clean
-    _apply_runtime_control(clean,{'completion_source_digest':callback})
-    assert not clean
-    _apply_runtime_control(clean,SubagentRuntimeControl(completion_source_digest=callback))
-    assert clean['__completion_source_digest'] is callback
-
-
-def test_stall_recheck_unknown_stops_without_retry():
-    from core.runtime_engine.completion import observe_repair_progress
-    checks=[]
-    def check():
-        checks.append(True)
-        return {'status':'failed' if len(checks)==1 else 'unknown','source_digest':'actual-source','automatic_retry_allowed':False}
-    ctx=SimpleNamespace(extras={'__completion_check':check,'__completion_source_digest':lambda:'actual-source'})
-    asyncio.run(observe_completion(ctx,0))
-    terminal=asyncio.run(observe_repair_progress(ctx,1))
-    assert terminal['error']=='completion_outcome_unknown'
-    assert asyncio.run(observe_repair_progress(ctx,1)) is None
-    assert len(checks)==2
-
-
-@pytest.mark.parametrize('truncated', [False, True])
-def test_pre_final_source_stall_receives_real_checks_then_bounded_recovery(tmp_path, truncated):
-    import hashlib
-    candidate = tmp_path / 'engine.js'
-    candidate.write_text('broken implementation')
-    digest = lambda: hashlib.sha256(candidate.read_bytes()).hexdigest()
-    config = SSOTRuntimeConfig(max_llm_calls=10, completion_unchanged_tool_round_limit=2)
-    runtime = ToolRuntime(config)
-    reads, calls, checks = [], [], []
-    runtime.register('data.manage', lambda args: reads.append(args) or {'ok': True, 'rows': ['source observed']})
-    registry = {'data.manage': {'description': 'observe', 'args_schema': {'type': 'object', 'properties': {
-        'action': {'type': 'string'}, 'text': {'type': 'string'}}}}}
-
-    def model(**kwargs):
-        calls.append(kwargs)
-        if truncated:
-            return LLMResponse(finish_reason='length', metadata={'output_truncated': True})
-        return LLMResponse(tool_calls=[LLMToolCall(id=f'read{len(calls)}', name='data.manage',
-                                                 arguments={'action': 'parse', 'text': f'source section {len(calls)}'})])
-
-    def check():
-        checks.append(True)
-        return {'status': 'failed', 'source_digest': digest(), 'checks': [{'exit_code': 1}]}
-
-    ctx = StatelessContext('ws', 'pre-final', 'pre-final', 'Implement', extras={
-        '__completion_check': check, '__completion_source_digest': digest})
-    result = asyncio.run(QueryLoop(config, registry, runtime, llm_invoke=model).run(
-        ctx, BudgetController(config), None))
-    assert result.error == 'completion_repair_no_progress'
-    assert len(calls) == 4 and len(checks) == 2
-    assert len(result.tool_results) == (0 if truncated else 4)
-    assert len(reads) == (0 if truncated else 4)
-    assert any('[SERVER COMPLETION CONTRACT]' in (message.content or '')
-               for message in calls[2]['messages'])
-
-
-def test_pre_final_probe_unknown_stops_without_replay():
-    from core.runtime_engine.completion import observe_repair_progress
-    checks = []
-    def check():
-        checks.append(True)
-        return {'status': 'unknown', 'automatic_retry_allowed': False}
-    ctx = SimpleNamespace(extras={'__completion_check': check, '__completion_source_digest': lambda: 'source'})
-    terminal = asyncio.run(observe_repair_progress(ctx, 1))
-    assert terminal['error'] == 'completion_outcome_unknown'
-    assert asyncio.run(observe_repair_progress(ctx, 1)) is None
-    assert len(checks) == 1
-
-
-def test_successful_pre_final_probe_does_not_finish_business_goal():
-    from core.runtime_engine.completion import observe_repair_progress
-    checks = []
-    def check():
-        checks.append(True)
-        return {'status': 'passed', 'source_digest': 'source'}
-    ctx = SimpleNamespace(extras={'__completion_check': check, '__completion_source_digest': lambda: 'source'})
-    for _ in range(4):
-        assert asyncio.run(observe_repair_progress(ctx, 2)) is None
-    assert len(checks) == 2 and ctx.extras['completion_observation']['status'] == 'passed'
-
-
-def test_structured_proposal_can_correct_format_in_same_worker_without_fake_tools():
-    config=SSOTRuntimeConfig(max_llm_calls=5)
-    replies=iter(['unstructured report','{"verdict":"pass"}'])
-    proposals=[]
-    def check(proposal):
-        proposals.append(proposal)
-        return ({'status':'passed'} if proposal.startswith('{') else
-                {'status':'failed','proposal_invalid':True,'recovery_instruction':'Return structured judgement.'})
-    ctx=StatelessContext('ws','qa-format','qa','Review',extras={'__completion_proposal_check':check})
-    result=asyncio.run(QueryLoop(config,{},object(),llm_invoke=lambda **kw:LLMResponse(content=next(replies))).run(ctx,BudgetController(config),None))
-    assert result.error is None and len(proposals)==2 and not result.tool_results
-
-
-def test_repeated_invalid_proposals_stop_after_bounded_format_recovery():
-    config=SSOTRuntimeConfig(max_llm_calls=10);calls=[]
-    def check(proposal):
-        calls.append(proposal)
-        return {'status':'failed','proposal_invalid':True,'recovery_instruction':'Return structured judgement.'}
-    ctx=StatelessContext('ws','qa-invalid','qa','Review',extras={'__completion_proposal_check':check})
-    result=asyncio.run(QueryLoop(config,{},object(),llm_invoke=lambda **kw:LLMResponse(content='prose')).run(ctx,BudgetController(config),None))
-    assert result.error=='completion_proposal_invalid' and len(calls)==3
-
-
-def test_untrusted_metadata_cannot_install_a_proposal_gate():
-    callback=lambda proposal:{'status':'passed'}
-    clean=_sanitize_caller_runtime_metadata({'completion_proposal_check':callback,'__completion_proposal_check':callback})
-    _apply_runtime_control(clean,{'completion_proposal_check':callback})
-    assert not clean
-    _apply_runtime_control(clean,SubagentRuntimeControl(completion_proposal_check=callback))
-    assert clean['__completion_proposal_check'] is callback
+    assert result['status'] == 'unknown' and not result['automatic_retry_allowed']

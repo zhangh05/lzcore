@@ -62,60 +62,6 @@ class LoopFailureRecovery:
         digest = hashlib.sha256(cls._tool_call_key(tc).encode("utf-8")).hexdigest()
         return f"sha256:{digest}"
 
-    def _suppress_repeated_tool_calls(
-        self, ctx: StatelessContext, tool_calls: list[LLMToolCall]
-    ) -> tuple[list[LLMToolCall], str]:
-        """Reuse immutable observations; suppress unchanged deterministic failures."""
-        previous = {
-            str(item.get("call_key") or ""): item
-            for item in (ctx.extras.get("task_state_execution_manifest") or [])
-            if isinstance(item, dict)
-        }
-        executable, suppressed, suppressed_keys = [], [], []
-        for call in tool_calls:
-            prior = previous.get(self._durable_call_key(call))
-            if not prior:
-                executable.append(call)
-                continue
-            read_only = self._executor._is_read_only_call(call)
-            from .contracts import observation_is_reusable
-
-            unchanged = int(prior.get("state_revision") or 0) == int(
-                ctx.extras.get("tool_state_revision") or 0
-            )
-            deterministic_failure = (
-                not read_only
-                and not bool(prior.get("ok"))
-                and not bool(prior.get("execution_may_continue"))
-                and unchanged
-            )
-            reusable_read = (
-                read_only
-                and bool(prior.get("ok"))
-                and observation_is_reusable(call.name, call.arguments)
-            )
-            if reusable_read or deterministic_failure:
-                # This text returns to the model, so retain the same alias
-                # spelling exposed in provider tool definitions.
-                suppressed.append(str(call.name).replace(".", "__"))
-                suppressed_keys.append(self._durable_call_key(call))
-            else:
-                executable.append(call)
-        if not suppressed:
-            ctx.extras.pop("suppressed_tool_signature", None)
-            return executable, ""
-        ctx.extras["suppressed_tool_signature"] = hashlib.sha256(
-            json.dumps(sorted(suppressed_keys), ensure_ascii=False).encode("utf-8")
-        ).hexdigest()
-        ctx.extras.setdefault("duplicate_tool_call_events", []).append(
-            {"count": len(suppressed), "tools": suppressed}
-        )
-        return executable, (
-            "[RUNTIME DEDUPLICATION] Exact calls with existing terminal evidence or a deterministic failure were not re-executed: "
-            + ", ".join(suppressed)
-            + ". Choose a materially different next action."
-        )
-
     @staticmethod
     def _has_late_network_readback(
         results: list[StreamingToolResult], pending: dict[str, Any]
@@ -140,24 +86,6 @@ class LoopFailureRecovery:
                 return True
         return False
 
-    @staticmethod
-    def _advance_tool_failure_round(streaks: dict[str, int], results: list):
-        """Count consecutive unchanged failure proposals, independent of width."""
-        if any(result.ok for result in results):
-            streaks.clear()
-        failures = {
-            f"{result.tool_name}:{str((result.output or {}).get('error') or result.error or 'unknown_error')}": result
-            for result in results
-            if not result.ok
-        }
-        for old in set(streaks) - set(failures):
-            streaks.pop(old)
-        for signature, result in failures.items():
-            streaks[signature] = streaks.get(signature, 0) + 1
-            if streaks[signature] >= 3:
-                return result
-        return None
-
     def _record_task_state_execution_manifest(
         self,
         ctx: StatelessContext,
@@ -171,16 +99,11 @@ class LoopFailureRecovery:
             ctx.extras["task_state_execution_manifest"] = manifest
         for call, result in zip(tool_calls, results):
             side_effecting = not self._executor._is_read_only_call(call)
-            if side_effecting and result.ok:
-                ctx.extras["tool_state_revision"] = (
-                    int(ctx.extras.get("tool_state_revision") or 0) + 1
-                )
             manifest.append(
                 {
                     "tool_id": str(call.name or "")[:160],
                     "call_key": self._durable_call_key(call),
                     "side_effecting": side_effecting,
-                    "state_revision": int(ctx.extras.get("tool_state_revision") or 0),
                     "ok": bool(result.ok),
                     # Preserve uncertainty as telemetry so the model receives the
                     # factual outcome without a runtime execution restriction.
@@ -428,138 +351,3 @@ class LoopFailureRecovery:
             "more appropriate tool, or a different strategy. If no safe recovery exists, answer "
             "with the concrete blocker and the best next action." + child_boundary
         )
-
-    @staticmethod
-    def _network_retry_final_gate(
-        ctx, final_text: str, tool_results: list[StreamingToolResult]
-    ) -> str:
-        """Keep every network configuration workflow grounded in tool evidence.
-
-        This deliberately knows nothing about vendor syntax or a particular
-        command such as ``shutdown``.  The device tool publishes the exact
-        model sequence and dispatch states; this gate only prevents a final
-        answer from discarding an unfinished sequence or a missing independent
-        post-write observation.
-        """
-        workbench = (
-            ctx.extras.get("workbench_context")
-            if isinstance(ctx.extras, dict)
-            else None
-        )
-        if (
-            not isinstance(workbench, dict)
-            or workbench.get("extension_id") != "network.operations"
-            or str(workbench.get("skill_id") or "").startswith("drawing:")
-            or workbench.get("tool_scope") == "exclusive"
-        ):
-            return ""
-        text = final_text.lower()
-        network_results = [
-            item
-            for item in tool_results
-            if str(item.tool_name or "").replace("__", ".")
-            == "network.operations.device.manage"
-        ]
-        request = str(ctx.extras.get("__raw_user_input") or "").lower()
-        if not network_results and any(
-            token in request
-            for token in ("retry", "again", "continue", "重试", "再试", "继续")
-        ):
-            return (
-                "[RUNTIME NETWORK RETRY EVIDENCE]\n"
-                "This retry has no network command result. Do not claim that a device command was executed, rejected, or read back. "
-                "Use the selected Skill's network tools now to obtain current evidence and continue the user's unfinished objective."
-            )
-        configured = [
-            (index, item)
-            for index, item in enumerate(network_results)
-            if isinstance(item.output, dict)
-            and item.output.get("executed_action") == "configure"
-        ]
-        if not configured:
-            claims_execution = any(
-                token in text
-                for token in (
-                    "configure",
-                    "已执行",
-                    "被拒绝",
-                    "配置未",
-                    "not executed",
-                    "rejected",
-                )
-            )
-            if claims_execution and any(
-                token in request
-                for token in ("retry", "again", "continue", "重试", "再试", "继续")
-            ):
-                return (
-                    "[RUNTIME NETWORK RETRY EVIDENCE]\n"
-                    "This retry has network evidence, but no `configure` execution result. A read/probe/catalog result cannot be reported as a configuration attempt or refusal. "
-                    "Continue with the unfinished objective using a configure call, unless the latest structured write result explicitly says its outcome is unknown or may still be executing."
-                )
-            return ""
-
-        last_config_index, last_config = configured[-1]
-        last_output = dict(last_config.output or {})
-        workflow = last_output.get("configuration_workflow")
-        workflow = dict(workflow) if isinstance(workflow, dict) else {}
-        unexecuted = list(
-            workflow.get("unexecuted_commands")
-            or last_output.get("unexecuted_commands")
-            or []
-        )
-        uncertain = list(workflow.get("uncertain_commands") or [])
-        if unexecuted:
-            return (
-                "[RUNTIME CONFIGURATION WORKFLOW]\n"
-                "The most recent configuration batch did not send every requested command. The exact unsent commands are data below. "
-                "Do not replay commands already sent. Reconcile any uncertain command with read-back, then decide and execute the remaining user-requested stage now; do not end with a promise to continue.\n"
-                + json.dumps(
-                    {
-                        "unexecuted_commands": unexecuted,
-                        "uncertain_commands": uncertain,
-                    },
-                    ensure_ascii=False,
-                )
-            )
-
-        # Any successful read after the final configure call is an independent
-        # post-write observation.  It is intentionally command-agnostic: the
-        # model selects the vendor-appropriate read command from the objective
-        # and live device state instead of a server-side command heuristic.
-        post_write_read = any(
-            index > last_config_index
-            and isinstance(item.output, dict)
-            and item.output.get("executed_action") == "read"
-            and item.ok
-            for index, item in enumerate(network_results)
-        )
-        if bool(workflow.get("requires_readback", True)) and not post_write_read:
-            return (
-                "[RUNTIME CONFIGURATION WORKFLOW]\n"
-                "A configuration batch has run, but this turn has no independent successful `read` after its final write. "
-                "Do not treat the CLI prompt acknowledgement as the requested network outcome. Use a targeted read now to observe the relevant final state; if the read cannot be obtained, make a concrete evidence-based blocker statement rather than a future-work promise."
-            )
-
-        deferred_language = any(
-            marker in text
-            for marker in (
-                "尚未执行",
-                "未执行",
-                "等待你",
-                "等待用户",
-                "请确认",
-                "请批准",
-                "wait for",
-                "not executed",
-                "need your confirmation",
-                "awaiting confirmation",
-            )
-        )
-        if deferred_language:
-            return (
-                "[RUNTIME CONFIGURATION WORKFLOW]\n"
-                "The user already submitted a concrete configuration objective. Current final prose defers an unfinished stage to a later confirmation. "
-                "Continue the active workflow now using the full conversation and tool evidence, or report a concrete terminal device/transport blocker. Do not ask for confirmation or merely promise a later action."
-            )
-        return ""

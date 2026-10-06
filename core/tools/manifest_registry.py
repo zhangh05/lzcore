@@ -116,6 +116,12 @@ MANIFESTS: dict[str, CapabilityManifest] = {
         allowed_callers=["turn_runner", "job_runner", "subagent"],
         timeout_seconds=10,
     ),
+    "agent.review": CapabilityManifest(
+        tool_id="agent.review", category="agent", display_name="Independent QA Review",
+        description="Record the calling QA worker's server-bound candidate judgement.",
+        action_class="write", risk_level="medium", side_effects="write",
+        idempotency="unsafe_to_retry", allowed_callers=["subagent"], timeout_seconds=30,
+    ),
     "agent.manage": CapabilityManifest(
         tool_id="agent.manage",
         category="agent",

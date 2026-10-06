@@ -75,7 +75,7 @@ def test_unknown_qa_checks_are_sticky_and_cannot_seed_source_repair(team,monkeyp
 
 def test_qa_rejected_source_is_inherited_and_repaired_before_fresh_qa_and_merge(team,monkeypatch):
     first=team.spawn();qa_runtime(monkeypatch,'fail',['VALUE must be 43.'])
-    reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    team.spawn('qa_agent',review=first['subtask_id'])
     original=subagent._load_task('parent-ws',first['subtask_id'])
     assert original.coding['phase']=='qa_rejected'
     source=project_path(original.coding['branch_workspace'],'files/data/app')
@@ -112,7 +112,7 @@ def test_invalid_public_qa_proposal_is_preserved_without_validating_candidate(te
     reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
     assert qa.status=='failed' and qa.coding['qa_invalid_proposal']=='Public review with no structured verdict.'
-    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='changes_ready'
+    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='qa_incomplete'
 
 
 @pytest.mark.parametrize('mutation',[
@@ -154,17 +154,13 @@ def test_malformed_blocking_evidence_cannot_be_accepted_or_inferred(team,monkeyp
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
     assert qa.status=='failed' and not qa.coding.get('qa_review')
     assert qa.coding['qa_invalid_proposal']==report('fail',[finding])
-    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='changes_ready'
+    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='qa_incomplete'
 
 
 def test_known_qa_rejection_has_review_summary_instead_of_provider_failure(team,monkeypatch):
     first=team.spawn()
     def runtime(session,turn,**kw):
-        observed=turn.op.runtime_control.completion_proposal_check(report('fail',['Real interface defect.']))
-        # The real QueryLoop terminates with ok=False on a known review rejection.
-        assert observed['terminal_error']=='coding_qa_review_rejected'
-        return SimpleNamespace(ok=False,final_response=report('fail',['Real interface defect.']),
-             tool_calls=[],errors=['coding_qa_review_rejected'])
+        return SimpleNamespace(ok=True,final_response=report('fail',['Real interface defect.']),tool_calls=[])
     monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',runtime)
     reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
@@ -215,30 +211,20 @@ def test_ready_revision_rejects_tampered_unknown_active_or_published_proposals(t
             'validation_commands':['true'],'revision_subtask_id':first['subtask_id']})
 
 
-def test_unchanged_passing_revision_cannot_publish_a_future_work_promise(team,monkeypatch):
+def test_unchanged_revision_requires_fresh_exact_qa_instead_of_forced_edit(team,monkeypatch):
     first=team.spawn()
-    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',lambda *a,**kw:
-        SimpleNamespace(ok=True,final_response='I will edit the source next.',tool_calls=[]))
+    qa_runtime(monkeypatch)
     repaired=team.client.invoke('agent.manage',{'action':'spawn','profile_id':'coding_agent',
-        'instruction':'Repair observed semantic defects','background':False,'coding_assignment':{
+        'instruction':'Reassess candidate','background':False,'coding_assignment':{
             'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
             'revision_subtask_id':first['subtask_id']}},context=team.parent).output
     task=subagent._load_task('parent-ws',repaired['subtask_id'])
-    observed=task.coding['completion_validation']
-    assert task.status=='failed' and task.coding['phase']=='failed'
-    assert observed['status']=='failed' and observed['readiness_gap']=='unchanged_source_proposal'
-    assert all(check['result']['exit_code']==0 for check in observed['checks'])
-    assert observed['source_digest']==task.coding['revision_source_digest']
-    assert task.coding['environment']['cleanup_confirmed']
+    assert task.status=='succeeded' and task.coding['candidate_digest']==task.coding['revision_source_digest']
     assert not subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
-    # Re-copying this semantic failure cannot pretend that old passing checks
-    # recovered a dependency failure and thereby validate identical source.
-    repeated=team.client.invoke('agent.manage',{'action':'spawn','profile_id':'coding_agent',
-        'instruction':'Repair same proposal','background':False,'coding_assignment':{
-            'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
-            'revision_subtask_id':task.subtask_id}},context=team.parent).output
-    again=subagent._load_task('parent-ws',repeated['subtask_id'])
-    assert again.status=='failed' and again.coding['completion_validation']['readiness_gap']=='unchanged_source_proposal'
+    assert team.spawn('qa_agent',review=task.subtask_id)['task_status']=='succeeded'
+    assert subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
+    from scripts.benchmark_team_acceptance import verify_team
+    assert verify_team('parent-ws','parent-session','files/data/app')['status']=='PASS'
 
 
 def test_revision_recovery_of_known_failed_checks_can_keep_source_unchanged(team,monkeypatch):
@@ -252,46 +238,104 @@ def test_revision_recovery_of_known_failed_checks_can_keep_source_unchanged(team
             'revision_subtask_id':first['subtask_id']}},context=team.parent).output
     task=subagent._load_task('parent-ws',repaired['subtask_id'])
     assert task.status=='succeeded' and task.coding['candidate_digest']==task.coding['revision_source_digest']
-    assert task.coding['completion_validation']['revision_evidence']=={
-        'source_changed':False,'previous_checks_recovered':True}
+    assert task.coding['completion_validation']['status']=='passed'
     assert not subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
     assert team.spawn('qa_agent',review=task.subtask_id)['task_status']=='succeeded'
     assert subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
 
 
-def test_cached_passing_checks_cannot_bypass_revision_evidence_or_replay_unknown(team,monkeypatch):
+def test_cached_passing_checks_and_unknown_do_not_replay_execution(team,monkeypatch):
     first=team.spawn();task=subagent._load_task('parent-ws',first['subtask_id'])
     task.coding.update(revision_subtask_id='prior',revision_source_digest=task.coding['candidate_digest'],
         revision_observation={'completion_validation':{'status':'passed'}})
     def unexpected(*a,**kw):raise AssertionError('Cached checks must not execute again')
     monkeypatch.setattr(DockerProjectEnvironment,'execute',unexpected)
-    assert coding_team.check_implementation(task)['readiness_gap']=='unchanged_source_proposal'
+    assert coding_team.check_implementation(task)['status']=='passed'
     unknown={'status':'unknown','automatic_retry_allowed':False}
     task.coding['completion_validation']=unknown
     project_path(task.coding['branch_workspace'],'files/data/app').joinpath('src/value.py').write_text('changed')
     assert coding_team.check_implementation(task)==unknown
 
 
-@pytest.mark.parametrize('legacy_publication',[False,True])
-def test_pre_fix_unchanged_revision_is_blocked_at_merge_and_independent_verification(team,monkeypatch,legacy_publication):
-    from scripts.benchmark_team_acceptance import verify_team
-    first=team.spawn()
-    with monkeypatch.context() as old_runtime:
-        old_runtime.setattr('agent.runtime.durable.coding_revisions.revision_readiness',lambda a,v:v)
-        qa_runtime(old_runtime)
-        copied=team.client.invoke('agent.manage',{'action':'spawn','profile_id':'coding_agent',
-            'instruction':'Old unchanged proposal','background':False,'coding_assignment':{
-                'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
-                'revision_subtask_id':first['subtask_id']}},context=team.parent).output
-        assert copied['task_status']=='succeeded'
-        assert team.spawn('qa_agent',review=copied['subtask_id'])['task_status']=='succeeded'
-        if legacy_publication:
-            assert subagent.merge_subagent_result('parent-task',copied['subtask_id'],'parent-ws')['ok']
-    if legacy_publication:
-        with pytest.raises(AssertionError,match='source revision has no actual change'):
-            verify_team('parent-ws','parent-session','files/data/app')
-    else:
-        result=subagent.merge_subagent_result('parent-task',copied['subtask_id'],'parent-ws')
-        assert not result['ok'] and result['error']=='coding_revision_incomplete'
-        assert not result['automatic_retry_allowed']
-        assert not project_path('parent-ws','files/data/app').joinpath('src/value.py').exists()
+
+@pytest.mark.parametrize('verdict,findings,expected', [('pass', [], 'succeeded'),
+    ('fail', ['Observed interface mismatch.'], 'failed'), ('unknown', [], 'failed'),
+    ('pass', ['Observed interface mismatch.'], 'failed')])
+def test_native_review_allows_prose_final_and_preserves_verdict(team,monkeypatch,verdict,findings,expected):
+    first=team.spawn();recordings=[]
+    def runtime(session,turn,**kw):
+        review=json.loads(report(verdict,findings))
+        # Identity values supplied by a model cannot replace the server binding.
+        review.update(candidate_digest='forged',review_subtask_id='forged')
+        recorded=team.client.invoke('agent.review',{'review':review},
+            context=ToolRuntimeContext(workspace_id=session.workspace_id,session_id=session.session_id,
+                                       requested_by='subagent'))
+        recordings.append(recorded)
+        assert recorded.status=='succeeded',recorded
+        assert recorded.output['review']['review_subtask_id']==first['subtask_id']
+        return SimpleNamespace(ok=True,final_response='自然语言 QA 报告，保留检查范围和实际发现。',tool_calls=[])
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',runtime)
+    reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
+    assert recordings and recordings[0].status=='succeeded', recordings
+    assert qa.status==expected,qa.errors
+    assert qa.coding['qa_final_report']=='自然语言 QA 报告，保留检查范围和实际发现。'
+    assert qa.coding['qa_review']['candidate_digest']!='forged'
+    merged=subagent.merge_subagent_result('parent-task',first['subtask_id'],'parent-ws')
+    assert bool(merged['ok'])==(expected=='succeeded')
+    if expected=='succeeded':
+        from scripts.benchmark_team_acceptance import verify_team
+        assert verify_team('parent-ws','parent-session','files/data/app')['status']=='PASS'
+
+
+def test_review_tool_rejects_parent_wrong_session_and_closed_binding(team,monkeypatch):
+    first=team.spawn();contexts=[]
+    def runtime(session,turn,**kw):
+        contexts.append(ToolRuntimeContext(workspace_id=session.workspace_id,
+            session_id=session.session_id,requested_by='subagent'))
+        wrong=ToolRuntimeContext(workspace_id=session.workspace_id,session_id='other-session',requested_by='subagent')
+        assert team.client.invoke('agent.review',{'review':json.loads(report())},context=wrong).status!='succeeded'
+        # Public arguments cannot override a missing trusted session identity.
+        missing=ToolRuntimeContext(workspace_id=session.workspace_id,requested_by='subagent')
+        assert team.client.invoke('agent.review',{'session_id':session.session_id,
+            'review':json.loads(report())},context=missing).status!='succeeded'
+        return SimpleNamespace(ok=True,final_response=report(),tool_calls=[])
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',runtime)
+    reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    assert reviewed['task_status']=='succeeded',subagent._load_task('parent-ws',reviewed['subtask_id']).errors
+    for context in [team.parent,contexts[0]]:
+        assert team.client.invoke('agent.review',{'review':json.loads(report())},context=context).status!='succeeded'
+
+
+def test_native_review_crosses_query_loop_and_governed_tool_gateway(team,monkeypatch):
+    import asyncio
+    from agent.llm.schemas import LLMResponse, LLMToolCall
+    from agent.runtime.ssot_tools import _make_tool_handler
+    from core.runtime_engine.budget_controller import BudgetController
+    from core.runtime_engine.models import SSOTRuntimeConfig, StatelessContext
+    from core.runtime_engine.query_loop import QueryLoop
+    from core.runtime_engine.tool_runtime import ToolRuntime
+    from core.tools.canonical_registry import CANONICAL_REGISTRY
+
+    first=team.spawn();observations=[]
+    def runtime(session,turn,**kw):
+        config=SSOTRuntimeConfig(max_llm_calls=3)
+        tool_runtime=ToolRuntime(config)
+        tool_runtime.register('agent.review',_make_tool_handler(client=team.client,tool_id='agent.review',
+            workspace_id=session.workspace_id,session_id=session.session_id,
+            run_id='local-review',trace_id='local-review',requested_by='subagent'))
+        replies=iter([LLMResponse(tool_calls=[LLMToolCall(id='record',name='agent__review',
+            arguments={'review':json.loads(report())})]),LLMResponse(content='Reviewed. 自然语言总结。')])
+        entry=CANONICAL_REGISTRY['agent.review']
+        ctx=StatelessContext(session.workspace_id,session.session_id,'local-review','Review exact candidate',extras={'caller_type':'subagent'})
+        result=asyncio.run(QueryLoop(config,{'agent.review':{'description':entry.description,
+            'args_schema':entry.input_schema}},tool_runtime,llm_invoke=lambda **kw:next(replies)).run(
+                ctx,BudgetController(config),None))
+        observations.append(result)
+        return SimpleNamespace(ok=result.error is None,final_response=result.final_response,tool_calls=[])
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',runtime)
+    reviewed=team.spawn('qa_agent',review=first['subtask_id'])
+    assert observations and observations[0].error is None,observations
+    assert len(observations[0].tool_results)==1 and observations[0].tool_results[0].ok,observations[0].tool_results
+    assert reviewed['task_status']=='succeeded',reviewed
+    assert subagent.merge_subagent_result('parent-task',first['subtask_id'],'parent-ws')['ok']

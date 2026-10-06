@@ -73,7 +73,7 @@ def test_llm_projection_preserves_complete_schema_constraints():
 def test_all_base_tool_schemas_reject_unpublished_arguments():
     from core.tools.canonical_registry import CANONICAL_REGISTRY
 
-    assert len(CANONICAL_REGISTRY) == 17
+    assert len(CANONICAL_REGISTRY) == 18
     for tool_id, entry in CANONICAL_REGISTRY.items():
         assert entry.input_schema.get("additionalProperties") is False, tool_id
 

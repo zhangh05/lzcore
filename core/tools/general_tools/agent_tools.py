@@ -513,6 +513,22 @@ def handle_agent_cancel(inv: ToolInvocation) -> dict:
         return _error_inv(inv, str(e)[:200])
 
 
+def handle_agent_review(inv: ToolInvocation) -> dict:
+    """Record only the calling QA worker's server-bound candidate judgement."""
+    from core.tools.project_execution import environment_for
+
+    if not inv.workspace_id or not inv.session_id:
+        return _error_inv(inv, "coding_review_requires_trusted_identity")
+    environment = environment_for(_caller_workspace(inv))
+    if (environment is None or environment.closed or environment.source_mode != "review"
+            or not callable(environment.review_submit)):
+        return _error_inv(inv, "coding_review_requires_active_qa_binding")
+    try:
+        return environment.review_submit(_inv_session_id(inv), inv.arguments["review"])
+    except (ValueError, TypeError, KeyError) as exc:
+        return _error_inv(inv, str(exc))
+
+
 def handle_agent_merge(inv: ToolInvocation) -> dict:
     """Integrate only the current trusted parent's independently reviewed task."""
     args = inv.arguments or {}
@@ -571,5 +587,6 @@ __all__ = [
     "handle_agent_get_result",
     "handle_agent_cancel",
     "handle_agent_merge",
+    "handle_agent_review",
     "handle_agent_status",
 ]

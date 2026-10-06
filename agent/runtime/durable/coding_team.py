@@ -97,12 +97,6 @@ def observe_progress(task) -> dict:
             "completion_status": (assignment.get("completion_validation") or {}).get("status", "pending")}
 
 
-def implementation_source_digest(task):
-    assignment = task.coding
-    branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
-    return manifest_digest(source_manifest(branch, assignment.get("generated_paths")))
-
-
 def check_implementation(task, cancel_check=None) -> dict:
     """Observe declared checks on current source through governed execution.
 
@@ -114,7 +108,6 @@ def check_implementation(task, cancel_check=None) -> dict:
     from storage.redaction import redact_value
 
     from .subagent import _save_task
-    from .coding_revisions import revision_readiness
 
     assignment = task.coding
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
@@ -125,11 +118,7 @@ def check_implementation(task, cancel_check=None) -> dict:
         # Source changes cannot reconcile an execution whose outcome is unknown.
         return cached
     if cached.get("source_digest") == digest and cached.get("status") == "passed":
-        result = revision_readiness(assignment, cached)
-        if result != cached:
-            assignment.update(phase="executing", completion_validation=result)
-            _save_task(task)
-        return result
+        return cached
     evidence = []
     assignment["phase"] = "verifying"
     _save_task(task)
@@ -159,7 +148,6 @@ def check_implementation(task, cancel_check=None) -> dict:
     result = {"status": status, "source_digest": digest, "checks": evidence,
               "source_changed_during_checks": source_changed,
               "automatic_retry_allowed": status != "unknown"}
-    result = revision_readiness(assignment, result)
     assignment.update(phase="executing", completion_validation=result)
     _save_task(task)
     return result
@@ -333,6 +321,15 @@ def coding_run(task):
                           source_mode="review" if task.profile_id == "qa_agent" else "implementation",
                           generated_paths=assignment.get("generated_paths")) as environment:
         environment.configure_validation(assignment["validation_commands"])
+        if task.profile_id == "qa_agent":
+            from .coding_reviews import record_qa_review
+
+            def submit_review(session_id, review):
+                if session_id != task.subtask_id:
+                    raise ValueError("coding_review_identity_mismatch")
+                return record_qa_review(task, review)
+
+            environment.review_submit = submit_review
         assignment["environment"] = environment.descriptor()
         instruction = (
             task.goal
@@ -401,7 +398,7 @@ def cancel_execution(task) -> dict:
     return {"cleanup_confirmed": environment.cleanup_confirmed}
 
 
-def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -> None:
+def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -> bool:
     from .subagent import _save_task
 
     assignment = task.coding
@@ -410,12 +407,12 @@ def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -
         if assignment.get("phase") not in {"qa_rejected", "qa_incomplete", "qa_unknown"}:
             assignment["phase"] = "failed"
         _save_task(task)
-        return
+        return False
     if task.profile_id == "qa_agent":
         from .coding_reviews import review_qa_proposal
         review = review_qa_proposal(task, proposal)
         if review["status"] != "passed":
-            raise ValueError("coding_qa_review_not_accepted")
+            return False
         evidence = assignment["validation"]
         assignment.update(phase="validated", validation=evidence)
         target = _related(task, assignment["review_subtask_id"])
@@ -450,6 +447,7 @@ def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -
             phase="changes_ready",
         )
     _save_task(task)
+    return True
 
 
 def integrate(task) -> dict:
@@ -477,15 +475,6 @@ def integrate(task) -> dict:
     if not accepted_review(qa, assignment.get("qa_candidate_digest")):
         return {"ok": False, "error": "coding_qa_verdict_required",
                 "phase": assignment.get("phase"), "automatic_retry_allowed": False}
-    if assignment.get("revision_subtask_id"):
-        from .coding_revisions import revision_readiness
-        readiness = revision_readiness(assignment, assignment.get("completion_validation") or {})
-        if readiness.get("status") != "passed":
-            # Reassess durable pre-fix proposals without executing checks or
-            # rewriting their historical result. QA cannot supply source repair.
-            return {"ok": False, "error": "coding_revision_incomplete",
-                    "readiness_gap": readiness.get("readiness_gap"),
-                    "automatic_retry_allowed": False}
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
     if (
         manifest_digest(source_manifest(branch, assignment.get("generated_paths")))

@@ -3,6 +3,8 @@
 
 import json
 
+import pytest
+
 
 def _isolate_provider_store(monkeypatch, tmp_path):
     import agent.llm.provider_store as store
@@ -216,21 +218,15 @@ class TestKeyResolverMask:
         assert mask_secret(None) == ""
 
 
-class TestMiniMaxM3NoResidue:
-    def test_no_m1_in_settings_default(self):
-        from agent.llm.settings import resolve_effective_llm_config
-        cfg = resolve_effective_llm_config()
-        model = cfg.get("model", "")
-        if model and "M1" in model:
-            assert model == "MiniMax-M3"
-
-    def test_no_m1_in_config_default(self):
-        from agent.llm.config import load_llm_config
-        cfg = load_llm_config()
-        for name, provider in cfg.get("providers", {}).items():
-            model = provider.get("model", "")
-            if model == "MiniMax-M1":
-                raise AssertionError(f"Provider {name} has MiniMax-M1 as model")
+@pytest.mark.parametrize("model", ["MiniMax-M1", "MiniMax-M3", "custom-model"])
+def test_explicit_yaml_model_is_not_silently_replaced(monkeypatch, model):
+    from agent.llm.config import resolve_provider_config
+    monkeypatch.delenv("LZCORE_LLM_ENABLED", raising=False)
+    monkeypatch.setattr("agent.llm.settings.resolve_effective_llm_config", lambda: {"config_source": "file"})
+    monkeypatch.setattr("agent.llm.config.resolve_api_key", lambda **kw: "")
+    config = {"enabled": True, "default_provider": "minimax", "providers": {"minimax": {
+        "type": "anthropic_messages", "base_url": "https://example.invalid/v1", "model": model}}}
+    assert resolve_provider_config(config)["model"] == model
 
 
 class TestOSSecretSanitizationAndFallback:

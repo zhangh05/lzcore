@@ -129,8 +129,6 @@ class SubagentRuntimeControl:
     workbench_context: dict[str, Any] = field(default_factory=dict)
     cancel_check: Any = None
     completion_check: Any = None
-    completion_source_digest: Any = None
-    completion_proposal_check: Any = None
 
 
 @dataclass
@@ -192,7 +190,6 @@ class SSOTRuntimeConfig:
     tracking_max_seconds: int = 0
     tracking_poll_interval_cap_seconds: float = 2.0
     tracking_no_progress_grace_seconds: float = 120.0
-    completion_unchanged_tool_round_limit: int = 12
 
     # One input-budget contract for the active runtime. Tool definitions remain
     # fully visible and are deducted before message/history/tool-result budgets.

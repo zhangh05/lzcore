@@ -89,6 +89,8 @@ def run_ssot_turn(
     metadata_in = _sanitize_caller_runtime_metadata(
         getattr(turn.op, "metadata", {}) or {}
     )
+    # Both runtime governance layers use the same server-created caller identity.
+    metadata_in["caller_type"] = requested_by
     _apply_runtime_control(metadata_in, getattr(turn.op, "runtime_control", None))
     from .ssot_metadata import _bind_execution_readiness
 

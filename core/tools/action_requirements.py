@@ -206,6 +206,7 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("save", "tag
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("delete",), _DELETE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("references", "reconcile_trash_preview"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("import", "reconcile_trash"), _WRITE))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.review", ("",), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("list", "get", "status"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("spawn", "start", "cancel", "merge"), _EXECUTE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("knowledge.manage", ("search", "read", "list", "chunk"), _READ))
@@ -228,12 +229,6 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts(
     "text.analyze", ("redact", "extract_entities", "match"), _READ,
 ))
 
-
-# Only computations over supplied arguments have reusable observations. Safe
-# retries do not imply that a browser, file, device or job is still unchanged.
-for _tool_action, _contract in ACTION_EXECUTION_CONTRACTS.items():
-    if _tool_action[0] in {"data.manage", "text.analyze"}:
-        _contract["observation_cache"] = "turn"
 
 def action_execution_contract(tool_id: str, action: str) -> dict:
     """Return a copy of the canonical action-level execution contract."""

@@ -269,7 +269,7 @@ def test_fragmented_drawing_call_saves_21_nodes_and_30_links_and_finishes(monkey
 
 
 @pytest.mark.parametrize('limit,noop', [(0,False), (3,False), (0,True)])
-def test_drawing_loop_continues_with_progress_but_stops_noops(temp_dirs, limit, noop):
+def test_drawing_loop_leaves_progress_and_noop_decisions_to_model(temp_dirs, limit, noop):
     from agent.llm.schemas import LLMToolCall
     from core.tools.schemas import ToolSpec, ToolInvocation
     from core.tools.registry import ToolRegistry
@@ -296,7 +296,7 @@ def test_drawing_loop_continues_with_progress_but_stops_noops(temp_dirs, limit, 
     result=asyncio.run(QueryLoop(cfg,registry,Runtime(),llm_invoke=llm).run(ctx,BudgetController(cfg),None))
     saved=drawings.get_topology(workspace,topo['topology_id'])
     if noop:
-        assert result.error=='tool_no_progress' and len(calls)==3 and saved['version']==1
+        assert result.error is None and len(calls)==21 and saved['version']==1
     else:
         assert result.error is None and len(calls)==21 and len(saved['nodes'])==20
         assert len(saved['canvas_items'])==1

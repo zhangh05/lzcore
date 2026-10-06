@@ -134,6 +134,12 @@ BUILTIN_CONTRACTS: dict[str, ToolContract] = {
         timeout_seconds=10,
         max_retries=1,
     ),
+    "agent.review": ToolContract(
+        name="agent.review", display_name="Independent QA Review",
+        description="Record an exact candidate judgement from its active QA worker.",
+        side_effect="mutate_local", risk_level="medium", idempotent=False,
+        timeout_seconds=30, max_retries=0,
+    ),
     "agent.manage": ToolContract(
         name="agent.manage",
         display_name="Agent",
@@ -318,18 +324,6 @@ def is_read_only_call(
         if declared:
             return declared.get("read_only") is True
     return action in READ_ONLY_ACTIONS.get(normalized, frozenset())
-
-
-def observation_is_reusable(tool_name: str, arguments: dict[str, Any] | None = None) -> bool:
-    """Reuse only an explicitly immutable action observation within this turn."""
-    from core.tools.action_requirements import action_execution_contract
-    normalized = str(tool_name or "").replace("__", ".")
-    action = str((arguments or {}).get("action") or "").strip().lower()
-    declared = action_execution_contract(normalized, action)
-    if not declared:
-        contract = get_contract(normalized)
-        declared = (contract.action_contracts or {}).get(action, {}) if contract else {}
-    return declared.get("observation_cache") == "turn"
 
 
 def get_retry_contract(

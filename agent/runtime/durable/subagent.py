@@ -398,16 +398,10 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         from core.runtime_engine.models import SubagentRuntimeControl
 
         completion_check = None
-        completion_source_digest = None
-        completion_proposal_check = None
         if task.coding and task.profile_id != "qa_agent":
-            from .coding_team import check_implementation, implementation_source_digest
+            from .coding_team import check_implementation
 
             completion_check = lambda: check_implementation(task, cancel_check)
-            completion_source_digest = lambda: implementation_source_digest(task)
-        elif task.coding:
-            from .coding_reviews import review_qa_proposal
-            completion_proposal_check = lambda proposal: review_qa_proposal(task, proposal)
 
         op = AgentOp(
             user_input=instruction,
@@ -430,8 +424,6 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 workbench_context=inherited_workbench_context,
                 cancel_check=cancel_check,
                 completion_check=completion_check,
-                completion_source_digest=completion_source_digest,
-                completion_proposal_check=completion_proposal_check,
             ),
         )
         turn = AgentTurn.from_op(op)
@@ -453,7 +445,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
 
         if task.coding:
             from .coding_team import finish_assignment
-            finish_assignment(task, coding_environment, is_ok and bool(final_resp) and not cancel_check(), final_resp)
+            is_ok = finish_assignment(task, coding_environment, is_ok and bool(final_resp) and not cancel_check(), final_resp)
 
         # AgentResult.tool_calls is the canonical one-row-per-action projection.
         for te in (getattr(llm_result, "tool_calls", []) or []) if llm_result is not None else []:
@@ -516,6 +508,8 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
             runtime_errors = list(getattr(llm_result, "errors", []) or []) if llm_result is not None else []
             if runtime_errors:
                 result.errors.extend(str(error)[:300] for error in runtime_errors[:10])
+            elif task.coding.get("phase") in {"qa_rejected", "qa_incomplete", "qa_unknown"}:
+                result.errors.append("coding_" + task.coding["phase"])
             elif not is_ok:
                 result.errors.append("Subagent runtime failed without error details")
             else:

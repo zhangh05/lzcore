@@ -129,6 +129,7 @@ class DockerProjectEnvironment:
         if source_mode not in {"implementation", "coordinator", "review"}:
             raise ValueError("invalid_project_source_mode")
         self.source_mode = source_mode
+        self.review_submit = None  # Server-bound QA recording callback, never serialized.
         self.generated_paths = validate_generated_paths(generated_paths)
         self.validation_commands = frozenset()
         self.generation = 0

@@ -445,6 +445,16 @@ def _handle_skill(inv: ToolInvocation) -> dict:
     }.get(action, lambda x: _unsupported(x, "list|find|load|inspect|mcp_list_tools|mcp_call"))(inv)
 
 
+def _qa_review_schema():
+    from agent.runtime.durable.coding_reviews import QA_REVIEW_SCHEMA
+    return QA_REVIEW_SCHEMA
+
+
+def _handle_agent_review(inv: ToolInvocation) -> dict:
+    from core.tools.general_tools.agent_tools import handle_agent_review
+    return handle_agent_review(inv)
+
+
 def _handle_agent(inv: ToolInvocation) -> dict:
     from core.tools.general_tools.agent_tools import handle_agent_cancel, handle_agent_get_result, handle_agent_list, handle_agent_merge, handle_agent_spawn, handle_agent_start, handle_agent_status
 
@@ -457,7 +467,7 @@ def _handle_agent(inv: ToolInvocation) -> dict:
         "cancel": handle_agent_cancel,
         "status": handle_agent_status,
         "merge": handle_agent_merge,
-    }.get(action, lambda x: _unsupported(x, "spawn|list|get|cancel|status|merge"))(inv)
+    }.get(action, lambda x: _unsupported(x, "spawn|start|list|get|cancel|status|merge"))(inv)
 
 
 def _handle_system(inv: ToolInvocation) -> dict:
@@ -894,6 +904,9 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
     _entry("knowledge.manage", _handle_knowledge, {**_COMMON, "action": {"type": "string", "enum": ["search", "read", "list", "chunk", "import", "reindex"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "artifact_id": {"type": "string"}, "level": {"type": "string", "enum": ["chunk", "source"]}, "chunk_id": {"type": "string"}, "source_id": {"type": "string"}, "chunk_type": {"type": "string"}, "scope": {"type": "string"}, "include_disabled": {"type": "boolean"}, "include_deleted": {"type": "boolean"}}, required=["action"], risk="medium", description="Knowledge operations. search requires query; read requires chunk_id or source_id; list lists sources; chunk lists chunks; import requires artifact_id; reindex requires source_id."),
     _entry("memory.manage", _handle_memory, {**_COMMON, **_MEMORY_ARGS, "action": {"type": "string", "enum": ["search", "get", "review", "confirm", "create", "update", "delete", "profile_get", "profile_set"]}}, required=["action"], risk="medium", description="Memory operations. get returns full text by memory_id; search/review support offset pagination. create requires content; update requires memory_id and replacement content; confirm/delete require memory_id; profile_set requires field and value."),
     _entry("skill.manage", _handle_skill, {**_COMMON, "action": {"type": "string", "enum": ["list", "find", "load", "inspect", "mcp_list_tools", "mcp_call"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "skill_name": {"type": "string"}, "provider_id": {"type": "string"}, "tool_name": {"type": "string"}, "arguments": {"type": "object"}, "confirm": {"type": "boolean"}}, required=["action"], risk="medium", permission="exec", description="Skill operations. find requires query; load/inspect require skill_name; MCP actions require provider_id and mcp_call also requires tool_name."),
+    _entry("agent.review", _handle_agent_review, {**_COMMON, "review": _qa_review_schema()},
+           required=["review"], risk="medium", permission="write",
+           description="Record the active independent QA worker's judgement for its exact server-bound candidate. Requires review with schema, verdict, scope, blocking_findings and report. Does not modify or publish source; final chat format is unrestricted. Other callers, sessions and closed QA bindings are rejected."),
     _entry("agent.manage", _handle_agent, {
         **_COMMON,
         "action": {"type": "string", "enum": ["spawn", "start", "list", "get", "status", "cancel", "merge"]},
@@ -913,7 +926,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         "session_id": {"type": "string"},
         "subtask_id": {"type": "string"},
         "parent_task_id": {"type": "string"},
-    }, required=["action"], description="Subagent task management. spawn delegates an outcome, not an invented implementation plan, and accepts only the profile_id values published in the schema; choose research_agent for external research, file_agent for workspace files, and data_agent for structured analysis. Preserve explicit user constraints, but let the child select and compose its allowed tools. get/cancel/merge use the subtask_id returned by spawn. Coding/frontend roles require coding_assignment, execute in isolated branches, and do not auto-merge. Dependencies must be integrated before start. qa_agent reviews an exact implementation candidate, preserves its source, runs the implementation contract checks, and returns the server-injected structured QA judgement. Failed or incomplete QA cannot validate a candidate. merge requires a passed structured independent QA verdict and rejects changed baselines. Parent task/session identities come from the runtime; omit parent_task_id and session_id rather than inventing them. start resumes a dependency-ready created task. Delegation does not extend an upstream tool or data provider's limits."),
+    }, required=["action"], description="Subagent task management. spawn delegates an outcome, not an invented implementation plan, and accepts only the profile_id values published in the schema; choose research_agent for external research, file_agent for workspace files, and data_agent for structured analysis. Preserve explicit user constraints, but let the child select and compose its allowed tools. get/cancel/merge use the subtask_id returned by spawn. Coding/frontend roles require coding_assignment, execute in isolated branches, and do not auto-merge. Dependencies must be integrated before start. qa_agent reviews an exact implementation candidate, preserves its source, runs the implementation contract checks, and records its judgement with agent.review; its final reply has no required presentation format. Failed or incomplete QA cannot validate a candidate. merge requires a passed independent QA verdict and rejects changed baselines. Parent task/session identities come from the runtime; omit parent_task_id and session_id rather than inventing them. start resumes a dependency-ready created task. Delegation does not extend an upstream tool or data provider's limits."),
     _entry("system.manage", _handle_system, {**_COMMON, **_SYSTEM_ARGS, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "action": {"type": "string", "enum": ["diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_checkpoint", "session_rewind", "session_export", "session_snapshot", "context_index", "context_read"]}}, required=["action"], risk="medium", description="context_index pages archived model-window evidence; context_read retrieves an explicit message text range. Omit checkpoint_id on context_index to discover archives after restart. Both stay within the current session; context_read requires checkpoint_id and message_index. Runtime health, current local date/time and host facts, durable tasks, audit logs, run details, and session operations. local_info returns timezone-aware current time plus host/IP/OS facts; run_get requires run_id; session actions require session_id; rewind additionally requires snapshot_id."),
     _entry("text.analyze", _handle_text, {**_COMMON, "action": {"type": "string", "enum": ["redact", "extract_entities", "match"]}, "text": {"type": "string"}, "pattern": {"type": "string"}}, required=["action"], description="Text redact, extract and match."),
     _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "create", "write", "write_artifact", "edit", "patch", "glob", "delete"]}}, required=["action"], risk="medium", description="Workspace files. list supports offset/limit pagination with next_offset; read returns full text unless an explicit line offset/limit is supplied. extract_document reads a managed text, DOCX, PDF, XLSX, or PPTX attachment by file_id and reports embedded_image_count for DOCX. extract_document_image extracts one DOCX image by file_id and 1-based image_index. extract_document_images extracts an ordered DOCX image batch (up to 8) for visual analysis; its image evidence is automatically delivered to the next model turn. Never pass a returned file_id to read/read_image because those actions require a workspace filepath. create requires filepath and content, preserves source directory structure under files/data, files/tmp or inbox, and fails if the target exists; use read then edit/patch for existing sources. write/write_artifact require filename and content and generate FileStore attachments, not source paths.", execution_contract={

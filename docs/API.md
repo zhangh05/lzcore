@@ -304,6 +304,8 @@ feedback.regions 提供 members、unassigned_node_ids、missing_region_refs、ou
 
 `agent.manage` 提供 spawn/start/list/get/status/cancel/merge。角色含 coding_agent/frontend_agent/qa_agent；角色提示不注册工具或授予权限。编码 spawn 必须带 `coding_assignment`：project_dir（files/data 下工程）、responsibilities（明确文件/目录前缀，`.` 为整个工程）、depends_on（同父任务前置 subtask_id）、validation_commands（1–12 个程序及字面参数）、review_subtask_id（QA 必需）。无领域 Skill 绑定的编码任务才可创建独立工程副本，不能静默扩大 Skill 范围。
 
+`agent.review` 是独立 QA 的裁决保存工具，输入 review 包含 schema=coding.qa_review.v1、verdict=pass/fail/unknown、scope、blocking_findings 和完整 report。仅 subagent caller 可调用，服务端核对活动 QA 环境与会话并绑定准确候选；实现者、父任务、其他会话及关闭环境不能代交裁决。它不修改或发布源码，最终文字回复可自由表达。缺少裁决或阻断发现仍不能整合，实际检查未知仍禁止重放。
+
 父 task/session 从服务器调用身份继承；模型不能伪造。start/merge 均核对当前父身份。merge 可省略 parent_task_id，存在可信父身份时由服务器推导；模型指定冲突身份即拒绝。生命周期 task_status 与工具调用 status 分开：实现回合 succeeded 时 phase 可仅为 changes_ready，独立 QA 为 validated，实际发布成功才 integrated。依赖等待 phase=dependency_wait，start 恢复原任务。
 
 QA 必须验证准确候选、源码不变、命令实际成功；merge 检查 QA 与候选摘要，并以真实父文件基线比较后发布。冲突保留原文件；结果 unknown 仅回查事务，不自动覆盖或重新执行写入。主任务取消继承到子任务，取消注册按认证主体的实际存储路径隔离。详情见 [Coding Runtime](architecture/CODING_RUNTIME.md)。

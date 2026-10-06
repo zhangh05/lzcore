@@ -70,17 +70,8 @@ def verify_team(workspace_id: str, session_id: str, project_dir: str) -> dict:
             )
             if assignment.get("revision_subtask_id"):
                 completed = assignment.get("completion_validation") or {}
-                previous = (assignment.get("revision_observation") or {}).get("completion_validation") or {}
-                changed = assignment.get("candidate_digest") != assignment.get("revision_source_digest")
-                recovered = previous.get("status") == "failed" and any(
-                    (type(item.get("result", {}).get("exit_code")) is int
-                     and item["result"]["exit_code"] != 0)
-                    or item.get("result", {}).get("runtime_status") == "failed"
-                    for item in previous.get("checks", [])
-                )
                 assert (completed.get("status") == "passed"
-                        and completed.get("source_digest") == assignment["candidate_digest"]
-                        and (changed or recovered)), "source revision has no actual change or check recovery"
+                        and completed.get("source_digest") == assignment["candidate_digest"]), "source revision lacks exact completed checks"
             for path, change in assignment["change"]["files"].items():
                 assert heads.get(path) == change["before"], "reviewed publication chain is broken"
                 if change["after"] is None:

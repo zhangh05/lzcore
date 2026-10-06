@@ -233,8 +233,6 @@ class QueryLoop(
                     "Tools remain available if more verification is needed.",
                 )
 
-        consecutive_tool_failures: dict[str, int] = {}
-        consecutive_no_changes = 0
         while True:
             if self._is_cancelled(ctx):
                 # If tools already produced results, surface them as a
@@ -356,9 +354,6 @@ class QueryLoop(
                 messages = self._append_turn_nudge(
                     messages, self._truncation_continuation(response)
                 )
-                stalled = await self._check_candidate_progress(ctx, messages)
-                if stalled:
-                    return finish(**stalled)
                 continue
 
             if response is None or response.error:
@@ -504,79 +499,6 @@ class QueryLoop(
                     ctx.extras.setdefault("batch_compile_events", []).extend(
                         batch_compile_events
                     )
-
-                tool_calls, duplicate_note = self._suppress_repeated_tool_calls(
-                    ctx, tool_calls
-                )
-                if duplicate_note:
-                    # Keep the model's proposal in transcript as a proposal,
-                    # then make the no-progress diagnosis explicit.  It was
-                    # never executed, so no synthetic tool result is created.
-                    if not tool_calls:
-                        messages = [*messages, response.assistant_message([])]
-                    messages = self._append_turn_nudge(messages, duplicate_note)
-                if not tool_calls:
-                    signature = str(
-                        ctx.extras.get("last_suppressed_tool_signature") or ""
-                    )
-                    current_signature = str(
-                        ctx.extras.get("suppressed_tool_signature") or ""
-                    )
-                    if current_signature and current_signature == signature:
-                        has_successful_patch = any(
-                            str(item.tool_name or "").replace("__", ".")
-                            == "network.operations.topology"
-                            and isinstance(item.output, dict)
-                            and item.output.get("action") == "patch"
-                            and item.ok
-                            for item in all_results
-                        )
-                        workbench = (
-                            ctx.extras.get("workbench_context")
-                            if isinstance(ctx.extras, dict)
-                            else None
-                        )
-                        is_drawing = (
-                            isinstance(workbench, dict)
-                            and workbench.get("extension_id") == "network.operations"
-                            and str(workbench.get("skill_id") or "").startswith(
-                                "drawing:"
-                            )
-                            and bool(workbench.get("allow_edit", True))
-                        )
-                        if (is_drawing or has_successful_patch) and (
-                            response.content or ""
-                        ).strip():
-                            return finish(
-                                final_response=response.content,
-                                tool_results=all_results,
-                                iterations=iterations,
-                                total_tool_calls=len(all_results),
-                                llm_calls=budget.llm_calls,
-                            )
-                        ctx.extras["response_outcome"] = "blocked_no_progress"
-                        ctx.extras.setdefault("no_progress_events", []).append(
-                            {
-                                "kind": "repeated_terminal_tool_proposal",
-                                "signature": current_signature,
-                                "iteration": iterations,
-                            }
-                        )
-                        return finish(
-                            final_response=(
-                                "任务受阻：模型连续提出同一组已有终态证据或确定性失败的工具调用；"
-                                "这些调用没有再次执行，已保留全部既有证据。请基于不同的可执行路径继续，"
-                                "或明确说明当前目标缺少的外部条件。"
-                            ),
-                            tool_results=all_results,
-                            iterations=iterations,
-                            total_tool_calls=len(all_results),
-                            llm_calls=budget.llm_calls,
-                            error="no_progress_repeated_tool_calls",
-                        )
-                    if current_signature:
-                        ctx.extras["last_suppressed_tool_signature"] = current_signature
-                    continue
 
                 gate = self._prepare_tool_calls(ctx, tool_calls)
                 if not gate["ok"]:
@@ -924,49 +846,6 @@ class QueryLoop(
                     workspace_id=ctx.workspace_id,
                 )
 
-                # Producers may explicitly report a successful no-op. This is
-                # not progress, even if their calls have different ids.
-                if results and all(
-                    res.ok and (res.output or {}).get("changed") is False
-                    for res in results
-                ):
-                    consecutive_no_changes += 1
-                elif any((res.output or {}).get("changed") is True for res in results):
-                    consecutive_no_changes = 0
-                if consecutive_no_changes >= 3:
-                    return finish(
-                        final_response="三次修改均未产生新的变更，已停止重复提交。已保留当前结果，请核对尚未满足的要求。",
-                        tool_results=all_results,
-                        iterations=iterations,
-                        total_tool_calls=len(all_results),
-                        llm_calls=budget.llm_calls,
-                        error="tool_no_progress",
-                    )
-
-                # A batch is one model proposal, not several recovery attempts.
-                # Deliver its failures before counting another retry round.
-                limited = self._advance_tool_failure_round(
-                    consecutive_tool_failures, results
-                )
-                if limited is not None:
-                    err_code = str(
-                        (limited.output or {}).get("error")
-                        or limited.error
-                        or "unknown_error"
-                    )
-                    ctx.extras["response_outcome"] = "tool_failure_limit_reached"
-                    return finish(
-                        final_response=(
-                            f"任务受阻：工具 {limited.tool_name} 连续多轮返回相同错误（{err_code}）。"
-                            "已主动停止重复重试，避免陷入无限循环。已保留当前工作结果与对话状态，请核对后继续。"
-                        ),
-                        tool_results=all_results,
-                        iterations=iterations,
-                        total_tool_calls=len(all_results),
-                        llm_calls=budget.llm_calls,
-                        error="consecutive_tool_failures",
-                    )
-
                 # New observed evidence reopens normal recovery planning.  A
                 # final-text-only response after a nudge is handled below as a
                 # truthful blocked state, not an unbounded dialogue loop.
@@ -1081,9 +960,6 @@ class QueryLoop(
                         "Additional tools remain available for a genuine unresolved evidence gap; never claim "
                         "visual details not present in the image.",
                     )
-                stalled = await self._check_candidate_progress(ctx, messages)
-                if stalled:
-                    return finish(**stalled)
                 continue
 
             # No tool calls is only a proposed final response. Runtime-owned
@@ -1132,35 +1008,13 @@ class QueryLoop(
                     )
                     continue
 
-            network_retry_nudge = self._network_retry_final_gate(
-                ctx, str(response.content or ""), all_results
-            )
-            if network_retry_nudge:
-                messages = [
-                    *messages,
-                    response.assistant_message(),
-                    LLMMessage(role="user", content=network_retry_nudge),
-                ]
-                ctx.extras.setdefault("network_execution_evidence_events", []).append(
-                    {
-                        "type": "unsupported_network_retry_final_rejected",
-                        "iteration": iterations,
-                    }
-                )
-                continue
+            from .completion import observe_completion, terminal_completion
 
-            from .completion import observe_completion, repair_instruction, terminal_completion
-
-            completion = await observe_completion(ctx, len(all_results), str(response.content or ""))
+            completion = await observe_completion(ctx)
             terminal = terminal_completion(completion)
             if terminal:
-                return finish(**terminal)
-            if completion and completion["status"] != "passed":
-                messages = [*messages, response.assistant_message([]), LLMMessage(
-                    role="user",
-                    content=repair_instruction(completion),
-                )]
-                continue
+                from core.tools.redaction import redact_string
+                return finish(final_response=redact_string(response.content or ""), **terminal)
 
             # No tool calls and no recoverable evidence gap → final response
             if response_stage_started_at is None:

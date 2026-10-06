@@ -203,7 +203,7 @@ def test_rejected_native_proposal_remains_rejected_after_durable_restart():
     assert restored.protocol["anthropic"][0]["id"] == "not_executed"
 
 
-def test_query_loop_suppresses_repeated_native_proposal_without_protocol_orphans(tmp_path, monkeypatch):
+def test_query_loop_executes_repeated_native_proposals_without_protocol_orphans(tmp_path, monkeypatch):
     import asyncio
     from agent.llm.schemas import LLMToolCall
     from core.runtime_engine.budget_controller import BudgetController
@@ -234,17 +234,17 @@ def test_query_loop_suppresses_repeated_native_proposal_without_protocol_orphans
         assert not pending
         requests.append(wire)
         if len(requests) > 2:
-            return LLMResponse(content="Parsed the data once.")
+            return LLMResponse(content="Parsed the data twice.")
         call = LLMToolCall(id="reused", name="data__manage", arguments={"action": "parse", "text": "source"})
         return LLMResponse(content="Parsing", tool_calls=[call], protocol={"anthropic": [
             {"type": "thinking", "thinking": "opaque", "signature": "sig"},
             {"type": "text", "text": "Parsing"},
             {"type": "tool_use", "id": call.id, "name": call.name, "input": call.arguments}]})
     loop = QueryLoop(config, registry, runtime, llm_invoke=model)
-    ctx = StatelessContext("protocol", "session", "request", "Parse source once.")
+    ctx = StatelessContext("protocol", "session", "request", "Parse source again.")
     result = asyncio.run(loop.run(ctx, BudgetController(config), None))
     assert result.error is None, result.error
-    assert observed == ["source"]
+    assert observed == ["source", "source"]
     assert len(requests) == 3
 
 

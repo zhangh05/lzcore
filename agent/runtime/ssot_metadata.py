@@ -6,6 +6,8 @@ from typing import Any
 
 _CALLER_RESERVED_RUNTIME_METADATA_KEYS = frozenset(
     {
+        "caller_type",
+        "requested_by",
         "cognitive_state",
         "conversation_history_block",
         "operational_clarification",
@@ -100,10 +102,6 @@ def _apply_runtime_control(metadata: dict[str, Any], runtime_control: Any) -> No
     if callable(runtime_control.completion_check):
         metadata["__completion_check"] = runtime_control.completion_check
 
-    if callable(runtime_control.completion_source_digest):
-        metadata["__completion_source_digest"] = runtime_control.completion_source_digest
-    if callable(runtime_control.completion_proposal_check):
-        metadata["__completion_proposal_check"] = runtime_control.completion_proposal_check
 
 
 def _bind_execution_readiness(metadata: dict[str, Any], workspace_id: str) -> None:

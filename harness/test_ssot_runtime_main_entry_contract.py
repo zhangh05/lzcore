@@ -248,3 +248,26 @@ def test_agent_app_projects_server_owned_cognitive_summary_and_events(monkeypatc
     assert result.metadata["cognitive"] == cognitive
     assert result.metadata["cognitive_events"] == cognitive_events
     assert result.metadata["cognitive"]["outcome"] != "forged"
+
+
+def test_runtime_binds_outer_tool_caller_from_server_identity(monkeypatch,temp_dirs):
+    from types import SimpleNamespace
+    from agent.core.session import AgentSession
+    from agent.core.turn import AgentTurn
+    from agent.protocol.op import AgentOp
+    from agent.runtime.ssot_runtime import run_ssot_turn
+
+    captured=[]
+    class Engine:
+        async def run(self,**kwargs):
+            captured.append(kwargs['extras'])
+            return SimpleNamespace(success=True,final_response='Done',node_results={},errors=[],metadata={})
+    monkeypatch.setattr('agent.runtime.ssot_runtime._build_engine',lambda **kw:Engine())
+    for caller in ['turn_runner','subagent','job_runner']:
+        session=AgentSession(session_id='caller-'+caller,workspace_id='default')
+        op=AgentOp(user_input='Hello',workspace_id='default',session_id=session.session_id,
+                   metadata={'caller_type':'forged','requested_by':'forged'})
+        result=run_ssot_turn(session,AgentTurn.from_op(op),requested_by=caller)
+        assert result.ok,result.errors
+        assert captured[-1]['caller_type']==caller
+        assert 'requested_by' not in captured[-1]
