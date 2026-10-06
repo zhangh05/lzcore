@@ -52,3 +52,23 @@ def test_explicit_secret_classification_still_redacts_before_storage(tmp_path, m
     stored = Path(record.path).read_text()
     assert "synthetic-secret-123456789" not in stored
     assert not contains_secret(stored)
+
+
+@pytest.mark.parametrize("separator", ["\n", "\r", "\t", '"', "\\"])
+def test_serialized_mask_boundaries_preserve_evidence(tmp_path, monkeypatch, separator):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    content = json.dumps({"stdout": "token: [REDACTED_SECRET]" + separator})
+    assert not contains_secret(content)
+    assert redact_artifact_content(content) == content
+    record = save_artifact("mask-proof", content=content, sensitivity="internal")
+    assert record is not None
+    assert read_artifact_content("mask-proof", record.artifact_id) == content
+
+
+@pytest.mark.parametrize("suffix", [r"\nsynthetic-secret-123456789", r"\qsynthetic-secret-123456789"])
+def test_mask_escape_does_not_exempt_following_credential(tmp_path, monkeypatch, suffix):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    content = "token: [REDACTED_SECRET]" + suffix
+    assert contains_secret(content)
+    assert save_artifact("mask-proof", content=content, sensitivity="internal") is None
+    assert "synthetic-secret-123456789" not in redact_artifact_content(content)

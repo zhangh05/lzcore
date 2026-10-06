@@ -233,4 +233,7 @@ def test_full_query_loop_three_hundred_tool_rounds(ctx):
     assert result.error is None, result.error
     assert executed == list(range(310)), [(r.error, r.output) for r in result.tool_results[:1]]
     assert len(ctx.extras['context_epochs']) > 20
+    assert result.metrics['context_epochs'][-1]['boundary'] == 'terminal'
+    terminal = read_epoch(ctx.workspace_id, ctx.session_id, result.metrics['context_epochs'][-1]['checkpoint_id'])
+    assert terminal['payload']['messages'][-1]['content'] == result.final_response
     assert max(invocations) < 22000

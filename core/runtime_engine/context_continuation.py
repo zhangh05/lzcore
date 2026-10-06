@@ -26,6 +26,7 @@ class ContextContinuation:
         self.anchors = deepcopy(anchors)
         self.parent_id = ""
         self.epochs: list[dict] = []
+        self.unexecuted_proposal = None
 
     def checkpoint_state(self) -> dict:
         """Server-owned lifecycle state carried through an external pause."""
@@ -41,6 +42,45 @@ class ContextContinuation:
         assert_tool_protocol(self.anchors)
         self.parent_id = str(state.get("parent_id") or "")
         self.epochs = deepcopy(state.get("epochs") or [])
+
+    def preserve_unexecuted_response(self, response) -> None:
+        """Retain a late proposal as audit data, not executed protocol state."""
+        self.unexecuted_proposal = {
+            "status": "not_executed", "message": asdict(response.assistant_message()),
+            "tool_calls": [asdict(call) for call in response.tool_calls],
+        }
+
+    def persist_terminal(self, messages: list[LLMMessage], ctx, *, error="", final_response="") -> dict:
+        """Archive the remaining window on every exit, without executing it.
+
+        Rollover alone misses the final exchange when a tool revokes its
+        environment or a turn ends before the next provider request.
+        Unsettled proposals remain observations, never resumable tool actions.
+        """
+        from core.tools.project_execution import public_container_temp_paths
+
+        snapshot = deepcopy(messages)
+        if final_response:
+            snapshot.append(LLMMessage(role="assistant", content=final_response))
+        calls = {str(call.get("id")) for message in snapshot for call in message.tool_calls or []}
+        settled = {str(message.tool_call_id) for message in snapshot if message.role == "tool"}
+        state = {"boundary": "terminal", "terminal_error": str(error or ""),
+                 "unsettled_call_ids": sorted(calls - settled), "automatic_replay_allowed": False}
+        if self.unexecuted_proposal:
+            state["unexecuted_model_proposal"] = self.unexecuted_proposal
+        for key in ("__trusted_task_state_contract", "recovery_goals", "task_state_execution_manifest"):
+            if key in ctx.extras:
+                state[key] = ctx.extras[key]
+        record = save_epoch(ctx.workspace_id, ctx.session_id, ctx.request_id,
+                            [asdict(message) for message in snapshot], state, self.parent_id,
+                            container_paths=public_container_temp_paths(ctx.workspace_id, "exec.run"))
+        reference = {"checkpoint_id": record["checkpoint_id"], "sha256": record["sha256"],
+                     "archived_messages": len(snapshot), "boundary": "terminal"}
+        self.parent_id = reference["checkpoint_id"]
+        self.epochs.append(reference)
+        ctx.extras["context_epochs"] = deepcopy(self.epochs)
+        ctx.extras["terminal_context_epoch"] = reference
+        return reference
 
     def prepare(self, messages: list[LLMMessage], ctx, available_tokens: int) -> bool:
         if estimate_message_tokens(messages) <= available_tokens:

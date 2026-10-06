@@ -42,6 +42,14 @@ class LoopTurnProjection:
                 else "任务已取消。"
             )
             ctx.extras["response_outcome"] = "cancelled"
+        try:
+            self._context_continuation.persist_terminal(
+                messages, ctx, error=values.get("error"), final_response=values.get("final_response"))
+        except (OSError, RuntimeError, TypeError, ValueError):
+            # Never overwrite an execution failure or retry its effects because
+            # evidence storage is unavailable; make the missing archive visible.
+            ctx.extras["terminal_context_archive_error"] = "context_archive_persist_failed"
+            values["error"] = values.get("error") or "context_archive_persist_failed"
         projected_metrics = {
             "elapsed_ms": (time.monotonic() - t_start) * 1000,
             "iterations": iterations,
@@ -54,6 +62,8 @@ class LoopTurnProjection:
             ),
             "context_budget": self._context_budget.as_dict(),
             "context_epochs": list(ctx.extras.get("context_epochs") or []),
+            "terminal_context_epoch": dict(ctx.extras.get("terminal_context_epoch") or {}),
+            "terminal_context_archive_error": str(ctx.extras.get("terminal_context_archive_error") or ""),
             "context_continuation_error": str(
                 ctx.extras.get("context_continuation_error") or ""
             ),

@@ -323,6 +323,8 @@ class QueryLoop(
             # the user-authoritative cancellation cannot be overwritten by a
             # late model response.
             if self._is_cancelled(ctx):
+                if response is not None:
+                    self._context_continuation.preserve_unexecuted_response(response)
                 return finish(
                     final_response=(
                         self._build_tool_result_fallback(ctx, all_results)
@@ -338,6 +340,8 @@ class QueryLoop(
 
             unavailable = await observe_execution_readiness(ctx)
             if unavailable:
+                if response is not None:
+                    self._context_continuation.preserve_unexecuted_response(response)
                 return finish(tool_results=all_results, llm_calls=budget.llm_calls, **unavailable)
 
             if response is not None and (response.metadata or {}).get(
@@ -915,6 +919,11 @@ class QueryLoop(
                     and item.get("kind") == "image"
                 ]
 
+                messages = self._append_tool_round(
+                    messages, model_tool_calls, results, response=response,
+                    workspace_id=ctx.workspace_id,
+                )
+
                 # Producers may explicitly report a successful no-op. This is
                 # not progress, even if their calls have different ids.
                 if results and all(
@@ -958,11 +967,6 @@ class QueryLoop(
                         error="consecutive_tool_failures",
                     )
 
-                # Append assistant message (with tool_calls) + tool results
-                messages = self._append_tool_round(
-                    messages, model_tool_calls, results, response=response,
-                    workspace_id=ctx.workspace_id,
-                )
                 # New observed evidence reopens normal recovery planning.  A
                 # final-text-only response after a nudge is handled below as a
                 # truthful blocked state, not an unbounded dialogue loop.
@@ -1216,7 +1220,6 @@ class QueryLoop(
                     if metrics
                     else False,
                     "context_budget": self._context_budget.as_dict(),
-                    "context_epochs": list(ctx.extras.get("context_epochs") or []),
                     "execution_duration_ms": execution_duration_ms,
                     "max_parallel_width": self._executor.max_parallel_width,
                 },

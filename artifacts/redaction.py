@@ -27,7 +27,10 @@ _MASKED_CREDENTIAL = re.compile(
     r"(?:password|secret|community|api[_-]?key|Bearer|Authorization(?:\s+Bearer)?|"
     r"MINIMAX_API_KEY|OPENAI_API_KEY|DEEPSEEK_API_KEY|private[_-]?key|token|"
     r"snmp-server\s+community)(?:\s+|[=:]\s*)"
-    r"\[REDACTED(?:_SECRET)?\][\"'`,.;:)}\]]*",
+    # Serialized tool evidence may end the value with a JSON escape instead
+    # of literal whitespace. Only delimiters are allowed after a whole mask;
+    # arbitrary escaped text or adjacent credential bytes still fail closed.
+    r"\[REDACTED(?:_SECRET)?\](?:[\"'`,.;:)}\]]|\\[nrt\"\\])*",
     re.IGNORECASE,
 )
 
@@ -78,9 +81,7 @@ def redact_metadata(metadata: dict) -> dict:
         return metadata
     result = {}
     for k, v in metadata.items():
-        if _is_sensitive_metadata_key(k):
-            result[k] = MASK
-        elif isinstance(v, str) and contains_secret(v):
+        if _is_sensitive_metadata_key(k) or (isinstance(v, str) and contains_secret(v)):
             result[k] = MASK
         else:
             result[k] = v

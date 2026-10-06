@@ -3912,6 +3912,1306 @@
         "harness": "Long correction was placed before explicit continuation wording. Standard resolver started a new task identity; preserved candidate still belongs to original parent. Cross-parent rejection is correct. Add explicit read-only parent continuation preflight; do not rewrite identities or weaken permissions.",
         "termination": "Natural root turn ended; no candidate QA/merge or business PASS. Old candidates retained. Future fresh task cannot appropriate earlier candidate."
       }
+    },
+    {
+      "round": "large-20261006-minimax-noc-1/d16806a00a",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-minimax-noc-1/reports/bench_noc_ecb8c419e1/d16806a00a",
+      "configuration": {
+        "case": "noc",
+        "workspace_id": "bench_noc_ecb8c419e1",
+        "session_id": "9477773750ab4bae",
+        "provider": "minimax",
+        "model": "MiniMax-M3",
+        "provider_type": "anthropic_messages",
+        "max_tokens": 16384,
+        "source_commit": "3cc6f218391a4c7d9479e6629e61af08172c4ef4",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "prompt_sha256": "2aa019eb43683f0da63a336ecdb8678500d07880986ddac78fd5d6f5a442f79d",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "tool_path_bases": {
+            "workspace.file": {
+              "basis": "workspace_root",
+              "project_prefix": "files/data/noc",
+              "example": "files/data/noc/src/main.ts"
+            },
+            "exec.run": {
+              "working_dir_basis": "workspace_root",
+              "working_dir": "files/data/noc",
+              "shell_path_basis": "container_cwd",
+              "container_cwd": "/workspace/files/data/noc"
+            }
+          },
+          "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 20400,
+          "preview_origin": "http://127.0.0.1:20400",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "preflight": {
+        "schema": "coding.benchmark_preflight.v1",
+        "provider": "minimax",
+        "model": "MiniMax-M3",
+        "provider_type": "anthropic_messages",
+        "status": "READY",
+        "agent_started": false,
+        "http_status": null,
+        "duration_seconds": 2.464,
+        "reason": null
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_complete_inventory_fields",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "duration_seconds": 678.5,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "tasks": [
+        {
+          "subtask_id": "sub-04d6cb48",
+          "profile_id": "coding_agent",
+          "status": "failed",
+          "phase": "failed",
+          "created_at": "2026-10-06T09:04:41.180191+00:00",
+          "finished_at": "2026-10-06T09:18:54.398483+00:00",
+          "errors": [
+            "completion_repair_no_progress"
+          ],
+          "branch_workspace": "coding-f45e2f5693b744faa4a069c7fcbb549d",
+          "source_files": 18,
+          "source_file_sha256": {
+            "package-lock.json": "3675ce5483eb435ec9490da9cf5787014cbe60bcbb2f34f32a296989552159b6",
+            "package.json": "f945556e5c535ba02d54657176b76ce2969ed31236a8c460c7fc047a088f9983",
+            "tsconfig.json": "136e6d6299d97ef7f811c3dc629e40add029b82a35d7ec3f6408d738ae42854f",
+            "scripts/build.mjs": "b84efb89e13df8e58d513ddbaeb13f2fe50384517945df48e997e9b91f516dbd",
+            "src/faults.ts": "f61a732ae2b6bd0df3889ca571a21f32683f2117949e19ffa5ac024acffff5b4",
+            "src/inventory.ts": "9179c184c9086eb6be47e7465306a837a66ffb36021d1fa5b43a6dc382c1b4b6",
+            "src/main.ts": "fef94fb9c847379f8230c41edb1b42b3084e546f567762daa331390004f0bf5b",
+            "src/engine.ts": "8367a38b3bb8c864eca6bcddd56aa5b18d09db35aa6b72f3391812a015e258dc",
+            "src/types.ts": "08213d9681986e446d4919a971da3aa3016907866dd4890a308369cd756d8dc3",
+            "src/index.ts": "2cba4f49cfb20ee51c612c8ac4c371e7239a9c40cec9acb598c74d0ae5e14d9e",
+            "src/server.ts": "56044aae1328df1248976f2636c8b3481d6c5ac5f2c847ef9795732f529ea569",
+            "src/db.ts": "e223abf94ea32a68278ce51cd6ce323e93c0a29fbb62a949999bfc0536cecac3",
+            "src/auth.ts": "11e86f791f81c725e94803dc867bfa4ae624a63f74185be58fbd224ae011f71c",
+            "src/server/inventory.ts": "e7170bf35dd93bbf6d7c3be8bbd598823383d4137eba5c46e9d52bc7b2100e11",
+            "src/server/http.ts": "ffef4440601e55dfb58b7ca76214da8fe756aa33a0e9c94673e328d260ccc541",
+            "src/server/engine.ts": "9dcd56402a66c168ee4c28b046bccbdb857be83d481c9473ece2745d50bd327f",
+            "src/server/db.ts": "2c7b2dc81567ae1aed39c6ebc9f9f944ef45184eb22a7333c07295c4657469dc",
+            "src/server/auth.ts": "40d60be4b716e80ef69d4542a78152dc104f03ae34ed29c6d48837ee037da4e8"
+          },
+          "cumulative_recorded_model_calls": 69,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": "failed",
+            "source_digest": "ede612786d170d0044bf272bf0fc85a62a75dbe5d87f4ec21719d27b4b4082a6",
+            "checks": [
+              {
+                "command": "npm test",
+                "runtime_status": "failed",
+                "exit_code": 1,
+                "execution_outcome": null,
+                "known_failure_markers": [
+                  "No test files found"
+                ]
+              },
+              {
+                "command": "npm run build",
+                "runtime_status": "failed",
+                "exit_code": 2,
+                "execution_outcome": null,
+                "known_failure_markers": [
+                  "TS2688"
+                ]
+              }
+            ]
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 50378,
+            "preview_origin": "http://127.0.0.1:50378",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-08d7c970",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "created_at": "2026-10-06T09:21:50.268674+00:00",
+          "finished_at": "2026-10-06T09:22:23.621825+00:00",
+          "errors": [],
+          "branch_workspace": "coding-1fd9b74ae1f9425cbc7b95840d9cbfbe",
+          "source_files": 0,
+          "source_file_sha256": {},
+          "cumulative_recorded_model_calls": 4,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 51533,
+            "preview_origin": "http://127.0.0.1:51533",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-0c374465",
+          "profile_id": "qa_agent",
+          "status": "failed",
+          "phase": "failed",
+          "created_at": "2026-10-06T10:40:31.314923+00:00",
+          "finished_at": "2026-10-06T10:43:09.312027+00:00",
+          "errors": [
+            "execution_environment_unavailable"
+          ],
+          "branch_workspace": "coding-8a09cb8e96ab4df6b7a95874d5962508",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 19,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:28f719ca8f8af79cacbd36308697ec913dec4dfed5ed6c82098abc50846da722",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 58879,
+            "preview_origin": "http://127.0.0.1:58879",
+            "preview_bind_port": 8080,
+            "source_mode": "review",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-1407cf8d",
+          "profile_id": "coding_agent",
+          "status": "succeeded",
+          "phase": "qa_rejected",
+          "created_at": "2026-10-06T09:43:17.751283+00:00",
+          "finished_at": "2026-10-06T09:56:02.902274+00:00",
+          "errors": [],
+          "branch_workspace": "coding-4d81457dc84d48f2bcfb58e5a2d0e8a5",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 88,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": "passed",
+            "source_digest": "9922c902a8a72951944e0cf20ec8a0b14309cfc57fb1701b2b7c8122787c9a60",
+            "checks": [
+              {
+                "command": "npm test",
+                "runtime_status": "succeeded",
+                "exit_code": 0,
+                "execution_outcome": null,
+                "known_failure_markers": []
+              },
+              {
+                "command": "npm run build",
+                "runtime_status": "succeeded",
+                "exit_code": 0,
+                "execution_outcome": null,
+                "known_failure_markers": []
+              }
+            ]
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 52901,
+            "preview_origin": "http://127.0.0.1:52901",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-1748b267",
+          "profile_id": "qa_agent",
+          "status": "failed",
+          "phase": "failed",
+          "created_at": "2026-10-06T10:07:32.042619+00:00",
+          "finished_at": "2026-10-06T10:13:04.568270+00:00",
+          "errors": [
+            "consecutive_tool_failures"
+          ],
+          "branch_workspace": "coding-dda7cfba82d24beca3241d2b26219a06",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 41,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:28f719ca8f8af79cacbd36308697ec913dec4dfed5ed6c82098abc50846da722",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 54453,
+            "preview_origin": "http://127.0.0.1:54453",
+            "preview_bind_port": 8080,
+            "source_mode": "review",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-3c57c966",
+          "profile_id": "qa_agent",
+          "status": "failed",
+          "phase": "qa_rejected",
+          "created_at": "2026-10-06T11:10:26.803303+00:00",
+          "finished_at": "2026-10-06T11:10:53.723672+00:00",
+          "errors": [
+            "coding_qa_review_rejected"
+          ],
+          "branch_workspace": "coding-1dbf07da2cec4b3899b7e0939011ba62",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 1,
+          "round_recorded_model_calls": 1,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 62486,
+            "preview_origin": "http://127.0.0.1:62486",
+            "preview_bind_port": 8080,
+            "source_mode": "review",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-4a6f0555",
+          "profile_id": "qa_agent",
+          "status": "failed",
+          "phase": "qa_rejected",
+          "created_at": "2026-10-06T10:19:36.542275+00:00",
+          "finished_at": "2026-10-06T10:21:45.370201+00:00",
+          "errors": [
+            "coding_qa_review_rejected"
+          ],
+          "branch_workspace": "coding-d3577389089d4c309f4f3250d5d8bc2b",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 14,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:28f719ca8f8af79cacbd36308697ec913dec4dfed5ed6c82098abc50846da722",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 55064,
+            "preview_origin": "http://127.0.0.1:55064",
+            "preview_bind_port": 8080,
+            "source_mode": "review",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-762ed294",
+          "profile_id": "qa_agent",
+          "status": "failed",
+          "phase": "validated",
+          "created_at": "2026-10-06T10:13:23.671036+00:00",
+          "finished_at": "2026-10-06T10:18:46.210224+00:00",
+          "errors": [
+            "subagent full-result artifact was not persisted"
+          ],
+          "branch_workspace": "coding-8c8fa105d95c433797efa95584a5791d",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 30,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:28f719ca8f8af79cacbd36308697ec913dec4dfed5ed6c82098abc50846da722",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 54765,
+            "preview_origin": "http://127.0.0.1:54765",
+            "preview_bind_port": 8080,
+            "source_mode": "review",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-7cd51209",
+          "profile_id": "qa_agent",
+          "status": "failed",
+          "phase": "qa_incomplete",
+          "created_at": "2026-10-06T11:07:36.802348+00:00",
+          "finished_at": "2026-10-06T11:09:50.892353+00:00",
+          "errors": [
+            "coding_qa_review_rejected"
+          ],
+          "branch_workspace": "coding-7034f52f649e43d8963c0b949ffe45c0",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 12,
+          "round_recorded_model_calls": 12,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 62181,
+            "preview_origin": "http://127.0.0.1:62181",
+            "preview_bind_port": 8080,
+            "source_mode": "review",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-82b9e4d4",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "created_at": "2026-10-06T11:11:52.452349+00:00",
+          "finished_at": "2026-10-06T11:13:24.650919+00:00",
+          "errors": [],
+          "branch_workspace": "coding-d0b4cc530b6d476cb26555512c9bfdf8",
+          "source_files": 4,
+          "source_file_sha256": {
+            ".gitignore": "571ae77b07d46f4473d3d122c038b6f2bf8b091de58f54d213629049b0cf4fdc",
+            "package.json": "4ad56915f13102eb1a8b88505877bcc6cf4c48d9edcd54371a135b61021b90ea",
+            "src/db.js": "62a2eebf7077b28b1967e8d83ba6df0f192f49d9e59d22ed3c88918317cabe3b",
+            "src/schema.js": "322c641ff369e44747c50e879c99083a2c40bbe92ab5ec1a037e1367478e28a6"
+          },
+          "cumulative_recorded_model_calls": 16,
+          "round_recorded_model_calls": 15,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 62625,
+            "preview_origin": "http://127.0.0.1:62625",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-8d6b4a52",
+          "profile_id": "qa_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "created_at": "2026-10-06T10:22:34.764646+00:00",
+          "finished_at": "2026-10-06T10:28:49.032806+00:00",
+          "errors": [],
+          "branch_workspace": "coding-ad4ad14484c8476c84351397d5e67ef2",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 41,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:28f719ca8f8af79cacbd36308697ec913dec4dfed5ed6c82098abc50846da722",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 55342,
+            "preview_origin": "http://127.0.0.1:55342",
+            "preview_bind_port": 8080,
+            "source_mode": "review",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-8f11d0ac",
+          "profile_id": "qa_agent",
+          "status": "failed",
+          "phase": "failed",
+          "created_at": "2026-10-06T11:02:22.624781+00:00",
+          "finished_at": "2026-10-06T11:07:26.185514+00:00",
+          "errors": [
+            "execution_environment_unavailable"
+          ],
+          "branch_workspace": "coding-387082aade5d48c7938428458557d873",
+          "source_files": 12,
+          "source_file_sha256": {
+            ".gitignore": "b0b5e214b7ad65d206bae9c7b8d0e280e8048184e02d2cb4b685130bd63590f7",
+            "package-lock.json": "0d5abc5be6eaeb6134bfce82d29f55f8b204fc7a1aff7d096ae1c6afb9bebb69",
+            "package.json": "225e50acb6df5cbca065677b6883758642c2d35fb94507203d1e6604bf9abd16",
+            "test/inventory.test.mjs": "527cf4227b23009e37fef8ad5370335319015757c07c5319f2f0dc3054feb5cb",
+            "scripts/start.mjs": "85d9b497ef8022c4d093d126cd03d9604b59d507326bd6deee275b91fb1f1a5f",
+            "scripts/build.mjs": "427941b056444b77acc7005cd816a69cf34447c01d5e794b837abc94d154577d",
+            "scripts/seed-check.mjs": "6657659c2af459f091e7a0af4ec02a21268dd2020e2b2f5d3e40349d065d1406",
+            "src/seed.mjs": "f6143cdc9d2a80dcecea35eb7e7386cade15c674336ca4302125456ed3eeeda1",
+            "src/db.mjs": "6c8ee0071844e08e507311752ce3cfa11adb7fc6a9e500fde4482ed95951f8e9",
+            "src/engine.mjs": "f0b36d5525af9c7e8cefebcfc856b0f56f4eed709a0776af4c366b56f3534d72",
+            "src/server.mjs": "60a166a117db723870fbf66117465dc3f87a72e714ecb2ce6481ca60c5eebf0d",
+            "src/auth.mjs": "dfc0f92c3d0ed79f8483efd6b7e807290e4b99fcda31b6cc392e9fcb702df126"
+          },
+          "cumulative_recorded_model_calls": 28,
+          "round_recorded_model_calls": 28,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 61463,
+            "preview_origin": "http://127.0.0.1:61463",
+            "preview_bind_port": 8080,
+            "source_mode": "review",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-bd37ab33",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "created_at": "2026-10-06T09:56:23.619722+00:00",
+          "finished_at": "2026-10-06T10:00:12.884258+00:00",
+          "errors": [],
+          "branch_workspace": "coding-d93a39c430864107bf791774aae35f5f",
+          "source_files": 18,
+          "source_file_sha256": {
+            "package-lock.json": "acda0ff51ca18d55665ddf9d84c5308d765dda9042154d64e67694a77da3c72f",
+            "package.json": "20fc0776395e16c7056d7634945e8210a85b8405e09b6182f7260833cadc0094",
+            "tsconfig.json": "136e6d6299d97ef7f811c3dc629e40add029b82a35d7ec3f6408d738ae42854f",
+            "scripts/build.mjs": "b84efb89e13df8e58d513ddbaeb13f2fe50384517945df48e997e9b91f516dbd",
+            "src/faults.ts": "f61a732ae2b6bd0df3889ca571a21f32683f2117949e19ffa5ac024acffff5b4",
+            "src/inventory.ts": "9179c184c9086eb6be47e7465306a837a66ffb36021d1fa5b43a6dc382c1b4b6",
+            "src/main.ts": "fef94fb9c847379f8230c41edb1b42b3084e546f567762daa331390004f0bf5b",
+            "src/engine.ts": "8367a38b3bb8c864eca6bcddd56aa5b18d09db35aa6b72f3391812a015e258dc",
+            "src/types.ts": "08213d9681986e446d4919a971da3aa3016907866dd4890a308369cd756d8dc3",
+            "src/index.ts": "2cba4f49cfb20ee51c612c8ac4c371e7239a9c40cec9acb598c74d0ae5e14d9e",
+            "src/server.ts": "56044aae1328df1248976f2636c8b3481d6c5ac5f2c847ef9795732f529ea569",
+            "src/db.ts": "e223abf94ea32a68278ce51cd6ce323e93c0a29fbb62a949999bfc0536cecac3",
+            "src/auth.ts": "11e86f791f81c725e94803dc867bfa4ae624a63f74185be58fbd224ae011f71c",
+            "src/server/inventory.ts": "e7170bf35dd93bbf6d7c3be8bbd598823383d4137eba5c46e9d52bc7b2100e11",
+            "src/server/http.ts": "ffef4440601e55dfb58b7ca76214da8fe756aa33a0e9c94673e328d260ccc541",
+            "src/server/engine.ts": "9dcd56402a66c168ee4c28b046bccbdb857be83d481c9473ece2745d50bd327f",
+            "src/server/db.ts": "2c7b2dc81567ae1aed39c6ebc9f9f944ef45184eb22a7333c07295c4657469dc",
+            "src/server/auth.ts": "40d60be4b716e80ef69d4542a78152dc104f03ae34ed29c6d48837ee037da4e8"
+          },
+          "cumulative_recorded_model_calls": 25,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": "failed",
+            "source_digest": "ede612786d170d0044bf272bf0fc85a62a75dbe5d87f4ec21719d27b4b4082a6",
+            "checks": [
+              {
+                "command": "npm test",
+                "runtime_status": "failed",
+                "exit_code": 127,
+                "execution_outcome": null,
+                "known_failure_markers": [
+                  "vitest: not found"
+                ]
+              },
+              {
+                "command": "npm run build",
+                "runtime_status": "failed",
+                "exit_code": 1,
+                "execution_outcome": null,
+                "known_failure_markers": []
+              }
+            ]
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/noc",
+                "example": "files/data/noc/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/noc",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/noc"
+              }
+            },
+            "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 53751,
+            "preview_origin": "http://127.0.0.1:53751",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-be2f6d6a",
+          "profile_id": "coding_agent",
+          "status": "failed",
+          "phase": "dependency_failed",
+          "created_at": "2026-10-06T11:11:17.743511+00:00",
+          "finished_at": "",
+          "errors": [],
+          "branch_workspace": "coding-3d82d0f5ba5e46e2bd540ad315305a15",
+          "source_files": 0,
+          "source_file_sha256": {},
+          "cumulative_recorded_model_calls": 0,
+          "round_recorded_model_calls": 0,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": null
+        }
+      ],
+      "operator_control": {
+        "action": "normal_cancellation_after_user_reported_provider_usage_limit",
+        "report": "d16806a00a",
+        "user_reported_reset_wait_minutes": 50,
+        "actual_provider_rate_limit_response_independently_observed": false,
+        "source_preserved": true,
+        "automatic_replay": false,
+        "containers_and_networks_readback_empty": true
+      },
+      "test_parameters": {
+        "model": "MiniMax-M3",
+        "provider": "minimax",
+        "provider_type": "anthropic_messages",
+        "saved_output_budget": 4096,
+        "test_output_budget": 16384,
+        "production_settings_modified": false,
+        "full_fixture_preserved": true,
+        "run_mode": "explicit_known_candidate_continuation_after_runtime_repair",
+        "previous_report": "426bec568b",
+        "source_target": "sub-1407cf8d",
+        "expected_parent_task_id": "tsk_119d3db13216234f980b",
+        "requested_first_phase": "exact_qa",
+        "runner_sha256": "c31ee67434af2706dd28d59e32699b48f99f13a139ebf35e556e91d35cf44fc5"
+      },
+      "parent_cumulative_recorded_model_calls": 66,
+      "parent_round_recorded_model_calls": 9,
+      "diagnosis": {
+        "termination": "User reported five-hour MiniMax limit and approximately 50 minutes remaining. Operator stopped both known running processes through normal cancellation. Not a natural model/application completion failure or stability run. All candidates preserved; cleanup confirmed.",
+        "acceptance": "No exact QA/merge or integrated full application. Independent failures against empty parent do not establish that each business scenario was exercised.",
+        "framework": "Serialized known credential mask followed by JSON escaped whitespace falsely blocked durable evidence. Separate red/green tests and shared fix recorded; this process used earlier imported code.",
+        "coordination": "NOC QA sub-8f11d0ac actually timed out after 30 seconds, closed environment correctly stopped its loop. Later QA sub-3c57c966 made one model request and zero tool observations yet claimed native installation failures; those claims are unverified model output, not actual native build evidence. RTS real implementation remained active with preserved source, no completed checks before cancellation.",
+        "evaluator_provenance": "Evaluator ran after local framework/acceptance edits; start commit and separate evaluator diff hash retained. This cancelled diagnostic is not a frozen-source stability validation."
+      },
+      "evaluator_source": {
+        "commit": "3cc6f218391a4c7d9479e6629e61af08172c4ef4",
+        "diff_sha256": "82ddb4a99e9d97aed4073f218ae16afda25f1df749f3b8e9c632cc7ac7a0c01d"
+      },
+      "evaluator_changed_after_run_started": true
+    },
+    {
+      "round": "large-20261006-minimax-rts-2/f589cd93b1",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-minimax-rts-2/reports/bench_rts_43cb269dce/f589cd93b1",
+      "configuration": {
+        "case": "rts",
+        "workspace_id": "bench_rts_43cb269dce",
+        "session_id": "4203c33acbe747cf",
+        "provider": "minimax",
+        "model": "MiniMax-M3",
+        "provider_type": "anthropic_messages",
+        "max_tokens": 16384,
+        "source_commit": "3cc6f218391a4c7d9479e6629e61af08172c4ef4",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "prompt_sha256": "6dd310bcec54e6096c4e0050f4ad80208178fd79ce9e0bbc62baf0f793421da1",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/rts",
+          "project": "/workspace/files/data/rts",
+          "tool_path_bases": {
+            "workspace.file": {
+              "basis": "workspace_root",
+              "project_prefix": "files/data/rts",
+              "example": "files/data/rts/src/main.ts"
+            },
+            "exec.run": {
+              "working_dir_basis": "workspace_root",
+              "working_dir": "files/data/rts",
+              "shell_path_basis": "container_cwd",
+              "container_cwd": "/workspace/files/data/rts"
+            }
+          },
+          "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 20401,
+          "preview_origin": "http://127.0.0.1:20401",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "preflight": {
+        "schema": "coding.benchmark_preflight.v1",
+        "provider": "minimax",
+        "model": "MiniMax-M3",
+        "provider_type": "anthropic_messages",
+        "status": "READY",
+        "agent_started": false,
+        "http_status": null,
+        "duration_seconds": 3.255,
+        "reason": null
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "rts",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "map_size_terrain_fair_spawns_resources_connectivity_and_chokes",
+            "camera_selection_control_groups_and_context_commands",
+            "all_commands_unit_types_and_complete_attributes",
+            "worker_gather_carry_deposit_depletion_and_resource_conservation",
+            "building_types_placement_construction_repair_cancel_and_refunds",
+            "production_population_queues_refunds_and_blocked_exits",
+            "combat_range_cooldown_armor_projectiles_retarget_and_no_friendly_fire",
+            "dynamic_three_state_fog_hidden_enemies_and_minimap",
+            "path_budget_terrain_buildings_formation_separation_choke_and_replanning",
+            "spatial_index_and_fixed_tick_render_ai_economy_separation",
+            "ai_resource_bound_economy_construction_scout_defend_attack_and_fog",
+            "technology_cost_time_prerequisites_and_actual_upgrade_effects",
+            "hud_commands_audio_alerts_animation_and_visual_identity",
+            "full_match_statistics_and_death_cleanup_across_all_references",
+            "complete_save_load_of_map_research_ai_queues_and_time",
+            "normal_mode_debug_restrictions_and_real_f3_metrics",
+            "300_units_50_buildings_combined_stress_and_bounded_memory",
+            "playable_skirmish_economy_to_victory_and_defeat"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_engine_battle_100v100_round_1",
+            "independent_engine_battle_100v100_round_2",
+            "independent_engine_battle_100v100_round_3",
+            "independent_engine_continuation_determinism_round_1",
+            "independent_engine_continuation_determinism_round_2",
+            "independent_engine_continuation_determinism_round_3",
+            "independent_engine_fog_save_round_1",
+            "independent_engine_fog_save_round_2",
+            "independent_engine_fog_save_round_3",
+            "independent_engine_long_run_cleanup_round_1",
+            "independent_engine_long_run_cleanup_round_2",
+            "independent_engine_long_run_cleanup_round_3",
+            "independent_engine_movement_200_round_1",
+            "independent_engine_movement_200_round_2",
+            "independent_engine_movement_200_round_3",
+            "independent_engine_normal_debug_guard_round_1",
+            "independent_engine_normal_debug_guard_round_2",
+            "independent_engine_normal_debug_guard_round_3",
+            "independent_engine_save_load_round_1",
+            "independent_engine_save_load_round_2",
+            "independent_engine_save_load_round_3",
+            "independent_engine_seed_and_tick_round_1",
+            "independent_engine_seed_and_tick_round_2",
+            "independent_engine_seed_and_tick_round_3",
+            "independent_engine_snapshot_contract_round_1",
+            "independent_engine_snapshot_contract_round_2",
+            "independent_engine_snapshot_contract_round_3",
+            "production_build"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "duration_seconds": 677.89,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "tasks": [
+        {
+          "subtask_id": "sub-5610f0e8",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "created_at": "2026-10-06T11:03:12.145568+00:00",
+          "finished_at": "2026-10-06T11:13:27.740766+00:00",
+          "errors": [],
+          "branch_workspace": "coding-e90252b0c86c4f9f99e83f378923e47d",
+          "source_files": 21,
+          "source_file_sha256": {
+            "index.html": "b3197ffd5b31818bc3bbdd31b068d53c1051c4853821e9808cd53a5ca46a026e",
+            "vite.config.js": "30a77f7df6d41b0ba4d6960907aa97188b7667d5c991a771b8038449a77bc969",
+            ".gitignore": "d15f232be465c9c8646f8af762131180e79f266aaac444919a5493efcaa4cb38",
+            "package-lock.json": "c0c785d31b23f7ae8b43a266059f99940f4c331651328a8fa5321f596108cae9",
+            "package.json": "909e417108748aad6f941fc668b61a586c5993dbf8518893c332f0a5aa50ab4f",
+            "test/runner.js": "35e32d2a2d9738b7cf62037d66a26b2e27e124eeabbdcba501309dc81bf64e0a",
+            "test/engine.test.js": "56f551f19b6b79fd9f19e4ac67d8740f35692428a2ab8595177970402e707e6c",
+            "tests/contract.test.mjs": "35e60deacf35feda31e0c0626653c35b528b52774aaa6512bcf4dd77b1146cff",
+            "scripts/start.mjs": "c58702a8bc631d7c373e76b32b98d7b1dbc54937011a161dc3cb10a693874217",
+            "scripts/build.mjs": "e934bcb84b90b54eea0a9d1c880ffb17974f43cd00e28475f452540bc4774729",
+            "src/render.js": "01107a69de2839e2cefb84320fdfd5879d43611f9e9e9968194c3710156f1f1c",
+            "src/main.js": "825a3014309d7777ee89d12bd7c8a96620f62b987b81911499dea0a1daad866f",
+            "src/engine.js": "98bf2ff135659f6227e93a0a03140963bffbb57812eeca1cf70effa85aa13368",
+            "src/engine/rng.js": "de65924e9ffc3d54bc2d820b7410e730bec63e9bbb5c4f021ce306f413fdfa33",
+            "src/engine/fog.js": "0d6dbe3ca15fd55766f472ca8e1b496411ca0179ef40506ca73d82cea707c747",
+            "src/engine/world.js": "70a7de36d24870d6b91880912b63c1b163037b558a37999a54db4015008d0dea",
+            "src/engine/defs.js": "1a65d940df7170201b54725fabd6fd43e1dad9305d1b9f47b1fd7f7594a26d64",
+            "src/engine/index.js": "eccd1361cd496f1a0f06bc8733c056f6e0dcc2ad76590a9b2ee2bb2c2d9357d9",
+            "src/engine/data.js": "0b2baf632d2ceee65867853704013b1a1f703641e9b93b069560eece0d0cf64e",
+            "src/engine/mapgen.js": "880ed9ba8414efa257c4e355afd197867c03f100f1a111480eb1931d8893651c",
+            "src/engine/pathfind.js": "cedd4f2b3232eabdd891baa6e0d27039b9a1d0cba09b0b91c90d6a8eb7c57ab9"
+          },
+          "cumulative_recorded_model_calls": 50,
+          "round_recorded_model_calls": 49,
+          "round_output_at_test_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/rts",
+            "project": "/workspace/files/data/rts",
+            "tool_path_bases": {
+              "workspace.file": {
+                "basis": "workspace_root",
+                "project_prefix": "files/data/rts",
+                "example": "files/data/rts/src/main.ts"
+              },
+              "exec.run": {
+                "working_dir_basis": "workspace_root",
+                "working_dir": "files/data/rts",
+                "shell_path_basis": "container_cwd",
+                "container_cwd": "/workspace/files/data/rts"
+              }
+            },
+            "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 61598,
+            "preview_origin": "http://127.0.0.1:61598",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        }
+      ],
+      "operator_control": {
+        "action": "normal_cancellation_after_user_reported_provider_usage_limit",
+        "report": "f589cd93b1",
+        "user_reported_reset_wait_minutes": 50,
+        "actual_provider_rate_limit_response_independently_observed": false,
+        "source_preserved": true,
+        "automatic_replay": false,
+        "containers_and_networks_readback_empty": true
+      },
+      "test_parameters": {
+        "model": "MiniMax-M3",
+        "provider": "minimax",
+        "provider_type": "anthropic_messages",
+        "saved_output_budget": 4096,
+        "test_output_budget": 16384,
+        "production_settings_modified": false,
+        "full_fixture_preserved": true,
+        "run_mode": "fresh_workspace_and_session_no_inherited_candidate",
+        "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+        "runner_sha256": "f44a0566f17458c477419291a5ad65b750c29a07c941d6a15af87c1581240fd8"
+      },
+      "parent_cumulative_recorded_model_calls": 4,
+      "parent_round_recorded_model_calls": 4,
+      "diagnosis": {
+        "termination": "User reported five-hour MiniMax limit and approximately 50 minutes remaining. Operator stopped both known running processes through normal cancellation. Not a natural model/application completion failure or stability run. All candidates preserved; cleanup confirmed.",
+        "acceptance": "No exact QA/merge or integrated full application. Independent failures against empty parent do not establish that each business scenario was exercised.",
+        "framework": "Serialized known credential mask followed by JSON escaped whitespace falsely blocked durable evidence. Separate red/green tests and shared fix recorded; this process used earlier imported code.",
+        "coordination": "NOC QA sub-8f11d0ac actually timed out after 30 seconds, closed environment correctly stopped its loop. Later QA sub-3c57c966 made one model request and zero tool observations yet claimed native installation failures; those claims are unverified model output, not actual native build evidence. RTS real implementation remained active with preserved source, no completed checks before cancellation.",
+        "evaluator_provenance": "Evaluator ran after local framework/acceptance edits; start commit and separate evaluator diff hash retained. This cancelled diagnostic is not a frozen-source stability validation."
+      },
+      "evaluator_source": {
+        "commit": "3cc6f218391a4c7d9479e6629e61af08172c4ef4",
+        "diff_sha256": "82ddb4a99e9d97aed4073f218ae16afda25f1df749f3b8e9c632cc7ac7a0c01d"
+      },
+      "evaluator_changed_after_run_started": true
     }
   ],
   "path_contract_kernel": {
@@ -5889,5 +7189,155 @@
     "actual_image": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
     "application_or_model_failure": false,
     "containers_started": false
+  },
+  "terminal_evidence_kernel_controls": [
+    {
+      "scope": "shared framework kernel probes; controlled provider, not business benchmark acceptance",
+      "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+      "checks": [
+        {
+          "name": "readonly_source_allows_governed_dependency_install",
+          "passed": true
+        },
+        {
+          "name": "actual_npm_bin_link_usable_in_readonly_validation_snapshot",
+          "passed": true
+        },
+        {
+          "name": "last_failed_governed_exchange_fully_archived_without_next_model_request",
+          "passed": true,
+          "checkpoint_id": "ctx_49611fecfc8e590001d5b4e9903bcc4c"
+        },
+        {
+          "name": "real_agentapp_timeout_stops_model_loop_without_replay",
+          "passed": true,
+          "model_stub_calls": 1,
+          "governed_tool_calls": 1,
+          "terminal_errors": [
+            "execution_environment_unavailable"
+          ]
+        },
+        {
+          "name": "closed_binding_next_turn_no_provider_invocation_or_host_fallback",
+          "passed": true
+        }
+      ],
+      "cleanup_confirmed": true
+    },
+    {
+      "scope": "shared framework kernel probes; controlled provider, not business benchmark acceptance",
+      "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+      "checks": [
+        {
+          "name": "readonly_source_allows_governed_dependency_install",
+          "passed": true
+        },
+        {
+          "name": "actual_npm_bin_link_usable_in_readonly_validation_snapshot",
+          "passed": true
+        },
+        {
+          "name": "last_failed_governed_exchange_fully_archived_without_next_model_request",
+          "passed": true,
+          "checkpoint_id": "ctx_bedf7817fc6028d3da7e468629c49a17"
+        },
+        {
+          "name": "real_agentapp_timeout_stops_model_loop_without_replay",
+          "passed": true,
+          "model_stub_calls": 1,
+          "governed_tool_calls": 1,
+          "terminal_errors": [
+            "execution_environment_unavailable"
+          ]
+        },
+        {
+          "name": "closed_binding_next_turn_no_provider_invocation_or_host_fallback",
+          "passed": true
+        }
+      ],
+      "cleanup_confirmed": true
+    }
+  ],
+  "candidate_local_diagnostic": {
+    "scope": "independent diagnostic on preserved stage-1 candidate; not team QA, integration, full acceptance or stability",
+    "source_subtask_id": "sub-1407cf8d",
+    "source_digest": "9922c902a8a72951944e0cf20ec8a0b14309cfc57fb1701b2b7c8122787c9a60",
+    "provider_calls": 0,
+    "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+    "checks": [
+      {
+        "name": "actual_governed_dependency_install",
+        "status": "PASS",
+        "evidence": {
+          "exit_code": 0,
+          "source_unchanged": null
+        }
+      },
+      {
+        "name": "actual_governed_candidate_test",
+        "status": "PASS",
+        "evidence": {
+          "exit_code": 0,
+          "source_unchanged": true
+        }
+      },
+      {
+        "name": "actual_governed_candidate_build",
+        "status": "PASS",
+        "evidence": {
+          "exit_code": 0,
+          "source_unchanged": true
+        }
+      },
+      {
+        "name": "candidate_start",
+        "status": "PASS",
+        "evidence": {
+          "exit_code": 0,
+          "source_unchanged": null
+        }
+      },
+      {
+        "name": "candidate_health",
+        "status": "PASS",
+        "evidence": {
+          "ok": true,
+          "ts": 1791285542634
+        }
+      },
+      {
+        "name": "complete_published_inventory_contract",
+        "status": "FAIL",
+        "error": "required device roles missing: wan"
+      },
+      {
+        "name": "observed_inventory_counts_and_roles",
+        "status": "PASS",
+        "evidence": {
+          "devices": 50,
+          "interfaces": 506,
+          "roles": [
+            "access",
+            "aggregation",
+            "core",
+            "firewall",
+            "router",
+            "server",
+            "wireless"
+          ]
+        }
+      },
+      {
+        "name": "real_same_engine_stress_scale",
+        "status": "FAIL",
+        "error": "timed out"
+      },
+      {
+        "name": "candidate_source_unchanged",
+        "status": "PASS"
+      }
+    ],
+    "cleanup_confirmed": true,
+    "unknown_write_note": "One fresh disposable stress request timed out after 3 seconds; it was not replayed. Its completion and target scale were not verified before confirmed container cleanup. Do not infer stress inventory failure from this timeout."
   }
 }

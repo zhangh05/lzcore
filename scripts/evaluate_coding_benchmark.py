@@ -86,6 +86,9 @@ def main() -> int:
             assert len({item["id"] for item in devices}) == len(devices)
             return {"devices": len(devices), "interfaces": len(interfaces), "links": len(topology["links"])}
         check("baseline_inventory", inventory)
+        from scripts.benchmark_noc_inventory import verify_inventory
+        check("independent_complete_inventory_fields", lambda: verify_inventory(
+            array("/api/devices", "devices"), array("/api/interfaces", "interfaces")))
         def progress():
             before = api("/api/test/state")
             api("/api/test/step", {"seconds": 10})

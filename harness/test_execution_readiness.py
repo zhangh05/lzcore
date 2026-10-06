@@ -60,6 +60,13 @@ def test_resource_revoked_during_generation_cannot_execute_proposed_write():
         ctx, BudgetController(config), None))
     assert result.error == "execution_environment_unavailable"
     assert result.llm_calls == 1 and executions == []
+    from storage.context_epoch_store import read_epoch
+    terminal = ctx.extras["terminal_context_epoch"]
+    archived = read_epoch(ctx.workspace_id, ctx.session_id, terminal["checkpoint_id"])["payload"]
+    assert archived["state"]["unsettled_call_ids"] == []
+    proposal = archived["state"]["unexecuted_model_proposal"]
+    assert proposal["status"] == "not_executed" and proposal["tool_calls"][0]["id"] == "write"
+    assert archived["state"]["automatic_replay_allowed"] is False
 
 
 @pytest.mark.parametrize("observation", [None, {"status": "invalid"}, RuntimeError("probe-private-payload")])
@@ -145,3 +152,39 @@ def test_tool_timeout_revokes_resource_without_second_model_call_or_replay():
     assert len(calls) == 1 and executions == [True]
     assert len(result.tool_results) == 1 and not result.tool_results[0].ok
     assert not ctx.extras.get("provider_recovery_events")
+    from storage.context_epoch_store import read_epoch
+    terminal = ctx.extras.get("terminal_context_epoch")
+    assert terminal, "the last failed exchange must survive without another model call"
+    archived = read_epoch(ctx.workspace_id, ctx.session_id, terminal["checkpoint_id"])["payload"]
+    calls = [m for m in archived["messages"] if m.get("tool_calls")]
+    assert calls[-1]["tool_calls"][0]["function"]["arguments"] == '{"action": "shell", "command": "assigned-check"}'
+    results = [m for m in archived["messages"] if m.get("role") == "tool"]
+    assert "command timed out" in results[-1]["content"]
+    assert archived["state"]["terminal_error"] == "execution_environment_unavailable"
+
+
+def test_archive_failure_is_visible_without_replaying_or_overwriting_tool_failure(monkeypatch):
+    from core.runtime_engine import context_continuation
+
+    def failed_archive(*_args, **_kwargs):
+        raise OSError("private-storage-payload")
+
+    monkeypatch.setattr(context_continuation, "save_epoch", failed_archive)
+    config = SSOTRuntimeConfig()
+    ctx = StatelessContext("ws", "archive-failure", "archive-failure", "Report observations")
+    calls = []
+
+    def model(**_kwargs):
+        calls.append(True)
+        return LLMResponse(content="Observations complete")
+
+    result = asyncio.run(QueryLoop(config, {}, ToolRuntime(config), llm_invoke=model).run(
+        ctx, BudgetController(config), None))
+    assert result.error == "context_archive_persist_failed" and calls == [True]
+    assert "private-storage-payload" not in str(result)
+    ctx.extras["__execution_readiness_check"] = lambda: {
+        "status": "unavailable", "cleanup_confirmed": True, "execution_may_continue": False}
+    stopped = asyncio.run(QueryLoop(config, {}, ToolRuntime(config), llm_invoke=model).run(
+        ctx, BudgetController(config), None))
+    assert stopped.error == "execution_environment_unavailable" and calls == [True]
+    assert stopped.metrics["terminal_context_archive_error"] == "context_archive_persist_failed"

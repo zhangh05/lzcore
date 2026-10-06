@@ -76,7 +76,7 @@ def expected_checks(case: str, rounds: int) -> set[str]:
         return names | {"independent_browser_interactions"}
     names.add("browser_boot_only")
     if case == "noc":
-        names.update(("api_boot", "independent_test_identity", "baseline_inventory",
+        names.update(("api_boot", "independent_test_identity", "baseline_inventory", "independent_complete_inventory_fields",
                       "simulation_progress", "stress_inventory"))
         repeated = NOC_ROUND_CHECKS
     else:
