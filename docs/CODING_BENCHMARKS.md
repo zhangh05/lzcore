@@ -13,7 +13,7 @@
   --output /tmp/lzcore-strict-workspaces/counter-round-1 --deadline 900
 ```
 
-新任务检查端口未占用。恢复明确提供同一 `--output --workspace-id --session-id`，可用 `--prompt` 给真实失败反馈；旧容器及其所有后代必须已确认清理，新回合重新启动隔离环境。deadline 发出服务端取消；报告另外核验进程/网络/broker 清理，不把发出取消等同于清理完成。
+新任务检查端口未占用。恢复明确提供同一 `--output --workspace-id --session-id --resume-task-id`，可用 `--prompt` 给真实失败反馈；先用标准 TaskState 解析核对父身份和最近完整交换，缺失/不匹配或输入会新建任务则 BLOCKED，模型、Provider 请求和容器尚未启动。该只读核验不重写旧任务身份、不允许跨父候选。旧容器及其所有后代必须已确认清理，新回合重新启动隔离环境。deadline 发出服务端取消；报告另外核验进程/网络/broker 清理，不把发出取消等同于清理完成。
 
 每轮先通过生产 Provider 传输执行一次不带工具的连接探测，再启动隔离环境和工程任务。`preflight.json` 只记录公共厂商/模型、HTTP 状态与稳定阻塞类别，不保存凭据或响应正文。401/403、限流/额度、缺失配置或探测异常会产生 `status=BLOCKED` 的 `verdict.json` 并以退出码 2 结束；这表示工程任务尚未开始，不能统计为大型工程生成失败或通过。前置请求被接受只证明连接可用，不证明后续带工具请求、工程质量或业务验收成功。
 
@@ -24,6 +24,8 @@
 ## 独立验收与团队验收
 
 运行脚本在项目容器仍存活时自动调用独立 Evaluator。生成工程的 npm test/build 在项目容器内执行；RTS 引擎和它的编译器在另一个无网络、只读工程挂载的 QA 容器中执行。可信宿主验收器只通过有大小和时间限制的 JSON RPC 接收观测，持有断言和随机场景；生成代码不能修改断言或读取验收程序。实现 Agent 看不到 Evaluator；宿主 Python/Node 不导入生成应用或它的依赖。
+
+独立引擎编译器固定为镜像内 esbuild 0.25.12，加载 `/usr/local/lib/node_modules/esbuild`，不要求应用额外声明它。有效 JS/TS 工程可以采用自己的构建工具；镜像没有验收断言或业务场景。verify_benchmark_evaluator.py 在没有项目编译器依赖的控制工程中验证 CommonJS、TS 模块导入/枚举、三组随机种子，并确认引擎篡改自身 assert 不能替换宿主断言。
 
 Evaluator 的独立调用必须提供服务端已建立的容器身份、镜像 ID、容器内工程路径及精确 loopback 预览，不能指定任意宿主工程执行。`--rounds` 默认 3（1–10），`--seed` 可重放随机目标/场景。生成应用的测试和生产构建独立单列，不代表业务正确。
 

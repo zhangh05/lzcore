@@ -9,19 +9,19 @@ and are neither copied nor included in reports.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 import hashlib
 import json
 import os
 import signal
 import socket
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import uuid
+from contextlib import contextmanager
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -56,6 +56,10 @@ def main() -> int:
         help="Continue an existing benchmark session in --output's isolated storage",
     )
     parser.add_argument(
+        "--resume-task-id",
+        help="Verified parent task identity required when continuing an existing session",
+    )
+    parser.add_argument(
         "--prompt",
         type=Path,
         help="An explicit benchmark or acceptance-feedback prompt",
@@ -86,18 +90,18 @@ def main() -> int:
     os.environ["LZCORE_WORKSPACE_ROOT"] = str(base / "storage")
     os.environ["LZCORE_MEMORY_DIR"] = str(base / "memory")
     os.environ["LZCORE_LLM_ENABLED"] = "true"
-    from storage.ids import validate_workspace_id
-    from storage.workspace_store import ensure_workspace
-    from storage.session_store import create_session
-    from storage.redaction import redact_value
-    from storage.paths import workspace_root
-    from agent.llm.config import resolve_provider_config
     from agent.app.facade import AgentApp
+    from agent.llm.config import resolve_provider_config
     from agent.runtime.stream_emitter import StreamEmitter
     from core.runtime_engine.models import MainAgentRuntimeControl
-    from core.tools.integration import get_default_tool_runtime_client
     from core.tools.context import ToolRuntimeContext
-    from core.tools.project_execution import isolated_project, PREVIEW_BIND_PORT
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.project_execution import PREVIEW_BIND_PORT, isolated_project
+    from storage.ids import validate_workspace_id
+    from storage.paths import workspace_root
+    from storage.redaction import redact_value
+    from storage.session_store import create_session
+    from storage.workspace_store import ensure_workspace
 
     ws = validate_workspace_id(
         args.workspace_id or f"bench_{args.case}_{uuid.uuid4().hex[:10]}"
@@ -178,6 +182,20 @@ def main() -> int:
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     (report / "prompt.md").write_text(prompt, encoding="utf-8")
+    if args.session_id:
+        from scripts.benchmark_continuation import continuation_preflight
+
+        continuation = continuation_preflight(ws, session_id, prompt, args.resume_task_id or "")
+        (report / "continuation.json").write_text(json.dumps(continuation, indent=2), encoding="utf-8")
+        if continuation["status"] != "READY":
+            blocked = {
+                "schema": "coding.benchmark_verdict.v1", **continuation,
+                "agent_started": False, "execution_environment_started": False,
+                "cleanup_required": False, "full_benchmark_acceptance": "NOT VERIFIED",
+            }
+            (report / "verdict.json").write_text(json.dumps(blocked, indent=2), encoding="utf-8")
+            print(json.dumps({"report": str(report), **blocked}), flush=True)
+            return 2
     from scripts.benchmark_preflight import provider_preflight
 
     readiness = provider_preflight(config)
@@ -328,6 +346,7 @@ def main() -> int:
             encoding="utf-8",
             errors="replace",
             timeout=600,
+            check=False,
         )
         (report / "acceptance.log").write_text(
             acceptance.stdout + acceptance.stderr, encoding="utf-8"

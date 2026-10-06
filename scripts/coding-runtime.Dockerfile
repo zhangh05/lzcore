@@ -9,5 +9,6 @@ RUN apt-get update \
 ENV npm_config_nodedir=/usr/local
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && npm install --global --no-audit --no-fund esbuild@0.25.12 \
     && mkdir -p /workspace/files/data
 WORKDIR /workspace

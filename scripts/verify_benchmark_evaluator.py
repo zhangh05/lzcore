@@ -22,8 +22,6 @@ def main():
         parser.error("output must be new owned scratch storage")
     args.output.mkdir(parents=True)
     os.environ["LZCORE_WORKSPACE_ROOT"] = str(args.output / "storage")
-    from core.tools.context import ToolRuntimeContext
-    from core.tools.integration import get_default_tool_runtime_client
     from core.tools.project_execution import isolated_project
     from scripts.benchmark_runtime import BenchmarkRuntime
     from storage.paths import workspace_root
@@ -31,9 +29,7 @@ def main():
     workspace = "evaluator-" + uuid.uuid4().hex[:12]
     project = workspace_root(workspace) / "files/data/project"
     project.mkdir(parents=True)
-    (project / "package.json").write_text(
-        '{"private":true,"dependencies":{"esbuild":"0.25.12"}}'
-    )
+    (project / "package.json").write_text('{"private":true,"type":"module"}')
     # This fixture deliberately tampers with the isolated process's assert.
     # It cannot see the verifier or change its own acceptance criteria.
     (project / "engine.cjs").write_text("""
@@ -47,23 +43,19 @@ exports.createGame = options => {
 };
 """)
     (project / "engine.cjs").chmod(0o600)
-    context = ToolRuntimeContext(
-        workspace_id=workspace, session_id="proof", requested_by="subagent"
-    )
+    (project / "helper.ts").write_text('export enum Mode { Running }; export const advance = (tick:number,n:number):number => tick+n;')
+    (project / "engine.ts").write_text("""
+import { advance, Mode } from './helper';
+export const createGame = (options: {seed:number}) => {
+ let tick:number=0;
+ return {step:(n:number)=>{tick=advance(tick,n)},
+ snapshot:()=>({tick,seed:options.seed,fog:new Uint8Array([1,0,1])}),
+ getState:()=>({hasVerifier:process.execArgv.some(a=>a.includes('trusted_verifier_canary')),mode:Mode.Running}),
+ command:()=>{},debugScenario:()=>{},save:()=>({tick}),load:(state:{tick:number})=>{tick=state.tick}};
+};
+""")
     reports = []
     with isolated_project(workspace, project, 18859) as environment:
-        install = get_default_tool_runtime_client().invoke(
-            "exec.run",
-            {
-                "action": "shell",
-                "command": "npm install --no-audit --no-fund",
-                "working_dir": "files/data/project",
-                "timeout": 90,
-            },
-            context=context,
-        )
-        if install.status != "succeeded":
-            raise RuntimeError("evaluator_dependency_install_failed")
         runtime = BenchmarkRuntime(
             environment.name, environment.image_id, project, environment.mount_target
         )
@@ -82,10 +74,12 @@ exports.createGame = options => {
                 "adversarial",
                 seed,
             )
+            typescript = runtime.independent_program(normal, "engine.ts", "typescript", seed)
             reports.append(
                 {
                     "seed": seed,
                     "positive_pass": positive.returncode == 0,
+                    "typescript_without_project_compiler_pass": typescript.returncode == 0,
                     "positive_error": positive.stderr[-500:]
                     if positive.returncode
                     else "",
@@ -100,6 +94,7 @@ exports.createGame = options => {
         0
         if all(
             r.get("positive_pass", True)
+            and r.get("typescript_without_project_compiler_pass", True)
             and r.get("assertion_tamper_rejected", True)
             and r.get("cleanup_confirmed", True)
             for r in reports

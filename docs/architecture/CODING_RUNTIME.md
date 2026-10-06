@@ -95,3 +95,5 @@ Provider 明确返回 HTTP 402 或余额/额度耗尽时，传输和 QueryLoop �
 专用编码镜像使用固定版本和摘要的 Node 22 LTS，提供同版本本地头文件及 C/C++ 工具链，npm_config_nodedir=/usr/local；原生 npm 依赖从受限包出口获取源码并在工程内编译，不要求扩大预编译产物/头文件下载权限。Node 24.21 对经典 ObjectWrap 模块的 GC 崩溃已在独立控制工程复现，不能只用 N-API 依赖安装成功判断工具链可用（[上游问题](https://github.com/nodejs/node/issues/65446)）。本机源码开发的 Node 版本要求与隔离编码镜像分开。镜像仍不包含框架、Evaluator、宿主凭据或 Docker Socket；每个环境记录实际不可变 image ID。verify_coding_isolation.py 强制原生依赖源码编译及 SQL 查询，并通过 benchmark_native_addon_probe.py 验证经典原生模块分配触发的 GC 和三次正常退出；还重复检查只读源码、受限网络、后代清理和独立验收隔离。
 
 明确的中文同一/当前/原有任务续接不依赖汉字后的词边界；cancelled/failed 父任务只有明确 resume 才保留身份，仍核对最近完整交换与服务端 CAS。不会自动恢复终态子任务、放宽同父源码修订或重放未知写入。
+
+大型压测恢复额外要求 --resume-task-id，只读预检调用相同 TaskState 解析器，确认当前请求仍绑定被选择的父任务。长纠错说明若使请求成为新任务，预检拒绝在错误父身份下启动；不能将原候选改为新父任务或跨父整合。独立 RTS 编译器由固定镜像提供，应用依赖声明不承担验收器自身的编译依赖；编译与引擎始终在隔离容器，断言仍仅在可信宿主。
