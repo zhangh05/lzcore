@@ -59,4 +59,6 @@ python scripts/build_windows_exe.py --webview2-runtime $env:LZCORE_WEBVIEW2_DIR
 
 Release workflow 使用锁定 Windows/Python 依赖、Inno Setup，每用户安装、升级前退出，卸载保留数据。windows_desktop_smoke.py 启动真实 EXE，经 CDP 验证页面、bridge、主题、缩放、托盘、第二次启动、原生导出、WebSocket 和带终态历史的关闭；安装/升级/卸载数据保留也单独验证。报告/截图在 windows-desktop-validation 产物。
 
+新 tag 的 Release 先生成草稿，缺失附件会使上传步骤失败。核对该提交的 CI、Windows 原生验证、全部附件及更新清单的版本、源码提交、大小与 SHA-256 后再公开草稿。已有公开 Release 的同版本重建仍替换附件，不移动 tag；不能把工作流启动或单独上传成功当成发布完成。
+
 runner 自动化不证明所有实体机/DPI/多显示器或大图帧率。原生关闭检查发现 Python.NET 卸载时，WinForms/WebView2 对象的终结可能再次调用已移除的类型。退出先完成任务收尾、等待原生关闭调用和状态线程返回，托盘由所属 UI 线程释放；随后停止本地服务、关闭设备会话、释放单实例锁，并按需启动恢复后的新进程。仅已加载 Python.NET 的 Windows 桌面入口，在上述清理和日志刷新完成后结束宿主进程，不再调用显式卸载或解释器退出钩子。Web-only、第二实例和其他平台保留正常 Python 退出。退出报告记录 exit_code/exit_hex，失败时保留 Windows 原生事件堆栈；原生 smoke 检查实际进程正常退出以及同一数据目录的重复启动和关闭。

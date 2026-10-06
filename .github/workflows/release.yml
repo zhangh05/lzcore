@@ -252,6 +252,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
+          draft: true
+          fail_on_unmatched_files: true
           files: |
             release/lzcore-*.zip
             release/lzcore-*-setup.exe
