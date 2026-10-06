@@ -91,10 +91,12 @@ def observe_progress(task) -> dict:
             except FileNotFoundError:
                 continue
     usage = read_usage(assignment["branch_workspace"])
-    return {"phase": assignment.get("phase"), "source_files": files, "source_bytes": size,
+    from .coding_state import candidate, review
+    facts = (review(task) if task.profile_id == "qa_agent" else candidate(task)) or {}
+    return {"state": facts.get("state", task.status), "source_files": files, "source_bytes": size,
             "recorded_model_calls": len(usage),
             "last_model_response_at": usage[-1].get("created_at", "") if usage else "",
-            "completion_status": (assignment.get("completion_validation") or {}).get("status", "pending")}
+            "completion_status": facts.get("validation", {}).get("status", "pending")}
 
 
 def check_implementation(task, cancel_check=None) -> dict:
@@ -107,21 +109,21 @@ def check_implementation(task, cancel_check=None) -> dict:
     from core.tools.integration import get_default_tool_runtime_client
     from storage.redaction import redact_value
 
-    from .subagent import _save_task
-
     assignment = task.coding
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
     baseline = source_manifest(branch, assignment.get("generated_paths"))
     digest = manifest_digest(baseline)
-    cached = assignment.get("completion_validation") or {}
+    from .coding_state import candidate, record_candidate_validation
+    recorded = candidate(task)
+    if not recorded:
+        raise ValueError("coding_candidate_unavailable")
+    cached = recorded["validation"]
     if cached.get("status") == "unknown":
         # Source changes cannot reconcile an execution whose outcome is unknown.
         return cached
     if cached.get("source_digest") == digest and cached.get("status") == "passed":
         return cached
     evidence = []
-    assignment["phase"] = "verifying"
-    _save_task(task)
     status = "passed" if baseline else "failed"
     for command in assignment["validation_commands"]:
         if callable(cancel_check) and cancel_check():
@@ -148,8 +150,8 @@ def check_implementation(task, cancel_check=None) -> dict:
     result = {"status": status, "source_digest": digest, "checks": evidence,
               "source_changed_during_checks": source_changed,
               "automatic_retry_allowed": status != "unknown"}
-    assignment.update(phase="executing", completion_validation=result)
-    _save_task(task)
+    if recorded["state"] == "building":
+        record_candidate_validation(task, result)
     return result
 
 
@@ -197,8 +199,7 @@ def create_assignment(task, supplied: dict) -> dict:
     if any(not shlex.split(command) for command in commands):
         raise ValueError("coding_validation_commands_required")
     assignment = {
-        "schema": "coding.assignment.v1",
-        "state_store_version": 2,
+        "schema": "coding.assignment.v2",
         "phase_id": phase_id(task, supplied),
         "project_dir": project,
         "responsibilities": responsibilities,
@@ -208,7 +209,6 @@ def create_assignment(task, supplied: dict) -> dict:
         "review_subtask_id": review_id,
         "revision_subtask_id": str(supplied.get("revision_subtask_id") or ""),
         "branch_workspace": "coding-" + uuid.uuid4().hex,
-        "phase": "assigned",
         "parent_contract_refs": [{"run_id": item["run_id"], "sha256": item["sha256"]}
                                  for item in parent_contract(task)],
     }
@@ -229,8 +229,8 @@ def create_assignment(task, supplied: dict) -> dict:
             raise ValueError("invalid_coding_qa_review_target")
         # The implementation assignment owns required checks. QA cannot weaken
         # them by asking for an easier command set.
-        from .coding_state import ensure_candidate
-        contract = ensure_candidate(target) or target.coding
+        from .coding_state import candidate
+        contract = candidate(target) or target.coding
         assignment["validation_commands"] = list(contract["validation_commands"])
         assignment["generated_paths"] = list(contract.get("generated_paths", []))
     elif review_id:
@@ -253,7 +253,7 @@ def create_assignment(task, supplied: dict) -> dict:
 
 
 def ready(task) -> bool:
-    from .coding_state import CandidateState, _REVIEWABLE, ensure_candidate
+    from .coding_state import CandidateState, _REVIEWABLE, candidate
     assignment = task.coding
     dependencies = list(assignment.get("depends_on") or [])
     if task.profile_id == "qa_agent":
@@ -263,34 +263,30 @@ def ready(task) -> bool:
             target = _related(task, subtask_id)
         except ValueError:
             task.status = "failed"
-            assignment["phase"] = "dependency_failed"
             task.summary = "Coding dependency identity is unavailable"
             return False
         review_target = task.profile_id == "qa_agent" and subtask_id == assignment["review_subtask_id"]
         try:
-            record = ensure_candidate(target)
+            record = candidate(target)
         except ValueError as exc:
             task.status = "failed"
-            assignment["phase"] = "dependency_failed"
             task.summary = str(exc)
             return False
         if record:
             available = record["state"] in _REVIEWABLE if review_target else record["state"] == CandidateState.INTEGRATED
-            failed = record["state"] in {CandidateState.VALIDATION_FAILED, CandidateState.REJECTED,
+            failed = (record["state"] == CandidateState.BUILDING and target.status in {"failed", "cancelled"}) or (record["state"] in {CandidateState.VALIDATION_FAILED, CandidateState.REJECTED,
                 CandidateState.INCOMPLETE, CandidateState.EXECUTION_UNKNOWN, CandidateState.PUBLICATION_UNKNOWN,
-                } and not available
+                } and not available)
         else:
             available = False
             failed = target.status in {"failed", "cancelled"}
         if failed:
             task.status = "failed"
-            assignment["phase"] = "dependency_failed"
             task.summary = "Coding dependency did not complete successfully"
             return False
         # Review consumes a completed candidate. Publication consumes its QA;
         # requiring publication here creates an impossible dependency cycle.
         if not available:
-            assignment["phase"] = "dependency_wait"
             return False
     return True
 
@@ -316,8 +312,8 @@ def coding_run(task):
         raise ValueError("coding_branch_already_executed")
     if task.profile_id == "qa_agent":
         target = _related(task, assignment["review_subtask_id"])
-        from .coding_state import ensure_candidate
-        reviewed_candidate = ensure_candidate(target)
+        from .coding_state import candidate
+        reviewed_candidate = candidate(target)
         if not reviewed_candidate:
             raise ValueError("coding_candidate_unavailable")
         source = project_path(
@@ -326,8 +322,6 @@ def coding_run(task):
         baseline = source_manifest(source, assignment.get("generated_paths"))
         if manifest_digest(baseline) != reviewed_candidate["source_digest"]:
             raise ValueError("coding_review_candidate_changed")
-        assignment["review_digest"] = reviewed_candidate["change"]["digest"]
-        assignment["review_candidate_digest"] = reviewed_candidate["source_digest"]
         copy_sources(source, branch, baseline)
     elif assignment.get("revision_subtask_id"):
         from .coding_revisions import seed_revision
@@ -337,8 +331,6 @@ def coding_run(task):
             source = project_path(task.workspace_id, assignment["project_dir"])
             baseline = source_manifest(source, assignment.get("generated_paths"))
             copy_sources(source, branch, baseline)
-    assignment["baseline"] = baseline
-    assignment["phase"] = "executing"
     _save_task(task)
     port = _free_preview_port()
     with isolated_project(branch_ws, branch, port,
@@ -354,7 +346,6 @@ def coding_run(task):
                 return record_qa_review(task, review)
 
             environment.review_submit = submit_review
-        assignment["environment"] = environment.descriptor()
         instruction = (
             task.goal
             + "\n\n[PARENT USER CONTRACT: CONTEXT FOR THIS DELEGATED PHASE]\n"
@@ -376,7 +367,7 @@ def coding_run(task):
                     "validation_commands": assignment["validation_commands"],
                     "review_subtask_id": assignment["review_subtask_id"],
                     "initial_source_paths": sorted(source_manifest(branch, assignment.get("generated_paths"))),
-                    "revision_observation": assignment.get("revision_observation"),
+                    "revision_observation": revision_context(task),
                     "tool_path_bases": environment.descriptor()["tool_path_bases"],
                     "constraints": "Work only in this isolated project branch. Upstream source dependencies are integrated; package caches are branch-local and may start empty. QA and coordinator may install declared dependencies through governed exec into writable node_modules/.venv without changing source or lockfiles; use npm ci when a lockfile exists. Bind preview to HOST/PORT from the process environment, never the browser origin port. Implementation owns writable source; QA and coordinator source mounts are read-only. Run assigned validation commands exactly from the project directory. Reviewed read-only projects use disposable build snapshots and only promote declared outputs; other commands retain their role's source mount mode. Logs/PID/temporary checks belong under /tmp. Source revisions require implementation and exact QA, then governed integration.",
                 },
@@ -387,13 +378,15 @@ def coding_run(task):
             from .coding_reviews import review_instruction
             instruction += "\n\n" + review_instruction()
         try:
+            if task.profile_id != "qa_agent":
+                from .coding_state import begin_candidate
+                begin_candidate(task, baseline=baseline, resources=environment.descriptor())
             if task.profile_id == "qa_agent":
                 from .coding_state import start_review
-                start_review(task, reviewed_candidate)
+                start_review(task, reviewed_candidate, baseline=baseline, resources=environment.descriptor())
             yield branch_ws, instruction, environment
         finally:
             environment.close()
-            assignment["environment"] = environment.descriptor()
             from .coding_state import candidate, capture, finish_review, review
             if task.profile_id == "qa_agent" and review(task):
                 if source_manifest(branch, assignment.get("generated_paths")) != baseline:
@@ -404,24 +397,22 @@ def coding_run(task):
                 latest = _load_task(task.workspace_id, task.subtask_id)
                 finish_review(task, resources=environment.descriptor(),
                               interrupted=bool(latest and latest.status == "cancelled"))
-            elif task.profile_id != "qa_agent" and not candidate(task):
+            elif task.profile_id == "qa_agent":
+                from .coding_state import record_review_creation_cleanup
+                record_review_creation_cleanup(task, environment.descriptor())
+            elif candidate(task) and candidate(task)["state"] == "building":
                 current = source_manifest(branch, assignment.get("generated_paths"))
-                if current:
-                    capture(task, source_digest=manifest_digest(current), baseline=baseline,
-                            change=changeset(baseline, current, assignment["responsibilities"]),
-                            validation=assignment.get("completion_validation") or {}, resources=assignment["environment"])
+                capture(task, source_digest=manifest_digest(current), baseline=baseline,
+                        change=changeset(baseline, current, assignment["responsibilities"]),
+                        validation=candidate(task)["validation"], resources=environment.descriptor())
             _save_task(task)
             if (
                 task.profile_id == "qa_agent"
                 and source_manifest(branch, assignment.get("generated_paths"))
                 != baseline
             ):
-                assignment["phase"] = "qa_failed"
-                _save_task(task)
                 raise ValueError("coding_qa_source_changed_before_cleanup")
             if not environment.cleanup_confirmed:
-                assignment["phase"] = "unknown"
-                _save_task(task)
                 raise RuntimeError("coding_branch_cleanup_unconfirmed")
 
 
@@ -433,8 +424,6 @@ def _project_facts(task):
 def cancel_execution(task) -> dict:
     """Close the server-owned branch binding without waiting for model I/O."""
     from core.tools.project_execution import environment_for
-    from .subagent import _load_task, _save_task
-
     assignment = task.coding
     environment = environment_for(assignment["branch_workspace"])
     if environment is None:
@@ -442,9 +431,8 @@ def cancel_execution(task) -> dict:
     if environment.project != project_path(assignment["branch_workspace"], assignment["project_dir"]).resolve():
         raise ValueError("coding_cancel_binding_mismatch")
     environment.close()
-    current = _load_task(task.workspace_id, task.subtask_id)
-    current.coding["environment"] = environment.descriptor()
-    _save_task(current)
+    from .coding_state import record_resources
+    record_resources(task, environment.descriptor())
     return {"cleanup_confirmed": environment.cleanup_confirmed}
 
 
@@ -454,9 +442,6 @@ def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -
     assignment = task.coding
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
     if not runtime_ok:
-        if assignment.get("phase") not in {"qa_rejected", "qa_incomplete", "qa_unknown"}:
-            assignment["phase"] = "failed"
-        _save_task(task)
         return False
     if task.profile_id == "qa_agent":
         from .coding_reviews import review_qa_proposal
@@ -465,8 +450,6 @@ def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -
             return False
         from .coding_state import review as recorded_review
         binding = recorded_review(task)
-        evidence = binding["validation"]
-        assignment.update(phase="validated", validation=evidence.get("checks", []))
         from storage.coding_state_store import read
         target = read(task.workspace_id, "candidates", binding["candidate_id"])
         if not target or target["change"]["digest"] != binding["change_digest"]:
@@ -480,43 +463,38 @@ def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -
         if validation["status"] != "passed":
             raise ValueError("coding_implementation_validation_incomplete")
         # Stop all descendants before hashing the output. Detached generators
-        # cannot mutate a candidate after it has been declared changes_ready.
+        # cannot mutate a candidate after it has been sealed as a candidate.
         if not environment.close():
             raise RuntimeError("coding_candidate_processes_not_stopped")
         current = source_manifest(branch, assignment.get("generated_paths"))
         if manifest_digest(current) != validation["source_digest"]:
             raise ValueError("coding_candidate_changed_after_validation")
-        assignment.update(
-            change=changeset(
-                assignment["baseline"], current, assignment["responsibilities"]
-            ),
-            candidate_digest=manifest_digest(current),
-            phase="changes_ready",
-        )
-        from .coding_state import capture
-        capture(task, source_digest=assignment["candidate_digest"], baseline=assignment["baseline"],
-                change=assignment["change"], validation=validation, resources=environment.descriptor())
+        from .coding_state import candidate, capture
+        record = candidate(task)
+        capture(task, source_digest=manifest_digest(current), baseline=record["baseline"],
+                change=changeset(record["baseline"], current, record["responsibilities"]),
+                validation=validation, resources=environment.descriptor())
     _save_task(task)
     return True
 
 
 def integrate(task) -> dict:
     """Publish an accepted Candidate; worker Task status is not acceptance."""
-    from .coding_state import CandidateState, accepted_reviews, ensure_candidate, project_task, transition
+    from .coding_state import CandidateState, accepted_reviews, candidate, transition
     from .subagent import _save_task
     from storage.coding_state_store import change as save_record, publication_lock
     from storage.project_changes import reconcile_publication
 
     if task.profile_id == "qa_agent":
         return {"ok": False, "error": "qa_has_no_implementation_changes"}
-    record = ensure_candidate(task)
+    record = candidate(task)
     if not record:
         return {"ok": False, "error": "coding_independent_qa_required"}
     with publication_lock(task.workspace_id, record["id"]):
-        record = ensure_candidate(task)
+        record = candidate(task)
         state = CandidateState(record["state"])
         if state == CandidateState.INTEGRATED:
-            return {"ok": True, "merged": True, "phase": "integrated", "coding": project_task(task).coding}
+            return {"ok": True, "merged": True, "phase": "integrated", "domain_state": {"candidate": record}}
         if state not in {CandidateState.ACCEPTED, CandidateState.CONFLICT,
                          CandidateState.PUBLISHING, CandidateState.PUBLICATION_UNKNOWN}:
             return {"ok": False, "error": "coding_independent_qa_required", "phase": state.value}
@@ -553,8 +531,18 @@ def integrate(task) -> dict:
             current["publication"] = result
             return current
         save_record(task.workspace_id, "candidates", record["id"], save_publication)
-        task.coding["publication"] = result
-        project_task(task)
         _save_task(task)
         return {**result, "merged": bool(result["ok"]), "candidate_id": record["id"],
                 "subtask_id": task.subtask_id, "parent_task_id": task.parent_task_id}
+
+
+def revision_context(task):
+    if not task.coding.get("revision_subtask_id"):
+        return None
+    from .coding_state import candidate
+    target = _related(task, task.coding["revision_subtask_id"])
+    record = candidate(target)
+    from storage.coding_state_store import read
+    return {"subtask_id": target.subtask_id, "source_digest": record["source_digest"],
+            "validation": record["validation"],
+            "reviews": [read(task.workspace_id, "reviews", identity) for identity in record["review_ids"]]}

@@ -344,7 +344,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
     if task.coding:
         from .coding_team import ready
         if not ready(task):
-            if task.coding.get("phase") != "dependency_failed":
+            if task.status != "failed":
                 task.status = "created"
             _save_task(task)
             _release_worker(ws_id, subtask_id, preserve_parent=task.status == "created")
@@ -518,18 +518,16 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
             runtime_errors = list(getattr(llm_result, "errors", []) or []) if llm_result is not None else []
             if runtime_errors:
                 result.errors.extend(str(error)[:300] for error in runtime_errors[:10])
-            elif task.coding.get("phase") in {"qa_rejected", "qa_incomplete", "qa_unknown"}:
-                result.errors.append("coding_" + task.coding["phase"])
+            elif review:
+                result.errors.append("coding_independent_review_incomplete")
             elif not is_ok:
                 result.errors.append("Subagent runtime failed without error details")
             else:
                 result.errors.append("Subagent returned no final response")
-            result.summary = (f"Independent QA verdict {review['verdict']}; candidate not accepted. See coding.qa_review for full evidence."
+            result.summary = (f"Independent QA verdict {review['verdict']}; candidate not accepted. See domain_state.review for full evidence."
                               if review else "Subagent runtime failed: " + "; ".join(result.errors)[:300])
 
     except Exception as e:
-        if task.coding and task.coding.get("phase") == "executing":
-            task.coding["phase"] = "failed"
         result.status = "failed"
         result.errors.append(f"subagent execution failed: {str(e)[:200]}")
         result.summary = f"Subagent execution error: {str(e)[:100]}"
@@ -815,6 +813,8 @@ def reconcile_subagent_tasks(*, started_before: str = "") -> list[str]:
     reconciled: list[str] = []
     def reconcile_scope(*, include_system: bool = False) -> None:
         for ws_id in list_workspace_ids(include_system=include_system):
+            from .coding_migration import migrate_workspace
+            migrate_workspace(ws_id)
             for raw in list_subagents(ws_id, 1000):
                 try:
                     if raw.get("workspace_id") != ws_id or raw.get("status") not in {"created", "running"}:
@@ -886,8 +886,8 @@ def _save_task(task: SubagentTask):
     task.workspace_id = _validated_workspace_id(task.workspace_id)
     _validated_subtask_id(task.subtask_id)
     if task.coding:
-        from .coding_state import project_task
-        project_task(task)
+        from .coding_assignment import execution_parameters
+        task.coding = execution_parameters(task.coding)
     saved = save_subagent(task.workspace_id, task.subtask_id, asdict(task))
     for field in ("status", "summary", "finished_at", "errors", "warnings"):
         setattr(task, field, saved[field])
@@ -920,8 +920,8 @@ def _load_task(ws_id: str, subtask_id: str) -> Optional[SubagentTask]:
         if not raw: return None
         task = SubagentTask(**{k:v for k,v in raw.items() if k in SubagentTask.__dataclass_fields__})
         if task.coding:
-            from .coding_state import project_task
-            project_task(task)
+            from .coding_assignment import execution_parameters
+            task.coding = execution_parameters(task.coding)
         return task
     except Exception: return None
 

@@ -1,3 +1,4 @@
+from agent.runtime.durable.coding_state import candidate as candidate_record, review as review_record
 """Cancellation stops owned execution while a worker waits for a model reply."""
 import threading
 
@@ -40,7 +41,7 @@ def test_cancel_closes_branch_without_waiting_for_model_reply(team, monkeypatch,
         assert environment.closed and environment.cleanup_confirmed
         persisted = subagent._load_task('parent-ws', task_id)
         assert persisted.status == 'cancelled'
-        assert persisted.coding['environment']['cleanup_confirmed']
+        assert candidate_record(persisted)['resources']['cleanup_confirmed']
         assert not subagent.merge_subagent_result('parent-task', task_id, 'parent-ws')['ok']
     finally:
         release.set()
@@ -74,8 +75,8 @@ def test_cancel_does_not_claim_failed_resource_cleanup_succeeded(team, monkeypat
         assert cancelled['ok'] and cancelled['cleanup_confirmed'] is False
         persisted = subagent._load_task('parent-ws', task_id)
         assert persisted.status == 'cancelled'
-        assert persisted.coding['environment']['closed']
-        assert not persisted.coding['environment']['cleanup_confirmed']
+        assert candidate_record(persisted)['resources']['closed']
+        assert not candidate_record(persisted)['resources']['cleanup_confirmed']
         monkeypatch.setattr(environment, 'close', close)
         reconciled = subagent.cancel_subagent_task(task_id, 'parent-ws')
         assert not reconciled['ok'] and reconciled['cleanup_confirmed']

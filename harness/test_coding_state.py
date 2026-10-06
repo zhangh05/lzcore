@@ -54,8 +54,8 @@ def test_concurrent_reviewers_cannot_hide_peer_failure_with_a_pass(team):
     peer2 = deepcopy(peer1)
     peer1.subtask_id = 'sub-aaaaaaaa'
     peer2.subtask_id = 'sub-bbbbbbbb'
-    state.start_review(peer1, state.candidate(producer))
-    state.start_review(peer2, state.candidate(producer))
+    state.start_review(peer1, state.candidate(producer), baseline=prior["baseline"], resources=prior["resources"])
+    state.start_review(peer2, state.candidate(producer), baseline=prior["baseline"], resources=prior["resources"])
     state.record_judgement(peer1, {**prior['judgement'], 'verdict': 'fail', 'blocking_findings': ['failure']})
     state.record_judgement(peer2, prior['judgement'])
     state.record_review_validation(peer1, prior['validation'])
@@ -148,15 +148,113 @@ def test_stopped_legacy_candidate_and_qa_import_exact_evidence_without_running_w
     first = team.spawn()
     qa = team.spawn('qa_agent', review=first['subtask_id'])
     assert subagent.merge_subagent_result('parent-task', first['subtask_id'], 'parent-ws')['ok']
-    # Keep the previous version's Task.coding contract and publication journal,
-    # remove only this test's new records to exercise an upgrade from v3.3.15.
+    from copy import deepcopy
     from storage.records import delete_json_record
-    delete_json_record('parent-ws', ('coding-state', 'candidates', state.candidate_id(first['subtask_id']) + '.json'))
-    delete_json_record('parent-ws', ('coding-state', 'reviews', state.review_id(qa['subtask_id']) + '.json'))
-    worker = subagent._load_task('parent-ws', first['subtask_id'])
-    for key in ('state_store_version', 'candidate_id'):
-        worker.coding.pop(key, None)
-    imported = state.ensure_candidate(worker)
+    producer = subagent._load_task('parent-ws', first['subtask_id'])
+    reviewer = subagent._load_task('parent-ws', qa['subtask_id'])
+    proposal, evidence = state.candidate(producer), state.review(reviewer)
+    producer.coding.update(schema='coding.assignment.v1', phase='integrated',
+        baseline=deepcopy(proposal['baseline']), change=deepcopy(proposal['change']),
+        candidate_digest=proposal['source_digest'], completion_validation=deepcopy(proposal['validation']),
+        environment=deepcopy(proposal['resources']), qa_subtask_id=reviewer.subtask_id)
+    reviewer.coding.update(schema='coding.assignment.v1', baseline=deepcopy(evidence['baseline']),
+        review_digest=evidence['change_digest'], review_candidate_digest=evidence['candidate_digest'],
+        qa_review=deepcopy(evidence['judgement']), qa_validation=deepcopy(evidence['validation']),
+        environment=deepcopy(evidence['resources']), qa_final_report=evidence['final_report'])
+    for task in (producer, reviewer):
+        atomic_save_json('parent-ws', ('subagents', task.subtask_id + '.json'), asdict(task))
+    delete_json_record('parent-ws', ('coding-state', 'candidates', proposal['id'] + '.json'))
+    delete_json_record('parent-ws', ('coding-state', 'reviews', evidence['id'] + '.json'))
+    from agent.runtime.durable.coding_migration import migrate_workspace
+    assert len(migrate_workspace('parent-ws')) == 2
+    imported = state.candidate(producer)
     assert imported['state'] == state.CandidateState.INTEGRATED and imported['legacy_import']
     assert state.accepted_reviews(imported)
-    assert subagent.merge_subagent_result('parent-task', worker.subtask_id, 'parent-ws')['ok']
+    assert subagent.merge_subagent_result('parent-task', producer.subtask_id, 'parent-ws')['ok']
+    from storage.subagent_store import read_subagent
+    from agent.runtime.durable.coding_assignment import FIELDS
+    assert all(set(read_subagent('parent-ws', task.subtask_id)['coding']) <= FIELDS for task in (producer, reviewer))
+    assert migrate_workspace('parent-ws') == []
+
+
+def test_live_and_terminal_tasks_never_persist_domain_mirrors(team, monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    from storage.subagent_store import read_subagent
+    from agent.runtime.durable.coding_assignment import FIELDS
+    entered, release = threading.Event(), threading.Event()
+    def runtime(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return SimpleNamespace(ok=True, final_response='Stopped without source', tool_calls=[])
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn', runtime)
+    first = team.spawn(background=True)
+    try:
+        assert entered.wait(2)
+        worker = subagent._load_task('parent-ws', first['subtask_id'])
+        assert state.candidate(worker)['state'] == state.CandidateState.BUILDING
+        assert state.candidate(worker)['resources']
+        worker.coding.update(phase='validated', qa_review={'verdict': 'pass'}, publication={'ok': True},
+                            baseline={'forged': True}, completion_validation={'status': 'passed'})
+        subagent._save_task(worker)
+        raw = read_subagent('parent-ws', worker.subtask_id)
+        assert set(raw['coding']) <= FIELDS and raw['coding']['schema'] == 'coding.assignment.v2'
+        assert not state.candidate(worker)['validation']
+        assert not subagent.merge_subagent_result('parent-task', worker.subtask_id, 'parent-ws')['ok']
+    finally:
+        release.set()
+        subagent.wait_subagent_task(first['subtask_id'], 'parent-ws', timeout=3)
+    assert set(read_subagent('parent-ws', first['subtask_id'])['coding']) <= FIELDS
+
+
+def test_startup_migrates_task_mirrors_without_mutating_existing_store(team):
+    first = team.spawn()
+    worker = subagent._load_task('parent-ws', first['subtask_id'])
+    proposal = state.candidate(worker)
+    worker.coding.update(schema='coding.assignment.v1', phase='integrated', candidate_digest='forged',
+                        qa_review={'verdict': 'pass'}, publication={'ok': True}, state_store_version=2)
+    atomic_save_json('parent-ws', ('subagents', worker.subtask_id + '.json'), asdict(worker))
+    subagent.reconcile_subagent_tasks()
+    assert state.candidate(worker) == proposal
+    from storage.subagent_store import read_subagent
+    from agent.runtime.durable.coding_assignment import FIELDS
+    assert set(read_subagent('parent-ws', worker.subtask_id)['coding']) <= FIELDS
+    assert not subagent.merge_subagent_result('parent-task', worker.subtask_id, 'parent-ws')['ok']
+
+
+def test_legacy_unknown_migration_preserves_observations_without_replaying(team, monkeypatch):
+    from copy import deepcopy
+    from storage.records import delete_json_record
+    first = team.spawn()
+    worker = subagent._load_task('parent-ws', first['subtask_id'])
+    proposal = state.candidate(worker)
+    unknown = {**deepcopy(proposal['validation']), 'status': 'unknown', 'automatic_retry_allowed': False}
+    worker.coding.update(schema='coding.assignment.v1', phase='validated', baseline=proposal['baseline'],
+                        completion_validation=unknown, environment=proposal['resources'])
+    atomic_save_json('parent-ws', ('subagents', worker.subtask_id + '.json'), asdict(worker))
+    delete_json_record('parent-ws', ('coding-state', 'candidates', proposal['id'] + '.json'))
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Migration cannot execute application commands')
+    monkeypatch.setattr('core.tools.project_execution.DockerProjectEnvironment.execute', forbidden)
+    from agent.runtime.durable.coding_migration import migrate_workspace
+    migrate_workspace('parent-ws')
+    migrated = state.candidate(worker)
+    assert migrated['state'] == state.CandidateState.EXECUTION_UNKNOWN and migrated['validation'] == unknown
+    assert not state.accepted_reviews(migrated)
+    assert migrate_workspace('parent-ws') == []
+
+
+def test_upgrade_does_not_recreate_lost_new_store_records(team):
+    from storage.records import delete_json_record
+    first = team.spawn()
+    worker = subagent._load_task('parent-ws', first['subtask_id'])
+    proposal = state.candidate(worker)
+    worker.coding.update(schema='coding.assignment.v1', state_store_version=2,
+                        baseline=proposal['baseline'], candidate_digest=proposal['source_digest'],
+                        completion_validation=proposal['validation'], environment=proposal['resources'])
+    atomic_save_json('parent-ws', ('subagents', worker.subtask_id + '.json'), asdict(worker))
+    delete_json_record('parent-ws', ('coding-state', 'candidates', proposal['id'] + '.json'))
+    from agent.runtime.durable.coding_migration import migrate_workspace
+    with pytest.raises(ValueError, match='coding_candidate_unavailable'):
+        migrate_workspace('parent-ws')
+    assert state.candidate(worker) is None

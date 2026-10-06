@@ -115,15 +115,6 @@ def check_qa(task):
     return result
 
 
-def _reject(task, observation):
-    from .subagent import _save_task
-    phase = ("qa_unknown" if observation["status"] == "unknown" else
-             "qa_incomplete" if observation.get("review_verdict") == "unknown" else "qa_rejected")
-    task.coding["phase"] = phase
-    _save_task(task)
-    return observation
-
-
 def review_qa_proposal(task, proposal):
     """Review Store owns judgement/checks; final-answer parsing is legacy input."""
     from .coding_state import review as read_review, record_review_report
@@ -131,22 +122,22 @@ def review_qa_proposal(task, proposal):
     if not recorded:
         raise ValueError("coding_review_unavailable")
     if recorded["validation"].get("status") == "unknown":
-        return _reject(task, {**recorded["validation"], "automatic_retry_allowed": False})
+        return {**recorded["validation"], "automatic_retry_allowed": False}
     if not recorded.get("judgement"):
         try:
             record_qa_review(task, json.loads(proposal))
         except (ValueError, TypeError):
             record_review_report(task, redact_value(proposal), invalid=True)
-            return _reject(task, {"status": "failed", "review_verdict": "unknown",
-                                 "automatic_retry_allowed": False})
+            return {"status": "failed", "review_verdict": "unknown",
+                    "automatic_retry_allowed": False}
     recorded = read_review(task)
     judgement = recorded["judgement"]
     record_review_report(task, redact_value(proposal))
     if judgement["verdict"] != "pass":
-        return _reject(task, {"status": "failed", "review_verdict": judgement["verdict"],
+        return {"status": "failed", "review_verdict": judgement["verdict"],
             "terminal_error": "coding_qa_review_rejected", "final_response": json.dumps(judgement, ensure_ascii=False),
-            "automatic_retry_allowed": False})
+            "automatic_retry_allowed": False}
     validation = check_qa(task)
     if validation["status"] != "passed":
-        return _reject(task, {**validation, "terminal_error": "coding_independent_validation_failed"})
+        return {**validation, "terminal_error": "coding_independent_validation_failed"}
     return {**validation, "review_verdict": "pass"}

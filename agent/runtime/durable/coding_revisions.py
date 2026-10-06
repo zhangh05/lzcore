@@ -6,9 +6,9 @@ from storage.project_changes import (
 
 def _target(task):
     from .coding_team import _related
-    from .coding_state import ensure_candidate, revision_source
+    from .coding_state import candidate, revision_source
     target = _related(task, task.coding['revision_subtask_id'])
-    record = ensure_candidate(target)
+    record = candidate(target)
     if (target.profile_id not in {'coding_agent', 'frontend_agent'} or not revision_source(record)
             or record['project_dir'] != task.coding['project_dir']):
         raise ValueError('coding_revision_requires_stopped_known_implementation')
@@ -27,7 +27,6 @@ def configure_revision(task):
         digest = manifest_digest(source_manifest(source, assignment['generated_paths']))
         if digest != proposal['source_digest']:
             raise ValueError('coding_revision_candidate_changed')
-    assignment['revision_source_digest'] = digest
 
 
 def seed_revision(task, branch):
@@ -41,15 +40,7 @@ def seed_revision(task, branch):
         if source_manifest(parent, assignment['generated_paths']) != baseline:
             raise ValueError('coding_revision_integrated_baseline_changed')
         proposed = source_manifest(source, assignment['generated_paths'])
-        if manifest_digest(proposed) != assignment['revision_source_digest']:
+        if manifest_digest(proposed) != proposal['source_digest']:
             raise ValueError('coding_revision_source_changed')
         copy_sources(source, branch, proposed)
-    assignment['revision_observation'] = {
-        'subtask_id': target.subtask_id, 'source_digest': assignment['revision_source_digest'],
-        'completion_validation': proposal['validation'],
-    }
-    if proposal['review_ids']:
-        from storage.coding_state_store import read
-        review = read(task.workspace_id, 'reviews', proposal['review_ids'][-1])
-        assignment['revision_observation']['qa_review'] = review.get('judgement') or {}
     return baseline

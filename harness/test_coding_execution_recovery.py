@@ -127,8 +127,8 @@ def test_missing_new_candidate_is_not_recreated_from_task_projection(team):
     first = team.spawn()
     producer = subagent._load_task('parent-ws', first['subtask_id'])
     delete_json_record('parent-ws', ('coding-state', 'candidates', state.candidate_id(first['subtask_id'])+'.json'))
-    with pytest.raises(ValueError, match='coding_candidate_unavailable'):
-        state.ensure_candidate(producer)
+    assert state.candidate(producer) is None
+    assert not subagent.merge_subagent_result('parent-task',producer.subtask_id,'parent-ws')['ok']
     assert state.candidate(producer) is None
 
 

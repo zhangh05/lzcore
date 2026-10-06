@@ -1,5 +1,7 @@
 # Coding 状态合同重构核验：2026-10-06
 
+本文记录 2026-10-06 当时的实现与验证；后续已删除 Task 兼容投影，现行合同见 `docs/architecture/CODING_RUNTIME.md` 与 `docs/CODING_STATE_OPTIMIZATION_2026-10-07.md`。
+
 本次按五项 P0 建议重构状态合同，保留模型的实现、规划和纠错选择。真实模型压测按用户要求停止；以下回归不代表 NOC、RTS 已完成业务验收。
 
 ## 已实现

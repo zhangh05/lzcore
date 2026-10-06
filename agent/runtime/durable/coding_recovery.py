@@ -23,7 +23,7 @@ def stopped_resources(candidate, identity):
 def reconcile_execution(task):
     from core.tools.project_execution import reconcile_environment
     from storage.project_changes import manifest_digest, project_path, quiescent_project, source_manifest
-    from .coding_state import CandidateState, _TRANSITIONS, candidate, project_task, review
+    from .coding_state import CandidateState, _TRANSITIONS, candidate, review
     from .subagent import _load_task, _save_task
 
     binding = review(task) if task.profile_id == "qa_agent" else candidate(task)
@@ -66,6 +66,6 @@ def reconcile_execution(task):
                 return current
             result = store.change(task.workspace_id, "candidates", identity, update, expected_revision=record["revision"])
         producer = _load_task(task.workspace_id, record["producer_task_id"])
-        _save_task(project_task(producer))
+        _save_task(producer)
         return {"ok": True, "reconciled": True, "candidate_id": identity, "state": result["state"],
                 "requires_new_review": True, "automatic_retry_allowed": False, "evidence": recovery}

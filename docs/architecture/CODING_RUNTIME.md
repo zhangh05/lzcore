@@ -28,7 +28,7 @@ Shell 与 Python 都经原有 ToolRuntime 进入同一适配器。系统隔离�
 
 ### 三种对象与候选状态机
 
-Task 表示 worker 创建、执行、停止、报告与错误；Candidate 表示不可变源码摘要、基线、变更集、实际检查及资源闭合证据；Review 独立绑定 candidate_id/source_digest/change_digest，保存 reviewer Task 引用、裁决、实际检查、资源和有效结果。它们存储在同一主体/工作区下的独立记录中，Task 的 succeeded、文字报告或 `coding.phase` 不授予候选通过。报告持久化失败也不能抹除已封存源码和已通过的独立评审。Candidate/Review Store 是封存候选及评审的唯一事实源；旧 `coding.phase`、qa_subtask_id、qa_review、qa_validation 等在 Task 读取和保存时仅作兼容投影。QA 的绑定、检查缓存、裁决、最终报告、收尾与发布不回退到 Task 缓存。Task 仍拥有未封存实现的执行 assignment 和 worker 生命周期。
+Task 表示 worker 创建、执行、停止、报告与错误；Candidate 在 building 阶段保存实时检查与资源，停止后封存不可变源码摘要、基线、变更集、实际检查及资源闭合证据；Review 独立绑定 candidate_id/source_digest/change_digest，保存 reviewer Task 引用、裁决、实际检查、资源和有效结果。它们存储在同一主体/工作区下的独立记录中，Task 的 succeeded、文字报告或 `coding.phase` 不授予候选通过。报告持久化失败也不能抹除已封存源码和已通过的独立评审。Candidate/Review Store 是封存候选及评审的唯一事实源；旧 `coding.phase`、qa_subtask_id、qa_review、qa_validation、baseline、change、environment、publication 等已从 Task 删除，不再投影或回退读取。Task 的 `coding.assignment.v2` 只保存执行参数；实现检查开始前建立 building Candidate，检查与资源从开始到封存均写入 Candidate Store。QA 的绑定、检查、裁决、最终报告及资源从开始到结束均写入 Review Store。
 
 | 事件/观察 | CandidateState |
 | --- | --- |
@@ -46,7 +46,7 @@ Task 表示 worker 创建、执行、停止、报告与错误；Candidate 表示
 
 EXECUTION_UNKNOWN 通过 `agent.manage(reconcile)` 显式回查恢复。它只读取封存资源身份、停止的 worker 和完整候选源码；不启动/停止环境、不执行应用命令或重放未知调用。Docker daemon ID 与容器/代理/网络名称在环境启动时保存；重启后仅在同一 daemon 上读取 info/inspect，明确不存在才证明未知清理已闭合；一次性构建容器也需核对。已有确认清理的封存记录可作为证据；不可达、身份不足、资源仍存在或源码改变均不能猜测通过。回查成功保存独立 execution_recovery 与 CAS 事件，原 Candidate 检查/资源快照和旧 Review 终态不变。新显式 QA 在新批次和新只读工程副本中实际运行完整检查，才可授予 acceptance；旧 unknown 结果不作为 PASS。再次产生 unknown 需要再次回查，旧恢复不覆盖新未知。独立团队验收器分别检查恢复证据、新 QA 和真实整合树。
 
-旧任务只在写入边界按准确源码与既有完整评审证据迁移；无法核实的 Task 字段不授权发布。新 assignment 标记 state_store_version；引用的 Candidate 记录缺失时不能从兼容投影重建。未封存失败任务没有候选属于正常生命周期。读取不启动 worker、不写应用。新记录的主体/工作区/会话/父任务与源码身份不可替换；会话永久删除删除关联对象并留下 tombstone，晚到写入与删除共享生命周期锁，不能复活记录。
+启动恢复前执行独立的一次性 assignment 迁移：既有 Store 记录优先；旧版观察与可回查源码移入 Candidate/Review，再将持久化 Task 改为 v2 并删除旧字段。未知检查保留 unknown；旧通过只有完整准确评审和发布日志能够确认才保留接受/整合。迁移不启动 worker 或执行应用命令。v2 记录缺失时不能从 Task 重建。尚未开始的任务没有候选属于正常生命周期。读取不启动 worker、不写应用。新记录的主体/工作区/会话/父任务与源码身份不可替换；会话永久删除删除关联对象并留下 tombstone，晚到写入与删除共享生命周期锁，不能复活记录。
 
 ### 项目与阶段事实
 
@@ -68,11 +68,11 @@ SSOT 注入服务端事实投影回调，每次模型请求前读取当前阶段
 
 实现者使用独立工作区的工程副本；实现依赖消费 `integrated` 的发布结果，QA 的 review_subtask_id（包括显式 depends_on 中同一目标）消费正式 CandidateState 可评审的候选，避免“QA 等整合、整合等 QA”的循环。QA 任务不能作为发布依赖。任务完成或整合后调度已授权、同父任务和会话的等待任务；进程恢复仍通过 agent.manage(start) 启动原任务，不重复创建。依赖失败/取消会形成明确 dependency_failed 终态。QA 使用准确候选源码的独立副本，不继承实现者对话；实现者的完成声明不能代替验证。每个验证命令表示一个可执行程序和字面参数，运行结果、退出码和 QA 前后源码摘要共同决定验证状态。任意命令退出 0 仍不等于完整业务验收，独立 Evaluator 单列事实。
 
-实现者主动结束回合时，服务端完成观察通过受治理执行入口运行 assignment 声明的检查，并绑定当前完整源码摘要。真实 failed/unknown 作为检查结果保存，同时保留模型的最终报告；不强制同一实现者再调用工具或按回复次数终止。未知结果仍优先于源码变化，停止自动执行且不能重放检查。只有检查通过、停止后代进程后源码仍一致，候选才能进入 ready（兼容投影 changes_ready）。该回调由 SubagentRuntimeControl 注入，调用者 metadata 不能伪造；候选仍须独立 QA 和真实整合。协调者依据实际检查、源码与报告决定后续工作。agent.manage(get) 回传源码文件数、字节数、模型调用及检查状态，不计算业务完成百分比。编码角色必须提供 coding_assignment，不能猜测工程位置。
+实现者主动结束回合时，服务端完成观察通过受治理执行入口运行 assignment 声明的检查，并绑定当前完整源码摘要。真实 failed/unknown 作为检查结果保存，同时保留模型的最终报告；不强制同一实现者再调用工具或按回复次数终止。未知结果仍优先于源码变化，停止自动执行且不能重放检查。只有检查通过、停止后代进程后源码仍一致，候选才能进入 ready。该回调由 SubagentRuntimeControl 注入，调用者 metadata 不能伪造；候选仍须独立 QA 和真实整合。协调者依据实际检查、源码与报告决定后续工作。agent.manage(get) 回传源码文件数、字节数、模型调用及检查状态，不计算业务完成百分比。编码角色必须提供 coding_assignment，不能猜测工程位置。
 
 编码交接从同父任务的完整用户消息保存 run_id/摘要引用，而非使用 1200 字的任务概述或只依赖协调者改写。task_state.objective_run_id 保留该目标的起始消息，后续同目标用户约束一并引用；执行时重新读取完整消息（含大消息制品）并核对摘要，缺失或改变拒绝交接。原需求作为阶段上下文，不扩展当前责任或权限。执行者同时收到初始源码路径事实；整合前父目录为空不能证明分支没有进展。取消摘要只声明 cancelled，发起来源需核对实际工具调用或外部控制记录，不能统一声称是用户取消。
 
-独立 QA 通过原生 agent.review 工具保存 coding.qa_review.v1 裁决，最终文字回复不要求 JSON 或固定模板。工具仅允许 subagent 调用，并核对活动 QA 的服务端环境绑定和会话身份；父任务、实现者、其他会话及关闭环境不能代交裁决。QA_REVIEW_SCHEMA 与工具校验共享 scope、完整 report、blocking_findings 及 pass/fail/unknown；候选摘要与 review_subtask_id 由服务端写入，模型不能替换。非空文字或含 title/evidence 的阻断项均被保存并阻止 pass。检查成功不覆盖明确失败。缺少裁决记为 qa_incomplete，不能从自然语言猜测通过；无格式重试循环或次数门禁。实际检查未知记为 qa_unknown，并禁止重放。准确候选、有效独立通过裁决及真实检查成功仍是整合条件。为已有调用方保留完整 v1 JSON 最终回复的读取兼容，不要求新 QA 使用该表达方式。
+独立 QA 通过原生 agent.review 工具保存 coding.qa_review.v1 裁决，最终文字回复不要求 JSON 或固定模板。工具仅允许 subagent 调用，并核对活动 QA 的服务端环境绑定和会话身份；父任务、实现者、其他会话及关闭环境不能代交裁决。QA_REVIEW_SCHEMA 与工具校验共享 scope、完整 report、blocking_findings 及 pass/fail/unknown；候选摘要与 review_subtask_id 由服务端写入，模型不能替换。非空文字或含 title/evidence 的阻断项均被保存并阻止 pass。检查成功不覆盖明确失败。缺少裁决使 Candidate 为 review_incomplete，不能从自然语言猜测通过；无格式重试循环或次数门禁。实际检查未知使 Candidate/Review 为 execution_unknown，并禁止重放。准确候选、有效独立通过裁决及真实检查成功仍是整合条件。为已有调用方保留完整 v1 JSON 最终回复的读取兼容，不要求新 QA 使用该表达方式。
 
 整合前检查 QA 身份、候选摘要、责任范围和父工程当前基线。与受治理文件/执行操作共享工作区锁，并冻结项目容器的后代进程。事务先保存前后内容与 journal，再逐文件发布；中断后回查哈希，确认整合、回滚已知部分或保留 unknown。用户/其他分支已改同一文件时返回 conflict，不覆盖。这里是独立文件树副本及变更集整合，不是 Git 分支管理，也不保证任意外部编辑器绕过文件锁时的整棵目录瞬时原子性。
 
@@ -117,9 +117,9 @@ SSOT 注入服务端事实投影回调，每次模型请求前读取当前阶段
 制品的秘密检测与脱敏共用完整值匹配：已脱敏的 [REDACTED]、[REDACTED_SECRET] 及其序列化结束符可以保留为证据；旁边或后缀出现真实秘密仍按原策略拒绝或脱敏。QA 的完整结果必须实际归档，归档失败的任务不能因结构化 verdict 为 pass 获得成功或整合资格。
 
 
-源码提议修订使用 coding_assignment.revision_subtask_id：仅同父任务/会话、同工程、已停止且清理确认的 coding/frontend 分支可作为输入。允许完成检查明确 failed 的失败分支、检查 passed 且摘要仍匹配的未整合 changes_ready/validated 候选，或准确独立 QA 明确 fail 且 QA 也已停止、清理确认的候选；复制一个已知源码提议不要求先获得 QA 通过或强制失败结论，不构成验收或发布。终态 failed 或 cancelled 的记录都保持原事实，只有新任务显式请求修订才复制来源。新任务继承其实际源码与原 integrated 基线，保持源码责任范围，检查和生成物合同由服务端继承；来源摘要或发布基线变化会拒绝。新源码仍是未评审提议，不进入父工程，须经过新候选准确 QA 和 merge。未回查闭合的未知结果、活动实现者、跨任务身份和 QA 角色修订被拒。原终态及源码不改写。
+源码提议修订使用 coding_assignment.revision_subtask_id：仅同父任务/会话、同工程、已停止且清理确认的 coding/frontend 分支可作为输入。允许完成检查明确 failed 的失败分支、检查 passed 且摘要仍匹配的未整合 ready/accepted 候选，或准确独立 QA 明确 fail 且 QA 也已停止、清理确认的候选；复制一个已知源码提议不要求先获得 QA 通过或强制失败结论，不构成验收或发布。终态 failed 或 cancelled 的记录都保持原事实，只有新任务显式请求修订才复制来源。新任务继承其实际源码与原 integrated 基线，保持源码责任范围，检查和生成物合同由服务端继承；来源摘要或发布基线变化会拒绝。新源码仍是未评审提议，不进入父工程，须经过新候选准确 QA 和 merge。未回查闭合的未知结果、活动实现者、跨任务身份和 QA 角色修订被拒。原终态及源码不改写。
 
-已通过完成检查并封存的候选，若独立 QA 仅因缺少业务证据返回 unknown、形成 qa_incomplete，可显式作为同父任务源码修订输入。服务端核对准确评审身份与摘要、实现和 QA 均已停止且清理确认，并将原 unknown 结论交接到新实现者；源候选及旧评审状态保持不变。qa_unknown 或任何未回查闭合的实际执行未知仍拒绝修订；完成显式 reconcile 后可以复制已核实的源码，但不继承未知检查为通过。新候选必须重新完成准确检查和独立 QA 后才能整合；复制源码不表示补齐评审或业务验收。
+已通过完成检查并封存的候选，若独立 QA 仅因缺少业务证据返回 unknown、形成 review_incomplete，可显式作为同父任务源码修订输入。服务端核对准确评审身份与摘要、实现和 QA 均已停止且清理确认，并将原 unknown 结论交接到新实现者；源候选及旧评审状态保持不变。execution_unknown 或任何未回查闭合的实际执行未知仍拒绝修订；完成显式 reconcile 后可以复制已核实的源码，但不继承未知检查为通过。新候选必须重新完成准确检查和独立 QA 后才能整合；复制源码不表示补齐评审或业务验收。
 
 修订是否有效由模型依据任务和独立 QA 判断。框架不以“必须修改源码摘要”或“必须恢复之前失败的检查”证明有效修订：检查仍绑定实际源码，同一候选也需要新的准确 QA。未修改源码不自动失败，修改源码也不自动通过。任何执行未知仍禁止自动重放。
 

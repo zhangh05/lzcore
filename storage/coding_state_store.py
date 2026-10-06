@@ -67,7 +67,9 @@ def change(workspace_id: str, kind: str, identity: str, update, *, expected_revi
             raise ValueError("coding_record_identity_mismatch")
         if previous:
             for key in ("schema", "id", "workspace_id", "session_id", "parent_task_id", *_IMMUTABLE[kind]):
-                if previous.get(key) != result.get(key):
+                sealing = kind == "candidates" and previous.get("state") == "building" and key in {
+                    "source_digest", "change", "validation", "resources", "failure_attributions"}
+                if not sealing and previous.get(key) != result.get(key):
                     raise ValueError("coding_record_identity_is_immutable")
             if kind == "reviews" and previous.get("state") in {"completed", "interrupted", "execution_unknown"}:
                 if any(previous.get(key) != result.get(key) for key in

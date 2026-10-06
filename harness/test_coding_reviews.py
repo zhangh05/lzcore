@@ -1,3 +1,4 @@
+from agent.runtime.durable.coding_state import candidate as candidate_record, review as review_record
 """QA findings cannot be overridden by successful executable checks."""
 import json
 from types import SimpleNamespace
@@ -25,18 +26,18 @@ def qa_runtime(monkeypatch, verdict='pass', findings=None):
 
 
 @pytest.mark.parametrize('verdict,findings,phase', [
-    ('fail',['Build module exports are missing.'],'qa_rejected'),
-    ('pass',['Build module exports are missing.'],'qa_rejected'),
-    ('unknown',[],'qa_incomplete')])
+    ('fail',['Build module exports are missing.'],'review_rejected'),
+    ('pass',['Build module exports are missing.'],'review_rejected'),
+    ('unknown',[],'review_incomplete')])
 def test_public_qa_failure_blocks_publication_even_when_all_checks_pass(team,monkeypatch,verdict,findings,phase):
     first=team.spawn();qa_runtime(monkeypatch,verdict,findings)
     reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
     candidate=subagent._load_task('parent-ws',first['subtask_id'])
-    assert qa.status=='failed' and qa.coding['phase']==phase
-    assert candidate.status=='succeeded' and candidate.coding['phase']==phase
-    assert qa.coding['qa_review']['verdict']==('fail' if findings else verdict)
-    assert qa.coding['environment']['cleanup_confirmed']
+    assert qa.status=='failed' and review_record(qa)['outcome']==('fail' if findings else verdict)
+    assert candidate.status=='succeeded' and candidate_record(candidate)['state']==phase
+    assert review_record(qa)['judgement']['verdict']==('fail' if findings else verdict)
+    assert review_record(qa)['resources']['cleanup_confirmed']
     assert not subagent.merge_subagent_result('parent-task',candidate.subtask_id,'parent-ws')['ok']
     assert not project_path('parent-ws','files/data/app').joinpath('src/value.py').exists()
     dependent=team.spawn(depends=[candidate.subtask_id])
@@ -64,7 +65,7 @@ def test_unknown_qa_checks_are_sticky_and_cannot_seed_source_repair(team,monkeyp
     monkeypatch.setattr(DockerProjectEnvironment,'execute',execute)
     reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
-    assert qa.coding['phase']=='qa_unknown'
+    assert review_record(qa)['state']=='execution_unknown'
     assert review_qa_proposal(qa,report())['status']=='unknown'
     assert check_qa(qa)['status']=='unknown' and len(calls)==1
     repeated=team.spawn('qa_agent',review=first['subtask_id'])
@@ -79,7 +80,7 @@ def test_qa_rejected_source_is_inherited_and_repaired_before_fresh_qa_and_merge(
     first=team.spawn();qa_runtime(monkeypatch,'fail',['VALUE must be 43.'])
     team.spawn('qa_agent',review=first['subtask_id'])
     original=subagent._load_task('parent-ws',first['subtask_id'])
-    assert original.coding['phase']=='qa_rejected'
+    assert candidate_record(original)['state']=='review_rejected'
     source=project_path(original.coding['branch_workspace'],'files/data/app')
     def repair(session,turn,**kw):
         if turn.op.runtime_control.profile['profile_id']!='qa_agent':
@@ -97,7 +98,7 @@ def test_qa_rejected_source_is_inherited_and_repaired_before_fresh_qa_and_merge(
           'validation_commands':['true'],'revision_subtask_id':first['subtask_id']}},context=team.parent).output
     assert repaired['task_status']=='succeeded',repaired
     candidate=subagent._load_task('parent-ws',repaired['subtask_id'])
-    assert candidate.coding['baseline']==original.coding['baseline']=={}
+    assert candidate_record(candidate)['baseline']==candidate_record(original)['baseline']=={}
     assert source.joinpath('src/value.py').read_text()=='VALUE = 42\n'
     assert not subagent.merge_subagent_result('parent-task',candidate.subtask_id,'parent-ws')['ok']
     assert team.spawn('qa_agent',review=candidate.subtask_id)['task_status']=='succeeded'
@@ -113,8 +114,8 @@ def test_invalid_public_qa_proposal_is_preserved_without_validating_candidate(te
        SimpleNamespace(ok=True,final_response='Public review with no structured verdict.',tool_calls=[]))
     reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
-    assert qa.status=='failed' and qa.coding['qa_invalid_proposal']=='Public review with no structured verdict.'
-    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='qa_incomplete'
+    assert qa.status=='failed' and review_record(qa)['invalid_proposal']=='Public review with no structured verdict.'
+    assert candidate_record(subagent._load_task('parent-ws',first['subtask_id']))['state']=='review_incomplete'
 
 
 @pytest.mark.parametrize('mutation',[
@@ -143,9 +144,9 @@ def test_structured_blocking_evidence_is_preserved_and_always_rejects_candidate(
     qa_runtime(monkeypatch,verdict,[finding])
     reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
-    assert qa.coding['qa_review']['blocking_findings']==[finding]
-    assert qa.coding['qa_review']['verdict']=='fail' and qa.coding['phase']=='qa_rejected'
-    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='qa_rejected'
+    assert review_record(qa)['judgement']['blocking_findings']==[finding]
+    assert review_record(qa)['judgement']['verdict']=='fail' and review_record(qa)['outcome']=='fail'
+    assert candidate_record(subagent._load_task('parent-ws',first['subtask_id']))['state']=='review_rejected'
     assert not subagent.merge_subagent_result('parent-task',first['subtask_id'],'parent-ws')['ok']
 
 
@@ -155,9 +156,9 @@ def test_malformed_blocking_evidence_cannot_be_accepted_or_inferred(team,monkeyp
     first=team.spawn();qa_runtime(monkeypatch,'fail',[finding])
     reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
-    assert qa.status=='failed' and not qa.coding.get('qa_review')
-    assert qa.coding['qa_invalid_proposal']==report('fail',[finding])
-    assert subagent._load_task('parent-ws',first['subtask_id']).coding['phase']=='qa_incomplete'
+    assert qa.status=='failed' and not review_record(qa).get('judgement')
+    assert review_record(qa)['invalid_proposal']==report('fail',[finding])
+    assert candidate_record(subagent._load_task('parent-ws',first['subtask_id']))['state']=='review_incomplete'
 
 
 def test_known_qa_rejection_has_review_summary_instead_of_provider_failure(team,monkeypatch):
@@ -167,13 +168,13 @@ def test_known_qa_rejection_has_review_summary_instead_of_provider_failure(team,
     monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',runtime)
     reviewed=team.spawn('qa_agent',review=first['subtask_id'])
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
-    assert qa.status=='failed' and qa.coding['phase']=='qa_rejected'
+    assert qa.status=='failed' and review_record(qa)['outcome']=='fail'
     assert 'Independent QA verdict fail' in qa.summary and 'LLM call failed' not in qa.summary
 
 
 def test_ready_unpublished_proposal_can_be_explicitly_revised_without_a_prior_qa_pass(team,monkeypatch):
     first=team.spawn();original=subagent._load_task('parent-ws',first['subtask_id'])
-    assert original.coding['phase']=='changes_ready' and original.coding['completion_validation']['status']=='passed'
+    assert candidate_record(original)['state']=='ready' and candidate_record(original)['validation']['status']=='passed'
     source=project_path(original.coding['branch_workspace'],'files/data/app')
     def repair(session,turn,**kw):
         if turn.op.runtime_control.profile['profile_id']!='qa_agent':
@@ -190,8 +191,8 @@ def test_ready_unpublished_proposal_can_be_explicitly_revised_without_a_prior_qa
             'validation_commands':['true'],'revision_subtask_id':first['subtask_id']}},context=team.parent).output
     assert repaired['task_status']=='succeeded',repaired
     candidate=subagent._load_task('parent-ws',repaired['subtask_id'])
-    assert candidate.coding['revision_observation']['completion_validation']['status']=='passed'
-    assert candidate.coding['baseline']==original.coding['baseline']=={}
+    assert coding_team.revision_context(candidate)['validation']['status']=='passed'
+    assert candidate_record(candidate)['baseline']==candidate_record(original)['baseline']=={}
     assert source.joinpath('src/value.py').read_text()=='VALUE = 42\n'
     assert not project_path('parent-ws','files/data/app').joinpath('src/value.py').exists()
     assert not subagent.merge_subagent_result('parent-task',candidate.subtask_id,'parent-ws')['ok']
@@ -223,7 +224,7 @@ def test_unchanged_revision_requires_fresh_exact_qa_instead_of_forced_edit(team,
             'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
             'revision_subtask_id':first['subtask_id']}},context=team.parent).output
     task=subagent._load_task('parent-ws',repaired['subtask_id'])
-    assert task.status=='succeeded' and task.coding['candidate_digest']==task.coding['revision_source_digest']
+    assert task.status=='succeeded' and candidate_record(task)['source_digest']==candidate_record(subagent._load_task('parent-ws',first['subtask_id']))['source_digest']
     assert not subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
     assert team.spawn('qa_agent',review=task.subtask_id)['task_status']=='succeeded'
     assert subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
@@ -241,8 +242,8 @@ def test_revision_recovery_of_known_failed_checks_can_keep_source_unchanged(team
             'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],
             'revision_subtask_id':first['subtask_id']}},context=team.parent).output
     task=subagent._load_task('parent-ws',repaired['subtask_id'])
-    assert task.status=='succeeded' and task.coding['candidate_digest']==task.coding['revision_source_digest']
-    assert task.coding['completion_validation']['status']=='passed'
+    assert task.status=='succeeded' and candidate_record(task)['source_digest']==candidate_record(subagent._load_task('parent-ws',first['subtask_id']))['source_digest']
+    assert candidate_record(task)['validation']['status']=='passed'
     assert not subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
     assert team.spawn('qa_agent',review=task.subtask_id)['task_status']=='succeeded'
     assert subagent.merge_subagent_result('parent-task',task.subtask_id,'parent-ws')['ok']
@@ -250,13 +251,11 @@ def test_revision_recovery_of_known_failed_checks_can_keep_source_unchanged(team
 
 def test_cached_passing_checks_and_unknown_do_not_replay_execution(team,monkeypatch):
     first=team.spawn();task=subagent._load_task('parent-ws',first['subtask_id'])
-    task.coding.update(revision_subtask_id='prior',revision_source_digest=task.coding['candidate_digest'],
-        revision_observation={'completion_validation':{'status':'passed'}})
     def unexpected(*a,**kw):raise AssertionError('Cached checks must not execute again')
     monkeypatch.setattr(DockerProjectEnvironment,'execute',unexpected)
     assert coding_team.check_implementation(task)['status']=='passed'
     unknown={'status':'unknown','automatic_retry_allowed':False}
-    task.coding['completion_validation']=unknown
+    corrupt_record('parent-ws','candidates',candidate_id(task.subtask_id),lambda r:r.update(validation=unknown))
     project_path(task.coding['branch_workspace'],'files/data/app').joinpath('src/value.py').write_text('changed')
     assert coding_team.check_implementation(task)==unknown
 
@@ -283,8 +282,8 @@ def test_native_review_allows_prose_final_and_preserves_verdict(team,monkeypatch
     qa=subagent._load_task('parent-ws',reviewed['subtask_id'])
     assert recordings and recordings[0].status=='succeeded', recordings
     assert qa.status==expected,qa.errors
-    assert qa.coding['qa_final_report']=='自然语言 QA 报告，保留检查范围和实际发现。'
-    assert qa.coding['qa_review']['candidate_digest']!='forged'
+    assert review_record(qa)['final_report']=='自然语言 QA 报告，保留检查范围和实际发现。'
+    assert review_record(qa)['judgement']['candidate_digest']!='forged'
     merged=subagent.merge_subagent_result('parent-task',first['subtask_id'],'parent-ws')
     assert bool(merged['ok'])==(expected=='succeeded')
     if expected=='succeeded':

@@ -1,3 +1,4 @@
+from agent.runtime.durable.coding_state import candidate as candidate_record, review as review_record
 """Coding team lifecycle, identity, conflicts and crash recovery contracts."""
 
 from types import SimpleNamespace
@@ -177,7 +178,7 @@ def test_dependencies_do_not_run_or_merge_before_ready(team):
     waiting = team.spawn(depends=[first["subtask_id"]])
     assert waiting["task_status"] == "created"
     stored = subagent._load_task("parent-ws", waiting["subtask_id"])
-    assert stored.coding["phase"] == "dependency_wait"
+    assert stored.status == "created" and stored.coding["depends_on"] == [first["subtask_id"]]
     assert not project_changes.project_path(
         stored.coding["branch_workspace"], "files/data/app"
     ).exists()
@@ -193,10 +194,10 @@ def test_implementation_cannot_publish_when_declared_check_fails(team, monkeypat
     item = team.spawn()
     task = subagent._load_task("parent-ws", item["subtask_id"])
     assert task.status == "failed"
-    validation = task.coding["completion_validation"]
+    validation = candidate_record(task)["validation"]
     assert validation["status"] == ("unknown" if unknown else "failed")
     assert validation["automatic_retry_allowed"] is not unknown
-    assert task.coding["phase"] != "changes_ready"
+    assert candidate_record(task)["state"] != "ready"
     assert not subagent.merge_subagent_result("parent-task", task.subtask_id, "parent-ws")["ok"]
 
 
@@ -216,7 +217,7 @@ def test_progress_prunes_dependencies_and_declared_outputs(team):
 def test_changed_source_invalidates_completion_evidence(team, monkeypatch):
     item = team.spawn()
     task = subagent._load_task("parent-ws", item["subtask_id"])
-    before = task.coding["completion_validation"]["source_digest"]
+    before = candidate_record(task)["validation"]["source_digest"]
     branch = project_changes.project_path(task.coding["branch_workspace"], "files/data/app")
     (branch / "src/value.py").write_text("VALUE = 43\n")
     calls = []
@@ -328,7 +329,7 @@ def test_publication_automatically_activates_requested_next_implementation(team,
     assert team.spawn('qa_agent', review=first['subtask_id'])['task_status'] == 'succeeded'
     assert subagent.merge_subagent_result('parent-task', first['subtask_id'], 'parent-ws')['ok']
     result = subagent.wait_subagent_task(next_task['subtask_id'], 'parent-ws', timeout=2)
-    assert result['status'] == 'succeeded' and result['coding']['phase'] == 'changes_ready', result
+    assert result['status'] == 'succeeded' and result['domain_state']['candidate']['state'] == 'ready', result
     assert len(called) == 2
     assert (workspace_root('parent-ws') / 'files/data/app/src/value.py').read_text() == 'VALUE = 42\n'
 
@@ -395,7 +396,7 @@ def test_cancelled_dependency_propagates_through_waiting_dag(team):
     for identity in [second["subtask_id"], third["subtask_id"]]:
         task = subagent._load_task("parent-ws", identity)
         assert task.status == "failed"
-        assert task.coding["phase"] == "dependency_failed"
+        assert task.status == "failed" and "dependency" in task.summary.lower()
 
 
 def test_candidate_change_after_qa_rejected(team):
@@ -554,7 +555,7 @@ def test_acceptance_replays_reviewed_updates_and_rejects_unreviewed_changes(team
     merged = subagent.merge_subagent_result("parent-task", second["subtask_id"], "parent-ws")
     assert merged["ok"] and merged["publication_order"] > first_order
     replay = subagent.merge_subagent_result("parent-task", first["subtask_id"], "parent-ws")
-    assert replay["coding"]["publication"]["publication_order"] == first_order
+    assert replay["domain_state"]["candidate"]["publication"]["publication_order"] == first_order
     assert len(verify_team("parent-ws", "parent-session", "files/data/app")["integrations"]) == 2
 
     extra = workspace_root("parent-ws") / "files/data/app/src/unreviewed.py"
@@ -621,8 +622,8 @@ def test_created_coding_task_can_only_start_from_its_parent(team):
         result.output
     )
     assert (
-        subagent._load_task("parent-ws", waiting["subtask_id"]).coding["phase"]
-        == "dependency_wait"
+        subagent._load_task("parent-ws", waiting["subtask_id"]).status
+        == "created"
     )
 
 
@@ -728,7 +729,7 @@ def test_request_wait_returns_same_running_worker_without_cancelling(team, monke
         release.set()
     result=original_wait(identity,'parent-ws',2)
     assert result['status']=='succeeded'
-    assert subagent._load_task('parent-ws',identity).coding['phase']=='changes_ready'
+    assert candidate_record(subagent._load_task('parent-ws',identity))['state']=='ready'
 
 
 def test_cancel_probe_reads_durable_marker_without_a_process_local_signal(monkeypatch,tmp_path):
@@ -755,7 +756,7 @@ def test_unknown_check_with_source_changes_is_never_replayed(team, monkeypatch):
     monkeypatch.setattr(DockerProjectEnvironment, 'execute', execute)
     item = team.spawn()
     task = subagent._load_task('parent-ws', item['subtask_id'])
-    validation = task.coding['completion_validation']
+    validation = candidate_record(task)['validation']
     assert validation['source_changed_during_checks']
     assert validation['status'] == 'unknown' and not validation['automatic_retry_allowed']
     branch = project_changes.project_path(task.coding['branch_workspace'], 'files/data/app')
@@ -768,7 +769,7 @@ def test_failed_revision_preserves_source_then_requires_exact_qa_and_merge(team,
     monkeypatch.setattr(DockerProjectEnvironment, 'execute', lambda *a, **kw: {'ok':False,'exit_code':1})
     first = team.spawn()
     original = subagent._load_task('parent-ws', first['subtask_id'])
-    assert original.status == 'failed' and original.coding['environment']['cleanup_confirmed']
+    assert original.status == 'failed' and candidate_record(original)['resources']['cleanup_confirmed']
     original_source = project_changes.project_path(original.coding['branch_workspace'], 'files/data/app')
     monkeypatch.setattr(DockerProjectEnvironment, 'execute', lambda *a, **kw: {'ok':True,'exit_code':0})
 
@@ -793,8 +794,8 @@ def test_failed_revision_preserves_source_then_requires_exact_qa_and_merge(team,
     assert repaired.output['task_status'] == 'succeeded', repaired.output
     task = subagent._load_task('parent-ws', repaired.output['subtask_id'])
     assert task.coding['validation_commands'] == original.coding['validation_commands']
-    assert task.coding['baseline'] == original.coding['baseline'] == {}
-    assert task.coding['change']['files']['src/value.py']['before'] is None
+    assert candidate_record(task)['baseline'] == candidate_record(original)['baseline'] == {}
+    assert candidate_record(task)['change']['files']['src/value.py']['before'] is None
     assert original_source.joinpath('src/value.py').read_text() == 'VALUE = 42\n'
     assert not subagent.merge_subagent_result('parent-task', task.subtask_id, 'parent-ws')['ok']
     reviewed = team.spawn('qa_agent', review=task.subtask_id)
@@ -838,14 +839,14 @@ def test_explicit_revision_can_copy_cancelled_source_only_with_known_failed_chec
     from storage.project_changes import source_manifest, manifest_digest, changeset, project_path
     source=source_manifest(project_path(stopped.coding['branch_workspace'],stopped.coding['project_dir']),stopped.coding['generated_paths'])
     stopped.coding.pop('candidate_id',None)
-    capture(stopped,source_digest=manifest_digest(source),baseline=stopped.coding['baseline'],
-        change=changeset(stopped.coding['baseline'],source,stopped.coding['responsibilities']),
-        validation=stopped.coding['completion_validation'],resources=stopped.coding['environment'])
+    capture(stopped,source_digest=manifest_digest(source),baseline=candidate_record(target)['baseline'],
+        change=changeset(candidate_record(target)['baseline'],source,stopped.coding['responsibilities']),
+        validation=candidate_record(target)['validation'],resources=candidate_record(target)['resources'])
     subagent._save_task(stopped)
     task=subagent.SubagentTask(parent_task_id='parent-task',workspace_id='parent-ws',session_id='parent-session',profile_id='coding_agent')
     supplied={'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],'revision_subtask_id':stopped.subtask_id}
     coding_team.create_assignment(task,supplied)
-    assert task.coding['revision_source_digest']
+    assert candidate_record(stopped)['source_digest'] and task.coding['revision_subtask_id'] == stopped.subtask_id
     assert subagent._load_task('parent-ws',stopped.subtask_id).status=='cancelled'
     corrupt_record('parent-ws','candidates',candidate_id(stopped.subtask_id),lambda r:r['validation'].update(status='unknown'))
     with pytest.raises(ValueError,match='stopped_known'):

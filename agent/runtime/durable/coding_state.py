@@ -12,6 +12,7 @@ from storage import coding_state_store as store
 
 
 class CandidateState(StrEnum):
+    BUILDING = "building"
     READY = "ready"
     VALIDATION_FAILED = "validation_failed"
     REVIEWING = "under_review"
@@ -68,94 +69,6 @@ def candidate(task):
     return store.read(task.workspace_id, "candidates", candidate_id(task.subtask_id))
 
 
-def ensure_candidate(task):
-    """Upgrade a stopped legacy producer at a write boundary, never on a read.
-
-    Legacy task phases cannot grant a new publication. Source and validation
-    are imported only after exact read-back; a new independent review is
-    required if its separate evidence record does not exist.
-    """
-    existing = candidate(task)
-    if existing:
-        return existing
-    assignment = task.coding
-    if assignment.get("candidate_id"):
-        raise ValueError("coding_candidate_unavailable")
-    if assignment.get("state_store_version"):
-        return None
-    resources = assignment.get("environment") or {}
-    if (task.profile_id == "qa_agent" or task.status in {"created", "running"}
-            or not resources.get("closed") or not resources.get("cleanup_confirmed")):
-        return None
-    from storage.project_changes import changeset, manifest_digest, project_path, quiescent_project, source_manifest
-    with quiescent_project(assignment["branch_workspace"]):
-        source = source_manifest(project_path(assignment["branch_workspace"], assignment["project_dir"]),
-                                 assignment.get("generated_paths"))
-        if not source:
-            return None
-        digest = manifest_digest(source)
-        if assignment.get("candidate_digest") and digest != assignment["candidate_digest"]:
-            raise ValueError("coding_revision_candidate_changed")
-        record = capture(task, source_digest=digest, baseline=assignment["baseline"],
-                         change=changeset(assignment["baseline"], source, assignment["responsibilities"]),
-                         validation=assignment.get("completion_validation") or {}, resources=resources)
-    _import_legacy_review(task, record)
-    record = candidate(task)
-    if assignment.get("phase") == "integrated" and record["state"] == CandidateState.ACCEPTED:
-        from storage.project_changes import publication_record
-        journal = publication_record(task.workspace_id, task.subtask_id)
-        if (journal["phase"] != "integrated" or journal["project"] != record["project_dir"]
-                or journal["digest"] != record["change"]["digest"] or journal["files"] != record["change"]["files"]):
-            raise ValueError("coding_legacy_publication_identity_mismatch")
-        transition(task.workspace_id, record["id"], "publication_started",
-                   evidence={"event_id": record["id"] + ":legacy-publication", "record_id": task.subtask_id})
-        transition(task.workspace_id, record["id"], "publication_integrated",
-                   evidence={"event_id": record["id"] + ":legacy-integrated", "record_id": task.subtask_id})
-        def publish(current):
-            current.update(publication={"ok": True, **journal}, legacy_import=True)
-            return current
-        store.change(task.workspace_id, "candidates", record["id"], publish)
-    task.coding["state_store_version"] = 2
-    from .subagent import _save_task
-    _save_task(task)
-    return candidate(task)
-
-
-def _import_legacy_review(task, record):
-    from .coding_team import _related
-    from core.tools.executor import validate_schema_value
-    from .coding_reviews import QA_REVIEW_SCHEMA
-    identity = task.coding.get("qa_subtask_id") or task.coding.get("qa_rejection_subtask_id")
-    if not identity or record["state"] not in _REVIEWABLE:
-        return
-    reviewer = _related(task, identity)
-    facts = reviewer.coding
-    judgement = facts.get("qa_review") or {}
-    if (reviewer.profile_id != "qa_agent" or reviewer.status in {"created", "running"}
-            or facts.get("review_subtask_id") != task.subtask_id
-            or facts.get("review_candidate_digest") != record["source_digest"]
-            or facts.get("review_digest") != record["change"]["digest"]
-            or judgement.get("candidate_digest") != record["source_digest"]
-            or judgement.get("review_subtask_id") != task.subtask_id
-            or validate_schema_value("qa_review", judgement, QA_REVIEW_SCHEMA)):
-        return
-    source = dict(record["baseline"])
-    for path, item in record["change"]["files"].items():
-        if item["after"] is None:
-            source.pop(path, None)
-        else:
-            source[path] = item["after"]
-    reviewer.coding.setdefault("baseline", source)
-    start_review(reviewer, record)
-    record_judgement(reviewer, judgement)
-    record_review_validation(reviewer, facts.get("qa_validation") or {})
-    record_review_report(reviewer, facts.get("qa_final_report", ""))
-    finish_review(reviewer, resources=facts.get("environment") or {})
-    imported = candidate(task)
-    if imported["state"] == CandidateState.ACCEPTED and not accepted_reviews(imported):
-        raise ValueError("coding_legacy_review_evidence_incomplete")
-
-
 def review(task):
     return store.read(task.workspace_id, "reviews", review_id(task.subtask_id))
 
@@ -208,6 +121,8 @@ def capture(task, *, source_digest, baseline, change, validation, resources):
     from core.runtime_engine.failure_attribution import coding_checks
     immutable["failure_attributions"] = coding_checks(validation, resources, reference=identity)
     def update(previous):
+        if previous and previous["state"] == CandidateState.BUILDING:
+            return {**previous, **immutable, "state": state.value, "updated_at": now_iso()}
         if previous:
             if any(previous.get(key) != value for key, value in immutable.items()):
                 raise ValueError("coding_candidate_snapshot_is_immutable")
@@ -217,7 +132,7 @@ def capture(task, *, source_digest, baseline, change, validation, resources):
     return store.change(task.workspace_id, "candidates", identity, update, session_id=task.session_id)
 
 
-def start_review(task, target):
+def start_review(task, target, *, baseline, resources):
     """Bind a review attempt to an immutable candidate; never to Task success."""
     if target["state"] not in _REVIEWABLE:
         raise ValueError("coding_candidate_not_reviewable")
@@ -228,10 +143,10 @@ def start_review(task, target):
         "reviewer_task_id": task.subtask_id, "candidate_id": target["id"],
         "candidate_digest": target["source_digest"], "change_digest": target["change"]["digest"],
         "branch_workspace": task.coding["branch_workspace"], "project_dir": target["project_dir"],
-        "baseline": task.coding["baseline"], "validation_commands": target["validation_commands"],
+        "baseline": baseline, "validation_commands": target["validation_commands"],
         "generated_paths": target["generated_paths"],
         "kind": "qa", "state": ReviewState.RUNNING.value, "judgement": None,
-        "validation": {}, "resources": {}, "created_at": now_iso(), "updated_at": now_iso(),
+        "validation": {}, "resources": resources, "created_at": now_iso(), "updated_at": now_iso(),
     }
     def create(previous):
         if previous:
@@ -249,7 +164,7 @@ def start_review(task, target):
             current["state"] = state.value
             current["review_ids"].append(identity)
             current["events"].append({"event_id": identity + ":started", "event": "review_started",
-                                      "state": state.value, "evidence": {"record_id": identity}})
+                                      "state": state.value, "evidence": {"record_id": identity, "binding": dict(record)}})
             return current
         # Register the required evidence reference first. If persistence fails,
         # publication sees a missing review instead of silently using an older
@@ -269,30 +184,27 @@ def recover_review_links(workspace_id, identity):
         worker = _load_task(workspace_id, reference.removeprefix("review-"))
         if (not worker or worker.profile_id != "qa_agent" or worker.status in {"created", "running"}
                 or worker.parent_task_id != target["parent_task_id"] or worker.session_id != target["session_id"]
-                or worker.coding.get("review_subtask_id") != target["producer_task_id"]
-                or worker.coding.get("review_candidate_digest") != target["source_digest"]
-                or worker.coding.get("review_digest") != target["change"]["digest"]):
+                or worker.coding.get("review_subtask_id") != target["producer_task_id"]):
             raise ValueError("coding_review_binding_recovery_unavailable")
-        resources = worker.coding.get("environment") or {}
-        if not resources.get("closed") or not resources.get("cleanup_confirmed"):
+        binding = next((event["evidence"]["binding"] for event in target["events"]
+                        if event["event"] == "review_started" and event["evidence"].get("record_id") == reference
+                        and event["evidence"].get("binding")), None)
+        if not binding:
+            raise ValueError("coding_review_binding_recovery_unavailable")
+        resources = next((event["evidence"]["resources"] for event in reversed(target["events"])
+                          if event["event"] == "review_creation_cleanup"
+                          and event["evidence"].get("record_id") == reference), binding["resources"])
+        from core.tools.project_execution import reconcile_environment
+        observed = reconcile_environment(resources)
+        if not observed["cleanup_confirmed"]:
             raise ValueError("coding_review_binding_cleanup_unconfirmed")
-        # The missing Review has no saved judgement/check evidence. Task's
-        # compatibility cache cannot recreate it or grant acceptance.
-        validation = {}
-        def restore(previous):
-            if previous:
-                return previous
-            return {"schema": "coding.review.v1", "id": reference, "workspace_id": workspace_id,
-                "parent_task_id": target["parent_task_id"], "session_id": target["session_id"],
-                "candidate_id": identity, "candidate_digest": target["source_digest"],
-                "change_digest": target["change"]["digest"], "reviewer_task_id": worker.subtask_id,
-                "kind": "qa", "state": (ReviewState.EXECUTION_UNKNOWN.value if validation.get("status") == "unknown"
-                                         else ReviewState.INTERRUPTED.value),
-                "outcome": "unknown", "judgement": None, "validation": validation,
-                "review_round": target["review_round"],
-                "resources": resources, "final_report": "", "recovery_reason": "review_binding_interrupted",
-                "created_at": now_iso(), "updated_at": now_iso()}
-        store.change(workspace_id, "reviews", reference, restore, session_id=target["session_id"])
+        # Creation intent supplies identity only; absent checks/judgement stay absent.
+        restored = {**binding, "state": ReviewState.INTERRUPTED.value, "outcome": "unknown",
+                    "judgement": None, "validation": {}, "resources": resources,
+                    "recovery_observation": observed, "final_report": "",
+                    "recovery_reason": "review_binding_interrupted", "updated_at": now_iso()}
+        store.change(workspace_id, "reviews", reference, lambda previous: previous or restored,
+                     session_id=target["session_id"])
         recovered = True
     if recovered:
         reconcile_reviews(workspace_id, identity)
@@ -486,46 +398,62 @@ def revision_source(record):
     return True
 
 
-def project_task(task):
-    """Compatibility projection only; none of these fields own domain state."""
-    if task.profile_id == "qa_agent":
-        record = review(task)
-        if record:
-            task.coding.update({key: record[key] for key in
-                ("project_dir", "branch_workspace", "baseline", "generated_paths", "validation_commands") if key in record})
-            task.coding.update(review_id=record["id"], candidate_id=record["candidate_id"],
-                               qa_review=record.get("judgement") or {},
-                               qa_validation=record.get("validation") or {},
-                               validation=record.get("validation", {}).get("checks", []),
-                               review_digest=record["change_digest"],
-                               review_candidate_digest=record["candidate_digest"],
-                               qa_final_report=record.get("final_report", ""),
-                               qa_invalid_proposal=record.get("invalid_proposal", ""))
-            if record["state"] in {ReviewState.COMPLETED, ReviewState.EXECUTION_UNKNOWN, ReviewState.INTERRUPTED}:
-                task.coding["phase"] = ("qa_unknown"
-                    if record["state"] == ReviewState.EXECUTION_UNKNOWN else
-                    {"pass": "validated", "fail": "qa_rejected", "unknown": "qa_incomplete"}[record["outcome"]])
-    else:
-        record = candidate(task)
-        if record:
-            phase = {CandidateState.READY: "changes_ready", CandidateState.VALIDATION_FAILED: "failed",
-                     CandidateState.ACCEPTED: "validated", CandidateState.REJECTED: "qa_rejected",
-                     CandidateState.INCOMPLETE: "qa_incomplete", CandidateState.EXECUTION_UNKNOWN: "qa_unknown",
-                     CandidateState.PUBLICATION_UNKNOWN: "unknown"}.get(CandidateState(record["state"]), record["state"])
-            task.coding.update({key: record[key] for key in
-                ("project_dir", "branch_workspace", "responsibilities", "generated_paths", "validation_commands")})
-            task.coding.pop("qa_subtask_id", None)
-            task.coding.pop("qa_rejection_subtask_id", None)
-            task.coding.update(state_store_version=2, candidate_id=record["id"], candidate_digest=record["source_digest"],
-                               change=record["change"], baseline=record["baseline"],
-                               completion_validation=record["validation"], phase=phase)
-            if "publication" in record:
-                task.coding["publication"] = record["publication"]
-            accepted = record.get("accepted_reviews") or {}
-            if accepted.get("qa"):
-                task.coding.update(qa_subtask_id=accepted["qa"][-1].removeprefix("review-"),
-                                   qa_candidate_digest=record["source_digest"])
-            elif record["state"] in {CandidateState.REJECTED, CandidateState.INCOMPLETE, CandidateState.EXECUTION_UNKNOWN}:
-                if record["review_ids"]:
-                    task.coding["qa_rejection_subtask_id"] = record["review_ids"][-1].removeprefix("review-")
-    return task
+def begin_candidate(task, *, baseline, resources):
+    """Persist live check facts in Candidate before its immutable source seal."""
+    from storage.project_changes import changeset
+    assignment = task.coding
+    identity = candidate_id(task.subtask_id)
+    def create(previous):
+        if previous:
+            raise ValueError("coding_candidate_already_started")
+        return {"schema": "coding.candidate.v1", "id": identity,
+            "workspace_id": task.workspace_id, "session_id": task.session_id,
+            "parent_task_id": task.parent_task_id, "producer_task_id": task.subtask_id,
+            "project_dir": assignment["project_dir"], "branch_workspace": assignment["branch_workspace"],
+            "source_digest": "", "baseline": baseline,
+            "change": changeset(baseline, baseline, assignment["responsibilities"]),
+            "validation": {}, "resources": resources,
+            "responsibilities": assignment["responsibilities"], "generated_paths": assignment["generated_paths"],
+            "validation_commands": assignment["validation_commands"],
+            "revision_of": candidate_id(assignment["revision_subtask_id"]) if assignment.get("revision_subtask_id") else "",
+            "required_review_kinds": ["qa"], "failure_attributions": [],
+            "state": CandidateState.BUILDING.value, "review_ids": [], "review_round": 0, "events": [],
+            "created_at": now_iso(), "updated_at": now_iso()}
+    return store.change(task.workspace_id, "candidates", identity, create, session_id=task.session_id)
+
+
+def record_candidate_validation(task, validation):
+    def update(record):
+        if not record or record["state"] != CandidateState.BUILDING:
+            raise ValueError("coding_candidate_not_building")
+        if record["validation"].get("status") == "unknown":
+            return record
+        record.update(validation=validation, source_digest=validation["source_digest"], updated_at=now_iso())
+        return record
+    return store.change(task.workspace_id, "candidates", candidate_id(task.subtask_id), update)
+
+
+def record_resources(task, resources):
+    kind, identity = ("reviews", review_id(task.subtask_id)) if task.profile_id == "qa_agent" else ("candidates", candidate_id(task.subtask_id))
+    def update(record):
+        if not record or record["state"] not in {CandidateState.BUILDING, ReviewState.RUNNING}:
+            return record
+        record.update(resources=resources, updated_at=now_iso())
+        return record
+    if store.read(task.workspace_id, kind, identity):
+        return store.change(task.workspace_id, kind, identity, update)
+    return None
+
+
+def record_review_creation_cleanup(task, resources):
+    """Persist cleanup after a failed second write of the review creation intent."""
+    identity = candidate_id(task.coding["review_subtask_id"])
+    reference = review_id(task.subtask_id)
+    def update(record):
+        if reference not in record["review_ids"]:
+            return record
+        record["events"].append({"event_id": reference + ":creation-cleanup",
+            "event": "review_creation_cleanup", "state": record["state"],
+            "evidence": {"record_id": reference, "resources": resources}})
+        return record
+    return store.change(task.workspace_id, "candidates", identity, update)
