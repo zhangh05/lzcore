@@ -182,3 +182,42 @@ def test_disposable_validation_resources_are_read_back_before_recovery(team, mon
         r['execution_recovery']['observations'][0]['checks'][0]['resources'].update(daemon_id='forged'))
     with pytest.raises(AssertionError):
         verify_team('parent-ws', 'parent-session', 'files/data/app')
+
+
+def test_stopped_unsealed_candidate_is_sealed_only_after_explicit_resource_readback(team, monkeypatch):
+    first = team.spawn()
+    producer = subagent._load_task('parent-ws', first['subtask_id'])
+    before = state.candidate(producer)
+    from harness.coding_record_fixtures import corrupt_record
+    corrupt_record('parent-ws', 'candidates', before['id'], lambda r:r.update(state='building', source_digest='', validation={}))
+    producer.status = 'failed'
+    atomic_save_json('parent-ws', ('subagents', producer.subtask_id + '.json'), asdict(producer))
+    with monkeypatch.context() as patch:
+        def forbidden(*a, **kw):
+            raise AssertionError('Interrupted candidate recovery must not execute or restart')
+        patch.setattr(DockerProjectEnvironment, 'execute', forbidden)
+        patch.setattr(DockerProjectEnvironment, 'start', forbidden)
+        patch.setattr(DockerProjectEnvironment, 'close', forbidden)
+        result = reconcile(team, producer.subtask_id)
+        assert result.status == 'succeeded' and result.output['requires_new_review'], result.output
+    after = state.candidate(producer)
+    assert after['state'] == 'review_incomplete' and after['source_digest'] == before['source_digest']
+    assert after['validation'] == {} and not state.accepted_reviews(after)
+    assert not subagent.merge_subagent_result('parent-task', producer.subtask_id, 'parent-ws')['ok']
+    assert team.spawn('qa_agent', review=producer.subtask_id)['task_status'] == 'succeeded'
+    assert subagent.merge_subagent_result('parent-task', producer.subtask_id, 'parent-ws')['ok']
+    assert verify_team('parent-ws', 'parent-session', 'files/data/app')['status'] == 'PASS'
+
+
+def test_unsealed_candidate_readback_cannot_interrupt_active_worker(team):
+    first = team.spawn()
+    producer = subagent._load_task('parent-ws', first['subtask_id'])
+    from harness.coding_record_fixtures import corrupt_record
+    corrupt_record('parent-ws', 'candidates', state.candidate_id(producer.subtask_id),
+                   lambda r:r.update(state='building', source_digest=''))
+    producer.status = 'running'
+    atomic_save_json('parent-ws', ('subagents', producer.subtask_id + '.json'), asdict(producer))
+    before = state.candidate(producer)
+    result = reconcile(team, producer.subtask_id)
+    assert result.status != 'succeeded' and 'not_stopped' in str(result.output)
+    assert state.candidate(producer) == before

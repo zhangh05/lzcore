@@ -97,11 +97,11 @@ def transition(workspace_id, identity, event, *, evidence, expected_revision=Non
                         expected_revision=expected_revision)
 
 
-def capture(task, *, source_digest, baseline, change, validation, resources):
+def capture(task, *, source_digest, baseline, change, validation, resources, interrupted=False):
     """Seal one producer output. Subsequent revisions create a new identity."""
     assignment = task.coding
     identity = candidate_id(task.subtask_id)
-    state = (CandidateState.EXECUTION_UNKNOWN if validation.get("status") == "unknown"
+    state = (CandidateState.EXECUTION_UNKNOWN if interrupted or validation.get("status") == "unknown"
              or not resources.get("closed") or not resources.get("cleanup_confirmed")
              else CandidateState.READY if validation.get("status") == "passed"
              and validation.get("source_digest") == source_digest else CandidateState.VALIDATION_FAILED)
@@ -200,7 +200,8 @@ def recover_review_links(workspace_id, identity):
             raise ValueError("coding_review_binding_cleanup_unconfirmed")
         # Creation intent supplies identity only; absent checks/judgement stay absent.
         restored = {**binding, "state": ReviewState.INTERRUPTED.value, "outcome": "unknown",
-                    "judgement": None, "validation": {}, "resources": resources,
+                    "judgement": None, "validation": {},
+                    "resources": {**resources, "closed": observed["closed"], "cleanup_confirmed": observed["cleanup_confirmed"]},
                     "recovery_observation": observed, "final_report": "",
                     "recovery_reason": "review_binding_interrupted", "updated_at": now_iso()}
         store.change(workspace_id, "reviews", reference, lambda previous: previous or restored,

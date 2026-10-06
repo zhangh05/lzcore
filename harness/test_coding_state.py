@@ -258,3 +258,35 @@ def test_upgrade_does_not_recreate_lost_new_store_records(team):
     with pytest.raises(ValueError, match='coding_candidate_unavailable'):
         migrate_workspace('parent-ws')
     assert state.candidate(worker) is None
+
+
+def test_missing_review_binding_uses_confirmed_readback_for_cleanup_not_task_cache(team, monkeypatch):
+    first = team.spawn()
+    original = store.change
+    fail_once = [True]
+    def fault(workspace, kind, identity, update, **kwargs):
+        if kind == 'reviews' and fail_once[0]:
+            fail_once[0] = False
+            raise OSError('Interrupted review creation')
+        return original(workspace, kind, identity, update, **kwargs)
+    monkeypatch.setattr(store, 'change', fault)
+    failed = team.spawn('qa_agent', review=first['subtask_id'])
+    producer = subagent._load_task('parent-ws', first['subtask_id'])
+    target = state.candidate(producer)
+    from harness.coding_record_fixtures import corrupt_record
+    def lost_cleanup_ack(record):
+        for event in record['events']:
+            if event['event'] == 'review_creation_cleanup':
+                event['evidence']['resources']['cleanup_confirmed'] = False
+    corrupt_record('parent-ws', 'candidates', target['id'], lost_cleanup_ack)
+    readbacks = []
+    def confirmed(resources):
+        readbacks.append(resources)
+        return {**resources, 'closed': True, 'cleanup_confirmed': True, 'observed_via': 'docker_readback'}
+    monkeypatch.setattr('core.tools.project_execution.reconcile_environment', confirmed)
+    state.recover_review_links('parent-ws', target['id'])
+    restored = store.read('parent-ws', 'reviews', state.review_id(failed['subtask_id']))
+    assert readbacks and not readbacks[0]['cleanup_confirmed']
+    assert restored['resources']['closed'] and restored['resources']['cleanup_confirmed']
+    assert restored['judgement'] is None and restored['validation'] == {} and restored['outcome'] == 'unknown'
+    assert not state.accepted_reviews(state.candidate(producer))

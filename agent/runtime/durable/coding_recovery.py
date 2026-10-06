@@ -22,8 +22,8 @@ def stopped_resources(candidate, identity):
 
 def reconcile_execution(task):
     from core.tools.project_execution import reconcile_environment
-    from storage.project_changes import manifest_digest, project_path, quiescent_project, source_manifest
-    from .coding_state import CandidateState, _TRANSITIONS, candidate, review
+    from storage.project_changes import changeset, manifest_digest, project_path, quiescent_project, source_manifest
+    from .coding_state import CandidateState, _TRANSITIONS, candidate, capture, review
     from .subagent import _load_task, _save_task
 
     binding = review(task) if task.profile_id == "qa_agent" else candidate(task)
@@ -32,7 +32,7 @@ def reconcile_execution(task):
     identity = binding["candidate_id"] if task.profile_id == "qa_agent" else binding["id"]
     with store.publication_lock(task.workspace_id, identity):
         record = store.read(task.workspace_id, "candidates", identity)
-        if record["state"] != CandidateState.EXECUTION_UNKNOWN:
+        if record["state"] not in {CandidateState.BUILDING, CandidateState.EXECUTION_UNKNOWN}:
             return {"ok": True, "reconciled": False, "candidate_id": identity, "state": record["state"]}
         records = [record, *[store.read(task.workspace_id, "reviews", value) for value in record["review_ids"]]]
         observations = []
@@ -53,6 +53,11 @@ def reconcile_execution(task):
             observations.append(observed)
         with quiescent_project(record["branch_workspace"]):
             source = source_manifest(project_path(record["branch_workspace"], record["project_dir"]), record["generated_paths"])
+            if record["state"] == CandidateState.BUILDING:
+                producer = _load_task(task.workspace_id, record["producer_task_id"])
+                record = capture(producer, source_digest=manifest_digest(source), baseline=record["baseline"],
+                    change=changeset(record["baseline"], source, record["responsibilities"]),
+                    validation=record["validation"], resources=record["resources"], interrupted=True)
             if manifest_digest(source) != record["source_digest"]:
                 raise ValueError("coding_execution_candidate_changed")
             recovery = {"source_digest": record["source_digest"], "observed_at": now_iso(),

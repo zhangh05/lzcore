@@ -46,6 +46,8 @@ Task 表示 worker 创建、执行、停止、报告与错误；Candidate 在 bu
 
 EXECUTION_UNKNOWN 通过 `agent.manage(reconcile)` 显式回查恢复。它只读取封存资源身份、停止的 worker 和完整候选源码；不启动/停止环境、不执行应用命令或重放未知调用。Docker daemon ID 与容器/代理/网络名称在环境启动时保存；重启后仅在同一 daemon 上读取 info/inspect，明确不存在才证明未知清理已闭合；一次性构建容器也需核对。已有确认清理的封存记录可作为证据；不可达、身份不足、资源仍存在或源码改变均不能猜测通过。回查成功保存独立 execution_recovery 与 CAS 事件，原 Candidate 检查/资源快照和旧 Review 终态不变。新显式 QA 在新批次和新只读工程副本中实际运行完整检查，才可授予 acceptance；旧 unknown 结果不作为 PASS。再次产生 unknown 需要再次回查，旧恢复不覆盖新未知。独立团队验收器分别检查恢复证据、新 QA 和真实整合树。
 
+显式 reconcile 也接受停止后仍处于 building 的实现：先回查所有原资源和实际源码，再封存为 execution_unknown 并保存恢复事实；未知或缺失的检查保持原值，仍需新 QA。活动 worker 不允许封存。
+
 启动恢复前执行独立的一次性 assignment 迁移：既有 Store 记录优先；旧版观察与可回查源码移入 Candidate/Review，再将持久化 Task 改为 v2 并删除旧字段。未知检查保留 unknown；旧通过只有完整准确评审和发布日志能够确认才保留接受/整合。迁移不启动 worker 或执行应用命令。v2 记录缺失时不能从 Task 重建。尚未开始的任务没有候选属于正常生命周期。读取不启动 worker、不写应用。新记录的主体/工作区/会话/父任务与源码身份不可替换；会话永久删除删除关联对象并留下 tombstone，晚到写入与删除共享生命周期锁，不能复活记录。
 
 ### 项目与阶段事实
