@@ -1,0 +1,264 @@
+{
+  "schema": "coding.minimax_pressure.v1",
+  "date": "2026-10-06",
+  "full_benchmark_acceptance": "NOT VERIFIED",
+  "rounds": [
+    {
+      "round": "large-20261006-minimax-noc-1",
+      "report": "/tmp/lzcore-strict-workspaces/large-20261006-minimax-noc-1/reports/bench_noc_ecb8c419e1/1d9b6a14ec",
+      "configuration": {
+        "case": "noc",
+        "workspace_id": "bench_noc_ecb8c419e1",
+        "session_id": "9477773750ab4bae",
+        "provider": "minimax",
+        "model": "MiniMax-M3",
+        "provider_type": "anthropic_messages",
+        "max_tokens": 4096,
+        "source_commit": "18aeb05f01912ee6a018ba36d130d8e7ccc12ca7",
+        "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "prompt_sha256": "36a7c80be6d17d2664ad0ad576bf755a66f105e0154c358a537b48b85e8ab184",
+        "execution_environment": {
+          "isolation_level": "strong_container",
+          "os": "Linux",
+          "cwd": "/workspace/files/data/noc",
+          "project": "/workspace/files/data/noc",
+          "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+          "network": "internal_with_dependency_only_tls_egress",
+          "preview_port": 20202,
+          "preview_origin": "http://127.0.0.1:20202",
+          "preview_bind_port": 8080,
+          "source_mode": "coordinator",
+          "generated_paths": [
+            "dist"
+          ],
+          "closed": false,
+          "cleanup_confirmed": false,
+          "cleanup_errors": []
+        }
+      },
+      "preflight": {
+        "schema": "coding.benchmark_preflight.v1",
+        "provider": "minimax",
+        "model": "MiniMax-M3",
+        "provider_type": "anthropic_messages",
+        "status": "READY",
+        "agent_started": false,
+        "http_status": null,
+        "duration_seconds": 4.274,
+        "reason": null
+      },
+      "verdict": {
+        "schema": "coding.benchmark_verdict.v1",
+        "case": "noc",
+        "status": "FAIL",
+        "agent_turn_ok": false,
+        "deadline_reached": false,
+        "named_acceptance_passed": false,
+        "team_required": true,
+        "team_accepted": false,
+        "cleanup_confirmed": true,
+        "full_benchmark_acceptance": "NOT VERIFIED",
+        "acceptance_scope": {
+          "status": "FAIL",
+          "named_acceptance_passed": false,
+          "full_benchmark_acceptance": "NOT VERIFIED",
+          "unverified_requirements": [
+            "all_14_pages_and_table_sort_filter_search",
+            "complete_device_interface_fields_sites_and_roles",
+            "counter_derived_rates_and_restart_reset_handling",
+            "realtime_stream_and_correlated_traffic_patterns",
+            "all_chart_ranges_and_device_interface_details",
+            "topology_hierarchy_layout_interactions_and_endpoint_link_states",
+            "all_alert_rules_threshold_durations_and_state_transitions",
+            "syslog_filters_bounded_ui_and_event_alert_separation",
+            "complete_ospf_bgp_state_and_core_wan_dependency_recovery",
+            "all_fault_types_manual_and_timed_recovery",
+            "configuration_backup_schedule_metadata_and_rollback_preview",
+            "health_score_and_global_search",
+            "all_roles_all_write_routes_and_ui_permission_consistency",
+            "refresh_and_process_restart_persistence",
+            "disconnect_reconnect_batching_rate_limit_and_stale_event_discard",
+            "stress_20_charts_100_faults_dedup_rca_and_interactive_performance"
+          ],
+          "missing_checks": [],
+          "failed_checks": [
+            "api_boot",
+            "baseline_inventory",
+            "browser_boot_only",
+            "generated_test_suite",
+            "independent_alert_dedup_ack_and_recovery_round_1",
+            "independent_alert_dedup_ack_and_recovery_round_2",
+            "independent_alert_dedup_ack_and_recovery_round_3",
+            "independent_configuration_diff_rollback_audit_round_1",
+            "independent_configuration_diff_rollback_audit_round_2",
+            "independent_configuration_diff_rollback_audit_round_3",
+            "independent_fault_CRC_round_1",
+            "independent_fault_CRC_round_2",
+            "independent_fault_CRC_round_3",
+            "independent_fault_HighPPS_round_1",
+            "independent_fault_HighPPS_round_2",
+            "independent_fault_HighPPS_round_3",
+            "independent_fault_noBuffers_round_1",
+            "independent_fault_noBuffers_round_2",
+            "independent_fault_noBuffers_round_3",
+            "independent_interface_counters_and_rates_round_1",
+            "independent_interface_counters_and_rates_round_2",
+            "independent_interface_counters_and_rates_round_3",
+            "independent_server_write_permissions_round_1",
+            "independent_server_write_permissions_round_2",
+            "independent_server_write_permissions_round_3",
+            "independent_test_identity",
+            "independent_topology_dependency_rca_round_1",
+            "independent_topology_dependency_rca_round_2",
+            "independent_topology_dependency_rca_round_3",
+            "production_build",
+            "simulation_progress",
+            "stress_inventory"
+          ],
+          "invalid_evidence": []
+        }
+      },
+      "duration_seconds": 1108.57,
+      "operator_cancelled": true,
+      "deadline_reached": false,
+      "tasks": [
+        {
+          "subtask_id": "sub-04d6cb48",
+          "profile_id": "coding_agent",
+          "status": "failed",
+          "phase": "failed",
+          "created_at": "2026-10-06T09:04:41.180191+00:00",
+          "finished_at": "2026-10-06T09:18:54.398483+00:00",
+          "errors": [
+            "completion_repair_no_progress"
+          ],
+          "branch_workspace": "coding-f45e2f5693b744faa4a069c7fcbb549d",
+          "source_files": 18,
+          "source_file_sha256": {
+            "package-lock.json": "3675ce5483eb435ec9490da9cf5787014cbe60bcbb2f34f32a296989552159b6",
+            "package.json": "f945556e5c535ba02d54657176b76ce2969ed31236a8c460c7fc047a088f9983",
+            "tsconfig.json": "136e6d6299d97ef7f811c3dc629e40add029b82a35d7ec3f6408d738ae42854f",
+            "scripts/build.mjs": "b84efb89e13df8e58d513ddbaeb13f2fe50384517945df48e997e9b91f516dbd",
+            "src/faults.ts": "f61a732ae2b6bd0df3889ca571a21f32683f2117949e19ffa5ac024acffff5b4",
+            "src/inventory.ts": "9179c184c9086eb6be47e7465306a837a66ffb36021d1fa5b43a6dc382c1b4b6",
+            "src/main.ts": "fef94fb9c847379f8230c41edb1b42b3084e546f567762daa331390004f0bf5b",
+            "src/engine.ts": "8367a38b3bb8c864eca6bcddd56aa5b18d09db35aa6b72f3391812a015e258dc",
+            "src/types.ts": "08213d9681986e446d4919a971da3aa3016907866dd4890a308369cd756d8dc3",
+            "src/index.ts": "2cba4f49cfb20ee51c612c8ac4c371e7239a9c40cec9acb598c74d0ae5e14d9e",
+            "src/server.ts": "56044aae1328df1248976f2636c8b3481d6c5ac5f2c847ef9795732f529ea569",
+            "src/db.ts": "e223abf94ea32a68278ce51cd6ce323e93c0a29fbb62a949999bfc0536cecac3",
+            "src/auth.ts": "11e86f791f81c725e94803dc867bfa4ae624a63f74185be58fbd224ae011f71c",
+            "src/server/inventory.ts": "e7170bf35dd93bbf6d7c3be8bbd598823383d4137eba5c46e9d52bc7b2100e11",
+            "src/server/http.ts": "ffef4440601e55dfb58b7ca76214da8fe756aa33a0e9c94673e328d260ccc541",
+            "src/server/engine.ts": "9dcd56402a66c168ee4c28b046bccbdb857be83d481c9473ece2745d50bd327f",
+            "src/server/db.ts": "2c7b2dc81567ae1aed39c6ebc9f9f944ef45184eb22a7333c07295c4657469dc",
+            "src/server/auth.ts": "40d60be4b716e80ef69d4542a78152dc104f03ae34ed29c6d48837ee037da4e8"
+          },
+          "recorded_model_calls": 69,
+          "output_at_saved_budget": 4,
+          "completion_validation": {
+            "status": "failed",
+            "source_digest": "ede612786d170d0044bf272bf0fc85a62a75dbe5d87f4ec21719d27b4b4082a6",
+            "checks": [
+              {
+                "command": "npm test",
+                "runtime_status": "failed",
+                "exit_code": 1,
+                "execution_outcome": null,
+                "known_failure_markers": [
+                  "No test files found"
+                ]
+              },
+              {
+                "command": "npm run build",
+                "runtime_status": "failed",
+                "exit_code": 2,
+                "execution_outcome": null,
+                "known_failure_markers": [
+                  "TS2688"
+                ]
+              }
+            ]
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 50378,
+            "preview_origin": "http://127.0.0.1:50378",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        },
+        {
+          "subtask_id": "sub-08d7c970",
+          "profile_id": "coding_agent",
+          "status": "cancelled",
+          "phase": "failed",
+          "created_at": "2026-10-06T09:21:50.268674+00:00",
+          "finished_at": "2026-10-06T09:22:23.621825+00:00",
+          "errors": [],
+          "branch_workspace": "coding-1fd9b74ae1f9425cbc7b95840d9cbfbe",
+          "source_files": 0,
+          "source_file_sha256": {},
+          "recorded_model_calls": 4,
+          "output_at_saved_budget": 0,
+          "completion_validation": {
+            "status": null,
+            "source_digest": null,
+            "checks": []
+          },
+          "environment": {
+            "isolation_level": "strong_container",
+            "os": "Linux",
+            "cwd": "/workspace/files/data/noc",
+            "project": "/workspace/files/data/noc",
+            "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+            "network": "internal_with_dependency_only_tls_egress",
+            "preview_port": 51533,
+            "preview_origin": "http://127.0.0.1:51533",
+            "preview_bind_port": 8080,
+            "source_mode": "implementation",
+            "generated_paths": [
+              "dist"
+            ],
+            "closed": true,
+            "cleanup_confirmed": true,
+            "cleanup_errors": []
+          }
+        }
+      ],
+      "operator_control": {
+        "action": "operator_cancel",
+        "reason": "First implementation failed completion_repair_no_progress with missing tests and Node types; no active worker. Apply verified shared exec path contract before next diagnostic run. Preserve known failed source proposal; do not replay unknown writes.",
+        "pid": 15215
+      },
+      "parent_recorded_model_calls": 17,
+      "diagnosis": {
+        "implementation": "First candidate stopped with completion_repair_no_progress after missing tests and missing Node type dependencies; generated source/import consistency also remains unverified. No exact QA or integration.",
+        "framework": "Coding handoff labeled exec paths as container cwd while working_dir accepts workspace-relative paths; real absolute working_dir attempts rejected. Shared path contract corrected and verified in b692a5c. Generic child failure summary incorrectly called completion failure an LLM failure.",
+        "cancellation_note": "Initial failed worker retained 18 source files and 69 recorded calls. Coordinator later started replacement sub-08d7c970, which made four recorded calls and produced zero source files. Its cancellation belongs to the operator stopping this diagnostic, not model-initiated cancellation. Last-observation timing in operator_control is not a guarantee that no replacement started before signal delivery.",
+        "acceptance": "Named evaluator failed with no integrated application; full business requirements were not exercised and remain NOT VERIFIED."
+      }
+    }
+  ],
+  "path_contract_kernel": {
+    "real_container": true,
+    "real_governed_tools": true,
+    "runtime_projection_consistent": true,
+    "workspace_relative_parameter_usable": true,
+    "absolute_parameter_rejected_without_execution": true,
+    "omitted_working_dir_uses_project": true,
+    "image_id": "sha256:343aee4bd516c3af0b0b27f35451f465020b057f12e9a87b0dc06c1dd4f5cebd",
+    "cleanup_confirmed": true
+  }
+}

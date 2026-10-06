@@ -158,6 +158,18 @@ def test_all_coding_roles_share_the_runtime_execution_path_contract(team, monkey
     assert observed == ['coding_agent', 'frontend_agent', 'qa_agent']
 
 
+@pytest.mark.parametrize('error', ['completion_repair_no_progress', 'llm_authentication_failed', 'llm_balance_insufficient'])
+def test_failed_subagent_reports_actual_runtime_error_without_guessing_provider_cause(team, monkeypatch, error):
+    monkeypatch.setattr('agent.runtime.ssot_runtime.run_ssot_turn',
+        lambda *a, **kw: SimpleNamespace(ok=False, final_response='', errors=[error], tool_calls=[]))
+    result = team.spawn()
+    assert result['task_status'] == 'failed'
+    task = subagent.get_subagent_task('parent-ws', result['subtask_id'])
+    assert task['errors'] == [error]
+    assert error in task['summary']
+    assert 'LLM call failed' not in task['summary']
+
+
 def test_dependencies_do_not_run_or_merge_before_ready(team):
     first = team.spawn()
     waiting = team.spawn(depends=[first["subtask_id"]])

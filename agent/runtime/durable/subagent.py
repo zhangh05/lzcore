@@ -513,13 +513,15 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         else:
             result.status = "failed"
             review = task.coding.get("qa_review") if task.profile_id == "qa_agent" else None
-            result.summary = (f"Independent QA verdict {review['verdict']}; candidate not accepted. See coding.qa_review for full evidence."
-                              if review else "Subagent LLM call failed")
-            llm_errors = list(getattr(llm_result, "errors", []) or []) if llm_result is not None else []
-            if llm_errors:
-                result.errors.extend(str(error)[:300] for error in llm_errors[:10])
+            runtime_errors = list(getattr(llm_result, "errors", []) or []) if llm_result is not None else []
+            if runtime_errors:
+                result.errors.extend(str(error)[:300] for error in runtime_errors[:10])
             elif not is_ok:
-                result.errors.append("LLM returned error without details")
+                result.errors.append("Subagent runtime failed without error details")
+            else:
+                result.errors.append("Subagent returned no final response")
+            result.summary = (f"Independent QA verdict {review['verdict']}; candidate not accepted. See coding.qa_review for full evidence."
+                              if review else "Subagent runtime failed: " + "; ".join(result.errors)[:300])
 
     except Exception as e:
         if task.coding and task.coding.get("phase") == "executing":
