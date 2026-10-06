@@ -15,6 +15,25 @@ def _target(task):
     ready_proposal = (target.status == 'succeeded' and assignment.get('phase') in {'changes_ready', 'validated'}
                       and validation.get('status') == 'passed'
                       and validation.get('source_digest') == assignment.get('candidate_digest'))
+    if assignment.get('phase') == 'qa_incomplete':
+        review = _related(task, assignment.get('qa_rejection_subtask_id', ''))
+        judgement = review.coding.get('qa_review') or {}
+        # Missing judgement evidence is not an unknown execution. Copying the
+        # already checked source preserves that gap; it neither accepts the
+        # review nor retries its operations. Both branches must be quiescent.
+        ready_proposal = (
+            target.status == 'succeeded' and validation.get('status') == 'passed'
+            and validation.get('source_digest') == assignment.get('candidate_digest')
+            and review.status == 'failed' and review.coding.get('phase') == 'qa_incomplete'
+            and judgement.get('verdict') == 'unknown'
+            and review.coding.get('review_subtask_id') == target.subtask_id
+            and judgement.get('review_subtask_id') == target.subtask_id
+            and judgement.get('candidate_digest') == assignment.get('candidate_digest')
+            and review.coding.get('review_candidate_digest') == assignment.get('candidate_digest')
+            and (review.coding.get('qa_validation') or {}).get('status') != 'unknown'
+            and (review.coding.get('environment') or {}).get('closed')
+            and (review.coding.get('environment') or {}).get('cleanup_confirmed')
+        )
     if assignment.get('phase') == 'qa_rejected':
         review = _related(task, assignment.get('qa_rejection_subtask_id', ''))
         failed_source = (review.status == 'failed' and review.coding.get('phase') == 'qa_rejected'
@@ -63,7 +82,7 @@ def seed_revision(task, branch):
         'subtask_id': target.subtask_id, 'source_digest': assignment['revision_source_digest'],
         'completion_validation': target.coding['completion_validation'],
     }
-    if target.coding.get('phase') == 'qa_rejected':
+    if target.coding.get('phase') in {'qa_rejected', 'qa_incomplete'}:
         review = _related(task, target.coding['qa_rejection_subtask_id'])
         assignment['revision_observation']['qa_review'] = review.coding['qa_review']
     return baseline

@@ -1,0 +1,135 @@
+{
+  "scope": "Framework audit following clarification: model performance is separate from runtime defects",
+  "base_commit": "5a5e317e3e360e8ffb86530400dc88597122f540",
+  "classification": [
+    {
+      "id": "source_absent_claim",
+      "category": "model_coordination_observation",
+      "framework_cause_established": false,
+      "evidence": "Actual agent.manage(get) already exposes isolated branch, progress and parent-before-merge hint. Empty parent does not prove source missing."
+    },
+    {
+      "id": "fresh_generation_instead_of_revision",
+      "category": "model_coordination_observation",
+      "framework_cause_established": false,
+      "evidence": "No observed failed revision invocation in those rounds. Explicit revision mechanism exists; fresh generation alone is not a contract violation."
+    },
+    {
+      "id": "source_rewrite_nonconvergence",
+      "category": "model_implementation_observation",
+      "framework_cause_established": false,
+      "evidence": "Observed source changes and failed checks; no evidence that runtime substituted or lost source. Existing failure-progress boundaries remain."
+    },
+    {
+      "id": "qa_unobserved_native_failure_claim",
+      "category": "model_judgement_observation",
+      "framework_cause_established": false,
+      "evidence": "One model request, zero actual tool operations in sub-3c57c966; claims are not actual build evidence. Explicit fail cannot authorize publication."
+    },
+    {
+      "id": "noc_wan_role_missing",
+      "category": "generated_application_defect",
+      "framework_cause_established": false,
+      "evidence": "Independent inventory checker observed 50 devices, 506 interfaces, seven roles; WAN missing. Generated source untouched in this audit."
+    },
+    {
+      "id": "qa_incomplete_known_source_revision_denied",
+      "category": "confirmed_framework_defect",
+      "status": "fixed_and_verified",
+      "evidence": "A stopped candidate with passed source-bound completion checks could be explicitly revised before QA, but identical source became ineligible after a judgement-only unknown. Red test reproduced the denial."
+    }
+  ],
+  "regression": {
+    "red_log": "/tmp/lzcore-isolation-runtime/revision-incomplete-red.log",
+    "red_result": "1 failed, 5 passed",
+    "related_log": "/tmp/lzcore-isolation-runtime/revision-incomplete-regression.log",
+    "related_result": "105 passed",
+    "full_backend_result": "2272 passed, 11 skipped",
+    "full_backend_log": "/tmp/lzcore-isolation-runtime/revision-incomplete-full-backend.log",
+    "frontend_result": "404 passed",
+    "frontend_log": "/tmp/lzcore-isolation-runtime/revision-incomplete-frontend.log",
+    "frontend_build": "PASS including 55 stylesheet checks",
+    "contract_checks": "63 passed",
+    "docs_consistency": "PASS",
+    "ruff_policy": "PASS"
+  },
+  "real_kernel": {
+    "scope": "framework kernel fixture with controlled provider; not NOC/RTS business acceptance",
+    "external_provider_calls": 0,
+    "image_id": "sha256:cd10a3ebedc5f0f613501e2ab525f89f3712fff4bb8c60277c1430771df951b9",
+    "checks": [
+      {
+        "name": "incomplete_qa_preserved_and_cannot_publish",
+        "passed": true
+      },
+      {
+        "name": "explicit_known_source_revision_retains_baseline_and_qa_gap",
+        "passed": true
+      },
+      {
+        "name": "fresh_exact_qa_and_governed_merge_verified_by_independent_team_reader",
+        "passed": true
+      }
+    ],
+    "controlled_model_calls": [
+      {
+        "phase": "implementation",
+        "index": 0
+      },
+      {
+        "phase": "implementation",
+        "index": 1
+      },
+      {
+        "phase": "qa_unknown",
+        "index": 0
+      },
+      {
+        "phase": "revision",
+        "index": 0
+      },
+      {
+        "phase": "revision",
+        "index": 1
+      },
+      {
+        "phase": "qa_pass",
+        "index": 0
+      },
+      {
+        "phase": "qa_pass",
+        "index": 1
+      }
+    ],
+    "cleanup_confirmed": true,
+    "team_evidence": {
+      "schema": "coding.team_acceptance.v1",
+      "status": "PASS",
+      "integrations": [
+        {
+          "implementation": "sub-f4bd9584",
+          "qa": "sub-5e133e7c",
+          "parent_task_id": "kernel-parent",
+          "change_digest": "e5b20024c8391596d644d8c2bed6fd89ca1132bfe760b3bda570428d4ddae8d1",
+          "files": 1,
+          "runtime_checks": 1,
+          "publication_order": 1
+        }
+      ]
+    }
+  },
+  "failed_kernel_control": {
+    "directory": "/tmp/lzcore-strict-workspaces/kernel-incomplete-qa-revision-20261006-1",
+    "log": "/tmp/lzcore-isolation-runtime/revision-incomplete-kernel.log",
+    "cause": "Control incorrectly required a successful tool envelope for intentionally failed QA. Actual child qa_incomplete state and cleanup were correctly returned. No runtime fix made for this assertion error."
+  },
+  "kernel_runner_sha256": "89abf77dbac0ba1f2e422523a4f7054ba9e1f9413daeead74a1e4927f3f375cf",
+  "external_provider_calls": 0,
+  "large_business_acceptance": "NOT VERIFIED",
+  "tag_release_changed": false,
+  "cleanup_observations": {
+    "actual_lzcore_containers_empty": true,
+    "actual_lzcore_networks_empty": true,
+    "old_candidates_untouched": true
+  }
+}
