@@ -306,10 +306,10 @@ def resolve_task_state(
     messages: Iterable[dict[str, Any]],
     resume_task_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Resolve a resumable generic task using a recent complete exchange guard.
+    """Resolve the current task by explicit identity, with text fallback.
 
-    This accepts only an explicit server-classified relationship or a bounded
-    generic continuation command. A different/new topic never inherits state.
+    An explicit identity is checked against the scoped persisted TaskState.
+    Without one, continuation requires a recent complete exchange guard.
     """
     state = load_task_state(workspace_id, session_id)
     task = state.get("task") if isinstance(state.get("task"), dict) else None
