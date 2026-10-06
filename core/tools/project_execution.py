@@ -307,11 +307,18 @@ class DockerProjectEnvironment:
         return not any(relative == p or relative.startswith(p + "/") for p in outputs)
 
     def descriptor(self):
+        project_relative = self.project.relative_to(self.root).as_posix()
         return {
             "isolation_level": self.isolation_level,
             "os": "Linux",
             "cwd": self.mount_target,
             "project": self.mount_target,
+            "tool_path_bases": {
+                "workspace.file": {"basis": "workspace_root", "project_prefix": project_relative,
+                                   "example": project_relative + "/src/main.ts"},
+                "exec.run": {"working_dir_basis": "workspace_root", "working_dir": project_relative,
+                             "shell_path_basis": "container_cwd", "container_cwd": self.mount_target},
+            },
             "image_id": self.image_id,
             "network": "internal_with_dependency_only_tls_egress",
             "preview_port": self.port,

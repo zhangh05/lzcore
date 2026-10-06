@@ -18,6 +18,8 @@ Shell 与 Python 都经原有 ToolRuntime 进入同一适配器。系统隔离�
 
 严格工程执行的 Shell/Python 默认目录统一为可写工程根目录，容器描述与结果的 `container_cwd`/`working_dir` 给出实际位置；显式 `working_dir` 仍是工作区相对路径并限定在挂载工程内。普通本地执行默认工作区根目录，`workspace.file` 始终使用工作区相对路径，不因 Shell 目录改变。服务端 assignment 明确两类工具的路径基准；文件写入越出管理根时返回 FILE_PATH_OUTSIDE_MANAGED_STORAGE、管理根与实际运行工程前缀。安全路径可附 suggested_filepath 供模型重新规划，但工具不改写参数或自动重放，准确路径仍受源码所有权约束。
 
+运行环境描述中的 `tool_path_bases` 是路径交接的共享事实源，主运行时提示和 coding/frontend/QA assignment 使用同一份内容。exec.run 的 `working_dir_basis=workspace_root` 与 `working_dir` 描述参数；`shell_path_basis=container_cwd` 与 `container_cwd` 描述命令内部路径。容器绝对目录不能当作 working_dir 参数，省略参数仍使用已绑定工程根目录；路径拒绝不自动转换或重放。
+
 脱敏区分宿主诊断路径与容器操作引用。正在运行的服务端 DockerProjectEnvironment 绑定允许 exec.run 输出、对应模型工具消息和原生参数归档保留容器 tmpfs 的 /tmp 路径；context_read 可取回同一引用。用户/系统消息、宿主路径、越界路径和凭据仍脱敏。权限不从模型参数或工具自报 isolation_level 推导，已关闭绑定不能获得该路径例外；此例外不赋予额外执行权限，也不允许把临时目录工程当作已整合源码。
 
 ## Coding Team

@@ -127,6 +127,37 @@ def test_role_runtime_has_real_isolated_changes_and_independent_qa_gate(team):
     assert subagent.merge_subagent_result("parent-task", identity, "parent-ws")["ok"]
 
 
+def test_all_coding_roles_share_the_runtime_execution_path_contract(team, monkeypatch):
+    from agent.runtime import ssot_runtime
+    from core.tools.project_execution import environment_for
+    from core.runtime_engine.prompt_contract import build_turn_message
+
+    original = ssot_runtime.run_ssot_turn
+    observed = []
+    def runtime(session, turn, **kwargs):
+        instruction = turn.op.user_input
+        assignment, _ = json.JSONDecoder().raw_decode(instruction.split('[SERVER CODING ASSIGNMENT]\n', 1)[1])
+        descriptor = environment_for(session.workspace_id).descriptor()
+        assert assignment['tool_path_bases'] == descriptor['tool_path_bases']
+        paths = assignment['tool_path_bases']['exec.run']
+        assert paths['working_dir'] == assignment['project_dir']
+        assert paths['working_dir_basis'] == 'workspace_root'
+        prompt = build_turn_message(workspace_id=session.workspace_id, session_id=session.session_id,
+                                   user_input=instruction)
+        projection = json.loads(prompt.split('project_execution: ', 1)[1].split('\n', 1)[0])
+        assert projection['tool_path_bases'] == assignment['tool_path_bases']
+        observed.append(assignment['role'])
+        return original(session, turn, **kwargs)
+    monkeypatch.setattr(ssot_runtime, 'run_ssot_turn', runtime)
+    implementation = team.spawn()
+    assert implementation['task_status'] == 'succeeded'
+    frontend = team.spawn('frontend_agent')
+    assert frontend['task_status'] == 'succeeded'
+    review = team.spawn('qa_agent', review=implementation['subtask_id'])
+    assert review['task_status'] == 'succeeded'
+    assert observed == ['coding_agent', 'frontend_agent', 'qa_agent']
+
+
 def test_dependencies_do_not_run_or_merge_before_ready(team):
     first = team.spawn()
     waiting = team.spawn(depends=[first["subtask_id"]])

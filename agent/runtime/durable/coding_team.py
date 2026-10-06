@@ -354,11 +354,7 @@ def coding_run(task):
                     "review_subtask_id": assignment["review_subtask_id"],
                     "initial_source_paths": sorted(source_manifest(branch, assignment.get("generated_paths"))),
                     "revision_observation": assignment.get("revision_observation"),
-                    "tool_path_bases": {
-                        "workspace.file": {"basis": "workspace_root", "project_prefix": assignment["project_dir"],
-                                           "example": assignment["project_dir"] + "/src/main.ts"},
-                        "exec.run": {"basis": "container_cwd", "cwd": environment.descriptor()["cwd"]},
-                    },
+                    "tool_path_bases": environment.descriptor()["tool_path_bases"],
                     "constraints": "Work only in this isolated project branch. Dependencies are already integrated. Bind preview to HOST/PORT from the process environment, never the browser origin port. Implementation owns writable source; QA and coordinator source mounts are read-only. Run assigned validation commands exactly from the project directory. Reviewed read-only projects use disposable build snapshots and only promote declared outputs; other commands retain their role's source mount mode. Logs/PID/temporary checks belong under /tmp. Source revisions require implementation and exact QA, then governed integration.",
                 },
                 ensure_ascii=False,

@@ -96,6 +96,35 @@ def test_strict_default_shell_directory_is_writable_project_and_explicit_paths_s
     assert len(calls) == 2
 
 
+def test_published_exec_path_contract_is_directly_usable_without_reinterpreting_paths(environment, monkeypatch):
+    from core.tools.context import ToolRuntimeContext
+    from core.tools.integration import get_default_tool_runtime_client
+
+    environment.started = True
+    monkeypatch.setitem(environments._BINDINGS, str(environment.root), environment)
+    calls = []
+    def run(*args, **kwargs):
+        calls.append(kwargs['argv_override'])
+        return {'ok': True, 'stdout': 'contract checked', 'exit_code': 0}
+    monkeypatch.setattr('core.tools.general_tools.shared._run_shell', run)
+    descriptor = environment.descriptor()
+    paths = descriptor['tool_path_bases']['exec.run']
+    assert paths['working_dir_basis'] == 'workspace_root'
+    assert paths['shell_path_basis'] == 'container_cwd'
+    assert paths['container_cwd'] == descriptor['cwd']
+    client = get_default_tool_runtime_client()
+    context = ToolRuntimeContext(workspace_id='isolated', session_id='exec-path-contract', requested_by='subagent')
+    observed = client.invoke('exec.run', {'action': 'shell', 'command': 'pwd',
+        'working_dir': paths['working_dir']}, context=context)
+    assert observed.status == 'succeeded'
+    assert observed.output['container_cwd'] == paths['container_cwd']
+    assert observed.output['working_dir'] == paths['working_dir']
+    rejected = client.invoke('exec.run', {'action': 'shell', 'command': 'pwd',
+        'working_dir': paths['container_cwd']}, context=context)
+    assert rejected.status == 'failed' and len(calls) == 1
+    assert calls[0][calls[0].index('--workdir') + 1] == descriptor['cwd']
+
+
 def test_python_contract_shared_with_host_and_container():
     from core.tools.python_program import build_program, decode_program_output
     result = subprocess.run(['python3', '-c', build_program('result = {"值": input_data["值"] + 1}', {'值': 2})], capture_output=True, text=True, encoding='utf-8')
