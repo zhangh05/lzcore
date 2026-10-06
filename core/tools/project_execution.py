@@ -32,7 +32,8 @@ def _security_arguments():
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--pids-limit=256",
-        "--tmpfs=/tmp:rw,nosuid,nodev,size=512m",
+        # QA scratch projects and native build tools need executable mappings.
+        "--tmpfs=/tmp:rw,exec,nosuid,nodev,size=512m",
     ]
 
 

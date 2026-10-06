@@ -383,6 +383,24 @@ def coding_run(task):
                 raise RuntimeError("coding_branch_cleanup_unconfirmed")
 
 
+def cancel_execution(task) -> dict:
+    """Close the server-owned branch binding without waiting for model I/O."""
+    from core.tools.project_execution import environment_for
+    from .subagent import _load_task, _save_task
+
+    assignment = task.coding
+    environment = environment_for(assignment["branch_workspace"])
+    if environment is None:
+        return {"cleanup_confirmed": False, "reason": "coding_binding_unavailable"}
+    if environment.project != project_path(assignment["branch_workspace"], assignment["project_dir"]).resolve():
+        raise ValueError("coding_cancel_binding_mismatch")
+    environment.close()
+    current = _load_task(task.workspace_id, task.subtask_id)
+    current.coding["environment"] = environment.descriptor()
+    _save_task(current)
+    return {"cleanup_confirmed": environment.cleanup_confirmed}
+
+
 def finish_assignment(task, environment, runtime_ok: bool, proposal: str = "") -> None:
     from .subagent import _save_task
 

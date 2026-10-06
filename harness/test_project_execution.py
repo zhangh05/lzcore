@@ -40,6 +40,8 @@ def test_container_contract_no_host_mounts_credentials_or_privileges(environment
     environment.start()
     run = next(call for call in calls if environment.name in call and call[0] == 'run')
     assert '--read-only' in run and '--cap-drop=ALL' in run and '--security-opt=no-new-privileges' in run
+    temporary = next(value for value in run if value.startswith('--tmpfs=/tmp:'))
+    assert set(temporary.split(':', 1)[1].split(',')) == {'rw', 'exec', 'nosuid', 'nodev', 'size=512m'}
     assert run[run.index('--network') + 1] == environment.network
     assert [value for value in run if value.startswith('type=bind')] == [f'type=bind,source={environment.project},target={environment.mount_target}']
     assert ('network', 'create', '--internal', environment.network) in calls

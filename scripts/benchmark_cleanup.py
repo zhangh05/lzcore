@@ -21,7 +21,11 @@ def drain_delegations(
 
     try:
         for row in owned():
-            if row["status"] in {"created", "running"}:
+            environment = row.get("coding", {}).get("environment")
+            if row["status"] in {"created", "running"} or (
+                row["status"] == "cancelled" and environment
+                and not environment.get("cleanup_confirmed")
+            ):
                 client.invoke(
                     "agent.manage",
                     {"action": "cancel", "subtask_id": row["subtask_id"]},

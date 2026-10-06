@@ -37,6 +37,27 @@ for (let i = 0; i < 300000; i++) {
 console.log('native-gc-control-survived');
 """
 
+TEMP_NATIVE_COMMAND = (
+    "mkdir -p /tmp/lzcore-native-control && "
+    "cp probe.node probe.cjs /tmp/lzcore-native-control/ && "
+    "cd /tmp/lzcore-native-control && node --max-old-space-size=32 probe.cjs"
+)
+
+
+def verify_temporary_native_addon(client, context, mode: str):
+    """Load the same compiled addon from ephemeral storage through ToolRuntime."""
+    observed = client.invoke("exec.run", {
+        "action": "shell", "command": TEMP_NATIVE_COMMAND, "timeout": 120,
+    }, context=context)
+    output = observed.output or {}
+    return {
+        "name": f"temporary_native_addon_gc_and_exit_{mode}",
+        "passed": observed.status == "succeeded" and output.get("exit_code") == 0
+        and output.get("stdout", "").strip() == "native-gc-control-survived",
+        "runtime_status": observed.status, "exit_code": output.get("exit_code"),
+        "runner": output.get("runner"), "stderr": output.get("stderr", "")[:1200],
+    }
+
 
 def verify_native_addon_gc(client, context, project_prefix: str, rounds: int = 3):
     """Compile against bundled headers; require GC, full execution and exit 0."""

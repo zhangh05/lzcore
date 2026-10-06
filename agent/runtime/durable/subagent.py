@@ -704,12 +704,13 @@ def cancel_subagent_task(subtask_id: str, ws_id: str) -> dict:
     task = _load_task(ws_id, subtask_id)
     if not task or task.workspace_id != ws_id:
         return {"ok": False, "error": "subtask not found"}
-    if task.status in {"succeeded", "failed", "cancelled"}:
+    if task.status in {"succeeded", "failed"}:
         return {
             "ok": False,
             "error": f"subtask is already {task.status}",
             "status": task.status,
         }
+    already_cancelled = task.status == "cancelled"
     _cancel_event(ws_id, subtask_id).set()
     if task.status not in {"succeeded", "failed", "cancelled"}:
         task.status = "cancelled"
@@ -718,6 +719,12 @@ def cancel_subagent_task(subtask_id: str, ws_id: str) -> dict:
         _save_task(task)
     if task.status != "cancelled":
         return {"ok": False, "error": f"subtask is already {task.status}", "status": task.status}
+    cleanup = {}
+    if task.coding:
+        from .coding_team import cancel_execution
+        cleanup = cancel_execution(task)
+    if already_cancelled:
+        return {"ok": False, "error": "subtask is already cancelled", "status": task.status, **cleanup}
     from agent.runtime.durable.trajectory import _live_tasks
     live = _live_tasks.get(subtask_id)
     if live is not None:
@@ -725,7 +732,7 @@ def cancel_subagent_task(subtask_id: str, ws_id: str) -> dict:
     if task.coding:
         from .coding_dispatch import dispatch_dependents
         dispatch_dependents(task)
-    return {"ok": True, "subtask_id": subtask_id, "status": task.status}
+    return {"ok": True, "subtask_id": subtask_id, "status": task.status, **cleanup}
 
 
 def list_subagent_tasks(ws_id: str, limit: int = 200) -> list[dict]:

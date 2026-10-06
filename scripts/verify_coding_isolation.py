@@ -63,9 +63,10 @@ def main() -> int:
             probe("cwd_traversal_denied", {"action": "shell", "working_dir": "../../", "command": "echo escaped"}, False)
             probe("registry_tls_dependency_allowed", {"action": "shell", "command": "npm view react version", "timeout": 30}, True)
             if index == 0:
-                from scripts.benchmark_native_addon_probe import verify_native_addon_gc
+                from scripts.benchmark_native_addon_probe import verify_native_addon_gc, verify_temporary_native_addon
 
                 checks.extend(verify_native_addon_gc(client, context, "files/data/project"))
+                checks.append(verify_temporary_native_addon(client, context, "implementation"))
                 probe("native_dependency_compiles_using_image_headers", {"action": "shell", "command":
                     "npm_config_build_from_source=true npm install better-sqlite3@13.0.3", "timeout": 180}, True)
                 probe("compiled_sqlite_runs_real_query", {"action": "shell", "command":
@@ -87,6 +88,11 @@ def main() -> int:
             compiler_probe = "node_modules/.bin/tsc --version"
             environment.configure_validation([rebuild, poison, compiler_probe])
             if index == 0:
+                from scripts.benchmark_native_addon_probe import TEMP_NATIVE_COMMAND
+
+                checks.append(verify_temporary_native_addon(client, context, "readonly"))
+                environment.configure_validation([rebuild, poison, compiler_probe, TEMP_NATIVE_COMMAND])
+                checks.append(verify_temporary_native_addon(client, context, "validation_snapshot"))
                 probe("dependency_bin_link_preserved_in_validation_snapshot", {"action":"shell", "command":compiler_probe, "timeout":30}, True)
             probe("standard_rebuild_deletes_output_root_in_snapshot", {"action":"shell", "command":rebuild, "timeout":30}, True)
             checks.append({"name":"validated_output_promoted", "passed": (project / "dist/rebuilt.txt").is_file() and (project / "dist/rebuilt.txt").read_text() == "rebuilt"})
