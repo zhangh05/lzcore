@@ -31,7 +31,7 @@ def main() -> int:
     os.environ["LZCORE_WORKSPACE_ROOT"] = str(args.output / "storage")
     from core.tools.context import ToolRuntimeContext
     from core.tools.integration import get_default_tool_runtime_client
-    from core.tools.project_execution import isolated_project
+    from core.tools.project_execution import isolated_project, reconcile_environment
     from storage.paths import workspace_root
     from storage.project_changes import quiescent_project
     client = get_default_tool_runtime_client()
@@ -51,6 +51,12 @@ def main() -> int:
             checks.append({"name": name, "passed": passed, "runtime_status": result.status})
         with isolated_project(ws, project, args.base_port + index) as environment:
             descriptor = environment.descriptor()
+            try:
+                reconcile_environment(descriptor)
+                still_live_rejected = False
+            except ValueError as exc:
+                still_live_rejected = str(exc) == "coding_execution_resources_unresolved"
+            checks.append({"name": "readback_does_not_resolve_live_container", "passed": still_live_rejected})
             probe("authorized_default_project_source_write", {"action": "shell", "command": "printf 'scoped' > owned.txt"}, True)
             checks.append({"name": "default_write_in_project", "passed": (project / "owned.txt").exists() and (project / "owned.txt").read_text() == "scoped"})
             probe("explicit_workspace_project_directory", {"action": "shell", "working_dir": "files/data/project", "command": "test -f owned.txt && pwd"}, True)
@@ -128,6 +134,14 @@ def main() -> int:
             probe("late_child_never_falls_back_to_host", {"action": "shell", "command": "touch late-host-write"}, False)
         checks.append({"name": "late_write_absent", "passed": not (project / "late-host-write").exists()})
         checks.append({"name": "kernel_cleanup_confirmed", "passed": environment.cleanup_confirmed})
+        # Simulate loss of the cleanup acknowledgement, preserving the actual
+        # original daemon/resource identity. Recovery only reads Docker state.
+        unconfirmed = {**environment.descriptor(), "cleanup_confirmed": False}
+        recovered = reconcile_environment(unconfirmed)
+        checks.append({"name": "lost_cleanup_ack_readback_confirms_original_resources_absent",
+                       "passed": recovered["cleanup_confirmed"] and recovered["observed_via"] == "docker_readback"
+                       and recovered["runtime_resources"] == unconfirmed["runtime_resources"]
+                       and recovered["daemon_id"] == unconfirmed["daemon_id"]})
         reports.append({"round": index + 1, "environment": descriptor, "checks": checks})
         print(json.dumps({"round": index + 1, "passed": all(item["passed"] for item in checks)}), flush=True)
     (args.output / "report.json").write_text(json.dumps(reports, indent=2), encoding="utf-8")

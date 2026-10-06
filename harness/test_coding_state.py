@@ -58,9 +58,11 @@ def test_concurrent_reviewers_cannot_hide_peer_failure_with_a_pass(team):
     state.start_review(peer2, state.candidate(producer))
     state.record_judgement(peer1, {**prior['judgement'], 'verdict': 'fail', 'blocking_findings': ['failure']})
     state.record_judgement(peer2, prior['judgement'])
-    state.finish_review(peer1, validation=prior['validation'], resources=prior['resources'])
+    state.record_review_validation(peer1, prior['validation'])
+    state.finish_review(peer1, resources=prior['resources'])
     assert state.candidate(producer)['state'] == state.CandidateState.REVIEWING
-    state.finish_review(peer2, validation=prior['validation'], resources=prior['resources'])
+    state.record_review_validation(peer2, prior['validation'])
+    state.finish_review(peer2, resources=prior['resources'])
     assert state.candidate(producer)['state'] == state.CandidateState.REJECTED
     assert not state.accepted_reviews(state.candidate(producer))
     reassessment = team.spawn('qa_agent', review=first['subtask_id'])
@@ -152,6 +154,8 @@ def test_stopped_legacy_candidate_and_qa_import_exact_evidence_without_running_w
     delete_json_record('parent-ws', ('coding-state', 'candidates', state.candidate_id(first['subtask_id']) + '.json'))
     delete_json_record('parent-ws', ('coding-state', 'reviews', state.review_id(qa['subtask_id']) + '.json'))
     worker = subagent._load_task('parent-ws', first['subtask_id'])
+    for key in ('state_store_version', 'candidate_id'):
+        worker.coding.pop(key, None)
     imported = state.ensure_candidate(worker)
     assert imported['state'] == state.CandidateState.INTEGRATED and imported['legacy_import']
     assert state.accepted_reviews(imported)

@@ -272,8 +272,15 @@ never as the underlying model or provider.
   calls with complete schema-valid arguments, not printed JSON or invented tools.
 - Prefer the smallest useful read before a mutation; reuse sufficient current evidence.
   Parallelize independent reads, order dependent steps and mutations. Coordinated calls
-  may use plan_step_id, plan_depends_on and plan_bindings; bind declared safe result fields
-  only. Consume structured output directly; use scripts when transformation needs them.
+  may omit all five optional orchestration fields for a single call:
+  plan_step_id names a logical step; successful ids are immutable, failed ids may be reused
+  with corrected arguments. plan_depends_on lists prerequisite ids that must all succeed.
+  plan_bindings maps destination arguments to steps.<id>.output (whole successful result)
+  or steps.<id>.output.<published_field>; use declared safe result bindings only.
+  plan_failure defaults to replan (correct/replace); continue permits independent branches
+  only, stop ends tool execution. Runtime safety still applies. plan_goal_ids associates
+  calls with exact RUNTIME GOAL LOOP ids; it does not prove completion.
+  Consume structured output directly; use scripts when transformation needs them.
 - A bounded evidence_projection with artifact_ref/content_digest is partial evidence.
   Treat omitted content as unknown; read relevant missing sections when needed.
 - All tools remain available to the main Agent within runtime policy. Guidance helps

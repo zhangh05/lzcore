@@ -49,11 +49,16 @@ def record_qa_review(task, review):
     if any(not text.strip() for text in texts):
         raise ValueError("empty_qa_review_text")
     review = redact_value(review)
-    review.update(candidate_digest=task.coding["review_candidate_digest"],
-                  review_subtask_id=task.coding["review_subtask_id"])
+    from .coding_state import review as read_review
+    binding = read_review(task)
+    if not binding:
+        raise ValueError("coding_review_unavailable")
+    from storage.coding_state_store import read
+    target = read(task.workspace_id, "candidates", binding["candidate_id"])
+    review.update(candidate_digest=binding["candidate_digest"],
+                  review_subtask_id=target["producer_task_id"])
     if review["verdict"] == "pass" and review["blocking_findings"]:
         review.update(proposed_verdict="pass", verdict="fail")
-    task.coding["qa_review"] = review
     from .coding_state import record_judgement
     record_judgement(task, review)
     _save_task(task)
@@ -66,14 +71,18 @@ def check_qa(task):
     from .subagent import _cancel_event, _save_task
     from .subagent_control import cancellation_probe
 
-    assignment = task.coding
-    source = project_path(assignment["branch_workspace"], assignment["project_dir"])
-    digest = manifest_digest(source_manifest(source, assignment.get("generated_paths")))
-    from .coding_state import review, record_review_validation
-    recorded = review(task)
-    cached = (recorded or {}).get("validation") or assignment.get("qa_validation") or {}
+    from .coding_state import review as read_review
+    assignment = read_review(task)
+    if not assignment:
+        raise ValueError("coding_review_unavailable")
+    from .coding_state import record_review_validation
+    cached = assignment.get("validation") or {}
     if cached.get("status") == "unknown":
         return cached
+    if assignment["state"] != "running":
+        return cached
+    source = project_path(assignment["branch_workspace"], assignment["project_dir"])
+    digest = manifest_digest(source_manifest(source, assignment.get("generated_paths")))
     if cached.get("source_digest") == digest and cached.get("status") == "passed":
         return cached
     status, checks = "passed", []
@@ -101,7 +110,6 @@ def check_qa(task):
             status = "failed"
     result = {"status": status, "source_digest": digest, "checks": checks,
               "automatic_retry_allowed": status != "unknown"}
-    assignment.update(qa_validation=result, validation=checks)
     record_review_validation(task, result)
     _save_task(task)
     return result
@@ -117,32 +125,28 @@ def _reject(task, observation):
 
 
 def review_qa_proposal(task, proposal):
-    """Check recorded judgement and executable evidence; never infer PASS from prose."""
-    from .subagent import _save_task
-    # Older callers may still return the v1 judgement as their final answer.
-    # New workers submit it through the tool; prose is retained, never scored.
-    if not task.coding.get("qa_review"):
+    """Review Store owns judgement/checks; final-answer parsing is legacy input."""
+    from .coding_state import review as read_review, record_review_report
+    recorded = read_review(task)
+    if not recorded:
+        raise ValueError("coding_review_unavailable")
+    if recorded["validation"].get("status") == "unknown":
+        return _reject(task, {**recorded["validation"], "automatic_retry_allowed": False})
+    if not recorded.get("judgement"):
         try:
             record_qa_review(task, json.loads(proposal))
         except (ValueError, TypeError):
-            task.coding["qa_invalid_proposal"] = redact_value(proposal)
-            _save_task(task)
+            record_review_report(task, redact_value(proposal), invalid=True)
             return _reject(task, {"status": "failed", "review_verdict": "unknown",
                                  "automatic_retry_allowed": False})
-    review = task.coding["qa_review"]
-    task.coding["qa_final_report"] = redact_value(proposal)
-    _save_task(task)
-    if (task.coding.get("qa_validation") or {}).get("status") == "unknown":
-        review.update(proposed_verdict=review["verdict"], verdict="unknown")
-        _save_task(task)
-        return _reject(task, {**task.coding["qa_validation"], "automatic_retry_allowed": False})
-    if review["verdict"] != "pass":
-        return _reject(task, {"status": "failed", "review_verdict": review["verdict"],
-            "terminal_error": "coding_qa_review_rejected", "final_response": json.dumps(review, ensure_ascii=False),
+    recorded = read_review(task)
+    judgement = recorded["judgement"]
+    record_review_report(task, redact_value(proposal))
+    if judgement["verdict"] != "pass":
+        return _reject(task, {"status": "failed", "review_verdict": judgement["verdict"],
+            "terminal_error": "coding_qa_review_rejected", "final_response": json.dumps(judgement, ensure_ascii=False),
             "automatic_retry_allowed": False})
     validation = check_qa(task)
     if validation["status"] != "passed":
-        review.update(proposed_verdict="pass", verdict="unknown" if validation["status"] == "unknown" else "fail")
-        _save_task(task)
         return _reject(task, {**validation, "terminal_error": "coding_independent_validation_failed"})
     return {**validation, "review_verdict": "pass"}

@@ -45,7 +45,7 @@ def test_agent_contract_exposes_current_runtime_actions():
 
     properties = get_contract("agent.manage").input_schema["properties"]
     actions = properties["action"]["enum"]
-    assert actions == ["spawn", "start", "list", "get", "status", "cancel", "merge"]
+    assert actions == ["spawn", "start", "list", "get", "status", "cancel", "merge", "reconcile"]
     assert "instruction" in properties
     assert "profile_id" in properties
     assert properties["profile_id"]["enum"] == list(BUILTIN_PROFILES)

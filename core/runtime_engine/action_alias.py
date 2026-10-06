@@ -183,7 +183,7 @@ _CANONICAL_ACTIONS: Final[dict[str, frozenset[str]]] = {
         "search", "read", "list", "chunk", "import", "reindex",
     }),
     "agent.manage": frozenset({
-        "spawn", "start", "list", "get", "cancel", "status", "merge",
+        "spawn", "start", "list", "get", "cancel", "status", "merge", "reconcile",
     }),
     "browser.manage": frozenset({
         "navigate", "snapshot", "screenshot", "click", "type", "extract",

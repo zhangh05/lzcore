@@ -54,6 +54,7 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("agent.manage", "spawn"): ("instruction",),
     ("agent.manage", "cancel"): ("subtask_id",),
     ("agent.manage", "start"): ("subtask_id",),
+    ("agent.manage", "reconcile"): ("subtask_id",),
     ("agent.manage", "merge"): (),
     ("system.manage", "context_index"): (),
     ("system.manage", "context_read"): ("checkpoint_id", "message_index"),
@@ -207,6 +208,7 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("delete",), 
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("references", "reconcile_trash_preview"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("import", "reconcile_trash"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.review", ("",), _WRITE))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("reconcile",), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("list", "get", "status"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("spawn", "start", "cancel", "merge"), _EXECUTE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("knowledge.manage", ("search", "read", "list", "chunk"), _READ))

@@ -513,7 +513,8 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 result.summary = "Subagent result persistence failed"
         else:
             result.status = "failed"
-            review = task.coding.get("qa_review") if task.profile_id == "qa_agent" else None
+            from .coding_state import review as read_review
+            review = (read_review(task) or {}).get("judgement") if task.profile_id == "qa_agent" else None
             runtime_errors = list(getattr(llm_result, "errors", []) or []) if llm_result is not None else []
             if runtime_errors:
                 result.errors.extend(str(error)[:300] for error in runtime_errors[:10])
@@ -884,6 +885,9 @@ def _save_task(task: SubagentTask):
     from storage.subagent_store import save_subagent
     task.workspace_id = _validated_workspace_id(task.workspace_id)
     _validated_subtask_id(task.subtask_id)
+    if task.coding:
+        from .coding_state import project_task
+        project_task(task)
     saved = save_subagent(task.workspace_id, task.subtask_id, asdict(task))
     for field in ("status", "summary", "finished_at", "errors", "warnings"):
         setattr(task, field, saved[field])

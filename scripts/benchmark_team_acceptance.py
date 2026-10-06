@@ -18,9 +18,19 @@ def verify_team(workspace_id: str, session_id: str, project_dir: str) -> dict:
         producer = tasks.get(candidate["producer_task_id"])
         assert producer and producer.get("profile_id") in {"coding_agent", "frontend_agent"}
         assert producer["parent_task_id"] == candidate["parent_task_id"]
-        assert candidate["resources"].get("closed") and candidate["resources"].get("cleanup_confirmed")
-        completed = candidate["validation"]
-        assert completed.get("status") == "passed" and completed.get("source_digest") == candidate["source_digest"]
+        recovery = candidate.get("execution_recovery")
+        if recovery:
+            _verify_execution_recovery(candidate, tasks)
+        else:
+            assert candidate["resources"].get("closed") and candidate["resources"].get("cleanup_confirmed")
+            completed = candidate["validation"]
+            assert completed.get("status") == "passed" and completed.get("source_digest") == candidate["source_digest"]
+        for identity in candidate["review_ids"]:
+            previous = read(workspace_id, "reviews", identity)
+            assert previous and previous["candidate_id"] == candidate["id"]
+            assert previous["state"] != "running"
+            if previous["state"] == "execution_unknown":
+                assert recovery and identity in recovery["resolved_review_ids"]
         source = source_manifest(project_path(candidate["branch_workspace"], project_dir), candidate["generated_paths"])
         assert source and manifest_digest(source) == candidate["source_digest"]
         accepted = candidate.get("accepted_reviews") or {}
@@ -75,6 +85,9 @@ def _verify_review(review, candidate, tasks, kind):
             and review['session_id'] == candidate['session_id']
             and review['parent_task_id'] == candidate['parent_task_id']
             and review['change_digest'] == candidate['change']['digest']), message
+    recovery = candidate.get('execution_recovery')
+    if recovery:
+        assert review['review_round'] > recovery['review_round'], 'reconciled execution requires new QA'
     worker = tasks.get(review['reviewer_task_id'])
     assert worker and worker['profile_id'] == 'qa_agent' and worker['parent_task_id'] == candidate['parent_task_id'], message
     judgement = review.get('judgement') or {}
@@ -92,3 +105,34 @@ def _verify_review(review, candidate, tasks, kind):
                and item['result'].get('execution_outcome') != 'unknown'
                and not item['result'].get('execution_may_continue') for item in checks), message
     assert review['resources'].get('closed') and review['resources'].get('cleanup_confirmed'), message
+
+
+def _verify_execution_recovery(candidate, tasks):
+    """Verify stored read-back independently; unknown checks are never PASS."""
+    recovery = candidate['execution_recovery']
+    assert recovery['source_digest'] == candidate['source_digest']
+    originals = [candidate, *[read(candidate['workspace_id'], 'reviews', identity)
+                              for identity in candidate['review_ids']
+                              if identity in recovery['resolved_review_ids']]]
+    observations = {item['record_id']: item for item in recovery['observations']}
+    for original in originals:
+        assert original
+        identity = original.get('reviewer_task_id') or original['producer_task_id']
+        assert tasks[identity]['status'] not in {'created', 'running'}
+        observation = observations[original['id']]
+        _verify_resource_readback(original['resources'], observation['resources'])
+        checked = {item['index']: item['resources'] for item in observation['checks']}
+        for index, check in enumerate(original['validation'].get('checks') or []):
+            descriptor = check.get('result', {}).get('validation_environment')
+            if descriptor:
+                _verify_resource_readback(descriptor, checked[index])
+
+
+def _verify_resource_readback(original, observed):
+    assert observed.get('closed') and observed.get('cleanup_confirmed')
+    if observed.get('observed_via') == 'recorded_cleanup':
+        assert original.get('closed') and original.get('cleanup_confirmed')
+    else:
+        assert observed.get('observed_via') == 'docker_readback'
+        assert observed['runtime_resources'] == original['runtime_resources']
+        assert observed['daemon_id'] and observed['daemon_id'] == original['daemon_id']

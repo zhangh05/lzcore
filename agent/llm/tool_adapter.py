@@ -70,39 +70,27 @@ def tool_spec_to_openai_function(tool: dict) -> dict:
     params_def["properties"].update({
         "plan_step_id": {
             "type": "string",
-            "description": (
-                "Optional logical step id. Successful ids are immutable; "
-                "reuse a failed id only with corrected arguments."
-            ),
+            "description": "Logical step id; see shared orchestration contract.",
         },
         "plan_depends_on": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Prerequisite step ids; all must succeed before this call runs.",
+            "description": "Prerequisite step ids.",
         },
         "plan_bindings": {
             "type": "object",
-            "description": (
-                "Map destination arguments to steps.<id>.output (whole successful result) "
-                "or steps.<id>.output.<published_field>; use declared safe bindings only."
-            ),
+            "description": "Destination arguments mapped to declared step result paths.",
         },
         "plan_failure": {
             "type": "string",
             "enum": ["replan", "stop", "continue"],
             "default": "replan",
-            "description": (
-                "On failure: replan=correct/replace; continue=independent branches only; "
-                "stop=end tool execution. Runtime safety still applies."
-            ),
+            "description": "Failure handling; see shared orchestration contract.",
         },
         "plan_goal_ids": {
             "type": "array",
             "items": {"type": "string"},
-            "description": (
-                "Exact ids from RUNTIME GOAL LOOP addressed by this corrected/alternative call; "
-                "runtime reconciles evidence, not self-reported completion."
-            ),
+            "description": "RUNTIME GOAL LOOP ids addressed by this call.",
         },
     })
 

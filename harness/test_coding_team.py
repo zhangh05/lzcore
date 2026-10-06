@@ -834,6 +834,13 @@ def test_explicit_revision_can_copy_cancelled_source_only_with_known_failed_chec
     # operator cancellation. Preserve that terminal fact, never resurrect it.
     stopped=subagent.SubagentTask(parent_task_id='parent-task',workspace_id='parent-ws',session_id='parent-session',
         profile_id='coding_agent',status='cancelled',coding=deepcopy(target.coding))
+    from agent.runtime.durable.coding_state import capture
+    from storage.project_changes import source_manifest, manifest_digest, changeset, project_path
+    source=source_manifest(project_path(stopped.coding['branch_workspace'],stopped.coding['project_dir']),stopped.coding['generated_paths'])
+    stopped.coding.pop('candidate_id',None)
+    capture(stopped,source_digest=manifest_digest(source),baseline=stopped.coding['baseline'],
+        change=changeset(stopped.coding['baseline'],source,stopped.coding['responsibilities']),
+        validation=stopped.coding['completion_validation'],resources=stopped.coding['environment'])
     subagent._save_task(stopped)
     task=subagent.SubagentTask(parent_task_id='parent-task',workspace_id='parent-ws',session_id='parent-session',profile_id='coding_agent')
     supplied={'project_dir':'files/data/app','responsibilities':['src'],'validation_commands':['true'],'revision_subtask_id':stopped.subtask_id}

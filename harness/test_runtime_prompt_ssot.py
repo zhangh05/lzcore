@@ -471,3 +471,39 @@ def test_qa_prompt_uses_published_review_tool_without_final_format_gate():
     from core.tools.canonical_registry import CANONICAL_REGISTRY
     from agent.runtime.durable.coding_reviews import QA_REVIEW_SCHEMA
     assert CANONICAL_REGISTRY['agent.review'].input_schema['properties']['review'] == QA_REVIEW_SCHEMA
+
+
+def test_compact_orchestration_keeps_complete_catalog_and_constraints():
+    from copy import deepcopy
+    from core.tools.integration import get_default_tool_runtime_client
+    from agent.runtime.ssot_catalog import build_runtime_catalog
+    from core.runtime_engine.loop_tool_catalog import _build_cached_tool_definitions
+
+    client = get_default_tool_runtime_client()
+    public = {item['tool_id']: item for item in client.list_tools()
+              if item.get('enabled') is not False and item.get('callable_by_llm') is not False and not item.get('forbidden')}
+    catalog = build_runtime_catalog(client)
+    tools = {item['function']['name']: item['function'] for item in _build_cached_tool_definitions(catalog)}
+    assert set(tools) == {identity.replace('.', '__') for identity in public}
+    fields = {'plan_step_id', 'plan_depends_on', 'plan_bindings', 'plan_failure', 'plan_goal_ids'}
+    for identity, spec in public.items():
+        parameters = tools[identity.replace('.', '__')]['parameters']
+        original = spec['input_schema']
+        assert set(parameters['properties']) == set(original.get('properties', {})) | fields
+        assert parameters.get('required', []) == original.get('required', [])
+        for name, schema in original.get('properties', {}).items():
+            # Only generated explanatory defaults may be added; no published
+            # constraint, nested schema, action or description may disappear.
+            actual = deepcopy(parameters['properties'][name])
+            if 'description' not in schema:
+                actual.pop('description', None)
+            if 'type' not in schema and not any(k in schema for k in ('enum','oneOf','anyOf','allOf')):
+                actual.pop('type', None)
+            assert actual == schema
+        assert parameters['properties']['plan_failure']['enum'] == ['replan', 'stop', 'continue']
+    prompt = build_runtime_system_prompt()
+    for text in ('successful ids are immutable', 'must all succeed', 'steps.<id>.output',
+                 'continue permits independent branches', 'stop ends tool execution', 'does not prove completion'):
+        assert text in prompt
+    assert 'reconcile' in tools['agent__manage']['parameters']['properties']['action']['enum']
+    assert 'Safe result bindings' in tools['exec__run']['description']

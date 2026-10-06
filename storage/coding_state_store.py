@@ -14,7 +14,8 @@ _IMMUTABLE = {
     "candidates": ("producer_task_id", "project_dir", "branch_workspace", "source_digest", "baseline",
                    "change", "validation", "resources", "responsibilities", "generated_paths",
                    "validation_commands", "revision_of", "required_review_kinds", "failure_attributions"),
-    "reviews": ("reviewer_task_id", "candidate_id", "candidate_digest", "change_digest", "kind", "review_round"),
+    "reviews": ("reviewer_task_id", "candidate_id", "candidate_digest", "change_digest", "kind", "review_round",
+                "branch_workspace", "project_dir", "baseline", "validation_commands", "generated_paths"),
     "projects": ("project_dir",),
 }
 
@@ -70,7 +71,7 @@ def change(workspace_id: str, kind: str, identity: str, update, *, expected_revi
                     raise ValueError("coding_record_identity_is_immutable")
             if kind == "reviews" and previous.get("state") in {"completed", "interrupted", "execution_unknown"}:
                 if any(previous.get(key) != result.get(key) for key in
-                       ("state", "judgement", "validation", "resources", "outcome", "final_report", "failure_attributions")):
+                       ("state", "judgement", "validation", "resources", "outcome", "final_report", "invalid_proposal", "failure_attributions")):
                     raise ValueError("coding_completed_review_is_immutable")
         result["revision"] = revision + 1
         return result, deepcopy(result)

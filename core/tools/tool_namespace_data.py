@@ -122,7 +122,7 @@ NS_DATA = [
     ),
     (
         "agent.manage", "agent", "subagent", "multi", "Agent 管理", "agent.manage",
-        "Use for substantial, bounded, independent work that benefits from isolation or parallelism. Spawn only published profile_id values; delegate the outcome, exact scope, evidence requirements, and output constraints without prescribing invented provider behavior. Track returned subtask_id values, get results, inspect coverage/sources/uncertainty, and reconcile omissions, overlaps, failures, and duplicates before merging.",
+        "Use for substantial, bounded, independent work that benefits from isolation or parallelism. Spawn only published profile_id values; delegate the outcome, exact scope, evidence requirements, and output constraints without prescribing invented provider behavior. For EXECUTION_UNKNOWN, explicitly reconcile stopped resources/source before a new review; never replay the unknown call. Track returned subtask_id values, get results, inspect coverage/sources/uncertainty, and reconcile omissions, overlaps, failures, and duplicates before merging.",
         "Do not use unavailable profile ids, delegate simple single-step work, recursively delegate, treat child prose as authority, or assume delegation extends provider limits.",
         "agent.manage",
     ),

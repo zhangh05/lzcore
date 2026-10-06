@@ -147,6 +147,7 @@ class DockerProjectEnvironment:
         self.closed = False
         self.started = False
         self.image_id = ""
+        self.daemon_id = ""
         self.cleanup_confirmed = False
         self.cleanup_errors: list[str] = []
 
@@ -171,6 +172,9 @@ class DockerProjectEnvironment:
         if self.started or self.closed:
             raise ValueError("isolated_execution_invalid_lifecycle")
         try:
+            self.daemon_id = self._docker("info", "--format", "{{.ID}}").stdout.strip()
+            if not self.daemon_id:
+                raise RuntimeError("isolated_execution_daemon_identity_unavailable")
             self.image_id = self._docker(
                 "image", "inspect", "--format", "{{.Id}}", self.image
             ).stdout.strip()
@@ -322,6 +326,8 @@ class DockerProjectEnvironment:
                              "shell_path_basis": "container_cwd", "container_cwd": self.mount_target},
             },
             "image_id": self.image_id,
+            "daemon_id": self.daemon_id,
+            "runtime_resources": {"project": self.name, "broker": self.broker, "network": self.network},
             "network": "internal_with_dependency_only_tls_egress",
             "preview_port": self.port,
             "preview_origin": f"http://127.0.0.1:{self.port}",
@@ -495,3 +501,36 @@ def isolated_project(workspace_id: str, project: Path, port: int, **options):
     finally:
         # Keep the closed binding so delayed operations cannot execute on host.
         environment.close()
+
+
+def reconcile_environment(descriptor):
+    """Read persisted runtime identity after restart; do not stop or launch anything."""
+    if descriptor.get("closed") and descriptor.get("cleanup_confirmed"):
+        return {"closed": True, "cleanup_confirmed": True, "observed_via": "recorded_cleanup"}
+    names = descriptor.get("runtime_resources") or {}
+    project = names.get("project", "")
+    if (not re.fullmatch(r"lzcore-project-[0-9a-f]{32}", project)
+            or names.get("broker") != project + "-packages"
+            or names.get("network") != project + "-network" or not descriptor.get("daemon_id")):
+        raise ValueError("coding_execution_readback_identity_unavailable")
+    cli, client_env = _client_configuration()
+    def read(*args):
+        try:
+            return subprocess.run([*cli, *args], env=client_env, capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            raise ValueError("coding_execution_readback_unavailable") from None
+    daemon = read("info", "--format", "{{.ID}}")
+    if daemon.returncode or daemon.stdout.strip() != descriptor["daemon_id"]:
+        raise ValueError("coding_execution_readback_daemon_mismatch")
+    for kind, key in (("container", "project"), ("container", "broker"), ("network", "network")):
+        name = names[key]
+        result = read(kind, "inspect", name)
+        absence = (rf"(?:No such container: |No such object: ){re.escape(name)}" if kind == "container"
+                   else rf"network {re.escape(name)} not found")
+        error = result.stderr.strip()
+        if (result.returncode != 1 or result.stdout.strip() not in {"", "[]"}
+                or not re.fullmatch(r"(?:Error(?: response from daemon)?: )?" + absence, error)):
+            raise ValueError("coding_execution_resources_unresolved")
+    return {"closed": True, "cleanup_confirmed": True, "observed_via": "docker_readback",
+            "runtime_resources": names, "daemon_id": descriptor["daemon_id"]}

@@ -36,6 +36,7 @@ _REVIEWABLE = frozenset({CandidateState.READY, CandidateState.REVIEWING,
                        CandidateState.ACCEPTED, CandidateState.REJECTED,
                        CandidateState.INCOMPLETE})
 _TRANSITIONS = {
+    "execution_reconciled": {CandidateState.EXECUTION_UNKNOWN: CandidateState.INCOMPLETE},
     "review_started": {value: CandidateState.REVIEWING for value in _REVIEWABLE},
     "review_accepted": {CandidateState.REVIEWING: CandidateState.ACCEPTED},
     "review_rejected": {CandidateState.REVIEWING: CandidateState.REJECTED},
@@ -78,6 +79,10 @@ def ensure_candidate(task):
     if existing:
         return existing
     assignment = task.coding
+    if assignment.get("candidate_id"):
+        raise ValueError("coding_candidate_unavailable")
+    if assignment.get("state_store_version"):
+        return None
     resources = assignment.get("environment") or {}
     if (task.profile_id == "qa_agent" or task.status in {"created", "running"}
             or not resources.get("closed") or not resources.get("cleanup_confirmed")):
@@ -110,6 +115,9 @@ def ensure_candidate(task):
             current.update(publication={"ok": True, **journal}, legacy_import=True)
             return current
         store.change(task.workspace_id, "candidates", record["id"], publish)
+    task.coding["state_store_version"] = 2
+    from .subagent import _save_task
+    _save_task(task)
     return candidate(task)
 
 
@@ -131,10 +139,18 @@ def _import_legacy_review(task, record):
             or judgement.get("review_subtask_id") != task.subtask_id
             or validate_schema_value("qa_review", judgement, QA_REVIEW_SCHEMA)):
         return
+    source = dict(record["baseline"])
+    for path, item in record["change"]["files"].items():
+        if item["after"] is None:
+            source.pop(path, None)
+        else:
+            source[path] = item["after"]
+    reviewer.coding.setdefault("baseline", source)
     start_review(reviewer, record)
     record_judgement(reviewer, judgement)
-    finish_review(reviewer, validation=facts.get("qa_validation") or {},
-                  resources=facts.get("environment") or {}, final_report=facts.get("qa_final_report", ""))
+    record_review_validation(reviewer, facts.get("qa_validation") or {})
+    record_review_report(reviewer, facts.get("qa_final_report", ""))
+    finish_review(reviewer, resources=facts.get("environment") or {})
     imported = candidate(task)
     if imported["state"] == CandidateState.ACCEPTED and not accepted_reviews(imported):
         raise ValueError("coding_legacy_review_evidence_incomplete")
@@ -211,6 +227,9 @@ def start_review(task, target):
         "session_id": task.session_id, "parent_task_id": task.parent_task_id,
         "reviewer_task_id": task.subtask_id, "candidate_id": target["id"],
         "candidate_digest": target["source_digest"], "change_digest": target["change"]["digest"],
+        "branch_workspace": task.coding["branch_workspace"], "project_dir": target["project_dir"],
+        "baseline": task.coding["baseline"], "validation_commands": target["validation_commands"],
+        "generated_paths": target["generated_paths"],
         "kind": "qa", "state": ReviewState.RUNNING.value, "judgement": None,
         "validation": {}, "resources": {}, "created_at": now_iso(), "updated_at": now_iso(),
     }
@@ -257,7 +276,9 @@ def recover_review_links(workspace_id, identity):
         resources = worker.coding.get("environment") or {}
         if not resources.get("closed") or not resources.get("cleanup_confirmed"):
             raise ValueError("coding_review_binding_cleanup_unconfirmed")
-        validation = worker.coding.get("qa_validation") or {}
+        # The missing Review has no saved judgement/check evidence. Task's
+        # compatibility cache cannot recreate it or grant acceptance.
+        validation = {}
         def restore(previous):
             if previous:
                 return previous
@@ -288,6 +309,17 @@ def record_judgement(task, judgement):
     return store.change(task.workspace_id, "reviews", review_id(task.subtask_id), update)
 
 
+def record_review_report(task, report, *, invalid=False):
+    def update(record):
+        if not record or record["state"] != ReviewState.RUNNING:
+            raise ValueError("coding_review_not_running")
+        record.update(final_report=report, updated_at=now_iso())
+        if invalid:
+            record["invalid_proposal"] = report
+        return record
+    return store.change(task.workspace_id, "reviews", review_id(task.subtask_id), update)
+
+
 def record_review_validation(task, validation):
     def update(record):
         if not record or record["state"] != ReviewState.RUNNING:
@@ -299,28 +331,30 @@ def record_review_validation(task, validation):
     return store.change(task.workspace_id, "reviews", review_id(task.subtask_id), update)
 
 
-def finish_review(task, *, validation, resources, final_report="", interrupted=False):
+def finish_review(task, *, resources, interrupted=False):
     """Close evidence collection independently of the reviewer's Task outcome."""
     def update(record):
         if not record:
             raise ValueError("coding_review_unavailable")
         if record["state"] != ReviewState.RUNNING:
             return record
-        unknown = (validation.get("status") == "unknown" or not resources.get("closed")
+        observed = record["validation"]
+        report = record.get("final_report", "")
+        unknown = (observed.get("status") == "unknown" or not resources.get("closed")
                    or not resources.get("cleanup_confirmed"))
         verdict = (record.get("judgement") or {}).get("verdict", "unknown")
         if unknown or interrupted:
             verdict = "unknown"
-        elif validation.get("status") == "failed":
+        elif observed.get("status") == "failed":
             verdict = "fail"
-        elif validation.get("status") != "passed" and verdict == "pass":
+        elif observed.get("status") != "passed" and verdict == "pass":
             verdict = "unknown"
         record.update(state=(ReviewState.EXECUTION_UNKNOWN.value if unknown else
                              ReviewState.INTERRUPTED.value if interrupted else ReviewState.COMPLETED.value),
-                      outcome=verdict, validation=validation, resources=resources,
-                      final_report=final_report, updated_at=now_iso())
+                      outcome=verdict, validation=observed, resources=resources,
+                      final_report=report, updated_at=now_iso())
         from core.runtime_engine.failure_attribution import coding_checks, observation
-        record["failure_attributions"] = coding_checks(validation, resources, reference=record["id"])
+        record["failure_attributions"] = coding_checks(observed, resources, reference=record["id"])
         if verdict == "fail":
             record["failure_attributions"].append(observation("coding_review_rejected", stage="review", reference=record["id"]))
         elif interrupted:
@@ -347,7 +381,8 @@ def reconcile_reviews(workspace_id, identity):
         # review round while retaining every previous report.
         current = [item for item in reviews if item["review_round"] == record["review_round"]]
         accepted = {}
-        if any(item["state"] == ReviewState.EXECUTION_UNKNOWN for item in reviews):
+        from .coding_recovery import resolved_unknown
+        if any(item["state"] == ReviewState.EXECUTION_UNKNOWN and not resolved_unknown(record, item) for item in reviews):
             state = CandidateState.EXECUTION_UNKNOWN
         elif any(item["state"] == ReviewState.RUNNING for item in reviews):
             state = CandidateState.REVIEWING
@@ -378,11 +413,13 @@ def reconcile_reviews(workspace_id, identity):
 
 def accepted_reviews(record):
     """Recheck review evidence, independent of presentation and Task status."""
+    from .coding_recovery import resolved_unknown
     result = {}
     for identity in record["review_ids"]:
         item = store.read(record["workspace_id"], "reviews", identity)
         if (not item or item["candidate_id"] != record["id"]
-                or item["state"] in {ReviewState.RUNNING, ReviewState.EXECUTION_UNKNOWN}):
+                or item["state"] == ReviewState.RUNNING
+                or item["state"] == ReviewState.EXECUTION_UNKNOWN and not resolved_unknown(record, item)):
             return {}
     for kind in record["required_review_kinds"]:
         identities = record.get("accepted_reviews", {}).get(kind) or []
@@ -403,7 +440,9 @@ def _accepted_review_item(record, item):
     judgement = (item or {}).get("judgement") or {}
     validation = (item or {}).get("validation") or {}
     checks = validation.get("checks") or []
-    if (not item or item["state"] != ReviewState.COMPLETED or item.get("outcome") != "pass"
+    recovery = record.get("execution_recovery") or {}
+    if (not item or recovery and item["review_round"] <= recovery["review_round"]
+            or item["state"] != ReviewState.COMPLETED or item.get("outcome") != "pass"
             or item["candidate_id"] != record["id"] or item["candidate_digest"] != record["source_digest"]
             or item["parent_task_id"] != record["parent_task_id"] or item["session_id"] != record["session_id"]
             or item["change_digest"] != record["change"]["digest"]
@@ -425,11 +464,13 @@ def _accepted_review_item(record, item):
 
 def revision_source(record):
     """A known immutable source may be copied; copying grants no acceptance."""
+    from .coding_recovery import resolved_unknown, stopped_resources
+    recovered = bool(record and stopped_resources(record, record["id"]))
     known = bool(record and record["state"] in {
         CandidateState.READY, CandidateState.ACCEPTED, CandidateState.REJECTED,
         CandidateState.INCOMPLETE, CandidateState.VALIDATION_FAILED,
-    } and record["resources"].get("closed") and record["resources"].get("cleanup_confirmed")
-        and record["validation"].get("status") != "unknown")
+    } and (recovered or record["resources"].get("closed") and record["resources"].get("cleanup_confirmed")
+        and record["validation"].get("status") != "unknown"))
     if not known:
         return False
     for identity in record["review_ids"]:
@@ -437,9 +478,10 @@ def revision_source(record):
         if (not item or item["candidate_id"] != record["id"]
                 or item["candidate_digest"] != record["source_digest"]
                 or item["parent_task_id"] != record["parent_task_id"] or item["session_id"] != record["session_id"]
-                or item["state"] in {ReviewState.RUNNING, ReviewState.EXECUTION_UNKNOWN}
-                or item["validation"].get("status") == "unknown"
-                or not item["resources"].get("closed") or not item["resources"].get("cleanup_confirmed")):
+                or item["state"] == ReviewState.RUNNING
+                or (not resolved_unknown(record, item) and (item["state"] == ReviewState.EXECUTION_UNKNOWN
+                    or item["validation"].get("status") == "unknown"
+                    or not item["resources"].get("closed") or not item["resources"].get("cleanup_confirmed")))):
             return False
     return True
 
@@ -449,9 +491,16 @@ def project_task(task):
     if task.profile_id == "qa_agent":
         record = review(task)
         if record:
+            task.coding.update({key: record[key] for key in
+                ("project_dir", "branch_workspace", "baseline", "generated_paths", "validation_commands") if key in record})
             task.coding.update(review_id=record["id"], candidate_id=record["candidate_id"],
                                qa_review=record.get("judgement") or {},
-                               qa_validation=record.get("validation") or task.coding.get("qa_validation", {}))
+                               qa_validation=record.get("validation") or {},
+                               validation=record.get("validation", {}).get("checks", []),
+                               review_digest=record["change_digest"],
+                               review_candidate_digest=record["candidate_digest"],
+                               qa_final_report=record.get("final_report", ""),
+                               qa_invalid_proposal=record.get("invalid_proposal", ""))
             if record["state"] in {ReviewState.COMPLETED, ReviewState.EXECUTION_UNKNOWN, ReviewState.INTERRUPTED}:
                 task.coding["phase"] = ("qa_unknown"
                     if record["state"] == ReviewState.EXECUTION_UNKNOWN else
@@ -463,7 +512,11 @@ def project_task(task):
                      CandidateState.ACCEPTED: "validated", CandidateState.REJECTED: "qa_rejected",
                      CandidateState.INCOMPLETE: "qa_incomplete", CandidateState.EXECUTION_UNKNOWN: "qa_unknown",
                      CandidateState.PUBLICATION_UNKNOWN: "unknown"}.get(CandidateState(record["state"]), record["state"])
-            task.coding.update(candidate_id=record["id"], candidate_digest=record["source_digest"],
+            task.coding.update({key: record[key] for key in
+                ("project_dir", "branch_workspace", "responsibilities", "generated_paths", "validation_commands")})
+            task.coding.pop("qa_subtask_id", None)
+            task.coding.pop("qa_rejection_subtask_id", None)
+            task.coding.update(state_store_version=2, candidate_id=record["id"], candidate_digest=record["source_digest"],
                                change=record["change"], baseline=record["baseline"],
                                completion_validation=record["validation"], phase=phase)
             if "publication" in record:

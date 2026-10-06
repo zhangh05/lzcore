@@ -557,6 +557,21 @@ def handle_agent_merge(inv: ToolInvocation) -> dict:
         return _error_inv(inv, str(exc)[:200])
 
 
+def handle_agent_reconcile(inv: ToolInvocation) -> dict:
+    """Use the runtime parent's scope and persisted execution identity only."""
+    from agent.runtime.durable.subagent import _load_task
+    from agent.runtime.durable.coding_recovery import reconcile_execution
+    try:
+        task = _load_task(_caller_workspace(inv), inv.arguments["subtask_id"])
+        if (not task or not inv.task_id or task.parent_task_id != inv.task_id
+                or task.session_id != _inv_session_id(inv)
+                or inv.arguments.get("parent_task_id", inv.task_id) != inv.task_id):
+            return _error_inv(inv, "coding_parent_identity_mismatch")
+        return reconcile_execution(task)
+    except (ValueError, OSError) as exc:
+        return _error_inv(inv, str(exc)[:200])
+
+
 def handle_agent_status(inv: ToolInvocation) -> dict:
     """List all running/completed subagent tasks."""
     try:
@@ -587,6 +602,7 @@ __all__ = [
     "handle_agent_get_result",
     "handle_agent_cancel",
     "handle_agent_merge",
+    "handle_agent_reconcile",
     "handle_agent_review",
     "handle_agent_status",
 ]

@@ -33,6 +33,8 @@ def test_container_contract_no_host_mounts_credentials_or_privileges(environment
     def docker(*args, **kwargs):
         calls.append(args)
         result = completed(*args)
+        if args[0] == 'info':
+            result.stdout = 'test-daemon'
         if args[:2] == ('image', 'inspect'):
             result.stdout = 'sha256:' + '1' * 64
         return result
@@ -140,6 +142,8 @@ def test_source_ownership_mounts_and_stable_preview_binding(environment, monkeyp
     def docker(*args, **kwargs):
         calls.append(args)
         result = completed(*args)
+        if args[0] == 'info':
+            result.stdout = 'test-daemon'
         if args[:2] == ('image', 'inspect'):
             result.stdout = 'sha256:' + '1' * 64
         return result
