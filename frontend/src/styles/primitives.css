@@ -118,7 +118,8 @@ textarea.input,
 select.input {
   height: var(--h-control);
   color: var(--console-ink);
-  background: var(--field);
+  /* Keep the shared select chevron instead of resetting its background image. */
+  background-color: var(--field);
   border: 1px solid var(--field-border);
   border-radius: var(--r-8);
   box-shadow: none;

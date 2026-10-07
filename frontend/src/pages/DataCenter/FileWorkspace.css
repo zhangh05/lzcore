@@ -1,6 +1,20 @@
 @layer pages {
 /* File workspace uses the established data panel and focus controls. */
 .file-workspace { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
+.file-workspace .file-space-nav { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 4px 0 12px; border-bottom: 1px solid var(--line-2); }
+.file-space-nav > .btn { flex: 0 0 auto; border-radius: var(--r-pill); }
+.file-space-nav > span { flex: 0 0 auto; font-size: var(--fs-12); color: var(--text-3); }
+.file-workspace .file-space-toolbar { gap: 10px; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r-12); background: var(--surface); }
+.file-space-toolbar > .ui-search { flex: 1 1 240px; }
+.file-space-filters { display: flex; flex: 1 1 390px; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.file-space-filters .input { flex: 1 1 120px; width: 0; min-width: 0; padding-right: 32px; font-size: var(--fs-13); border-color: var(--line); cursor: pointer; }
+.file-space-filters .input:hover { border-color: var(--line-3); }
+.file-space-filters .input:focus-visible { border-color: var(--accent); }
+.file-space-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.file-space-actions .btn { height: var(--h-control); }
+.file-space-import { color: var(--accent); background: var(--accent-soft); border-color: transparent; cursor: pointer; }
+.file-space-import:focus-within { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 2px; }
+.file-space-import:has(input:disabled) { opacity: .5; cursor: default; }
 .file-space-row { align-items: center; }
 .file-space-select { flex: 1; min-width: 0; background: transparent; border: 0; color: inherit; text-align: left; cursor: pointer; padding: 6px; }
 .file-space-select b, .file-space-select small { display: block; overflow-wrap: anywhere; }
@@ -20,7 +34,7 @@
   .page.data-center { overflow-y: auto; overflow-x: hidden; }
   .file-workspace { flex: none; overflow: visible; }
   .file-workspace .data-split { min-height: 0; }
-  .file-workspace .ui-filter-bar { flex-wrap: wrap; }
+  .file-space-toolbar > .ui-search, .file-space-filters { flex-basis: 100%; }
   .file-space-pdf { min-height: 320px; }
 }
 

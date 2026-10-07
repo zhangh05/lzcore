@@ -5,7 +5,7 @@ import { SourceBrowser } from './SourceBrowser';
 import { FileInspection } from './FileInspection';
 import { knowledgeApi, storageApi } from '../../api';
 import { apiRequest } from '../../api/client';
-import { Button, DetailPanel, FilterBar, SearchInput } from '../../components/ui';
+import { Button, DetailPanel, FilterBar, SearchInput, Select } from '../../components/ui';
 import { CodeBlock, EmptyState } from '../../components/common';
 import { confirm } from '../../components/ConfirmDialog';
 import { useToastStore } from '../../stores/toast';
@@ -129,19 +129,23 @@ export function FileWorkspace({ workspaceId, initialFile }: { workspaceId: strin
   }
   const fileUrl = (file: ManagedFile, action: string) => `/api/storage/files/${encodeURIComponent(file.file_id)}/${action}?workspace_id=${encodeURIComponent(workspaceId)}`;
   return <section className="file-workspace" data-testid="file-workspace">
-    <FilterBar>
+    <FilterBar className="file-space-nav">
       {Object.entries({ files: '资料与文件', sources: '工作目录', deliverables: '交付物', history: '历史版本', evidence: '过程资料', recycle: '回收站', governance: '核对与备份' }).map(([key, label]) =>
         <Button key={key} size="sm" variant={view === key ? 'selected' : 'default'} onClick={() => setView(key)}>{label}</Button>)}
       <div className="spacer" /><span>{total} 个文件</span>
     </FilterBar>
     {view === "sources" ? <SourceBrowser workspaceId={workspaceId} /> : view === "governance" ? <FileGovernance workspaceId={workspaceId} /> : <>
-    <FilterBar><SearchInput value={query} onChange={event => setQuery(event.target.value)} placeholder={searchMode === 'content' ? '搜索正文（原文／已建索引文档）' : '搜索名称、路径或来源'} />
-      <select className="select" aria-label="搜索范围" value={searchMode} onChange={event => setSearchMode(event.target.value)}><option value="metadata">名称与路径</option><option value="content">正文</option></select>
-      <select className="select" aria-label="文件目录" value={directory} onChange={event => setDirectory(event.target.value)}><option value="*">所有目录</option>{directories.map(folder => <option key={folder} value={folder}>{folder || '工作区根目录'}</option>)}</select>
-      <select className="select" aria-label="文件排序" value={sort} onChange={event => setSort(event.target.value)}><option value="created">最近创建</option><option value="name">文件名</option><option value="size">文件大小</option></select>
-      <label className="btn sm">导入多个文件<input type="file" multiple disabled={busy} className="file-upload-input" onChange={event => { void upload(Array.from(event.target.files || [])); event.target.value = ''; }} /></label>
+    <FilterBar className="file-space-toolbar"><SearchInput value={query} onClear={() => setQuery('')} onChange={event => setQuery(event.target.value)} placeholder={searchMode === 'content' ? '搜索正文（原文／已建索引文档）' : '搜索名称、路径或来源'} />
+      <div className="file-space-filters">
+      <Select aria-label="搜索范围" value={searchMode} onChange={event => setSearchMode(event.target.value)}><option value="metadata">名称与路径</option><option value="content">正文</option></Select>
+      <Select aria-label="文件目录" value={directory} onChange={event => setDirectory(event.target.value)}><option value="*">所有目录</option>{directories.map(folder => <option key={folder} value={folder}>{folder || '工作区根目录'}</option>)}</Select>
+      <Select aria-label="文件排序" value={sort} onChange={event => setSort(event.target.value)}><option value="created">最近创建</option><option value="name">文件名</option><option value="size">文件大小</option></Select>
+      </div>
+      <div className="file-space-actions">
+      <label className="btn sm file-space-import">导入多个文件<input type="file" multiple disabled={busy} className="file-upload-input" onChange={event => { void upload(Array.from(event.target.files || [])); event.target.value = ''; }} /></label>
       <Button size="sm" disabled={!checked.length || busy} onClick={() => void remove(recycle)}>处理已选 {checked.length} 项</Button>
       <Button size="sm" onClick={refresh}>刷新</Button>
+      </div>
     </FilterBar>
     {error && <div className="callout err" role="alert">{error}</div>}
     {operationResults.length > 0 && <ul aria-label="逐项处理结果">{operationResults.map((item, index) => <li key={index}>{item.name}：{item.error || item.result}</li>)}</ul>}
@@ -168,7 +172,7 @@ export function FileWorkspace({ workspaceId, initialFile }: { workspaceId: strin
           {['csv', 'xlsx', 'docx', 'pptx', 'pdf', 'zip', 'tar'].includes(selected.file_kind) && <FileInspection key={selected.file_id} workspaceId={workspaceId} fileId={selected.file_id} kind={selected.file_kind} />}
           {content && <CodeBlock>{content}</CodeBlock>}
           {offset !== null && <Button size="sm" onClick={() => { const identity = selectedIdentity.current; apiRequest<{ content: string; next_offset?: number }>({ method: 'GET', url: `/storage/files/${selected.file_id}/content`, params: { workspace_id: workspaceId, offset } }).then(result => { if (selectedIdentity.current === identity) { setContent(value => value + result.content); setOffset(result.next_offset ?? null); } }).catch(reason => { if (selectedIdentity.current === identity) setError(String(reason.message || reason)); }); }}>继续读取</Button>}
-          <fieldset className="file-space-organize"><legend>名称与目录</legend><label>文件名<input value={name} onChange={event => setName(event.target.value)} /></label><label>目录<input value={folder} placeholder="例如 项目/资料" onChange={event => setFolder(event.target.value)} /></label><Button size="sm" onClick={() => void organize()}>保存</Button></fieldset>
+          <fieldset className="file-space-organize"><legend>名称与目录</legend><label>文件名<input className="input" value={name} onChange={event => setName(event.target.value)} /></label><label>目录<input className="input" value={folder} placeholder="例如 项目/资料" onChange={event => setFolder(event.target.value)} /></label><Button size="sm" onClick={() => void organize()}>保存</Button></fieldset>
         </>}
         {selected.references.map((ref, index) => <p key={index}>{ref.owner_type} · {ref.relation} · {ref.owner_id}
           {ref.owner_type === 'message' && typeof ref.metadata?.session_id === 'string' && <Button size="sm" onClick={() => { useSessionStore.getState().setCurrentSession(String(ref.metadata?.session_id)); navigate('/workbench'); }}>打开使用会话</Button>}
