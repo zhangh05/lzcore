@@ -5,6 +5,7 @@ import base64
 import ctypes
 from ctypes import wintypes
 import json
+import io
 import os
 import re
 from pathlib import Path
@@ -29,7 +30,12 @@ def wait_until(call, timeout=90):
 
 def verify_packaged_files(page, origin, output):
     """Exercise real FileStore endpoints under the packaged native principal."""
-    result = page.evaluate("""async () => {
+    from PIL import Image
+    from openpyxl import Workbook
+    pdf = io.BytesIO(); Image.new('RGB', (30, 20), '#eeeeee').save(pdf, format='PDF')
+    workbook = io.BytesIO(); book = Workbook(); book.active['A1'] = '=1+2'; book.save(workbook)
+    formats = {'pdf': base64.b64encode(pdf.getvalue()).decode(), 'xlsx': base64.b64encode(workbook.getvalue()).decode()}
+    result = page.evaluate("""async formats => {
       const token = (await (await fetch('/api/local-token')).json()).token;
       const headers = {'X-LZCore-Local-Token': token};
       async function call(path, options={}) {
@@ -47,12 +53,26 @@ def verify_packaged_files(page, origin, output):
       await call('/storage/files/'+fid+'/restore', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workspace_id:'default'})});
       const actual = new Uint8Array(await (await call('/storage/files/'+fid+'/download?workspace_id=default')).arrayBuffer());
       if (actual.length !== bytes.length || actual.some((v,i)=>v!==bytes[i])) throw new Error('restored bytes changed');
+      const checked = {};
+      for (const [kind, encoded] of Object.entries(formats)) {
+        const form = new FormData(); form.append('file', new Blob([Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))]), '真实格式.'+kind);
+        const original = await (await call('/workspaces/default/artifacts/upload', {method:'POST',body:form})).json();
+        const id = original.file.file_id;
+        const structure = await (await call('/storage/files/'+id+'/inspect?workspace_id=default')).json();
+        if (kind === 'xlsx' && structure.units[0].cells[0].formula !== '=1+2') throw new Error('formula lost');
+        if (kind === 'pdf') {
+          const rendered = await (await call('/storage/files/'+id+'/page', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workspace_id:'default',page:1})})).json();
+          const image = new Uint8Array(await (await call('/storage/files/'+rendered.image_file_id+'/preview?workspace_id=default')).arrayBuffer());
+          if (image[0] !== 137 || image[1] !== 80 || image[2] !== 78 || image[3] !== 71) throw new Error('page image unavailable');
+        }
+        checked[kind] = {file_id:id,coverage:structure.coverage};
+      }
       const backup = await (await call('/storage/backup?workspace_id=default')).blob();
       const restore = new FormData(); restore.append('workspace_id','default'); restore.append('file',backup,'files.zip');
       const preview = await (await call('/storage/restore', {method:'POST',body:restore})).json();
       if (!preview.ok || preview.conflicts.length) throw new Error('backup preview conflict');
-      return {ok:true,file_id:fid,bytes_preserved:true,backup_preview:preview,model_requests:0};
-    }""")
+      return {ok:true,file_id:fid,bytes_preserved:true,formats:checked,backup_preview:preview,model_requests:0};
+    }""", formats)
     (output/'files.json').write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
     page.goto(origin+'/data')
     page.get_by_role('tab', name=re.compile('^文件')).click()

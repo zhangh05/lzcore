@@ -127,7 +127,7 @@ included. The field is optional for records produced by older versions.
 | `POST` | `/api/storage/search/rebuild` | Rebuild disposable text/parsed-document index; no model or embedding requests. |
 | `GET` | `/api/storage/sources` | Browse an actual managed source directory by filepath, offset/limit. |
 | `POST` | `/api/storage/sources/move` | Move an actual source path; destination conflicts block; code imports are not rewritten. |
-| `POST` | `/api/storage/reconcile` | Preview or hash-verify pending FileRecord commits; apply=true settles metadata, never replays payload writes. |
+| `POST` | `/api/storage/reconcile` | Read back pending FileRecord/Artifact commits, controlled mutations and interrupted restores; apply=true settles verified metadata, never replays payload writes or infers the writer outcome. |
 | `GET` | `/api/storage/sources/content` | Bounded UTF-8 source preview at an explicit workspace filepath. |
 | `GET` | `/api/storage/health` | Separate file/size/reference/owner checks; hashes=true explicitly hashes payloads. |
 | `POST` | `/api/storage/migration` | Preview proven missing owner references; apply=true repairs with a before/result backup. |

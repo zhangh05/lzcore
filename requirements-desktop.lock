@@ -158,7 +158,9 @@ pynacl==1.6.2
 pypdf2==3.0.1
     # via -r requirements.txt
 pypdfium2==5.13.0
-    # via pdfplumber
+    # via
+    #   -r requirements.txt
+    #   pdfplumber
 pytest==9.1.1
     # via -r requirements.txt
 python-dateutil==2.9.0.post0
