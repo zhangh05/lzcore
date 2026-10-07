@@ -5,6 +5,10 @@ interface TaskSnapshot {
   task?: { task_id: string; status: string };
 }
 
+const UNFINISHED_STATUSES = new Set([
+  "partial", "replan_required", "waiting_user", "interrupted", "cancelled", "failed",
+]);
+
 export function TaskResumeControl({ workspaceId, sessionId, running, turnId, onResume }: {
   workspaceId: string | null; sessionId: string | null; running: boolean;
   turnId?: string; onResume: (text: string, metadata: Record<string, unknown>) => void;
@@ -23,7 +27,7 @@ export function TaskResumeControl({ workspaceId, sessionId, running, turnId, onR
     return () => { disposed = true; };
   }, [workspaceId, sessionId, running, turnId]);
   const task = snapshot?.workspaceId === workspaceId && snapshot?.sessionId === sessionId ? snapshot.value.task : undefined;
-  if (running || !task?.task_id) return null;
+  if (running || !task?.task_id || !UNFINISHED_STATUSES.has(task.status)) return null;
   return <div className="wb-retry-bar">
     <button type="button" data-testid="resume-task-btn" onClick={() => onResume(
       "继续当前任务。先核对已有结果和未完成事项；未知写入只回查，不重放。",

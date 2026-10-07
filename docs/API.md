@@ -27,7 +27,7 @@
 
 HTTP message 带 session_id 和 client_request_id 时，实际 Agent 运行绑定已认领的 session job：阶段事件更新该回合，取消检查读取同一作业。回合结束恢复原事件回调，过期回调不更新后续请求。HTTP 响应仍是整轮结果，不因此提供 token 续流。
 
-HTTP `/api/agent/message` 和 WebSocket `message` 均接受 `metadata.resume_task_id`。工作台“继续任务”先读取当前会话的 TaskState，再显式传该 ID；任务身份按认证主体、workspace、session 核对，缺失、跨会话或已被新任务替换的 ID 被拒绝。SSOT 在执行前重新核对并用 revision CAS 开始同一任务。显式续接不判断请求语言；只有未提供此字段时才使用自然语言续接 fallback。字段不授权工具、不自动恢复子任务，也不重放未知写入。WebSocket `type=resume` 仍只恢复传输日志，与任务续接不同。
+HTTP `/api/agent/message` 和 WebSocket `message` 均接受 `metadata.resume_task_id`。工作台“继续任务”先读取当前会话的 TaskState，仅在本轮未运行且任务状态为 partial、replan_required、waiting_user、interrupted、cancelled 或 failed 时显示，再显式传该 ID；已完成任务（包括普通问候）不显示此入口，仍可通过正常输入追加需求。任务身份按认证主体、workspace、session 核对，缺失、跨会话或已被新任务替换的 ID 被拒绝。SSOT 在执行前重新核对并用 revision CAS 开始同一任务。显式续接不判断请求语言；只有未提供此字段时才使用自然语言续接 fallback。字段不授权工具、不自动恢复子任务，也不重放未知写入。WebSocket `type=resume` 仍只恢复传输日志，与任务续接不同。
 
 Provider 的有界空响应重试及候选回退耗尽后，返回 `llm_empty_response`，用户目标记为失败；QueryLoop 不再无限重发。输出截断走原有续接，未完成的工具参数不执行，不能把截断或空响应记为成功。
 
