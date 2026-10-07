@@ -180,7 +180,8 @@ CAPABILITY_PLAYBOOKS: dict[str, str] = {
     ),
     "document_or_report": (
         "Distinguish recorded source, analysis and recommendation. For a durable deliverable, use "
-        "workspace__file(action=\"write_artifact\"), verify creation, and return its "
+        "workspace__file(action=\"write_artifact\") for text, or publish an actual generated "
+        "file with workspace__filestore(action=\"publish\"). Verify creation and return its "
         "workspace-relative path or returned reference."
     ),
     "structured_operations": (

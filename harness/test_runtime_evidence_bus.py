@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 
 from agent.llm.schemas import LLMToolCall
 
@@ -160,6 +161,24 @@ def test_semantic_validator_rejects_managed_file_id_as_workspace_path():
     )])
     assert result.valid is False
     assert "ARG_REFERENCE_KIND_MISMATCH" in [error.code for error in result.errors]
+
+
+@pytest.mark.parametrize('action,field,value', [
+    ('inspect', 'file_id', 'files/data/report.xlsx'),
+    ('render_page', 'file_id', 'files/data/report.pdf'),
+    ('extract_archive', 'destination', 'file_ca25780d719247b8'),
+    ('restore_bundle', 'file_id', 'files/data/backup.zip'),
+])
+def test_new_file_actions_validate_identity_before_handler(action, field, value):
+    from core.tools.canonical_registry import CANONICAL_REGISTRY
+    from core.runtime_engine.models import ExecutionNode
+    from core.runtime_engine.semantic_validator import SemanticValidator
+
+    metadata = CANONICAL_REGISTRY['workspace.filestore'].execution_contract
+    result = SemanticValidator({'workspace.filestore': {'metadata': metadata}}).validate([
+        ExecutionNode(id='wrong_identity', tool='workspace.filestore', args={'action': action, field: value}),
+    ])
+    assert 'ARG_REFERENCE_KIND_MISMATCH' in [error.code for error in result.errors]
 
 
 def test_query_loop_delivers_pending_evidence_on_any_llm_scope_once():
