@@ -42,7 +42,9 @@ test('34. file organization and recycling preserve identity and original bytes',
   await page.getByRole('dialog').getByRole('button', { name: '移入回收站', exact: true }).click();
   await page.getByRole('button', { name: '回收站', exact: true }).click();
   await page.getByRole('button', { name: new RegExp('已组织-' + name) }).click();
+  const recovery = page.waitForResponse(response => response.url().includes(`/storage/files/${fid}/restore`) && response.request().method() === 'POST');
   await page.getByRole('button', { name: '恢复', exact: true }).click();
+  expect((await recovery).ok()).toBeTruthy();
   const restored = await api.get(`/api/storage/files/${fid}/download?workspace_id=default`);
   expect(Buffer.compare(await restored.body(), payload)).toBe(0);
   await page.getByRole('button', { name: '资料与文件', exact: true }).click();
