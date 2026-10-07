@@ -248,16 +248,35 @@ jobs:
             ${{ runner.temp }}/desktop-qa/*/native-errors.txt
           if-no-files-found: warn
 
-      - name: Publish release asset
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
-        uses: softprops/action-gh-release@v2
+      - name: Preserve verified Windows packages
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
-          draft: true
-          fail_on_unmatched_files: true
-          files: |
+          name: windows-release-packages
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+          path: |
             release/lzcore-*.zip
             release/lzcore-*-setup.exe
             release/windows-update.json
             release/SHA256SUMS.txt
-          generate_release_notes: ${{ github.event_name != 'workflow_dispatch' }}
+
+  publish:
+    needs: windows-package
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve verified Windows packages
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release-packages
+          path: release
+      - name: Upload existing draft or create release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "联智中枢 $RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" release/* --repo "$GITHUB_REPOSITORY" --clobber
