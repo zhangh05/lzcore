@@ -207,7 +207,7 @@ def delete_file_record(workspace_id: str, file_id: str) -> bool:
 
 
 def compact_file_index(workspace_id: str) -> dict:
-    """Compact files.jsonl: deduplicate file_ids and remove soft-deleted records.
+    """Compact files.jsonl without dropping recoverable or referenced identities.
 
     Returns a summary dict:
       {"before": N, "after": M, "removed": N-M, "duplicates_resolved": D}
@@ -224,13 +224,13 @@ def compact_file_index(workspace_id: str) -> dict:
 
         # Remove soft-deleted and deduplicate
         kept = []
-        duplicates = 0
+        duplicates = before - len(records)
         seen_ids = set()
         # Records are already deduplicated by read_file_records (last wins)
         for rec in records:
             fid = rec.get("file_id", "")
             # Remove soft-deleted
-            if rec.get("lifecycle") in ("soft_deleted", "deleted", "purged"):
+            if rec.get("lifecycle") == "deleted":
                 continue
             if fid in seen_ids:
                 duplicates += 1
@@ -241,7 +241,7 @@ def compact_file_index(workspace_id: str) -> dict:
         _atomic_write_lines(idx, kept)
 
         after = len(kept)
-        removed = len(records) - after
+        removed = before - after
         total_removed = removed  # includes dedup within already-deduped records
         return {
             "before": before,

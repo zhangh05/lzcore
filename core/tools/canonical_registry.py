@@ -559,6 +559,17 @@ def _handle_workspace_file(inv: ToolInvocation) -> dict:
                 return {"ok": False, "error_code": "CODING_SOURCE_OWNED_BY_IMPLEMENTATION",
                         "error": "Reviewed project source is read-only for QA/coordinator. Delegate a source revision and exact QA, then integrate. Runtime outputs belong in declared generated directories or /tmp.",
                         "executed": False}
+        if filepath and _action(inv) in {'edit', 'patch'} and not inv.arguments.get('dry_run'):
+            from storage.file_mutations import managed_file_mutation, FileSettlementError
+            try:
+                with managed_file_mutation(_caller_workspace(inv), paths=[_workspace_path(_caller_workspace(inv), filepath)]) as changes:
+                    result = _dispatch_workspace_file(inv)
+                if changes:
+                    result['file_changes'] = changes
+                return result
+            except FileSettlementError as exc:
+                return {'ok': False, 'error': str(exc), 'error_code': 'EXECUTION_UNKNOWN',
+                        'executed': True, 'automatic_retry_allowed': False, 'filepath': filepath}
         return _dispatch_workspace_file(inv)
 
 

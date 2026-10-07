@@ -1,7 +1,8 @@
 # storage/file_store.py
 """Unified file storage layer.
 
-All file creation in the workspace MUST go through this module.
+Managed attachment and published payload creation goes through this module.
+Exact source trees are owned by storage.workspace_files.
 Files are indexed in ``index/files.jsonl`` and stored under
 ``files/<category>/`` within the workspace.
 """
@@ -152,8 +153,8 @@ def import_user_upload(
     original_name: str,
     *,
     logical_type: str = "user_upload",
-    file_kind: str = "text",
-    binary: bool = False,
+    file_kind: str | None = None,
+    binary: bool | None = None,
     source: str = "user_upload",
     session_id: str = "",
     run_id: str = "",
@@ -186,7 +187,10 @@ def import_user_upload(
 
     size = target.stat().st_size
     sha = _sha256_of_file(target)
-    mime = _guess_mime(original_name, binary)
+    from storage.file_types import classify_file
+    classification = classify_file(original_name, file_kind=file_kind, binary=binary)
+    file_kind, binary = classification['file_kind'], classification['binary']
+    mime = classification['mime_type']
 
     # Policy enforcement: reject disallowed kinds or oversized files
     from storage.policy import MAX_UPLOAD_BYTES, ALLOWED_UPLOAD_KINDS
@@ -243,6 +247,9 @@ def write_agent_output(
     safe_title = _safe_name(title or fid)
     if not ext:
         ext = _ext_for_kind(file_kind)
+    from storage.file_types import classify_file
+    classification = classify_file(f'{safe_title}.{ext}', file_kind=file_kind, binary=isinstance(content, bytes))
+    file_kind = classification['file_kind']
     rel_dir = _dir_for_type(logical_type)
     target_dir = ws / rel_dir
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -272,7 +279,7 @@ def write_agent_output(
         file_kind=file_kind,
         path=rel_path,
         original_name=f"{safe_title}.{ext}",
-        mime_type=_guess_mime(f"{safe_title}.{ext}", is_binary),
+        mime_type=classification['mime_type'],
         binary=is_binary,
         size_bytes=size,
         sha256=sha,
@@ -508,7 +515,7 @@ def purge_file(workspace_id: str, file_id: str) -> bool:
     if rec.get("lifecycle") == "purged":
         return True
     try:
-        path = _resolve_workspace_relative_path(workspace_id, rec["path"])
+        path = _resolve_workspace_relative_path(workspace_id, rec.get('metadata', {}).get('trash_path') or rec["path"])
         if path.exists():
             path.unlink()
     except (OSError, ValueError):
@@ -517,6 +524,35 @@ def purge_file(workspace_id: str, file_id: str) -> bool:
         "lifecycle": "purged",
         "metadata": {**rec.get("metadata", {}), "purged_at": _now_iso()},
     })
+
+
+def restore_file(workspace_id: str, file_id: str) -> dict:
+    """Restore a file tombstone only from its exact, verified payload."""
+    from storage.project_changes import workspace_files_lock
+    with workspace_files_lock(workspace_id):
+        rec = get_file_record(workspace_id, file_id)
+        if not rec:
+            return {'ok': False, 'error': 'file_not_found'}
+        if rec.get('lifecycle') == 'active':
+            return {'ok': True, 'file_id': file_id, 'lifecycle': 'active', 'already_active': True}
+        if rec.get('lifecycle') != 'soft_deleted':
+            return {'ok': False, 'error': 'file_not_recoverable'}
+        target = _resolve_workspace_relative_path(workspace_id, rec['path'])
+        trash_path = rec.get('metadata', {}).get('trash_path')
+        source = _resolve_workspace_relative_path(workspace_id, trash_path) if trash_path else target
+        if not source.is_file() or _sha256_of_file(source) != rec.get('sha256'):
+            return {'ok': False, 'error': 'restore_payload_missing_or_changed'}
+        if source != target:
+            if target.exists():
+                return {'ok': False, 'error': 'restore_path_conflict'}
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source.rename(target)
+        metadata = {k: v for k, v in rec.get('metadata', {}).items() if k not in {'trash_path', 'deleted_at'}}
+        if not index.update_file_record(workspace_id, file_id, {'lifecycle': 'active', 'metadata': metadata}):
+            return {'ok': False, 'error': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}
+        from storage.events import publish
+        publish(workspace_id, 'file', 'restored', file_id)
+        return {'ok': True, 'file_id': file_id, 'lifecycle': 'active'}
 
 
 def delete_file_permanently(workspace_id: str, file_id: str) -> bool:
@@ -536,16 +572,8 @@ def delete_file_permanently(workspace_id: str, file_id: str) -> bool:
 # ── Internal helpers ─────────────────────────────────────────────────
 
 def _guess_mime(name: str, binary: bool = False) -> str:
-    ext = Path(name).suffix.lower()
-    mime_map = {
-        ".txt": "text/plain", ".md": "text/markdown", ".json": "application/json",
-        ".yaml": "text/yaml", ".yml": "text/yaml", ".xml": "text/xml",
-        ".csv": "text/csv", ".html": "text/html", ".log": "text/plain",
-        ".pdf": "application/pdf", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-        ".gif": "image/gif", ".webp": "image/webp",
-    }
-    return mime_map.get(ext, "application/octet-stream" if binary else "text/plain")
+    from storage.file_types import classify_file
+    return classify_file(name, binary=binary)['mime_type']
 
 
 def _ext_for_kind(kind: str) -> str:

@@ -12,7 +12,8 @@ MAX_UPLOAD_BYTES = 200 * 1024 * 1024          # 200 MB
 BINARY_KINDS = frozenset({
     "pdf", "docx", "xlsx", "pptx",
     "zip", "tar", "gz", "bz2", "7z",
-    "png", "jpg", "jpeg", "gif", "svg", "webp",
+    "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "avif", "heic",
+    "binary", "doc", "xls", "ppt", "mp3", "wav", "m4a", "ogg", "flac", "mp4", "webm", "mov",
 })
 
 TEXT_KINDS = frozenset({
@@ -22,11 +23,7 @@ TEXT_KINDS = frozenset({
 
 # ── Logical type → expected file kinds ───────────────────────────────
 
-ALLOWED_UPLOAD_KINDS = frozenset({
-    "text", "binary", "pdf", "docx", "xlsx",
-    "pptx", "markdown", "config", "json", "yaml", "xml", "csv", "html", "log",
-    "zip", "tar", "gz", "png", "jpg", "jpeg", "gif", "svg", "webp",
-})
+ALLOWED_UPLOAD_KINDS = BINARY_KINDS | TEXT_KINDS
 
 # ── Sensitivity ──────────────────────────────────────────────────────
 

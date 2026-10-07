@@ -2,7 +2,6 @@ import { memo, useState } from "react";
 import { useSessionStore } from "../../../stores/session";
 import { useToastStore } from "../../../stores/toast";
 import { knowledgeApi, memoryApi } from "../../../api";
-import { apiRequest } from "../../../api/client";
 import { IconBolt, IconBrain, IconBook, IconRefresh, IconAlert, IconShield, IconChevronDown, IconChevronRight } from "../../../components/Icon";
 import { TaskTrackingCard } from "../../../components/TaskTrackingCard";
 import { UNKNOWN_OUTCOME_COPY, unknownOutcomeParagraph } from "../../../components/toolCallState";
@@ -139,16 +138,6 @@ export const ResultInline = memo(function ResultInline({
         tags: ["agent_answer", "confirmed"],
         user_confirmed: true,
       });
-      // Also save to unified files for File Manager visibility
-      try {
-        const file = new File([finalText], `${finalText.slice(0, 30)}.txt`, { type: "text/plain" });
-        const form = new FormData();
-        form.append("file", file);
-        form.append("artifact_type", "memory");
-        form.append("title", finalText.slice(0, 42) || "本次结论");
-        form.append("workspace_id", currentWorkspaceId);
-        await apiRequest({ method: "POST", url: `/workspaces/${currentWorkspaceId}/artifacts/upload`, data: form });
-      } catch {}
       if (res.conflict) {
         toast({ kind: "warning", title: "已记录，但发现冲突", body: "这条记忆和已有记忆可能不一致，请稍后在记忆列表核对。" });
       } else {
@@ -177,15 +166,6 @@ export const ResultInline = memo(function ResultInline({
         scope: "workspace",
         language: "zh",
       });
-      // Also save to unified files for File Manager visibility
-      try {
-        const form = new FormData();
-        form.append("file", file);
-        form.append("artifact_type", "knowledge");
-        form.append("title", title);
-        form.append("workspace_id", currentWorkspaceId);
-        await apiRequest({ method: "POST", url: `/workspaces/${currentWorkspaceId}/artifacts/upload`, data: form });
-      } catch {}
       toast({ kind: "success", title: "已保存到知识库", body: "这条回答已整理为可检索文档" });
     } catch (e: unknown) {
       toast({ kind: "error", title: "保存失败", body: isApiError(e) ? e.message : String(e) });

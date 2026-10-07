@@ -9,7 +9,7 @@ from storage.artifact_metadata_store import list_artifact_records
 from storage.file_store import get_file_record, list_files, read_file_content
 from storage.gc import gc_preview
 from storage.ids import validate_workspace_id
-from storage.reference_index import list_references_for_file
+from storage.reference_index import list_references_for_file, list_references
 
 
 def data_overview(workspace_id: str) -> dict[str, Any]:
@@ -23,8 +23,9 @@ def data_overview(workspace_id: str) -> dict[str, Any]:
     health = gc_preview(ws_id)
     referenced = 0
     unreferenced = 0
+    referenced_ids = {r.get('file_id') for r in list_references(ws_id)}
     for item in active_files:
-        if list_references_for_file(ws_id, str(item.get("file_id") or "")):
+        if item.get('file_id') in referenced_ids:
             referenced += 1
         else:
             unreferenced += 1
@@ -75,12 +76,19 @@ def managed_data_files(
             "authority": (artifact.get("metadata") or {}).get("authority", ""),
         })
     result: list[dict[str, Any]] = []
+    references_by_file = {}
+    for reference in list_references(ws_id):
+        references_by_file.setdefault(reference.get('file_id'), []).append(reference)
+    from storage.file_types import file_capabilities
     for record in files:
         file_id = str(record.get("file_id") or "")
-        references = list_references_for_file(ws_id, file_id)
+        references = references_by_file.get(file_id, [])
         metadata = dict(record.get("metadata") or {})
         result.append({
             "file_id": file_id,
+            "path": record.get('path', ''),
+            "sha256": record.get('sha256', ''),
+            "capabilities": file_capabilities(record),
             "logical_type": record.get("logical_type", ""),
             "file_kind": record.get("file_kind", ""),
             "original_name": record.get("original_name", ""),
@@ -131,7 +139,7 @@ def file_relations(workspace_id: str, file_id: str) -> dict[str, Any] | None:
     }
 
 
-def text_file_content(workspace_id: str, file_id: str, *, max_chars: int = 100_000) -> dict[str, Any] | None:
+def text_file_content(workspace_id: str, file_id: str, *, max_chars: int = 100_000, offset: int = 0) -> dict[str, Any] | None:
     ws_id = validate_workspace_id(workspace_id)
     record = get_file_record(ws_id, file_id)
     if record is None:
@@ -139,21 +147,28 @@ def text_file_content(workspace_id: str, file_id: str, *, max_chars: int = 100_0
     if record.get("binary"):
         return {"file_id": file_id, "binary": True, "content": "", "truncated": False}
     content = read_file_content(ws_id, file_id)
+    if offset < 0 or max_chars < 1:
+        raise ValueError('invalid_content_range')
+    end = min(len(content), offset + max_chars)
     return {
         "file_id": file_id,
         "binary": False,
-        "content": content,
-        "truncated": False,
+        "content": content[offset:end],
+        "offset": offset,
+        "next_offset": end if end < len(content) else None,
+        "total_chars": len(content),
+        "truncated": end < len(content),
     }
 
 
-def delete_unreferenced_file(workspace_id: str, file_id: str, *, force: bool = False) -> dict[str, Any]:
+def delete_unreferenced_file(workspace_id: str, file_id: str, *, force: bool = False, permanent: bool = False) -> dict[str, Any]:
     """Delete a managed file.
 
     The default path stays conservative for backend callers: referenced files
     are refused. User-facing data management can pass force=True after explicit
-    confirmation to remove the file, its direct references and associated
-    artifact records together.
+    confirmation. Recycling retains payload and owner references; permanent
+    clearance retains a purged FileRecord so history can explain unavailable
+    original bytes without dangling identities.
     """
     ws_id = validate_workspace_id(workspace_id)
     relations = file_relations(ws_id, file_id)
@@ -165,23 +180,13 @@ def delete_unreferenced_file(workspace_id: str, file_id: str, *, force: bool = F
             "error": "file_in_use",
             "relations": relations,
         }
-    if force:
-        from artifacts.store import delete_artifact
-        for artifact in relations.get("artifacts") or []:
-            artifact_id = str(artifact.get("artifact_id") or "")
-            if artifact_id:
-                delete_artifact(ws_id, artifact_id, hard=True)
-        from storage.reference_index import list_references_for_file, remove_reference
-        for reference in list_references_for_file(ws_id, file_id):
-            remove_reference(ws_id, str(reference.get("ref_id") or ""))
-        relations = file_relations(ws_id, file_id)
-        if relations is None:
-            from storage.events import publish
-            publish(ws_id, "file", "deleted", file_id)
-            return {"ok": True, "file_id": file_id}
-    from storage.file_store import delete_file_permanently
-    if not delete_file_permanently(ws_id, file_id):
+    from storage.file_store import purge_file, soft_delete_file
+    from storage.project_changes import workspace_files_lock
+    with workspace_files_lock(ws_id):
+        completed = purge_file(ws_id, file_id) if permanent else soft_delete_file(ws_id, file_id)
+    if not completed:
         return {"ok": False, "error": "delete_failed"}
     from storage.events import publish
     publish(ws_id, "file", "deleted", file_id)
-    return {"ok": True, "file_id": file_id}
+    return {"ok": True, "file_id": file_id, "lifecycle": 'purged' if permanent else 'soft_deleted',
+            "recoverable": not permanent, "affected": relations, "references_retained": True}

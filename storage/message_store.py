@@ -86,6 +86,12 @@ class SessionMessageStore:
 
     def write_message(self, run_id: str, role: str, content: str,
                       metadata: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        from storage.project_changes import workspace_files_lock
+        with workspace_files_lock(self.ws_id):
+            return self._write_message(run_id, role, content, metadata)
+
+    def _write_message(self, run_id: str, role: str, content: str,
+                       metadata: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """Persist a FULL user or assistant message independently.
 
         Returns the message_id, or None if the content is empty.
@@ -143,6 +149,15 @@ class SessionMessageStore:
 
         msg_path = self._msg_path(rid, role)
         _atomic_write(msg_path, record)
+
+        from storage.reference_index import replace_owner_references
+        attachments = list(meta.get('attachments') or [])
+        attachments += list((meta.get('history_state') or {}).get('attachments') or [])
+        files = {(str(a['file_id']), 'attachment') for a in attachments if isinstance(a, dict) and a.get('file_id')}
+        if record.get('artifact_ref', {}).get('file_id'):
+            files.add((record['artifact_ref']['file_id'], 'content'))
+        replace_owner_references(self.ws_id, 'message', f'{self.session_id}/{rid}:{role}',
+                                 list(files), metadata={'session_id': self.session_id, 'run_id': rid})
 
         msg_id = f"{rid}:{role}"
         return msg_id
@@ -301,8 +316,8 @@ class SessionMessageStore:
                         "storage_managed": True,
                     },
                 )
-                add_reference(self.ws_id, rec.file_id, "message",
-                              f"{run_id}:{role}", "large_content",
+                add_reference(self.ws_id, rec.file_id, "artifact",
+                              artifact["artifact_id"], "content",
                               metadata={"artifact_id": artifact["artifact_id"],
                                         "session_id": self.session_id})
                 return {

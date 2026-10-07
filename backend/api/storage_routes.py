@@ -49,7 +49,9 @@ def register_storage_routes(app) -> None:
             return jsonify({"ok": False, "error": "invalid_workspace_id"}), 400
         from storage.data_management import text_file_content
         try:
-            content = text_file_content(workspace_id, file_id)
+            content = text_file_content(workspace_id, file_id,
+                offset=int(request.args.get('offset', 0)),
+                max_chars=min(100_000, int(request.args.get('limit', 100_000))))
         except (OSError, ValueError) as exc:
             return jsonify({"ok": False, "error": str(exc)[:160]}), 400
         if content is None:
@@ -64,9 +66,12 @@ def register_storage_routes(app) -> None:
             from storage.file_store import get_file_record, resolve_file_path
             record = get_file_record(workspace_id, file_id)
             mime_type = str((record or {}).get("mime_type") or "").lower()
-            if not record or record.get("lifecycle", "active") != "active" or not mime_type.startswith("image/"):
+            if not record or record.get("lifecycle", "active") != "active" or not (mime_type.startswith("image/") or mime_type == 'application/pdf'):
                 return jsonify({"ok": False, "error": "image_not_found"}), 404
-            return send_file(resolve_file_path(workspace_id, file_id), mimetype=mime_type, conditional=True, max_age=3600)
+            response = send_file(resolve_file_path(workspace_id, file_id), mimetype=mime_type, conditional=True, max_age=0)
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            response.headers['Content-Security-Policy'] = "sandbox; default-src 'none'; style-src 'unsafe-inline'"
+            return response
         except (OSError, ValueError):
             return jsonify({"ok": False, "error": "image_not_found"}), 404
 
@@ -81,11 +86,37 @@ def register_storage_routes(app) -> None:
             return jsonify({"ok": False, "error": "confirm_required"}), 400
         force = request.args.get("force", "").lower() == "true"
         from storage.data_management import delete_unreferenced_file
-        result = delete_unreferenced_file(workspace_id, file_id, force=force)
+        result = delete_unreferenced_file(workspace_id, file_id, force=force,
+            permanent=request.args.get('permanent', '').lower() == 'true')
         if result.get("ok"):
             return jsonify(result)
         status = 409 if result.get("error") == "file_in_use" else 404 if result.get("error") == "file_not_found" else 400
         return jsonify(result), status
+
+    @app.route('/api/storage/files/<file_id>/restore', methods=['POST'])
+    def api_storage_file_restore(file_id):
+        data = request.get_json(silent=True) or {}
+        try:
+            workspace_id = validate_workspace_id(data.get('workspace_id', ''))
+            from storage.file_store import restore_file
+            result = restore_file(workspace_id, file_id)
+            return jsonify(result), 200 if result.get('ok') else 409
+        except (ValueError, OSError) as exc:
+            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+
+    @app.route('/api/storage/files/<file_id>/download')
+    def api_storage_file_download(file_id):
+        try:
+            workspace_id = validate_workspace_id(request.args.get('workspace_id', ''))
+            from storage.file_store import get_file_record, resolve_file_path
+            record = get_file_record(workspace_id, file_id)
+            if not record or record.get('lifecycle', 'active') != 'active':
+                return jsonify({'ok': False, 'error': 'file_unavailable'}), 404
+            return send_file(resolve_file_path(workspace_id, file_id), as_attachment=True,
+                download_name=record.get('original_name') or file_id,
+                mimetype=record.get('mime_type') or 'application/octet-stream', conditional=True)
+        except (ValueError, OSError):
+            return jsonify({'ok': False, 'error': 'file_unavailable'}), 404
 
     @app.route("/api/storage/events")
     def api_storage_events():

@@ -53,35 +53,9 @@ def _confirmed(data: dict | None = None) -> bool:
 
 def _guess_upload_kind(filename: str, artifact_type: str = "") -> tuple:
     """Return (file_kind, binary) for uploaded file."""
-    name = (filename or "").lower()
-    at = (artifact_type or "").lower()
-    if name.endswith(".png"):
-        return "png", True
-    if name.endswith((".jpg", ".jpeg")):
-        return "jpeg", True
-    if name.endswith(".gif"):
-        return "gif", True
-    if name.endswith(".webp"):
-        return "webp", True
-    if name.endswith(".pdf"):
-        return "pdf", True
-    if name.endswith(".docx"):
-        return "docx", True
-    if name.endswith(".xlsx"):
-        return "xlsx", True
-    if name.endswith(".pptx"):
-        return "pptx", True
-    if name.endswith((".zip", ".tar", ".gz", ".7z")):
-        return "zip", True
-    if name.endswith((".json",)):
-        return "json", False
-    if name.endswith((".yaml", ".yml")):
-        return "yaml", False
-    if name.endswith((".md",)):
-        return "markdown", False
-    if name.endswith((".cfg", ".conf", ".txt", ".log")) or at in ("config", "config_input"):
-        return "config", False
-    return "text", False
+    from storage.file_types import classify_file
+    classification = classify_file(filename)
+    return classification["file_kind"], classification["binary"]
 
 
 def register_artifact_routes(app):

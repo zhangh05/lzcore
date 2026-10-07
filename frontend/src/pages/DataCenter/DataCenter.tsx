@@ -251,39 +251,23 @@ export function DataCenter() {
 
   const deleteFiles = async (targets: ManagedFile[]) => {
     if (!workspaceId) return;
-    const artifactIds = Array.from(new Set(targets.flatMap((file) => file.artifacts.filter((item) => item.lifecycle !== "deleted").map((item) => item.artifact_id))));
-    const standaloneFiles = targets.filter((file) => !file.artifacts.some((item) => item.lifecycle !== "deleted"));
     const referencedCount = targets.filter((file) => file.reference_count > 0).length;
     const accepted = await confirm({
-      title: targets.length > 1 ? `删除 ${targets.length} 项数据？` : artifactIds.length ? "删除文件及关联产出？" : "永久删除文件？",
-      body: [
-        `将删除 ${targets.length} 项数据${artifactIds.length ? `，包含 ${artifactIds.length} 个关联产出` : ""}。`,
-        referencedCount ? `其中 ${referencedCount} 项存在引用关系，系统会同步清理这些引用记录。` : "",
-        "删除后无法恢复。",
-      ].filter(Boolean).join(" "),
-      confirmLabel: "确认删除",
+      title: `将 ${targets.length} 个文件移入回收站？`,
+      body: `文件可以恢复。${referencedCount ? `其中 ${referencedCount} 个文件正在被使用，来源和引用记录会保留。` : ""}`,
+      confirmLabel: "移入回收站",
       destructive: true,
     });
     if (!accepted) return;
     setBusy(true);
     try {
-      const artifactResult = artifactIds.length ? await artifactsApi.batchDelete(workspaceId, artifactIds) : null;
-      const standaloneResults = await Promise.allSettled(standaloneFiles.map((file) => storageApi.delete(workspaceId, file.file_id)));
-      const failedStandalone = standaloneResults
-        .map((item, index) => ({ item, file: standaloneFiles[index] }))
-        .filter((entry): entry is { item: PromiseRejectedResult; file: ManagedFile } => entry.item.status === "rejected");
-      const artifactDeleted = artifactResult?.deleted ?? 0;
-      const artifactFailed = Math.max(0, (artifactResult?.total ?? 0) - artifactDeleted);
-      if (failedStandalone.length || artifactFailed) {
-        const firstFailed = failedStandalone[0];
-        const failedName = firstFailed?.file.original_name || firstFailed?.file.file_id || (artifactFailed ? `${artifactFailed} 个任务产出` : "");
-        const failedReason = firstFailed ? (isApiError(firstFailed.item.reason) ? firstFailed.item.reason.message : String(firstFailed.item.reason)) : "部分关联产出删除失败";
-        throw new Error(`${failedName} 删除失败：${failedReason}`);
-      }
-      const deletedCount = standaloneResults.length + artifactDeleted;
-      setSelectedFile((current) => current && targets.some((file) => file.file_id === current.file_id) ? null : current);
-      setSelectedFileIds((ids) => ids.filter((id) => !targets.some((file) => file.file_id === id)));
-      toast({ kind: "success", title: "已删除", body: `已处理 ${deletedCount} 项数据。` });
+      const results = await Promise.allSettled(targets.map((file) => storageApi.delete(workspaceId, file.file_id)));
+      const completed = targets.filter((_file, index) => results[index].status === "fulfilled");
+      const failed = results.length - completed.length;
+      setSelectedFile((current) => current && completed.some((file) => file.file_id === current.file_id) ? null : current);
+      setSelectedFileIds((ids) => ids.filter((id) => !completed.some((file) => file.file_id === id)));
+      toast({ kind: failed ? "warning" : "success", title: failed ? "部分完成" : "已移入回收站",
+        body: `${completed.length} 个文件已处理${failed ? `，${failed} 个失败，可继续选择失败项处理` : "，可在回收站恢复"}。` });
       await Promise.all([loadData(), loadArtifacts()]);
     } catch (reason) {
       toast({ kind: "error", title: "删除失败", body: errorMessage(reason) });

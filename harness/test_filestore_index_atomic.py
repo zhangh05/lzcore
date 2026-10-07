@@ -225,15 +225,15 @@ class TestAtomicUpdate:
 
 
 class TestCompact:
-    def test_compact_removes_soft_deleted(self, tmp_workspace, test_record):
+    def test_compact_preserves_recoverable_identity(self, tmp_workspace, test_record):
         """Soft-deleted records removed by compact."""
         append_file_record("default", test_record)
         update_file_record("default", test_record["file_id"], {"lifecycle": "soft_deleted"})
 
         result = compact_file_index("default")
-        assert result["removed"] >= 1
+        assert result["removed"] == 0
         records = read_file_records("default")
-        assert len(records) == 0  # All soft-deleted removed
+        assert len(records) == 1  # Recoverable file identity must survive compaction.
 
     def test_compact_resolves_duplicates(self, tmp_workspace, test_record):
         """Duplicate file_ids: last write wins after compact."""

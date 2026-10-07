@@ -59,8 +59,9 @@ def register_knowledge_routes(app):
         ext = Path(uploaded.filename).suffix.lower().lstrip(".")
         if ext in IMAGE_EXTENSIONS:
             return jsonify({"ok": False, "error": "unsupported_knowledge_format"}), 400
-        file_kind = ext if ext in IMAGE_EXTENSIONS else _knowledge_file_kind(ext)
-        binary = ext in IMAGE_EXTENSIONS or ext in {"pdf", "docx"}
+        from storage.file_types import classify_file
+        classification = classify_file(uploaded.filename)
+        file_kind, binary = classification['file_kind'], classification['binary']
         try:
             from storage.file_store import import_user_upload, resolve_file_path
 
@@ -68,7 +69,7 @@ def register_knowledge_routes(app):
                 workspace_id=ws_id,
                 file_source=uploaded.stream,
                 original_name=uploaded.filename,
-                logical_type="tmp",
+                logical_type="knowledge_source",
                 file_kind=file_kind,
                 binary=binary,
                 source="knowledge_upload",
@@ -89,6 +90,7 @@ def register_knowledge_routes(app):
         result = import_file(
             workspace_id=ws_id,
             source=str(target),
+            file_id=file_record.file_id,
             title=request.form.get("title", "") or uploaded.filename,
             source_type=request.form.get("source_type", "project_doc") or "project_doc",
             scope=request.form.get("scope", "workspace") or "workspace",
@@ -98,9 +100,6 @@ def register_knowledge_routes(app):
                 "uploaded_filename": uploaded.filename,
             },
         )
-        from storage.file_store import purge_file
-        purge_file(ws_id, file_record.file_id)
-
         if not result.get("ok"):
             return jsonify({
                 "ok": False,
@@ -108,6 +107,7 @@ def register_knowledge_routes(app):
                 "summary": result.get("summary", "知识库导入失败"),
                 "errors": result.get("errors", []),
                 "warnings": result.get("warnings", []),
+                "file_id": file_record.file_id,
             }), 400
 
         source = {

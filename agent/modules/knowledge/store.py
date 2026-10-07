@@ -295,10 +295,14 @@ def delete_source(workspace_id: str, source_id: str) -> bool:
     for chunk in chunks:
         ids_to_purge.add(chunk["item_id"])
     store.purge(ids_to_purge)
+    from storage.reference_index import replace_owner_references
+    replace_owner_references(workspace_id, 'knowledge_source', source_id, [])
     for file_id in file_ids - {""}:
         try:
-            from storage.file_store import purge_file
-            purge_file(workspace_id, file_id)
+            from storage.file_store import soft_delete_file
+            from storage.reference_index import list_references_for_file
+            if not list_references_for_file(workspace_id, file_id):
+                soft_delete_file(workspace_id, file_id)
         except Exception:
             _LOG.warning("failed to retire knowledge file for %s", source_id, exc_info=True)
     return True
@@ -375,5 +379,4 @@ def query(
         "total": len(formatted),
         "metadata": {"retrieval_backend": "unified_bm25"},
     }
-
 

@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from storage.records import append_jsonl, mutate_jsonl, read_jsonl
+from storage.records import mutate_jsonl, read_jsonl
 from storage.schemas import FileReference
 
 _REF_INDEX_PARTS = ("index", "references.jsonl")
@@ -36,8 +36,49 @@ def add_reference(
         created_at=_now_iso(),
         metadata=metadata or {},
     )
-    append_jsonl(workspace_id, _REF_INDEX_PARTS, ref.as_dict())
-    return ref
+    def upsert(rows):
+        for row in rows:
+            if (row.get('file_id'), row.get('owner_type'), row.get('owner_id'), row.get('relation')) == (file_id, owner_type, owner_id, relation):
+                row['metadata'] = {**row.get('metadata', {}), **(metadata or {})}
+                return rows, FileReference(**row)
+        return [*rows, ref.as_dict()], ref
+    return mutate_jsonl(workspace_id, _REF_INDEX_PARTS, upsert)
+
+
+def list_references(workspace_id: str) -> list[dict]:
+    return read_jsonl(workspace_id, _REF_INDEX_PARTS)
+
+
+def replace_owner_references(workspace_id: str, owner_type: str, owner_id: str,
+                             files: list[tuple[str, str]], *, metadata: dict | None = None) -> None:
+    """Reconcile one owner's dependencies under a single index lock."""
+    wanted = set(files)
+    def replace(rows):
+        kept, found = [], set()
+        for row in rows:
+            if (row.get('owner_type'), row.get('owner_id')) != (owner_type, owner_id):
+                kept.append(row)
+                continue
+            key = (row.get('file_id'), row.get('relation'))
+            if key in wanted and key not in found:
+                row['metadata'] = {**row.get('metadata', {}), **(metadata or {})}
+                kept.append(row)
+                found.add(key)
+        for fid, relation in sorted(wanted - found):
+            kept.append(FileReference(ref_id=f'ref_{uuid.uuid4().hex[:12]}', workspace_id=workspace_id,
+                file_id=fid, owner_type=owner_type, owner_id=owner_id, relation=relation,
+                created_at=_now_iso(), metadata=metadata or {}).as_dict())
+        return kept, None
+    mutate_jsonl(workspace_id, _REF_INDEX_PARTS, replace)
+
+
+def remove_session_references(workspace_id: str, session_id: str) -> None:
+    def remove(rows):
+        return [r for r in rows if not (
+            r.get('owner_type') in {'message', 'session'} and (
+                r.get('metadata', {}).get('session_id') == session_id or
+                (r.get('owner_type') == 'session' and r.get('owner_id') == session_id)))], None
+    mutate_jsonl(workspace_id, _REF_INDEX_PARTS, remove)
 
 
 def list_references_for_file(workspace_id: str, file_id: str) -> list[dict]:

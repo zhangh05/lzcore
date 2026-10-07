@@ -444,6 +444,9 @@ def delete_session_permanently(
         except (OSError, TypeError, ValueError):
             failures.append("coding_state_delete_failed")
         complete = not path.exists() and not msg_dir.exists() and not request_registry_dir.exists()
+        if complete:
+            from storage.reference_index import remove_session_references
+            remove_session_references(ws_id, safe_id)
         if failures or not complete:
             _LOG.error(
                 "session_hard_delete_incomplete session_id=%s workspace_id=%s failures=%s",

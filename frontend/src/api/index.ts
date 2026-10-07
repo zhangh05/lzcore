@@ -416,9 +416,13 @@ export const storageApi = {
     apiRequest<{ ok: boolean; relations: { file_id: string; in_use: boolean; artifacts: Array<Record<string, unknown>>; references: Array<Record<string, unknown>> } }>(
       { method: "GET", url: `/storage/files/${file_id}/relations`, params: { workspace_id } }, signal,
     ),
-  delete: (workspace_id: string, file_id: string) =>
-    apiRequest<{ ok: boolean; file_id: string }>({
-      method: "DELETE", url: `/storage/files/${file_id}`, params: { workspace_id, confirm: "true", force: "true" },
+  delete: (workspace_id: string, file_id: string, permanent = false) =>
+    apiRequest<{ ok: boolean; file_id: string; lifecycle: string; recoverable: boolean }>({
+      method: "DELETE", url: `/storage/files/${file_id}`, params: { workspace_id, confirm: "true", force: "true", permanent: String(permanent) },
+    }),
+  restore: (workspace_id: string, file_id: string) =>
+    apiRequest<{ ok: boolean; file_id: string; lifecycle: string }>({
+      method: "POST", url: `/storage/files/${file_id}/restore`, data: { workspace_id },
     }),
   events: (workspace_id: string): SSEConnection =>
     openSSE(`/storage/events?workspace_id=${encodeURIComponent(workspace_id)}`),

@@ -5,7 +5,7 @@ import re
 from core.tools.schemas import ToolInvocation
 from storage.ids import validate_workspace_id
 
-from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok, _result, _run_shell, _unavailable
+from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok, _result, _run_shell, _unavailable, _workspace_path
 """Split general tool handlers."""
 
 # ── Environment variable keys blocked from user override ──
@@ -108,9 +108,28 @@ def _reject_unsafe_local_exec(inv: ToolInvocation, command: str) -> dict | None:
 
 
 def handle_command_exec(inv: ToolInvocation) -> dict:
+    return _managed_execution(inv, _handle_command_exec)
+
+
+def _managed_execution(inv: ToolInvocation, handler) -> dict:
     from storage.project_changes import workspace_files_lock
     with workspace_files_lock(_caller_workspace(inv)):
-        return _handle_command_exec(inv)
+        from storage.file_mutations import managed_file_mutation, FileSettlementError
+        from core.tools.project_execution import environment_for
+        ws = _caller_workspace(inv)
+        environment = environment_for(ws)
+        try:
+            scope = environment.project if environment is not None else _workspace_path(ws, str(inv.arguments.get('working_dir') or ''))
+            with managed_file_mutation(ws, scope=scope) as changes:
+                result = handler(inv)
+            if changes:
+                result.setdefault('output', result)['file_changes'] = changes
+            return result
+        except FileSettlementError as exc:
+            return {'ok': False, 'error': str(exc), 'error_code': 'EXECUTION_UNKNOWN',
+                    'executed': True, 'automatic_retry_allowed': False}
+        except ValueError as exc:
+            return _error_inv(inv, str(exc))
 
 
 def _handle_command_exec(inv: ToolInvocation) -> dict:
@@ -184,6 +203,10 @@ def _handle_command_exec(inv: ToolInvocation) -> dict:
     return _result(inv, result.pop("ok", False), result)
 
 def handle_powershell_script(inv: ToolInvocation) -> dict:
+    return _managed_execution(inv, _handle_powershell_script)
+
+
+def _handle_powershell_script(inv: ToolInvocation) -> dict:
     from storage.project_changes import workspace_files_lock
     with workspace_files_lock(_caller_workspace(inv)):
         return _handle_powershell_script(inv)
@@ -281,9 +304,7 @@ def handle_slash_run(inv: ToolInvocation) -> dict:
         return _error_inv(inv, str(e)[:200])
 
 def handle_python_exec(inv: ToolInvocation) -> dict:
-    from storage.project_changes import workspace_files_lock
-    with workspace_files_lock(_caller_workspace(inv)):
-        return _handle_python_exec(inv)
+    return _managed_execution(inv, _handle_python_exec)
 
 
 def _handle_python_exec(inv: ToolInvocation) -> dict:

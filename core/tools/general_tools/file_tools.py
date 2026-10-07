@@ -240,6 +240,9 @@ def handle_ws_write_artifact_file(inv: ToolInvocation) -> dict:
         validate_workspace_id(ws)
         safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename or "output.txt")
         suffix = Path(safe_name).suffix.lstrip(".") or "txt"
+        from storage.file_types import classify_file
+        if classify_file(safe_name)['binary'] and suffix != 'svg':
+            return _error_inv(inv, 'Binary output requires publishing a real generated file; text content cannot create this format.')
         title = Path(safe_name).stem or "output"
         from storage.file_store import write_agent_output
         rec = write_agent_output(
