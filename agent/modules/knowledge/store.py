@@ -89,6 +89,8 @@ def import_document(
     # Source records stay lightweight, while the complete normalized text is
     # kept in managed workspace storage. This preserves read/reindex semantics
     # without duplicating multi-megabyte documents in ContextStore JSONL.
+    from storage.file_store import FileCommitUnknown
+    from storage.file_mutations import FileSettlementError
     try:
         from storage.file_store import write_knowledge_document
         normalized = write_knowledge_document(
@@ -100,6 +102,8 @@ def import_document(
         normalized_file_id = normalized.file_id
         meta["normalized_file_id"] = normalized_file_id
         meta["storage_managed"] = True
+    except (FileCommitUnknown, FileSettlementError) as exc:
+        return {**exc.as_result(), "errors": ["normalized_content_settlement_unknown"]}
     except Exception as exc:
         return {
             "ok": False,

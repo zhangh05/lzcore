@@ -52,6 +52,48 @@ def test_reference_repeated_save_is_idempotent(files_ws):
     assert list_references_for_file(files_ws, 'file_example')[0]['metadata']['used']
 
 
+def test_knowledge_api_reuses_managed_original_and_rejects_other_scope(files_ws):
+    from backend.main import app
+    from storage.file_store import import_user_upload, list_files, resolve_file_path
+    from storage.reference_index import list_references_for_file
+    payload = b'# Reusable source\nActual original bytes'
+    record = import_user_upload(files_ws, io.BytesIO(payload), 'source.md')
+    client = app.test_client()
+    rejected = client.post('/api/knowledge/upload', data={'workspace_id': 'other_files', 'file_id': record.file_id})
+    assert rejected.status_code == 400
+    assert rejected.get_json()['error'] == 'file_unavailable'
+    response = client.post('/api/knowledge/upload', data={'workspace_id': files_ws, 'file_id': record.file_id})
+    assert response.status_code == 200
+    source_id = response.get_json()['source']['source_id']
+    records = list_files(files_ws)
+    assert len(records) == 2  # Original plus normalized knowledge, no upload copy.
+    assert resolve_file_path(files_ws, record.file_id).read_bytes() == payload
+    assert any(ref['owner_id'] == source_id and ref['relation'] == 'source' for ref in list_references_for_file(files_ws, record.file_id))
+    from storage.file_store import soft_delete_file
+    soft_delete_file(files_ws, record.file_id)
+    recycled = client.post('/api/knowledge/upload', data={'workspace_id': files_ws, 'file_id': record.file_id})
+    assert recycled.status_code == 400
+    assert recycled.get_json()['error'] == 'file_unavailable'
+
+
+def test_knowledge_api_preserves_unknown_normalized_commit(files_ws, monkeypatch):
+    from backend.main import app
+    from storage.file_store import import_user_upload, resolve_file_path
+    from storage import index
+    from storage.file_audit import reconcile_file_commits
+    record = import_user_upload(files_ws, io.BytesIO(b'# Real source\nContent'), 'source.md')
+    monkeypatch.setattr(index, 'append_file_record', lambda *_: (_ for _ in ()).throw(RuntimeError('index fault')))
+    response = app.test_client().post('/api/knowledge/upload', data={'workspace_id': files_ws, 'file_id': record.file_id})
+    result = response.get_json()
+    assert response.status_code == 409
+    assert result['error_code'] == 'EXECUTION_UNKNOWN'
+    assert result['automatic_retry_allowed'] is False
+    assert result['file_id'] != record.file_id
+    assert result['source_file_id'] == record.file_id
+    assert resolve_file_path(files_ws, record.file_id).read_bytes() == b'# Real source\nContent'
+    assert any(item['file_id'] == result['file_id'] and item['state'] == 'verified_payload_unindexed' for item in reconcile_file_commits(files_ws)['results'])
+
+
 def test_mutation_keeps_referenced_bytes_and_publishes_working_version(files_ws):
     from storage.file_store import import_user_upload, resolve_file_path, get_file_record
     from storage.reference_index import add_reference

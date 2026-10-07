@@ -464,13 +464,14 @@ export const knowledgeApi = {
     ),
   upload: (
     workspace_id: string,
-    file: File,
+    file: File | { file_id: string },
     opts?: { title?: string; tags?: string; source_type?: string; scope?: string; language?: string },
     signal?: AbortSignal,
   ): Promise<{ ok: boolean; source: KnowledgeSource; summary?: string }> => {
     const form = new FormData();
     form.append("workspace_id", workspace_id);
-    form.append("file", file);
+    if (file instanceof File) form.append("file", file);
+    else form.append("file_id", file.file_id);
     if (opts?.title) form.append("title", opts.title);
     if (opts?.tags) form.append("tags", opts.tags);
     if (opts?.source_type) form.append("source_type", opts.source_type);

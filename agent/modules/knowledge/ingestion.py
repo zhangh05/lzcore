@@ -350,6 +350,7 @@ def import_file(
     )
     if not saved.get("ok"):
         return {
+            **saved,
             "ok": False,
             "summary": saved.get("summary", "import_document failed"),
             "errors": saved.get("errors", ["store_failed"]),

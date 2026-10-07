@@ -50,32 +50,33 @@ def register_knowledge_routes(app):
         ws_id, err = _validated_ws_id(ws_id)
         if err:
             return err
-        if "file" not in request.files:
-            return jsonify({"ok": False, "error": "no file provided"}), 400
-        uploaded = request.files["file"]
-        if not uploaded.filename:
-            return jsonify({"ok": False, "error": "empty filename"}), 400
-
-        ext = Path(uploaded.filename).suffix.lower().lstrip(".")
-        if ext in IMAGE_EXTENSIONS:
-            return jsonify({"ok": False, "error": "unsupported_knowledge_format"}), 400
-        from storage.file_types import classify_file
-        classification = classify_file(uploaded.filename)
-        file_kind, binary = classification['file_kind'], classification['binary']
+        uploaded = request.files.get("file")
+        existing_id = (request.form.get("file_id") or "").strip()
+        if bool(uploaded) == bool(existing_id):
+            return jsonify({"ok": False, "error": "provide_one_file_or_file_id"}), 400
         try:
-            from storage.file_store import import_user_upload, resolve_file_path, FileCommitUnknown
-
-            file_record = import_user_upload(
-                workspace_id=ws_id,
-                file_source=uploaded.stream,
-                original_name=uploaded.filename,
-                logical_type="knowledge_source",
-                file_kind=file_kind,
-                binary=binary,
-                source="knowledge_upload",
-                metadata={"source_type": request.form.get("source_type", "project_doc")},
-            )
-            target = resolve_file_path(ws_id, file_record.file_id)
+            from storage.file_store import import_user_upload, resolve_file_path, get_file_record, FileCommitUnknown
+            if existing_id:
+                record = get_file_record(ws_id, existing_id)
+                if not record or record.get("lifecycle", "active") != "active":
+                    raise ValueError("file_unavailable")
+                filename = record["original_name"]
+                target = resolve_file_path(ws_id, existing_id)
+                source_file_id = existing_id
+            else:
+                filename = uploaded.filename
+                if not filename:
+                    raise ValueError("empty_filename")
+                if Path(filename).suffix.lower().lstrip(".") in IMAGE_EXTENSIONS:
+                    raise ValueError("unsupported_knowledge_format")
+                file_record = import_user_upload(
+                    workspace_id=ws_id, file_source=uploaded.stream,
+                    original_name=filename, logical_type="knowledge_source",
+                    source="knowledge_upload",
+                    metadata={"source_type": request.form.get("source_type", "project_doc")},
+                )
+                source_file_id = file_record.file_id
+                target = resolve_file_path(ws_id, source_file_id)
         except FileCommitUnknown as exc:
             return jsonify({**exc.as_result(), 'file': exc.record}), 409
         except ValueError as exc:
@@ -92,30 +93,32 @@ def register_knowledge_routes(app):
         result = import_file(
             workspace_id=ws_id,
             source=str(target),
-            file_id=file_record.file_id,
-            title=request.form.get("title", "") or uploaded.filename,
+            file_id=source_file_id,
+            title=request.form.get("title", "") or filename,
             source_type=request.form.get("source_type", "project_doc") or "project_doc",
             scope=request.form.get("scope", "workspace") or "workspace",
             language=request.form.get("language", "zh") or "zh",
             tags=tags,
             metadata={
-                "uploaded_filename": uploaded.filename,
+                "uploaded_filename": filename,
             },
         )
         if not result.get("ok"):
             return jsonify({
+                **result,
                 "ok": False,
                 "error": (result.get("errors") or ["import_failed"])[0],
                 "summary": result.get("summary", "知识库导入失败"),
                 "errors": result.get("errors", []),
                 "warnings": result.get("warnings", []),
-                "file_id": file_record.file_id,
-            }), 400
+                "file_id": result.get("file_id") or source_file_id,
+                "source_file_id": source_file_id,
+            }), 409 if result.get("error_code") == "EXECUTION_UNKNOWN" else 400
 
         source = {
             "source_id": result.get("source_id", ""),
             "workspace_id": ws_id,
-            "title": result.get("title", "") or request.form.get("title", "") or uploaded.filename,
+            "title": result.get("title", "") or request.form.get("title", "") or filename,
             "source_type": result.get("source_type", request.form.get("source_type", "project_doc")),
             "scope": result.get("scope", request.form.get("scope", "workspace")),
             "language": result.get("language", request.form.get("language", "zh")),

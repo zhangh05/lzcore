@@ -138,6 +138,8 @@ included. The field is optional for records produced by older versions.
 | `GET` | `/api/storage/files/<file_id>/content`, `/api/storage/files/<file_id>/preview`, `/api/storage/files/<file_id>/relations`, `/api/storage/files/<file_id>/download` | Text content supports `offset`/`limit` and explicit continuation; preview serves images/PDF/audio/video; download preserves original bytes and filename. |
 | `GET` | `/api/knowledge/sources`, `/api/knowledge/search`, `/api/knowledge/chunks/<chunk_id>` | Knowledge sources/search/chunk. |
 | `POST` | `/api/knowledge/upload`, `/api/knowledge/sources/from-artifact`, `/api/knowledge/sources/<source_id>/reindex` | Knowledge ingestion/reindex. |
+
+`/api/knowledge/upload` accepts exactly one multipart `file` or existing `file_id`, plus `workspace_id` and ingestion options. Existing files are resolved in the authenticated principal/workspace and must be active; knowledge ingestion references the original without re-uploading it. Unsupported parsing remains an explicit failure and preserves the original.
 | `GET/PATCH/DELETE` | `/api/knowledge/sources/<source_id>` | Knowledge source lifecycle. |
 | `GET` | `/api/memory/status`, `/api/memory/list` | Governed memory projections. |
 | `POST` | `/api/memory/search`, `/api/memory/write`, `/api/memory/confirm`, `/api/memory/reject`, `/api/memory/batch-delete` | Governed memory operations. |

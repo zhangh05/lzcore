@@ -1,5 +1,26 @@
 import { test, expect } from './fixtures';
 
+test('34. knowledge ingestion from the file library reuses its actual original', async ({ page, api }) => {
+  const name = `知识原件-${Date.now()}.md`;
+  const payload = Buffer.from('# 原始资料\n真实内容\n');
+  const upload = await api.post('/api/workspaces/default/artifacts/upload', { multipart: { file: { name, mimeType: 'text/markdown', buffer: payload } } });
+  const fid = (await upload.json()).file.file_id;
+  await page.goto('/data');
+  await page.getByRole('tab', { name: /^文件/ }).click();
+  await page.getByPlaceholder('搜索名称、路径或来源').fill(name);
+  await page.getByRole('button', { name: new RegExp(name) }).click();
+  const ingestion = page.waitForResponse(response => response.url().endsWith('/knowledge/upload') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: '加入知识库', exact: true }).click();
+  const imported = await ingestion;
+  expect(imported.ok()).toBeTruthy();
+  const sourceId = (await imported.json()).source.source_id;
+  await expect(page).toHaveURL(new RegExp(`/knowledge\\?source_id=${sourceId}`));
+  const metadata = (await (await api.get(`/api/storage/files/${fid}?workspace_id=default`)).json()).file;
+  expect(metadata.references.some((reference: { owner_id: string; relation: string }) => reference.owner_id === sourceId && reference.relation === 'source')).toBeTruthy();
+  const original = await api.get(`/api/storage/files/${fid}/download?workspace_id=default`);
+  expect(Buffer.compare(await original.body(), payload)).toBe(0);
+});
+
 test('34. managed originals can be reused and remain isolated between conversations', async ({ page, api }) => {
   const name = `文件复用-${Date.now()}.csv`;
   const uploaded = await api.post('/api/workspaces/default/artifacts/upload', { multipart: { file: { name, mimeType: 'text/csv', buffer: Buffer.from('设备,地址\n测试,192.0.2.1\n') } } });

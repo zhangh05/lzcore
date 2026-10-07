@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileGovernance } from './FileGovernance';
 import { SourceBrowser } from './SourceBrowser';
 import { FileInspection } from './FileInspection';
-import { storageApi } from '../../api';
+import { knowledgeApi, storageApi } from '../../api';
 import { apiRequest } from '../../api/client';
 import { Button, DetailPanel, FilterBar, SearchInput } from '../../components/ui';
 import { CodeBlock, EmptyState } from '../../components/common';
@@ -114,6 +114,19 @@ export function FileWorkspace({ workspaceId, initialFile }: { workspaceId: strin
     try { await storageApi.organize(workspaceId, selected.file_id, { name, folder }); setSelected(null); refresh(); }
     catch (reason) { setError(String((reason as Error).message || reason)); }
   }
+  async function addToKnowledge() {
+    if (!selected || busy) return;
+    const identity = selectedIdentity.current;
+    setBusy(true); setError('');
+    try {
+      const result = await knowledgeApi.upload(workspaceId, { file_id: selected.file_id }, { title: selected.original_name });
+      if (selectedIdentity.current === identity) {
+        toast({ kind: 'success', title: '已加入知识库', body: '知识来源复用当前原件' });
+        navigate(`/knowledge?source_id=${encodeURIComponent(result.source.source_id)}`);
+      }
+    } catch (reason) { if (selectedIdentity.current === identity) setError(String((reason as Error).message || reason)); }
+    finally { setBusy(false); refresh(); }
+  }
   const fileUrl = (file: ManagedFile, action: string) => `/api/storage/files/${encodeURIComponent(file.file_id)}/${action}?workspace_id=${encodeURIComponent(workspaceId)}`;
   return <section className="file-workspace" data-testid="file-workspace">
     <FilterBar>
@@ -143,7 +156,7 @@ export function FileWorkspace({ workspaceId, initialFile }: { workspaceId: strin
       </aside>
       {!selected ? <DetailPanel empty={{ text: '选择文件', hint: '预览、下载、组织资料并查看来源' }} /> : <DetailPanel title={selected.original_name} onClose={() => setSelected(null)} actions={<>
         {recycle ? <><Button size="sm" onClick={() => void restore()}>恢复</Button><Button size="sm" variant="danger-ghost" onClick={() => void remove(true)}>永久清除</Button></> : <>
-          <a className="btn sm" href={fileUrl(selected, 'download')}>下载原件</a><Button size="sm" variant="danger-ghost" onClick={() => void remove()}>移入回收站</Button>
+          <a className="btn sm" href={fileUrl(selected, 'download')}>下载原件</a><Button size="sm" disabled={busy} onClick={() => void addToKnowledge()}>加入知识库</Button><Button size="sm" variant="danger-ghost" onClick={() => void remove()}>移入回收站</Button>
         </>}
       </>}>
         <dl className="file-space-properties"><dt>路径</dt><dd>{selected.path || '托管文件'}</dd><dt>文件身份</dt><dd>{selected.file_id}</dd><dt>来源</dt><dd>{selected.source}</dd><dt>使用关系</dt><dd>{selected.reference_count} 处</dd></dl>
