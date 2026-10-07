@@ -166,55 +166,12 @@ CANONICAL_ALIASES_GLOBAL: Final[dict[str, tuple[str, str | None]]] = {}
 # Canonical enum sets per tool — mirrors the canonical registry action enums.
 # Keep this table aligned with ``core.tools.canonical_registry`` because the
 # pre-execution repair path consults it before schema validation.
+from core.tools.canonical_registry import CANONICAL_REGISTRY
+
 _CANONICAL_ACTIONS: Final[dict[str, frozenset[str]]] = {
-    "exec.run": frozenset({
-        "shell", "python", "slash",
-    }),
-    "system.manage": frozenset({
-        "diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log",
-        "run_get", "session_get", "session_checkpoint", "session_rewind",
-        "session_export", "session_snapshot", "context_index", "context_read",
-    }),
-    "workspace.file": frozenset({
-        "list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "edit", "patch",
-        "create", "write", "write_artifact", "glob", "delete",
-    }),
-    "knowledge.manage": frozenset({
-        "search", "read", "list", "chunk", "import", "reindex",
-    }),
-    "agent.manage": frozenset({
-        "spawn", "start", "list", "get", "cancel", "status", "merge", "reconcile",
-    }),
-    "browser.manage": frozenset({
-        "navigate", "snapshot", "screenshot", "click", "type", "extract",
-        "scroll", "hover", "press_key", "select_option", "evaluate", "wait",
-        "tabs", "network", "console", "navigate_back", "close",
-    }),
-    "web.manage": frozenset({"search", "fetch", "weather", "weather_batch", "deep_search"}),
-    "location.manage": frozenset({"resolve", "resolve_batch", "reverse"}),
-    "data.manage": frozenset({
-        "parse", "stats", "distinct", "aggregate", "filter",
-        "sort", "render", "pivot", "join",
-    }),
-    "report.manage": frozenset({
-        "save", "diff", "document",
-    }),
-    "text.analyze": frozenset({
-        "redact", "extract_entities", "match",
-    }),
-    "memory.manage": frozenset({
-        "search", "get", "create", "update", "confirm", "delete",
-        "review", "profile_get", "profile_set",
-    }),
-    "skill.manage": frozenset({
-        "list", "find", "load", "inspect", "mcp_list_tools", "mcp_call",
-    }),
-    "workspace.artifact": frozenset({
-        "list", "read", "save", "tag", "delete",
-    }),
-    "workspace.filestore": frozenset({
-        "references", "import", "reconcile_trash_preview", "reconcile_trash",
-    }),
+    tool_id: frozenset(entry.input_schema['properties']['action']['enum'])
+    for tool_id, entry in CANONICAL_REGISTRY.items()
+    if entry.input_schema.get('properties', {}).get('action', {}).get('enum')
 }
 
 

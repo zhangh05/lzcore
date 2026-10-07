@@ -1,3 +1,4 @@
+import { MemoryRouter } from '../router';
 /**
  * Test 7 — API error 状态
  */
@@ -24,7 +25,7 @@ describe("API Error state", () => {
       status: 200,
       data: { sources: [] },
     });
-    render(<KnowledgeLibrary />);
+    render(<MemoryRouter initialEntries={["/knowledge"]}><KnowledgeLibrary /></MemoryRouter>);
     const err = await screen.findByTestId("error-state");
     expect(err.textContent).toContain("service unavailable");
     expect(err.textContent).toContain("http_5xx");

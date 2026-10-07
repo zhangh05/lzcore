@@ -1,5 +1,7 @@
 import React, { memo, useEffect, useId, useRef, useState, type ChangeEvent, type DragEvent, type RefObject } from "react";
 import type { PendingAttachment } from "../../../hooks/useWorkbenchSend";
+import type { ManagedFile } from '../../../types';
+import { FileLibraryPicker } from '../../../components/FileLibraryPicker';
 import {
   IconAttachment,
   IconClose,
@@ -42,9 +44,13 @@ export interface WorkbenchComposerProps {
   onDragOver: (event: DragEvent) => void;
   onDrop: (event: DragEvent) => void;
   isSkillLocked?: boolean;
+  workspaceId?: string | null;
+  onChooseFiles?: (files: ManagedFile[]) => void;
 }
 
 export const WorkbenchComposer = memo(function WorkbenchComposer({
+  workspaceId,
+  onChooseFiles,
   currentSessionId,
   turnRunning,
   input,
@@ -67,7 +73,9 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
   onDrop,
   isSkillLocked = false,
 }: WorkbenchComposerProps) {
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const canSend = Boolean(currentSessionId && (input.trim() || attachments.length > 0));
+  useEffect(() => { setLibraryOpen(false); }, [currentSessionId, workspaceId]);
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const [resourceQuery, setResourceQuery] = useState("");
   const resourcePanelId = useId();
@@ -124,6 +132,7 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
       ) : null}
 
       {/* 核心输入行与操作 */}
+      {workspaceId && onChooseFiles && <FileLibraryPicker workspaceId={workspaceId} maxCount={Math.max(0, 8 - attachments.length)} open={libraryOpen} onClose={() => setLibraryOpen(false)} onChoose={onChooseFiles} />}
       <div className="wb-input-row">
         <div className="wb-input-main">
           <textarea
@@ -145,7 +154,6 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
               type="file"
               multiple
               disabled={!currentSessionId || turnRunning}
-              accept=".txt,.md,.json,.csv,.tsv,.log,.conf,.cfg,.yaml,.yml,.xml,.html,.htm,.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.gif,.webp"
               onChange={onFileInputChange}
               className="wb-file-input"
             />
@@ -161,6 +169,8 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
               <IconAttachment size={16} aria-hidden="true" />
             </button>
 
+            {workspaceId && onChooseFiles && <button type="button" className="wb-attach-btn" disabled={!currentSessionId || turnRunning}
+              onClick={() => setLibraryOpen(true)} aria-label="选择已有文件" title="选择已有文件"><IconDocument size={16} /></button>}
             {turnRunning ? (
               <button
                 className="wb-stop"

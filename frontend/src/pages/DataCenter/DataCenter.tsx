@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import type { IconProps } from "@phosphor-icons/react";
 import { useSearchParams } from "../../router";
+import { FileWorkspace } from "./FileWorkspace";
 import { apiRequest } from "../../api/client";
 import {
   archiveApi,
@@ -57,6 +58,7 @@ export function DataCenter() {
   const toast = useToastStore((state) => state.show);
   const [searchParams, setSearchParams] = useSearchParams();
   const producerId = searchParams.get("producer_id") || "";
+  const artifactFocus = searchParams.get('artifact_id') || '';
   const [tab, setTab] = useState<DataTab>(producerId ? "artifacts" : "overview");
   const [overview, setOverview] = useState<DataOverview | null>(null);
   const [files, setFiles] = useState<ManagedFile[]>([]);
@@ -65,14 +67,13 @@ export function DataCenter() {
   const [retention, setRetention] = useState<LifecyclePreview | null>(null);
   const [archive, setArchive] = useState<LifecyclePreview | null>(null);
   const [archivedItems, setArchivedItems] = useState<ArchivedDataItem[]>([]);
+  useEffect(() => { setFileFocus(null); }, [workspaceId]);
   const [artifactView, setArtifactView] = useState<ArtifactView>("");
-  const [selectedFile, setSelectedFile] = useState<ManagedFile | null>(null);
+  const [fileFocus, setFileFocus] = useState<ManagedFile | null>(null);
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
-  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [content, setContent] = useState<string>("");
   const [contentNote, setContentNote] = useState<string>("");
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -88,7 +89,7 @@ export function DataCenter() {
   // tab 上的计数徽章：让用户切之前就知道每个 tab 有多少东西。
   // "概览"不计数（它本身就是汇总），"数据关联"用已被引用的文件数。
   const tabCounts: Partial<Record<DataTab, number>> = {
-    files: files.length,
+    files: overview?.files.active ?? 0,
     artifacts: artifacts.length,
     relations: overview?.files.referenced ?? 0,
     lifecycle: pendingTotal,
@@ -170,47 +171,10 @@ export function DataCenter() {
     };
   }, [workspaceId, loadData, loadArtifacts]);
 
-  const typeOptions = useMemo(
-    () => Array.from(new Set(files.map((file) => file.logical_type))).sort(),
-    [files],
-  );
-  const filteredFiles = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return files.filter((file) => {
-      if (typeFilter !== "all" && file.logical_type !== typeFilter) return false;
-      if (!query) return true;
-      return [file.original_name, file.file_id, file.logical_type, file.source, file.run_id]
-        .some((value) => String(value || "").toLowerCase().includes(query));
-    });
-  }, [files, search, typeFilter]);
-
-  useEffect(() => {
-    const currentIds = new Set(files.map((file) => file.file_id));
-    setSelectedFileIds((ids) => ids.filter((id) => currentIds.has(id)));
-  }, [files]);
-
-  const selectFile = async (file: ManagedFile) => {
-    setSelectedArtifact(null);
-    setSelectedFile(file);
-    setContent("");
-    setContentNote(file.binary ? "二进制文件不提供文本预览" : "正在读取内容…");
-    contentAbort.current?.abort();
-    if (file.binary || !workspaceId) return;
-    const controller = new AbortController();
-    contentAbort.current = controller;
-    try {
-      const result = await storageApi.content(workspaceId, file.file_id, controller.signal);
-      if (!controller.signal.aborted) {
-        setContent(result.content || "");
-        setContentNote(result.truncated ? "内容较大，当前只显示前 100,000 个字符" : "");
-      }
-    } catch (reason) {
-      if (!controller.signal.aborted) setContentNote(isApiError(reason) ? reason.message : String(reason));
-    }
-  };
+  const filteredFiles = useMemo(() => files.filter(file => !search ||
+    [file.original_name, file.file_id, file.source, file.run_id].some(value => String(value || '').toLowerCase().includes(search.toLowerCase()))), [files, search]);
 
   const selectArtifact = async (artifact: Artifact) => {
-    setSelectedFile(null);
     setSelectedArtifact(artifact);
     setContent("");
     setContentNote("正在读取内容…");
@@ -219,6 +183,13 @@ export function DataCenter() {
     const controller = new AbortController();
     contentAbort.current = controller;
     try {
+      if (artifact.file_id) {
+        const file = await storageApi.metadata(workspaceId, artifact.file_id, controller.signal);
+        if (file.file.binary) {
+          if (!controller.signal.aborted) setContentNote('二进制原件可下载，文件空间提供结构或页面预览。');
+          return;
+        }
+      }
       const result = await artifactsApi.content(workspaceId, artifact.artifact_id, controller.signal);
       if (!controller.signal.aborted) {
         setContent(result.content || "");
@@ -228,6 +199,18 @@ export function DataCenter() {
       if (!controller.signal.aborted) setContentNote(isApiError(reason) ? reason.message : String(reason));
     }
   };
+
+  useEffect(() => {
+    if (!workspaceId || !artifactFocus) return;
+    const controller = new AbortController();
+    setTab('artifacts');
+    artifactsApi.get(workspaceId, artifactFocus, controller.signal)
+      .then(result => { if (!controller.signal.aborted) void selectArtifact(result.artifact); })
+      .catch(reason => { if (!controller.signal.aborted) setError(String(reason.message || reason)); });
+    return () => controller.abort();
+  // selectArtifact consumes the current authenticated workspace.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, artifactFocus]);
 
   const upload = async (file: File) => {
     if (!workspaceId) return;
@@ -247,37 +230,6 @@ export function DataCenter() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const deleteFiles = async (targets: ManagedFile[]) => {
-    if (!workspaceId) return;
-    const referencedCount = targets.filter((file) => file.reference_count > 0).length;
-    const accepted = await confirm({
-      title: `将 ${targets.length} 个文件移入回收站？`,
-      body: `文件可以恢复。${referencedCount ? `其中 ${referencedCount} 个文件正在被使用，来源和引用记录会保留。` : ""}`,
-      confirmLabel: "移入回收站",
-      destructive: true,
-    });
-    if (!accepted) return;
-    setBusy(true);
-    try {
-      const results = await Promise.allSettled(targets.map((file) => storageApi.delete(workspaceId, file.file_id)));
-      const completed = targets.filter((_file, index) => results[index].status === "fulfilled");
-      const failed = results.length - completed.length;
-      setSelectedFile((current) => current && completed.some((file) => file.file_id === current.file_id) ? null : current);
-      setSelectedFileIds((ids) => ids.filter((id) => !completed.some((file) => file.file_id === id)));
-      toast({ kind: failed ? "warning" : "success", title: failed ? "部分完成" : "已移入回收站",
-        body: `${completed.length} 个文件已处理${failed ? `，${failed} 个失败，可继续选择失败项处理` : "，可在回收站恢复"}。` });
-      await Promise.all([loadData(), loadArtifacts()]);
-    } catch (reason) {
-      toast({ kind: "error", title: "删除失败", body: errorMessage(reason) });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const deleteFile = async (file: ManagedFile) => {
-    await deleteFiles([file]);
   };
 
   const deleteArtifact = async (artifact: Artifact) => {
@@ -361,11 +313,11 @@ export function DataCenter() {
             label={label}
             count={tabCounts[key]}
             active={tab === key}
-            onClick={() => { setTab(key); setSelectedFile(null); setSelectedArtifact(null); }}
+            onClick={() => { setTab(key); setFileFocus(null); setSelectedArtifact(null); }}
           />
         ))}
         <div className="spacer" />
-        {overview && <Badge kind={overview.health.ok ? "ok" : "err"}>{overview.health.ok ? "数据关系正常" : "发现数据问题"}</Badge>}
+        {overview && <Badge kind={overview.health.ok ? "ok" : "err"}>{overview.health.ok ? "文件存在性检查通过" : "发现数据问题"}</Badge>}
       </FilterBar>
 
       {/* 跨 tab 概览：把 overview 的关键数字 + 待处理数集中成 5 格 stat strip。
@@ -405,17 +357,7 @@ export function DataCenter() {
         onOpenFiles={() => setTab("files")}
         onOpenLifecycle={() => setTab("lifecycle")}
       />}
-      {tab === "files" && (
-        <FilesView
-          files={filteredFiles} search={search} onSearch={setSearch}
-          typeFilter={typeFilter} typeOptions={typeOptions} onTypeFilter={setTypeFilter}
-          busy={busy}
-          selected={selectedFile} onSelect={(file) => void selectFile(file)}
-          selectedIds={selectedFileIds} onSelectedIds={setSelectedFileIds} onDelete={(file) => void deleteFile(file)}
-          onBulkDelete={(targets) => void deleteFiles(targets)}
-      detail={<FileDetail file={selectedFile} content={content} note={contentNote} busy={busy} onDelete={deleteFile} />}
-        />
-      )}
+      {tab === "files" && workspaceId && <FileWorkspace key={workspaceId} workspaceId={workspaceId} initialFile={fileFocus} />}
       {tab === "artifacts" && (
         <ArtifactsView
           artifacts={artifacts} governance={governance} view={artifactView} onView={setArtifactView}
@@ -423,10 +365,14 @@ export function DataCenter() {
             setSearchParams({}, { replace: true });
           }}
           selected={selectedArtifact} onSelect={(artifact) => void selectArtifact(artifact)}
-          detail={<ArtifactDetail artifact={selectedArtifact} content={content} note={contentNote} onDelete={deleteArtifact} />}
+          detail={<ArtifactDetail artifact={selectedArtifact} content={content} note={contentNote} onDelete={deleteArtifact} workspaceId={workspaceId || ''} onOpenFile={async fid => {
+            if (!workspaceId) return;
+            try { const result = await storageApi.metadata(workspaceId, fid); setFileFocus(result.file); setTab('files'); }
+            catch (reason) { setError(String((reason as Error).message || reason)); }
+          }} />}
         />
       )}
-      {tab === "relations" && <RelationsView files={filteredFiles} search={search} onSearch={setSearch} onSelect={(file) => { setTab("files"); void selectFile(file); }} />}
+      {tab === "relations" && <RelationsView files={filteredFiles} search={search} onSearch={setSearch} onSelect={(file) => { setTab("files"); setFileFocus(file); }} />}
       {tab === "lifecycle" && (
         <LifecycleView retention={retention} archive={archive} archivedItems={archivedItems} busy={busy} onApply={applyLifecycle} onRestore={restoreArchived} />
       )}
@@ -442,7 +388,7 @@ function Overview({ overview, files, onImport, onOpenFiles, onOpenLifecycle }: {
   onOpenLifecycle: () => void;
 }) {
   if (!overview) return <EmptyState text="暂无数据概览" />;
-  const healthSummary = `断链 ${overview.health.missing_on_disk} · 孤儿 ${overview.health.orphan_files}`;
+  const healthSummary = `断链 ${overview.health.missing_on_disk} · 未登记路径 ${overview.health.orphan_files}`;
   const typeEntries = Object.entries(overview.types).sort((a, b) => b[1] - a[1]);
   return <div className="data-overview">
     <section className="data-summary-panel" aria-label="数据摘要">
@@ -453,7 +399,7 @@ function Overview({ overview, files, onImport, onOpenFiles, onOpenLifecycle }: {
         </div>
         <div className={`data-health-inline ${overview.health.ok ? "ok" : "err"}`}>
           <span className="data-health-dot" />
-          <strong>{overview.health.ok ? "数据关系正常" : "发现数据问题"}</strong>
+          <strong>{overview.health.ok ? "文件存在性检查通过" : "发现数据问题"}</strong>
           <small>{healthSummary}</small>
         </div>
       </div>
@@ -508,111 +454,6 @@ function Stat({ label, value, hint, tone = "" }: { label: string; value: string 
   return <div className={`data-stat ${tone}`}><span className="data-stat-label">{label}</span><strong>{value}</strong><small>{hint}</small></div>;
 }
 
-function FilesView({ files, search, onSearch, typeFilter, typeOptions, onTypeFilter, busy, selected, onSelect, selectedIds, onSelectedIds, onDelete, onBulkDelete, detail }: {
-  files: ManagedFile[]; search: string; onSearch: (value: string) => void; typeFilter: string; typeOptions: string[];
-  onTypeFilter: (value: string) => void; busy: boolean; selected: ManagedFile | null; onSelect: (file: ManagedFile) => void;
-  selectedIds: string[]; onSelectedIds: (ids: string[]) => void; onDelete: (file: ManagedFile) => void; onBulkDelete: (files: ManagedFile[]) => void; detail: ReactNode;
-}) {
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const selectedFiles = useMemo(() => files.filter((file) => selectedIdSet.has(file.file_id)), [files, selectedIdSet]);
-  const allVisibleSelected = files.length > 0 && files.every((file) => selectedIdSet.has(file.file_id));
-  const toggleAll = () => {
-    const visibleIds = new Set(files.map((file) => file.file_id));
-    if (allVisibleSelected) onSelectedIds(selectedIds.filter((id) => !visibleIds.has(id)));
-    else onSelectedIds(Array.from(new Set([...selectedIds, ...visibleIds])));
-  };
-  const toggleOne = (fileId: string) => {
-    onSelectedIds(selectedIdSet.has(fileId) ? selectedIds.filter((id) => id !== fileId) : [...selectedIds, fileId]);
-  };
-  const rowKeyDown = (event: KeyboardEvent<HTMLDivElement>, file: ManagedFile) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onSelect(file);
-    }
-  };
-
-  return <>
-    <FilterBar className="data-file-filters">
-      <SearchInput value={search} onChange={(event) => onSearch(event.target.value)} onClear={() => onSearch("")} placeholder="搜索文件名、ID、来源或任务" aria-label="搜索数据" />
-      <select className="select" value={typeFilter} onChange={(event) => onTypeFilter(event.target.value)} aria-label="按数据类型筛选">
-        <option value="all">全部类型</option>
-        {typeOptions.map((type) => <option key={type} value={type}>{typeLabel(type)}</option>)}
-      </select>
-      <span className="metric-chip">{files.length} 项</span>
-    </FilterBar>
-    <div className="split-shell data-split">
-      <aside className="data-list" aria-label="数据列表">
-        <div className="data-list-toolbar">
-          <label className="data-check-all">
-            <input type="checkbox" checked={allVisibleSelected} disabled={!files.length || busy} onChange={toggleAll} />
-            <span>全选</span>
-          </label>
-          <span className="data-list-count">{selectedFiles.length ? `已选 ${selectedFiles.length}` : `${files.length} 项`}</span>
-          <Button size="sm" variant="danger-ghost" disabled={!selectedFiles.length || busy} onClick={() => onBulkDelete(selectedFiles)}>批量删除</Button>
-        </div>
-        <div className="data-list-scroll">
-          {!files.length && <EmptyState text="没有符合条件的数据" hint="调整筛选条件或导入文件" />}
-          {files.map((file) => {
-            return <div
-              key={file.file_id}
-              role="button"
-              tabIndex={0}
-              className={`data-row ${selected?.file_id === file.file_id ? "selected" : ""}`}
-              onClick={() => onSelect(file)}
-              onKeyDown={(event) => rowKeyDown(event, file)}
-            >
-              <label className="data-row-check" title="选择删除" onClick={(event) => event.stopPropagation()}>
-                <input type="checkbox" checked={selectedIdSet.has(file.file_id)} disabled={busy} onChange={() => toggleOne(file.file_id)} />
-              </label>
-              <span className="data-row-main">
-                <b>{file.original_name || file.file_id}</b>
-                <small>{typeLabel(file.logical_type)} · {sourceLabel(file.source)} · {formatFileSize(file.size_bytes)} · {formatDate(file.created_at, "short")}</small>
-              </span>
-              <span className="data-row-badges">
-                {file.artifacts.length > 0 && <Badge kind="info">{file.artifacts.length} 个产出</Badge>}
-                <Badge kind={file.reference_count ? "warn" : "muted"}>{file.reference_count ? `${file.reference_count} 个引用` : "独立文件"}</Badge>
-              </span>
-              <Button size="sm" variant="danger-ghost" className="data-row-action" disabled={busy} title="删除这项数据" onClick={(event) => { event.stopPropagation(); onDelete(file); }}>删除</Button>
-            </div>;
-          })}
-        </div>
-      </aside>
-      {detail}
-    </div>
-  </>;
-}
-
-function FileDetail({ file, content, note, busy, onDelete }: { file: ManagedFile | null; content: string; note: string; busy: boolean; onDelete: (file: ManagedFile) => void }) {
-  if (!file) return <DetailPanel empty={{ text: "选择一个文件", hint: "查看内容、来源、任务产出和关联信息" }} />;
-  return <DetailPanel title={file.original_name || file.file_id} subtitle={`${typeLabel(file.logical_type)} · ${formatFileSize(file.size_bytes)}`} actions={<>
-    <Button size="sm" variant="danger-ghost" disabled={busy} title="删除这项数据" onClick={() => onDelete(file)}>删除</Button>
-  </>}>
-    <div className="info-grid-3 data-info-grid">
-      <Info label="文件 ID" value={file.file_id} mono />
-      <Info label="来源" value={sourceLabel(file.source)} />
-      <Info label="敏感级别" value={sensitivityLabel(file.sensitivity)} />
-      <Info label="关联任务" value={file.run_id ? shortId(file.run_id) : "无"} />
-      <Info label="引用数量" value={String(file.reference_count)} />
-      <Info label="数据状态" value={lifecycleLabel(file.lifecycle)} />
-    </div>
-    <section className="data-detail-section">
-      <h4>关联任务产出</h4>
-      {file.artifacts.length ? file.artifacts.map((artifact) => <div className="data-relation-item" key={artifact.artifact_id}>
-        <span><b>{artifact.title || artifact.artifact_id}</b><small>{artifact.artifact_type}</small></span>
-        <Badge kind={artifact.lifecycle === "active" ? "ok" : "muted"}>{artifact.lifecycle}</Badge>
-      </div>) : <p className="dim text-sm">当前没有关联的任务产出。</p>}
-    </section>
-    <section className="data-detail-section">
-      <h4>业务引用</h4>
-      {file.references.length ? file.references.map((reference, index) => <div className="data-relation-item" key={`${reference.owner_type}-${reference.owner_id}-${index}`}>
-        <span><b>{referenceTypeLabel(reference.owner_type)}</b><small>{relationLabel(reference.relation)}</small></span>
-        <span className="mono text-sm">{shortId(reference.owner_id)}</span>
-      </div>) : <p className="dim text-sm">没有业务对象引用，可直接删除。</p>}
-    </section>
-    <section className="data-detail-section"><h4>内容预览</h4>{note && <p className="dim text-sm">{note}</p>}{content && <CodeBlock>{content}</CodeBlock>}</section>
-  </DetailPanel>;
-}
-
 function ArtifactsView({ artifacts, governance, view, onView, producerId, onClearProducer, selected, onSelect, detail }: {
   artifacts: Artifact[]; governance: ArtifactGovernanceSummary | null; view: ArtifactView; onView: (view: ArtifactView) => void;
   producerId: string; onClearProducer: () => void; selected: Artifact | null; onSelect: (artifact: Artifact) => void; detail: ReactNode;
@@ -648,7 +489,7 @@ function ArtifactsView({ artifacts, governance, view, onView, producerId, onClea
   </>;
 }
 
-function ArtifactDetail({ artifact, content, note, onDelete }: { artifact: Artifact | null; content: string; note: string; onDelete: (artifact: Artifact) => void }) {
+function ArtifactDetail({ artifact, content, note, onDelete, workspaceId, onOpenFile }: { artifact: Artifact | null; content: string; note: string; onDelete: (artifact: Artifact) => void; workspaceId: string; onOpenFile: (fid: string) => void }) {
   if (!artifact) return <DetailPanel empty={{ text: "选择一项任务产出", hint: "查看可信状态、来源和内容" }} />;
   return <DetailPanel title={artifact.title || artifact.artifact_id} subtitle={`${artifact.artifact_type} · ${formatFileSize(artifact.size_bytes)}`} actions={<Button size="sm" variant="danger-ghost" onClick={() => onDelete(artifact)}>删除</Button>}>
     <div className="info-grid-3 data-info-grid">
@@ -660,6 +501,7 @@ function ArtifactDetail({ artifact, content, note, onDelete }: { artifact: Artif
       <Info label="数据状态" value={lifecycleLabel(artifact.lifecycle)} />
     </div>
     {artifact.governance?.authority_reason && <div className="callout info">{artifact.governance.authority_reason}</div>}
+    {artifact.file_id && <div className="actions-row"><a className="btn sm" href={`/api/storage/files/${encodeURIComponent(artifact.file_id)}/download?workspace_id=${encodeURIComponent(workspaceId)}`}>下载原件</a><Button size="sm" onClick={() => onOpenFile(artifact.file_id!)}>打开文件空间</Button></div>}
     <section className="data-detail-section"><h4>内容预览</h4>{note && <p className="dim text-sm">{note}</p>}{content && <CodeBlock>{content}</CodeBlock>}</section>
     <details className="collapse"><summary>元数据</summary><CodeBlock language="json">{JSON.stringify(artifact.metadata || {}, null, 2)}</CodeBlock></details>
   </DetailPanel>;
@@ -741,11 +583,4 @@ function sumCounts(counts?: Record<string, number>): number { return Object.valu
 function archiveKindLabel(kind: string): string { return ({ runs: "执行记录", traces: "处理过程", jobs: "任务", tmp: "临时文件" } as Record<string, string>)[kind] || kind; }
 function candidateLabel(kind: string): string { return ({ runs: "执行记录", traces: "处理过程", jobs: "任务", artifacts: "临时文件", sessions: "会话", memories: "长期记忆", temp: "临时文件" } as Record<string, string>)[kind] || kind; }
 function referenceTypeLabel(type: string): string { return ({ run: "执行任务", session: "会话", artifact: "任务产出", knowledge_source: "知识来源", job: "定时任务" } as Record<string, string>)[type] || type || "业务对象"; }
-function relationLabel(relation: string): string { return ({ source: "源文件", output: "任务产出", attachment: "附件", normalized: "规范化内容" } as Record<string, string>)[relation] || relation || "关联"; }
-function sensitivityLabel(value: string): string { return ({ public: "公开", internal: "内部", sensitive: "敏感", secret: "机密" } as Record<string, string>)[value] || value; }
 function lifecycleLabel(value: string): string { return ({ active: "使用中", archived: "已归档", soft_deleted: "待清理", purged: "已清理" } as Record<string, string>)[value] || value; }
-function errorMessage(reason: unknown): string {
-  if (isApiError(reason)) return reason.message;
-  if (reason instanceof Error) return reason.message;
-  return String(reason);
-}

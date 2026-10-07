@@ -422,14 +422,9 @@ def import_file(
     _index.replace_chunks(workspace_id, source_id, parents + children)
 
     # ReferenceIndex: link source/normalized files to knowledge source
-    try:
-        from storage.reference_index import add_reference
-        if source_file_id:
-            add_reference(workspace_id, source_file_id, "knowledge_source", source_id, "source")
-        if normalized_file_id:
-            add_reference(workspace_id, normalized_file_id, "knowledge_source", source_id, "normalized")
-    except Exception:
-        pass
+    from storage.reference_index import replace_owner_references
+    replace_owner_references(workspace_id, 'knowledge_source', source_id,
+        [(fid, relation) for fid, relation in ((source_file_id, 'source'), (normalized_file_id, 'normalized')) if fid])
 
     result: dict[str, Any] = {
         "ok": True,

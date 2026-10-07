@@ -120,9 +120,22 @@ included. The field is optional for records produced by older versions.
 | `GET` | `/api/workspaces/<ws_id>/artifacts/<artifact_id>/content`, `/api/workspaces/<ws_id>/artifacts/<artifact_id>/review-items`, `/api/workspaces/<ws_id>/artifacts/<artifact_id>/summarize` | Artifact content, review items and summary. |
 | `POST` | `/api/workspaces/<ws_id>/artifacts/<artifact_id>/promote`; `/api/workspaces/<ws_id>/artifacts/upload`, `/api/workspaces/<ws_id>/artifacts/batch-delete` | Promote/upload/explicit batch delete. |
 | `GET` | `/api/storage/overview`, `/api/storage/files`, `/api/storage/events` | Managed-file storage projections. |
+| `GET/PATCH` | `/api/storage/files/<file_id>` | Resolve identity/capabilities or organize name/display folder (JSON workspace_id); file_id stays stable. |
+| `GET` | `/api/storage/files/<file_id>/inspect` | Structured Office/CSV/PDF/archive inspection, offset/limit, source digest and explicit coverage. |
+| `POST` | `/api/storage/files/<file_id>/page` | PDF page image; optional available local OCR. JSON workspace_id/page/ocr. |
+| `GET` | `/api/storage/search` | Literal managed-content search with line/snippet/digest and indexed coverage. |
+| `POST` | `/api/storage/search/rebuild` | Rebuild disposable text/parsed-document index; no model or embedding requests. |
+| `GET` | `/api/storage/sources` | Browse an actual managed source directory by filepath, offset/limit. |
+| `POST` | `/api/storage/sources/move` | Move an actual source path; destination conflicts block; code imports are not rewritten. |
+| `POST` | `/api/storage/reconcile` | Preview or hash-verify pending FileRecord commits; apply=true settles metadata, never replays payload writes. |
+| `GET` | `/api/storage/sources/content` | Bounded UTF-8 source preview at an explicit workspace filepath. |
+| `GET` | `/api/storage/health` | Separate file/size/reference/owner checks; hashes=true explicitly hashes payloads. |
+| `POST` | `/api/storage/migration` | Preview proven missing owner references; apply=true repairs with a before/result backup. |
+| `GET` | `/api/storage/backup` | Download file-domain payload/identity/owner backup; excludes credentials and live jobs. |
+| `POST` | `/api/storage/restore` | Multipart backup preview by default, apply=true restores within the same principal/workspace without overwriting conflicts. |
 | `DELETE` | `/api/storage/files/<file_id>` | Recycle a managed file; `permanent=true` clears bytes while retaining the file identity and owner references. Requires `confirm=true`; referenced files require `force=true`. |
 | `POST` | `/api/storage/files/<file_id>/restore` | Restore a soft-deleted file; JSON body supplies verified `workspace_id`. Payload integrity and destination conflicts are checked. |
-| `GET` | `/api/storage/files/<file_id>/content`, `/api/storage/files/<file_id>/preview`, `/api/storage/files/<file_id>/relations`, `/api/storage/files/<file_id>/download` | Text content supports `offset`/`limit` and explicit continuation; preview serves images/PDF; download preserves original bytes and filename. |
+| `GET` | `/api/storage/files/<file_id>/content`, `/api/storage/files/<file_id>/preview`, `/api/storage/files/<file_id>/relations`, `/api/storage/files/<file_id>/download` | Text content supports `offset`/`limit` and explicit continuation; preview serves images/PDF/audio/video; download preserves original bytes and filename. |
 | `GET` | `/api/knowledge/sources`, `/api/knowledge/search`, `/api/knowledge/chunks/<chunk_id>` | Knowledge sources/search/chunk. |
 | `POST` | `/api/knowledge/upload`, `/api/knowledge/sources/from-artifact`, `/api/knowledge/sources/<source_id>/reindex` | Knowledge ingestion/reindex. |
 | `GET/PATCH/DELETE` | `/api/knowledge/sources/<source_id>` | Knowledge source lifecycle. |

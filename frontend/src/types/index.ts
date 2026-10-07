@@ -503,6 +503,7 @@ export interface ManagedFileArtifact {
 }
 
 export interface ManagedFile {
+  search_hit?: { line: number; snippet: string };
   file_id: string;
   logical_type: string;
   file_kind: string;
@@ -520,7 +521,10 @@ export interface ManagedFile {
   artifacts: ManagedFileArtifact[];
   reference_count: number;
   reference_types: string[];
-  references: Array<{ owner_type: string; owner_id: string; relation: string }>;
+  references: Array<{ owner_type: string; owner_id: string; relation: string; metadata?: { session_id?: string; run_id?: string } }>;
+  path?: string;
+  sha256?: string;
+  capabilities?: { preview: string; text_read: boolean; document_extract: boolean; image_evidence: boolean; download: boolean; media?: string; archive?: boolean };
 }
 
 export interface DataOverview {

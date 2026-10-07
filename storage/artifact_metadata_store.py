@@ -68,13 +68,41 @@ def create_artifact_metadata(
     return record
 
 
-def upsert_artifact_record(workspace_id: str, record: dict, *, add_to_index: bool = False) -> None:
+def upsert_artifact_record(workspace_id: str, record: dict, *, add_to_index: bool = False,
+                           settle_references: bool = True) -> None:
     """Upsert metadata and optionally update the lightweight index atomically."""
     ws_id = validate_workspace_id(workspace_id)
-    with FileLock(_metadata_lock_path(ws_id)):
-        _upsert_record_unlocked(ws_id, record)
-        if add_to_index:
-            _append_index_unlocked(ws_id, str(record.get("artifact_id") or ""))
+    from storage.project_changes import workspace_files_lock
+    from storage.file_store import get_file_record, FileCommitUnknown
+    with workspace_files_lock(ws_id):
+        payload = get_file_record(ws_id, record.get('file_id', '')) if add_to_index else None
+        intent = workspace_root(ws_id) / 'sys/artifact-commits' / (record['artifact_id'] + '.json')
+        try:
+            if payload:
+                atomic_write_json(intent, {'version': 1, 'record': record, 'settle_references': settle_references})
+            with FileLock(_metadata_lock_path(ws_id)):
+                _upsert_record_unlocked(ws_id, record)
+                if add_to_index:
+                    _append_index_unlocked(ws_id, str(record.get("artifact_id") or ""))
+            if add_to_index and settle_references:
+                _settle_artifact_references(ws_id, record)
+            if payload:
+                intent.unlink(missing_ok=True)
+        except (OSError, RuntimeError) as exc:
+            if payload:
+                raise FileCommitUnknown(payload, artifact_id=record['artifact_id']) from exc
+            raise
+
+
+def _settle_artifact_references(workspace_id, record):
+    from storage.reference_index import replace_owner_references
+    meta = record.get('metadata') or {}
+    sources = [*meta.get('source_file_ids', []), meta.get('source_file_id')]
+    files = [(fid, 'source') for fid in sources if fid]
+    if record.get('file_id'):
+        files.append((record['file_id'], 'content'))
+    replace_owner_references(workspace_id, 'artifact', record['artifact_id'], files,
+                             metadata={'artifact_type': record.get('artifact_type'), 'run_id': record.get('run_id', '')})
 
 
 def remove_artifact_record(workspace_id: str, artifact_id: str) -> bool:

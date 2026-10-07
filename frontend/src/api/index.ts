@@ -400,6 +400,12 @@ export const toolsApi = {
 };
 
 export const storageApi = {
+  page: (workspace_id: string, options: { q?: string; lifecycle?: string; view?: string; folder?: string; sort?: string; cursor?: string; limit?: number } = {}, signal?: AbortSignal) =>
+    apiRequest<{ ok: boolean; files: ManagedFile[]; total: number; next_cursor: string; folders?: string[] }>({ method: "GET", url: "/storage/files", params: { workspace_id, ...options } }, signal),
+  metadata: (workspace_id: string, file_id: string, signal?: AbortSignal) =>
+    apiRequest<{ ok: boolean; file: ManagedFile }>({ method: "GET", url: `/storage/files/${file_id}`, params: { workspace_id } }, signal),
+  organize: (workspace_id: string, file_id: string, data: { name?: string; folder?: string }) =>
+    apiRequest<{ ok: boolean; file: ManagedFile }>({ method: "PATCH", url: `/storage/files/${file_id}`, data: { workspace_id, ...data } }),
   overview: (workspace_id: string, signal?: AbortSignal) =>
     apiRequest<{ ok: boolean; overview: DataOverview }>(
       { method: "GET", url: "/storage/overview", params: { workspace_id } }, signal,
@@ -409,7 +415,7 @@ export const storageApi = {
       { method: "GET", url: "/storage/files", params: { workspace_id, lifecycle } }, signal,
     ),
   content: (workspace_id: string, file_id: string, signal?: AbortSignal) =>
-    apiRequest<{ ok: boolean; file_id: string; binary: boolean; content: string; truncated: boolean }>(
+    apiRequest<{ ok: boolean; file_id: string; binary: boolean; content: string; truncated: boolean; next_offset?: number | null; total_chars?: number }>(
       { method: "GET", url: `/storage/files/${file_id}/content`, params: { workspace_id } }, signal,
     ),
   relations: (workspace_id: string, file_id: string, signal?: AbortSignal) =>

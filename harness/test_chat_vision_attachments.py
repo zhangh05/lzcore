@@ -51,8 +51,9 @@ def test_file_attachment_guidance_is_trusted_and_uses_canonical_extract_action()
     assert "file_manual" in guidance
     assert "file_image" not in guidance
     assert 'workspace__file(action="extract_document"' in guidance
-    assert "extract_document_image" in guidance
-    assert "Never infer a workspace path" in guidance
+    assert 'workspace__filestore(action="resolve"' in guidance
+    assert 'workspace__filestore(action="materialize"' in guidance
+    assert 'not a workspace filepath' in guidance
 
 
 def test_websocket_attachment_validation_uses_authenticated_user_scope(monkeypatch, tmp_path):

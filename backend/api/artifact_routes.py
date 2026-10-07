@@ -151,7 +151,7 @@ def register_artifact_routes(app):
             logical_type = "chat_attachment"
 
         try:
-            from storage.file_store import import_user_upload, read_file_content
+            from storage.file_store import import_user_upload, read_file_content, FileCommitUnknown
             file_record = import_user_upload(
                 workspace_id=ws_id,
                 file_source=f.stream,
@@ -176,6 +176,8 @@ def register_artifact_routes(app):
             if "unsupported_file_kind" in msg:
                 return jsonify({"ok": False, "error": "unsupported_file_kind", "detail": msg}), 400
             return jsonify({"ok": False, "error": "upload_failed", "detail": msg[:200]}), 400
+        except FileCommitUnknown as exc:
+            return jsonify({**exc.as_result(), 'file': exc.record}), 409
         except Exception as exc:
             return jsonify({"ok": False, "error": "upload_failed", "detail": str(exc)[:200]}), 400
 
@@ -203,6 +205,8 @@ def register_artifact_routes(app):
                     artifact = sanitize_record(rec)
                 else:
                     warnings.append("artifact_creation_blocked")
+            except FileCommitUnknown as exc:
+                return jsonify({**exc.as_result(), 'file': file_record.as_dict()}), 409
             except Exception as exc:
                 warnings.append(f"artifact_creation_failed: {str(exc)[:120]}")
         else:

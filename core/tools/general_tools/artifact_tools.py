@@ -44,7 +44,7 @@ def handle_artifact_search(inv: ToolInvocation) -> dict:
             "governance": artifact_governance_summary(ws),
         })
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_artifact_read_content_safe(inv: ToolInvocation) -> dict:
@@ -85,7 +85,7 @@ def handle_artifact_read_content_safe(inv: ToolInvocation) -> dict:
             "sensitivity": sensitivity,
         })
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_artifact_save_result(inv: ToolInvocation) -> dict:
@@ -109,7 +109,7 @@ def handle_artifact_save_result(inv: ToolInvocation) -> dict:
             "file_id": getattr(rec, "file_id", ""),
         })
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_artifact_tag(inv: ToolInvocation) -> dict:
@@ -131,7 +131,7 @@ def handle_artifact_tag(inv: ToolInvocation) -> dict:
             return _error_inv(inv, "artifact tag update failed")
         return _ok(inv, "", {"artifact_id": art_id, "tags": existing})
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_artifact_delete_soft(inv: ToolInvocation) -> dict:
@@ -151,7 +151,7 @@ def handle_artifact_delete_soft(inv: ToolInvocation) -> dict:
             "lifecycle": "deleted" if ok else "",
         }) if ok else _error_inv(inv, "delete failed")
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 __all__ = ['handle_artifact_search', 'handle_artifact_read_content_safe', 'handle_artifact_save_result', 'handle_artifact_tag', 'handle_artifact_delete_soft']

@@ -6,7 +6,8 @@ export type PendingAttachment = {
   id: string;
   name: string;
   size: string;
-  file: File;
+  file?: File;
+  managed?: { file_id: string; workspace_id: string; mime_type: string; size_bytes: number };
   uploading?: boolean;
   previewUrl?: string;
 };
@@ -69,7 +70,7 @@ export function useWorkbenchSend({
   ) => {
     const pendingAttachments = attachments;
     const hasAttachments = pendingAttachments.length > 0;
-    const hasImages = pendingAttachments.some((attachment) => attachment.file.type.startsWith("image/"));
+    const hasImages = pendingAttachments.some((attachment) => (attachment.file?.type || attachment.managed?.mime_type || '').match(/^image\/(png|jpeg|gif|webp)$/));
     const text = (typeof textOverride === "string" ? textOverride : input).trim();
     if ((!text && !hasAttachments) || sending) return;
     if (!workspaceId) {
@@ -101,6 +102,19 @@ export function useWorkbenchSend({
       const uploadedIds = new Set<string>();
       for (const attachment of pendingAttachments) {
         try {
+          if (attachment.managed) {
+            if (attachment.managed.workspace_id !== workspaceId) { failedNames.push(attachment.name); continue; }
+            const result = await apiRequest<{ ok: boolean; file: { file_id: string; original_name: string; mime_type: string; size_bytes: number; lifecycle: string } }>({
+              method: 'GET', url: `/storage/files/${attachment.managed.file_id}`, params: { workspace_id: workspaceId },
+            });
+            if (!result.ok || result.file.lifecycle !== 'active') { failedNames.push(attachment.name); continue; }
+            uploaded.push({ file_id: result.file.file_id, name: result.file.original_name,
+              mime_type: result.file.mime_type, size_bytes: result.file.size_bytes,
+              kind: result.file.mime_type.startsWith('image/') ? 'image' : 'file', previewUrl: attachment.previewUrl });
+            uploadedIds.add(attachment.id);
+            continue;
+          }
+          if (!attachment.file) { failedNames.push(attachment.name); continue; }
           const form = new FormData();
           form.append("file", attachment.file);
           form.append("artifact_type", "chat_attachment");

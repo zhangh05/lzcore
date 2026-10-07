@@ -30,6 +30,7 @@ interface KnowledgeSourceDetail extends KnowledgeSource {
 }
 import { IconBook, IconClose, IconDocument, IconPlus, IconRefresh, IconSearch } from "../../components/Icon";
 import { shortId } from "../../utils/displayText";
+import { useSearchParams } from '../../router';
 
 export function KnowledgeLibrary() {
   const currentWorkspaceId = useSessionStore((s) => s.currentWorkspaceId);
@@ -56,6 +57,19 @@ export function KnowledgeLibrary() {
   const [editingTitle, setEditingTitle] = useState("");
   const [detailSource, setDetailSource] = useState<KnowledgeSourceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [searchParams] = useSearchParams();
+  const sourceFocus = searchParams.get('source_id');
+  useEffect(() => {
+    setDetailSource(null);
+    if (!sourceFocus || !currentWorkspaceId) return;
+    let active = true;
+    setDetailLoading(true);
+    knowledgeApi.getSource(sourceFocus, currentWorkspaceId)
+      .then(result => { if (active) setDetailSource(result.source); })
+      .catch(reason => { if (active) toast({ kind: 'error', title: '来源不可用', body: String(reason.message || reason) }); })
+      .finally(() => { if (active) setDetailLoading(false); });
+    return () => { active = false; };
+  }, [currentWorkspaceId, sourceFocus, toast]);
 
   const sources = useAsync<{ sources: KnowledgeSource[]; counts?: Record<string, number> }>(
     (s) =>

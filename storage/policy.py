@@ -12,7 +12,7 @@ MAX_UPLOAD_BYTES = 200 * 1024 * 1024          # 200 MB
 BINARY_KINDS = frozenset({
     "pdf", "docx", "xlsx", "pptx",
     "zip", "tar", "gz", "bz2", "7z",
-    "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "avif", "heic",
+    "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "tiff", "tif", "ico", "avif", "heic",
     "binary", "doc", "xls", "ppt", "mp3", "wav", "m4a", "ogg", "flac", "mp4", "webm", "mov",
 })
 

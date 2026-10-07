@@ -82,7 +82,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             & $python -c "import flask, flask_sock, yaml, bs4, lxml, pdfplumber, paramiko"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            & $python -m pytest -q harness/test_windows_runtime_contract.py harness/test_session_management.py harness/test_storage_filestore_foundation.py harness/test_turn_replay.py harness/test_turn_closeout.py harness/test_replay_persist_fault.py harness/test_stream_secret_buffer.py harness/test_ws_agent_contract.py harness/test_ws_system_broadcast.py harness/test_context_memory_repairs.py harness/test_workspace_source_creation.py harness/test_observation_freshness.py harness/test_reasoning_protocol_continuity.py harness/test_runtime_recovery_hardening.py harness/test_provider_catalog.py harness/test_llm_stream_tool_calls.py harness/test_synthesis_recovery.py
+            & $python -m pytest -q harness/test_windows_runtime_contract.py harness/test_session_management.py harness/test_storage_filestore_foundation.py harness/test_file_workflow_contract.py harness/test_turn_replay.py harness/test_turn_closeout.py harness/test_replay_persist_fault.py harness/test_stream_secret_buffer.py harness/test_ws_agent_contract.py harness/test_ws_system_broadcast.py harness/test_context_memory_repairs.py harness/test_workspace_source_creation.py harness/test_observation_freshness.py harness/test_reasoning_protocol_continuity.py harness/test_runtime_recovery_hardening.py harness/test_provider_catalog.py harness/test_llm_stream_tool_calls.py harness/test_synthesis_recovery.py
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
@@ -244,6 +244,7 @@ jobs:
             ${{ runner.temp }}/desktop-qa/*/*.png
             ${{ runner.temp }}/desktop-qa/*/startup.json
             ${{ runner.temp }}/desktop-qa/*/result.json
+            ${{ runner.temp }}/desktop-qa/*/files.json
             ${{ runner.temp }}/desktop-qa/*/native-errors.txt
           if-no-files-found: warn
 

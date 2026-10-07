@@ -15,7 +15,7 @@ _TEXT = {
 }
 _BINARY = {
     **{ext: ext for ext in ('pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt',
-        'png', 'jpg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'heic', 'zip', 'tar',
+        'png', 'jpg', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'ico', 'svg', 'avif', 'heic', 'zip', 'tar',
         'gz', 'bz2', '7z', 'mp3', 'wav', 'm4a', 'ogg', 'flac', 'mp4', 'webm', 'mov')},
     'jpeg': 'jpeg',
 }
@@ -47,7 +47,7 @@ def file_capabilities(record: dict) -> dict:
     return {'download': active, 'text_read': active and not record.get('binary', False),
             'document_extract': active and (kind in TEXT_KINDS or kind in {'pdf', 'docx', 'xlsx', 'pptx'}),
             'image_evidence': active and kind in {'png', 'jpg', 'jpeg', 'gif', 'webp'},
-            'preview': 'image' if mime.startswith('image/') else 'pdf' if kind == 'pdf'
+            'preview': 'image' if kind in {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'} else 'pdf' if kind == 'pdf'
                        else 'text' if not record.get('binary', False) else 'download',
             'archive': active and kind in {'zip', 'tar', 'gz', 'bz2'},
             'media': 'audio' if mime.startswith('audio/') else 'video' if mime.startswith('video/') else ''}

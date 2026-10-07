@@ -379,7 +379,6 @@ export function OperationsPage() {
 
   // Deep-link: ?job=<id> and/or ?focus=<run_id>
   useEffect(() => {
-    if (jobs.length === 0) return;
     const deepLinkRequestId = ++deepLinkRequestRef.current;
     const jobId = searchParams.get("job");
     const focus = searchParams.get("focus");
@@ -389,24 +388,16 @@ export function OperationsPage() {
       return;
     }
     if (focus) {
-      // Best-effort: scan agent_run jobs' sessions for the run.
-      const candidates = jobs.filter((j) => j.job_type === "agent_run").slice(0, 12);
-      (async () => {
-        for (const j of candidates) {
-          if (deepLinkRequestId !== deepLinkRequestRef.current) return;
-          const sid = getSessionId(j);
-          if (!sid) continue;
-          try {
-            const d = await workspacesApi.recentRuns(wsId, sid);
-            const list = ((d?.runs ?? []) as RuntimeAuditTurn[]).filter((run) => runMatchesJob(run, j));
-            const target = list.find((r) => runIdentity(r) === focus);
-            if (target && deepLinkRequestId === deepLinkRequestRef.current) {
-              selectedJobRef.current = j;
-              setSelectedJob(j); setJobTab("overview"); setRuns(list); await openRun(target); return;
-            }
-          } catch { /* keep scanning */ }
-        }
-      })();
+      void runtimeAuditApi.run(wsId, focus).then(raw => {
+        if (deepLinkRequestId !== deepLinkRequestRef.current) return;
+        const run = ((raw as { run?: RuntimeAuditTurn })?.run || raw) as RuntimeAuditTurn;
+        if (!run || runIdentity(run) !== focus) return;
+        const job = jobs.find(candidate => runMatchesJob(run, candidate)) || null;
+        selectedJobRef.current = job;
+        setSelectedJob(job); setJobTab('overview'); setRuns([run]); void openRun(run);
+      }).catch(reason => {
+        if (deepLinkRequestId === deepLinkRequestRef.current) toast({ kind: 'error', title: '来源任务不可用', body: String(reason.message || reason) });
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobs, openRun, searchParams, selectJob, wsId]);
@@ -525,7 +516,7 @@ export function OperationsPage() {
   };
 
   // ── Empty state ──
-  if (!loading && !error && jobs.length === 0) {
+  if (!loading && !error && jobs.length === 0 && !selRun) {
     return (
       <div className="page operations-page">
         <OperationsPageHeader count={0} onRefresh={loadJobs} />

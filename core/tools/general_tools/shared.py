@@ -81,7 +81,11 @@ def _error_inv(
 ) -> dict:
     """Like _error but attaches the tool_id so the LLM-facing contract
     is consistent across success and failure paths."""
-    out = _error(msg)
+    from storage.file_store import FileCommitUnknown
+    from storage.file_mutations import FileSettlementError
+    if isinstance(msg, (FileCommitUnknown, FileSettlementError)):
+        return {**msg.as_result(), 'tool_id': getattr(inv, 'tool_id', '')}
+    out = _error(str(msg))
     tool_id = getattr(inv, "tool_id", "")
     if tool_id:
         out["tool_id"] = tool_id

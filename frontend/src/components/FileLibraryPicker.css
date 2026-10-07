@@ -1,0 +1,6 @@
+@layer workbench {
+.file-picker-list { max-height: 45vh; overflow: auto; padding: 12px 0; }
+.file-picker-row { display: flex; gap: 12px; align-items: center; padding: 12px; cursor: pointer; }
+.file-picker-row span { min-width: 0; overflow-wrap: anywhere; }
+.file-picker-row small { display: block; opacity: .65; margin-top: 4px; }
+}

@@ -57,8 +57,11 @@ def test_knowledge_upload_writes_through_filestore(monkeypatch, tmp_path):
     body = resp.get_json()
     assert body["ok"] is True
     files = list_files("default")
-    assert len(files) == 1
-    normalized = files[0]
+    assert len(files) == 2
+    original = next(file for file in files if file['logical_type'] == 'knowledge_source')
+    from storage.file_store import resolve_file_path
+    assert resolve_file_path('default', original['file_id']).read_bytes() == b'# OSPF\nneighbor state'
+    normalized = next(file for file in files if file['logical_type'] == 'knowledge_normalized')
     assert normalized["logical_type"] == "knowledge_normalized"
     assert normalized["path"].startswith("files/data/ksrc_")
     assert normalized["path"].endswith(".md")
@@ -92,8 +95,10 @@ def test_knowledge_upload_writes_through_filestore(monkeypatch, tmp_path):
         f"/api/knowledge/sources/{source_id}",
         query_string={"workspace_id": "default"},
     ).status_code == 404
-    assert list_files("default") == []
-    assert not (workspace_root / "default" / normalized["path"]).exists()
+    assert [file["file_id"] for file in list_files("default")] == [original["file_id"]]
+    from storage.file_store import get_file_record
+    assert get_file_record('default', normalized['file_id'])['lifecycle'] == 'soft_deleted'
+    assert resolve_file_path('default', original['file_id']).read_bytes() == b'# OSPF\nneighbor state'
 
 
 def test_frontend_knowledge_search_uses_current_query_contract():

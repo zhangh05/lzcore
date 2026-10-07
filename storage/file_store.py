@@ -90,6 +90,19 @@ def _resolve_workspace_relative_path(workspace_id: str, rel_path: str) -> Path:
     return target
 
 
+class FileCommitUnknown(RuntimeError):
+    """Payload exists; its identity must be verified before any further write."""
+    def __init__(self, record, *, artifact_id=''):
+        super().__init__('file_commit_unknown_requires_readback')
+        self.record = record.as_dict() if hasattr(record, 'as_dict') else dict(record)
+        self.artifact_id = artifact_id
+
+    def as_result(self):
+        return {'ok': False, 'status': 'failed', 'error': str(self), 'error_code': 'EXECUTION_UNKNOWN',
+                'file_id': self.record['file_id'], 'filepath': self.record['path'], 'sha256': self.record['sha256'],
+                'artifact_id': self.artifact_id, 'executed': True, 'automatic_retry_allowed': False}
+
+
 def create_file_record(
     workspace_id: str,
     logical_type: str,
@@ -143,7 +156,14 @@ def create_file_record(
         sensitivity=sensitivity,
         metadata=metadata or {},
     )
-    index.append_file_record(workspace_id, rec)
+    from storage.atomic_io import atomic_write_json
+    intent = workspace_root(workspace_id) / 'sys/file-commits' / f'{fid}.json'
+    try:
+        atomic_write_json(intent, {'version': 1, 'record': rec.as_dict()})
+        index.append_file_record(workspace_id, rec)
+        intent.unlink()
+    except (OSError, RuntimeError) as exc:
+        raise FileCommitUnknown(rec) from exc
     return rec
 
 
@@ -307,53 +327,36 @@ def write_knowledge_document(
     """
     if not re.fullmatch(r"ksrc_[0-9a-f]{12}", str(source_id or "")):
         raise ValueError("invalid knowledge source_id")
-    ensure_workspace_storage_dirs(workspace_id)
-    ws = workspace_root(workspace_id)
-    target = ws / "files" / "data" / f"{source_id}.md"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = ws / "files" / "tmp" / f"{source_id}.{uuid.uuid4().hex[:8]}.tmp"
-    tmp.parent.mkdir(parents=True, exist_ok=True)
-    tmp.write_text(str(content or ""), encoding="utf-8")
-    os.replace(tmp, target)
-
-    rel_path = target.relative_to(ws).as_posix()
-    data = target.read_bytes()
-    updates = {
-        "logical_type": "knowledge_normalized",
-        "file_kind": "markdown",
-        "path": rel_path,
-        "original_name": f"{source_id}.md",
-        "mime_type": "text/markdown",
-        "binary": False,
-        "size_bytes": len(data),
-        "sha256": _sha256_of_bytes(data),
-        "source": "knowledge_import",
-        "sensitivity": "internal",
-        "lifecycle": "active",
-        "metadata": {
-            "source_id": source_id,
-            "title": str(title or "")[:200],
-            "storage_managed": True,
-            "normalized_format": "markdown",
-        },
-    }
-    if file_id and index.update_file_record(workspace_id, file_id, updates):
-        rec = get_file_record(workspace_id, file_id)
-        return FileRecord(**{k: v for k, v in rec.items() if k in FileRecord.__dataclass_fields__})
-    return create_file_record(
-        workspace_id=workspace_id,
-        logical_type="knowledge_normalized",
-        file_kind="markdown",
-        path=rel_path,
-        original_name=f"{source_id}.md",
-        mime_type="text/markdown",
-        binary=False,
-        size_bytes=len(data),
-        sha256=_sha256_of_bytes(data),
-        source="knowledge_import",
-        sensitivity="internal",
-        metadata=updates["metadata"],
-    )
+    from storage.project_changes import workspace_files_lock
+    from storage.file_mutations import managed_file_mutation
+    with workspace_files_lock(workspace_id):
+        ensure_workspace_storage_dirs(workspace_id)
+        ws = workspace_root(workspace_id)
+        target = ws / "files/data" / f"{source_id}.md"
+        relative = target.relative_to(ws).as_posix()
+        existing = [r for r in index.read_file_records(workspace_id)
+                    if r.get('path') == relative and r.get('lifecycle', 'active') == 'active']
+        if len(existing) > 1 or file_id and (not existing or existing[0]['file_id'] != file_id):
+            raise ValueError('knowledge_normalized_identity_mismatch')
+        current_id = existing[0]['file_id'] if existing else ''
+        tmp = ws / "files/tmp" / f"{source_id}.{uuid.uuid4().hex[:8]}.tmp"
+        with managed_file_mutation(workspace_id, paths=[target.resolve()]) as changes:
+            tmp.write_text(str(content or ''), encoding='utf-8')
+            os.replace(tmp, target)
+        if changes:
+            current_id = changes[-1]['file_id']
+        metadata = {'source_id': source_id, 'title': str(title or '')[:200],
+                    'storage_managed': True, 'normalized_format': 'markdown'}
+        if current_id:
+            rec = get_file_record(workspace_id, current_id)
+            metadata = {**rec.get('metadata', {}), **metadata}
+            if not index.update_file_record(workspace_id, current_id, {'metadata': metadata}):
+                raise FileCommitUnknown(rec)
+            rec = get_file_record(workspace_id, current_id)
+            return FileRecord(**{k: v for k, v in rec.items() if k in FileRecord.__dataclass_fields__})
+        return create_file_record(workspace_id, 'knowledge_normalized', 'markdown', relative,
+            original_name=f'{source_id}.md', mime_type='text/markdown', binary=False,
+            source='knowledge_import', sensitivity='internal', metadata=metadata)
 
 
 def read_file_content(workspace_id: str, file_id: str) -> str:

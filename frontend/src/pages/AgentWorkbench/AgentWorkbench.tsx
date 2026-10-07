@@ -242,6 +242,12 @@ export function TaskWorkbench() {
   const progressPanelCollapsed = !taskProgressOpen;
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  useEffect(() => {
+    setAttachments(previous => {
+      for (const item of previous) if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return [];
+    });
+  }, [currentWorkspaceId, currentSessionId]);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -704,6 +710,15 @@ export function TaskWorkbench() {
           running={turnRunning} turnId={latestAssistant?.run_id}
           onResume={(text, metadata) => onSendRef.current(text, metadata)} />
         <WorkbenchComposer
+          workspaceId={currentWorkspaceId}
+          onChooseFiles={(files) => {
+            if (!currentWorkspaceId || !currentSessionId) return;
+            setAttachments(previous => [...previous, ...files.filter(file => !previous.some(item => item.managed?.file_id === file.file_id)).slice(0, Math.max(0, 8 - previous.length)).map(file => ({
+              id: file.file_id, name: file.original_name, size: formatFileSize(file.size_bytes),
+              managed: { file_id: file.file_id, workspace_id: currentWorkspaceId, mime_type: file.mime_type, size_bytes: file.size_bytes },
+              previewUrl: file.capabilities?.image_evidence ? `/api/storage/files/${file.file_id}/preview?workspace_id=${encodeURIComponent(currentWorkspaceId)}` : undefined,
+            }))]);
+          }}
           currentSessionId={currentSessionId}
           turnRunning={turnRunning}
           input={input}

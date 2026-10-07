@@ -88,3 +88,25 @@ describe("useWorkbenchSend", () => {
     }));
   });
 });
+
+it('reuses an existing managed file without uploading and uses current server metadata', async () => {
+  const request = vi.spyOn(apiClient, 'apiRequest').mockResolvedValue({ ok: true, file: { file_id: 'file-existing', lifecycle: 'active', original_name: '原件.pdf', mime_type: 'application/pdf', size_bytes: 42 } });
+  const { result } = renderHook(() => useWorkbenchSend({ workspaceId: 'default', sessionId: 'session-2', input: 'use again',
+    attachments: [{ id: 'existing', name: 'old name', size: '1 B', managed: { file_id: 'file-existing', workspace_id: 'default', mime_type: 'application/pdf', size_bytes: 1 } }], sending: false,
+    setInput: vi.fn(), setAttachments: vi.fn(), clearDraft: vi.fn(), prepareToSend: vi.fn(), keepAtBottom: vi.fn(), toast: vi.fn(), pendingAutoMetadataRef: { current: null } }));
+  await act(async () => { await result.current.send(); });
+  expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: 'GET', url: '/storage/files/file-existing', params: { workspace_id: 'default' } }));
+  expect(request.mock.calls.every(([config]) => config.method !== 'POST')).toBe(true);
+  expect(sendStream).toHaveBeenCalledWith(expect.objectContaining({ attachments: [expect.objectContaining({ file_id: 'file-existing', name: '原件.pdf' })] }));
+});
+
+it('retains an attachment selected in a different workspace', async () => {
+  sendStream.mockReset();
+  const request = vi.spyOn(apiClient, 'apiRequest');
+  const { result } = renderHook(() => useWorkbenchSend({ workspaceId: 'current', sessionId: 'session-2', input: '',
+    attachments: [{ id: 'existing', name: 'other.pdf', size: '1 B', managed: { file_id: 'file-existing', workspace_id: 'other', mime_type: 'application/pdf', size_bytes: 1 } }], sending: false,
+    setInput: vi.fn(), setAttachments: vi.fn(), clearDraft: vi.fn(), prepareToSend: vi.fn(), keepAtBottom: vi.fn(), toast: vi.fn(), pendingAutoMetadataRef: { current: null } }));
+  await act(async () => { await result.current.send(); });
+  expect(request).not.toHaveBeenCalled();
+  expect(sendStream).not.toHaveBeenCalled();
+});

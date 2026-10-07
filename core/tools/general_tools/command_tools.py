@@ -126,8 +126,7 @@ def _managed_execution(inv: ToolInvocation, handler) -> dict:
                 result.setdefault('output', result)['file_changes'] = changes
             return result
         except FileSettlementError as exc:
-            return {'ok': False, 'error': str(exc), 'error_code': 'EXECUTION_UNKNOWN',
-                    'executed': True, 'automatic_retry_allowed': False}
+            return exc.as_result()
         except ValueError as exc:
             return _error_inv(inv, str(exc))
 

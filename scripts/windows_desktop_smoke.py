@@ -6,6 +6,7 @@ import ctypes
 from ctypes import wintypes
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import subprocess
@@ -24,6 +25,41 @@ def wait_until(call, timeout=90):
         except (OSError, ValueError): pass
         time.sleep(.25)
     raise AssertionError('Timed out waiting for desktop readiness')
+
+
+def verify_packaged_files(page, origin, output):
+    """Exercise real FileStore endpoints under the packaged native principal."""
+    result = page.evaluate("""async () => {
+      const token = (await (await fetch('/api/local-token')).json()).token;
+      const headers = {'X-LZCore-Local-Token': token};
+      async function call(path, options={}) {
+        const response = await fetch('/api'+path, {...options, headers:{...headers,...options.headers}});
+        if (!response.ok) throw new Error(path + ':' + response.status);
+        return response;
+      }
+      const bytes = new Uint8Array([0,1,2,255]);
+      const form = new FormData(); form.append('file', new Blob([bytes]), '中文 原件.custom');
+      const uploaded = await (await call('/workspaces/default/artifacts/upload', {method:'POST',body:form})).json();
+      const fid = uploaded.file.file_id;
+      const changed = await (await call('/storage/files/'+fid, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({workspace_id:'default',name:'已整理 原件.custom',folder:'中文 项目/资料'})})).json();
+      if (changed.file.file_id !== fid || changed.file.metadata.folder !== '中文 项目/资料') throw new Error('identity changed');
+      await call('/storage/files/'+fid+'?workspace_id=default&confirm=true', {method:'DELETE'});
+      await call('/storage/files/'+fid+'/restore', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workspace_id:'default'})});
+      const actual = new Uint8Array(await (await call('/storage/files/'+fid+'/download?workspace_id=default')).arrayBuffer());
+      if (actual.length !== bytes.length || actual.some((v,i)=>v!==bytes[i])) throw new Error('restored bytes changed');
+      const backup = await (await call('/storage/backup?workspace_id=default')).blob();
+      const restore = new FormData(); restore.append('workspace_id','default'); restore.append('file',backup,'files.zip');
+      const preview = await (await call('/storage/restore', {method:'POST',body:restore})).json();
+      if (!preview.ok || preview.conflicts.length) throw new Error('backup preview conflict');
+      return {ok:true,file_id:fid,bytes_preserved:true,backup_preview:preview,model_requests:0};
+    }""")
+    (output/'files.json').write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
+    page.goto(origin+'/data')
+    page.get_by_role('tab', name=re.compile('^文件')).click()
+    page.get_by_placeholder('搜索名称、路径或来源').fill('已整理 原件.custom')
+    page.get_by_role('button', name='已整理 原件.custom', exact=False).click()
+    page.get_by_text(result['file_id'], exact=True).wait_for()
+    page.screenshot(path=str(output/'file-workspace.png'), full_page=True)
 
 
 def run(exe: Path, mode: str, output: Path):
@@ -105,6 +141,7 @@ def run(exe: Path, mode: str, output: Path):
             subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(script),'-ParentPid',str(proc.pid),'-FileName',str(conversation.resolve())],check=True,timeout=35)
             wait_until(lambda: conversation.exists())
             assert '真实工作台中文导出' in conversation.read_text(encoding='utf-8')
+            verify_packaged_files(page, start['origin'], output)
             # Actual packaged topology renderer: neutral defaults and black ink
             # survive native theme changes without touching persistent drawing data.
             assert user32.MoveWindow(hwnd, 40, 40, 1280, 800, True)

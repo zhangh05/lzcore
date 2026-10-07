@@ -49,7 +49,8 @@ def data_overview(workspace_id: str) -> dict[str, Any]:
             "orphan_files": len(health.get("orphan_files") or []),
             "missing_on_disk": len(health.get("missing_on_disk") or []),
             "soft_deleted": len(health.get("soft_deleted") or []),
-            "ok": not any(health.get(key) for key in ("orphan_files", "missing_on_disk")),
+            "scope": "active_payload_existence",
+            "ok": not health.get("missing_on_disk"),
         },
     }
 
@@ -109,6 +110,7 @@ def managed_data_files(
                 "owner_type": str(item.get("owner_type") or ""),
                 "owner_id": str(item.get("owner_id") or ""),
                 "relation": str(item.get("relation") or "source"),
+                "metadata": dict(item.get("metadata") or {}),
             } for item in references],
         })
     result.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)

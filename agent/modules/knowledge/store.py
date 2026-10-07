@@ -125,6 +125,11 @@ def import_document(
     store = get_context_store(workspace_id)
     try:
         store.put(item)
+        from storage.reference_index import replace_owner_references
+        files = [(normalized_file_id, 'normalized')]
+        if meta.get('source_file_id'):
+            files.append((meta['source_file_id'], 'source'))
+        replace_owner_references(workspace_id, 'knowledge_source', source_id, files)
         _create_basic_chunks(
             workspace_id, source_id, title.strip()[:200], content, meta,
             scope=source_scope,
@@ -379,4 +384,3 @@ def query(
         "total": len(formatted),
         "metadata": {"retrieval_backend": "unified_bm25"},
     }
-

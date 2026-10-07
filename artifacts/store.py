@@ -324,7 +324,7 @@ def save_artifact(workspace_id: str, content: str = "", source_path: str = "",
     file_kind = cls["file_ext"] or ext or "text"
 
     try:
-        from storage.file_store import get_file_record, write_agent_output
+        from storage.file_store import get_file_record, write_agent_output, FileCommitUnknown
         existing = get_file_record(workspace_id, file_id) if file_id and not content_had_secret else None
         if existing and existing.get("lifecycle", "active") == "active":
             file_rec = FileRecord(**{
@@ -357,6 +357,8 @@ def save_artifact(workspace_id: str, content: str = "", source_path: str = "",
                     "storage_managed": True,
                 },
             )
+    except FileCommitUnknown:
+        raise
     except Exception:
         # If FileStore fails, artifact creation fails.
         return None
@@ -384,18 +386,6 @@ def save_artifact(workspace_id: str, content: str = "", source_path: str = "",
 
     if run_id:
         _update_run_index(workspace_id, run_id, art_id, artifact_type, title)
-
-    try:
-        from storage.reference_index import add_reference
-        if rec.file_id:
-            add_reference(workspace_id, rec.file_id, "artifact", art_id, "output",
-                          metadata={"artifact_type": artifact_type, "run_id": run_id})
-        src_file = (metadata or {}).get("source_file_id")
-        if src_file:
-            add_reference(workspace_id, src_file, "artifact", art_id, "source",
-                          metadata={"artifact_type": artifact_type, "run_id": run_id})
-    except Exception:
-        _LOG.warning("artifacts.store: silent exception", exc_info=True)
 
     from storage.events import publish
     publish(workspace_id, "artifact", "created", art_id)

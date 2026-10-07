@@ -1,3 +1,4 @@
+import { MemoryRouter } from '../router';
 import { beforeEach, describe, expect, it } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -25,7 +26,7 @@ describe("KnowledgeLibrary upload", () => {
   });
 
   it("shows local upload controls", async () => {
-    render(<KnowledgeLibrary />);
+    render(<MemoryRouter initialEntries={["/knowledge"]}><KnowledgeLibrary /></MemoryRouter>);
 
     expect(await screen.findByTestId("knowledge-upload-card")).toBeInTheDocument();
     expect(screen.getByTestId("knowledge-upload-file")).toBeInTheDocument();
@@ -68,7 +69,7 @@ describe("KnowledgeLibrary upload", () => {
       },
     });
 
-    render(<KnowledgeLibrary />);
+    render(<MemoryRouter initialEntries={["/knowledge"]}><KnowledgeLibrary /></MemoryRouter>);
     const file = new File(["# OSPF"], "ospf.md", { type: "text/markdown" });
 
     await userEvent.upload(await screen.findByTestId("knowledge-upload-file"), file);

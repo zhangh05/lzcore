@@ -630,10 +630,100 @@ def _handle_workspace_filestore(inv: ToolInvocation) -> dict:
     )
 
     action = _action(inv) or "references"
+    if action in {'list', 'resolve', 'materialize', 'publish', 'rename', 'move', 'restore', 'delete', 'inspect', 'render_page', 'source_list', 'source_move', 'pack', 'extract_archive', 'search', 'reindex', 'health', 'migration_preview', 'migrate', 'export', 'restore_bundle_preview', 'restore_bundle', 'reconcile_preview', 'reconcile'}:
+        from storage.file_workspace import files_page, resolve_reference, working_material, publish_file, organize_file
+        from storage.file_store import FileCommitUnknown
+        from core.tools.general_tools.shared import _caller_workspace
+        args, ws = inv.arguments or {}, _caller_workspace(inv)
+        reference = {k: str(args.get(k) or '') for k in ('file_id', 'artifact_id', 'filepath')}
+        try:
+            if action in {'reconcile_preview', 'reconcile'}:
+                from storage.file_audit import reconcile_file_commits
+                result = reconcile_file_commits(ws, apply=action == 'reconcile')
+            elif action == 'health':
+                from storage.file_audit import file_health
+                result = {'health': file_health(ws, hashes=args.get('hashes') is True)}
+            elif action in {'migration_preview', 'migrate'}:
+                from storage.file_audit import migrate_references
+                result = migrate_references(ws, apply=action == 'migrate')
+            elif action == 'export':
+                from storage.file_bundle import export_bundle
+                from storage.source_workspace import writable_path
+                target = writable_path(ws, str(args.get('destination') or ''))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with target.open('xb') as stream:
+                    export_bundle(ws, output=stream)
+                result = {'filepath': str(args.get('destination')), 'size_bytes': target.stat().st_size, 'scope': 'files_and_owner_evidence'}
+            elif action in {'restore_bundle_preview', 'restore_bundle'}:
+                from storage.file_bundle import restore_bundle
+                from storage.file_store import resolve_file_path
+                with resolve_file_path(ws, str(args.get('file_id') or '')).open('rb') as source:
+                    result = restore_bundle(ws, source, preview=action == 'restore_bundle_preview')
+            elif action == 'search':
+                from storage.file_search import search_content
+                result = search_content(ws, str(args.get('query') or ''), limit=int(args.get('limit') or 50), cursor=str(args.get('cursor') or ''))
+            elif action == 'reindex':
+                from storage.file_search import synchronize
+                result = synchronize(ws, documents=True, rebuild=True)
+            elif action in {'source_list', 'source_move', 'pack', 'extract_archive'}:
+                from storage.source_workspace import source_entries, move_source, pack_source, extract_archive
+                if action == 'source_list':
+                    result = source_entries(ws, str(args.get('filepath') or 'files/data'), offset=int(args.get('offset') or 0), limit=int(args.get('limit') or 100))
+                elif action == 'source_move':
+                    result = move_source(ws, str(args.get('filepath') or ''), str(args.get('destination') or ''))
+                elif action == 'pack':
+                    result = pack_source(ws, str(args.get('filepath') or ''), str(args.get('destination') or ''))
+                else:
+                    result = extract_archive(ws, str(args.get('file_id') or ''), str(args.get('destination') or ''))
+            elif action == 'inspect':
+                from storage.file_formats import inspect_file
+                result = inspect_file(ws, str(args.get('file_id') or ''), offset=int(args.get('offset') or 0), limit=int(args.get('limit') or 50))
+            elif action == 'render_page':
+                from storage.file_formats import render_pdf_page
+                from core.runtime_engine.evidence import managed_image_evidence
+                result = render_pdf_page(ws, str(args.get('file_id') or ''), page=int(args.get('page') or 1), ocr=args.get('ocr') is True)
+                result['evidence_parts'] = [managed_image_evidence(result['image_file_id'], source_file_id=result['file_id'])]
+            elif action == 'list':
+                result = files_page(ws, query=str(args.get('query') or ''), lifecycle=str(args.get('lifecycle') or 'active'),
+                    view=str(args.get('view') or 'files'), limit=int(args.get('limit') or 100), cursor=str(args.get('cursor') or ''), folder=args.get('folder'), sort=str(args.get('sort') or 'created'))
+            elif action == 'resolve':
+                result = resolve_reference(ws, **reference)
+            elif action == 'materialize':
+                result = working_material(ws, **reference, destination=str(args.get('destination') or ''))
+            elif action == 'publish':
+                result = publish_file(ws, str(args.get('filepath') or ''), title=str(args.get('title') or ''),
+                    run_id=str(inv.run_id or ''), session_id=str(inv.session_id or ''),
+                    source_file_ids=args.get('source_file_ids') or [], artifact_type=str(args.get('artifact_type') or 'agent_file'))
+            elif action in {'rename', 'move'}:
+                result = organize_file(ws, str(args.get('file_id') or ''),
+                    name=args.get('name') if action == 'rename' else None,
+                    folder=args.get('folder') if action == 'move' else None)
+            elif action == 'restore':
+                from storage.file_store import restore_file
+                result = restore_file(ws, str(args.get('file_id') or ''))
+            else:
+                from storage.data_management import delete_unreferenced_file
+                result = delete_unreferenced_file(ws, str(args.get('file_id') or ''),
+                    force=args.get('force') is True, permanent=args.get('permanent') is True)
+            return {'ok': True, 'tool_id': 'workspace.filestore', **result}
+        except FileCommitUnknown as exc:
+            return exc.as_result()
+        except ValueError as exc:
+            return {'ok': False, 'error': str(exc), 'executed': False}
+        except FileExistsError:
+            return {'ok': False, 'error': 'destination_already_exists', 'executed': False, 'automatic_retry_allowed': False}
+        except (OSError, RuntimeError) as exc:
+            writing = action in {'materialize', 'publish', 'rename', 'move', 'restore', 'delete', 'source_move', 'pack', 'extract_archive', 'migrate', 'export', 'restore_bundle', 'reconcile'}
+            return {'ok': False, 'error': str(exc)[:160], 'error_code': 'EXECUTION_UNKNOWN' if writing else 'FILE_READ_FAILED',
+                    'executed': writing, 'automatic_retry_allowed': not writing}
     if action == "references":
         return handle_file_references(inv, file_id=str((inv.arguments or {}).get("file_id") or ""))
     if action == "import":
-        return handle_file_import_workspace_path(inv, filepath=str((inv.arguments or {}).get("filepath") or ""))
+        from storage.file_store import FileCommitUnknown
+        try:
+            return handle_file_import_workspace_path(inv, filepath=str((inv.arguments or {}).get("filepath") or ""))
+        except FileCommitUnknown as exc:
+            return exc.as_result()
     if action == "reconcile_trash_preview":
         return handle_file_reconcile_trash(inv, apply=False)
     if action == "reconcile_trash":
@@ -965,7 +1055,21 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         },
     }),
     _entry("workspace.artifact", _handle_workspace_artifact, {**_COMMON, "action": {"type": "string", "enum": ["list", "read", "save", "tag", "delete"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "artifact_id": {"type": "string"}, "content": {"type": "string"}, "title": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}, "artifact_type": {"type": "string"}, "evidence_view": {"type": "string", "enum": ["current", "history", "deliverables"]}, "producer_id": {"type": "string"}, "asset_id": {"type": "string"}}, required=["action"], description="Workspace artifact operations. list may filter by query, evidence_view, producer_id, or asset_id."),
-    _entry("workspace.filestore", _handle_workspace_filestore, {**_COMMON, "action": {"type": "string", "enum": ["references", "import", "reconcile_trash_preview", "reconcile_trash"]}, "file_id": {"type": "string"}, "filepath": {"type": "string"}}, required=["action"], description="FileStore references, import, and hash-verified legacy trash reconciliation."),
+    _entry("workspace.filestore", _handle_workspace_filestore, {**_COMMON,
+        "action": {"type": "string", "enum": ["list", "resolve", "inspect", "render_page", "search", "reindex", "health", "migration_preview", "migrate", "export", "restore_bundle_preview", "restore_bundle", "reconcile_preview", "reconcile", "source_list", "source_move", "pack", "extract_archive", "materialize", "publish", "rename", "move", "restore", "delete", "references", "import", "reconcile_trash_preview", "reconcile_trash"]},
+        "file_id": {"type": "string"}, "artifact_id": {"type": "string"},
+        "filepath": {"type": "string", "description": "Workspace-relative path; never an execution cwd or container path."},
+        "destination": {"type": "string", "description": "New workspace-relative working-copy path in the current writable project; cannot overwrite."},
+        "sort": {"type": "string", "enum": ["created", "name", "size"]},
+        "query": {"type": "string"}, "cursor": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+        "view": {"type": "string", "enum": ["files", "all", "evidence", "history", "deliverables"]},
+        "lifecycle": {"type": "string", "enum": ["active", "soft_deleted", "archived", "purged"]},
+        "title": {"type": "string"}, "artifact_type": {"type": "string"},
+        "source_file_ids": {"type": "array", "items": {"type": "string"}},
+        "hashes": {"type": "boolean"}, "offset": {"type": "integer", "minimum": 0}, "page": {"type": "integer", "minimum": 1}, "ocr": {"type": "boolean"},
+        "name": {"type": "string"}, "folder": {"type": "string"}, "force": {"type": "boolean"}, "permanent": {"type": "boolean"}},
+        required=["action"], description="reconcile_preview/reconcile verify pending FileRecord commits against actual payload hashes; settle metadata only and never replay a source write. health reports checked and unchecked consistency domains; hashes requests full payload verification. migration_preview/migrate reconstruct only proven owner references with backups; no automatic deduplication or payload rewrite. export creates a file-domain backup at destination; restore_bundle_preview/restore_bundle inspect or restore that backup by file_id within the same principal/workspace, preserving conflicts. search finds literal content hits with line positions and indexed coverage; reindex explicitly includes parsed documents without embedding/model requests. source_list browses actual managed source directories; source_move changes a real path without rewriting code imports. pack creates a real ZIP and extract_archive expands supported ZIP/TAR archives into an exclusive writable directory. inspect pages document structures including XLSX formulas/cached values, DOCX block order, PPTX object positions, CSV rows and archive members with explicit coverage. render_page renders a PDF page as actual image evidence; OCR is explicit and requires an installed Tesseract processor. Discover managed files with list/query/cursor and resolve one file_id, artifact_id or filepath. materialize preserves original bytes and returns an explicit working-copy filepath/execution_path. publish registers a real generated file, including binary Office/media/archive outputs, and its input references. rename/move organize without changing file_id. delete recycles by default; permanent clearance retains unavailable identities. restore verifies bytes. Existing import is inbox-only; reconcile_trash verifies legacy deletes.",
+        execution_contract={'reference_kinds': {action: {'file_id': 'managed_file', 'filepath': 'workspace_path'} for action in ('resolve', 'materialize', 'publish', 'rename', 'move', 'restore', 'delete')}}),
     _entry("workspace.metadata.get", _handle_workspace_metadata, {"workspace_id": {"type": "string"}}, description="Workspace metadata."),
     _entry("workspace.document.pdf.extract_text", _handle_pdf_extract, {"workspace_id": {"type": "string"}, "filepath": {"type": "string"}, "page_range": {"type": "string"}}, required=["filepath"], description="Extract PDF text."),
 ]
@@ -1016,7 +1120,13 @@ _BINDABLE_INPUTS: dict[str, dict[str, list[str]]] = {
         "extract_document_images": ["file_id"],
     },
     "workspace.artifact": {"list": ["query"], "read": ["artifact_id"]},
-    "workspace.filestore": {"references": ["file_id"]},
+    "workspace.filestore": {"references": ["file_id"],
+        "export": ["destination"], "restore_bundle_preview": ["file_id"], "restore_bundle": ["file_id"], "search": ["query"], "source_list": ["filepath"], "source_move": ["filepath", "destination"], "pack": ["filepath", "destination"], "extract_archive": ["file_id", "destination"],
+        "inspect": ["file_id"], "render_page": ["file_id"],
+        "resolve": ['file_id', 'artifact_id', 'filepath'],
+        "materialize": ['file_id', 'artifact_id', 'filepath', 'destination'],
+        "publish": ['filepath', 'source_file_ids'], 'restore': ['file_id'],
+        'rename': ['file_id'], 'move': ['file_id'], 'delete': ['file_id']},
     "workspace.document.pdf.extract_text": {"*": ["filepath"]},
 }
 
@@ -1099,7 +1209,8 @@ _REFERENCEABLE_OUTPUTS: dict[str, dict[str, list[str]]] = {
     "workspace.file": {
         "list": ["files", "count"], "glob": ["matches", "count"],
         "read": ["preview", "size", "truncated"],
-        "read_image": ["filepath", "filename", "format", "dimensions"],
+        "read_image": ["filepath", "filename", "format", "dimensions", "file_id", "evidence_parts"],
+        "edit": ["file_changes"], "patch": ["file_changes"],
         "extract_document": ["file_id", "file_kind", "title", "content", "truncated", "embedded_image_count"],
         "extract_document_image": ["file_id", "image_index", "image_count", "evidence_parts"],
         "extract_document_images": ["file_id", "image_count", "evidence_parts", "has_more"],
@@ -1112,7 +1223,13 @@ _REFERENCEABLE_OUTPUTS: dict[str, dict[str, list[str]]] = {
         "save": ["artifact_id", "artifact_ids", "file_id"],
     },
     "workspace.filestore": {
+        'reconcile_preview': ['results', 'payload_writes'], 'reconcile': ['results', 'payload_writes'],
+        'rename': ['file_id', 'path', 'reference'], 'move': ['file_id', 'path', 'reference'], 'restore': ['file_id'], 'delete': ['file_id', 'lifecycle'],
+        "health": ["health"], "migration_preview": ["additions", "unresolved"], "migrate": ["backup", "additions"], "export": ["filepath"], "restore_bundle_preview": ["conflicts"], "restore_bundle": ["restored", "conflicts"], "search": ["hits", "next_cursor", "coverage"], "reindex": ["indexed", "failures"], "source_list": ["filepath", "entries", "next_offset"], "source_move": ["filepath", "file_changes"], "pack": ["filepath", "members"], "extract_archive": ["filepath", "source_file_id"],
+        "inspect": ["file_id", "units", "coverage", "next_offset"], "render_page": ["file_id", "image_file_id", "evidence_parts", "text"],
         "references": ["file_id", "references"], "import": ["file_id", "path"],
+        "list": ["files", "next_cursor", "total"], "resolve": ["file_id", "path", "reference", "capabilities"],
+        "materialize": ["filepath", "execution_path", "reference"], "publish": ["file_id", "filepath", "artifact_id", "sha256", "download_url"],
     },
     "workspace.metadata.get": {"*": ["workspace_id", "exists", "artifact_count"]},
     "workspace.document.pdf.extract_text": {"*": ["text", "page_count", "pages_read"]},

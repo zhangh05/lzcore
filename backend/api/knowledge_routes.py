@@ -63,7 +63,7 @@ def register_knowledge_routes(app):
         classification = classify_file(uploaded.filename)
         file_kind, binary = classification['file_kind'], classification['binary']
         try:
-            from storage.file_store import import_user_upload, resolve_file_path
+            from storage.file_store import import_user_upload, resolve_file_path, FileCommitUnknown
 
             file_record = import_user_upload(
                 workspace_id=ws_id,
@@ -76,6 +76,8 @@ def register_knowledge_routes(app):
                 metadata={"source_type": request.form.get("source_type", "project_doc")},
             )
             target = resolve_file_path(ws_id, file_record.file_id)
+        except FileCommitUnknown as exc:
+            return jsonify({**exc.as_result(), 'file': exc.record}), 409
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)[:200]}), 400
         except Exception as exc:

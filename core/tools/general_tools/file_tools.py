@@ -93,7 +93,7 @@ def handle_file_read(inv: ToolInvocation) -> dict:
             "truncated": end < len(lines),
         })
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_file_edit(inv: ToolInvocation) -> dict:
@@ -140,7 +140,7 @@ def handle_file_edit(inv: ToolInvocation) -> dict:
             "preview": diff_preview,
         })
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_file_patch(inv: ToolInvocation) -> dict:
@@ -202,7 +202,7 @@ def handle_file_patch(inv: ToolInvocation) -> dict:
             "diff_preview": _generate_diff_preview(original[:500], new_content[:500]),
         })
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_ws_list_files(inv: ToolInvocation) -> dict:
@@ -229,7 +229,7 @@ def handle_ws_list_files(inv: ToolInvocation) -> dict:
                               "offset": offset, "has_more": end < len(files),
                               "next_offset": end if end < len(files) else None})
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_ws_write_artifact_file(inv: ToolInvocation) -> dict:
@@ -293,7 +293,7 @@ def handle_ws_write_artifact_file(inv: ToolInvocation) -> dict:
             })
         return _ok(inv, "", output)
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_ws_get_metadata(inv: ToolInvocation) -> dict:
@@ -306,11 +306,11 @@ def handle_ws_get_metadata(inv: ToolInvocation) -> dict:
             "artifact_count": len(list((target / "files").iterdir())) if (target / "files").exists() else 0,
         })
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 def handle_file_read_image(inv: ToolInvocation) -> dict:
-    """Read image file metadata."""
+    """Read image metadata and transport real image evidence to the model."""
     ws = _caller_workspace(inv)
     filepath = inv.arguments.get("filepath", "")
     try:
@@ -323,24 +323,25 @@ def handle_file_read_image(inv: ToolInvocation) -> dict:
         img_exts = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".ico", ".svg"}
         if suffix not in img_exts:
             return _error_inv(inv, f"not an image file: {suffix}")
-        dims = ""
-        try:
-            from PIL import Image
-            with Image.open(target) as img:
-                dims = f"{img.width}x{img.height}"
-        except Exception:
-            dims = "unknown"
+        if suffix == '.svg':
+            return _error_inv(inv, 'SVG source can be read with workspace.file read and previewed; visual evidence requires rendering to a raster image in the available execution environment.')
+        from storage.image_transport import image_for_evidence
+        from core.runtime_engine.evidence import managed_image_evidence
+        fid, dimensions = image_for_evidence(ws, target, run_id=str(inv.run_id or ''), session_id=str(inv.session_id or ''))
+        dims = f'{dimensions[0]}x{dimensions[1]}'
         return _ok(inv, f"Image {target.name} ({dims})", {
+            "file_id": fid,
+            "evidence_parts": [managed_image_evidence(fid)],
             "filename": target.name,
             "size": target.stat().st_size,
             "format": suffix.lstrip("."),
             "dimensions": dims,
             "filepath": filepath,
             "workspace_id": ws,
-            "note": "Image file metadata returned.",
+            "note": "Image evidence is delivered through the current model evidence transport.",
         })
     except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+        return _error_inv(inv, e)
 
 
 __all__ = ['handle_file_create', 'handle_file_read', 'handle_file_edit', 'handle_file_patch', 'handle_ws_list_files', 'handle_ws_write_artifact_file', 'handle_ws_get_metadata']

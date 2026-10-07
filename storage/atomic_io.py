@@ -79,6 +79,22 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
     _replace_with_retry(tmp, path)
 
 
+def atomic_write_stream(path: Path, stream) -> None:
+    """Publish a verified stream without holding its complete payload in memory."""
+    import shutil
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _unique_tmp(path)
+    try:
+        with tmp.open('xb') as output:
+            shutil.copyfileobj(stream, output)
+            output.flush()
+            os.fsync(output.fileno())
+        _replace_with_retry(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def _json_without_nonfinite(value: Any) -> Any:
     """Keep a NaN in one record from failing every other JSON write."""
     if isinstance(value, float):

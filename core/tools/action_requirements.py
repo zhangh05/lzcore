@@ -83,6 +83,21 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("workspace.artifact", "tag"): ("artifact_id", "tags"),
     ("workspace.artifact", "delete"): ("artifact_id",),
     ("workspace.filestore", "references"): ("file_id",),
+    ("workspace.filestore", "export"): ("destination",),
+    ("workspace.filestore", "restore_bundle_preview"): ("file_id",),
+    ("workspace.filestore", "restore_bundle"): ("file_id",),
+    ("workspace.filestore", "search"): ("query",),
+    ("workspace.filestore", "source_move"): ("filepath", "destination"),
+    ("workspace.filestore", "pack"): ("filepath", "destination"),
+    ("workspace.filestore", "extract_archive"): ("file_id", "destination"),
+    ("workspace.filestore", "inspect"): ("file_id",),
+    ("workspace.filestore", "render_page"): ("file_id",),
+    ("workspace.filestore", "materialize"): ("destination",),
+    ("workspace.filestore", "publish"): ("filepath",),
+    ("workspace.filestore", "rename"): ("file_id", "name"),
+    ("workspace.filestore", "move"): ("file_id", "folder"),
+    ("workspace.filestore", "restore"): ("file_id",),
+    ("workspace.filestore", "delete"): ("file_id",),
     ("workspace.filestore", "import"): ("filepath",),
 }
 
@@ -206,6 +221,9 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("list", "rea
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("save", "tag"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.artifact", ("delete",), _DELETE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("references", "reconcile_trash_preview"), _READ))
+ACTION_EXECUTION_CONTRACTS.update(_contracts('workspace.filestore', ('list', 'resolve', 'inspect', 'render_page', 'source_list', 'search', 'health', 'migration_preview', 'restore_bundle_preview', 'reconcile_preview'), _READ))
+ACTION_EXECUTION_CONTRACTS.update(_contracts('workspace.filestore', ('materialize', 'publish', 'rename', 'move', 'restore', 'source_move', 'pack', 'extract_archive', 'reindex', 'migrate', 'export', 'restore_bundle', 'reconcile'), _WRITE))
+ACTION_EXECUTION_CONTRACTS.update(_contracts('workspace.filestore', ('delete',), _DELETE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("import", "reconcile_trash"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.review", ("",), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("reconcile",), _WRITE))
