@@ -15,8 +15,11 @@ test('34. knowledge ingestion from the file library reuses its actual original',
   expect(imported.ok()).toBeTruthy();
   const sourceId = (await imported.json()).source.source_id;
   await expect(page).toHaveURL(new RegExp(`/knowledge\\?source_id=${sourceId}`));
-  const metadata = (await (await api.get(`/api/storage/files/${fid}?workspace_id=default`)).json()).file;
-  expect(metadata.references.some((reference: { owner_id: string; relation: string }) => reference.owner_id === sourceId && reference.relation === 'source')).toBeTruthy();
+  const relationResponse = await api.get(`/api/storage/files/${fid}/relations?workspace_id=default`);
+  expect(relationResponse.ok()).toBeTruthy();
+  const relations = (await relationResponse.json()).relations;
+  expect(relations.file_id).toBe(fid);
+  expect(relations.references.some((reference: { owner_type: string; owner_id: string; relation: string }) => reference.owner_type === 'knowledge_source' && reference.owner_id === sourceId && reference.relation === 'source')).toBeTruthy();
   const original = await api.get(`/api/storage/files/${fid}/download?workspace_id=default`);
   expect(Buffer.compare(await original.body(), payload)).toBe(0);
 });

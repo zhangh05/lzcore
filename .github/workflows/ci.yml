@@ -5,9 +5,17 @@ on:
     branches: [main, master, develop]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      browser_spec:
+        description: Browser spec to rerun in development and production (only frontend-e2e runs)
+        required: true
+        default: 34-file-workspace
+        type: string
 
 jobs:
   frontend:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -47,14 +55,25 @@ jobs:
       - name: Exercise authenticated workbench in Chromium
         env:
           E2E_PYTHON_BIN: python
-        run: npm --prefix frontend run e2e
+          E2E_SPEC: ${{ inputs.browser_spec }}
+        run: |
+          if [ -n "$E2E_SPEC" ]; then
+            npm --prefix frontend run e2e -- "$E2E_SPEC"
+          else
+            npm --prefix frontend run e2e
+          fi
       - name: Verify production CSS and visual flows
         env:
           E2E_PYTHON_BIN: python
           E2E_PRODUCTION: "1"
+          E2E_SPEC: ${{ inputs.browser_spec }}
         run: |
           npm --prefix frontend run build
-          npm --prefix frontend run e2e -- 23-topology-editing 21-management-width 25-workbench-hierarchy 26-visual-system 27-compact-chat 28-login-cascade 29-neutral-hierarchy 30-topology-theme-colors 31-topology-drawing-semantics 32-gentle-drag 33-topology-tool-groups 34-file-workspace
+          if [ -n "$E2E_SPEC" ]; then
+            npm --prefix frontend run e2e -- "$E2E_SPEC"
+          else
+            npm --prefix frontend run e2e -- 23-topology-editing 21-management-width 25-workbench-hierarchy 26-visual-system 27-compact-chat 28-login-cascade 29-neutral-hierarchy 30-topology-theme-colors 31-topology-drawing-semantics 32-gentle-drag 33-topology-tool-groups 34-file-workspace
+          fi
       - name: Preserve browser visual evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,6 +83,7 @@ jobs:
           retention-days: 14
 
   test:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -91,6 +111,7 @@ jobs:
           python scripts/verify_docs_runtime_consistency.py
 
   docker-isolation:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -110,6 +131,7 @@ jobs:
           python -m pytest harness/integration/test_docker_runner_integration.py -q --tb=short
 
   coding-isolation:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -142,6 +164,7 @@ jobs:
           retention-days: 14
 
   distributed-adapters:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -206,6 +229,7 @@ jobs:
           python -m pytest harness/integration/test_distributed_adapters_integration.py -q --tb=short
 
   production-profile:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       POSTGRES_PASSWORD: integration-password
@@ -233,6 +257,7 @@ jobs:
           docker run --rm lzcore-backend:latest docker --version
 
   lint:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -283,6 +308,7 @@ jobs:
           "
 
   windows-smoke:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
