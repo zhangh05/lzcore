@@ -241,7 +241,7 @@ def test_source_move_and_archive_roundtrip_preserve_bytes(files_ws):
         extract_archive(files_ws, record.file_id, 'files/data/extracted')
 
 
-@pytest.mark.parametrize('member', ['../escape.txt', '/absolute.txt', 'C:/escape.txt', 'a\\b.txt'])
+@pytest.mark.parametrize('member', ['../escape.txt', '/absolute.txt', 'C:/escape.txt', 'a\\b.txt', 'nul\x00suffix.txt'])
 def test_archive_traversal_rejected_before_writing(files_ws, member):
     import zipfile
     from storage.file_store import import_user_upload
@@ -249,7 +249,9 @@ def test_archive_traversal_rejected_before_writing(files_ws, member):
     from storage.paths import workspace_root
     raw = io.BytesIO()
     with zipfile.ZipFile(raw, 'w') as archive:
-        archive.writestr(member, 'no')
+        info = zipfile.ZipInfo('fixture')
+        info.filename = member  # Keep adversarial bytes intact on Windows too.
+        archive.writestr(info, 'no')
     record = import_user_upload(files_ws, io.BytesIO(raw.getvalue()), 'bad.zip')
     with pytest.raises(ValueError, match='unsafe_archive_member'):
         extract_archive(files_ws, record.file_id, 'files/data/destination')

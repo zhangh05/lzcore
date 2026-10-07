@@ -130,7 +130,9 @@ def extract_archive(workspace_id, file_id, destination):
         else:
             raise ValueError('archive_processor_unavailable')
         try:
-            planned = [(m, member_path(m.filename if isinstance(m, zipfile.ZipInfo) else m.name)) for m in members]
+            # ZipInfo.filename is normalized by the host OS. Validate the original
+            # archive spelling before that normalization can erase unsafe input.
+            planned = [(m, member_path(m.orig_filename if isinstance(m, zipfile.ZipInfo) else m.name)) for m in members]
             if total > MAX_UPLOAD_BYTES:
                 raise ValueError('archive_extracted_size_exceeds_storage_limit')
             names = [str(p.relative_to(target)).casefold() for _, p in planned]
