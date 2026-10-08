@@ -5,7 +5,7 @@
 - 基线：main@74faf69；分支 `refactor/fe-visual-redesign`
 - 状态：✅ 完成并验证 · ✅⚠️ 完成（高风险面，只改视觉，契约冻结）· ⬜ 未完成 · ⬜⚠️ 未完成且高风险 · — 无界面（纯重定向，不计入）
 - 截图：同状态 before/after 存于评审 box `/workspace/lzcore/<目录>/shots/{before,after}/`（`pr1` = 第 1 批，`batchN` = 第 N 批），仓库不提交图片
-- **统计（按下表计算）：界面 45 项（另 1 项纯重定向不计），已完成 29，未完成 16**：D3, D4, D5, D6, D7, D10, G1, G2, G3, G4, G5, G6, G7, G8, G9, G10（其中高风险 9 项）
+- **统计（按下表计算）：界面 45 项（另 1 项纯重定向不计），已完成 45，未完成 0**
 
 
 ## A. 基础设施（跨页面）
@@ -45,14 +45,14 @@
 |---|---|---|---|---|---|---|
 | D1 | 工作台页头 | `WorkbenchHeader.tsx` | ✅ | 9fbe3ae, e3fc2a2 | `batch6/after/02-workbench-result-light-1440.png`, `08-header-collapsed-*` | 第 6 批：标题 + 模型状态胶囊；对话/时间线分段组（role=group）；进度开关强调态；独立 WorkbenchHeader.css |
 | D2 | 空状态与快捷提示 | `WorkbenchEmptyState.tsx`、`WorkbenchQuickChips.ts` | ✅ | 9fbe3ae, e3fc2a2 | `batch6/after/01-workbench-empty-light-1440.png`, `11-workbench-empty-light-390.png` | 第 6 批：起点卡片（按钮名 = 标签不变，提示经 aria-describedby 关联）；独立 WorkbenchEmptyState.css |
-| D3 | 消息流 / 流式输出 / 思考块 | `MessageRow.tsx`、`StreamingContent.tsx`、`ThinkingBlock.tsx`、`WorkbenchMessages.css` | ⬜⚠️ | — | — | streaming 状态机不动；不得引入第二份 task/state 镜像 |
-| D4 | 工具调用卡片 | `InlineToolCallCard.tsx`、`toolCallState.ts`、`WorkbenchTools.css` | ⬜⚠️ | — | — | 保留完整工具与绘图能力，不做关键词过滤 |
-| D5 | 审批（批准/拒绝） | `ApprovalActions.tsx` | ⬜⚠️ | — | — | 审批/取消/恢复契约冻结 |
-| D6 | 任务进度 / 阶段 / 证据 | `TaskProgressPanel.tsx`、`TaskProgress*.css` | ⬜⚠️ | — | — | 展示权威状态（coding_state_store），缓存不决定业务状态 |
-| D7 | 恢复执行 | `TaskResumeControl.tsx` | ⬜⚠️ | — | — | 结果未知的写操作只能重查/对账，绝不自动重放 |
-| D8 | 结果与阶段产出 | `ResultInline.tsx`、`StageOutputs.tsx`、`WorkbenchResults.css` | ✅ | 9fbe3ae, e3fc2a2 | `batch6/after/03-result-details-*`, `04-stage-output-open-*` | 第 6 批：结果单卡 + 发丝线分节，模型判断为唯一强调；阶段输出成组列表。结果开关 aria-label 名称不匹配为 main 既有（单测依赖 getByLabelText） |
+| D3 | 消息流 / 流式输出 / 思考块 | `MessageRow.tsx`、`StreamingContent.tsx`、`ThinkingBlock.tsx`、`WorkbenchMessages.css` | ✅⚠️ | 5e3110c, 12e8864 | `batch7/after/01-streaming-*` | 第 7 批：流式行 + 进度胶囊、中性思考块；markdown 表格/代码横向滚动区可聚焦并有名称（12e8864）；streaming 状态机未动 |
+| D4 | 工具调用卡片 | `InlineToolCallCard.tsx`、`toolCallState.ts`、`WorkbenchTools.css` | ✅⚠️ | 5e3110c | `batch7/after/02-tools-complete-*`, `03-tools-open-*`, `06-tools-bottom-light-390.png` | 第 7 批：工具调用成组发丝线列表，失败/未知以左侧轨标示；≤760 名称独占首行；工具与绘图能力不过滤 |
+| D5 | 审批（批准/拒绝） | `ApprovalActions.tsx` | ✅⚠️ | 5e3110c | `batch7/after/04-approval-*` | 第 7 批：审批卡头部/可聚焦命令块（待执行命令）/动作行，批准为主按钮，焦点顺序 = 视觉顺序；审批契约未动 |
+| D6 | 任务进度 / 阶段 / 证据 | `TaskProgressPanel.tsx`、`TaskProgress*.css` | ✅⚠️ | 5e3110c | `batch7/after/02-tools-complete-light-1440.png`, `01-streaming-light-390.png` | 第 7 批：进度证据行全宽名称两行截断；≤620 进度面板紧凑不再占半屏；展示权威状态，无状态镜像 |
+| D7 | 恢复执行 | `TaskResumeControl.tsx` | ✅⚠️ | 5e3110c | `batch7/after/05-resume-*` | 第 7 批：继续任务条进入阅读列，说明“未知写入只回查、不重放”；按钮/元数据/恢复契约未动 |
+| D8 | 结果与阶段产出 | `ResultInline.tsx`、`StageOutputs.tsx`、`WorkbenchResults.css` | ✅ | 9fbe3ae, e3fc2a2, 12e8864 | `batch6/after/03-result-details-*`, `04-stage-output-open-*` | 第 6 批：结果单卡 + 发丝线分节，模型判断为唯一强调；阶段输出成组列表。结果开关名称改为取自可见内容（12e8864，单测同步） |
 | D9 | 输入框 / 附件 / 文件库选择 | `WorkbenchComposer.tsx`、`components/FileLibraryPicker.tsx` | ✅⚠️ | 9fbe3ae, e3fc2a2 | `batch6/after/06-composer-attachments-*`, `07-file-library-*` | 第 6 批：附件托盘移入输入卡片；文件库为带框分隔列表（选中态来自 :has(input:checked)）；发送/停止状态未动；e2e 27/34 |
-| D10 | 运行事件时间线 / 追踪详情 | `components/{RuntimeEventTimeline,TraceDetailPanel,TaskTrackingCard}.tsx` | ⬜ | e3fc2a2（部分） | `batch6/after/05-timeline-*`, `05b-timeline-open-*`, `13-timeline-light-390.png` | 部分：RuntimeEventTimeline 已重做（第 6 批，修复 runtime 层被 base 重置清空间距）；TraceDetailPanel、TaskTrackingCard 未做 → 保持未勾选 |
+| D10 | 运行事件时间线 / 追踪详情 | `components/{RuntimeEventTimeline,TraceDetailPanel,TaskTrackingCard}.tsx` | ✅ | e3fc2a2, 7124695, 5e3110c | `batch6/after/05-timeline-*`, `batch7/after/07-runs-trace-*` | 时间线（第 6 批）+ 卡片状态投影 runCardStatus（7124695：进行中/完成/失败/未知/未载入不再误报“本轮完成”）+ TraceDetailPanel 行按钮/筛选 aria-pressed/搜索/可聚焦元数据（5e3110c）；TaskTrackingCard 同批 |
 
 ## E. 资料中心
 
@@ -64,7 +64,7 @@
 | E4 | 生命周期 | `/data` 归档与清理 | ✅ | db93d46 | `pr1/after/01-data-overview-dark-1440.png` | — |
 | E5 | 文件空间（7 视图）、来源浏览、核对与备份、结构预览 | `/data?tab=files` `FileWorkspace/SourceBrowser/FileGovernance/FileInspection` | ✅ | 5c06970 | `pr1/after/02-data-files-dark-1440.png` | 全选三态、选择条、390px 列表完整显示 |
 | E6 | 长期记忆（列表、展开详情、冲突复核、编辑、批量/单条永久删除） | `/memory` `MemoryPage.tsx` | ✅ | e17a1a1 | `pr1/after/10-memory-list-dark-1440.png` | 删除改为 ConfirmDialog |
-| E7 | 知识库（列表、重命名、检索、导入） | `/knowledge` `KnowledgeLibrary.tsx` | ✅ | 003ad44 | `batch4/after/01-knowledge-dark-1440.png` | 第 4 批：列表主列 + 库状态/上传/导入侧栏 |
+| E7 | 知识库（列表、重命名、检索、导入） | `/knowledge` `KnowledgeLibrary.tsx` | ✅ | 003ad44, 0bbb6a0, 3420acf | `batch4/after/01-knowledge-dark-1440.png` | 第 4 批：列表主列 + 库状态/上传/导入侧栏 |
 
 ## F. 任务 / 系统
 
@@ -78,25 +78,20 @@
 
 | ID | 界面 | 主要文件 | 状态 | 提交 | 截图（after） | 备注 |
 |---|---|---|---|---|---|---|
-| G1 | 网络设备（设备、连接、区域、证据环境、运行参考/最近观察/命令反馈批量删除） | `/extensions/network.operations/manage?tab=devices` `NetworkOperations.tsx` | ⬜ | — | — | 扩展路由契约（manifest/runtime/registry）不变；2407 行 |
-| G2 | Skill 管理（已发布 Skill、绘图 Skill、工具授权） | `…/manage?tab=skills` | ⬜ | — | — | — |
-| G3 | 拓扑图库 / 工作区框架 | `/topology` `TopologyPage.tsx`、`TopologyWorkspace`、`TopologyLibrary` | ⬜⚠️ | — | — | `/topology` 内置入口（routes.tsx:55）本 PR 不删 |
-| G4 | 拓扑工具栏 | `TopologyHeaderToolbar/EditToolbar/PresentationToolbar/DisplayTools/ToolGroups` | ⬜ | — | — | e2e 23/30/31/32/33 |
-| G5 | 画布与绘制 | `TopologyCanvasStage`、`NetOpsCanvas`、`useCanvas*`、`canvas*.ts`、`TopologyWhiteboard` | ⬜⚠️ | — | — | 区域身份只认 `canvas_items.item_id`，节点 `region_id` 引用它；渲染/命中测试不动，只调主题色 token |
-| G6 | 节点/链路/区域/选择检查器 | `Topology*Inspector*.tsx` | ⬜ | — | — | — |
-| G7 | 拓扑对话框 | `Topology{Link,ManualNode,Region,Metadata,Revision,Conflict,EmptyCreate}Dialog.tsx`、`TopologyShortcutHelp` | ⬜⚠️ | — | — | 冲突/修订对话框涉及协同与版本恢复 |
-| G8 | 右键菜单 | `TopologyContextMenu.tsx`、`TopologyMenus.css` | ⬜ | — | — | — |
-| G9 | 拓扑 Agent 面板 | `TopologyAgentPanel.tsx` | ⬜⚠️ | — | — | “开启新会话”用原生 `confirm` → ConfirmDialog；会话/流式契约不变 |
-| G10 | 视图书签命名 | `useTopologyViews.tsx` | ⬜ | — | — | 原生 `window.prompt` → 可访问输入对话框 |
+| G1 | 网络设备（设备、连接、区域、证据环境、运行参考/最近观察/命令反馈批量删除） | `/extensions/network.operations/manage?tab=devices` `NetworkOperations.tsx` | ✅ | ec15203 | `batch8/after/01-devices-*`, `06-connections-*`, `03-context-*`, `04-device-editor-*` | 第 8 批：设备一行记录 + 连接披露内嵌下沉列表；状态胶囊中性 + 状态点，仅失败/待确认指纹/部分参考着色；区域管理字段组（区域名称、编辑区域 X/删除区域 X）；扩展路由/manifest/runtime/registry 契约未动 |
+| G2 | Skill 管理（已发布 Skill、绘图 Skill、工具授权） | `…/manage?tab=skills` | ✅ | ec15203 | `batch8/after/02-skills-*`, `05-skill-editor-*` | 第 8 批：Skill 记录节奏、删除降为 danger-ghost；编辑器名称整行、“设备连接”空态说明；工具授权逻辑未动 |
+| G3 | 拓扑图库 / 工作区框架 | `/topology` `TopologyPage.tsx`、`TopologyWorkspace`、`TopologyLibrary` | ✅⚠️ | e67db0e | `batch9/after/02-library-*`, `01-workspace-*` | 第 9 批：图库设备符号块改为发丝线表面、选中=selected 态；/topology 路由与 nav 网络快捷项保留 |
+| G4 | 拓扑工具栏 | `TopologyHeaderToolbar/EditToolbar/PresentationToolbar/DisplayTools/ToolGroups` | ✅ | e67db0e | `batch9/after/01-workspace-*`, `11-view-mode-*`, `12-insert-menu-*`, `13-arrange-menu-*` | 第 9 批：选择模式提示与查看模式胶囊改中性；缩放胶囊统一字阶 + 等宽读数；工具组/编辑栏既有 token 样式经审视保留 |
+| G5 | 画布与绘制 | `TopologyCanvasStage`、`NetOpsCanvas`、`useCanvas*`、`canvas*.ts`、`TopologyWhiteboard` | ✅⚠️ | e67db0e | `batch9/after/01-workspace-dark-1440.png`, `01-workspace-light-1440.png` | 第 9 批：节点/连线标签文字、标签底与描边在主题切换时解析 `--lz-color-*`（字面值仅作缺省）；连线描边色（e2e 30）、网格/叠加绘制、渲染与命中测试、canvas_items.item_id 区域身份均未动 |
+| G6 | 节点/链路/区域/选择检查器 | `Topology*Inspector*.tsx` | ✅ | e67db0e | `batch9/after/03-node-inspector-*`, `04-link-inspector-*`, `05-region-inspector-*`, `06-selection-inspector-*` | 第 9 批：检查器字号下限 9.5px → 11px，28px 字段（lz 字段 token + 统一箭头 + 焦点环），类型胶囊中性，尺寸预设实线胶囊；宽度保持 240（定位常量） |
+| G7 | 拓扑对话框 | `Topology{Link,ManualNode,Region,Metadata,Revision,Conflict,EmptyCreate}Dialog.tsx`、`TopologyShortcutHelp` | ✅⚠️ | e67db0e | `batch9/after/08-metadata-dialog-*`, `10-revision-dialog-*`, `17-link-dialog-*` | 第 9 批：对话框头部不再继承全局 24px 内缩（标题与字段对齐），去分隔线，幽灵关闭；图标关闭按钮与 3 个对话框获得可访问名称。冲突/修订行为冻结；冲突对话框未单独截图（状态未复现，单测覆盖其行为） |
+| G8 | 右键菜单 | `TopologyContextMenu.tsx`、`TopologyMenus.css` | ✅ | e67db0e | `batch9/after/07-context-menu-*`, `14-display-menu-*` | 第 9 批：审视后右键菜单/显示菜单沿用既有 token 样式，仅把 <11px 文字提到字阶下限 |
+| G9 | 拓扑 Agent 面板 | `TopologyAgentPanel.tsx` | ✅⚠️ | 0bbb6a0, 3420acf, e67db0e | `batch9/after/09-agent-panel-*` | “开启新会话”原生 confirm → ConfirmDialog（0bbb6a0），卸载时中止（3420acf）；头部小字提到字阶下限；会话/流式契约未动（e2e 27b） |
+| G10 | 视图书签命名 | `useTopologyViews.tsx` | ✅ | 0bbb6a0, 3420acf | `batch9/after/16-bookmark-dialog-*` | window.prompt → FormDialog（0bbb6a0）；对话框绑定图纸 + 工作区 + 打开周期，切换/卸载即取消且不写入（3420acf，renderHook 回归） |
 
-## 剩余原生对话框（来自源码 grep）
-- ~~`pages/UserManagement/UserManagement.tsx:117` confirm~~ → 第 4 批已改为 ConfirmDialog
-- ~~`pages/Operations/OperationsPage.tsx:475, 492` confirm~~ → 第 4 批已改为 ConfirmDialog
-- ~~`pages/Diagnostics/Diagnostics.tsx:342` prompt、`:344` confirm~~ → 第 5 批已改为 FormDialog + ConfirmDialog
-- `extensions/network_operations/frontend/components/TopologyAgentPanel.tsx:191` confirm
-- ~~`layouts/Sidebar.tsx` 会话永久删除 confirm~~ → 第 2+3 批已改为 ConfirmDialog
-- `extensions/network_operations/frontend/components/useTopologyViews.tsx:89` prompt
-- `pages/KnowledgeLibrary/KnowledgeLibrary.tsx:141` 删除知识源用的裸 `confirm(...)`（全局 window.confirm，未导入 ConfirmDialog）——第 4 批的 grep 只查了 `window.confirm`，漏掉了它；E7 视觉已完成，但这处原生对话框仍待替换（需 await + 取消不发请求 + 单测断言原生未调用）
+## 原生对话框（来自源码 grep）
+- 全部已替换。最终 grep（`frontend/src` + `extensions/*/frontend`，非测试文件）：`window.confirm|window.prompt|window.alert` 0 处；裸 `confirm(`/`prompt(` 均为导入的 ConfirmDialog / FormDialog；`alert(` 0 处。
+- 第 4 批 UserManagement、OperationsPage ×2；第 5 批 Diagnostics prompt + confirm；第 2+3 批 Sidebar；0bbb6a0：KnowledgeLibrary 删除知识源、TopologyAgentPanel 开启新会话、useTopologyViews 保存视图（prompt → FormDialog）；3420acf：三者绑定打开时的作用域与打开周期（切换/卸载即取消，过期结果不写入）。
 
 ## 批次顺序
 | 批 | 范围 | 清单项 | 主要风险/回归面 |
@@ -107,10 +102,10 @@
 | 4 ✅ | 列表型管理页：知识库、用户与权限、任务记录（3 处 window.confirm → ConfirmDialog） | E7, C2, F1 | 已完成（@003ad44）；组件未拆分，请求未动 |
 | 5 ✅ | 系统页：系统状态（写操作账本对账 prompt → 可访问表单对话框）、系统设置 | F2, F3 | 已完成（@eaad8c8）；只对账不重放；密钥处理未动 |
 | 6 ✅ | 工作台外围：功能描述抽屉、页头、空状态、输入框/附件/文件库、结果与阶段产出、事件时间线（追踪详情未做） | B4, D1, D2, D8, D9（D10 部分） | e2e 25/27；发送/取消状态不变 |
-| 7 | 工作台核心：消息流/流式、思考块、工具调用卡片、审批、任务进度、恢复执行 | D3–D7 | 最高风险：流式/审批/取消/恢复契约，权威状态投影，不建状态镜像 |
-| 8 | 网络设备与 Skill 管理页 | G1, G2 | 扩展路由契约；2407 行单文件 |
-| 9 | 拓扑外壳：图库/工作区、工具栏、检查器、右键菜单、对话框、Agent 面板（confirm）、视图书签（prompt） | G3, G4, G6–G10 | e2e 23/30–33；冲突/修订对话框 |
-| 10 | 拓扑画布主题 token 与收尾全量走查，Windows 原生验证后转 Ready | G5 | canvas_items.item_id 区域身份、渲染/命中测试不动 |
+| 7 ✅ | 工作台核心：消息流/流式、思考块、工具调用卡片、审批、任务进度、恢复执行 | D3–D7 | 最高风险：流式/审批/取消/恢复契约，权威状态投影，不建状态镜像 |
+| 8 ✅ | 网络设备与 Skill 管理页 | G1, G2 | 扩展路由契约；2407 行单文件 |
+| 9 ✅ | 拓扑外壳：图库/工作区、工具栏、检查器、右键菜单、对话框、Agent 面板（confirm）、视图书签（prompt） | G3, G4, G6–G10 | e2e 23/30–33；冲突/修订对话框 |
+| 10 ✅（画布 token 并入第 9 批；Windows 原生验证未做） | 拓扑画布主题 token 与收尾全量走查，Windows 原生验证后转 Ready | G5 | canvas_items.item_id 区域身份、渲染/命中测试不动 |
 
 ## 第 2+3 批记录（@e984ca8）
 - 新增：Ctrl/⌘K 快速跳转（只读/导航）、账户菜单 + 显示密度（UI store `density`，只改间距）、外框 + 页面纸张、侧栏会话筛选
@@ -141,3 +136,26 @@
 - 检查（仅受影响项）：typecheck 0；lint:styles 71；lint:tokens 312/6 warn（基线）；vitest 受影响 11 文件 58 例；e2e 02/11/17/20/25/26/27/29/34/37 dev 20 passed（1.9m）、production 20 passed（49.3s）；axe 24 个截图状态 critical/serious 11（main 同状态 26），无新增；键盘 + 减少动态 11/11。
 - 截图：`/workspace/lzcore/batch6/shots/{before,after}/`（同状态 24 张/侧）；工具：`batch6/tools/{shots6,kb6,diff6.py,inv.py}`。
 - 计数更正：此前写的「25/45」把第 2+3 批的 B4 计入完成，但 B4 当时为 ⬜；按行实际为 24/45（剩 21）。本批后按行计算为 29/45（剩 16）。
+
+## 第 7 批及评审修复记录（@0bbb6a0 → @5e3110c）
+- `refactor(dialogs)` 0bbb6a0：最后 3 处原生对话框（KnowledgeLibrary 删除、TopologyAgentPanel 开启新会话、useTopologyViews 保存视图）→ ConfirmDialog / FormDialog；取消不发请求。
+- `fix(timeline)` 7124695（评审缺陷 1）：`runCardStatus(group)` 投影——流式=本轮进行中、执行结果未知=本轮结果未知、ok=本轮完成、失败/消息 error=本轮失败、无回复=尚无回复、无结果=结果未载入；新增 runtimeTimelineStatus.test.tsx（7 例，旧代码 3 failed）。
+- `fix(dialogs)` 3420acf（评审缺陷 2）：confirm/promptForm 接受 `signal`；书签对话框属于打开时的图纸 + 工作区 + 打开周期，切换/卸载即中止且不写入；拓扑新会话、知识源删除同样绑定（renderHook 图纸切换 / 工作区切换 / 卸载回归）。
+- `fix(a11y)` 12e8864：结果开关名称取自可见内容；markdown 表格滚动区与代码块可聚焦且有名称。
+- `style(workbench)` 5e3110c：D3–D7、D10（WorkbenchRun.css 14.3 KB，workbench 层；TraceDetailPanel.css 重写，console 层）。
+- 检查：typecheck 0；lint:styles 72；vitest 受影响 17 文件 108 例；e2e 02/10/11/14/17/21/23/24/25/27/29 dev 44 passed（3.9m）、production（去掉仅 dev 的 24 首例）42 passed（1.5m）；axe 17 状态 0（main 24）；键盘 + 减少动态 9 PASS / 1 SKIP（思考块在最终回复中被剥离，状态无法构造）。
+- 截图：`/workspace/lzcore/batch7/shots/{before,after}/`；工具：`batch7/tools/{shots7,kb7}.mjs`。CI：@3420acf run 37803648977 9/9；@5e3110c run 37805631849 9/9。
+
+## 第 8 批记录（@ec15203）
+- G1/G2：设备/Skill/证据环境/编辑抽屉；证据登记表拆到 NetworkContext.css（16 KiB 上限）。
+- 检查：typecheck 0；lint:styles 73；lint:tokens 312/6 warn（基线）；vitest networkOperations + extensionRegistry 26 例；e2e 14/21/22/26 dev 16 passed（3.7m）、production 16 passed（1.1m）；axe 17 状态 0（main 同状态 14，均为既有品牌区）；键盘 + 减少动态 12/12。
+- 截图：`/workspace/lzcore/batch8/shots/{before,after}/`（各 17）；工具：`batch8/tools/{seed8.py,shots8.mjs,kb8.mjs}`。CI：@ec15203 run 37807968826 9/9。
+
+## 第 9 批记录（@e67db0e）
+- G3–G10（含 G5 画布标签主题 token）；见上表备注。
+- 检查：typecheck 0；lint:styles 73；lint:tokens 312/6 warn；vitest 拓扑/网络 23 文件 154 例；e2e 22/23/26/27/30/31/32/33 dev 52 passed（4.4m）、production 52 passed（2.4m）；axe 38 状态 1（快捷键帮助亮色：遮罩下的顶栏文字对比度，遮罩造成，非本批新增）vs main 36 状态 111（canvas/参考线 aria-prohibited-attr、隐藏测试钩子按钮无名称、对话框无名称、品牌区）；键盘 + 减少动态 10/10。
+- 截图：`/workspace/lzcore/batch9/shots/{before,after}/`；工具：`batch9/tools/{seed9.py,shots9.mjs,kb9.mjs,montage.py}`。
+
+## 收尾边界
+- **待 Windows 原生验证**：`scripts/windows_desktop_smoke.py` 未运行；CI 的 windows-smoke 不等价于原生桌面验证。PR 保持草稿。
+- 冲突对话框（G7）未截图（状态未在截图环境复现，行为由单测覆盖）；第 7 批思考块键盘检查 SKIP。
