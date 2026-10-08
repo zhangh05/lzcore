@@ -335,11 +335,33 @@ export function Diagnostics() {
   const allOk = runtimeOk && selfcheckOk && operationUnknownCount === 0 && operationRunningCount === 0;
   const hasData = health !== null || selfcheck !== null || usage !== null;
 
+  // The two-step resolve belongs to the workspace and page lifecycle it was
+  // opened in (same contract as the bookmark / knowledge-delete dialogs): a
+  // workspace switch or leaving the page aborts it. An unsent resolve is never
+  // sent; an already-sent one is never replayed, and its response and the
+  // follow-up list only commit while that scope is still current.
+  const resolveCycleRef = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    if (resolveCycleRef.current) {
+      resolveCycleRef.current.abort();
+      resolveCycleRef.current = null;
+      setResolvingOperation("");
+    }
+  }, [currentWorkspaceId]);
+
   const resolveUnknownOperation = useCallback(async (
     operationId: string,
     status: "succeeded" | "failed",
   ) => {
     if (!currentWorkspaceId || resolvingOperation) return;
+    const workspaceId = currentWorkspaceId;
+    resolveCycleRef.current?.abort();
+    const cycle = new AbortController();
+    resolveCycleRef.current = cycle;
+    const { signal } = cycle;
+    const release = () => {
+      if (resolveCycleRef.current === cycle) resolveCycleRef.current = null;
+    };
     const outcome = status === "succeeded" ? "已成功完成" : "执行失败";
     // Two steps, same as before: a reason, then an explicit confirmation.
     // Cancelling either step sends nothing; the reason is never auto-filled.
@@ -352,22 +374,31 @@ export function Diagnostics() {
       requiredMessage: "请填写核对依据后再继续。",
       multiline: true,
       confirmLabel: "继续",
-    });
-    if (!reason) return;
+    }, { signal });
+    if (!reason || signal.aborted) {
+      release();
+      return;
+    }
     const confirmed = await confirm({
       title: `确认已核对外部事实，并将该操作标记为“${outcome}”？`,
       body: `操作 ${operationId}\n核对依据：${reason}`,
       confirmLabel: status === "succeeded" ? "标记为成功" : "标记为失败",
       destructive: status === "failed",
-    });
-    if (!confirmed) return;
+    }, { signal });
+    if (!confirmed || signal.aborted) {
+      release();
+      return;
+    }
     setResolvingOperation(operationId);
     try {
-      await operationLedgerApi.resolve(currentWorkspaceId, operationId, status, reason);
-      const refreshed = await operationLedgerApi.list(currentWorkspaceId);
+      await operationLedgerApi.resolve(workspaceId, operationId, status, reason);
+      if (signal.aborted) return;
+      const refreshed = await operationLedgerApi.list(workspaceId);
+      if (signal.aborted) return;
       setOperations({ operations: refreshed.operations, counts: refreshed.counts });
     } finally {
-      setResolvingOperation("");
+      release();
+      if (!signal.aborted) setResolvingOperation("");
     }
   }, [currentWorkspaceId, resolvingOperation]);
 
