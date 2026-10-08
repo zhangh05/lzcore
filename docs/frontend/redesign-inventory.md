@@ -96,6 +96,7 @@
 - `extensions/network_operations/frontend/components/TopologyAgentPanel.tsx:191` confirm
 - ~~`layouts/Sidebar.tsx` 会话永久删除 confirm~~ → 第 2+3 批已改为 ConfirmDialog
 - `extensions/network_operations/frontend/components/useTopologyViews.tsx:89` prompt
+- `pages/KnowledgeLibrary/KnowledgeLibrary.tsx:141` 删除知识源用的裸 `confirm(...)`（全局 window.confirm，未导入 ConfirmDialog）——第 4 批的 grep 只查了 `window.confirm`，漏掉了它；E7 视觉已完成，但这处原生对话框仍待替换（需 await + 取消不发请求 + 单测断言原生未调用）
 
 ## 批次顺序
 | 批 | 范围 | 清单项 | 主要风险/回归面 |
