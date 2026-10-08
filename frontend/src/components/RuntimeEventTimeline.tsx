@@ -404,18 +404,37 @@ function groupMessagesIntoRuns(messages: ChatMsg[]): RunGroup[] {
 
 /* ── run card ── */
 
+/**
+ * Card status is a projection of the message lifecycle plus the backend
+ * result facts — never of "not an error". A turn that is still streaming, or
+ * whose result has not been loaded / does not exist, is not reported as
+ * completed: only a result with `ok === true` (and no unresolved unknown
+ * outcome) reads "本轮完成".
+ */
+export type RunCardStatus = "ok" | "err" | "unknown" | "running" | "none";
+export function runCardStatus(group: Pick<RunGroup, "assistantMsg" | "result">): { status: RunCardStatus; statusLabel: string } {
+  const assistant = group.assistantMsg;
+  const result = group.result;
+  if (assistant?.status === "streaming") return { status: "running", statusLabel: "本轮进行中" };
+  if (result) {
+    if (result.metadata?.execution_outcome === "unknown") return { status: "unknown", statusLabel: "本轮结果未知" };
+    return result.ok ? { status: "ok", statusLabel: "本轮完成" } : { status: "err", statusLabel: "本轮失败" };
+  }
+  if (assistant?.status === "error") return { status: "err", statusLabel: "本轮失败" };
+  if (!assistant) return { status: "none", statusLabel: "尚无回复" };
+  return { status: "none", statusLabel: "结果未载入" };
+}
+
+
 const RunCard: React.FC<{ group: RunGroup; runIdx: number }> = React.memo(({ group, runIdx }) => {
   const [open, setOpen] = useState(false);
   const result = group.result;
   const assistantText = group.assistantMsg?.text ?? "";
   const userText = group.userMsg?.text ?? "";
-  const unknown = result?.metadata.execution_outcome === "unknown";
-  const ok = result ? result.ok : group.assistantMsg?.status !== "error";
   const cardId = (result?.turn_id ?? group.runId).slice(0, 8);
   const title = plainSnippet(userText, 90);
   const snippet = plainSnippet(assistantText, 120);
-  const status = unknown ? "unknown" : ok ? "ok" : "err";
-  const statusLabel = unknown ? "本轮结果未知" : ok ? "本轮完成" : "本轮失败";
+  const { status, statusLabel } = runCardStatus(group);
   const toolCount = result?.tool_calls?.length ?? 0;
   const stepCount = result?.events?.length ?? 0;
   const hasResultBody = !!result;

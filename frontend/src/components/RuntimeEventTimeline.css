@@ -56,6 +56,7 @@
 .rt-card-dot.ok { background: var(--ok); }
 .rt-card-dot.err { background: var(--danger); }
 .rt-card-dot.unknown { background: var(--unknown); }
+.rt-card-dot:is(.running, .none) { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-4); }
 
 .rt-card-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rt-card-title {
@@ -87,6 +88,7 @@
 .rt-card-status.ok { color: var(--ok); background: var(--ok-soft); }
 .rt-card-status.err { color: var(--danger); background: var(--danger-soft); }
 .rt-card-status.unknown { color: var(--unknown); background: var(--unknown-soft); }
+.rt-card-status:is(.running, .none) { color: var(--text-3); background: var(--surface-2); }
 .rt-card-count { color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; }
 .rt-card-id, .rt-card-time {
   color: var(--text-4);
