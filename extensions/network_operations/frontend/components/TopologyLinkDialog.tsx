@@ -4,6 +4,7 @@ import { IconClose } from "../../../../frontend/src/components/Icon";
 import { Button } from "../../../../frontend/src/components/ui";
 import type { Topology } from "./topologyDocument";
 import { nextFreeInterface } from "./topologyInterfaceAllocation";
+import { useTopologyDialogFocus } from "./useTopologyDialogFocus";
 
 export type TopologyLinkDialogProps = {
   activeTopology: Topology;
@@ -48,8 +49,12 @@ export function TopologyLinkDialog({
   setLinkForm,
   setPendingConnection,
 }: TopologyLinkDialogProps) {
+  const dialogRef = useTopologyDialogFocus<HTMLDialogElement>(() =>
+    setPendingConnection(null),
+  );
   return (
     <dialog
+      ref={dialogRef}
       open
       role="dialog"
       aria-modal="true"

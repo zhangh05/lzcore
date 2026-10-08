@@ -64,8 +64,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
-  padding: 6px 6px 6px 10px;
+  min-height: 40px;
+  padding: 6px 6px 6px 8px;
   border-bottom: 1px solid var(--lz-color-border-subtle);
   background: var(--lz-color-bg-surface);
   user-select: none;
@@ -80,7 +80,7 @@
 .topology-studio .topology-inspector .inspector-header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
 }
@@ -170,8 +170,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--lz-radius-sm);

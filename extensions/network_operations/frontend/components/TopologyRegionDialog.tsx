@@ -3,6 +3,7 @@ import { IconClose } from "../../../../frontend/src/components/Icon";
 import { Button } from "../../../../frontend/src/components/ui";
 import type { Topology } from "./topologyDocument";
 import { ZONE_COLOR_PRESETS } from "./topologyDocument";
+import { useTopologyDialogFocus } from "./useTopologyDialogFocus";
 
 export type TopologyRegionDialogProps = {
   activeTopology: Topology;
@@ -31,8 +32,12 @@ export function TopologyRegionDialog({
   zoneColorIndex,
   zoneNameInput,
 }: TopologyRegionDialogProps) {
+  const dialogRef = useTopologyDialogFocus<HTMLDialogElement>(() =>
+    setShowCreateZoneModal(false),
+  );
   return (
     <dialog
+      ref={dialogRef}
       open
       role="dialog"
       aria-modal="true"

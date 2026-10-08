@@ -584,4 +584,12 @@
   }
 }
 
+@media (max-width: 640px) {
+  /* Conflict/revision choices are long sentences: stack them, primary first. */
+  .compare-panel .modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 }

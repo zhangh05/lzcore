@@ -1,6 +1,7 @@
 /** TopologyEmptyCreateDialog owns its presentation; document writes stay with the workspace controller. */
 import { IconClose } from "../../../../frontend/src/components/Icon";
 import { Button } from "../../../../frontend/src/components/ui";
+import { useTopologyDialogFocus } from "./useTopologyDialogFocus";
 
 export type TopologyEmptyCreateDialogProps = {
   busy: boolean;
@@ -27,8 +28,12 @@ export function TopologyEmptyCreateDialog({
   topologyDescInput,
   topologyNameInput,
 }: TopologyEmptyCreateDialogProps) {
+  const dialogRef = useTopologyDialogFocus<HTMLDialogElement>(() =>
+    setTopologyModalMode(null),
+  );
   return (
     <dialog
+      ref={dialogRef}
       open
       role="dialog"
       aria-modal="true"
