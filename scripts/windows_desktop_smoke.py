@@ -78,6 +78,7 @@ def verify_packaged_files(page, origin, output):
     page.get_by_role('tab', name=re.compile('^文件')).click()
     page.get_by_placeholder('搜索名称、路径或来源').fill('已整理 原件.custom')
     page.get_by_role('button', name='已整理 原件.custom', exact=False).click()
+    page.locator('.file-space-metadata > summary').click()
     page.get_by_text(result['file_id'], exact=True).wait_for()
     page.screenshot(path=str(output/'file-workspace.png'), full_page=True)
 
