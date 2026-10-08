@@ -424,7 +424,7 @@ export function Diagnostics() {
         </button>
       </PageHeader>
 
-      <div className="page-body page-body-flex">
+      <div className="page-body page-body-flex diag-page-body">
         {/* ═══ 概览摘要卡（用户3秒看懂系统状态） ═══ */}
         {summaryStats ? (
           <div className="diag-summary">
@@ -441,6 +441,12 @@ export function Diagnostics() {
                 {summaryStats.issueCount > 0 && ` · 自检发现 ${summaryStats.issueCount} 项问题`}
                 {summaryStats.cost > 0 && ` · 花费 ¥${summaryStats.cost.toFixed(4)}`}
               </p>
+            </div>
+            <div className="diag-summary-stats" role="group" aria-label="检测摘要">
+              <span><b>{summaryStats.okCount}</b><small>正常</small></span>
+              <span><b data-tone={summaryStats.warnCount ? "warn" : "quiet"}>{summaryStats.warnCount}</b><small>警告</small></span>
+              <span><b data-tone={summaryStats.errCount ? "danger" : "quiet"}>{summaryStats.errCount}</b><small>异常</small></span>
+              <span><b>{summaryStats.calls.toLocaleString()}</b><small>调用</small></span>
             </div>
             {!summaryStats.selfOk && summaryStats.issueCount > 0 && (
               <div className="diag-summary-alert">
@@ -479,7 +485,7 @@ export function Diagnostics() {
 
         {/* ═══ 行1: 运行时健康（全宽） ═══ */}
         <div>
-          <Section title="运行时健康" badge={
+          <Section title="运行时健康" kicker={health ? `${health.components?.length ?? 0} 项子系统` : "核心子系统"} badge={
             health ? (
               <span className="diag-section-badge">
                 {runtimeOk ? <span className="diag-section-badge diag-text-ok">● 全部正常</span> : `${hs.ok} 正常` + (hs.warning ? ` / ${hs.warning} 警告` : "") + (hs.error ? ` / ${hs.error} 异常` : "")}
@@ -527,7 +533,7 @@ export function Diagnostics() {
 
         {/* ═══ 行2: 用量 + 自检 + 提示词 ═══ */}
         <div className="diag-row-3col">
-          <Section title="用量统计">
+          <Section title="用量统计" kicker="模型">
             {usage ? (
               <div className="diag-usage-body">
                 <div className="diag-usage-big">
@@ -555,7 +561,7 @@ export function Diagnostics() {
             )}
           </Section>
 
-          <Section title="自动检查结果" badge={selfcheck?.status === "healthy" ? <span className="diag-section-badge diag-text-ok">通过</span> : (selfcheck?.issues?.length ?? 0) > 0 ? <span className="diag-section-badge diag-text-warn">{(selfcheck?.issues?.length ?? 0)} 项问题</span> : null}>
+          <Section title="自动检查结果" kicker="安全与规约" badge={selfcheck?.status === "healthy" ? <span className="diag-section-badge diag-text-ok">通过</span> : (selfcheck?.issues?.length ?? 0) > 0 ? <span className="diag-section-badge diag-text-warn">{(selfcheck?.issues?.length ?? 0)} 项问题</span> : null}>
             {selfcheck ? (
               selfcheck.issues && selfcheck.issues.length > 0 ? (
                 <div className="diag-issues-list">
@@ -588,9 +594,9 @@ export function Diagnostics() {
             )}
           </Section>
 
-          <Section title="提示词库" badge={prompts?.length != null ? <span className="faint">{prompts.length} 条</span> : null}>
+          <Section title="提示词库" kicker="装配" badge={prompts?.length != null ? <span className="faint">{prompts.length} 条</span> : null}>
             {prompts && prompts.length > 0 ? (
-              <div className="diag-prompt-list">
+              <div className="diag-prompt-list" role="region" aria-label="提示词库列表" tabIndex={0}>
                 <DataTable<PromptItem>
                   rows={prompts}
                   keyExtractor={(p) => p.prompt_id}
@@ -611,7 +617,7 @@ export function Diagnostics() {
 
         {/* ═══ 行3: 上下文 + 数据策略 ═══ */}
         <div className="diag-row-2col">
-          <Section title="上下文运行时">
+          <Section title="上下文运行时" kicker="工作记忆">
             {contextOk !== null ? (
               <div className="diag-context-info">
                 <div className={`diag-context-status ${contextOk ? "diag-context-on" : "diag-context-off"}`}>
@@ -631,7 +637,7 @@ export function Diagnostics() {
             )}
           </Section>
 
-          <Section title="数据策略">
+          <Section title="数据策略" kicker="只读">
             <div className="diag-policy-management">
               <span>此处只显示当前策略，文件和归档操作统一在数据管理中完成。</span>
               <Link className="btn sm" to="/data" viewTransition>打开数据管理</Link>
@@ -665,7 +671,7 @@ export function Diagnostics() {
         </div>
 
         <div>
-          <Section title="写操作账本" badge={operations ? (
+          <Section title="写操作账本" kicker="未知结果须人工核对" badge={operations ? (
             <span className={`diag-section-badge ${operationUnknownCount + operationRunningCount === 0 ? "diag-text-ok" : "diag-text-warn"}`}>
               {operationUnknownCount + operationRunningCount === 0 ? "无待核对项" : `${operationUnknownCount + operationRunningCount} 项未决操作`}
             </span>
@@ -678,8 +684,9 @@ export function Diagnostics() {
                   <Row label="历史失败" value={String(operations.counts.failed ?? 0)} compact />
                 </div>
                 {operations.operations.filter((item) => item.status === "unknown" || item.status === "running").slice(0, 5).map((item) => (
-                  <div className="diag-continuation-alert" key={item.operation_id}>
+                  <div className="diag-continuation-alert" data-status={item.status} key={item.operation_id}>
                     <div>
+                      <em className="diag-op-status">{item.status === "unknown" ? "结果未知" : "执行中"}</em>
                       <b>{item.operation_id}</b>
                       <span>{item.canonical_tool} · {item.status === "unknown" ? "结果未知，先核对外部事实，禁止重试" : "仍在执行，请等待或按运维流程核对"}</span>
                       {item.planned_at && <small>发生时间：{formatDate(item.planned_at, "compact")}</small>}
@@ -715,15 +722,18 @@ export function Diagnostics() {
 
 /* ─── Sub-components ─── */
 
-function Section({ title, badge, children }: { title: string; badge?: React.ReactNode; children: React.ReactNode }) {
+function Section({ title, kicker, badge, children }: { title: string; kicker?: string; badge?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="diag-section">
+    <section className="diag-section">
       <div className="diag-section-head">
-        <h3 className="diag-section-title">{title}</h3>
+        <div className="diag-section-heading">
+          {kicker && <span className="diag-section-kicker">{kicker}</span>}
+          <h3 className="diag-section-title">{title}</h3>
+        </div>
         {badge}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
