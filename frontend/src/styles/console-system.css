@@ -11,14 +11,15 @@
   min-height: 72px;
   padding: var(--space-4) var(--space-6) var(--space-3);
   gap: 16px;
-  border-bottom: 0;
-  background: var(--bg);
+  border-bottom: 1px solid var(--line-2);
+  background: var(--surface);
 }
 .page-header h1 {
   color: var(--console-ink);
-  font-size: var(--fs-20);
-  line-height: var(--lh-20);
+  font-size: var(--fs-22);
+  line-height: var(--lh-22);
   font-weight: var(--weight-display);
+  letter-spacing: -0.005em;
 }
 .page-header {
   gap: var(--flow-loose);

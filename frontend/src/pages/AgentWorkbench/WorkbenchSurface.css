@@ -1,0 +1,235 @@
+/* Workbench conversation surface (v2 redline): a 760px reading column, a
+   quiet sheet header, assistant output as typeset content with framed tables
+   and code, the composer as a raised card and the progress rail as a calm
+   timeline. It sits in the `pages` layer because it refines both the
+   workbench rules and the shared markdown typography for this one surface;
+   narrow-width rules in `responsive` still win. Visual only: no markup,
+   state or testid depends on it. */
+
+@layer pages {
+
+.wb-shell { --wb-read: 760px; background: var(--surface); }
+.wb-conversation-column { background: var(--surface); }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.wb-shell .wb-header {
+  min-height: 56px;
+  padding: 10px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-2);
+}
+.wb-shell .wb-header h1 { font-size: var(--fs-16); line-height: var(--lh-16); font-weight: var(--weight-strong); letter-spacing: 0; }
+.wb-shell .wb-header-model { color: var(--text-3); font-size: var(--fs-12); }
+.wb-shell .wb-header-actions { gap: 4px; }
+.wb-shell .wb-mode-btn {
+  height: 30px;
+  padding: 0 10px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  font-size: var(--fs-13);
+  font-weight: var(--weight-label);
+}
+.wb-shell .wb-mode-btn:hover { color: var(--text); background: var(--surface-hover); }
+.wb-shell .wb-mode-btn.active { color: var(--text); background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-xs); }
+
+/* ── Reading column ─────────────────────────────────────────────────────── */
+.wb-shell .wb-chat-list { padding: 28px 24px 32px; background: var(--surface); }
+.wb-shell .wb-chat-list > * { width: 100%; max-width: var(--wb-read); margin-inline: auto; }
+.wb-shell .message-row { margin-bottom: 0; }
+.wb-shell .message-row.assistant { padding-top: 0; border-top: 0; }
+.wb-shell .message-row + .message-row { margin-top: 28px; }
+.wb-shell .message-row.user .message-stack { max-width: min(560px, 82%); }
+.wb-shell .message-avatar.user { display: none; }
+.wb-shell .chat-bubble.user {
+  padding: 10px 14px;
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--message-user) 70%, var(--line-2));
+  border-radius: 12px 12px 4px 12px;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+.wb-shell .message-avatar.agent {
+  width: 28px;
+  height: 28px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 0;
+  border-radius: 8px;
+}
+.wb-shell .message-row.assistant .message-stack { gap: 12px; }
+
+/* Assistant output: typeset content. */
+.wb-shell .chat-bubble.assistant.markdown-body { color: var(--text); font-size: var(--fs-14); line-height: 1.72; }
+.wb-shell .markdown-body :is(h1, h2, h3) { margin: 20px 0 8px; letter-spacing: 0; }
+.wb-shell .markdown-body h2 { padding: 0; font-size: var(--fs-18); line-height: 26px; border: 0; }
+.wb-shell .markdown-body h3 { font-size: var(--fs-16); line-height: var(--lh-16); font-weight: var(--weight-strong); }
+.wb-shell .markdown-body > :first-child { margin-top: 0; }
+.wb-shell .markdown-body strong { color: var(--text); font-weight: var(--weight-strong); }
+.wb-shell .markdown-body :not(pre) > code {
+  padding: 1px 6px;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 0;
+  border-radius: 4px;
+  font-size: 12.5px;
+}
+
+/* Tables: one framed container, tinted header, quiet rows. */
+.wb-shell .markdown-body .markdown-table-scroll {
+  margin: 12px 0 16px;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.wb-shell .markdown-body table { width: 100%; margin: 0; border: 0; border-collapse: separate; border-spacing: 0; }
+.wb-shell .markdown-body thead { background: transparent; }
+.wb-shell .markdown-body th {
+  height: 36px;
+  padding: 0 14px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-strong);
+  text-align: left;
+}
+.wb-shell .markdown-body td {
+  height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-top: 1px solid var(--line-2);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+.wb-shell .markdown-body tbody tr:first-child td { border-top: 0; }
+.wb-shell .markdown-body tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.wb-shell .markdown-body tbody tr:hover td { background: var(--surface-hover); }
+
+/* Code: header bar + sunken body. */
+.wb-shell .markdown-body .code-block-wrap {
+  margin: 12px 0 16px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: none;
+}
+.wb-shell .markdown-body .code-block-wrap:hover { border-color: var(--line-3); }
+.wb-shell .code-block-header {
+  height: 34px;
+  padding: 0 8px 0 14px;
+  color: var(--text-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+.wb-shell .code-copy-btn { height: 24px; padding: 0 8px; color: var(--text-3); background: transparent; border: 0; border-radius: var(--r-control); font-size: var(--fs-12); }
+.wb-shell .code-copy-btn:hover { color: var(--text); background: var(--surface-hover); }
+.wb-shell .markdown-body .code-block-wrap pre,
+.wb-shell .markdown-body .code-block-wrap pre > code {
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--fs-12);
+  line-height: 20px;
+}
+.wb-shell .markdown-body .code-block-wrap pre > code { padding: 0; }
+
+/* Result bar: a status line with its actions. */
+.wb-shell .chat-result-inline { padding-top: 4px; border-top: 0; }
+.wb-shell .result-inline-disclosure {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.wb-shell .result-overview-toggle { min-height: 44px; padding: 0 14px; }
+.wb-shell .result-overview-title { font-size: var(--fs-13); font-weight: var(--weight-strong); }
+.wb-shell .result-inline-details { padding: 0 14px 12px; border-top: 1px solid var(--line-2); }
+.wb-shell .result-inline-details .result-actions { padding-top: 12px; }
+
+/* Tool calls: grouped, mono names, quiet rows. */
+.wb-shell .tool-call-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: none; }
+.wb-shell .tool-call-card-header { min-height: 36px; padding: 0 12px; }
+.wb-shell .tc-name { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text); }
+.wb-shell .tc-duration-pill, .wb-shell .tc-duration { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); }
+
+/* Empty state: a centred prompt with suggestion chips. */
+.wb-shell .wb-empty-lead { color: var(--text); font-size: var(--fs-22); line-height: var(--lh-22); font-weight: var(--weight-display); }
+.wb-shell .wb-empty .empty-mark { width: 40px; height: 40px; border-radius: 12px; font-size: var(--fs-16); }
+.wb-shell .wb-empty-chips { gap: 8px; margin-top: 16px; }
+.wb-shell .wb-empty-chips .wb-input-chip {
+  height: 32px;
+  padding: 0 14px;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow-xs);
+  font-size: var(--fs-13);
+}
+.wb-shell .wb-empty-chips .wb-input-chip:hover { color: var(--text); border-color: var(--line-3); background: var(--surface-hover); }
+
+/* ── Composer: raised card on the reading column ───────────────────────── */
+.wb-shell .wb-input-bar.wb-composer-dock { padding: 8px 24px 14px; background: var(--surface); border-top: 0; }
+.wb-shell .wb-composer-dock > * { width: 100%; max-width: var(--wb-read); margin-inline: auto; }
+.wb-shell .wb-input-row {
+  padding: 10px 10px 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+}
+.wb-shell .wb-input-row:hover { border-color: var(--line-3); }
+.wb-shell .wb-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring-shadow), var(--shadow-md); }
+.wb-shell .wb-input { font-size: var(--fs-14); line-height: var(--lh-14); }
+.wb-shell .wb-attach-btn { width: 34px; height: 34px; color: var(--text-3); background: transparent; border: 0; border-radius: var(--r-control); }
+.wb-shell .wb-attach-btn:hover { color: var(--text); background: var(--surface-hover); }
+.wb-shell .wb-send { width: 34px; height: 34px; color: var(--accent-text); background: var(--accent); border: 0; border-radius: 9px; box-shadow: var(--shadow-xs); }
+.wb-shell .wb-send:hover:not(:disabled) { background: var(--accent-2); }
+.wb-shell .wb-send:disabled { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 38%, var(--surface)); box-shadow: none; }
+.wb-shell .wb-composer-meta { padding: 0 4px; font-size: var(--fs-11); color: var(--text-4); }
+
+/* ── Progress rail: calm card with a step timeline ─────────────────────── */
+.wb-shell .task-progress-panel { background: var(--surface-2); border-left: 1px solid var(--line-2); }
+.wb-shell .task-progress-header { gap: 10px; padding: 16px 20px 14px; border-bottom: 1px solid var(--line-2); }
+.wb-shell .task-progress-kicker { color: var(--text-3); font-size: var(--fs-11); font-weight: var(--weight-strong); letter-spacing: .02em; }
+.wb-shell .task-progress-header-title { font-size: var(--fs-15); font-weight: var(--weight-strong); }
+.wb-shell .task-progress-body { padding: 16px 20px; }
+.wb-shell .task-phase-list {
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+}
+.wb-shell .task-stepper-item { padding-bottom: 2px; }
+.wb-shell .stepper-spine { left: 13px; top: 30px; bottom: -2px; width: 1.5px; background: var(--line); }
+.wb-shell .stepper-spine.is-done { background: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.wb-shell .task-phase-summary { gap: 10px; padding: 6px 2px; border-radius: var(--r-control); }
+.wb-shell .task-phase-summary:hover { background: var(--surface-hover); }
+.wb-shell .task-phase-index { width: 22px; height: 22px; flex-basis: 22px; border-width: 1.5px; font-size: 11px; }
+.wb-shell .task-phase.done .task-phase-index { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.wb-shell .task-phase-title-wrap h3 { color: var(--text); font-size: var(--fs-13); font-weight: var(--weight-label); }
+.wb-shell .task-phase-status-tag { padding: 0; background: transparent; color: var(--text-3); font-size: var(--fs-11); font-weight: var(--weight-label); font-variant-numeric: tabular-nums; }
+.wb-shell .task-phase-status-tag.done { color: var(--ok); }
+.wb-shell .task-phase-content { padding-left: 34px; }
+.wb-shell :is(.task-footprint-section, .task-evidence-section, .task-result-section) {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+}
+.wb-shell .task-section-title { color: var(--text-2); font-size: var(--fs-12); font-weight: var(--weight-strong); }
+.wb-shell .task-progress-footer { padding: 12px 20px 14px; background: var(--surface-2); border-top: 1px solid var(--line-2); }
+
+}
