@@ -135,6 +135,8 @@
   color: var(--lz-color-text-primary);
 }
 
+.topology-studio .netops-viewport-controls button { white-space: nowrap; flex-shrink: 0; }
+
 .topology-studio .netops-viewport-controls .netops-zoom-readout {
   min-width: 44px;
   color: var(--lz-color-text-tertiary);

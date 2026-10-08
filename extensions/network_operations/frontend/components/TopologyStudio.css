@@ -322,4 +322,13 @@
   }
 }
 
+.topology-studio .topology-library-close { display: none; }
+@media (max-width: 760px) {
+  /* Narrow: the library is a drawer over the canvas instead of a grid column that squeezes it. */
+  .network-admin .topology-studio.library-open,
+  .network-admin .topology-studio.library-open.agent-open { grid-template-columns: minmax(0, 1fr); }
+  .network-admin .topology-studio.library-open .topology-canvas-area { grid-column: 1; }
+  .network-admin .topology-studio.library-open .topology-sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: min(320px, calc(100% - 40px)); max-height: none; overflow-y: auto; z-index: 35; border-right: 1px solid var(--lz-color-border-subtle); box-shadow: var(--lz-shadow-popover); }
+  .topology-studio .topology-library-close { display: inline-flex; width: var(--lz-touch-min, 40px); padding: 0; border-color: transparent; background: transparent; color: var(--lz-color-text-tertiary); }
+}
 }

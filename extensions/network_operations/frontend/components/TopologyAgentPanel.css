@@ -118,4 +118,19 @@
 }
 .topology-agent-change button:disabled { opacity: 0.5; cursor: default; }
 
+/* Close control exists for the narrow sheet only; docked layouts are unchanged. */
+.topology-agent-close { display: none; align-items: center; justify-content: center; width: var(--lz-touch-min, 40px); height: var(--lz-touch-min, 40px); padding: 0; border: 0; border-radius: var(--lz-radius-sm); background: transparent; color: var(--lz-color-text-tertiary); cursor: pointer; }
+.topology-agent-close:hover { background: var(--lz-color-bg-hover); color: var(--lz-color-text-primary); }
+.topology-agent-close:focus-visible { outline: 2px solid var(--lz-color-border-focus); outline-offset: 1px; }
+@media (max-width: 760px) {
+  /* Narrow: the agent panel is a full-width sheet over the studio, not a 42vw strip. */
+  .network-admin .topology-studio.agent-open:not(.is-fullscreen) .studio-agent-dock { inset: 0; width: auto; border-left: 0; z-index: 35; box-shadow: none; }
+  .studio-agent-dock:focus-visible { outline: none; }
+  .topology-agent > header { padding: 8px 8px 8px 16px; }
+  .topology-agent > header > .topology-agent-header-actions { display: flex; gap: 4px; }
+  .topology-agent-close { display: inline-flex; }
+  .topology-agent-input-row { flex-wrap: wrap; }
+  .topology-agent-composer textarea { flex: 1 1 100%; width: 100%; }
+  .topology-agent-input-row > button { margin-left: auto; }
+}
 }

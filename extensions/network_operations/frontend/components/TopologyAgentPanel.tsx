@@ -15,6 +15,7 @@ import {
   IconSend,
   IconStop,
   IconPlus,
+  IconClose,
 } from "../../../../frontend/src/components/Icon";
 import type { Topology } from "./topologyDocument";
 import type { CanvasSelection } from "./canvasSelection";
@@ -55,6 +56,7 @@ export function TopologyAgentPanel({
   activities = [],
   onLocate,
   onUndoChange,
+  onClose,
 }: {
   workspaceId: string;
   topology: Topology;
@@ -64,6 +66,8 @@ export function TopologyAgentPanel({
   activities?: DrawingActivity[];
   onLocate?: (ids: string[]) => void;
   onUndoChange?: (version: number) => void;
+  /** Closes the panel; the button only shows when it is a narrow-width sheet. */
+  onClose?: () => void;
 }) {
   const storageKey = scopedLocalStorageKey(
     `drawing_session_v2:${workspaceId}:${topology.topology_id}`,
@@ -317,6 +321,17 @@ export function TopologyAgentPanel({
           <span className={running ? "agent-pulse" : ""}>
             {running ? "执行中" : "就绪"}
           </span>
+          {onClose && (
+            <button
+              type="button"
+              className="topology-agent-close"
+              aria-label="关闭绘图对话"
+              data-sheet-close=""
+              onClick={onClose}
+            >
+              <IconClose size={16} />
+            </button>
+          )}
         </div>
       </header>
       <div className="topology-agent-scope">

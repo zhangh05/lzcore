@@ -1,6 +1,6 @@
 /** TopologyLibrary owns its presentation; document writes stay with the workspace controller. */
 import { type DragEvent } from "react";
-import { IconPlus } from "../../../../frontend/src/components/Icon";
+import { IconClose, IconPlus } from "../../../../frontend/src/components/Icon";
 import { Button } from "../../../../frontend/src/components/ui";
 import { type CanvasApi } from "./NetOpsCanvas";
 import { DRAWING_DEVICE_TYPES } from "./topologyDevicePalette";
@@ -12,6 +12,8 @@ import type {
 import { DeviceTypeIcon } from "./TopologyItemControls";
 
 export type TopologyLibraryProps = {
+  /** Closes the library; the button only shows when it is a narrow-width drawer. */
+  onClose?: () => void;
   activeTopology: Topology;
   armedNodeType: string | null;
   canvasApiRef: import("react").MutableRefObject<CanvasApi | null>;
@@ -58,6 +60,7 @@ export type TopologyLibraryProps = {
 };
 
 export function TopologyLibrary({
+  onClose,
   activeTopology,
   armedNodeType,
   canvasApiRef,
@@ -95,6 +98,17 @@ export function TopologyLibrary({
           >
             新建
           </Button>
+          {onClose && (
+            <Button
+              size="sm"
+              className="topology-library-close"
+              aria-label="关闭设备库"
+              data-sheet-close=""
+              onClick={onClose}
+            >
+              <IconClose size={14} />
+            </Button>
+          )}
         </div>
         <div className="topology-dropdown-wrap">
           <select
