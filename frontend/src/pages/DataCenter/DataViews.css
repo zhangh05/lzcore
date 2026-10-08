@@ -1,0 +1,78 @@
+/* Data management views that scroll as a document: overview, relations and
+   lifecycle. Frame, panels and toolbars are in DataCenter.css. */
+@layer pages {
+/* ── Overview ──────────────────────────────────────────── */
+.dm-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); align-items: start; gap: var(--lz-space-4); }
+.dm-side { display: grid; gap: var(--lz-space-4); min-width: 0; }
+.dm-recent-list { margin: 0; padding: var(--lz-space-1) 0; list-style: none; }
+.dm-recent-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 84px;
+  align-items: center;
+  gap: var(--lz-space-3);
+  inline-size: 100%;
+  min-block-size: 52px;
+  padding: var(--lz-space-2) var(--lz-space-4);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dm-recent-list > li + li > .dm-recent-row { box-shadow: inset 0 1px 0 var(--lz-color-border-subtle); }
+.dm-recent-row:hover { background: var(--lz-color-bg-hover); }
+.dm-recent-row:focus-visible { outline: var(--focus-width) solid var(--lz-color-border-focus); outline-offset: -2px; }
+.dm-recent-main { display: grid; gap: 2px; min-width: 0; }
+.dm-recent-main b, .dm-row-main b { overflow: hidden; color: var(--lz-color-text-primary); font: var(--lz-font-control); font-weight: var(--weight-heading); text-overflow: ellipsis; white-space: nowrap; }
+.dm-recent-main small, .dm-row-main small { overflow: hidden; color: var(--lz-color-text-tertiary); font: var(--lz-font-label); text-overflow: ellipsis; white-space: nowrap; }
+.dm-recent-size, .dm-recent-date { color: var(--lz-color-text-secondary); font: var(--lz-font-label); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.dm-recent-date { color: var(--lz-color-text-tertiary); }
+.dm-health-line { display: flex; align-items: center; gap: var(--lz-space-2); margin: 0; font: var(--lz-font-control); font-weight: var(--weight-heading); color: var(--lz-color-success-fg); }
+.dm-health-line.is-err { color: var(--lz-color-danger-fg); }
+.dm-side .ui-info-list > div { grid-template-columns: minmax(0, 1fr) auto; }
+.dm-side .ui-info-list dd { font-variant-numeric: tabular-nums; text-align: right; }
+.dm-breakdown { display: grid; gap: var(--lz-space-3); margin: 0; padding: 0; list-style: none; }
+.dm-breakdown > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--lz-space-1) var(--lz-space-3); font: var(--lz-font-control); }
+.dm-breakdown-label { color: var(--lz-color-text-secondary); }
+.dm-breakdown b { color: var(--lz-color-text-primary); font-variant-numeric: tabular-nums; }
+.dm-breakdown-bar { grid-column: 1 / -1; block-size: 4px; border-radius: var(--lz-radius-pill); background: var(--lz-color-bg-muted); overflow: hidden; }
+.dm-breakdown-bar > span { display: block; block-size: 100%; border-radius: inherit; background: var(--lz-color-accent); }
+
+/* ── Relations table ───────────────────────────────────── */
+.dm-table-wrap { border-radius: var(--lz-radius-lg); }
+.dm-relations-table th.num, .dm-relations-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.dm-relations-table td { vertical-align: middle; }
+.dm-cell-link { display: inline-flex; align-items: center; gap: var(--lz-space-2); max-inline-size: 420px; padding: 0; border: 0; background: transparent; color: var(--lz-color-text-primary); font: var(--lz-font-control); font-weight: var(--weight-heading); text-align: left; cursor: pointer; }
+.dm-cell-link > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-cell-link:hover > span:last-child { color: var(--lz-color-accent); text-decoration: underline; text-underline-offset: 3px; }
+.dm-cell-link:focus-visible { outline: var(--focus-width) solid var(--lz-color-border-focus); outline-offset: 2px; border-radius: var(--lz-radius-xs); }
+.dm-relations-table td.dm-muted { display: table-cell; color: var(--lz-color-text-tertiary); }
+
+/* ── Lifecycle ─────────────────────────────────────────── */
+.dm-lifecycle-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lz-space-4); }
+.dm-action-card.has-candidates { border-top: 3px solid var(--lz-color-danger-fg); }
+.dm-action-card.is-info.has-candidates { border-top-color: var(--lz-color-info-fg); }
+.dm-action-card.has-candidates .dm-action-count b { color: var(--lz-color-danger-fg); }
+.dm-action-card.is-info.has-candidates .dm-action-count b { color: var(--lz-color-info-fg); }
+.dm-action-count { display: grid; flex: 0 0 auto; justify-items: end; color: var(--lz-color-text-tertiary); font: var(--lz-font-caption); }
+.dm-action-count b { color: var(--lz-color-text-primary); font: var(--lz-font-numeric); font-variant-numeric: tabular-nums; }
+.dm-candidates { display: flex; flex-wrap: wrap; gap: var(--lz-space-2); margin: 0; padding: 0; list-style: none; }
+.dm-candidates > li { display: inline-flex; align-items: baseline; gap: var(--lz-space-1); padding: 2px var(--lz-space-2); border-radius: var(--lz-radius-sm); background: var(--lz-color-bg-sunken); color: var(--lz-color-text-secondary); font: var(--lz-font-label); }
+.dm-candidates b { color: var(--lz-color-text-primary); font-variant-numeric: tabular-nums; }
+.dm-archive-list { margin: 0; padding: 0; list-style: none; }
+.dm-archive-list > li { display: flex; align-items: center; justify-content: space-between; gap: var(--lz-space-3); padding: var(--lz-space-2) var(--lz-space-4); min-block-size: 52px; }
+.dm-archive-list > li + li { border-top: 1px solid var(--lz-color-border-subtle); }
+.dm-archive-main { display: grid; gap: 2px; min-width: 0; }
+.dm-archive-main b { overflow-wrap: anywhere; font: var(--lz-font-control); font-weight: var(--weight-heading); color: var(--lz-color-text-primary); }
+.dm-archive-main small { font: var(--lz-font-label); color: var(--lz-color-text-tertiary); }
+
+@media (max-width: 1100px) {
+  .dm-overview-grid { grid-template-columns: minmax(0, 1fr); }
+  .dm-side { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items: start; }
+}
+@media (max-width: 760px) {
+  .dm-lifecycle-actions { grid-template-columns: minmax(0, 1fr); }
+  .dm-recent-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .dm-recent-date { display: none; }
+}
+}

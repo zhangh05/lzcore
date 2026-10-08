@@ -18,6 +18,7 @@ import "./styles/global.css";
 import "./pages/Settings/Settings.css";
 import "./pages/Operations/Operations.css";
 import "./pages/DataCenter/DataCenter.css";
+import "./pages/DataCenter/DataViews.css";
 import "./pages/MemoryPage/MemoryPage.css";
 import "./pages/KnowledgeLibrary/KnowledgeLibrary.css";
 import "./pages/Diagnostics/Diagnostics.css";
