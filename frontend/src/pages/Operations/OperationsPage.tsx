@@ -13,6 +13,7 @@ import { useSessionStore } from "../../stores/session";
 import { APP_EVENTS } from "../../utils/appEvents";
 import { useToastStore } from "../../stores/toast";
 import { Badge, StatusDot, EmptyState, LoadingState } from "../../components/common";
+import { confirm } from "../../components/ConfirmDialog";
 import { PageHeader, DetailPanel, Button, FilterBar, Input, Select, TabButton } from "../../components/ui";
 import {
   IconRefresh,
@@ -472,7 +473,8 @@ export function OperationsPage() {
       toast({ kind: "error", title: "仅终态任务可删除", body: "请先取消或等待任务结束后再删除。" });
       return;
     }
-    if (!window.confirm(`永久删除任务「${job.title || job.job_id}」及其事件和日志？此操作不可恢复。`)) return;
+    const accepted = await confirm({ title: `永久删除任务「${job.title || job.job_id}」？`, body: "该任务的事件和日志将被彻底清除，此操作不可恢复。", confirmLabel: "永久删除", destructive: true });
+    if (!accepted) return;
     try {
       await jobsApi.delete(job.job_id, wsId);
       if (selectedJob?.job_id === job.job_id) {
@@ -489,7 +491,8 @@ export function OperationsPage() {
   const handleBatchDelete = async () => {
     const jobIds = [...selectedJobIds].sort();
     if (!jobIds.length) return;
-    if (!window.confirm(`永久删除已选 ${jobIds.length} 条任务及其事件和日志？此操作不可恢复。`)) return;
+    const accepted = await confirm({ title: `永久删除已选 ${jobIds.length} 条任务？`, body: "这些任务的事件和日志将被彻底清除，此操作不可恢复。", confirmLabel: "永久删除", destructive: true });
+    if (!accepted) return;
     try {
       await jobsApi.deleteMany(jobIds, wsId);
       if (selectedJob && jobIds.includes(selectedJob.job_id)) {

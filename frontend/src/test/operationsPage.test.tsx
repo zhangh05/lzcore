@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "../router";
+import { ConfirmHost } from "../components/ConfirmDialog";
 import { OperationsPage } from "../pages/Operations/OperationsPage";
 import { enqueue, enqueueAsync, getRequests, installMockApi, resetMocks } from "./mockServer";
 import { useSessionStore } from "../stores/session";
@@ -38,7 +39,7 @@ describe("OperationsPage", () => {
       },
     });
 
-    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
 
     fireEvent.click(await screen.findByText("Job One"));
 
@@ -76,7 +77,7 @@ describe("OperationsPage", () => {
       },
     });
 
-    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
 
     fireEvent.click(await screen.findByText("Job Two"));
 
@@ -95,7 +96,7 @@ describe("OperationsPage", () => {
 
   it("keeps the batch-management entry visible when there are no terminal tasks", async () => {
     enqueue("/jobs", { status: 200, data: { jobs: [] } });
-    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
 
     expect(await screen.findByLabelText("批量任务管理")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "删除已选 (0)" })).toBeDisabled();
@@ -113,7 +114,7 @@ describe("OperationsPage", () => {
       { run_id: "run-b", session_id: "sess-b", status: "ok", ok: true, user_input_summary: "Current B run" },
     ] } });
 
-    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
     fireEvent.click(await screen.findByText("Job A"));
     fireEvent.click(screen.getByText("Job B"));
     expect(await screen.findByText("Current B run")).toBeInTheDocument();
@@ -151,12 +152,15 @@ describe("OperationsPage", () => {
     ] } });
     enqueue("/jobs/batch-delete", { status: 200, data: { ok: true, deleted: true, job_ids: ["job-terminal-a", "job-terminal-b"] } });
     enqueue("/jobs", { status: 200, data: { jobs: [{ job_id: "job-running", job_type: "agent_run", status: "running", title: "Running" }] } });
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+    const native = vi.fn().mockReturnValue(true);
+    vi.stubGlobal("confirm", native);
 
-    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
     fireEvent.click(await screen.findByLabelText("选择任务 Terminal A"));
     fireEvent.click(screen.getByLabelText("选择任务 Terminal B"));
     fireEvent.click(screen.getByRole("button", { name: "删除已选 (2)" }));
+    await screen.findByRole("dialog", { name: "永久删除已选 2 条任务？" });
+    fireEvent.click(screen.getByRole("button", { name: "永久删除" }));
 
     await waitFor(() => {
       const request = getRequests().find((item) => item.url === "/jobs/batch-delete");
@@ -168,6 +172,45 @@ describe("OperationsPage", () => {
       });
     });
     expect(screen.queryByLabelText("选择任务 Running")).not.toBeInTheDocument();
+    expect(native).not.toHaveBeenCalled();
+  });
+
+  it("asks in the product dialog before deleting one task and does nothing on cancel", async () => {
+    enqueue("/jobs", { status: 200, data: { jobs: [{ job_id: "job-done", job_type: "agent_run", status: "succeeded", title: "Done Job" }] } });
+    const native = vi.fn().mockReturnValue(true);
+    vi.stubGlobal("confirm", native);
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
+    await screen.findByText("Done Job");
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    await screen.findByRole("dialog", { name: "永久删除任务「Done Job」？" });
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(getRequests().some((r) => (r.method ?? "GET").toUpperCase() === "DELETE")).toBe(false);
+
+    enqueue("/jobs/job-done", { status: 200, data: { ok: true, deleted: true } });
+    enqueue("/jobs", { status: 200, data: { jobs: [] } });
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    await screen.findByRole("dialog", { name: "永久删除任务「Done Job」？" });
+    fireEvent.click(screen.getByRole("button", { name: "永久删除" }));
+    await waitFor(() => expect(getRequests().find((r) => (r.method ?? "").toUpperCase() === "DELETE")?.url).toBe("/jobs/job-done"));
+    expect(native).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the selection when the bulk delete dialog is cancelled", async () => {
+    enqueue("/jobs", { status: 200, data: { jobs: [
+      { job_id: "job-terminal-a", job_type: "agent_run", status: "succeeded", title: "Terminal A" },
+      { job_id: "job-terminal-b", job_type: "agent_run", status: "failed", title: "Terminal B" },
+    ] } });
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
+    fireEvent.click(await screen.findByLabelText("选择任务 Terminal A"));
+    fireEvent.click(screen.getByLabelText("选择任务 Terminal B"));
+    fireEvent.click(screen.getByRole("button", { name: "删除已选 (2)" }));
+    await screen.findByRole("dialog", { name: "永久删除已选 2 条任务？" });
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(getRequests().some((r) => r.url === "/jobs/batch-delete")).toBe(false);
+    expect(screen.getByRole("button", { name: "删除已选 (2)" })).toBeEnabled();
   });
 
   it("cancels an active job from the detail pane", async () => {
@@ -196,7 +239,7 @@ describe("OperationsPage", () => {
       },
     });
 
-    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
     fireEvent.click(await screen.findByText("Active Inspection"));
 
     const cancelBtn = await screen.findByRole("button", { name: "终止任务" });
@@ -239,7 +282,7 @@ describe("OperationsPage", () => {
     });
     enqueue("/runs/run-trace-1/trace", { status: 200, data: { events: [] } });
 
-    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/runs"]}><OperationsPage /><ConfirmHost /></MemoryRouter>);
     fireEvent.click(await screen.findByText("Trace Job"));
 
     // Click the run card to open run trace

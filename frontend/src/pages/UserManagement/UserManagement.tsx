@@ -1,4 +1,5 @@
 import { IconUser } from "../../components/Icon";
+import { confirm } from "../../components/ConfirmDialog";
 import { EmptyState } from "../../components/common";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -114,7 +115,14 @@ export function UserManagement() {
 
   async function removeSelectedUser() {
     const username = selectedUsername || draft.username.trim();
-    if (!username || !window.confirm(`删除普通用户「${username}」？\n\n账号将无法再登录，历史会话和产物会保留用于审计。`)) return;
+    if (!username) return;
+    const accepted = await confirm({
+      title: `删除普通用户「${username}」？`,
+      body: "账号将无法再登录，历史会话和产物会保留用于审计。",
+      confirmLabel: "删除用户",
+      destructive: true,
+    });
+    if (!accepted) return;
     setBusy(true);
     setError("");
     setNotice("");
