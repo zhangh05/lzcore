@@ -155,6 +155,11 @@
   opacity: 1;
   transform: none;
 }
+/* Escape closes the menu while focus stays on the trigger. */
+.app-nav-group.menu-dismissed:is(:hover, :focus-within) .app-nav-menu {
+  visibility: hidden;
+  opacity: 0;
+}
 .app-nav-menu-head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

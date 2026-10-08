@@ -94,8 +94,30 @@ const NavGroupItem = memo(function NavGroupItem({ group, currentPath, currentSea
   }, [group]);
   const Icon = group.Icon;
   const hasMenu = group.items.length > 1;
+  // The menu is revealed by CSS (:hover / :focus-within). aria-expanded must
+  // report that visibility, not whether the group holds the current route:
+  // track the same two conditions, and let Escape dismiss it for keyboard use.
+  const [hovered, setHovered] = useState(false);
+  const [focusWithin, setFocusWithin] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const expanded = hasMenu && (hovered || focusWithin) && !dismissed;
   return (
-    <div className={"app-nav-group" + (active ? " active" : "") + (hasMenu ? " has-menu" : "")} onMouseEnter={warmGroup} onFocus={warmGroup}>
+    <div
+      className={"app-nav-group" + (active ? " active" : "") + (hasMenu ? " has-menu" : "") + (hasMenu && dismissed ? " menu-dismissed" : "")}
+      onMouseEnter={() => { warmGroup(); setHovered(true); setDismissed(false); }}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => { warmGroup(); setFocusWithin(true); }}
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setFocusWithin(false);
+        setDismissed(false);
+      }}
+      onKeyDown={(event) => {
+        if (!hasMenu || event.key !== "Escape" || dismissed) return;
+        setDismissed(true);
+        event.currentTarget.querySelector<HTMLElement>(".app-nav-group-trigger")?.focus();
+      }}
+    >
       <NavLink
         to={group.to}
         data-testid={group.testid}
@@ -103,7 +125,7 @@ const NavGroupItem = memo(function NavGroupItem({ group, currentPath, currentSea
         onPointerDown={warmGroup}
         onTouchStart={warmGroup}
         aria-haspopup={hasMenu ? "menu" : undefined}
-        aria-expanded={hasMenu ? (active ? "true" : "false") : undefined}
+        aria-expanded={hasMenu ? (expanded ? "true" : "false") : undefined}
         viewTransition
       >
         {/*
