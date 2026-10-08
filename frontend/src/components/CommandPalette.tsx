@@ -24,39 +24,73 @@ interface PaletteEntry {
   run: () => void;
 }
 
+interface SessionResult {
+  cycle: number;
+  workspaceId: string;
+  sessions: Session[];
+}
+
+const NO_SESSIONS: Session[] = [];
+
+/** Sessions to show: only a result read for the current open cycle and workspace. */
+export function visibleSessions(result: SessionResult | null, current: { cycle: number; workspaceId: string | null | undefined }): Session[] {
+  if (!result || !current.workspaceId) return NO_SESSIONS;
+  if (result.cycle !== current.cycle || result.workspaceId !== current.workspaceId) return NO_SESSIONS;
+  return result.sessions;
+}
+
 export function CommandPalette({ open, onClose, items }: { open: boolean; onClose: () => void; items: NavItem[] }) {
   const navigate = useNavigate();
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  // One result slot, tagged with the open cycle and the workspace it was read
+  // for. A result is only projected (and only selectable) while both tags still
+  // match: closing, reopening or switching workspace starts a new cycle, and a
+  // cancelled or superseded request can never write into the current one.
+  const [sessionResult, setSessionResult] = useState<SessionResult | null>(null);
+  const [cycle, setCycle] = useState(0);
+  const cycleRef = useRef(0);
   const currentWorkspaceId = useSessionStore((s) => s.currentWorkspaceId);
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession);
   const switchWbSession = useWorkbenchStore((s) => s.switchSession);
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
 
+  // Dialog lifecycle: focus, scroll lock and focus return follow `open` only.
   useEffect(() => {
     if (!open) return;
     setQuery("");
     setActive(0);
     const previouslyFocused = document.activeElement as HTMLElement | null;
     inputRef.current?.focus({ preventScroll: true });
-    const ctrl = new AbortController();
-    if (currentWorkspaceId) {
-      sessionsApi.list(currentWorkspaceId, "active", ctrl.signal)
-        .then((res) => setSessions(res.sessions ?? []))
-        .catch(() => setSessions([]));
-    }
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      ctrl.abort();
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus({ preventScroll: true });
     };
+  }, [open]);
+
+  // Session read: one request per (open cycle, workspace), same abort rule as
+  // useAsync — a callback whose signal was aborted, or whose cycle is no longer
+  // current, returns without touching state.
+  useEffect(() => {
+    const thisCycle = ++cycleRef.current;
+    setCycle(thisCycle);
+    setSessionResult(null);
+    if (!open || !currentWorkspaceId) return;
+    const workspaceId = currentWorkspaceId;
+    const ctrl = new AbortController();
+    const isCurrent = () => !ctrl.signal.aborted && cycleRef.current === thisCycle;
+    sessionsApi.list(workspaceId, "active", ctrl.signal)
+      .then((res) => { if (isCurrent()) setSessionResult({ cycle: thisCycle, workspaceId, sessions: res.sessions ?? [] }); })
+      .catch(() => { if (isCurrent()) setSessionResult({ cycle: thisCycle, workspaceId, sessions: [] }); });
+    return () => ctrl.abort();
   }, [open, currentWorkspaceId]);
+
+  const sessions = visibleSessions(sessionResult, { cycle, workspaceId: currentWorkspaceId });
 
   const entries = useMemo<PaletteEntry[]>(() => {
     const pages: PaletteEntry[] = items.map((item) => {
@@ -77,6 +111,9 @@ export function CommandPalette({ open, onClose, items }: { open: boolean; onClos
       hint: sess.message_count > 0 ? `${sess.message_count} 条消息` : undefined,
       icon: <IconChat size={16} />,
       run: () => {
+        // Select only from the cycle and workspace this row was read for.
+        const tag = sessionResult;
+        if (!tag || tag.cycle !== cycleRef.current || tag.workspaceId !== useSessionStore.getState().currentWorkspaceId) return;
         setCurrentSession(sess.session_id);
         switchWbSession(sess.session_id);
         navigate("/workbench");
@@ -92,7 +129,7 @@ export function CommandPalette({ open, onClose, items }: { open: boolean; onClos
     const q = query.trim().toLocaleLowerCase();
     const all = [...pages, ...sessionEntries, ...prefs];
     return q ? all.filter((entry) => `${entry.label} ${entry.hint ?? ""}`.toLocaleLowerCase().includes(q)) : all;
-  }, [items, sessions, theme, query, navigate, setCurrentSession, switchWbSession, setTheme]);
+  }, [items, sessions, sessionResult, theme, query, navigate, setCurrentSession, switchWbSession, setTheme]);
 
   useEffect(() => { setActive((index) => Math.min(index, Math.max(entries.length - 1, 0))); }, [entries.length]);
 

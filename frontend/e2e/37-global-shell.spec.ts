@@ -72,3 +72,32 @@ test("37b. phone shell keeps every route reachable from the drawer", async ({ pa
   const duration = await page.locator(".app-sidebar").evaluate((el) => parseFloat(getComputedStyle(el).transitionDuration));
   expect(duration).toBeLessThanOrEqual(0.01);
 });
+
+test("37c. reopening the jump list never shows the previous cycle's sessions while loading", async ({ page, api }) => {
+  await api.post("/api/sessions", { data: { workspace_id: "default", title: "上一周期会话" } });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/data");
+  await expect(page.getByTestId("page-data-center")).toBeVisible();
+  const palette = page.getByRole("dialog", { name: "快速跳转" });
+  const previous = page.getByRole("option", { name: /上一周期会话/ });
+  await page.keyboard.press("Control+k");
+  await expect(previous).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+
+  // Hold the next session-list answer: while it is pending the reopened list
+  // must not project the closed cycle's rows, and they return only from the
+  // new request's own answer.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let held = 0;
+  await page.route(/\/api\/sessions\?/, async (route) => { held += 1; await gate; await route.continue(); });
+  await page.keyboard.press("Control+k");
+  await expect(palette).toBeVisible();
+  await expect.poll(() => held).toBeGreaterThan(0);
+  await expect(page.getByRole("option", { name: /切换到(深色|浅色)主题/ })).toBeVisible();
+  await expect(previous).toHaveCount(0);
+  release();
+  await expect(previous).toBeVisible();
+  await page.unroute(/\/api\/sessions\?/);
+});
