@@ -28,7 +28,8 @@ def _get_store(ws_id: str):
 def _via_gate(title: str, content: str, ws_id: str, source: str = "llm_tool",
               memory_type: str = "knowledge_note", scope: str = "workspace",
               session_id: str = "", task_id: str = "",
-              citations: list = None, tags: list = None) -> dict:
+              citations: list = None, tags: list = None,
+              memory_key: str = '', supersedes_memory_id: str = '') -> dict:
     """Write memory through MemoryWriteGate. Gate decides status."""
     from storage.memory_governance import MemoryRecord, MemoryWriteGate
     rec = MemoryRecord(
@@ -40,6 +41,7 @@ def _via_gate(title: str, content: str, ws_id: str, source: str = "llm_tool",
         confidence=0.5,  # Neutral default; gate adjusts via _auto_confirm
         citations=citations or [], created_by=source,
         redacted=True,
+        metadata={'memory_key': memory_key, 'supersedes_memory_id': supersedes_memory_id},
     )
     gate = MemoryWriteGate()
     return gate.write(rec)
@@ -69,6 +71,8 @@ def handle_memory_search(inv: ToolInvocation) -> dict:
             "content": r.get("content", ""),
             "status": r.get("status", ""),
             "memory_type": r.get("memory_type", ""),
+            "scope": r.get("scope"), "workspace_id": r.get("workspace_id"),
+            "updated_at": r.get("updated_at"), "metadata": r.get("metadata"),
         } for r in results[:limit]]
         return _ok(inv, "", {
             "results": safe, "count": len(safe),
@@ -89,7 +93,7 @@ def handle_memory_get(inv: ToolInvocation) -> dict:
             return _error_inv(inv, "memory_not_found")
         return _ok(inv, "", {key: getattr(record, key) for key in
                             ("memory_id", "content", "summary", "status", "scope",
-                             "workspace_id", "session_id", "task_id", "memory_type")})
+                             "workspace_id", "session_id", "task_id", "memory_type", "metadata", "citations", "created_at", "updated_at")})
     except Exception as exc:
         return _error_inv(inv, str(exc)[:200])
 
@@ -105,7 +109,7 @@ def handle_memory_create(inv: ToolInvocation) -> dict:
         title = content[:80]
     try:
         ws = _caller_workspace(inv)
-        sid = str(args.get("session_id", ""))
+        sid = str(inv.session_id or args.get("session_id") or '')
         is_sub = bool(args.get("is_subagent", False))
         source = "subagent" if is_sub else "llm_tool"
         result = _via_gate(
@@ -114,7 +118,10 @@ def handle_memory_create(inv: ToolInvocation) -> dict:
             memory_type=str(args.get("memory_type", "knowledge_note")),
             scope=str(args.get("scope", "workspace")),
             session_id=sid,
+            task_id=str(inv.task_id or ''),
             tags=list(args.get("tags") or []),
+            memory_key=str(args.get('memory_key') or ''),
+            supersedes_memory_id=str(args.get('supersedes_memory_id') or ''),
         )
         memory_id = result.get("memory_id", "")
         status = result.get("status", "pending")
@@ -144,7 +151,7 @@ def handle_memory_review(inv: ToolInvocation) -> dict:
         all_recs = store.list_all(ws)
         pending = [
             r for r in all_recs
-            if getattr(r, "status", "") == "pending"
+            if getattr(r, "status", "") in {"pending", "conflict"}
         ]
         pending.sort(key=lambda r: getattr(r, "created_at", ""), reverse=True)
         items = [{
@@ -163,7 +170,7 @@ def handle_memory_review(inv: ToolInvocation) -> dict:
             "_hint": (
                 f"有 {len(pending)} 条待确认记忆。"
                 + (f" 已返回 {len(items)} 条。" if len(pending) > limit else "")
-                + " 高 confidence 的建议更可靠。用 confirm 激活，delete 移除。"
+                + " confidence 仅为模型自评，不代表验证。用 confirm 激活，delete 移除。"
             ) if items else "没有待确认的记忆。",
         })
     except Exception as e:
@@ -208,7 +215,7 @@ def handle_memory_confirm(inv: ToolInvocation) -> dict:
     try:
         ws = _caller_workspace(inv)
         from storage.memory_governance import confirm_memory
-        result = confirm_memory(ws, memory_id)
+        result = confirm_memory(ws, memory_id, authority="operator_confirm")
         if not result.get("ok"):
             return _error_inv(inv, str(result.get("error") or "memory_confirm_failed")[:200])
         return _ok(inv, "", {
@@ -271,12 +278,13 @@ def handle_memory_set_profile(inv: ToolInvocation) -> dict:
         profile["updated_at"] = now_iso()
 
         rec = MemoryRecord(
-            workspace_id=ws, scope="workspace",
-            memory_type="profile", status="active",
-            source="user", content=str(profile),
+            workspace_id=ws, scope="global",
+            memory_type="profile", status="pending",
+            source="agent_suggestion", content=str(profile),
             summary=f"Profile updated: {field}",
-            confidence=1.0, created_by="user", redacted=True,
-            metadata={"profile": profile},
+            confidence=0.5, created_by="llm_tool", redacted=True,
+            metadata={"profile": profile, "authority": "agent_inference", "generation_origin": "memory_tool_profile", 'memory_key': 'user.profile',
+                      'supersedes_memory_id': str(results[0]['memory_id']) if results else ''},
         )
         gate = MemoryWriteGate()
         result = gate.write(rec)
@@ -327,10 +335,9 @@ def handle_memory_update(inv: ToolInvocation) -> dict:
             confidence=rec.confidence,
             citations=list(rec.citations or []),
             created_by="llm_tool",
-            metadata={**dict(rec.metadata or {}), "supersedes_memory_id": rec.memory_id},
+            metadata={**dict(rec.metadata or {}), "supersedes_memory_id": rec.memory_id,
+                      "authority": "agent_inference", "generation_origin": "memory_tool_update"},
         )
-        if not replacing_active:
-            proposal.memory_id = rec.memory_id
         result = MemoryWriteGate(store).write(proposal)
         if not result.get("ok"):
             return _error_inv(inv, str(result.get("error") or "memory update rejected")[:200])
@@ -340,7 +347,8 @@ def handle_memory_update(inv: ToolInvocation) -> dict:
             "memory_id": result_memory_id,
             "supersedes_memory_id": memory_id,
             "memory_status": result.get("status"),
-            "updated": not duplicate and not replacing_active,
+            "updated": False,
+            "proposed_update": not duplicate,
             "duplicate": duplicate,
             "_hint": (
                 "内容与现有记忆重复，未创建新版本。"

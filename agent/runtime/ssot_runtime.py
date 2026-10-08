@@ -298,14 +298,17 @@ def run_ssot_turn(
         except Exception as exc:
             task_state_resolution_error = exc
             _LOG.warning("task state begin checkpoint failed", exc_info=True)
+    governing_rules: list[str] = []
     retrieved_context_block = _build_retrieved_context_block(
         workspace_id=workspace_id,
         session_id=session_id,
-        task_id=turn.turn_id,
+        task_id=str((task_state_contract or {}).get("task_id") or turn.turn_id),
         user_input=user_input,
         max_tokens=runtime_context_budget.retrieved_context_tokens,
         include_workspace_memory=not bool(getattr(session, "is_sub_agent", False)),
+        governing_rules=governing_rules,
     )
+    metadata_in['governing_memory_block'] = '\n'.join(governing_rules)
     if retrieved_context_block:
         metadata_in["retrieved_context_block"] = retrieved_context_block
 
@@ -750,7 +753,7 @@ def run_ssot_turn(
         _record_experience_and_maybe_reflect(
             workspace_id=workspace_id,
             session_id=session_id,
-            task_id=turn.turn_id,
+            task_id=str((task_state_contract or {}).get("task_id") or turn.turn_id),
             user_input=user_input,
             assistant_response=result.final_response or "",
             tool_calls=list(result.tool_calls or []),

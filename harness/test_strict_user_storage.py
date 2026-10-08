@@ -93,7 +93,7 @@ def test_one_user_memory_is_shared_across_their_workspaces(monkeypatch, tmp_path
     from storage.memory_governance import MemoryRecord, MemoryStore, MemoryWriteGate
 
     with storage_principal("alice"):
-        record = MemoryRecord(workspace_id="one", memory_type="profile", source="user", status="active", content="Alice prefers concise answers.")
+        record = MemoryRecord(workspace_id="one", scope="global", memory_type="profile", source="user", status="active", content="Alice prefers concise answers.")
         assert MemoryWriteGate().write(record)["ok"] is True
         assert MemoryStore().get("two", record.memory_id) is not None
         assert MemoryStore().list_retrievable("two")[0]["memory_id"] == record.memory_id

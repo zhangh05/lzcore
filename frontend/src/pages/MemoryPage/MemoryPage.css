@@ -300,3 +300,31 @@
   transition: background var(--dur-2) var(--ease);
 }
 }
+
+@layer pages {
+
+.memory-page .memory-form-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.memory-page .memory-form-options label {
+  display: grid;
+  gap: var(--space-2);
+  flex: 1 1 200px;
+}
+.memory-page .memory-card-detail {
+  overflow-wrap: anywhere;
+}
+
+}
+
+@layer pages {
+.memory-page .memory-toolbar { gap: var(--space-2); }
+.memory-page .memory-select-wrap { position: relative; display: inline-flex; flex: 0 1 auto; min-width: 120px; }
+.memory-page .memory-select-wrap > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--text-3); }
+.memory-page .memory-filter-select { appearance: none; width: 100%; min-height: 36px; padding: 8px 30px 8px 12px; border: 1px solid var(--console-border); border-radius: var(--r-6); color: var(--text-2); background: var(--console-surface); }
+.memory-page .memory-form-options .memory-select-wrap { width: 100%; }
+.memory-page .memory-toolbar label { display: inline-flex; gap: var(--space-1); align-items: center; color: var(--text-3); }
+}

@@ -45,7 +45,7 @@ def environment_for(workspace_id: str):
 def public_container_temp_paths(workspace_id: str, tool_id: str, action: str = "") -> bool:
     """Resolve operational path visibility from a server-owned live binding."""
     if tool_id != "exec.run" and not (
-        tool_id == "system.manage" and action in {"context_index", "context_read"}
+        tool_id == "system.manage" and action in {"context_index", "context_read", "context_search"}
     ):
         return False
     if not workspace_id:

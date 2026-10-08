@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok
-from storage.context_epoch_store import list_epochs, read_index, read_message_chunk
+from storage.context_epoch_store import list_epochs, read_index, read_message_chunk, search_epochs
 
 
 def handle_context_archive(inv):
@@ -13,7 +13,9 @@ def handle_context_archive(inv):
         return _error_inv(inv, "context_archive_session_scope_mismatch")
     args = inv.arguments
     try:
-        if args["action"] == "context_index":
+        if args['action'] == 'context_search':
+            value = search_epochs(ws, sid, str(args.get('query') or ''), str(args.get('checkpoint_id') or ''), int(args.get('offset', 0)), int(args.get('limit', 30)))
+        elif args["action"] == "context_index":
             checkpoint_id = str(args.get("checkpoint_id") or "")
             value = (read_index(ws, sid, checkpoint_id, int(args.get("offset", 0)), int(args.get("limit", 30)))
                      if checkpoint_id else list_epochs(ws, sid, int(args.get("offset", 0)), int(args.get("limit", 30))))

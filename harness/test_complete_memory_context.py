@@ -43,8 +43,9 @@ def test_complete_memory_tool_write_read_search(monkeypatch):
 
 def test_journal_no_reprocessing_after_500_events(monkeypatch):
     cursor = {}
+    monkeypatch.setattr("storage.memory_event_store.read_cursor", lambda *args: cursor)
     monkeypatch.setattr(event_log, "read_cursor", lambda *args: cursor)
-    monkeypatch.setattr(event_log, "save_cursor", lambda ws, sid, value: cursor.update(value))
+    monkeypatch.setattr("storage.memory_event_store.save_cursor", lambda ws, sid, value: cursor.update(value))
     ids = [f"event-{i}" for i in range(700)]
     event_log.mark_experiences_processed("test_ws", "test_session", ids)
     assert cursor["processed_event_ids"] == ids
@@ -64,7 +65,7 @@ def test_journal_preserves_complete_turn(monkeypatch):
 
 def test_shared_memory_and_exact_transient_scope(monkeypatch):
     from core.context.unified_retriever import UnifiedRetriever
-    shared = MemoryRecord(workspace_id="other_ws", scope="workspace", status="active", memory_type="core_rule", content="shared")
+    shared = MemoryRecord(workspace_id="other_ws", scope="global", status="active", memory_type="core_rule", content="shared")
     private = MemoryRecord(workspace_id="test_ws", scope="task", task_id="other_task", session_id="same", status="active", content="private")
     monkeypatch.setattr(MemoryStore, "list_all", lambda *args: [shared, private])
     visible = MemoryStore().list_retrievable("test_ws", session_id="same", task_id="current", limit=0)
@@ -76,8 +77,8 @@ def test_shared_memory_and_exact_transient_scope(monkeypatch):
 
 
 def test_memory_search_filters_before_ranking_and_paginates(monkeypatch):
-    records = [MemoryRecord(status="rejected", content="match") for _ in range(40)]
-    records += [MemoryRecord(status="active", content=f"match {i}") for i in range(12)]
+    records = [MemoryRecord(workspace_id='test_ws', status="rejected", content="match") for _ in range(40)]
+    records += [MemoryRecord(workspace_id='test_ws', status="active", content=f"match {i}") for i in range(12)]
     monkeypatch.setattr(MemoryStore, "list_all", lambda *args: records)
     store = MemoryStore()
     first = store.search("test_ws", "", retrievable_only=True, limit=7)
@@ -121,7 +122,7 @@ def test_core_rules_not_limited_to_eight_and_failure_visible(monkeypatch):
     from agent.runtime.ssot_runtime import _build_retrieved_context_block
     reader = SimpleNamespace(retrieve_for_context=lambda *args, **kwargs: {"memory_hits": [], "knowledge_hits": []})
     monkeypatch.setattr(unified_retriever, "get_retriever", lambda ws: reader)
-    rules = [MemoryRecord(memory_type="core_rule", scope="workspace", status="active", content=f"constraint-{i}") for i in range(15)]
+    rules = [MemoryRecord(workspace_id='test_ws', memory_type="core_rule", scope="workspace", status="active", content=f"constraint-{i}") for i in range(15)]
     monkeypatch.setattr(MemoryStore, "list_all", lambda *args: rules)
     args = dict(workspace_id="test_ws", session_id="session", task_id="task", user_input="test")
     assert "constraint-14" in _build_retrieved_context_block(**args)

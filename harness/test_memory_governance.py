@@ -96,7 +96,7 @@ class TestAuthorityGate:
         assert result["ok"] is True
         assert result["status"] == "active"
 
-    def test_verified_reflection_can_activate_semantic_fact(self, isolated_memory):
+    def test_metadata_label_cannot_activate_unverified_semantic_fact(self, isolated_memory):
         record = MemoryRecord(
             workspace_id="ws_verified_fact",
             memory_type="semantic_fact",
@@ -115,7 +115,7 @@ class TestAuthorityGate:
             },
         )
         result = MemoryWriteGate().write(record)
-        assert result["status"] == "active"
+        assert result["status"] == "pending"
 
     def test_unsupported_agent_inference_stays_pending(self, isolated_memory):
         record = MemoryRecord(
@@ -271,7 +271,7 @@ class TestExplicitCommands:
         )
         assert created["status"] == "active"
         forgotten = apply_memory_command(
-            parse_memory_command("忘掉测试规则"),
+            parse_memory_command("忘掉以后全量测试只跑一次。"),
             workspace_id="ws_command",
             session_id="session-command",
             task_id="turn-command-2",

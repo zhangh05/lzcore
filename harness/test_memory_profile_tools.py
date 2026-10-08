@@ -15,6 +15,9 @@ def test_profile_set_persists_structured_preferences(monkeypatch, tmp_path):
     ))
     assert set_result["ok"] is True
 
+    from storage.memory_governance import confirm_memory
+    assert set_result['memory_status'] == 'pending'
+    assert confirm_memory(workspace_id, set_result['memory_id'])['ok']
     get_result = handle_memory_get_profile(ToolInvocation(
         tool_id="memory.manage", workspace_id=workspace_id,
         arguments={"action": "profile_get"},

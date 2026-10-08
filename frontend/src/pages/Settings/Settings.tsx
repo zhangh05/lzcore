@@ -696,7 +696,7 @@ function LongTermMemoryCard({
         <div className="flex-1">
           <div className="text-md memory-gating-title-text">长期记忆</div>
           <div className="muted text-xs memory-gating-desc">
-            智能体自动学习明确偏好、项目规则、稳定事实和可复用经验；你只需要管理结果。
+            自动整理任务经历：原文已核对的历史工具观察可自动生效，模型推断、规则和操作方法等待确认。关闭后仍可手动管理或明确要求记住。
           </div>
         </div>
         <div className="row-flex-sm">

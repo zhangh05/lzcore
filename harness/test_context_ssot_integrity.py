@@ -13,6 +13,17 @@ from core.runtime_engine.prompt_contract import RUNTIME_SYSTEM_PROMPT
 from storage.principal import storage_principal
 
 
+
+def put_memory_fixture(data):
+    """Retrieval fixtures use the canonical memory store, never an index alias."""
+    from storage.memory_governance import MemoryRecord, MemoryStore
+    row = dict(data)
+    row['metadata'] = {'fixture_id': row['item_id']}
+    row['status'] = row.get('status') or row.get('memory_status') or 'active'
+    record = MemoryRecord.from_dict(row)
+    MemoryStore()._save(record)
+    return record.memory_id
+
 def test_restored_history_overlap_is_not_injected_twice():
     persisted = [
         {"role": "user", "content": "hello"},
@@ -71,7 +82,7 @@ def test_retriever_cache_isolated_by_storage_principal(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
     with storage_principal("alice"):
         alice = get_retriever("team")
-        alice._store.put({
+        put_memory_fixture({
             "item_id": "alice-only",
             "item_type": "memory_hit",
             "workspace_id": "team",
@@ -116,15 +127,15 @@ def test_memory_context_retrieval_enforces_scope(monkeypatch, tmp_path):
         "memory_status": "active",
         "status": "active",
     }
-    retriever._store.put({**common, "item_id": "workspace", "scope": "workspace", "content": "router preference workspace"})
-    retriever._store.put({**common, "item_id": "session-a", "scope": "session", "session_id": "s-a", "content": "router preference session a"})
-    retriever._store.put({**common, "item_id": "session-b", "scope": "session", "session_id": "s-b", "content": "router preference session b"})
-    retriever._store.put({**common, "item_id": "task-a", "scope": "task", "task_id": "t-a", "content": "router preference task a"})
+    put_memory_fixture({**common, "item_id": "workspace", "scope": "workspace", "content": "router preference workspace"})
+    put_memory_fixture({**common, "item_id": "session-a", "scope": "session", "session_id": "s-a", "content": "router preference session a"})
+    put_memory_fixture({**common, "item_id": "session-b", "scope": "session", "session_id": "s-b", "content": "router preference session b"})
+    put_memory_fixture({**common, "item_id": "task-a", "scope": "task", "task_id": "t-a", "content": "router preference task a"})
 
     hits = retriever.search_memory(
         "router preference", top_k=10, session_id="s-a", task_id="t-a"
     )
-    ids = {hit["item_id"] for hit in hits}
+    ids = {hit["metadata"]["fixture_id"] for hit in hits}
     assert ids == {"workspace", "session-a", "task-a"}
 
 
@@ -132,7 +143,7 @@ def test_cross_session_hits_cannot_crowd_out_visible_memory(monkeypatch, tmp_pat
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
     retriever = UnifiedRetriever("alpha")
     for index in range(40):
-        retriever._store.put({
+        put_memory_fixture({
             "item_id": f"other-{index}",
             "item_type": "memory_hit",
             "workspace_id": "alpha",
@@ -143,7 +154,7 @@ def test_cross_session_hits_cannot_crowd_out_visible_memory(monkeypatch, tmp_pat
             "session_id": "other",
             "content": "exact router preference target",
         })
-    retriever._store.put({
+    put_memory_fixture({
         "item_id": "visible",
         "item_type": "memory_hit",
         "workspace_id": "alpha",
@@ -156,7 +167,7 @@ def test_cross_session_hits_cannot_crowd_out_visible_memory(monkeypatch, tmp_pat
     hits = retriever.search_memory(
         "router preference target", top_k=1, session_id="current"
     )
-    assert [hit["item_id"] for hit in hits] == ["visible"]
+    assert [hit["metadata"]["fixture_id"] for hit in hits] == ["visible"]
 
 
 def test_retriever_does_not_rescan_unchanged_store(monkeypatch, tmp_path):
@@ -189,7 +200,7 @@ def test_retriever_applies_boosts_before_final_top_k(monkeypatch, tmp_path):
     retriever = UnifiedRetriever("alpha")
     old_ts = "2020-01-01T00:00:00+00:00"
     fresh_ts = datetime.now(timezone.utc).isoformat()
-    retriever._store.put({
+    put_memory_fixture({
         "item_id": "old",
         "item_type": "memory_hit",
         "workspace_id": "alpha",
@@ -200,7 +211,7 @@ def test_retriever_applies_boosts_before_final_top_k(monkeypatch, tmp_path):
         "created_at": old_ts,
         "content": "router preference target",
     })
-    retriever._store.put({
+    put_memory_fixture({
         "item_id": "fresh",
         "item_type": "memory_hit",
         "workspace_id": "alpha",
@@ -213,7 +224,7 @@ def test_retriever_applies_boosts_before_final_top_k(monkeypatch, tmp_path):
     })
 
     hits = retriever.search_memory("router preference target", top_k=1)
-    assert [hit["item_id"] for hit in hits] == ["fresh"]
+    assert [hit["metadata"]["fixture_id"] for hit in hits] == ["fresh"]
 
 
 def test_runtime_prompt_has_context_authority_contract():

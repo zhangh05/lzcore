@@ -31,7 +31,7 @@ def _container_tool_call(call: dict) -> bool:
         arguments = json.loads(function.get("arguments") or "{}")
     except (TypeError, ValueError):
         return False
-    return isinstance(arguments, dict) and arguments.get("action") in {"context_index", "context_read"}
+    return isinstance(arguments, dict) and arguments.get("action") in {"context_index", "context_read", "context_search"}
 
 
 def _redact_json_text(value, container_paths: bool):
@@ -218,6 +218,7 @@ def read_index(
                     for call in message.get("tool_calls") or []
                 ],
                 "chars": len(_json(message)),
+                "excerpt": _json(message)[:240],
             }
         )
     return {
@@ -265,3 +266,82 @@ def read_message_chunk(
         "trust": "untrusted_data",
         "redaction_applied": True,
     }
+
+
+def search_epochs(workspace_id: str, session_id: str, query: str,
+                  checkpoint_id: str = '', offset: int = 0, limit: int = 30) -> dict:
+    """Rebuildable lexical index; every result is rechecked against its archive."""
+    import sqlite3
+    from core.context.unified_retriever import tokenize, expand_query
+    from storage.records import workspace_record_dir
+
+    if not query.strip() or offset < 0 or not 1 <= limit <= 200:
+        raise ValueError('invalid_context_search_range')
+    directory = workspace_record_dir(workspace_id, 'sessions', session_id, 'context_epochs', create=True)
+    paths = sorted(directory.glob('ctx_*.json'))
+    signature = hashlib.sha256(_json(['index-v3', [(p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in paths]]).encode()).hexdigest()
+    database = directory / 'search.sqlite'
+    with FileLock(directory / 'search.lock'):
+        def open_index():
+            connection = sqlite3.connect(database, timeout=5)
+            try:
+                connection.execute('CREATE TABLE IF NOT EXISTS metadata (signature TEXT)')
+                connection.execute('CREATE TABLE IF NOT EXISTS evidence (digest TEXT PRIMARY KEY, checkpoint_id TEXT, message_index INTEGER, role TEXT, text TEXT)')
+                connection.execute('CREATE TABLE IF NOT EXISTS occurrences (digest TEXT, checkpoint_id TEXT, message_index INTEGER, PRIMARY KEY(checkpoint_id,message_index))')
+                connection.execute('CREATE VIRTUAL TABLE IF NOT EXISTS archive_terms USING fts5(digest UNINDEXED, terms)')
+                return connection
+            except sqlite3.DatabaseError:
+                connection.close()
+                raise
+        try:
+            connection = open_index()
+            previous = connection.execute('SELECT signature FROM metadata').fetchone()
+        except sqlite3.DatabaseError:
+            if 'connection' in locals():
+                connection.close()
+            # This file contains no facts, only a disposable projection.
+            database.unlink(missing_ok=True)
+            connection = open_index()
+            previous = None
+        try:
+            if previous != (signature,):
+                with connection:
+                    connection.execute('DELETE FROM evidence')
+                    connection.execute('DELETE FROM occurrences')
+                    connection.execute('DELETE FROM archive_terms')
+                    for path in paths:
+                        record = read_epoch(workspace_id, session_id, path.stem)
+                        for index, message in enumerate(record['payload']['messages']):
+                            text = _json(message)
+                            digest = hashlib.sha256(text.encode()).hexdigest()
+                            cursor = connection.execute('INSERT OR IGNORE INTO evidence VALUES (?,?,?,?,?)', (digest, path.stem, index, message['role'], text))
+                            connection.execute('INSERT INTO occurrences VALUES (?,?,?)', (digest, path.stem, index))
+                            if cursor.rowcount:
+                                connection.execute('INSERT INTO archive_terms VALUES (?,?)', (digest, ' '.join(tokenize(text))))
+                    connection.execute('DELETE FROM metadata')
+                    connection.execute('INSERT INTO metadata VALUES (?)', (signature,))
+            terms = list(dict.fromkeys(tokenize(expand_query(query))))
+            expression = ' OR '.join('"' + term.replace('"', '""') + '"' for term in terms)
+            if checkpoint_id:
+                # An explicit checkpoint must exist in the caller's session.
+                read_epoch(workspace_id, session_id, checkpoint_id)
+            clause = ' AND occurrences.checkpoint_id = ?' if checkpoint_id else ''
+            joins = ' JOIN evidence USING(digest)' + (' JOIN occurrences USING(digest)' if checkpoint_id else '')
+            pointer = 'occurrences' if checkpoint_id else 'evidence'
+            parameters = [expression, checkpoint_id] if checkpoint_id else [expression]
+            total = connection.execute('SELECT count(*) FROM archive_terms' + joins + ' WHERE archive_terms MATCH ?' + clause, parameters).fetchone()[0] if expression else 0
+            rows = connection.execute(f'SELECT {pointer}.checkpoint_id,{pointer}.message_index,role,text FROM archive_terms' + joins + ' WHERE archive_terms MATCH ?' + clause + ' ORDER BY bm25(archive_terms), evidence.digest LIMIT ? OFFSET ?', [*parameters, limit, offset]).fetchall() if expression else []
+            results = []
+            for checkpoint, index, role, text in rows:
+                original = read_epoch(workspace_id, session_id, checkpoint)
+                if _json(original['payload']['messages'][index]) != text:
+                    raise ValueError('context_search_projection_stale')
+                position = text.lower().find(query.strip().lower())
+                if position < 0:
+                    positions = [text.lower().find(term) for term in tokenize(query)]
+                    position = min((p for p in positions if p >= 0), default=0)
+                start = max(0, position - 100)
+                results.append({'checkpoint_id': checkpoint, 'sha256': original['sha256'], 'message_index': index, 'role': role, 'char_offset': start, 'char_limit': min(800, len(text) - start), 'excerpt': text[start:start + 800], 'total_chars': len(text)})
+            return {'records': results, 'total': total, 'offset': offset, 'next_offset': offset + len(results) if offset + len(results) < total else None, 'source_kind': 'archived_conversation', 'trust': 'untrusted_data', 'coverage': 'lexical_search_of_complete_archived_messages', 'redaction_applied': True}
+        finally:
+            connection.close()

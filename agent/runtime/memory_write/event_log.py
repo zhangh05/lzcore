@@ -11,7 +11,6 @@ from storage.memory_event_store import (
     delete_journal,
     read_cursor,
     read_events,
-    save_cursor,
 )
 from storage.redaction import redact_text, redact_value
 from storage.time_utils import now_iso
@@ -71,20 +70,8 @@ def pending_experiences(workspace_id: str, session_id: str, limit: int = 12) -> 
 def mark_experiences_processed(workspace_id: str, session_id: str, event_ids: list[str]) -> None:
     ws_id = validate_workspace_id(workspace_id)
     sid = validate_session_id(session_id)
-    cursor = read_cursor(ws_id, sid)
-    processed = list(dict.fromkeys([
-        *list(cursor.get("processed_event_ids") or []),
-        *(str(item) for item in event_ids if item),
-    ]))
-    # Preserve reflection checkpoints: processing a completed batch must not
-    # erase the per-proposal journal for another pending batch.
-    cursor = dict(cursor)
-    cursor.update({
-        "session_id": sid,
-        "processed_event_ids": processed,
-        "updated_at": now_iso(),
-    })
-    save_cursor(ws_id, sid, cursor)
+    from storage.memory_event_store import finish_batch
+    finish_batch(ws_id, sid, [str(item) for item in event_ids if item])
 
 
 def delete_experience_journal(workspace_id: str, session_id: str) -> None:

@@ -5,15 +5,11 @@ from __future__ import annotations
 import json
 import hashlib
 import logging
-import threading
 from typing import Any
 
 from storage.redaction import redact_text
 
 _log = logging.getLogger(__name__)
-_LOCK_GUARD = threading.Lock()
-_REFLECTION_LOCKS: dict[tuple[str, str], threading.Lock] = {}
-
 VALID_TYPES = {"core_rule", "semantic_fact", "episodic_case", "procedural_rule"}
 
 
@@ -23,15 +19,18 @@ def consolidate_experiences(
     session_id: str,
     task_id: str,
 ) -> dict[str, Any]:
-    key = (workspace_id, session_id)
-    with _LOCK_GUARD:
-        lock = _REFLECTION_LOCKS.setdefault(key, threading.Lock())
-    with lock:
-        return _consolidate_locked(
-            workspace_id=workspace_id,
-            session_id=session_id,
-            task_id=task_id,
-        )
+    from storage.memory_event_store import reflection_lock
+    from agent.runtime.memory_write.event_log import pending_experiences
+
+    with reflection_lock(workspace_id, session_id):
+        total = 0
+        results = []
+        while True:
+            outcome = _consolidate_locked(workspace_id=workspace_id, session_id=session_id, task_id=task_id)
+            total += outcome.get('processed', 0)
+            results.extend(outcome.get('results', []))
+            if outcome.get('status') != 'processed' or not pending_experiences(workspace_id, session_id):
+                return {**outcome, 'processed': total, 'results': results}
 
 
 def _consolidate_locked(
@@ -40,20 +39,28 @@ def _consolidate_locked(
     session_id: str,
     task_id: str,
 ) -> dict[str, Any]:
-    from agent.runtime.memory_write.event_log import mark_experiences_processed, pending_experiences
+    from agent.runtime.memory_write.event_log import pending_experiences
     from storage.memory_event_store import read_cursor
     from storage.memory_governance import MemoryStore, is_auto_memory_enabled
 
     if not is_auto_memory_enabled(workspace_id):
         return {"ok": True, "status": "disabled", "processed": 0}
-    events = pending_experiences(workspace_id, session_id, limit=12)
+    cursor = read_cursor(workspace_id, session_id)
+    batches = dict(cursor.get('consolidation_batches') or {})
+    unfinished = next(iter(batches.values()), None)
+    if isinstance(unfinished, dict):
+        from storage.memory_event_store import read_events
+        wanted = set(unfinished.get('event_ids') or [])
+        events = [row for row in read_events(workspace_id, session_id) if row.get('event_id') in wanted]
+        if len(events) != len(wanted):
+            return {'ok': False, 'status': 'evidence_missing', 'processed': 0}
+    else:
+        events = pending_experiences(workspace_id, session_id, limit=12)
     if not events:
         return {"ok": True, "status": "empty", "processed": 0}
 
     event_ids = [str(row.get("event_id") or "") for row in events]
     batch_id = _batch_id(event_ids)
-    cursor = read_cursor(workspace_id, session_id)
-    batches = dict(cursor.get("consolidation_batches") or {})
     batch = batches.get(batch_id)
     store = MemoryStore()
 
@@ -90,7 +97,18 @@ def _consolidate_locked(
         if isinstance(previous, dict) and previous.get("ok"):
             results.append(previous)
             continue
-        result = _apply(proposal, workspace_id, session_id, task_id, events, store)
+        memory_id = 'mem-' + proposal_id.removeprefix('proposal-')[:12]
+        existing = store.get(workspace_id, memory_id)
+        if existing is not None and existing.metadata.get('consolidation_proposal_id') == proposal_id:
+            result = {'ok': True, 'status': existing.status, 'memory_id': memory_id, 'reconciled': True}
+        elif isinstance(previous, dict) and previous.get('status') == 'execution_unknown':
+            result = previous
+        else:
+            try:
+                result = _apply(proposal, workspace_id, session_id, task_id, events, store)
+            except OSError:
+                result = {'ok': False, 'status': 'execution_unknown', 'memory_id': memory_id,
+                          'error': 'memory_write_unknown_readback_required'}
         result = {**dict(result or {}), "proposal_id": proposal_id}
         results_by_id[proposal_id] = result
         batch["results"] = results_by_id
@@ -103,9 +121,8 @@ def _consolidate_locked(
     if any(not result.get("ok") for result in results):
         return {"ok": False, "status": "retry_pending", "processed": 0, "results": results}
 
-    batches.pop(batch_id, None)
-    _save_batches(cursor, batches, workspace_id, session_id)
-    mark_experiences_processed(workspace_id, session_id, event_ids)
+    from storage.memory_event_store import finish_batch
+    finish_batch(workspace_id, session_id, event_ids, batch_id)
     return {"ok": True, "status": "processed", "processed": len(events), "results": results}
 
 
@@ -133,9 +150,14 @@ def _save_batches(cursor: dict[str, Any], batches: dict[str, Any], workspace_id:
     updated["updated_at"] = now_iso()
     cursor.clear()
     cursor.update(updated)
-    from storage.memory_event_store import save_cursor
+    from storage.memory_event_store import update_cursor
 
-    save_cursor(workspace_id, session_id, updated)
+    def merge(latest):
+        latest.update(consolidation_batches=batches, session_id=session_id, updated_at=updated['updated_at'])
+        return latest
+    latest = update_cursor(workspace_id, session_id, merge)
+    cursor.clear()
+    cursor.update(latest)
 
 
 def should_consolidate(events: list[dict[str, Any]]) -> bool:
@@ -188,9 +210,11 @@ def _reflect(events: list[dict[str, Any]], existing: list[dict[str, Any]]) -> li
 
 
 def _apply(proposal, workspace_id, session_id, task_id, events, store):
-    from storage.memory_governance import MemoryRecord, MemoryWriteGate, expire_memory
+    from storage.memory_governance import MemoryRecord, MemoryWriteGate
 
     action = proposal["action"]
+    if action in {'supersede', 'expire'} and not proposal.get('target_memory_id'):
+        return {'ok': True, 'status': 'ignored', 'reason': 'exact_target_required'}
     target = str(proposal.get("target_memory_id") or "")
     if action == "ignore":
         return {"ok": True, "status": "ignored"}
@@ -198,7 +222,12 @@ def _apply(proposal, workspace_id, session_id, task_id, events, store):
         old = store.get(workspace_id, target)
         if old and (old.source in {"user", "manual_confirm"} or old.memory_type == "core_rule"):
             return {"ok": True, "status": "ignored", "reason": "user_memory_requires_explicit_control"}
-        return expire_memory(workspace_id, target)
+        if old is None:
+            return {'ok': True, 'status': 'ignored', 'reason': 'target_not_found'}
+        proposal = {**proposal, 'memory_type': old.memory_type, 'scope': old.scope,
+                    'content': '建议停用：' + old.content,
+                    'summary': '停用建议：' + (old.summary or old.content),
+                    'confidence': proposal.get('confidence', 0.5), 'score': proposal.get('score', 3)}
 
     evidence_ids = set(proposal.get("evidence_event_ids") or [])
     evidence_events = [row for row in events if row.get("event_id") in evidence_ids]
@@ -215,6 +244,17 @@ def _apply(proposal, workspace_id, session_id, task_id, events, store):
         # Stable record identity makes an interrupted create idempotent even
         # in the narrow window between writing the record and saving cursor.
         record_kwargs["memory_id"] = "mem-" + proposal_id.removeprefix("proposal-")[:12]
+    from storage.memory_governance import verified_observation
+    quote = proposal.get('evidence_quote')
+    observation = verified_observation(workspace_id, session_id, quote) if isinstance(quote, dict) else None
+    # Automatic activation is limited to an exact quotation selected by the
+    # model. Its broader explanation remains a candidate, even with real IDs.
+    if not (observation and memory_type == 'episodic_case' and action == 'create'
+            and proposal.get('scope', 'workspace') != 'global'
+            and proposal['content'] == observation['quote']):
+        observation = None
+    if observation:
+        authority, authority_rank = 'verified_tool', 70
     record = MemoryRecord(
         **record_kwargs,
         workspace_id=workspace_id,
@@ -225,34 +265,31 @@ def _apply(proposal, workspace_id, session_id, task_id, events, store):
         status=status,
         source="agent_suggestion",
         source_ref=target,
-        content=proposal["content"],
-        summary=proposal["summary"],
+        content=observation['content'] if observation else proposal['content'],
+        summary=observation["summary"] if observation else proposal["summary"],
         confidence=proposal["confidence"],
-        citations=[{"event_id": row["event_id"]} for row in evidence_events],
+        citations=[observation] if observation else [{"event_id": row["event_id"]} for row in evidence_events],
         created_by="memory_consolidator",
         metadata={
             "memory_key": proposal.get("memory_key"),
+            "verified_observation": observation,
             "authority": authority,
             "authority_rank": authority_rank,
             "llm_score": proposal["score"],
             "llm_keep": proposal["score"] >= 3,
-            "llm_summary": proposal["summary"],
+            "llm_summary": observation["summary"] if observation else proposal["summary"],
+            "proposal_summary": proposal["summary"],
             "extraction_reason": proposal.get("reason"),
             "evidence_source": "experience_journal",
             "evidence_event_ids": [row["event_id"] for row in evidence_events],
             "consolidation_origin": "task_reflection",
             "generation_origin": "task_reflection",
             "consolidation_proposal_id": proposal_id,
-            "supersedes_memory_id": target if action == "supersede" else "",
+            "supersedes_memory_id": target if action in {"supersede", "expire"} else "",
+            "proposed_action": action,
         },
     )
     result = MemoryWriteGate(store).write(record)
-    if result.get("ok") and result.get("status") == "active" and action == "supersede" and target:
-        old = store.get(workspace_id, target)
-        if old and old.status == "active":
-            old.status = "expired"
-            old.metadata["superseded_by"] = result.get("memory_id")
-            store._save(old)
     return result
 
 
@@ -304,12 +341,14 @@ def _parse_operations(raw: str) -> list[dict[str, Any]] | None:
             "score": score,
             "reason": str(item.get("reason") or ""),
             "evidence_event_ids": [str(v) for v in list(item.get("evidence_event_ids") or [])],
+            "evidence_quote": item.get("evidence_quote") if isinstance(item.get("evidence_quote"), dict) else None,
         })
     return result
 
 
 def _safe_event(row: dict[str, Any]) -> dict[str, Any]:
     return {
+        "created_at": row.get("created_at"),
         "event_id": row.get("event_id"),
         "task_id": row.get("task_id"),
         "task_ok": row.get("task_ok"),

@@ -43,6 +43,10 @@ def _record_experience_and_maybe_reflect(
         from storage.memory_governance import is_auto_memory_enabled
 
         install_memory_governance_hooks()
+        command = parse_memory_command(user_input)
+        if command is not None and not is_auto_memory_enabled(workspace_id):
+            apply_memory_command(command, workspace_id=workspace_id, session_id=session_id, task_id=task_id)
+            return
         if not is_auto_memory_enabled(workspace_id):
             return
         event = append_experience(
@@ -54,7 +58,6 @@ def _record_experience_and_maybe_reflect(
             tool_calls=tool_calls,
             task_ok=task_ok,
         )
-        command = parse_memory_command(user_input)
         if command is not None:
             apply_memory_command(
                 command,

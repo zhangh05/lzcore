@@ -83,7 +83,8 @@ class LoopModelGateway:
             else ""
         )
         retrieved_block = (
-            (ctx.extras.get("retrieved_context_block") or "") if include_history else ""
+            (ctx.extras.get("retrieved_context_block") or "") if include_history
+            else (ctx.extras.get('governing_memory_block') or '')
         )
         operational_hint = ctx.extras.get("operational_clarification") or {}
         trusted_items = [runtime_clock_prompt_item()]

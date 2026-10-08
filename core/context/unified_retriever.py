@@ -412,10 +412,10 @@ class UnifiedRetriever:
         task_id: str = "",
         **kwargs,
     ) -> list[dict]:
-        """Search the user's governed memory SSOT, shared across workspaces."""
+        """Search canonical records visible to the current user, project and turn."""
         from storage.memory_governance import MemoryStore
 
-        records = MemoryStore().search(self.workspace_id, query, limit=max(top_k * 3, top_k),
+        records = MemoryStore().search(self.workspace_id, query, limit=0 if top_k == 0 else max(top_k * 3, top_k),
                                        retrievable_only=True, session_id=session_id, task_id=task_id)
         if records:
             candidates = [
@@ -428,17 +428,11 @@ class UnifiedRetriever:
                 and str(item.get("memory_type") or "") in SUPPORTED_MEMORY_TYPES
                 and self._memory_scope_visible(item, session_id=session_id, task_id=task_id)
             ]
-            return visible[:top_k]
+            return visible[:top_k] if top_k else visible
 
-        # ContextStore is a historical projection/test seam, not memory SSOT.
-        return self.search(
-            query, item_type="memory_hit", top_k=top_k,
-            result_filter=lambda hit: (
-                str(hit.get("memory_status") or hit.get("status") or "").lower() in {"active", "confirmed"}
-                and str(hit.get("memory_type") or "") in SUPPORTED_MEMORY_TYPES
-                and self._memory_scope_visible(hit, session_id=session_id, task_id=task_id)
-            ), **kwargs,
-        )[:top_k]
+        # Absence, expiry, or a failed projection is never authority to revive
+        # an indexed record. The index is not a second memory database.
+        return []
 
     def search_knowledge(self, query: str, top_k: int = 5, **kwargs) -> list[dict]:
         """Convenience: search knowledge_chunk items only."""
@@ -478,13 +472,13 @@ class UnifiedRetriever:
     ) -> bool:
         from storage.memory_governance import MemoryRecord, memory_scope_visible
         # A projection may outlive its TTL without any write changing the index.
-        # Revalidate lifecycle on every read, including the legacy fallback.
+        # Revalidate lifecycle on every read, before returning evidence.
         record = dict(hit, status=hit.get("memory_status") or hit.get("status"))
         if record["status"] == "confirmed":
             record["status"] = "active"
         return (
             MemoryRecord.from_dict(record).is_retrievable()
-            and memory_scope_visible(hit, session_id=session_id, task_id=task_id)
+            and memory_scope_visible(hit, workspace_id=self.workspace_id, session_id=session_id, task_id=task_id)
         )
 
     @staticmethod

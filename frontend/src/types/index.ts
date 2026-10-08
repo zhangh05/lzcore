@@ -906,6 +906,10 @@ export interface JobEvent {
 
 export interface MemoryRecord {
   memory_id: string;
+  workspace_id?: string;
+  superseded_by?: string;
+  retrievable?: boolean;
+  citations?: Record<string, unknown>[];
   title: string;
   summary?: string;
   content: string;

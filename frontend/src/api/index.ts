@@ -593,19 +593,19 @@ export const knowledgeApi = {
 
 export const memoryApi = {
   list: (
-    params: { workspace_id: string; include_deleted?: boolean; limit?: number },
+    params: { workspace_id: string; include_deleted?: boolean; limit?: number; offset?: number; scope?: string; memory_type?: string; status?: string },
     signal?: AbortSignal,
-  ): Promise<{ ok: boolean; records: MemoryRecord[]; count?: number }> =>
-    apiRequest<{ ok: boolean; records: MemoryRecord[]; count?: number }>(
+  ): Promise<{ ok: boolean; records: MemoryRecord[]; count?: number; total?: number; next_offset?: number | null; load_errors?: unknown[] }> =>
+    apiRequest<{ ok: boolean; records: MemoryRecord[]; count?: number; total?: number; next_offset?: number | null; load_errors?: unknown[] }>(
       { method: "GET", url: "/memory/list", params },
       signal,
     ),
 
   search: (
-    data: { query: string; workspace_id: string; limit?: number },
+    data: { query: string; workspace_id: string; limit?: number; offset?: number; scope?: string; memory_type?: string; status?: string; include_deleted?: boolean },
     signal?: AbortSignal,
-  ): Promise<{ ok: boolean; results: MemoryRecord[]; count?: number }> =>
-    apiRequest<{ ok: boolean; results: MemoryRecord[]; count?: number }>(
+  ): Promise<{ ok: boolean; results: MemoryRecord[]; count?: number; total?: number; next_offset?: number | null; load_errors?: unknown[] }> =>
+    apiRequest<{ ok: boolean; results: MemoryRecord[]; count?: number; total?: number; next_offset?: number | null; load_errors?: unknown[] }>(
       { method: "POST", url: "/memory/search", data },
       signal,
     ),
@@ -615,6 +615,9 @@ export const memoryApi = {
       title: string;
       content: string;
       workspace_id: string;
+      memory_id?: string;
+      memory_key?: string;
+      supersedes_memory_id?: string;
       scope?: string;
       tags?: string[];
       memory_type?: "core_rule" | "semantic_fact" | "episodic_case" | "procedural_rule" | "knowledge_note" | "profile";
@@ -626,6 +629,9 @@ export const memoryApi = {
       { method: "POST", url: "/memory/write", data },
       signal,
     ),
+
+  get: (memoryId: string, workspaceId: string, signal?: AbortSignal): Promise<{ ok: boolean; record: MemoryRecord }> =>
+    apiRequest({ method: "GET", url: `/memory/${encodeURIComponent(memoryId)}`, params: { workspace_id: workspaceId } }, signal),
 
   deleteHard: (
     memoryId: string,

@@ -27,7 +27,7 @@ from backend.api.llm_api import (
     handle_provider_delete, handle_llm_activate, handle_provider_create,
 )
 from backend.api.capability_routes import handle_capabilities
-from backend.api.memory import handle_memory_status, handle_memory_write, handle_memory_search, handle_memory_confirm, handle_memory_delete, handle_memory_list, handle_memory_batch_delete
+from backend.api.memory import handle_memory_get, handle_memory_status, handle_memory_write, handle_memory_search, handle_memory_confirm, handle_memory_delete, handle_memory_list, handle_memory_batch_delete
 from backend.api.session_routes import (
     handle_session_create, handle_session_list,
     handle_session_detail, handle_session_update,
@@ -312,6 +312,10 @@ def create_app():
     def api_memory_reject():
         from backend.api.memory import handle_memory_reject
         return handle_memory_reject()
+
+    @app.route("/api/memory/<memory_id>", methods=["GET"])
+    def api_memory_get(memory_id):
+        return handle_memory_get(memory_id)
 
     @app.route("/api/memory/<memory_id>", methods=["DELETE"])
     def api_memory_delete(memory_id):

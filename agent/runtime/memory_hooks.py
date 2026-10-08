@@ -35,9 +35,10 @@ def _delete_memory_projection(ws_id: str, memory_id: str) -> None:
 
 
 def _rank_memory_records(query: str, records: list[dict], limit: int) -> list[dict]:
-    from core.context.unified_retriever import rank_documents
+    from core.context.unified_retriever import UnifiedRetriever, rank_documents
 
-    return rank_documents(query, records, top_k=limit)
+    ranked = rank_documents(query, records, top_k=len(records))
+    return UnifiedRetriever._apply_boosts(ranked)[:limit]
 
 
 def _emit_memory_event(ws_id: str, record: MemoryRecord, event_type: str) -> None:

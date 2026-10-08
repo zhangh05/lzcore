@@ -1,7 +1,7 @@
 {
   "name": "lzcore-workbench",
   "private": true,
-  "version": "3.3.16",
+  "version": "3.3.17",
   "description": "联智中枢 v3.3.16",
   "type": "module",
   "engines": {

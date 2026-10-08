@@ -16,6 +16,7 @@ def _build_retrieved_context_block(
     user_input: str,
     max_tokens: int = 3000,
     include_workspace_memory: bool = True,
+    governing_rules: list[str] | None = None,
 ) -> str:
     """Retrieve governed context without silently widening child-agent access.
 
@@ -26,79 +27,70 @@ def _build_retrieved_context_block(
     """
     if not workspace_id or not user_input.strip():
         return ""
+    from storage.memory_governance import MemoryStore
+    from storage.redaction import redact_text
+    from core.runtime_engine.context_budget import estimate_text_tokens
+
+    lines = []
+    def governing(line):
+        lines.append(line)
+        if governing_rules is not None:
+            governing_rules.append(line)
+
+    # Load standing rules independently of lexical/knowledge retrieval. A
+    # damaged derived index cannot erase canonical governing records.
+    if include_workspace_memory:
+        try:
+            store = MemoryStore()
+            records = store.list_retrievable(workspace_id, session_id=session_id, task_id=task_id, limit=0)
+            mandatory = [r for r in records if r['memory_type'] in {'core_rule', 'profile'}]
+            for rule in sorted(mandatory, key=lambda r: r['updated_at']):
+                content = redact_text(str(rule.get('content') or rule.get('summary') or '')).strip()
+                if content:
+                    authority = str((rule.get('metadata') or {}).get('authority') or rule.get('source') or '')
+                    label = 'core-rule' if rule['memory_type'] == 'core_rule' else 'user-profile'
+                    governing(f"[{label} memory_id={rule['memory_id']} scope={rule['scope']} origin_workspace={rule['workspace_id']} updated_at={rule['updated_at']} authority={authority}] {content}")
+            if store.load_errors():
+                governing('[memory_load_warning] Some canonical records could not be read. Healthy rules remain available; unavailable records are not known to be absent. Use memory.manage get/review to inspect the gap.')
+        except Exception:
+            _LOG.debug('governing memory read failed', exc_info=True)
+            governing('[memory_load_warning] Governing records could not be loaded. Do not assume there are no saved rules; use the governed memory read tools.')
     try:
         from core.context.unified_retriever import get_retriever
-        from storage.memory_governance import MemoryStore
-
         retriever = get_retriever(workspace_id)
-        if include_workspace_memory:
-            retrieved = retriever.retrieve_for_context(
-                user_input,
-                top_k_memory=3,
-                top_k_knowledge=2,
-                session_id=session_id,
-                task_id=task_id,
-            )
-        else:
-            retrieved = {
-                "memory_hits": [],
-                "knowledge_hits": retriever.search_knowledge(user_input, top_k=2),
-            }
-        from storage.redaction import redact_text
-
-        lines: list[str] = []
-        if include_workspace_memory:
-            core_store = MemoryStore()
-            core_rules = core_store.list_retrievable(
-                workspace_id,
-                memory_type="core_rule",
-                session_id=session_id,
-                task_id=task_id,
-                limit=0,
-            )
-            for rule in core_rules:
-                content = redact_text(
-                    str(rule.get("content") or rule.get("summary") or "")
-                ).strip()
-                if content:
-                    lines.append(
-                        f"[core-rule scope=workspace authority=explicit-user] {content}"
-                    )
-            if core_store.load_errors():
-                lines.append(
-                    "[memory_load_warning] Some saved memory records could not be read; "
-                    "healthy records remain available. Do not assume unavailable records are absent."
-                )
-        for hit in retrieved.get("memory_hits", [])[:3]:
-            if str(hit.get("memory_type") or "") == "core_rule":
+        retrieved = (retriever.retrieve_for_context(user_input, top_k_memory=0, top_k_knowledge=2,
+                     session_id=session_id, task_id=task_id) if include_workspace_memory else
+                     {'memory_hits': [], 'knowledge_hits': retriever.search_knowledge(user_input, top_k=2)})
+        used = 0
+        deferred = []
+        for hit in retrieved.get('memory_hits', []):
+            if hit.get('memory_type') in {'core_rule', 'profile'}:
                 continue
-            content = redact_text(
-                str(hit.get("content") or hit.get("summary") or "")
-            ).strip()
+            content = redact_text(str(hit.get('content') or hit.get('summary') or '')).strip()
+            if not content:
+                continue
+            memory_id = str(hit.get('memory_id') or '')
+            line = f"[memory memory_id={memory_id} scope={hit.get('scope', 'workspace')} updated_at={hit.get('updated_at', '')}] {content}"
+            cost = estimate_text_tokens(line)
+            if used + cost <= max_tokens:
+                lines.append(line)
+                used += cost
+            else:
+                deferred.append(memory_id)
+        if deferred:
+            lines.append(f'[memory_retrieval_coverage] {len(deferred)} additional ranked records remain in canonical storage. Automatic retrieval selected complete records within {max_tokens} tokens; no record text was cut. Use memory.manage search/get for additional evidence. First deferred memory_id={deferred[0]}.')
+        for hit in retrieved.get('knowledge_hits', []):
+            content = redact_text(str(hit.get('content') or hit.get('summary') or '')).strip()
             if content:
-                scope = str(hit.get("scope") or "workspace")
-                lines.append(f"[memory scope={scope}] {content}")
-        for hit in retrieved.get("knowledge_hits", [])[:2]:
-            content = redact_text(
-                str(hit.get("content") or hit.get("summary") or "")
-            ).strip()
-            if content:
-                scope = str(hit.get("scope") or "workspace")
-                source_id = str(hit.get("source_id") or "")
-                chunk_id = str(hit.get("chunk_id") or hit.get("item_id") or "")
-                parent_chunk_id = str(hit.get("parent_chunk_id") or "")
-                title = str(hit.get("title") or "")
-                section = str(hit.get("chapter") or hit.get("section") or "")
-                lines.append(
-                    "[knowledge "
-                    f"scope={scope} source_id={source_id} chunk_id={chunk_id} "
-                    f"parent_chunk_id={parent_chunk_id} title={title!r} section={section!r}] "
-                    f"{content}"
-                )
-        return "\n".join(lines)
+                lines.append('[knowledge '
+                    f"scope={hit.get('scope', 'workspace')} source_id={hit.get('source_id', '')} "
+                    f"chunk_id={hit.get('chunk_id') or hit.get('item_id') or ''} "
+                    f"parent_chunk_id={hit.get('parent_chunk_id', '')} title={str(hit.get('title') or '')!r} "
+                    f"section={str(hit.get('chapter') or hit.get('section') or '')!r}] {content}")
     except Exception:
-        _LOG.debug("governed context retrieval failed", exc_info=True)
-        return "[context_load_failed] Memory/knowledge context could not be loaded. Do not assume there are no saved rules or facts; retry the relevant read tool and disclose any unresolved gap."
+        _LOG.debug('governed context retrieval failed', exc_info=True)
+        lines.append('[context_load_failed] Ranked memory/knowledge context could not be loaded. Governing rules above remain valid. Retry relevant read tools and disclose unresolved gaps.')
+    return '\n'.join(lines)
 
 
 def _build_history_block(

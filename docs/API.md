@@ -141,7 +141,7 @@ included. The field is optional for records produced by older versions.
 
 `/api/knowledge/upload` accepts exactly one multipart `file` or existing `file_id`, plus `workspace_id` and ingestion options. Existing files are resolved in the authenticated principal/workspace and must be active; knowledge ingestion references the original without re-uploading it. Unsupported parsing remains an explicit failure and preserves the original.
 | `GET/PATCH/DELETE` | `/api/knowledge/sources/<source_id>` | Knowledge source lifecycle. |
-| `GET` | `/api/memory/status`, `/api/memory/list` | Governed memory projections. |
+| `GET` | `/api/memory/status`, `/api/memory/list`, `/api/memory/<memory_id>` | Canonical scoped memory, lifecycle, revision and read diagnostics. |
 | `POST` | `/api/memory/search`, `/api/memory/write`, `/api/memory/confirm`, `/api/memory/reject`, `/api/memory/batch-delete` | Governed memory operations. |
 | `DELETE` | `/api/memory/<memory_id>` | Memory hard delete. |
 | `POST` | `/api/reports/create` | Create a report. |
@@ -258,7 +258,7 @@ Anthropic 接入模板不预填模型 ID，添加时填写当前账户或网关�
 
 QueryLoop 在完整工具交互边界建立模型窗口归档，原始用户约束保留，任务、目标与未知执行状态随新窗口继续。归档在当前主体/工作区/会话的 `sessions/<session_id>/context_epochs` 中持久化，包含 SHA256 与父归档引用；归档失败不会替换当前窗口，也不会重放工具。系统提示词、工具定义、输出预留和安全余量共同计入模型容量；单独的初始用户约束已超过容量时明确停止。
 
-`system.manage(action=context_index, checkpoint_id?, offset?, limit?)` 未指定 checkpoint 时分页发现当前会话的归档，指定 checkpoint 时分页列出消息索引；`context_read(checkpoint_id, message_index, char_offset?, char_limit?)` 回查消息的明确文本范围，返回下一范围游标和校验值。调用方不能读取其他会话归档；归档内容是已脱敏的非可信历史数据，不是新指令。`char_limit` 为 1–32000，默认 8000。运行记录公开 `context_epochs` 和接续错误，不把窗口接续说成历史删除或完整业务验收。
+`system.manage(action=context_index, checkpoint_id?, offset?, limit?)` 未指定 checkpoint 时分页发现当前会话的归档，指定 checkpoint 时分页列出消息索引；`context_search(query, checkpoint_id?, offset?, limit?)` 在当前会话完整归档中词法检索原文，返回精确消息与文本范围指针；`context_read(checkpoint_id, message_index, char_offset?, char_limit?)` 回查消息的明确文本范围，返回下一范围游标和校验值。调用方不能读取其他会话归档；归档内容是已脱敏的非可信历史数据，不是新指令。`char_limit` 为 1–32000，默认 8000。运行记录公开 `context_epochs` 和接续错误，不把窗口接续说成历史删除或完整业务验收。
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -338,3 +338,9 @@ QA 必须验证准确候选、源码不变、命令实际成功；merge 检查 Q
 工程源码分类由 `coding_assignment.generated_paths` 显式声明可再生输出路径（例如 `["dist"]`），默认空。`build/`、`dist/` 或嵌套同名目录本身不构成生成物身份；构建脚本属于源码。快照、QA、候选摘要、事务整合和团队验收使用同一份合同，QA 从实现任务继承且不能另行削弱。项目根、路径越界及项目配置文件不能被声明为排除输出。
 
 子任务总生命周期与工具请求等待分开：`background=false` 最多等待 15 秒，仍在执行就返回同一任务句柄；不会因外层请求超时取消有效工作。`get/status` 查看持久化状态，`start` 仅启动前置依赖已满足的 created 任务。取消同时通过实时信号和主体/工作区范围内的持久化标记传播，跨进程可见。压测结束取消、等待并核验其全部委派分支清理，清理未知不能计为通过。
+
+### Memory scope and revision
+
+`GET /api/memory/list` requires workspace_id, and accepts scope, memory_type, status, session_id, include_deleted, offset and limit (1–500). Filtering precedes paging; total, next_offset and load_errors describe actual coverage. `POST /api/memory/search` accepts query, workspace_id, scope/memory_type/status filters, include_deleted, offset and limit (1–100). `GET /api/memory/<memory_id>?workspace_id=...` reads a visible canonical record in full with its replacement relation and retrievable status.
+
+`POST /api/memory/write` preserves full title/content, accepts scope, memory_type, memory_key and supersedes_memory_id, and can accept a stable client memory_id (`mem-` plus 12 hexadecimal characters) for readback. Human user_confirmed writes are explicit controls; generated records remain candidates unless the server verifies an exact journal observation. Revisions retain original records; scope/type/session/task must match the target. Existing IDs reconcile identical content and cannot overwrite different content. A storage exception returns HTTP 409 with status=execution_unknown and memory_id; read the record to reconcile, never automatically repeat the write.

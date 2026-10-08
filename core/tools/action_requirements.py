@@ -58,6 +58,7 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("agent.manage", "merge"): (),
     ("system.manage", "context_index"): (),
     ("system.manage", "context_read"): ("checkpoint_id", "message_index"),
+    ("system.manage", "context_search"): ("query",),
     ("system.manage", "run_get"): ("run_id",),
     ("system.manage", "session_get"): ("session_id",),
     ("system.manage", "session_checkpoint"): ("session_id",),
@@ -241,7 +242,7 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts("skill.manage", ("mcp_call",), _EXE
 ACTION_EXECUTION_CONTRACTS.update(_contracts("report.manage", ("diff", "document"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("report.manage", ("save",), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts(
-    "system.manage", ("diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_export", "session_snapshot", "context_index", "context_read"), _READ,
+    "system.manage", ("diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_export", "session_snapshot", "context_index", "context_read", "context_search"), _READ,
 ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("system.manage", ("session_checkpoint",), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("system.manage", ("session_rewind",), _DELETE))

@@ -38,12 +38,13 @@ def handle_memory_status():
         return jsonify({
             "ok": True,
             "enabled": is_auto_memory_enabled(ws_id),
-            "backend": "governed_context_store",
+            "backend": "canonical_memory_records",
             "workspace_id": ws_id,
             "records": len(records),
-            "policy": "layered_reflection",
+            "policy": "evidence_governed",
             "status_counts": status_counts,
-            "data_dir": f"workspaces/{ws_id}/memory/",
+            "scope_counts": {scope: sum(r.scope == scope for r in all_records) for scope in ("global", "workspace", "session", "task")},
+            "load_errors": store.load_errors(),
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)[:200]}), 500
@@ -52,9 +53,13 @@ def handle_memory_status():
 def handle_memory_write():
     """Write a memory record through MemoryWriteGate (governed)."""
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'ok': False, 'error': 'object_required'}), 400
     title = data.get("title", "")
     content = data.get("content", "")
-    if not title and not content:
+    if not isinstance(title, str) or not isinstance(content, str):
+        return jsonify({'ok': False, 'error': 'text_required'}), 400
+    if not title.strip() and not content.strip():
         return jsonify({"ok": False, "error": "title or content required"}), 400
 
     workspace_id = data.get("workspace_id", "")
@@ -75,7 +80,9 @@ def handle_memory_write():
         gate = MemoryWriteGate()
 
         # Build MemoryRecord for governance
+        record_id = {'memory_id': str(data['memory_id'])} if data.get('memory_id') else {}
         rec = MemoryRecord(
+            **record_id,
             workspace_id=ws_id,
             session_id=data.get("session_id", ""),
             task_id=data.get("task_id", ""),
@@ -83,15 +90,22 @@ def handle_memory_write():
             memory_type=data.get("memory_type", "knowledge_note"),
             status="active" if user_confirmed else "pending",
             source="user" if user_confirmed else ("subagent" if is_subagent else "agent_suggestion"),
-            content=content[:2000],
-            summary=title[:200],
+            content=content,
+            summary=title,
             confidence=confidence,
             citations=data.get("citations", []),
             created_by="user" if user_confirmed else source,
             redacted=True,
+            metadata={
+                'memory_key': str(data.get('memory_key') or ''),
+                'supersedes_memory_id': str(data.get('supersedes_memory_id') or ''),
+            },
         )
         result = gate.write(rec)
-        return jsonify(result)
+        return jsonify(result), 200 if result.get('ok') else 400
+    except OSError:
+        return jsonify({'ok': False, 'status': 'execution_unknown', 'memory_id': rec.memory_id,
+                        'error': 'memory_write_unknown_readback_required'}), 409
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)[:200]}), 500
 
@@ -113,9 +127,20 @@ def handle_memory_search():
     try:
         from storage.memory_governance import MemoryStore
         store = MemoryStore()
-        records = store.search(ws_id, query, limit=limit)
-
-        return jsonify({"ok": True, "results": records[:limit], "count": len(records[:limit])})
+        offset = max(0, int(data.get('offset', 0)))
+        records = store.search(ws_id, query, limit=0,
+                               scope_filter=str(data.get('scope') or ''),
+                               type_filter=str(data.get('memory_type') or ''),
+                               status_filter=str(data.get('status') or ''))
+        from storage.memory_governance import MemoryRecord
+        all_records = store.list_all(ws_id)
+        replaced = store.superseded_records(all_records)
+        if data.get('include_deleted') is False:
+            records = [rec for rec in records if rec['status'] not in {'rejected', 'expired'} and rec['memory_id'] not in replaced]
+        page = [_record_view(MemoryRecord.from_dict(rec), replaced) for rec in records[offset:offset + limit]]
+        return jsonify({'ok': True, 'results': page, 'count': len(page), 'total': len(records),
+                        'next_offset': offset + len(page) if offset + len(page) < len(records) else None,
+                        'load_errors': store.load_errors()})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)[:200]}), 500
 
@@ -195,37 +220,50 @@ def handle_memory_batch_delete():
     return jsonify({"ok": True, "deleted_count": deleted, "requested": len(ids)})
 
 
-def handle_memory_list():
-    """List memory records."""
-    ws_id, err = _read_ws_id(request.args.get("workspace_id", ""))
+def _record_view(record, replaced):
+    payload = record.to_dict()
+    payload['superseded_by'] = replaced.get(record.memory_id) or record.metadata.get('superseded_by', '')
+    payload['retrievable'] = record.is_retrievable() and not payload['superseded_by']
+    return payload
+
+
+def handle_memory_get(memory_id):
+    ws_id, err = _read_ws_id(request.args.get('workspace_id', ''))
     if err:
-        return jsonify({"ok": False, "error": err}), 400
+        return jsonify({'ok': False, 'error': err}), 400
     from storage.memory_governance import MemoryStore
     store = MemoryStore()
-    include_deleted = str(request.args.get("include_deleted", "")).lower() in {"1", "true", "yes"}
-    status_filter = str(request.args.get("status", "")).strip()
-    session_id = str(request.args.get("session_id", "")).strip()
-    try:
-        limit = int(request.args.get("limit") or 100)
-    except Exception:
-        limit = 100
-    limit = max(1, min(limit, 500))
+    with store.mutation_lock(ws_id):
+        record = store.get(ws_id, memory_id)
+        if record is None:
+            return jsonify({'ok': False, 'error': 'memory_unavailable' if store.load_errors() else 'memory_not_found',
+                            'load_errors': store.load_errors()}), 404
+        replaced = store.superseded_records(store.list_all(ws_id))
+        return jsonify({'ok': True, 'record': _record_view(record, replaced)})
 
-    records = []
-    for rec in store.list_all(ws_id):
-        if status_filter and rec.status != status_filter:
-            continue
-        if session_id and rec.session_id != session_id:
-            continue
-        if not include_deleted and rec.status in {"rejected", "expired"}:
-            continue
-        payload = rec.to_dict()
-        try:
-            from core.tools.redaction import redact_tool_output
-            payload = redact_tool_output(payload)
-        except Exception:
-            pass
-        records.append(payload)
-        if len(records) >= limit:
-            break
-    return jsonify({"ok": True, "records": records, "count": len(records)})
+
+def handle_memory_list():
+    """Filter before paging, with an explicit cursor and canonical diagnostics."""
+    ws_id, err = _read_ws_id(request.args.get('workspace_id', ''))
+    if err:
+        return jsonify({'ok': False, 'error': err}), 400
+    try:
+        offset = int(request.args.get('offset', 0))
+        limit = int(request.args.get('limit', 100))
+        if offset < 0 or not 1 <= limit <= 500:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify({'ok': False, 'error': 'invalid_page_range'}), 400
+    from storage.memory_governance import MemoryStore
+    store = MemoryStore()
+    all_records = store.list_all(ws_id)
+    replaced = store.superseded_records(all_records)
+    include_deleted = request.args.get('include_deleted', '').lower() in {'true', '1', 'yes'}
+    filters = {field: request.args.get(field, '').strip() for field in ('status', 'scope', 'memory_type', 'session_id')}
+    records = [_record_view(rec, replaced) for rec in all_records
+               if all(not value or getattr(rec, field) == value for field, value in filters.items())
+               and (include_deleted or rec.status not in {'rejected', 'expired'} and rec.memory_id not in replaced)]
+    page = records[offset:offset + limit]
+    return jsonify({'ok': True, 'records': page, 'count': len(page), 'total': len(records),
+                    'offset': offset, 'next_offset': offset + len(page) if offset + len(page) < len(records) else None,
+                    'load_errors': store.load_errors()})

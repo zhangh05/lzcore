@@ -7,7 +7,9 @@ record adapter directly.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
+
+from storage.locking import FileLock
 
 from storage.ids import validate_session_id, validate_workspace_id
 from storage.records import (
@@ -47,9 +49,10 @@ def save_cursor(workspace_id: str, session_id: str, cursor: dict[str, Any]) -> N
 def delete_journal(workspace_id: str, session_id: str) -> None:
     ws_id = validate_workspace_id(workspace_id)
     sid = validate_session_id(session_id)
-    for parts in (_journal_parts(sid), _cursor_parts(sid)):
-        path = workspace_record_file(ws_id, *parts, create_parent=False)
-        delete_record_path(path)
+    with reflection_lock(ws_id, sid):
+        for parts in (_journal_parts(sid), _cursor_parts(sid)):
+            path = workspace_record_file(ws_id, *parts, create_parent=False)
+            delete_record_path(path)
 
 
 def _journal_parts(session_id: str) -> tuple[str, ...]:
@@ -58,3 +61,35 @@ def _journal_parts(session_id: str) -> tuple[str, ...]:
 
 def _cursor_parts(session_id: str) -> tuple[str, ...]:
     return ("memory", "reflection", f"{session_id}.json")
+
+
+def reflection_lock(workspace_id: str, session_id: str) -> FileLock:
+    ws_id = validate_workspace_id(workspace_id)
+    sid = validate_session_id(session_id)
+    path = workspace_record_file(ws_id, *_cursor_parts(sid), create_parent=True)
+    return FileLock(path.with_suffix('.reflection.lock'))
+
+
+def update_cursor(workspace_id: str, session_id: str, update: Callable[[dict], dict]) -> dict:
+    ws_id = validate_workspace_id(workspace_id)
+    sid = validate_session_id(session_id)
+    path = workspace_record_file(ws_id, *_cursor_parts(sid), create_parent=True)
+    with FileLock(path.with_suffix('.transaction.lock')):
+        value = update(dict(read_cursor(ws_id, sid)))
+        save_cursor(ws_id, sid, value)
+        return value
+
+
+def finish_batch(workspace_id: str, session_id: str, event_ids: list[str], batch_id: str = '') -> dict:
+    from storage.time_utils import now_iso
+
+    def complete(cursor):
+        cursor['processed_event_ids'] = list(dict.fromkeys([
+            *cursor.get('processed_event_ids', []), *event_ids,
+        ]))
+        batches = dict(cursor.get('consolidation_batches') or {})
+        if batch_id:
+            batches.pop(batch_id, None)
+        cursor.update(consolidation_batches=batches, session_id=session_id, updated_at=now_iso())
+        return cursor
+    return update_cursor(workspace_id, session_id, complete)

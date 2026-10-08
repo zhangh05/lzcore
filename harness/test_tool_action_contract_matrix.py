@@ -433,7 +433,7 @@ def test_memory_mutations_propagate_governance_failures(monkeypatch, handler_nam
     import core.tools.general_tools.memory_tools as memory_tools
     from core.tools.schemas import ToolInvocation
 
-    monkeypatch.setattr(f"storage.memory_governance.{governance_name}", lambda *_args: {"ok": False, "error": "not found"})
+    monkeypatch.setattr(f"storage.memory_governance.{governance_name}", lambda *_args, **_kwargs: {"ok": False, "error": "not found"})
     handler = getattr(memory_tools, handler_name)
     result = handler(ToolInvocation(tool_id="memory.manage", workspace_id="test_ws", arguments=arguments))
     assert result["ok"] is False
@@ -444,7 +444,7 @@ def test_memory_confirmation_preserves_governance_status(monkeypatch):
     from core.tools.general_tools.memory_tools import handle_memory_confirm
     from core.tools.schemas import ToolInvocation
 
-    monkeypatch.setattr("storage.memory_governance.confirm_memory", lambda *_args: {"ok": True, "status": "active"})
+    monkeypatch.setattr("storage.memory_governance.confirm_memory", lambda *_args, **_kwargs: {"ok": True, "status": "active"})
     result = handle_memory_confirm(ToolInvocation(
         tool_id="memory.manage", workspace_id="test_ws", arguments={"action": "confirm", "memory_id": "mem_1"},
     ))

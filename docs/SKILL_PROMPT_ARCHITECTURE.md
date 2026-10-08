@@ -58,7 +58,7 @@
 | report_summary | 采样时间、失败与未覆盖对象 |
 | manual_review_explain | 对象、原因和可关闭复核的具体检查 |
 | knowledge_answer | 只用 knowledge_hits；引用 artifact_id/chunk_id |
-| memory_consolidation | JSON 操作数组；待确认提案、不设任意条数上限 |
+| memory_consolidation | JSON 操作数组；候选与可回查的历史原文观察，不设任意条数上限 |
 
 模板注册版本用于诊断，不是产品版本或 Git tag。max_context_chars、Top-K 等不同设置职责不同：模板预算不裁数据，检索策略仍可选择相关命中，供应商容量仍受限制。
 

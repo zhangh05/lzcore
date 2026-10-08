@@ -82,6 +82,48 @@ def verify_packaged_files(page, origin, output):
     page.screenshot(path=str(output/'file-workspace.png'), full_page=True)
 
 
+def verify_packaged_memory(page, origin, output):
+    """Full text, scoped ownership, revision and human review in the frozen app."""
+    result = page.evaluate("""async () => {
+      const token = (await (await fetch('/api/local-token')).json()).token;
+      const headers = {'X-LZCore-Local-Token': token, 'Content-Type':'application/json'};
+      async function call(path, data) {
+        const response = await fetch('/api'+path, {method:data?'POST':'GET', headers, ...(data?{body:JSON.stringify(data)}:{})});
+        if (!response.ok) throw new Error(path+':'+response.status);
+        return await response.json();
+      }
+      const content = '完整长期记忆原文'.repeat(500)+'末尾约束';
+      const original = await call('/memory/write', {workspace_id:'default',title:'桌面记忆原文',content,user_confirmed:true});
+      if ((await call('/memory/'+original.memory_id+'?workspace_id=default')).record.content !== content) throw new Error('memory content cut');
+      const denied = await fetch('/api/memory/'+original.memory_id+'?workspace_id=another-project',{headers});
+      if (denied.status !== 404) throw new Error('project memory leaked');
+      const personal = await call('/memory/write', {workspace_id:'default',title:'桌面个人偏好',content:'个人通用偏好：使用中文回复。',scope:'global',memory_type:'core_rule',user_confirmed:true});
+      if (!(await call('/memory/'+personal.memory_id+'?workspace_id=another-project')).record) throw new Error('personal memory unavailable');
+      const candidate = await call('/memory/write', {workspace_id:'default',title:'桌面记忆审核',content:'新版完整内容：发布前核对附件。',supersedes_memory_id:original.memory_id});
+      if (candidate.status !== 'conflict') throw new Error('unreviewed replacement activated');
+      if ((await call('/memory/'+original.memory_id+'?workspace_id=default')).record.status !== 'active') throw new Error('original retired before review');
+      return {original:original.memory_id,candidate:candidate.memory_id,full_chars:content.length,scopes_verified:true,model_requests:0};
+    }""")
+    page.goto(origin+'/memory')
+    page.get_by_role('button', name='桌面记忆审核', exact=True).click()
+    page.get_by_role('button', name='确认并启用', exact=True).click()
+    page.get_by_text('记忆已确认并开始生效', exact=True).wait_for()
+    checked = page.evaluate("""async ids => {
+      const token=(await (await fetch('/api/local-token')).json()).token;
+      const headers={'X-LZCore-Local-Token':token};
+      const records=[];
+      for(const id of [ids.original,ids.candidate]) {
+        const r=await fetch('/api/memory/'+id+'?workspace_id=default',{headers});
+        records.push((await r.json()).record);
+      }
+      if(records[0].status!=='expired'||records[0].content.length!==ids.full_chars||records[1].status!=='active') throw new Error('review or original lost');
+      return {reviewed:true,original_preserved:true};
+    }""",result)
+    result.update(checked)
+    (output/'memory.json').write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
+    page.screenshot(path=str(output/'memory-workspace.png'),full_page=True)
+
+
 def run(exe: Path, mode: str, output: Path):
     output.mkdir(parents=True, exist_ok=True)
     data = output / '中文 用户数据'
@@ -162,6 +204,7 @@ def run(exe: Path, mode: str, output: Path):
             wait_until(lambda: conversation.exists())
             assert '真实工作台中文导出' in conversation.read_text(encoding='utf-8')
             verify_packaged_files(page, start['origin'], output)
+            verify_packaged_memory(page, start['origin'], output)
             # Actual packaged topology renderer: neutral defaults and black ink
             # survive native theme changes without touching persistent drawing data.
             assert user32.MoveWindow(hwnd, 40, 40, 1280, 800, True)

@@ -56,25 +56,25 @@ def apply_memory_command(
     store = MemoryStore()
     if command.get("action") == "forget":
         query = str(command.get("query") or "").strip()
-        candidates = store.search(workspace_id, query, limit=10) if query else store.list_all(workspace_id)
-        expired = []
-        for item in candidates:
-            memory_id = item.get("memory_id") if isinstance(item, dict) else getattr(item, "memory_id", "")
-            record = store.get(workspace_id, str(memory_id or ""))
-            if record is None or record.status != "active" or record.memory_type != "core_rule":
-                continue
-            if expire_memory(workspace_id, record.memory_id).get("ok"):
-                expired.append(record.memory_id)
-            if not query:
-                break
-        return {"ok": True, "action": "forget", "expired_memory_ids": expired}
+        candidates = [r for r in store.list_all(workspace_id)
+                      if r.status == 'active' and r.memory_type == 'core_rule']
+        if query:
+            candidates = [r for r in candidates if r.memory_id == query or query in r.content]
+            if len(candidates) != 1:
+                return {'ok': False, 'action': 'forget', 'status': 'needs_selection',
+                        'candidate_memory_ids': [r.memory_id for r in candidates],
+                        'expired_memory_ids': []}
+        else:
+            candidates = candidates[:1]
+        expired = [r.memory_id for r in candidates if expire_memory(workspace_id, r.memory_id).get('ok')]
+        return {'ok': True, 'action': 'forget', 'expired_memory_ids': expired}
 
     content = str(command.get("content") or "").strip()
     record = MemoryRecord(
         workspace_id=workspace_id,
         session_id=session_id,
         task_id=task_id,
-        scope="workspace",
+        scope=str(command.get('scope') or 'workspace'),
         memory_type="core_rule",
         status="active",
         source="user",
@@ -90,6 +90,7 @@ def apply_memory_command(
             "extraction_reason": command.get("reason"),
             "evidence_source": "user_input",
             "generation_origin": "user_memory_command",
+            "supersedes_memory_id": str(command.get('supersedes_memory_id') or ''),
         },
     )
     return MemoryWriteGate(store).write(record)
