@@ -1,116 +1,152 @@
-/* Settings owns its layout; shared controls, colors and memory card keep their own layers. */
+/* Settings owns its layout: section rail, grouped sections, framed provider editor, danger zone. */
 @layer pages {
-.settings-page .page-header { border-bottom: 1px solid var(--line); }
+.settings-page .page-header { border-bottom: 1px solid var(--line-2); }
+.settings-page > .page-body.no-pad { display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--surface-2); }
+.settings-page .settings-help { flex: 0 0 auto; padding: 8px 24px; color: var(--text-3); background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-12); }
+.settings-page .settings-help summary { cursor: pointer; width: fit-content; }
+.settings-page .settings-help summary:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+.settings-page .settings-help-body { padding-top: 6px; color: var(--text-2); }
+
+/* ── Shell: section rail + scrolling content ─────────────────────────────── */
+.settings-page .settings-shell { display: grid; flex: 1 1 auto; grid-template-columns: 216px minmax(0, 1fr); min-height: 0; }
+.settings-page .settings-section-nav { display: flex; flex-direction: column; gap: 2px; min-height: 0; padding: 20px 12px; overflow: auto; background: var(--surface); border-right: 1px solid var(--line-2); }
+.settings-page .settings-section-link {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  padding: 9px 12px;
+  color: var(--text-2);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-control);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.settings-page .settings-section-link span { font-size: var(--fs-13); font-weight: var(--weight-label); }
+.settings-page .settings-section-link small { color: var(--text-3); font-size: var(--fs-11); line-height: var(--lh-12); }
+.settings-page .settings-section-link:hover { color: var(--text); background: var(--surface-hover); }
+.settings-page .settings-section-link.active { color: var(--text); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); box-shadow: inset 3px 0 0 var(--accent); }
+.settings-page .settings-section-link.active span { font-weight: var(--weight-strong); }
+.settings-page .settings-section-link.is-danger span { color: var(--danger); }
+.settings-page .settings-section-link.is-danger.active { background: var(--danger-soft); box-shadow: inset 3px 0 0 var(--danger); }
+.settings-page .settings-section-link:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: -2px; }
+.settings-page .settings-content { display: flex; flex-direction: column; gap: 32px; min-width: 0; min-height: 0; padding: 24px 28px 48px; overflow-y: auto; scroll-padding-top: 16px; }
+
+/* ── Groups ──────────────────────────────────────────────────────────────── */
+.settings-page .settings-group { display: grid; gap: 12px; min-width: 0; scroll-margin-top: 16px; }
+.settings-page .settings-group-head { display: grid; gap: 2px; }
+.settings-page .settings-group-kicker { color: var(--text-3); font-size: var(--fs-11); line-height: var(--lh-12); letter-spacing: .04em; }
+.settings-page .settings-group-head h2 { margin: 0; color: var(--text); font-size: var(--fs-18); line-height: var(--lh-18); font-weight: var(--weight-strong); }
+.settings-page .settings-group-head h2:focus { outline: none; }
+.settings-page .settings-group-head p { margin: 0; color: var(--text-3); font-size: var(--fs-13); line-height: var(--lh-13); }
+.settings-page .settings-group-danger .settings-group-kicker { color: var(--danger); }
+
+/* ── Provider editor: one framed sheet (cards | form) ───────────────────── */
 .settings-page .settings-layout {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  height: 100%;
-  min-height: 0;
-  background: var(--surface);
-}
-.settings-page .provider-sidebar {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: 248px minmax(0, 1fr);
   min-width: 0;
-  min-height: 0;
-  padding: var(--space-3);
-  border-right: 1px solid var(--line);
-  background: var(--surface-2);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
 }
-.settings-page .provider-sidebar-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding-bottom: var(--space-3);
-  font-weight: var(--weight-heading);
-}
-.settings-page .provider-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-height: 0;
-  overflow: auto;
-}
+.settings-page .provider-sidebar { display: flex; flex-direction: column; min-width: 0; padding: 12px; background: var(--surface-2); border: 0; border-right: 1px solid var(--line-2); border-radius: 0; }
+.settings-page .provider-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 4px 12px; color: var(--text); font-size: var(--fs-13); font-weight: var(--weight-strong); }
+.settings-page .provider-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 .settings-page .provider-card {
   flex: 0 0 auto;
   width: 100%;
-  min-height: 80px;
-  padding: var(--space-3);
-  border: 1px solid transparent;
-  border-radius: var(--r-6);
-  text-align: left;
-  background: transparent;
+  padding: 10px 12px;
   color: var(--text);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
 }
-.settings-page .provider-card:hover { background: var(--surface-3); }
-.settings-page .provider-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.settings-page .provider-card-top { display: flex; align-items: center; gap: var(--space-2); }
-.settings-page .provider-card-label { font-size: var(--fs-14); font-weight: var(--weight-heading); overflow-wrap: anywhere; }
+.settings-page .provider-card:hover { border-color: var(--line-3); }
+.settings-page .provider-card.selected { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.settings-page .provider-card-top { display: flex; align-items: center; gap: 8px; }
+.settings-page .provider-card-label { flex: 1; min-width: 0; font-size: var(--fs-14); font-weight: var(--weight-strong); overflow-wrap: anywhere; }
 .settings-page .provider-card-hint,
-.settings-page .provider-card-meta { margin-top: var(--space-1); font-size: var(--fs-12); color: var(--text-3); }
-.settings-page .settings-form-panel { min-width: 0; min-height: 0; padding: var(--space-6); overflow-y: auto; container-type: inline-size; }
-.settings-page .settings-form-card { max-width: 960px; margin-inline: auto; }
-.settings-page .settings-form-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--line);
-}
-.settings-page .settings-form-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  margin: 0 0 var(--space-1);
-  font-size: var(--fs-18);
-  font-weight: var(--weight-heading);
-  overflow-wrap: anywhere;
-}
-.settings-page .settings-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
-.settings-page .settings-row { margin-bottom: var(--space-4); }
-.settings-page .settings-row-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
-  align-items: stretch;
-}
-.settings-page .settings-row-grid .ui-form-field { display: flex; flex-direction: column; min-width: 0; gap: var(--space-2); }
+.settings-page .provider-card-meta { margin-top: 2px; color: var(--text-3); font-size: var(--fs-12); line-height: var(--lh-12); }
+.settings-page .settings-form-panel { min-width: 0; padding: 0; overflow: visible; container-type: inline-size; }
+.settings-page .settings-form-card { max-width: none; margin: 0; padding: 0; background: transparent; border: 0; border-radius: 0; }
+.settings-page .settings-form-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin: 0; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.settings-page .settings-form-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 2px; color: var(--text); font-size: var(--fs-16); line-height: var(--lh-16); font-weight: var(--weight-strong); overflow-wrap: anywhere; }
+.settings-page .settings-form-title .ml-2 { margin-left: 0; }
+
+/* Form rows: labelled controls on a consistent two-column rhythm. */
+.settings-page .settings-fields { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 20px 24px; border: 0; }
+.settings-page .settings-row { margin: 0; }
+.settings-page .settings-row-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; align-items: stretch; }
+.settings-page .settings-row-grid .ui-form-field { display: flex; flex-direction: column; min-width: 0; gap: 6px; }
 .settings-page .settings-row-grid .ui-form-control { margin-top: auto; }
-.settings-page .settings-row-compact { display: grid; gap: var(--space-4); }
-.settings-page .settings-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  position: static;
-  margin-top: var(--space-4);
-  padding-block: var(--space-4);
-  border-top: 1px solid var(--line);
-}
+.settings-page .settings-row-compact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 14px 16px; background: var(--surface-2); border-radius: var(--r-control); }
+.settings-page .settings-fields .ui-form-field > label,
+.settings-page .settings-fields .ui-form-label { color: var(--text); font-size: var(--fs-13); font-weight: var(--weight-label); }
+.settings-page .settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; position: static; margin: 0; padding: 14px 24px; background: var(--surface-2); border-top: 1px solid var(--line); }
 .settings-page .success-text,
-.settings-page .settings-result-heading { display: inline-flex; align-items: center; gap: var(--space-1); }
-.settings-page .settings-test-result { padding: var(--space-3); font-size: var(--fs-12); }
-.settings-page .test-result-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-4); }
-.settings-page .settings-help { padding: var(--space-2) var(--space-4); color: var(--text-3); font-size: var(--fs-12); }
-.settings-page .settings-help summary { cursor: pointer; }
-.settings-page .settings-help-body { padding-top: var(--space-2); }
+.settings-page .settings-result-heading { display: inline-flex; align-items: center; gap: 4px; }
+.settings-page .settings-test-result { margin: 0 24px 16px; padding: 12px; font-size: var(--fs-12); }
+.settings-page .test-result-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-control); }
 .settings-page .settings-error-text { color: var(--danger); }
-@media (max-width: 920px) {
-  .settings-page .settings-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-  .settings-page .provider-sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
-  .settings-page .provider-list { flex-direction: row; padding-bottom: var(--space-1); }
+
+/* ── Memory, appearance, danger: framed preference cards ────────────────── */
+.settings-page .memory-gating-card,
+.settings-page .settings-pref-card,
+.settings-page .settings-danger-zone { margin: 0; padding: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r-card); box-shadow: none; }
+.settings-page .memory-gating-header { align-items: center; gap: 16px; margin: 0; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.settings-page .memory-gating-title-text { color: var(--text); font-size: var(--fs-14); font-weight: var(--weight-strong); }
+.settings-page .memory-gating-desc { margin-top: 2px; color: var(--text-3); line-height: var(--lh-12); }
+.settings-page .memory-gating-box { margin: 16px 20px; border: 0; border-radius: var(--r-control); box-shadow: none; }
+.settings-page .settings-pref-row,
+.settings-page .settings-danger-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; }
+.settings-page .settings-pref-row + .settings-pref-row { border-top: 1px solid var(--line); }
+.settings-page .settings-pref-text { display: grid; gap: 2px; min-width: 0; }
+.settings-page .settings-pref-text b { color: var(--text); font-size: var(--fs-14); font-weight: var(--weight-strong); }
+.settings-page .settings-pref-text span { color: var(--text-3); font-size: var(--fs-12); line-height: var(--lh-12); }
+.settings-page .settings-segmented { flex: 0 0 auto; }
+.settings-page .settings-segmented label { position: relative; display: inline-flex; align-items: center; height: 30px; padding: 0 14px; color: var(--text-3); border-radius: var(--r-control); font-size: var(--fs-13); font-weight: var(--weight-label); cursor: pointer; }
+.settings-page .settings-segmented label:hover { color: var(--text); }
+.settings-page .settings-segmented label.active { color: var(--text); background: var(--surface); box-shadow: var(--shadow-xs); font-weight: var(--weight-strong); }
+.settings-page .settings-segmented input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.settings-page .settings-segmented label:has(input:focus-visible) { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; }
+.settings-page .settings-danger-zone { border-color: color-mix(in srgb, var(--danger) 40%, var(--line-2)); }
+.settings-page .settings-danger-row { background: color-mix(in srgb, var(--danger) 4%, var(--surface)); }
+.settings-page .settings-danger-row .btn.danger { flex: 0 0 auto; background: var(--surface); border-color: color-mix(in srgb, var(--danger) 45%, var(--line-2)); }
+.settings-page .settings-danger-row .btn.danger:hover:not(:disabled) { color: var(--danger-text); background: var(--danger); border-color: var(--danger); }
+
+/* ── Narrow ──────────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .settings-page .settings-layout { grid-template-columns: minmax(0, 1fr); }
+  .settings-page .provider-sidebar { border-right: 0; border-bottom: 1px solid var(--line-2); }
+  .settings-page .provider-list { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
   .settings-page .provider-card { width: 180px; }
-  .settings-page .settings-form-panel { padding: var(--space-4); }
+}
+@media (max-width: 900px) {
+  .settings-page > .page-body.no-pad { overflow: auto; }
+  .settings-page .settings-help { padding: 8px 14px; }
+  .settings-page .settings-shell { display: block; }
+  .settings-page .settings-section-nav { position: sticky; top: 0; z-index: 2; flex-direction: row; gap: 4px; padding: 8px 12px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line-2); }
+  .settings-page .settings-section-link { flex: 0 0 auto; width: auto; padding: 6px 12px; }
+  .settings-page .settings-section-link small { display: none; }
+  .settings-page .settings-section-link.active { box-shadow: inset 0 -2px 0 var(--accent); }
+  .settings-page .settings-section-link.is-danger.active { box-shadow: inset 0 -2px 0 var(--danger); }
+  .settings-page .settings-content { gap: 24px; padding: 16px 12px 32px; overflow: visible; }
+  .settings-page .settings-group { scroll-margin-top: 56px; }
+  .settings-page .settings-form-header,
+  .settings-page .settings-fields,
+  .settings-page .settings-actions { padding-inline: 16px; }
+  .settings-page .settings-pref-row,
+  .settings-page .settings-danger-row { flex-direction: column; align-items: stretch; padding: 14px 16px; }
+  .settings-page .settings-segmented { align-self: flex-start; }
 }
 @container (max-width: 560px) {
-  .settings-row-grid { grid-template-columns: minmax(0, 1fr); }
-  .settings-form-header { flex-wrap: wrap; }
+  .settings-page .settings-row-grid,
+  .settings-page .settings-row-compact { grid-template-columns: minmax(0, 1fr); }
+  .settings-page .settings-form-header { flex-wrap: wrap; }
 }
 }
