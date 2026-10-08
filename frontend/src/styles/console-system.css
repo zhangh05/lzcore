@@ -122,9 +122,7 @@
 
 @media (max-width: 920px) {
   .knowledge-library .knowledge-meta-grid > * + *,
-  .knowledge-library .kl-summary-cell + .kl-summary-cell,
-  .data-center .data-lifecycle-card + .data-lifecycle-card,
-  .data-center .data-info-cell + .data-info-cell { border-left: 0; border-top: 1px solid var(--console-border-soft); }
+  .knowledge-library .kl-summary-cell + .kl-summary-cell { border-left: 0; border-top: 1px solid var(--console-border-soft); }
 }
 @keyframes diagPulse {
   0%, 100% { transform: scale(1); opacity: 0.6; }
