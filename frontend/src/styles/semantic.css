@@ -71,27 +71,33 @@
   --lz-space-10: 40px;
   --lz-space-12: var(--space-12);
 
-  /* Radius */
+  /* Radius: control / card / dialog roles plus the raw steps */
   --lz-radius-xs: var(--r-4);
-  --lz-radius-sm: var(--r-6);
+  --lz-radius-sm: var(--r-control);
   --lz-radius-md: var(--r-8);
-  --lz-radius-lg: var(--r-12);
+  --lz-radius-card: var(--r-card);
+  --lz-radius-lg: var(--r-dialog);
   --lz-radius-pill: var(--r-pill);
 
   /* Type roles: size / line-height pairs on the CJK-friendly rhythm */
-  --lz-font-caption: var(--weight-label) var(--fs-11)/16px var(--font-sans);
-  --lz-font-label: var(--weight-label) var(--fs-12)/18px var(--font-sans);
-  --lz-font-control: var(--weight-label) var(--fs-13)/20px var(--font-sans);
-  --lz-font-body: var(--weight-body) var(--fs-14)/22px var(--font-sans);
-  --lz-font-title-sm: var(--weight-heading) var(--fs-15)/22px var(--font-sans);
-  --lz-font-title: var(--weight-heading) var(--fs-16)/24px var(--font-sans);
-  --lz-font-display: var(--weight-display) var(--fs-20)/28px var(--font-sans);
-  --lz-font-mono-sm: var(--weight-body) var(--fs-12)/18px var(--font-mono);
-  --lz-font-numeric: var(--weight-heading) var(--fs-20)/28px var(--font-sans);
+  --lz-font-caption: var(--weight-label) var(--fs-11)/var(--lh-11) var(--font-sans);
+  --lz-font-label: var(--weight-label) var(--fs-12)/var(--lh-12) var(--font-sans);
+  --lz-font-control: var(--weight-label) var(--fs-13)/var(--lh-13) var(--font-sans);
+  --lz-font-body: var(--weight-body) var(--fs-14)/var(--lh-14) var(--font-sans);
+  --lz-font-title-sm: var(--weight-heading) var(--fs-14)/var(--lh-14) var(--font-sans);
+  --lz-font-title: var(--weight-heading) var(--fs-16)/var(--lh-16) var(--font-sans);
+  --lz-font-panel: var(--weight-heading) var(--fs-18)/var(--lh-18) var(--font-sans);
+  --lz-font-display: var(--weight-display) var(--fs-20)/var(--lh-20) var(--font-sans);
+  --lz-font-hero: var(--weight-display) var(--fs-24)/var(--lh-24) var(--font-sans);
+  --lz-font-mono-sm: var(--weight-body) var(--fs-12)/var(--lh-12) var(--font-mono);
+  --lz-font-numeric: var(--weight-heading) var(--fs-20)/var(--lh-20) var(--font-sans);
 
-  /* Elevation: cards stay flat (DESIGN.md); only floating layers lift */
+  /* Elevation: surfaces carry a hairline shadow; only floating layers lift */
   --lz-shadow-none: none;
   --lz-shadow-control: var(--shadow-xs);
+  --lz-shadow-card: var(--shadow-card);
+  --lz-shadow-raised: var(--shadow-md);
+  --lz-shadow-dialog: var(--shadow-float);
   --lz-shadow-popover: var(--shadow-menu);
   --lz-shadow-focus: var(--shadow-focus);
 
@@ -113,17 +119,13 @@
   --lz-ease-standard: var(--ease);
   --lz-ease-enter: var(--ease-out);
 
-  /* Density: control and row heights. Compact mode is opt-in per subtree via
-     data-density="compact"; nothing sets it yet. */
+  /* Density: control and row heights follow tokens.css, where
+     [data-density="compact"] (set on <html> from the account menu) trims them. */
   --lz-control-h: var(--h-control);
   --lz-control-h-sm: var(--h-control-compact);
-  --lz-row-h: 44px;
-  --lz-row-h-dense: 36px;
+  --lz-row-h: var(--h-row);
+  --lz-row-h-dense: var(--h-row-dense);
   --lz-touch-min: var(--h-touch);
 }
-[data-density="compact"] {
-  --lz-control-h: var(--h-control-compact);
-  --lz-row-h: 36px;
-  --lz-row-h-dense: 32px;
-}
+
 }
