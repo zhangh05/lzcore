@@ -11,6 +11,7 @@ import enum
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from core.tools.execution_contracts import COMMAND_TIMEOUT_MAX_SECONDS, COMMAND_TIMEOUT_GUARD_SECONDS
 
 
 class ExecutionStatus(enum.Enum):
@@ -165,7 +166,9 @@ class SSOTRuntimeConfig:
     """Configuration for the SSOT Runtime Engine."""
     max_retries_per_node: int = 1
     parallel_layer_timeout_ms: int = 300_000
-    single_node_timeout_ms: int = 120_000
+    # Tool contracts bound each call. The default caller cap accommodates the
+    # complete published command timeout plus its transport/cleanup guard.
+    single_node_timeout_ms: int = (COMMAND_TIMEOUT_MAX_SECONDS + COMMAND_TIMEOUT_GUARD_SECONDS) * 1000
     planner_timeout_ms: int = 20_000
     # Per-provider-call transport guard.  This is not a task/loop deadline:
     # the QueryLoop preserves all state and retries after a provider failure.

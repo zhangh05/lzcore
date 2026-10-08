@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import math
 
+COMMAND_TIMEOUT_MAX_SECONDS = 600
+COMMAND_TIMEOUT_GUARD_SECONDS = 10
+
 
 def declared_action_contract(schema: dict, declared: dict, arguments: dict) -> dict:
     action = str((arguments or {}).get("action") or "").strip().lower()

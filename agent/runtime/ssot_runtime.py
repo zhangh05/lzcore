@@ -792,7 +792,6 @@ def _build_engine(
         # per-tool transport deadlines still protect unavailable endpoints.
         max_total_seconds=0,
         max_tool_seconds=0,
-        single_node_timeout_ms=120_000,
         parallel_layer_timeout_ms=300_000,
         tracking_max_seconds=0,
         # Tracking belongs to the same goal-driven loop.  Zero means it has

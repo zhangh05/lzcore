@@ -243,6 +243,10 @@ def _sync_contracts_from_canonical_registry() -> None:
             continue
         contract.description = entry.description or contract.description
         contract.input_schema = deepcopy(entry.input_schema or {})
+        from core.tools.execution_contracts import validate_execution_time_budget
+        contract.execution_time_budget = validate_execution_time_budget(
+            (entry.execution_contract or {}).get("execution_time_budget"), contract.input_schema,
+        )
 
 
 _sync_contracts_from_canonical_registry()

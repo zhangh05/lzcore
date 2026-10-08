@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from core.tools.schemas import ToolInvocation, ToolSpec
+from core.tools.execution_contracts import COMMAND_TIMEOUT_MAX_SECONDS, COMMAND_TIMEOUT_GUARD_SECONDS
 
 
 def handle_weather_current(inv: ToolInvocation) -> dict:
@@ -799,7 +800,8 @@ _EXEC_ARGS = {
     },
     "description": {"type": "string"},
     "working_dir": {"type": "string", "description": "Explicit workspace-relative working directory. When omitted, strict project execution uses its assigned project root; trusted local execution uses the workspace root. Container cwd is for paths inside command, never the working_dir parameter. workspace.file paths always resolve from the workspace root."},
-    "timeout": {"type": "integer", "minimum": 1, "maximum": 600},
+    "timeout": {"type": "integer", "minimum": 1, "maximum": COMMAND_TIMEOUT_MAX_SECONDS,
+                "description": "Operation timeout in seconds; shell defaults to 30. The runtime reserves separate return/cleanup time. Explicit server execution caps still apply."},
     "target": {"type": "string", "enum": ["local"], "default": "local"},
     "shell": {"type": "string", "enum": ["native", "cmd", "powershell"], "default": "native", "description": "native uses /bin/bash on macOS/Linux and cmd.exe on Windows; powershell requires Windows."},
     "env_vars": {"type": "object"},
@@ -957,7 +959,9 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
     _entry("exec.run", _handle_exec, {
         **_COMMON, **_EXEC_ARGS,
         "action": {"type": "string", "enum": ["shell", "python", "slash"], "default": "shell"},
-    }, required=["action"], risk="medium", permission="exec", description="Local shell, slash, and Python data processing. Python uses the policy-selected runner: trusted local mode is explicitly best-effort, while network or multi-user mode requires strong container isolation."),
+    }, required=["action"], risk="medium", permission="exec", description="Local shell, slash, and Python data processing. Python uses the policy-selected runner: trusted local mode is explicitly best-effort, while network or multi-user mode requires strong container isolation.", execution_contract={
+        "execution_time_budget": {"duration_argument": "timeout", "guard_seconds": COMMAND_TIMEOUT_GUARD_SECONDS},
+    }),
     _entry("browser.manage", _handle_browser, {**_COMMON, **_BROWSER_ARGS, "action": {"type": "string", "enum": ["navigate", "snapshot", "screenshot", "click", "type", "extract", "scroll", "hover", "press_key", "select_option", "evaluate", "wait", "tabs", "network", "console", "navigate_back", "close"]}}, required=["action"], risk="medium", description="Browser automation. navigate requires url; extract may use a url or the current page; click/hover require selector or ref; type requires text and selector/ref. tabs uses tab_action=list|new|switch|close."),
     _entry("web.manage", _handle_web, {**_COMMON, **_WEB_ARGS, "action": {"type": "string", "enum": ["search", "fetch", "weather", "weather_batch", "deep_search"]}}, required=["action"], description="Current external evidence via search/fetch/weather. Use proactively for time-sensitive facts, official technical references, versions and vulnerabilities. search finds candidates; fetch verifies page content; deep_search does both for top sources. Weather accepts one precise location or a verified latitude/longitude pair; weather_batch accepts 2-10 explicit locations. Resolve broad/all scopes explicitly and report exact coverage rather than silently choosing representative locations. Select authority_profile and cite returned titles/URLs.", execution_contract={
         "batching": [{

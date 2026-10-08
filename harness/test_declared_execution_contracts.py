@@ -37,6 +37,86 @@ def test_missing_merged_action_cannot_inherit_an_innocuous_sole_contract():
     assert declared_action_contract({}, declared, {}) == {}
 
 
+@pytest.mark.parametrize('requested, expected', [(None, 120), (180, 190), (600, 610)])
+def test_command_timeout_reaches_the_runtime_with_return_guard(monkeypatch, requested, expected):
+    """The published 180/600-second requests must not hit a hidden 120s cap."""
+    from core.tools.canonical_registry import get_entry, to_tool_specs
+    from core.tools.catalog_snapshot import build_catalog_snapshot
+
+    contract = get_contract('exec.run')
+    spec = next(spec for spec, _ in to_tool_specs() if spec.tool_id == 'exec.run')
+    declared = get_entry('exec.run').execution_contract['execution_time_budget']
+    assert contract.execution_time_budget == spec.metadata['execution_time_budget'] == declared
+    item = next(item for item in build_catalog_snapshot()['tools'] if item['tool_id'] == 'exec.run')
+    assert item['execution_time_budget'] == declared
+
+    observed = []
+    original_wait = asyncio.wait_for
+
+    async def record_wait(awaitable, timeout):
+        observed.append(timeout)
+        return await original_wait(awaitable, timeout=timeout)
+
+    monkeypatch.setattr(asyncio, 'wait_for', record_wait)
+
+    async def handler(args):
+        await asyncio.sleep(0.01)
+        return {'ok': True, 'requested_timeout': args.get('timeout')}
+
+    async def run():
+        runtime = ToolRuntime(SSOTRuntimeConfig())
+        runtime.register('exec.run', handler)
+        args = {'action': 'shell', 'command': 'controlled fixture'}
+        if requested is not None:
+            args['timeout'] = requested
+        result = await runtime.execute_node(
+            ExecutionNode('command', 'exec.run', args),
+            StatelessContext('timing', 'session', 'request', 'run'), {},
+        )
+        assert result.success and result.data['requested_timeout'] == requested
+
+    asyncio.run(run())
+    assert observed == [expected]
+
+
+def test_production_entry_uses_the_same_command_caller_cap():
+    from agent.runtime.ssot_runtime import _build_engine
+    from core.tools.canonical_registry import get_entry
+
+    engine = _build_engine(
+        workspace_id='default', session_id='timing', run_id='timing', trace_id='timing',
+        requested_by='test', prebuilt_registry={
+            'exec.run': {'args_schema': get_entry('exec.run').input_schema},
+        },
+    )
+    assert engine.config.single_node_timeout_ms == SSOTRuntimeConfig().single_node_timeout_ms
+    assert engine.config.single_node_timeout_ms >= 610_000
+
+
+def test_long_command_request_cannot_override_an_explicit_server_cap():
+    calls = []
+
+    async def command(_args):
+        calls.append(True)
+        await asyncio.sleep(0.06)
+        return {'ok': True}
+
+    async def run():
+        runtime = ToolRuntime(SSOTRuntimeConfig(single_node_timeout_ms=20))
+        runtime.register('exec.run', command)
+        result = await runtime.execute_node(
+            ExecutionNode('capped', 'exec.run', {'action': 'shell', 'command': 'fixture', 'timeout': 600}),
+            StatelessContext('timing', 'session', 'request', 'run'), {},
+        )
+        assert not result.success and result.error_code == 'TOOL_TIMEOUT_UNCERTAIN'
+        assert result.metadata['automatic_retry_allowed'] is False
+        assert result.metadata['execution_may_continue'] is True
+        await asyncio.sleep(0.08)
+
+    asyncio.run(run())
+    assert calls == [True]
+
+
 @pytest.mark.parametrize('rule', [
     {'duration_argument': 'missing', 'guard_seconds': 1},
     {'duration_argument': 'seconds', 'guard_seconds': True},
