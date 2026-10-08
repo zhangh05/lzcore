@@ -101,6 +101,7 @@
 .settings-page .memory-gating-header { align-items: center; gap: 16px; margin: 0; padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .settings-page .memory-gating-title-text { color: var(--text); font-size: var(--fs-14); font-weight: var(--weight-strong); }
 .settings-page .memory-gating-desc { margin-top: 2px; color: var(--text-3); line-height: var(--lh-12); }
+.settings-page .memory-gating-status { white-space: nowrap; }
 .settings-page .memory-gating-box { margin: 16px 20px; border: 0; border-radius: var(--r-control); box-shadow: none; }
 .settings-page .settings-pref-row,
 .settings-page .settings-danger-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; }
@@ -144,6 +145,8 @@
   .settings-page .settings-pref-row,
   .settings-page .settings-danger-row { flex-direction: column; align-items: stretch; padding: 14px 16px; }
   .settings-page .settings-segmented { align-self: flex-start; }
+  .settings-page .memory-gating-header { flex-wrap: wrap; padding: 14px 16px; }
+  .settings-page .memory-gating-box { margin: 14px 16px; }
 }
 @container (max-width: 560px) {
   .settings-page .settings-row-grid,
