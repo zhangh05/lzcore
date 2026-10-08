@@ -42,7 +42,7 @@
 .file-list-head strong { font: var(--lz-font-control); font-weight: var(--weight-heading); color: var(--lz-color-text-primary); }
 .file-list-head span { font: var(--lz-font-label); color: var(--lz-color-text-tertiary); font-variant-numeric: tabular-nums; }
 .file-list-scroll { flex: 1; min-height: 0; overflow: auto; }
-.file-workspace input[type="checkbox"] { inline-size: 15px; block-size: 15px; margin: 0; flex: 0 0 auto; accent-color: var(--lz-color-accent); cursor: pointer; }
+.file-workspace input[type="checkbox"] { inline-size: 16px; block-size: 16px; margin: 0; flex: 0 0 auto; accent-color: var(--lz-color-accent); cursor: pointer; }
 .file-workspace .file-space-row {
   display: grid;
   grid-template-columns: 15px auto minmax(0, 1fr);
@@ -73,7 +73,7 @@
 .file-workspace .ui-detail-panel-actions { flex-wrap: wrap; min-width: 0; flex-shrink: 1; gap: var(--lz-space-2); }
 .file-preview-facts { padding: var(--lz-space-3) var(--lz-space-4); border-radius: var(--lz-radius-md); background: var(--lz-color-bg-sunken); }
 .file-workspace .ui-detail-panel-body > section, .file-space-organize, .file-space-metadata { margin-top: var(--lz-space-5); }
-.file-workspace .ui-detail-panel-body h4 { margin: 0 0 var(--lz-space-2); color: var(--lz-color-text-secondary); font: var(--lz-font-label); font-weight: var(--weight-heading); }
+.file-workspace .ui-detail-panel-body :is(h3, h4) { margin: 0 0 var(--lz-space-2); color: var(--lz-color-text-secondary); font: var(--lz-font-label); font-weight: var(--weight-heading); }
 .file-preview-content { display: grid; gap: var(--lz-space-2); }
 .file-preview-content > .btn { justify-self: start; }
 .file-space-note { margin: var(--lz-space-4) 0 0; }

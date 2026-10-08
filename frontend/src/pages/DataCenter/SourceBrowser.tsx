@@ -73,7 +73,7 @@ export function SourceBrowser({ workspaceId }: { workspaceId: string }) {
           <Button size="sm" disabled={!destination.trim() || destination === selected.filepath} onClick={() => void move()}>移动或重命名</Button>
           <p className="dm-muted">路径以当前工作区根为基准。项目源码的构建引用不会自动重写。</p>
         </fieldset>
-        {text && <section className="file-preview-content" aria-label="内容预览"><h4>内容预览</h4><CodeBlock>{text}</CodeBlock></section>}
+        {text && <section className="file-preview-content" aria-label="内容预览"><h3>内容预览</h3><CodeBlock>{text}</CodeBlock></section>}
       </>}
     </DetailPanel></div>
   </section>;

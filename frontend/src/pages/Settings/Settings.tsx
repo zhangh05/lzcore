@@ -603,7 +603,7 @@ function NumberField({ label, value, min, max, step, onChange, testid }: {
 }) {
   return (
     <FormField label={label}>
-      <Input type="number" value={value} min={min} max={max} step={step} onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(n); }} data-testid={testid} />
+      <Input type="number" aria-label={label} value={value} min={min} max={max} step={step} onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(n); }} data-testid={testid} />
     </FormField>
   );
 }
@@ -710,6 +710,7 @@ function LongTermMemoryCard({
             onClick={() => onChange(!enabled)}
             role="switch"
             aria-checked={enabled}
+            aria-label="长期记忆"
             data-testid="toggle-memory-enabled"
           >
             <span className="toggle-knob" />

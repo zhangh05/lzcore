@@ -210,12 +210,12 @@ export function FileWorkspace({ workspaceId, initialFile }: { workspaceId: strin
           {selected.capabilities?.media === 'audio' && <audio controls src={fileUrl(selected, 'preview')} />}
           {selected.capabilities?.media === 'video' && <video className="file-space-preview" controls src={fileUrl(selected, 'preview')} />}
           {['csv', 'xlsx', 'docx', 'pptx', 'pdf', 'zip', 'tar'].includes(selected.file_kind) && <FileInspection key={selected.file_id} workspaceId={workspaceId} fileId={selected.file_id} kind={selected.file_kind} />}
-          {content && <><h4>内容预览</h4><CodeBlock>{content}</CodeBlock></>}
+          {content && <><h3>内容预览</h3><CodeBlock>{content}</CodeBlock></>}
           {offset !== null && <Button size="sm" onClick={continueReading}>继续读取</Button>}
           {selected.binary && !selected.capabilities?.preview && !selected.capabilities?.media && <p className="dm-muted">二进制原件不提供文本预览，可以下载后使用专用工具查看。</p>}
         </section>}
         {(selected.references.length > 0 || selected.run_id || selected.session_id) && <section className="file-space-usage" aria-label="使用关系">
-          <h4>使用关系</h4>
+          <h3>使用关系</h3>
           <ul>
             {selected.references.map((ref, index) => <li key={index}>
               <span><b>{referenceOwnerLabel(ref.owner_type)}</b><small>{ref.relation} · {ref.owner_id}</small></span>

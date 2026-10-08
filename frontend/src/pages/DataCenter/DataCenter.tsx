@@ -521,7 +521,7 @@ function ArtifactDetail({ artifact, content, note, onDelete, workspaceId, onOpen
         ["创建时间", formatDate(artifact.created_at, "short")],
       ]} />
     </section>
-    <section className="dm-detail-section"><h4>内容预览</h4>{note && <p className="dm-muted" role="status">{note}</p>}{content && <CodeBlock>{content}</CodeBlock>}</section>
+    <section className="dm-detail-section"><h3>内容预览</h3>{note && <p className="dm-muted" role="status">{note}</p>}{content && <CodeBlock>{content}</CodeBlock>}</section>
     <details className="dm-disclosure"><summary>元数据</summary><CodeBlock language="json">{JSON.stringify(artifact.metadata || {}, null, 2)}</CodeBlock></details>
   </DetailPanel>;
 }
