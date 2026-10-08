@@ -26,6 +26,7 @@ import {
 } from "../../../frontend/src/components/Icon";
 import {
   Button,
+  FilterSelect,
   PageHeader,
   TabButton,
   SearchInput,
@@ -1112,21 +1113,23 @@ export default function NetworkOperations({
               onClear={() => setQuery("")}
             />
             {view === "devices" && (
-              <select
+              <FilterSelect
+                label="区域"
                 aria-label="筛选区域"
                 value={regionFilter}
                 onChange={(event) => setRegionFilter(event.target.value)}
               >
-                <option value="">全部区域</option>
+                <option value="">全部</option>
                 {regions.map((region) => (
                   <option key={region.region_id} value={region.region_id}>
                     {region.name}
                   </option>
                 ))}
-              </select>
+              </FilterSelect>
             )}
           </div>
           <Button
+            variant="primary"
             icon={<IconPlus size={14} />}
             onClick={() => {
               if (view === "devices") {
@@ -1175,53 +1178,59 @@ export default function NetworkOperations({
             <section className="network-panel">
               <h2>{deviceForm.device_id ? "编辑设备" : "登记设备"}</h2>
               <p>设备只保存身份与区域，凭据由独立连接安全管理。</p>
-              <form onSubmit={saveRegion} className="inline-form">
-                <input
-                  value={regionName}
-                  onChange={(event) => setRegionName(event.target.value)}
-                  placeholder={
-                    editingRegionId ? "修改区域名称" : "新建设备区域"
-                  }
-                />
-                <Button variant="primary" type="submit">
-                  {editingRegionId ? "保存" : "添加区域"}
-                </Button>
-                {editingRegionId ? (
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      setEditingRegionId("");
-                      setRegionName("");
-                    }}
-                  >
-                    取消
+              <fieldset className="region-manager">
+                <legend>设备区域</legend>
+                <form onSubmit={saveRegion} className="inline-form">
+                  <input
+                    aria-label="区域名称"
+                    value={regionName}
+                    onChange={(event) => setRegionName(event.target.value)}
+                    placeholder={
+                      editingRegionId ? "修改区域名称" : "新建设备区域"
+                    }
+                  />
+                  <Button type="submit">
+                    {editingRegionId ? "保存" : "添加区域"}
                   </Button>
+                  {editingRegionId ? (
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setEditingRegionId("");
+                        setRegionName("");
+                      }}
+                    >
+                      取消
+                    </Button>
+                  ) : null}
+                </form>
+                {regions.length ? (
+                  <div className="region-list">
+                    {regions.map((region) => (
+                      <span key={region.region_id}>
+                        {region.name}
+                        <button
+                          type="button"
+                          aria-label={`编辑区域 ${region.name}`}
+                          onClick={() => {
+                            setEditingRegionId(region.region_id);
+                            setRegionName(region.name);
+                          }}
+                        >
+                          编辑
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`删除区域 ${region.name}`}
+                          onClick={() => void removeRegion(region)}
+                        >
+                          删除
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 ) : null}
-              </form>
-              {regions.length ? (
-                <div className="region-list">
-                  {regions.map((region) => (
-                    <span key={region.region_id}>
-                      {region.name}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingRegionId(region.region_id);
-                          setRegionName(region.name);
-                        }}
-                      >
-                        编辑
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void removeRegion(region)}
-                      >
-                        删除
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
+              </fieldset>
               <form onSubmit={saveDevice} className="form-grid">
                 <label>
                   设备名称
@@ -1520,7 +1529,7 @@ export default function NetworkOperations({
               <h2>{skillForm.skill_id ? "编辑 Skill" : "创建 Skill"}</h2>
               <p>维护工作台可选 Skill 的状态、设备、连接与能力边界。</p>
               <form onSubmit={saveSkill} className="form-grid">
-                <label>
+                <label className="full-field">
                   名称
                   <input
                     required
@@ -1603,6 +1612,17 @@ export default function NetworkOperations({
                 </fieldset>
                 <fieldset>
                   <legend>设备连接</legend>
+                  {connections.some(
+                    (connection) =>
+                      connection.credential_configured &&
+                      skillForm.device_ids.includes(connection.device_id),
+                  ) ? null : (
+                    <p className="fieldset-empty">
+                      {skillForm.device_ids.length
+                        ? "所选设备还没有已配置凭据的连接。"
+                        : "先选择设备，这里会列出其已配置凭据的连接。"}
+                    </p>
+                  )}
                   {connections
                     .filter(
                       (connection) =>
@@ -1760,7 +1780,7 @@ export default function NetworkOperations({
                           </Button>
                           <Button
                             size="sm"
-                            variant="danger"
+                            variant="danger-ghost"
                             icon={<IconTrash size={13} />}
                             onClick={() => void removeDevice(device)}
                           >
@@ -2018,7 +2038,7 @@ export default function NetworkOperations({
                           </Button>
                           <Button
                             size="sm"
-                            variant="danger"
+                            variant="danger-ghost"
                             icon={<IconTrash size={13} />}
                             onClick={() => void removeSkill(skill)}
                           >

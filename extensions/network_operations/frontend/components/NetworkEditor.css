@@ -18,23 +18,35 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-.network-editor-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--line-2); font-size: var(--fs-13); color: var(--text-3); }
-.network-editor .network-panel { border: 0; border-radius: 0; padding: var(--space-6); overflow: visible; }
+.network-editor-top { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: var(--lz-space-3); min-height: 56px; padding: 0 var(--lz-space-4) 0 var(--lz-space-6); background: var(--lz-color-bg-surface); border-bottom: 1px solid var(--lz-color-border-subtle); font: var(--lz-font-label); color: var(--lz-color-text-tertiary); }
+.network-editor .network-panel { border: 0; border-radius: 0; box-shadow: none; padding: var(--lz-space-6); overflow: visible; }
+.network-editor .network-panel > h2 { margin: 0 0 var(--lz-space-1); font: var(--lz-font-panel); color: var(--lz-color-text-primary); }
+.network-editor .network-panel > p { margin-bottom: var(--lz-space-5); font: var(--lz-font-control); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); }
+.network-editor .form-grid > label { color: var(--lz-color-text-secondary); font: var(--lz-font-label); }
+.network-editor .fieldset-empty { margin: 4px 0 0; font: var(--lz-font-label); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); }
+.network-editor .region-manager { margin: 0 0 var(--lz-space-5); }
+.network-editor .region-manager legend { color: var(--lz-color-text-primary); }
 .network-editor .form-grid,
 .network-dialog-modal .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 14px; }
 .network-editor .form-grid label,
 .network-dialog-modal .form-grid label { display: grid; gap: 7px; font-size: var(--fs-13); font-weight: var(--weight-label); }
 .network-editor .full-field, .network-dialog-modal .full-field { grid-column: 1/-1; }
 .network-editor input:not([type="checkbox"]), .network-editor select, .network-editor textarea,
-.network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select, .network-dialog-modal textarea,
-.network-filters input, .network-filters select {
-  box-sizing: border-box; min-width: 0; max-width: 100%; min-height: var(--h-control);
-  border: 1px solid var(--line-3); border-radius: var(--r-8); padding: 6px 11px;
-  background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-13); outline: none;
+.network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select, .network-dialog-modal textarea {
+  box-sizing: border-box; min-width: 0; max-width: 100%; min-height: var(--lz-control-h);
+  border: 1px solid var(--lz-color-border-field); border-radius: var(--lz-radius-sm); padding: 6px 11px;
+  background-color: var(--lz-color-bg-field); color: var(--lz-color-text-primary); font: var(--lz-font-control); font-weight: var(--weight-body); outline: none;
+  transition: border-color var(--lz-dur-fast) var(--lz-ease-standard), box-shadow var(--lz-dur-fast) var(--lz-ease-standard);
 }
+.network-editor select, .network-dialog-modal select {
+  appearance: none; padding-right: 30px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23727e84' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 12px 12px;
+}
+.network-editor :is(input:not([type="checkbox"]), select, textarea):hover:not(:focus):not(:disabled) { border-color: var(--lz-color-border-strong); }
+.network-editor input::placeholder, .network-editor textarea::placeholder { color: var(--lz-color-text-quaternary); }
 .network-editor input:focus-visible, .network-editor select:focus-visible, .network-editor textarea:focus-visible,
-.network-dialog-modal input:focus-visible, .network-dialog-modal select:focus-visible, .network-dialog-modal textarea:focus-visible,
-.network-filters input:focus-visible, .network-filters select:focus-visible {
+.network-dialog-modal input:focus-visible, .network-dialog-modal select:focus-visible, .network-dialog-modal textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--focus-ring-shadow);
   outline: var(--focus-width) solid var(--focus-ring);
@@ -44,10 +56,15 @@
 .network-dialog-modal textarea { min-height: 80px; resize: vertical; }
 .network-editor fieldset,
 .network-dialog-modal fieldset { grid-column: 1/-1; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--r-8); min-width: 0; }
+.network-editor fieldset { padding: 10px 14px 12px; border-color: var(--lz-color-border-subtle); border-radius: var(--lz-radius-md); }
 .network-editor legend,
 .network-dialog-modal legend { padding: 0 6px; font-size: var(--fs-13); font-weight: var(--weight-heading); }
 .network-editor .form-grid .check,
 .network-dialog-modal .form-grid .check { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; font-size: var(--fs-13); font-weight: normal; }
+.network-editor .form-grid .check { align-items: center; padding: 6px 0; color: var(--lz-color-text-primary); font: var(--lz-font-control); font-weight: var(--weight-body); }
+.network-editor .form-grid .check input { margin-top: 0; }
+.network-editor .form-grid .capability-check { align-items: flex-start; }
+.network-editor .form-grid .capability-check input { margin-top: 2px; }
 .network-editor .check input,
 .network-dialog-modal .check input { flex-shrink: 0; margin-top: 3px; accent-color: var(--accent); }
 .network-editor .capability-check span,
@@ -58,15 +75,22 @@
 .network-dialog-modal .intrinsic-capabilities { margin: 0 0 var(--space-2); color: var(--text-3); font-size: var(--fs-12); }
 .network-editor .inline-form,
 .network-dialog-modal .inline-form { display: flex; gap: var(--space-2); margin: 18px 0 10px; }
+.network-editor .region-manager .inline-form { margin: 4px 0 0; }
 .network-editor .inline-form input,
 .network-dialog-modal .inline-form input { flex: 1; }
 .network-editor .region-list,
 .network-dialog-modal .region-list { display: flex; gap: var(--space-2); flex-wrap: wrap; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.network-editor .region-manager .region-list { gap: 6px; margin: var(--lz-space-3) 0 0; padding: 0; border: 0; }
+.network-editor .region-manager .region-list > span { gap: 2px; min-height: 28px; padding: 0 2px 0 10px; border: 1px solid var(--lz-color-border-subtle); border-radius: var(--lz-radius-pill); background: var(--lz-color-bg-sunken); color: var(--lz-color-text-primary); font: var(--lz-font-label); }
+.network-editor .region-manager .region-list button { min-height: 24px; padding: 0 6px; border-radius: var(--lz-radius-pill); color: var(--lz-color-text-tertiary); font: var(--lz-font-caption); }
+.network-editor .region-manager .region-list button:hover { color: var(--lz-color-accent); background: var(--lz-color-bg-hover); }
+.network-editor .region-manager .region-list button + button:hover { color: var(--lz-color-danger-fg); }
+.network-editor .region-manager .region-list button:focus-visible { outline: var(--focus-width) solid var(--lz-color-border-focus); outline-offset: 1px; }
 .network-editor .region-list > span,
 .network-dialog-modal .region-list > span { display: flex; align-items: center; gap: var(--space-2); padding: 5px 8px; background: var(--surface-2); border-radius: var(--r-8); font-size: var(--fs-12); }
 .network-editor .region-list button,
 .network-dialog-modal .region-list button { background: transparent; border: 0; color: var(--accent); cursor: pointer; }
-.network-editor .form-actions { grid-column: 1 / -1; display: flex; gap: 10px; position: sticky; bottom: 0; z-index: 2; margin: var(--space-4) calc(-1 * var(--space-6)) calc(-1 * var(--space-6)); padding: var(--space-4) var(--space-6); border-top: 1px solid var(--line); background: var(--surface); box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05); }
+.network-editor .form-actions { grid-column: 1 / -1; display: flex; gap: var(--lz-space-2); position: sticky; bottom: 0; z-index: 2; margin: var(--lz-space-4) calc(-1 * var(--lz-space-6)) calc(-1 * var(--lz-space-6)); padding: var(--lz-space-3) var(--lz-space-6); border-top: 1px solid var(--lz-color-border-subtle); background: var(--lz-color-bg-surface); box-shadow: none; }
 @media (max-width: 760px) {
   .network-editor .form-grid,
   .network-dialog-modal .form-grid { grid-template-columns: 1fr; }
@@ -79,8 +103,7 @@
 }
 @media (max-width: 760px) {
   .network-editor input:not([type="checkbox"]), .network-editor select,
-  .network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select,
-  .network-filters input, .network-filters select { min-height: var(--h-touch); }
+  .network-dialog-modal input:not([type="checkbox"]), .network-dialog-modal select { min-height: var(--h-touch); }
 }
 
 .section-title-row {
