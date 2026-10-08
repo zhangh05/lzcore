@@ -20,6 +20,7 @@ import type { Topology } from "./topologyDocument";
 import type { CanvasSelection } from "./canvasSelection";
 import { resolveTopologySession } from "./TopologySessionResolver";
 import { formatDate } from "../../../../frontend/src/utils/format";
+import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
 import type { DrawingActivity } from "./topologyCollaboration";
 import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
 
@@ -188,8 +189,13 @@ export function TopologyAgentPanel({
 
   const handleResetSession = async () => {
     if (running || !sessionId) return;
-    if (!confirm("确定要为当前图纸开启新会话吗？既有对话将被清空并重新开始。"))
-      return;
+    const accepted = await confirm({
+      title: "为当前图纸开启新会话？",
+      body: "既有对话将被清空并重新开始。",
+      confirmLabel: "开启新会话",
+      destructive: true,
+    });
+    if (!accepted) return;
     const oldId = sessionId;
     try {
       await sessionsApi.delete(oldId, workspaceId).catch(() => {});

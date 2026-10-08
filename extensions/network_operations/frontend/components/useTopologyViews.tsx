@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type CanvasApi } from "./NetOpsCanvas";
+import { promptForm } from "../../../../frontend/src/components/FormDialog";
 import type { SelectedElement, Topology } from "./topologyDocument";
 
 export type useTopologyViewsPorts = {
@@ -83,10 +84,17 @@ export function useTopologyViews({
       setBookmarks([]);
     }
   }, [bookmarkKey]);
-  const saveBookmark = () => {
+  const saveBookmark = async () => {
     const view = canvasApiRef.current?.getViewport();
     if (!view) return;
-    const name = window.prompt("视图名称", `视图 ${bookmarks.length + 1}`);
+    const name = await promptForm({
+      title: "保存当前视图",
+      label: "视图名称",
+      initialValue: `视图 ${bookmarks.length + 1}`,
+      hint: "同名视图会被覆盖。",
+      requiredMessage: "请输入视图名称",
+      confirmLabel: "保存视图",
+    });
     if (!name) return;
     const next = [
       ...bookmarks.filter((item) => item.name !== name),

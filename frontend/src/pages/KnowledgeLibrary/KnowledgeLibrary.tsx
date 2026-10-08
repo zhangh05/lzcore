@@ -8,6 +8,7 @@ import {
 } from "../../components/common";
 import { PageHeader, DataTable, SearchInput, SegmentedControl } from "../../components/ui";
 import { PortalModal } from "../../components/PortalModal";
+import { confirm } from "../../components/ConfirmDialog";
 import { knowledgeApi, artifactsApi, storageApi } from "../../api";
 import { useSessionStore } from "../../stores/session";
 import { formatDate, formatFileSize } from "../../utils/format";
@@ -138,7 +139,13 @@ export function KnowledgeLibrary() {
 
   async function onDelete(source_id: string, title: string) {
     if (!currentWorkspaceId) return;
-    if (!confirm(`确认删除「${title || source_id}」？删除后需重新导入。`)) return;
+    const accepted = await confirm({
+      title: `删除知识源「${title || source_id}」？`,
+      body: "删除后需重新导入。",
+      confirmLabel: "删除",
+      destructive: true,
+    });
+    if (!accepted) return;
     try {
       await knowledgeApi.delete(source_id, currentWorkspaceId);
       toast({ kind: "success", title: "已删除", body: title || source_id });

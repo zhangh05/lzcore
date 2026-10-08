@@ -5,6 +5,7 @@ import {
   buildTopologySelection,
   TopologyAgentPanel,
 } from "../../../extensions/network_operations/frontend/components/TopologyAgentPanel";
+import { ConfirmHost } from "../components/ConfirmDialog";
 
 vi.mock("../api", () => ({
   sessionsApi: {
@@ -200,17 +201,21 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
         },
       });
 
-      window.confirm = vi.fn().mockReturnValue(true);
+      const nativeConfirm = vi.fn().mockReturnValue(true);
+      window.confirm = nativeConfirm;
       const deleteSpy = vi.fn().mockResolvedValue({ ok: true });
       (sessionsApi as unknown as { delete: typeof deleteSpy }).delete = deleteSpy;
 
       render(
-        <TopologyAgentPanel
-          workspaceId="default"
-          topology={mockTopology as never}
-          selection={mockSelection}
-          onCompleted={() => {}}
-        />
+        <>
+          <TopologyAgentPanel
+            workspaceId="default"
+            topology={mockTopology as never}
+            selection={mockSelection}
+            onCompleted={() => {}}
+          />
+          <ConfirmHost />
+        </>
       );
 
       // Verify messages exist in store
@@ -219,13 +224,45 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
       expect(newChatBtn).toBeInTheDocument();
 
       fireEvent.click(newChatBtn);
+      await screen.findByRole("dialog", { name: "为当前图纸开启新会话？" });
+      expect(deleteSpy).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "开启新会话" }));
 
       await vi.waitFor(() => {
+        expect(nativeConfirm).not.toHaveBeenCalled();
         expect(deleteSpy).toHaveBeenCalledWith("s-active-123", "default");
         expect(localStorage.getItem(storageKey)).toBeNull();
         expect(useWorkbenchStore.getState().bySession["s-active-123"]?.length || 0).toBe(0);
         expect(screen.getByText("把想法画出来")).toBeInTheDocument();
       });
+    });
+
+    it("cancelling the new-session dialog keeps the session and sends no delete", async () => {
+      const { sessionsApi } = await import("../api");
+      const { useWorkbenchStore } = await import("../stores/workbench");
+      const { scopedLocalStorageKey } = await import("../utils/userScope");
+      const storageKey = scopedLocalStorageKey(`drawing_session_v2:default:${mockTopology.topology_id}`);
+      localStorage.setItem(storageKey, "s-keep-1");
+      useWorkbenchStore.setState({
+        bySession: { "s-keep-1": [{ id: "m1", role: "user", text: "画个交换机", status: "ready" } as never] },
+      });
+      const nativeConfirm = vi.fn().mockReturnValue(true);
+      window.confirm = nativeConfirm;
+      const deleteSpy = vi.fn().mockResolvedValue({ ok: true });
+      (sessionsApi as unknown as { delete: typeof deleteSpy }).delete = deleteSpy;
+      render(
+        <>
+          <TopologyAgentPanel workspaceId="default" topology={mockTopology as never} selection={mockSelection} onCompleted={() => {}} />
+          <ConfirmHost />
+        </>
+      );
+      fireEvent.click(screen.getByTitle("清空当前图纸对话，开启新会话"));
+      await screen.findByRole("dialog", { name: "为当前图纸开启新会话？" });
+      fireEvent.click(screen.getByRole("button", { name: "取消" }));
+      await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(deleteSpy).not.toHaveBeenCalled();
+      expect(nativeConfirm).not.toHaveBeenCalled();
+      expect(localStorage.getItem(storageKey)).toBe("s-keep-1");
     });
 
     it("enables the send button when user types text, even if active turn job loaded is false", async () => {
