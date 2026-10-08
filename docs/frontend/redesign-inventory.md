@@ -45,7 +45,7 @@
 |---|---|---|---|---|---|---|
 | D1 | 工作台页头 | `WorkbenchHeader.tsx` | ✅ | 9fbe3ae, e3fc2a2 | `batch6/after/02-workbench-result-light-1440.png`, `08-header-collapsed-*` | 第 6 批：标题 + 模型状态胶囊；对话/时间线分段组（role=group）；进度开关强调态；独立 WorkbenchHeader.css |
 | D2 | 空状态与快捷提示 | `WorkbenchEmptyState.tsx`、`WorkbenchQuickChips.ts` | ✅ | 9fbe3ae, e3fc2a2 | `batch6/after/01-workbench-empty-light-1440.png`, `11-workbench-empty-light-390.png` | 第 6 批：起点卡片（按钮名 = 标签不变，提示经 aria-describedby 关联）；独立 WorkbenchEmptyState.css |
-| D3 | 消息流 / 流式输出 / 思考块 | `MessageRow.tsx`、`StreamingContent.tsx`、`ThinkingBlock.tsx`、`WorkbenchMessages.css` | ✅⚠️ | 5e3110c, 12e8864 | `batch7/after/01-streaming-*` | 第 7 批：流式行 + 进度胶囊、中性思考块；markdown 表格/代码横向滚动区可聚焦并有名称（12e8864）；streaming 状态机未动 |
+| D3 | 消息流 / 流式输出 / 思考块 | `MessageRow.tsx`、`StreamingContent.tsx`、`ThinkingBlock.tsx`、`WorkbenchMessages.css` | ✅⚠️ | 5e3110c, 12e8864 | `batch7/after/01-streaming-*` | 第 7 批：流式行 + 进度胶囊、中性思考块；markdown 表格/代码横向滚动区可聚焦并有名称（12e8864）；streaming 状态机未动；思考块在线应用中不可达（`<think>` 在 store/transport 层已剥离），浏览器内验收未做，见“收尾边界” |
 | D4 | 工具调用卡片 | `InlineToolCallCard.tsx`、`toolCallState.ts`、`WorkbenchTools.css` | ✅⚠️ | 5e3110c | `batch7/after/02-tools-complete-*`, `03-tools-open-*`, `06-tools-bottom-light-390.png` | 第 7 批：工具调用成组发丝线列表，失败/未知以左侧轨标示；≤760 名称独占首行；工具与绘图能力不过滤 |
 | D5 | 审批（批准/拒绝） | `ApprovalActions.tsx` | ✅⚠️ | 5e3110c | `batch7/after/04-approval-*` | 第 7 批：审批卡头部/可聚焦命令块（待执行命令）/动作行，批准为主按钮，焦点顺序 = 视觉顺序；审批契约未动 |
 | D6 | 任务进度 / 阶段 / 证据 | `TaskProgressPanel.tsx`、`TaskProgress*.css` | ✅⚠️ | 5e3110c | `batch7/after/02-tools-complete-light-1440.png`, `01-streaming-light-390.png` | 第 7 批：进度证据行全宽名称两行截断；≤620 进度面板紧凑不再占半屏；展示权威状态，无状态镜像 |
@@ -83,8 +83,8 @@
 | G3 | 拓扑图库 / 工作区框架 | `/topology` `TopologyPage.tsx`、`TopologyWorkspace`、`TopologyLibrary` | ✅⚠️ | e67db0e | `batch9/after/02-library-*`, `01-workspace-*` | 第 9 批：图库设备符号块改为发丝线表面、选中=selected 态；/topology 路由与 nav 网络快捷项保留 |
 | G4 | 拓扑工具栏 | `TopologyHeaderToolbar/EditToolbar/PresentationToolbar/DisplayTools/ToolGroups` | ✅ | e67db0e | `batch9/after/01-workspace-*`, `11-view-mode-*`, `12-insert-menu-*`, `13-arrange-menu-*` | 第 9 批：选择模式提示与查看模式胶囊改中性；缩放胶囊统一字阶 + 等宽读数；工具组/编辑栏既有 token 样式经审视保留 |
 | G5 | 画布与绘制 | `TopologyCanvasStage`、`NetOpsCanvas`、`useCanvas*`、`canvas*.ts`、`TopologyWhiteboard` | ✅⚠️ | e67db0e | `batch9/after/01-workspace-dark-1440.png`, `01-workspace-light-1440.png` | 第 9 批：节点/连线标签文字、标签底与描边在主题切换时解析 `--lz-color-*`（字面值仅作缺省）；连线描边色（e2e 30）、网格/叠加绘制、渲染与命中测试、canvas_items.item_id 区域身份均未动 |
-| G6 | 节点/链路/区域/选择检查器 | `Topology*Inspector*.tsx` | ✅ | e67db0e | `batch9/after/03-node-inspector-*`, `04-link-inspector-*`, `05-region-inspector-*`, `06-selection-inspector-*` | 第 9 批：检查器字号下限 9.5px → 11px，28px 字段（lz 字段 token + 统一箭头 + 焦点环），类型胶囊中性，尺寸预设实线胶囊；宽度保持 240（定位常量） |
-| G7 | 拓扑对话框 | `Topology{Link,ManualNode,Region,Metadata,Revision,Conflict,EmptyCreate}Dialog.tsx`、`TopologyShortcutHelp` | ✅⚠️ | e67db0e | `batch9/after/08-metadata-dialog-*`, `10-revision-dialog-*`, `17-link-dialog-*` | 第 9 批：对话框头部不再继承全局 24px 内缩（标题与字段对齐），去分隔线，幽灵关闭；图标关闭按钮与 3 个对话框获得可访问名称。冲突/修订行为冻结；冲突对话框未单独截图（状态未复现，单测覆盖其行为） |
+| G6 | 节点/链路/区域/选择检查器 | `Topology*Inspector*.tsx` | ✅ | e67db0e, 0d54db9 | `batch9/after/03-node-inspector-*`, `04-link-inspector-*`, `05-region-inspector-*`, `06-selection-inspector-*` | 第 9 批：检查器字号下限 9.5px → 11px，28px 字段（lz 字段 token + 统一箭头 + 焦点环），类型胶囊中性，尺寸预设实线胶囊；宽度保持 240（定位常量）；头部动作 24px（WCAG 2.5.8 下限）让 10 字符设备名不再截断（0d54db9） |
+| G7 | 拓扑对话框 | `Topology{Link,ManualNode,Region,Metadata,Revision,Conflict,EmptyCreate}Dialog.tsx`、`TopologyShortcutHelp` | ✅⚠️ | e67db0e, 0d54db9 | `batch9/after/08-metadata-dialog-*`, `10-revision-dialog-*`, `17-link-dialog-*`, `18-conflict-dialog-*`, `15-shortcut-help-*` | 第 9 批：对话框头部不再继承全局 24px 内缩（标题与字段对齐），去分隔线，幽灵关闭；图标关闭按钮与 3 个对话框获得可访问名称。冲突/修订行为冻结；冲突对话框未单独截图（状态未复现，单测覆盖其行为）。0d54db9：7 个拓扑对话框补齐模态键盘契约（打开即聚焦、Tab/Shift+Tab 不逃逸、Esc 执行原关闭动作、关闭后焦点归位；main 上均无）；快捷键帮助改用共享 PortalModal；冲突对话框已复现并截图（亮/暗 1440 + 390，axe 0；main 4/3/4），≤640 选项纵向排列不再重叠；冲突状态胶囊悬停不再降透明度 |
 | G8 | 右键菜单 | `TopologyContextMenu.tsx`、`TopologyMenus.css` | ✅ | e67db0e | `batch9/after/07-context-menu-*`, `14-display-menu-*` | 第 9 批：审视后右键菜单/显示菜单沿用既有 token 样式，仅把 <11px 文字提到字阶下限 |
 | G9 | 拓扑 Agent 面板 | `TopologyAgentPanel.tsx` | ✅⚠️ | 0bbb6a0, 3420acf, e67db0e | `batch9/after/09-agent-panel-*` | “开启新会话”原生 confirm → ConfirmDialog（0bbb6a0），卸载时中止（3420acf）；头部小字提到字阶下限；会话/流式契约未动（e2e 27b） |
 | G10 | 视图书签命名 | `useTopologyViews.tsx` | ✅ | 0bbb6a0, 3420acf | `batch9/after/16-bookmark-dialog-*` | window.prompt → FormDialog（0bbb6a0）；对话框绑定图纸 + 工作区 + 打开周期，切换/卸载即取消且不写入（3420acf，renderHook 回归） |
@@ -157,5 +157,7 @@
 - 截图：`/workspace/lzcore/batch9/shots/{before,after}/`；工具：`batch9/tools/{seed9.py,shots9.mjs,kb9.mjs,montage.py}`。
 
 ## 收尾边界
-- **待 Windows 原生验证**：`scripts/windows_desktop_smoke.py` 未运行；CI 的 windows-smoke 不等价于原生桌面验证。PR 保持草稿。
-- 冲突对话框（G7）未截图（状态未在截图环境复现，行为由单测覆盖）；第 7 批思考块键盘检查 SKIP。
+- **待 Windows 原生验证**：`scripts/windows_desktop_smoke.py` 未运行；CI 的 windows-smoke 是脚本/路由测试（run 37812880728：92 passed / 1 skipped），不等价于原生桌面验证。PR 保持草稿。
+- 思考块（D3 的一部分）：在线应用里不可达——历史消息经 `stores/workbench.ts` 的 `sanitizeAssistantText`、流式经 `realtime/turnTransport.ts` 的 `filterStreamingThink` 去掉 `<think>`，`MessageRow` 拿不到思考内容；注入含 `<think>` 的历史后 3 个视口均无 `.thinking-disclosure`。因此浏览器内键盘/视觉验收未做；组件为原生 button + aria-expanded/aria-controls，单测只覆盖点击切换。
+- 快捷键帮助的 axe serious（第 9 批）不是误报：旧遮罩把顶栏压暗到 3.88:1，但顶栏仍可点击、可 Tab 到达，且帮助没有 role=dialog。已在 0d54db9 改用共享 PortalModal，复测 axe 0、焦点不逃逸。
+- 冲突对话框：0d54db9 前未复现；现由 `batch9/tools/conflict.mjs`（拦住界面的保存请求，先用 API 写入远端改动，界面写入得 409 后进入三方合并）复现，三视口截图 + axe + 键盘均已做。
