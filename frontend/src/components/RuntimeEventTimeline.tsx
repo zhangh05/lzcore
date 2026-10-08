@@ -16,6 +16,7 @@ import type { ChatMsg } from "../stores/workbench";
 import { useWorkbenchStore } from "../stores/workbench";
 import { useSessionStore } from "../stores/session";
 import { shortId } from "../utils/displayText";
+import { formatDate } from "../utils/format";
 import {
   RUNTIME_EVENT_KIND_LABELS,
   runtimeEventKind,
@@ -23,7 +24,7 @@ import {
   runtimeEventTone,
   type RuntimeEventTone,
 } from "../utils/streamStage";
-import { IconAlert, IconCheck, IconClose } from "./Icon";
+import { IconAlert, IconCheck, IconChevronDown, IconClose } from "./Icon";
 import {
   UNKNOWN_OUTCOME_COPY,
   deriveSettledCardState,
@@ -47,6 +48,17 @@ function timeStr(evt: RuntimeEvent): string {
     return new Date(evt.timestamp * 1000).toLocaleTimeString("zh-CN", { hour12: false });
   }
   return "";
+}
+
+/** One readable line from message text: no markdown syntax, no code blocks. */
+function plainSnippet(text: string, max: number): string {
+  const flat = text
+    .replace(/```[\s\S]*?(```|$)/g, " ")
+    .replace(/^\s*\|.*$/gm, " ")
+    .replace(/[|*_`#>]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
 }
 
 function eventCallId(evt: RuntimeEvent): string {
@@ -111,7 +123,7 @@ const ToolChip: React.FC<{
           <code className="rt-step-name">{toolLabel(tc.tool_id)}</code>
           <span className={`rt-tag ${state}`}>{state === "ok" ? "完成" : state === "unknown" ? UNKNOWN_OUTCOME_COPY.pill : "失败"}</span>
           {tc.duration_ms != null && <span className="rt-dur">{formatMs(tc.duration_ms)}</span>}
-          {hasBody && <span className="rt-chev">{open ? "▲" : "▼"}</span>}
+          {hasBody && <span className={`rt-chev${open ? " is-open" : ""}`} aria-hidden="true"><IconChevronDown size={12} /></span>}
         </div>
         {state === "unknown" && (
           <div className="rt-step-note" role="note">
@@ -302,11 +314,11 @@ const FallbackBody: React.FC<{
     <div className="rt-card-body">
       <div className="rt-fallback">
         <div className="rt-fallback-row">
-          <span className="rt-fallback-role">🙋 用户</span>
+          <span className="rt-fallback-role">提问</span>
           <span className="rt-fallback-text">{userText || "(无内容)"}</span>
         </div>
         <div className="rt-fallback-row">
-          <span className="rt-fallback-role">🤖 AI</span>
+          <span className="rt-fallback-role">答复</span>
           <span className="rt-fallback-text">{assistantText || "(无内容)"}</span>
         </div>
         <div className="rt-fallback-hint">
@@ -392,15 +404,39 @@ function groupMessagesIntoRuns(messages: ChatMsg[]): RunGroup[] {
 
 /* ── run card ── */
 
+/**
+ * Card status is a projection of the message lifecycle plus the backend
+ * result facts — never of "not an error". A turn that is still streaming, or
+ * whose result has not been loaded / does not exist, is not reported as
+ * completed: only a result with `ok === true` (and no unresolved unknown
+ * outcome) reads "本轮完成".
+ */
+export type RunCardStatus = "ok" | "err" | "unknown" | "running" | "none";
+export function runCardStatus(group: Pick<RunGroup, "assistantMsg" | "result">): { status: RunCardStatus; statusLabel: string } {
+  const assistant = group.assistantMsg;
+  const result = group.result;
+  if (assistant?.status === "streaming") return { status: "running", statusLabel: "本轮进行中" };
+  if (result) {
+    if (result.metadata?.execution_outcome === "unknown") return { status: "unknown", statusLabel: "本轮结果未知" };
+    return result.ok ? { status: "ok", statusLabel: "本轮完成" } : { status: "err", statusLabel: "本轮失败" };
+  }
+  if (assistant?.status === "error") return { status: "err", statusLabel: "本轮失败" };
+  if (!assistant) return { status: "none", statusLabel: "尚无回复" };
+  return { status: "none", statusLabel: "结果未载入" };
+}
+
+
 const RunCard: React.FC<{ group: RunGroup; runIdx: number }> = React.memo(({ group, runIdx }) => {
   const [open, setOpen] = useState(false);
   const result = group.result;
   const assistantText = group.assistantMsg?.text ?? "";
   const userText = group.userMsg?.text ?? "";
-  const unknown = result?.metadata.execution_outcome === "unknown";
-  const ok = result ? result.ok : group.assistantMsg?.status !== "error";
   const cardId = (result?.turn_id ?? group.runId).slice(0, 8);
-  const snippet = assistantText.slice(0, 50) || userText.slice(0, 50) || "";
+  const title = plainSnippet(userText, 90);
+  const snippet = plainSnippet(assistantText, 120);
+  const { status, statusLabel } = runCardStatus(group);
+  const toolCount = result?.tool_calls?.length ?? 0;
+  const stepCount = result?.events?.length ?? 0;
   const hasResultBody = !!result;
 
   // When expanded and no result yet, fetch the full trace lazily.
@@ -433,7 +469,7 @@ const RunCard: React.FC<{ group: RunGroup; runIdx: number }> = React.memo(({ gro
   };
 
   return (
-    <div className="rt-card">
+    <div className={`rt-card${open ? " is-open" : ""}`} data-status={status}>
       {/* ── collapsed header ── */}
       <div
         className="rt-card-bar"
@@ -443,10 +479,19 @@ const RunCard: React.FC<{ group: RunGroup; runIdx: number }> = React.memo(({ gro
         aria-expanded={open}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } }}
       >
-        <span className={`rt-card-dot ${unknown ? "unknown" : ok ? "ok" : "err"}`} />
-        <span className="rt-card-id">{cardId || `#${runIdx + 1}`}</span>
-        <span className="rt-card-snippet">{snippet}{snippet.length > 50 ? "…" : ""}</span>
-        <span className="rt-card-chev">{open ? "▲ 收起" : "▼ 展开"}</span>
+        <span className={`rt-card-dot ${status}`} aria-hidden="true" />
+        <span className="rt-card-main">
+          <span className="rt-card-title">{title || snippet || "（无内容）"}</span>
+          {title && snippet ? <span className="rt-card-snippet">{snippet}</span> : null}
+        </span>
+        <span className="rt-card-meta">
+          <span className={`rt-card-status ${status}`}>{statusLabel}</span>
+          {toolCount > 0 ? <span className="rt-card-count">{toolCount} 次工具</span> : null}
+          {stepCount > 0 ? <span className="rt-card-count">{stepCount} 步</span> : null}
+          <span className="rt-card-id">{cardId || `#${runIdx + 1}`}</span>
+          {group.createdAt ? <time className="rt-card-time" dateTime={group.createdAt}>{formatDate(group.createdAt, "time")}</time> : null}
+        </span>
+        <span className="rt-card-chev" aria-hidden="true"><IconChevronDown size={14} /></span>
       </div>
 
       {/* ── expanded body ── */}

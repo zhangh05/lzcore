@@ -10,6 +10,8 @@ interface DetailPanelProps {
   onClose?: () => void;
   empty?: { text: string; hint?: string };
   className?: string;
+  /** Heading level for the title. Pages render h1, so the panel defaults to h2. */
+  headingLevel?: 2 | 3;
 }
 
 export function DetailPanel({
@@ -20,7 +22,9 @@ export function DetailPanel({
   onClose,
   empty,
   className = "",
+  headingLevel = 2,
 }: DetailPanelProps) {
+  const Heading = headingLevel === 3 ? "h3" : "h2";
   if (!children && empty) {
     return (
       <div className={`split-detail ui-detail-empty ${className}`}>
@@ -34,7 +38,7 @@ export function DetailPanel({
       {(title || actions || onClose) && (
         <div className="ui-detail-panel-head">
           <div>
-            {title && <h3 className="ui-detail-panel-title">{title}</h3>}
+            {title && <Heading className="ui-detail-panel-title">{title}</Heading>}
             {subtitle && <div className="ui-detail-panel-subtitle">{subtitle}</div>}
           </div>
           <div className="ui-detail-panel-actions">

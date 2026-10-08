@@ -6,6 +6,7 @@ import {
   RevisionDiff,
   TopologyRevision,
 } from "./topologyRevisionModel";
+import { useTopologyDialogFocus } from "./useTopologyDialogFocus";
 
 export type TopologyRevisionDialogProps = {
   diffLoading: boolean;
@@ -36,8 +37,12 @@ export function TopologyRevisionDialog({
   setRestoreLayout,
   setShowRevisions,
 }: TopologyRevisionDialogProps) {
+  const dialogRef = useTopologyDialogFocus<HTMLDialogElement>(() =>
+    setShowRevisions(false),
+  );
   return (
     <dialog
+      ref={dialogRef}
       open
       role="dialog"
       aria-modal="true"

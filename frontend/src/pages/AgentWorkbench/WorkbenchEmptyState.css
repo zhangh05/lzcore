@@ -1,0 +1,92 @@
+/* WorkbenchEmptyState owns the empty conversation: one line of intent and
+   the real starting points, as cards that preview what each one will ask.
+   Loaded from main.tsx right after AgentWorkbench.css (see WorkbenchHeader.css). */
+
+/* ── Empty state: a centred prompt with suggestion chips ── */
+@layer workbench {
+.wb-shell .wb-empty-lead { color: var(--text); font-size: var(--fs-22); line-height: var(--lh-22); font-weight: var(--weight-display); }
+.wb-shell .wb-empty .empty-mark { width: 40px; height: 40px; color: var(--accent-text); background: var(--accent); border-radius: 12px; font-size: var(--fs-16); font-weight: var(--weight-heading); }
+.wb-shell .wb-empty-chips { gap: 8px; margin-top: 16px; }
+.wb-shell .wb-empty-chips .wb-input-chip {
+  height: 32px;
+  padding: 0 14px;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow-xs);
+  font-size: var(--fs-13);
+}
+.wb-shell .wb-empty-chips .wb-input-chip:hover { color: var(--text); border-color: var(--line-3); background: var(--surface-hover); }
+}
+
+/* ── Start cards v2 ── */
+@layer workbench {
+.wb-shell .wb-empty-chips.wb-start-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: min(100%, 720px);
+  margin-top: 24px;
+}
+/* The card is a wrapper; the button carries only the label (its accessible
+   name) and covers the whole card through ::after, so the hint stays visible
+   text outside the button and is announced as its description. */
+.wb-shell .wb-start-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 96px;
+  padding: 14px 36px 14px 16px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.wb-shell .wb-start-card:has(.wb-start-card-btn:hover:not(:disabled)) { border-color: var(--accent); box-shadow: var(--shadow-card); }
+.wb-shell .wb-start-card:has(.wb-start-card-btn:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.wb-shell .wb-start-card:has(.wb-start-card-btn:disabled) { opacity: 0.55; }
+.wb-shell .wb-empty-chips .wb-input-chip.wb-start-card-btn {
+  position: static;
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  white-space: normal;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--weight-strong);
+}
+.wb-shell .wb-empty-chips .wb-input-chip.wb-start-card-btn:hover { background: none; }
+.wb-shell .wb-empty-chips .wb-input-chip.wb-start-card-btn:focus-visible { outline: none; }
+.wb-shell .wb-start-card-btn::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-card); cursor: pointer; }
+.wb-shell .wb-start-card-btn:disabled::after { cursor: not-allowed; }
+.wb-shell .wb-start-card-hint {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.wb-shell .wb-start-card-arrow { position: absolute; top: 15px; right: 14px; color: var(--text-4); transition: transform var(--dur-2) var(--ease), color var(--dur-2) var(--ease); }
+.wb-shell .wb-start-card:has(.wb-start-card-btn:hover:not(:disabled)) .wb-start-card-arrow { color: var(--accent); transform: translateX(2px); }
+
+@media (max-width: 760px) {
+  .wb-shell .wb-empty-chips.wb-start-cards { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 18px; }
+  .wb-shell .wb-start-card { min-height: 0; padding-block: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-shell .wb-start-card-arrow { transition: none; }
+}
+}

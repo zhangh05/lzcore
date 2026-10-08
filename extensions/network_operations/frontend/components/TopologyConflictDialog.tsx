@@ -3,6 +3,7 @@ import { IconClose } from "../../../../frontend/src/components/Icon";
 import { Button } from "../../../../frontend/src/components/ui";
 import type { Topology } from "./topologyDocument";
 import { describeMergeValue, DIFF_FIELD_LABELS } from "./topologyRevisionModel";
+import { useTopologyDialogFocus } from "./useTopologyDialogFocus";
 
 export type TopologyConflictDialogProps = {
   applyConflictChoice: (choice: "merged" | "theirs" | "mine") => void;
@@ -26,8 +27,12 @@ export function TopologyConflictDialog({
   nodeLabelById,
   setShowConflict,
 }: TopologyConflictDialogProps) {
+  const dialogRef = useTopologyDialogFocus<HTMLDialogElement>(() =>
+    setShowConflict(false),
+  );
   return (
     <dialog
+      ref={dialogRef}
       open
       role="dialog"
       aria-modal="true"

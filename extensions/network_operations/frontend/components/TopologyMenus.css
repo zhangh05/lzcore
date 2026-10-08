@@ -64,32 +64,35 @@
 }
 
 .topology-canvas-viewport.mode-select .canvas-mode-hint {
-  color: var(--accent);
-  font-weight: var(--weight-heading);
+  color: var(--lz-color-text-tertiary);
+  font-weight: var(--weight-body);
 }
 
 .canvas-mode-hint.is-view-mode {
-  color: var(--accent);
-  font-weight: var(--weight-heading);
-  background: var(--accent-soft);
-  padding: 3px 9px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--accent);
+  color: var(--lz-color-text-secondary);
+  font-weight: var(--weight-label);
+  background: var(--lz-color-bg-sunken);
+  padding: 2px 9px;
+  border-radius: var(--lz-radius-pill);
+  border: 1px solid var(--lz-color-border-subtle);
 }
 .canvas-context-menu { position: fixed; z-index: 1200; display: grid; gap: 2px; min-width: 168px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-menu); }
 .canvas-context-menu button { padding: 6px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
 .canvas-context-menu button:hover { background: var(--accent-soft); color: var(--accent); }
 .canvas-context-menu button.danger:hover { background: var(--danger-soft); color: var(--danger); }
 .canvas-context-menu hr { margin: 3px 4px; border: 0; border-top: 1px solid var(--line-2); }
-.shortcut-help-backdrop { position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; background: #10253630; }
-.shortcut-help { width: min(420px, 92vw); max-height: 82vh; overflow: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 24px 60px #10253640; }
-.shortcut-help > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line-2); }
-.shortcut-help > header button { border: 0; background: transparent; color: var(--text-3); cursor: pointer; }
-.shortcut-help dl { margin: 0; padding: 8px 16px 16px; display: grid; gap: 2px; }
-.shortcut-help dl > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line-2); font-size: 12px; }
+.modal.shortcut-help { width: min(420px, 92vw); max-height: 82vh; padding: 0; overflow: auto; border-radius: var(--lz-radius-lg); border: 1px solid var(--lz-color-border-subtle); background: var(--lz-color-bg-surface); box-shadow: var(--lz-shadow-popover); }
+.modal.shortcut-help:focus-visible { outline: 2px solid var(--lz-color-border-focus); outline-offset: 2px; }
+.shortcut-help > header { display: flex; align-items: center; justify-content: space-between; gap: var(--lz-space-3); padding: var(--lz-space-4) var(--lz-space-3) var(--lz-space-2) var(--lz-space-5); }
+.shortcut-help > header h2 { margin: 0; font: var(--lz-font-title-sm); color: var(--lz-color-text-primary); }
+.shortcut-help > header button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: var(--lz-radius-sm); background: transparent; color: var(--lz-color-text-tertiary); cursor: pointer; }
+.shortcut-help > header button:hover { background: var(--lz-color-bg-hover); color: var(--lz-color-text-primary); }
+.shortcut-help > header button:focus-visible { outline: 2px solid var(--lz-color-border-focus); outline-offset: 1px; }
+.shortcut-help dl { margin: 0; padding: 0 var(--lz-space-5) var(--lz-space-4); display: grid; }
+.shortcut-help dl > div { display: grid; grid-template-columns: 152px 1fr; gap: var(--lz-space-3); padding: 6px 0; border-bottom: 1px solid var(--lz-color-border-subtle); font: var(--lz-font-caption); }
 .shortcut-help dl > div:last-child { border-bottom: 0; }
-.shortcut-help dt { color: var(--text); font-weight: var(--weight-heading); font-family: var(--font-mono); font-size: 11px; }
-.shortcut-help dd { margin: 0; color: var(--text-2); }
+.shortcut-help dt { color: var(--lz-color-text-primary); font: var(--lz-font-mono-sm); font-weight: var(--weight-heading); }
+.shortcut-help dd { margin: 0; color: var(--lz-color-text-secondary); }
 .studio-views-menu { position: relative; font-size: 12px; }
 .studio-views-menu > summary { padding: 6px 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-views-menu > summary::-webkit-details-marker { display: none; }
@@ -97,7 +100,7 @@
 .studio-views-menu > div { position: absolute; right: 0; top: 32px; z-index: 40; display: grid; gap: 3px; width: 190px; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow-menu); }
 .studio-views-menu > div > button { padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
 .studio-views-menu > div > button:hover { background: var(--accent-soft); color: var(--accent); }
-.studio-views-menu > div > small { padding: 4px 8px; color: var(--text-3); font-size: 10.5px; }
+.studio-views-menu > div > small { padding: 4px 8px; color: var(--text-3); font-size: var(--fs-11); }
 .studio-views-menu .view-row { display: flex; align-items: center; gap: 2px; }
 .studio-views-menu .view-row > button:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studio-views-menu .view-remove { flex: 0 0 auto; width: 20px; padding: 4px 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); cursor: pointer; }
@@ -111,7 +114,7 @@
 .studio-layout-menu > div button { display: grid; gap: 1px; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
 .studio-layout-menu > div button:hover { background: var(--accent-soft); }
 .studio-layout-menu > div strong { font-size: 12px; color: var(--text); }
-.studio-layout-menu > div small { font-size: 10px; color: var(--text-3); }
+.studio-layout-menu > div small { font-size: var(--fs-11); color: var(--text-3); }
 .canvas-filter-count { display: inline-flex; align-items: center; gap: 5px; }
 .canvas-filter-count > button { display: inline-flex; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
 

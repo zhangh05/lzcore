@@ -9,13 +9,17 @@ interface PortalModalProps {
   style?: React.CSSProperties;
   testId?: string;
   ariaLabel?: string;
+  /** Id of the visible title; preferred over ariaLabel when the dialog has one. */
+  ariaLabelledBy?: string;
+  /** Id of the element that explains the consequence of the dialog. */
+  ariaDescribedBy?: string;
 }
 
 /** Modal rendered through a portal to <body>, so it is immune to any
  *  transform/filter on ancestor containers (e.g. the route transition) and
  *  always positions against the viewport. Closes on backdrop click + Escape,
  *  and locks body scroll while open. */
-export function PortalModal({ open, onClose, children, className = "", style, testId, ariaLabel = "对话框" }: PortalModalProps) {
+export function PortalModal({ open, onClose, children, className = "", style, testId, ariaLabel = "对话框", ariaLabelledBy, ariaDescribedBy }: PortalModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -67,7 +71,9 @@ export function PortalModal({ open, onClose, children, className = "", style, te
         style={style}
         role="dialog"
         aria-modal="true"
-        aria-label={ariaLabel}
+        aria-label={ariaLabelledBy ? undefined : ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        aria-describedby={ariaDescribedBy}
         tabIndex={-1}
       >
         {children}

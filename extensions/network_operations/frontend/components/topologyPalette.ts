@@ -34,8 +34,8 @@ export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, strin
 export const CANVAS_ACCENT = { light: "#0f7773", dark: "#7cc9bc" };
 /** Group containers are neutral structure; custom drawing colours remain intact. */
 export const CANVAS_GROUP = {
-  light: { fill: "#f8f9f9", border: "#d7dee1", text: "#566368" },
-  dark: { fill: "#15191c", border: "#2b333a", text: "#abb5bd" },
+  light: { fill: "#f7f9f9", border: "#dae0e3", text: "#535f65" },
+  dark: { fill: "#13171a", border: "#343d44", text: "#abb5bd" },
 };
 
 /** Compatibility export: drawing colours do not use operational state. */

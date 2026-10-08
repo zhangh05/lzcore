@@ -136,6 +136,7 @@ export function AppLayout({ children, navigationItems, settingsNavigationItems }
         className={"app-sidebar" + (sidebarOpen ? "" : " collapsed")}
         data-testid="layout-left"
         aria-label="侧栏"
+        role={mobileNavOpen ? "dialog" : undefined}
         aria-modal={mobileNavOpen ? "true" : undefined}
       >
         {(sidebarOpen || mobileNavOpen) && (

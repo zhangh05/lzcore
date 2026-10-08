@@ -9,6 +9,23 @@ export type useCanvasThemePorts = {
   theme: string;
 };
 
+/**
+ * Canvas label colours follow the app's semantic tokens. Cytoscape needs a
+ * concrete colour, so the token is resolved through a probe element after the
+ * data-theme attribute has changed (the theme state below is driven by that
+ * attribute). The literal is only the fallback for a missing token.
+ */
+function resolveToken(token: string, fallback: string): string {
+  if (typeof document === "undefined" || !document.body) return fallback;
+  const probe = document.createElement("span");
+  probe.style.display = "none";
+  probe.style.color = `var(${token}, ${fallback})`;
+  document.body.appendChild(probe);
+  const value = getComputedStyle(probe).color;
+  probe.remove();
+  return value || fallback;
+}
+
 export function useCanvasTheme({
   cyRef,
   rendererReady,
@@ -29,6 +46,18 @@ export function useCanvasTheme({
     const cy = cyRef.current;
     if (!cy || !rendererReady) return;
     const dark = theme === "dark";
+    const labelText = resolveToken(
+      "--lz-color-text-primary",
+      dark ? "#f1f5f9" : "#0f172a",
+    );
+    const labelSurface = resolveToken(
+      "--lz-color-bg-surface",
+      dark ? "#1e293b" : "#ffffff",
+    );
+    const labelBorder = resolveToken(
+      "--lz-color-border-default",
+      dark ? "#334155" : "#cbd5e1",
+    );
     cy.style()
       .selector("node:selected")
       .style({
@@ -44,7 +73,7 @@ export function useCanvasTheme({
     cy.style()
       .selector("node")
       .style({
-        color: dark ? "#f1f5f9" : "#0f172a",
+        color: labelText,
         "text-background-opacity": 0,
         "text-border-width": 0,
       })
@@ -52,17 +81,17 @@ export function useCanvasTheme({
       .style({ "background-color": dark ? "#1c242c" : "data(vendorTint)" })
       .selector("edge")
       .style({
-        color: dark ? "#f8fafc" : "#0f172a",
+        color: labelText,
         "text-background-shape": "roundrectangle",
-        "text-background-color": dark ? "#1e293b" : "#ffffff",
+        "text-background-color": labelSurface,
         "text-background-opacity": 0.95,
         "text-border-width": 1,
-        "text-border-color": dark ? "#334155" : "#cbd5e1",
+        "text-border-color": labelBorder,
         "text-border-opacity": 0.9,
         "text-background-padding": "2px 6px",
       })
       .selector(".canvas-item")
-      .style({ "text-background-color": dark ? "#111820" : "#ffffff" })
+      .style({ "text-background-color": labelSurface })
       .selector(".lz-group")
       .style({
         "background-color": dark

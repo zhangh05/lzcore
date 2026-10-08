@@ -1,0 +1,126 @@
+/* Collection surfaces shared by data-heavy pages (design system v2):
+   stat strip, filter select, selection bar, per-item results, file kind mark,
+   label/value list. Shared components live in the console layer so a page's
+   own refinements (pages layer) can adjust them without specificity games. */
+@layer console {
+.ui-stat-strip { min-width: 0; }
+.ui-stat-strip > dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  margin: 0;
+  background: var(--lz-color-bg-surface);
+  border: 1px solid var(--lz-color-border-subtle);
+  border-radius: var(--lz-radius-lg);
+  overflow: hidden;
+}
+.ui-stat {
+  display: grid;
+  align-content: start;
+  gap: var(--lz-space-1);
+  min-width: 0;
+  padding: var(--lz-space-3) var(--lz-space-4);
+  box-shadow: -1px 0 0 var(--lz-color-border-subtle);
+}
+.ui-stat dt { font: var(--lz-font-label); color: var(--lz-color-text-tertiary); }
+.ui-stat dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--lz-space-1) var(--lz-space-2); margin: 0; min-width: 0; }
+.ui-stat-value { font: var(--lz-font-numeric); color: var(--lz-color-text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ui-stat-hint { font: var(--lz-font-caption); color: var(--lz-color-text-tertiary); }
+.ui-stat.is-warning .ui-stat-value { color: var(--lz-color-warning-fg); }
+.ui-stat.is-danger .ui-stat-value { color: var(--lz-color-danger-fg); }
+.ui-stat.is-success .ui-stat-value { color: var(--lz-color-success-fg); }
+
+.ui-filter-select {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--lz-control-h);
+  padding-left: var(--lz-space-3);
+  background: var(--lz-color-bg-field);
+  border: 1px solid var(--lz-color-border-field);
+  border-radius: var(--lz-radius-sm);
+  color: var(--lz-color-text-tertiary);
+  font: var(--lz-font-control);
+  transition: border-color var(--lz-dur-base) var(--lz-ease-standard);
+}
+.ui-filter-select:hover { border-color: var(--lz-color-border-strong); }
+.ui-filter-select:focus-within { outline: var(--focus-width) solid var(--lz-color-border-focus); outline-offset: 1px; }
+.ui-filter-select-label { flex: 0 0 auto; white-space: nowrap; }
+.ui-filter-select-label::after { content: "："; }
+.ui-filter-select-control { position: relative; display: flex; align-items: center; flex: 1 1 auto; min-width: 0; height: 100%; }
+.ui-filter-select-input {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 calc(var(--lz-space-3) + 14px) 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--lz-color-text-primary);
+  font: inherit;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.ui-filter-select-input:focus { outline: none; }
+.ui-filter-select-control > svg { position: absolute; right: var(--lz-space-2); color: var(--lz-color-text-tertiary); pointer-events: none; }
+
+.ui-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lz-space-2) var(--lz-space-3);
+  min-height: 48px;
+  padding: var(--lz-space-2) var(--lz-space-3) var(--lz-space-2) var(--lz-space-4);
+  background: var(--lz-color-bg-sunken);
+  border-top: 1px solid var(--lz-color-border-subtle);
+  font: var(--lz-font-control);
+  color: var(--lz-color-text-secondary);
+}
+.ui-selection-count b { color: var(--lz-color-text-primary); font-variant-numeric: tabular-nums; }
+.ui-selection-note { font: var(--lz-font-label); color: var(--lz-color-text-tertiary); }
+.ui-selection-actions { display: flex; flex-wrap: wrap; gap: var(--lz-space-2); margin-left: auto; }
+
+.ui-op-results {
+  border: 1px solid var(--lz-color-border-subtle);
+  border-left: 3px solid var(--lz-color-success-fg);
+  border-radius: var(--lz-radius-md);
+  background: var(--lz-color-bg-surface);
+  font: var(--lz-font-control);
+}
+.ui-op-results.has-failures { border-left-color: var(--lz-color-danger-fg); }
+.ui-op-results-head { display: flex; align-items: center; gap: var(--lz-space-3); min-height: 40px; padding: var(--lz-space-1) var(--lz-space-2) var(--lz-space-1) var(--lz-space-4); }
+.ui-op-results-head > strong { color: var(--lz-color-text-primary); font-weight: var(--weight-heading); }
+.ui-op-results-head > span { flex: 1; color: var(--lz-color-text-tertiary); font: var(--lz-font-label); }
+.ui-op-results ul { display: grid; gap: var(--lz-space-1); max-height: 160px; margin: 0; padding: 0 var(--lz-space-4) var(--lz-space-3); overflow: auto; list-style: none; }
+.ui-op-results li { display: flex; align-items: flex-start; gap: var(--lz-space-2); color: var(--lz-color-text-secondary); font: var(--lz-font-label); overflow-wrap: anywhere; }
+.ui-op-results li > svg { flex: 0 0 auto; margin-top: 2px; }
+.ui-op-results li.is-ok > svg { color: var(--lz-color-success-fg); }
+.ui-op-results li.is-error { color: var(--lz-color-danger-fg); }
+
+.ui-file-kind {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 22px;
+  border-radius: var(--lz-radius-xs);
+  background: var(--lz-color-bg-muted);
+  color: var(--lz-color-text-secondary);
+  font: var(--weight-heading) var(--fs-10)/1 var(--font-mono);
+  letter-spacing: .02em;
+}
+.ui-file-kind.is-doc { background: var(--lz-color-info-bg); color: var(--lz-color-info-fg); }
+.ui-file-kind.is-pdf { background: var(--lz-color-danger-bg); color: var(--lz-color-danger-fg); }
+.ui-file-kind.is-data { background: var(--lz-color-success-bg); color: var(--lz-color-success-fg); }
+.ui-file-kind.is-archive { background: var(--lz-color-warning-bg); color: var(--lz-color-warning-fg); }
+.ui-file-kind.is-media { background: var(--lz-color-accent-subtle); color: var(--lz-color-accent); }
+
+.ui-info-list { display: grid; gap: var(--lz-space-2); margin: 0; font: var(--lz-font-control); }
+.ui-info-list > div { display: grid; grid-template-columns: minmax(72px, 96px) minmax(0, 1fr); gap: var(--lz-space-3); align-items: baseline; }
+.ui-info-list dt { color: var(--lz-color-text-tertiary); font: var(--lz-font-label); }
+.ui-info-list dd { margin: 0; min-width: 0; color: var(--lz-color-text-primary); overflow-wrap: anywhere; }
+.ui-info-list dd.mono { font: var(--lz-font-mono-sm); color: var(--lz-color-text-secondary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-filter-select { transition: none; }
+}
+}

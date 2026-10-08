@@ -40,7 +40,7 @@ test("25. scope disclosure preserves selection and explicit progress preference 
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
     await page.screenshot({ path: testInfo.outputPath(`scope-${width}.png`) });
   }
-  await page.getByRole("searchbox").press("Escape");
+  await page.getByRole("searchbox", { name: "搜索 Skill 资源" }).press("Escape");
   const summary = page.getByRole("button", { name: "已选 1 个资源", exact: true });
   await expect(summary).toBeFocused();
   await expect(summary).toHaveAttribute("aria-expanded", "false");

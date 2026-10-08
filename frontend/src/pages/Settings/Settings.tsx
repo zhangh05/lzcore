@@ -1,16 +1,19 @@
 /**
  * Settings — LLM Provider configuration (v2).
  *
- * Layout: left provider sidebar (cards) → right form panel.
- * Each provider has its own config file; click to edit, "应用" to activate.
+ * Layout: section navigation → grouped sections in one scrolling column:
+ * 模型服务 (provider cards + form), 长期记忆, 外观, 危险操作. Each provider has
+ * its own config file; click to edit, "应用" to activate. 外观 reads and
+ * writes the existing UI store (theme, density); it keeps no state of its own.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { settingsApi } from "../../api";
 import { Badge, EmptyState, LoadingState } from "../../components/common";
 import { Button, Input, Select, FormField } from "../../components/ui";
 import { confirm } from "../../components/ConfirmDialog";
-import { useSessionStore } from "../../stores/session";
+import { useSessionStore, useUIStore } from "../../stores/session";
+import { motionScrollBehavior } from "../../utils/motion";
 import { useToastStore } from "../../stores/toast";
 import { isApiError } from "../../types";
 import type { ProviderConfig, LlmTestResult } from "../../types";
@@ -309,6 +312,71 @@ export function Settings() {
   const isNew = selectedId === NEW_PROVIDER;
   const isActiveProvider = selectedId === activeId;
   const isBusy = saving || applying || testing;
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [section, setSection] = useState<SettingsSectionId>("providers");
+
+  // Section rail ⇄ scroll position: one contract for highlight and jumps.
+  // The element that scrolls depends on the breakpoint (.settings-content on
+  // desktop, the page body at ≤900px where the rail is a sticky strip), so
+  // the spy listens to scroll events in the capture phase and reacts to any
+  // scroller that contains the sections; geometry is measured against the
+  // same visible top edge (below a sticky rail) that jumps land on.
+  const pendingJumpRef = useRef<{ id: SettingsSectionId; top: number; until: number; arrived: boolean } | null>(null);
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const update = (scroller: HTMLElement | null) => {
+      const metrics = scrollMetrics(scroller);
+      const pending = pendingJumpRef.current;
+      if (pending) {
+        // A rail click owns the highlight while the scroller is travelling to,
+        // or resting at, its jump position (a jump clamped to the end must not
+        // be re-labelled as the last section). Moving away releases it.
+        if (Math.abs(metrics.scrollTop - pending.top) <= 2) { pending.arrived = true; return; }
+        if (!pending.arrived && Date.now() <= pending.until) return;
+        pendingJumpRef.current = null;
+      }
+      const edge = sectionVisibleTop(content, scroller) + SECTION_ACTIVATION_SLACK;
+      let current: SettingsSectionId = SETTINGS_SECTIONS[0].id;
+      for (const item of SETTINGS_SECTIONS) {
+        const el = content.querySelector<HTMLElement>(`#settings-${item.id}`);
+        if (el && el.getBoundingClientRect().top <= edge) current = item.id;
+      }
+      if (metrics.max > 0 && metrics.scrollTop >= metrics.max - 2) current = SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1].id;
+      setSection(current);
+    };
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (target === document || target === document.documentElement) update(null);
+      else if (target instanceof HTMLElement && target.contains(content)) update(target);
+    };
+    const onResize = () => update(findScrollContainer(content));
+    const abandonJump = () => { pendingJumpRef.current = null; };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    window.addEventListener("resize", onResize);
+    for (const type of ["wheel", "touchstart", "keydown"] as const) document.addEventListener(type, abandonJump, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("resize", onResize);
+      for (const type of ["wheel", "touchstart", "keydown"] as const) document.removeEventListener(type, abandonJump, { capture: true });
+    };
+  }, [loading, error, draft === null]);
+
+  const goToSection = (id: SettingsSectionId) => {
+    const content = contentRef.current;
+    const el = content?.querySelector<HTMLElement>(`#settings-${id}`);
+    setSection(id);
+    if (!content || !el) return;
+    const scroller = findScrollContainer(content);
+    const metrics = scrollMetrics(scroller);
+    const desired = metrics.scrollTop + el.getBoundingClientRect().top - sectionVisibleTop(content, scroller) - SECTION_JUMP_GAP;
+    const top = Math.max(0, Math.min(metrics.max, Math.round(desired)));
+    if (Math.abs(top - metrics.scrollTop) > 1) {
+      pendingJumpRef.current = { id, top, until: Date.now() + 1500, arrived: false };
+      (scroller ?? window).scrollTo({ top, behavior: motionScrollBehavior() });
+    }
+    el.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
+  };
 
   // ── Render states ──
 
@@ -351,6 +419,11 @@ export function Settings() {
             添加模型厂商 → 选择接口协议 → 填写地址、密钥和模型 → 测试连接 → 保存或应用。保存保留配置，应用切换当前厂商。
           </div>
         </details>
+        <div className="settings-shell">
+        <SettingsNav active={section} onChange={goToSection} />
+        <div className="settings-content" ref={contentRef}>
+        <section className="settings-group" id="settings-providers" aria-labelledby="settings-providers-title">
+          <SectionHead id="settings-providers-title" kicker="当前工作区使用的模型" title="模型服务" desc="选择厂商并填写接入信息；保存保留配置，应用切换当前厂商。" />
         <div className="settings-layout">
           {/* ── Left: Provider sidebar ── */}
           <aside className="provider-sidebar" data-testid="provider-sidebar">
@@ -544,24 +617,48 @@ export function Settings() {
                       {formatDate(draft.updated_at, "compact")}
                     </span>
                   )}
-                  <Button
-                    type="button" variant="danger-ghost" onClick={onReset}
-                    disabled={isBusy || isNew || (draft.is_builtin === false && isActiveProvider)}
-                    title={draft.is_builtin === false && isActiveProvider ? "先应用其他厂商，再删除当前厂商" : undefined} data-testid="btn-reset-llm"
-                  >
-                    <IconTrash size={15} aria-hidden="true" />{draft.is_builtin === false ? "删除厂商" : "重置"}
-                  </Button>
                 </div>
               </div>
             )}
 
+          </section>
+        </div>
+        </section>
+
+        <section className="settings-group" id="settings-memory" aria-labelledby="settings-memory-title">
+          <SectionHead id="settings-memory-title" kicker="当前工作区" title="长期记忆" desc="控制是否自动整理任务经历；记忆内容在记忆页管理。" />
             <LongTermMemoryCard
               enabled={memoryEnabled}
               loading={memorySaving}
               loaded={memoryLoaded}
               onChange={onMemoryEnabledChange}
             />
-          </section>
+        </section>
+
+        <section className="settings-group" id="settings-appearance" aria-labelledby="settings-appearance-title">
+          <SectionHead id="settings-appearance-title" kicker="仅这台浏览器" title="外观" desc="主题与显示密度只影响显示，不随工作区或账号同步。" />
+          <AppearanceCard />
+        </section>
+
+        <section className="settings-group settings-group-danger" id="settings-danger" aria-labelledby="settings-danger-title">
+          <SectionHead id="settings-danger-title" kicker="不可撤销" title="危险操作" desc="作用于“模型服务”中当前选中的厂商。" />
+          <div className="settings-danger-zone">
+            <div className="settings-danger-row">
+              <div className="settings-pref-text">
+                <b>{isNew ? "新厂商尚未保存" : draft.is_builtin === false ? `删除 ${draft.label}` : `重置 ${draft.label}`}</b>
+                <span>{isNew ? "保存后才能重置或删除。" : draft.is_builtin === false ? (isActiveProvider ? "这是当前应用的厂商：先应用其他厂商，再删除。" : "删除厂商配置及保存的密钥。") : "恢复为默认值，并清除保存的密钥。"}</span>
+              </div>
+              <Button
+                type="button" variant="danger" onClick={onReset}
+                disabled={isBusy || isNew || (draft.is_builtin === false && isActiveProvider)}
+                title={draft.is_builtin === false && isActiveProvider ? "先应用其他厂商，再删除当前厂商" : undefined} data-testid="btn-reset-llm"
+              >
+                <IconTrash size={15} aria-hidden="true" />{draft.is_builtin === false ? "删除厂商" : "重置"}
+              </Button>
+            </div>
+          </div>
+        </section>
+        </div>
         </div>
       </div>
     </div>
@@ -569,6 +666,111 @@ export function Settings() {
 }
 
 /* ──────────────────────── Sub-components ──────────────────────── */
+
+type SettingsSectionId = "providers" | "memory" | "appearance" | "danger";
+
+/** Gap between the visible top edge and a section after a rail jump; matches .settings-group scroll-margin. */
+const SECTION_JUMP_GAP = 8;
+/** A section becomes current once its top is within this distance of the visible top edge. */
+const SECTION_ACTIVATION_SLACK = 32;
+
+/** Nearest ancestor that actually scrolls vertically; null means the document scrolls. */
+function findScrollContainer(from: HTMLElement): HTMLElement | null {
+  for (let el: HTMLElement | null = from; el; el = el.parentElement) {
+    if (/(auto|scroll|overlay)/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1) return el;
+  }
+  return null;
+}
+
+function scrollMetrics(scroller: HTMLElement | null) {
+  const root = scroller ?? document.scrollingElement ?? document.documentElement;
+  return { scrollTop: root.scrollTop, max: root.scrollHeight - root.clientHeight };
+}
+
+/** Top edge where sections become visible: the scroller's top, below the rail when the rail is sticky inside it. */
+function sectionVisibleTop(content: HTMLElement, scroller: HTMLElement | null): number {
+  const top = scroller ? scroller.getBoundingClientRect().top : 0;
+  const nav = content.parentElement?.querySelector<HTMLElement>(".settings-section-nav");
+  if (!nav) return top;
+  const style = getComputedStyle(nav);
+  if (style.position !== "sticky" || (scroller && !scroller.contains(nav))) return top;
+  return top + (parseFloat(style.top) || 0) + nav.getBoundingClientRect().height;
+}
+
+const SETTINGS_SECTIONS: { id: SettingsSectionId; label: string; hint: string }[] = [
+  { id: "providers", label: "模型服务", hint: "厂商、密钥与参数" },
+  { id: "memory", label: "长期记忆", hint: "自动整理任务经历" },
+  { id: "appearance", label: "外观", hint: "主题与显示密度" },
+  { id: "danger", label: "危险操作", hint: "重置或删除厂商" },
+];
+
+/** Section navigation: a side rail on desktop, a horizontal strip on narrow screens. */
+function SettingsNav({ active, onChange }: { active: SettingsSectionId; onChange: (id: SettingsSectionId) => void }) {
+  return (
+    <nav className="settings-section-nav" aria-label="设置分区">
+      {SETTINGS_SECTIONS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={"settings-section-link" + (item.id === "danger" ? " is-danger" : "") + (active === item.id ? " active" : "")}
+          aria-current={active === item.id ? "true" : undefined}
+          onClick={() => onChange(item.id)}
+        >
+          <span>{item.label}</span>
+          <small>{item.hint}</small>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function SectionHead({ id, kicker, title, desc }: { id: string; kicker: string; title: string; desc: string }) {
+  return (
+    <header className="settings-group-head">
+      <span className="settings-group-kicker">{kicker}</span>
+      <h2 id={id} tabIndex={-1}>{title}</h2>
+      <p>{desc}</p>
+    </header>
+  );
+}
+
+/**
+ * Theme and density over the existing UI store: the same preferences the
+ * header theme button (setTheme) and the account menu (setDensity) use,
+ * persisted by the store under lzcore_ui. No settings state of its own.
+ */
+function AppearanceCard() {
+  const theme = useUIStore((s) => s.theme);
+  const setTheme = useUIStore((s) => s.setTheme);
+  const density = useUIStore((s) => s.density);
+  const setDensity = useUIStore((s) => s.setDensity);
+  return (
+    <div className="settings-pref-card">
+      <div className="settings-pref-row">
+        <div className="settings-pref-text"><b>主题</b><span>与顶栏的主题按钮是同一项偏好。</span></div>
+        <div className="segmented settings-segmented" role="radiogroup" aria-label="主题">
+          {([["light", "浅色"], ["dark", "深色"]] as const).map(([value, label]) => (
+            <label key={value} className={theme === value ? "active" : ""}>
+              <input type="radio" name="settings-theme" value={value} checked={theme === value} onChange={() => setTheme(value)} />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="settings-pref-row">
+        <div className="settings-pref-text"><b>显示密度</b><span>只改变间距，不改变内容；与账户菜单的密度选项是同一项偏好。</span></div>
+        <div className="segmented settings-segmented" role="radiogroup" aria-label="显示密度">
+          {([["comfortable", "舒适"], ["compact", "紧凑"]] as const).map(([value, label]) => (
+            <label key={value} className={density === value ? "active" : ""}>
+              <input type="radio" name="settings-density" value={value} checked={density === value} onChange={() => setDensity(value)} />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PageHeader({ activeLabel }: { activeLabel?: string }) {
   return (
@@ -603,7 +805,7 @@ function NumberField({ label, value, min, max, step, onChange, testid }: {
 }) {
   return (
     <FormField label={label}>
-      <Input type="number" value={value} min={min} max={max} step={step} onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(n); }} data-testid={testid} />
+      <Input type="number" aria-label={label} value={value} min={min} max={max} step={step} onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(n); }} data-testid={testid} />
     </FormField>
   );
 }
@@ -710,6 +912,7 @@ function LongTermMemoryCard({
             onClick={() => onChange(!enabled)}
             role="switch"
             aria-checked={enabled}
+            aria-label="长期记忆"
             data-testid="toggle-memory-enabled"
           >
             <span className="toggle-knob" />

@@ -134,64 +134,13 @@
   letter-spacing: var(--tracking-cjk);
 }
 
-.login-page {
-  background:
-    radial-gradient(900px 420px at 50% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
-    var(--bg);
-}
-
-.login-panel {
-  padding: 28px 28px 24px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-16);
-  box-shadow: var(--shadow-float);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-.login-form input {
-  height: 42px;
-  border-radius: var(--r-8);
-  border-color: var(--line-2);
-  background: var(--field);
-  box-shadow: none;
-}
-
-.login-form input:focus {
-  outline: var(--focus-width) solid var(--focus-ring);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--focus-ring-shadow);
-}
-
-.login-submit {
-  border-radius: var(--r-8);
-  box-shadow: none;
-}
-
-.login-submit:focus-visible {
-  outline: var(--focus-width) solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
 .settings-page .settings-form-card,
 .settings-page .provider-sidebar,
-.memory-page .memory-list,
-.data-center .data-summary-panel,
-.data-center .data-main-panel,
-.data-center .data-governance-panel,
 .capability-directory,
 .diag-section,
 .empty-onboarding {
   border-color: var(--line-2);
   box-shadow: none;
-}
-
-.memory-page .memory-card-row:hover,
-.data-center .data-row:hover,
-.data-center .data-recent-row:hover,
-.data-center .data-archive-row:hover {
-  background: var(--surface-hover);
 }
 
 .settings-page .provider-sidebar button:focus-visible,
@@ -209,21 +158,10 @@
   border-radius: var(--r-12);
 }
 
-.wb-empty .empty-mark {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: var(--weight-heading);
-  color: var(--accent-text);
-  background: var(--accent);
-}
-
 .stat-value,
 .metric-val,
 .tc-duration-pill,
 .rt-dur,
-.brand-text small,
 .task-phase-index {
   font-variant-numeric: tabular-nums;
 }
@@ -233,8 +171,6 @@
   text-transform: none;
 }
 
-.sidebar-content .list-item,
-.app-nav-item,
 .stage-output > summary,
 .tool-call-card-header {
   transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);

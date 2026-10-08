@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--overlay) 85%, transparent);
+  background: var(--overlay);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   animation: overlay-in var(--dur-2) var(--ease-out) both;
@@ -24,9 +24,13 @@
   overflow: auto;
   background: var(--surface);
   border: 1px solid var(--line-2);
-  border-radius: var(--r-12);
-  box-shadow: var(--shadow-menu);
-  animation: surface-in var(--dur-2) var(--ease-out) both;
+  border-radius: var(--r-dialog);
+  box-shadow: var(--shadow-float);
+  animation: dialog-in var(--dur-3) var(--ease-out) both;
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }
 
 .modal-title {
@@ -45,27 +49,70 @@
   margin-top: 18px;
 }
 
+.modal.confirm-modal { width: min(440px, calc(100vw - 32px)); padding: 20px 20px 16px; }
 .confirm-dialog {
-  min-width: 280px;
+  min-width: 260px;
 }
+.confirm-dialog-main { display: flex; align-items: flex-start; gap: 14px; }
+.confirm-dialog-text { flex: 1 1 auto; min-width: 0; padding-top: 6px; }
+.confirm-dialog-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: var(--info);
+  background: var(--info-soft);
+  border-radius: 50%;
+}
+.confirm-dialog.is-destructive .confirm-dialog-icon { color: var(--danger); background: var(--danger-soft); }
 
 .confirm-dialog-title {
   margin: 0 0 8px;
-  font-size: var(--fs-15);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
   font-weight: var(--weight-heading);
   color: var(--text);
 }
 
 .confirm-dialog-body {
-  margin-bottom: 16px;
-  font-size: var(--fs-13);
-  color: var(--text-3);
-  line-height: 1.5;
+  margin-bottom: 20px;
+  font-size: var(--fs-14);
+  color: var(--text-2);
+  line-height: var(--lh-14);
+  white-space: pre-line;
 }
 
 .confirm-dialog-actions {
   justify-content: flex-end;
 }
+
+/* Form dialog: the in-app replacement for window.prompt (components/FormDialog.tsx). */
+.modal.form-dialog-modal { width: min(480px, calc(100vw - 32px)); }
+.form-dialog .confirm-dialog-body { margin-bottom: 16px; }
+.form-dialog-field { display: grid; gap: 6px; margin: 0 0 20px; }
+.form-dialog-label { font-size: var(--fs-13); font-weight: var(--weight-label); color: var(--text); }
+.form-dialog-control {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-control);
+  resize: vertical;
+}
+textarea.form-dialog-control { min-height: 96px; }
+.form-dialog-control::placeholder { color: var(--text-4); }
+.form-dialog-control:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; border-color: var(--accent); }
+.form-dialog-control.is-invalid { border-color: var(--danger); }
+.form-dialog-hint,
+.form-dialog-error { margin: 0; font-size: var(--fs-12); line-height: var(--lh-12); }
+.form-dialog-hint { color: var(--text-3); }
+.form-dialog-error { color: var(--danger); font-weight: var(--weight-label); }
 
 .toast-host {
   position: fixed;
@@ -83,17 +130,16 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  min-width: 260px;
-  padding: 12px 14px;
+  min-width: 280px;
+  padding: 12px 12px 12px 14px;
   pointer-events: auto;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: var(--surface);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid var(--line-2);
-  border-left: 3px solid var(--text-3);
-  border-radius: var(--r-12);
-  box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--line) 30%, transparent);
-  animation: toast-in var(--dur-4) var(--ease-out) both;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg);
+  animation: toast-in var(--dur-3) var(--ease-out) both;
 }
 
 .toast-icon-wrap {
@@ -101,46 +147,30 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-8);
-  margin-top: -1px;
+  width: 20px;
+  height: 20px;
+  margin-top: 0;
+  background: transparent;
 }
 
-.toast.success .toast-icon-wrap {
-  color: var(--ok);
-  background: var(--ok-soft);
-}
-.toast.error .toast-icon-wrap {
-  color: var(--danger);
-  background: var(--danger-soft);
-}
-.toast.warning .toast-icon-wrap {
-  color: var(--warn);
-  background: var(--warn-soft);
-}
-.toast.info .toast-icon-wrap {
-  color: var(--info);
-  background: var(--info-soft);
-}
-
-.toast.success { border-left-color: var(--ok); }
-.toast.error { border-left-color: var(--danger); }
-.toast.warning { border-left-color: var(--warn); }
-.toast.info { border-left-color: var(--info); }
+.toast.success .toast-icon-wrap { color: var(--ok); }
+.toast.error .toast-icon-wrap { color: var(--danger); }
+.toast.warning .toast-icon-wrap { color: var(--warn); }
+.toast.info .toast-icon-wrap { color: var(--info); }
+.toast.error { border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
 
 .toast-title {
   margin-bottom: 2px;
   color: var(--text);
   font-size: var(--fs-13);
   font-weight: var(--weight-heading);
-  line-height: 1.4;
+  line-height: var(--lh-13);
 }
 
 .toast-body {
-  color: var(--text-2);
+  color: var(--text-3);
   font-size: var(--fs-12);
-  line-height: 1.5;
+  line-height: var(--lh-12);
   word-break: break-word;
 }
 
@@ -161,13 +191,13 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   color: var(--text-4);
   background: transparent;
   border: none;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-control);
   cursor: pointer;
   transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
 }
@@ -182,9 +212,7 @@
   .modal {
     width: calc(100vw - 24px);
     padding: var(--space-6);
-    border-radius: var(--r-12);
-    box-shadow: var(--shadow-menu);
-    animation: surface-in var(--dur-2) var(--ease-out) both;
+    border-radius: var(--r-dialog);
   }
 }
 
@@ -250,13 +278,13 @@
 }
 
 .modal-sheet {
-  animation: surface-in var(--dur-2) var(--ease-out) both;
+  animation: dialog-in var(--dur-3) var(--ease-out) both;
   width: min(760px, 100%);
   max-height: calc(100dvh - 32px);
   overflow: auto;
   background: var(--surface);
-  border-radius: var(--r-12);
-  box-shadow: var(--shadow-menu);
+  border-radius: var(--r-dialog);
+  box-shadow: var(--shadow-float);
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -275,16 +303,16 @@
 
 .modal-title {
   font-weight: var(--weight-heading);
-  font-size: 18px;
+  font-size: var(--fs-16);
   color: var(--text);
-  line-height: var(--lh-heading);
+  line-height: var(--lh-16);
 }
 
 .modal-subtitle {
-  margin-top: 5px;
-  font-size: 12px;
-  color: var(--text-4);
-  line-height: 1.5;
+  margin-top: 4px;
+  font-size: var(--fs-13);
+  color: var(--text-3);
+  line-height: var(--lh-13);
 }
 
 .modal-close {

@@ -13,10 +13,12 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 // shared stylesheet is how the order became accidental in the first place.
 import "./components/RuntimeEventTimeline.css";
 import "./styles/tokens.css";
+import "./styles/semantic.css";
 import "./styles/global.css";
 import "./pages/Settings/Settings.css";
 import "./pages/Operations/Operations.css";
 import "./pages/DataCenter/DataCenter.css";
+import "./pages/DataCenter/DataViews.css";
 import "./pages/MemoryPage/MemoryPage.css";
 import "./pages/KnowledgeLibrary/KnowledgeLibrary.css";
 import "./pages/Diagnostics/Diagnostics.css";
@@ -26,13 +28,23 @@ import "./components/TraceDetailPanel.css";
 import "./styles/patterns.css";
 import "./styles/product-shell.css";
 import "./styles/primitives.css";
+import "./components/ui/collection.css";
 import "./styles/console-system.css";
 import "./pages/AgentWorkbench/AgentWorkbench.css";
+import "./pages/AgentWorkbench/WorkbenchHeader.css";
+import "./pages/AgentWorkbench/WorkbenchEmptyState.css";
 import "./pages/AgentWorkbench/WorkbenchComposer.css";
 import "./styles/typography.css";
 // Page refinements come last: they exist to outrank the design system above.
 // See styles/pages.css.
 import "./styles/pages.css";
+import "./styles/management-surfaces.css";
+import "./styles/management-knowledge.css";
+import "./styles/management-users.css";
+import "./styles/management-runs.css";
+import "./styles/diagnostics-surface.css";
+import "./styles/diagnostics-ledger.css";
+// Workbench conversation surface refines the workbench and markdown rules above.
 // Narrow-width adaptations last: they must outrank the unconditional rules they
 // refine, and a declared layer is what makes that true regardless of import
 // order. See styles/responsive.css.

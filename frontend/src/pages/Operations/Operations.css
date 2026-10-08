@@ -234,9 +234,17 @@
 }
 
 .job-card-title {
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: 0;
+  font: inherit;
   font-size: var(--fs-13);
   font-weight: var(--weight-heading);
+  text-align: left;
+  cursor: pointer;
 }
+.job-card-title:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
 
 .job-card-meta {
   display: flex;

@@ -7,11 +7,6 @@
       --flow-block: 24px;
     }
 
-    /* The version badge is decoration; at this width it costs the brand room. */
-    .brand-text small {
-      display: none;
-    }
-
     .stat-value {
       font-size: 18px;
     }
@@ -36,13 +31,4 @@
     }
   }
 
-  @media (max-width: 640px) {
-    .app-header {
-      padding: 0 12px;
-    }
-
-    .brand-text > span {
-      font-size: var(--fs-13);
-    }
-  }
 }

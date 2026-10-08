@@ -440,3 +440,130 @@
   transform: rotate(-135deg);
 }
 }
+
+/* ── Result card (v2): one framed disclosure. The summary line carries the
+   outcome; the details are flat sections divided by hairlines instead of a
+   stack of nested boxes. The model's judgement is the one accent callout.
+   Stage outputs read as one grouped list above the answer. ── */
+@layer workbench {
+.wb-shell .chat-result-inline { padding-top: 4px; border-top: 0; }
+.wb-shell .result-inline-disclosure {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  transition: border-color var(--dur-2) var(--ease);
+}
+.wb-shell .result-inline-disclosure:hover { border-color: var(--line-3); }
+.wb-shell .result-overview-toggle {
+  min-height: 48px;
+  padding: 0 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.wb-shell .result-overview-toggle:hover { background: var(--surface-hover); }
+.wb-shell .result-overview-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.wb-shell .result-overview-title { font-size: var(--fs-13); font-weight: var(--weight-strong); }
+.wb-shell .result-overview-status { height: 22px; font-weight: var(--weight-label); }
+.wb-shell .result-inline-details {
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px;
+  border-top: 1px solid var(--line-2);
+}
+.wb-shell .result-inline-details > * { margin: 0; padding-block: 12px; }
+.wb-shell .result-inline-details > * + * { border-top: 1px solid var(--line-2); }
+
+/* The model's own judgement: the single accent callout. */
+.wb-shell .result-inline-details > .cognitive-summary {
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--accent-soft);
+  border: 0;
+  border-radius: var(--r-control);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+.wb-shell .result-inline-details > .cognitive-summary + * { margin-top: 4px; border-top: 0; }
+.wb-shell .cognitive-summary .inline-icon-accent { flex-shrink: 0; margin-top: 3px; }
+.wb-shell .cognitive-summary-text { white-space: normal; }
+.wb-shell .cognitive-summary-outcome {
+  padding: 0 8px;
+  color: var(--accent);
+  background: var(--surface);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+/* Tool line + its technical disclosure. */
+.wb-shell .result-inline-details > .chat-tool-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  color: var(--text-2);
+  background: transparent;
+  border-inline: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  font-size: var(--fs-13);
+}
+.wb-shell .chat-tool-summary .inline-technical-details { margin-left: auto; }
+.wb-shell .chat-tool-summary .inline-technical-details > summary { color: var(--accent); font-size: var(--fs-12); cursor: pointer; }
+.wb-shell .chat-tool-summary .inline-technical-details[open] { flex-basis: 100%; margin-left: 0; }
+.wb-shell .chat-tool-calls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.wb-shell .chat-tool-call { min-height: 26px; padding: 0 10px; background: var(--surface-2); border: 0; border-radius: var(--r-pill); }
+
+/* Action trace: a section, not a box inside the box. */
+.wb-shell .result-inline-details > .action-trace-panel { background: transparent; border-inline: 0; border-bottom: 0; border-radius: 0; box-shadow: none; }
+.wb-shell .action-trace-head { flex-wrap: wrap; gap: 6px; }
+.wb-shell :is(.action-trace-title, .chat-source-summary > b) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  color: var(--text);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-strong);
+}
+.wb-shell .action-trace-note { margin-top: 8px; color: var(--text-3); font-size: var(--fs-12); line-height: var(--lh-12); }
+
+/* Sources: typed chips with a quiet score. */
+.wb-shell .result-inline-details > .chat-source-summary { color: var(--text-3); }
+.wb-shell .chat-source-list { gap: 6px; margin-top: 8px; }
+.wb-shell .chat-source-chip {
+  min-height: 26px;
+  padding: 0 10px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 0;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-12);
+}
+
+/* Actions: one even row; the source count trails on the right. */
+.wb-shell .result-inline-details > .result-actions { gap: 8px; padding-block: 12px 14px; }
+.wb-shell .result-actions .run-detail-button { height: 32px; padding: 0 12px; border-color: var(--line); border-radius: var(--r-control); }
+.wb-shell .result-actions .run-detail-info { margin-left: auto; color: var(--text-4); font-size: var(--fs-12); }
+
+/* Stage outputs: one grouped list with dividers. */
+.wb-shell .stage-outputs { gap: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); }
+.wb-shell .stage-outputs .stage-output { margin: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+.wb-shell .stage-outputs .stage-output + .stage-output { border-top: 1px solid var(--line-2); }
+.wb-shell .stage-outputs .stage-output > summary { min-height: 40px; padding: 0 14px; color: var(--text); font-size: var(--fs-13); font-weight: var(--weight-label); }
+.wb-shell .stage-outputs .stage-output > summary:hover { background: var(--surface-hover); }
+.wb-shell .stage-outputs .stage-output > summary span { color: var(--text-4); font-size: var(--fs-12); font-weight: var(--weight-body); }
+.wb-shell .stage-outputs .stage-output[open] > summary { border-bottom: 1px solid var(--line-2); }
+.wb-shell .stage-outputs .stage-output-body { padding: 12px 16px 14px; background: var(--surface-2); }
+
+@media (max-width: 760px) {
+  .wb-shell .result-overview-meta { display: none; }
+  .wb-shell .result-actions .run-detail-info { margin-left: 0; }
+}
+}

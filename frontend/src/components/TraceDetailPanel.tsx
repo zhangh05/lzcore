@@ -6,6 +6,7 @@
  */
 import { useState, useMemo } from "react";
 import { Badge } from "./common";
+import { IconChevronDown, IconChevronRight, IconCopy } from "./Icon";
 import {
   deriveRunTraceStats,
   eventToolId,
@@ -104,8 +105,8 @@ export function TraceDetailPanel({ traceEvents, selectedRun }: Props) {
           {String(selectedRun.trace_id || "-").substring(0, 12)}
         </span>
         <div className="trace-spacer" />
-        <button className="btn sm" onClick={() => { const t = JSON.stringify(traceEvents, null, 2); navigator.clipboard?.writeText(t).catch(() => {}); }}>
-          📋 复制
+        <button className="btn sm" type="button" onClick={() => { const t = JSON.stringify(traceEvents, null, 2); navigator.clipboard?.writeText(t).catch(() => {}); }}>
+          <IconCopy size={13} /> 复制
         </button>
       </div>
 
@@ -132,16 +133,16 @@ export function TraceDetailPanel({ traceEvents, selectedRun }: Props) {
       )}
 
       {/* ── Filter bar ── */}
-      <div className="segmented trace-filter-bar">
+      <div className="segmented trace-filter-bar" role="group" aria-label="按类型筛选">
         {(Object.entries(FILTER_LABELS) as [EventFilter, string][]).map(([k, v]) => (
-          <button key={k} className={filter === k ? "active" : ""} onClick={() => setFilter(k)} type="button">
+          <button key={k} className={filter === k ? "active" : ""} aria-pressed={filter === k} onClick={() => setFilter(k)} type="button">
             {v}{counts[k] ? ` ${counts[k]}` : ""}
           </button>
         ))}
       </div>
 
       <input
-        className="input trace-search-input" type="text" placeholder="搜索处理记录…" value={search}
+        className="input trace-search-input" type="search" aria-label="搜索处理记录" placeholder="搜索处理记录…" value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
 
@@ -159,13 +160,15 @@ export function TraceDetailPanel({ traceEvents, selectedRun }: Props) {
             const badge = evBadge(e);
             const tId = e.tool_id || eventToolId(e);
             return (
-              <div key={e.event_id} className="trace-event-item">
-                <div
+              <div key={e.event_id} className={`trace-event-item ${badge}`}>
+                <button
+                  type="button"
                   className={`trace-event-header${open ? " open" : ""}`}
+                  aria-expanded={open}
                   onClick={() => toggle(e.event_id)}
                 >
                   <span className="trace-event-index">{idx + 1}</span>
-                  <Badge kind={badge} withDot>{et}</Badge>
+                  <span className={`trace-event-kind ${badge}`}>{et}</span>
                   {tId && <code className="trace-event-tool-id">{tId}</code>}
                   {e.name && !tId && <span className="trace-event-name">{e.name}</span>}
                   {e.status && <Badge kind={e.status === "error" || e.status === "failed" ? "err" : "ok"}>{e.status}</Badge>}
@@ -175,8 +178,8 @@ export function TraceDetailPanel({ traceEvents, selectedRun }: Props) {
                   <span className="trace-event-time">
                     {formatEventTime(e)}
                   </span>
-                  <span className="trace-event-toggle">{open ? "▲" : "▼"}</span>
-                </div>
+                  <span className="trace-event-toggle" aria-hidden="true">{open ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}</span>
+                </button>
                 {open && (
                   <div className="trace-event-detail">
                     {e.summary && !e.message && <div className="trace-detail-summary">{e.summary}</div>}
@@ -215,12 +218,12 @@ export function TraceDetailPanel({ traceEvents, selectedRun }: Props) {
 
       {/* ── Full metadata ── */}
       <div className="trace-metadata-section">
-        <button className="btn sm" onClick={() => setShowMeta(!showMeta)}>
+        <button className="btn sm" type="button" aria-expanded={showMeta} onClick={() => setShowMeta(!showMeta)}>
           {showMeta ? "收起技术信息" : "查看完整技术信息"}
         </button>
         {showMeta && (
           <div className="trace-metadata-actions">
-            <pre className="trace-metadata-pre">
+            <pre className="trace-metadata-pre" tabIndex={0} aria-label="完整技术信息">
               {JSON.stringify({
                 run_id: selectedRun.run_id, turn_id: selectedRun.turn_id, trace_id: selectedRun.trace_id,
                 session_id: selectedRun.session_id, status: selectedRun.status, intent: selectedRun.intent,

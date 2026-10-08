@@ -31,7 +31,13 @@ export function ToastHost() {
       data-testid="toast-host"
     >
       {messages.map((m) => (
-        <div key={m.id} className={`toast ${m.kind}`} role="alert" aria-live="assertive">
+        // Failures interrupt (alert); confirmations wait for a pause (status).
+        <div
+          key={m.id}
+          className={`toast ${m.kind}`}
+          role={m.kind === "error" || m.kind === "warning" ? "alert" : "status"}
+          aria-live={m.kind === "error" || m.kind === "warning" ? "assertive" : "polite"}
+        >
           <div className="toast-icon-wrap" aria-hidden="true">
             {getToastIcon(m.kind)}
           </div>

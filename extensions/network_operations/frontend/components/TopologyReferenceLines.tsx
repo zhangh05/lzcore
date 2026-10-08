@@ -11,7 +11,7 @@ export function TopologyReferenceLines({ lines, viewport, editable, onChange }: 
   onChange?: (lines: ReferenceLine[]) => void;
 }) {
   const drag = useRef<{ id: string; coordinate: number; position: number; scale: number } | null>(null);
-  return <div className="topology-reference-lines" aria-label="画布参考线">
+  return <div className="topology-reference-lines" role="group" aria-label="画布参考线">
     {lines.map(line => <button key={line.id} type="button" className={`reference-line axis-${line.axis}`} data-locked={line.locked}
       aria-label={`${line.axis === 'x' ? '垂直' : '水平'}参考线 ${line.position}${line.locked ? ' 已锁定' : ''}`}
       aria-disabled={!editable || line.locked} title={line.locked ? '参考线已锁定' : '拖动坐标标签调整参考线；方向键微调'}

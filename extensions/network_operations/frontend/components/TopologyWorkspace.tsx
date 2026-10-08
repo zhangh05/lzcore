@@ -16,6 +16,7 @@ import { regionBounds } from "./topologyRegions";
 import { TopologyRevisionDialog } from "./TopologyRevisionDialog";
 import { RevisionDiff, TopologyRevision } from "./topologyRevisionModel";
 import { TopologyShortcutHelp } from "./TopologyShortcutHelp";
+import { useTopologyNarrowSheet } from "./useTopologyNarrowSheet";
 import { useTopologyCollaboration } from "./useTopologyCollaboration";
 import { useTopologyDeviceCommands } from "./useTopologyDeviceCommands";
 import { useTopologyDocumentState } from "./useTopologyDocumentState";
@@ -828,6 +829,18 @@ export default function TopologyWorkspace({
     );
   }, [selectedElement, activeTopology]);
 
+  // ≤760px: library and agent panel are sheets over the canvas (focus in, Escape, focus back).
+  useTopologyNarrowSheet(
+    showLibrary,
+    () => studioContainerRef.current?.querySelector<HTMLElement>(".topology-sidebar"),
+    () => setShowLibrary(false),
+  );
+  useTopologyNarrowSheet(
+    showAgent,
+    () => studioContainerRef.current?.querySelector<HTMLElement>(".studio-agent-dock"),
+    () => setShowAgent(false),
+  );
+
   if (loadError) {
     return (
       <div className="topology-empty-state" role="alert">
@@ -945,6 +958,7 @@ export default function TopologyWorkspace({
     >
       {/* 1. Left Panel: Topology selector + Device Palette + Group Palette */}
       <TopologyLibrary
+        onClose={() => setShowLibrary(false)}
         activeTopology={activeTopology}
         armedNodeType={armedNodeType}
         canvasApiRef={canvasApiRef}
@@ -1106,6 +1120,7 @@ export default function TopologyWorkspace({
               canvasApiRef.current?.focusIds(ids);
             }}
             onUndoChange={undoDrawingChange}
+            onClose={() => setShowAgent(false)}
             onCompleted={() => {
               void handleAgentCompleted();
             }}

@@ -1,6 +1,38 @@
+/* File library picker: a framed, divided list inside the modal. Selected rows
+   take the accent tint (from the checkbox state itself, no extra state). */
 @layer workbench {
-.file-picker-list { max-height: 45vh; overflow: auto; padding: 12px 0; }
-.file-picker-row { display: flex; gap: 12px; align-items: center; padding: 12px; cursor: pointer; }
-.file-picker-row span { min-width: 0; overflow-wrap: anywhere; }
-.file-picker-row small { display: block; opacity: .65; margin-top: 4px; }
+.file-picker-list {
+  max-height: 45vh;
+  margin-top: 12px;
+  padding: 0;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.file-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease);
+}
+.file-picker-row + .file-picker-row { border-top: 1px solid var(--line-2); }
+.file-picker-row:hover { background: var(--surface-hover); }
+.file-picker-row:has(input:checked) { background: var(--accent-soft); }
+.file-picker-row:has(input:disabled:not(:checked)) { cursor: not-allowed; opacity: .6; }
+.file-picker-row input { flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.file-picker-row span { min-width: 0; color: var(--text); font-size: var(--fs-13); line-height: var(--lh-13); font-weight: var(--weight-label); overflow-wrap: anywhere; }
+.file-picker-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: var(--weight-body);
+}
+.file-picker-list > p { padding: 20px 14px; color: var(--text-3); font-size: var(--fs-13); text-align: center; }
+.file-picker-list + .actions-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 }

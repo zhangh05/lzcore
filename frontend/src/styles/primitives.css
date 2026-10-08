@@ -1,108 +1,106 @@
 /* Shared controls and list/detail patterns. Page refinements stay scoped. */
 @layer console {
+/* ── Button ──────────────────────────────────────────────────────────────
+   One anatomy, five intents. Secondary (default) is a quiet raised surface;
+   primary is the single filled action per region; ghost is for toolbars and
+   rows; danger tints only on intent. Hover/active are planar (no movement);
+   focus is a 2px ring with 2px offset so it never merges with the border. */
 .btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   min-width: 0;
   height: var(--h-control);
-  padding: 0 12px;
+  padding: 0 14px;
   color: var(--text-2);
-  background: transparent;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-8);
-  box-shadow: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-xs);
   font-size: var(--fs-13);
   font-weight: var(--weight-label);
   line-height: 1;
   white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
   transition:
-    color var(--dur-2) var(--ease),
-    background var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    box-shadow var(--dur-2) var(--ease);
+    color var(--dur-1) var(--ease),
+    background-color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
 }
+.btn > svg { flex: 0 0 auto; }
 .btn:hover:not(:disabled) {
-  color: var(--console-ink);
+  color: var(--text);
   background: var(--surface-hover);
-  border-color: var(--line);
-  box-shadow: none;
+  border-color: var(--line-3);
   transform: none;
 }
-/* Button hover feedback is strictly planar (transform: none, no spatial displacement)
-   using surface contrast and border transitions rather than physical floating, avoiding
-   micro-jitter across dense operational consoles. */
-.btn:active:not(:disabled) { background: var(--surface-3); }
+.btn:active:not(:disabled) { background: var(--surface-3); box-shadow: none; }
 .btn:focus-visible {
-  box-shadow: var(--shadow-focus);
   outline: var(--focus-width) solid var(--focus-ring);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
-.btn:disabled { opacity: 1; color: var(--text-3); background: transparent; border-color: var(--line-2); }
+.btn:disabled {
+  opacity: 1;
+  color: var(--text-4);
+  background: var(--surface-2);
+  border-color: var(--line-2);
+  box-shadow: none;
+  cursor: not-allowed;
+}
 .btn.primary {
   color: var(--accent-text);
   background: var(--console-action);
   border-color: var(--console-action);
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
 }
 .btn.primary:hover:not(:disabled) {
   color: var(--accent-text);
   background: var(--console-action-strong);
   border-color: var(--console-action-strong);
-  box-shadow: none;
-  transform: none;
 }
+.btn.primary:active:not(:disabled) { background: color-mix(in srgb, var(--console-action-strong) 86%, var(--text)); }
 .btn.selected {
-  color: var(--accent);
+  color: var(--accent-2);
   background: var(--surface-selected);
-  border-color: var(--accent);
-}
-.btn.selected:hover:not(:disabled) { color: var(--accent); background: var(--surface-hover); border-color: var(--accent); }
-.btn.ghost {
-  border-color: transparent;
-  background: transparent;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   box-shadow: none;
 }
-/* Also from global.css, and also still live: nothing here touches
-   `.btn.ghost:hover`, so it kept applying across the split. Moved because a
-   hover state belongs next to the button it is a state of, not in a sheet that
-   is only accidentally earlier in the cascade. */
-.btn.ghost:hover:not(:disabled) {
-  background: var(--surface-3);
-  border-color: transparent;
-}
-.btn-xs { height: var(--h-control-compact); padding: 0 6px; font-size: var(--fs-12); }
-.btn-xs-compact { height: var(--h-control-compact); padding: 0 4px; font-size: var(--fs-12); }
-.btn-info,
-.btn-info.btn {
+.btn.selected:hover:not(:disabled) { color: var(--accent-2); background: var(--surface-selected); border-color: var(--accent); }
+.btn.ghost {
   color: var(--text-2);
   background: transparent;
-  border-color: var(--line);
+  border-color: transparent;
+  box-shadow: none;
 }
-.btn-info:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--line-3);
-}
-.btn-info:active:not(:disabled) {
-  background: var(--surface-3);
-  border-color: var(--line-3);
-}
-.btn.sm { height: var(--h-control-compact); border-radius: var(--r-4); padding: 0 9px; font-size: var(--fs-13); }
-.btn.icon-only { width: 32px; padding: 0; }
-.btn.icon-only.sm { width: 32px; min-height: 32px; }
+.btn.ghost:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); border-color: transparent; }
+.btn.ghost:active:not(:disabled) { background: var(--surface-3); }
+.btn.ghost:disabled { background: transparent; border-color: transparent; }
+.btn-xs { height: 28px; padding: 0 8px; font-size: var(--fs-12); }
+.btn-xs-compact { height: 28px; padding: 0 6px; font-size: var(--fs-12); }
+.btn-info,
+.btn-info.btn { color: var(--text-2); background: var(--surface); border-color: var(--line); }
+.btn-info:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--line-3); }
+.btn-info:active:not(:disabled) { background: var(--surface-3); border-color: var(--line-3); }
+.btn.sm { height: var(--h-control-compact); padding: 0 10px; border-radius: var(--r-control); font-size: var(--fs-12); gap: 5px; }
+.btn.lg { height: 40px; padding: 0 18px; font-size: var(--fs-14); }
+.btn.icon-only { width: var(--h-control); padding: 0; }
+.btn.icon-only.sm { width: var(--h-control-compact); min-height: var(--h-control-compact); }
 .btn.danger,
-.btn.danger-ghost { color: var(--danger); background: transparent; border-color: transparent; }
+.btn.danger-ghost { color: var(--danger); background: transparent; border-color: transparent; box-shadow: none; }
 .btn.danger:hover:not(:disabled),
 .btn.danger-ghost:hover:not(:disabled) {
   color: var(--danger);
   background: var(--danger-soft);
   border-color: color-mix(in srgb, var(--danger) 24%, transparent);
 }
-.btn.danger-confirm { color: var(--danger-text); background: var(--danger); border-color: var(--danger); }
-.btn.danger-confirm:hover:not(:disabled) { color: var(--danger-text); background: color-mix(in srgb, var(--danger) 88%, #000); border-color: transparent; }
+.btn.danger-confirm { color: var(--danger-text); background: var(--danger); border-color: var(--danger); box-shadow: var(--shadow-xs); }
+.btn.danger-confirm:hover:not(:disabled) { color: var(--danger-text); background: color-mix(in srgb, var(--danger) 86%, var(--text)); border-color: transparent; }
 .btn.primary:disabled,
-.btn.danger-confirm:disabled { color: var(--text-3); background: var(--surface-3); border-color: transparent; cursor: not-allowed; }
+.btn.danger-confirm:disabled { color: var(--text-4); background: var(--surface-3); border-color: transparent; box-shadow: none; cursor: not-allowed; }
 .btn.danger:disabled,
 .btn.danger-ghost:disabled {
   color: var(--text-4);
@@ -112,7 +110,23 @@
   cursor: not-allowed;
   pointer-events: none;
 }
+/* Loading keeps the label (and the width) and adds a leading spinner; the
+   button is disabled by its owner so it cannot submit twice. */
+.btn.is-loading { cursor: progress; }
+.btn.is-loading::before {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  content: "";
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
 
+/* ── Field ───────────────────────────────────────────────────────────────
+   Boundary uses --field-border (≥3:1, WCAG 1.4.11). Focus replaces the
+   border with the accent and adds a 3px soft ring; invalid uses danger. */
 .input,
 textarea.input,
 select.input {
@@ -121,20 +135,35 @@ select.input {
   /* Keep the shared select chevron instead of resetting its background image. */
   background-color: var(--field);
   border: 1px solid var(--field-border);
-  border-radius: var(--r-8);
+  border-radius: var(--r-control);
   box-shadow: none;
-  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+  font-size: var(--fs-13);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
 }
-.input:hover,
-textarea.input:hover,
-select.input:hover { border-color: var(--line-3); }
+.input:hover:not(:disabled):not(:focus),
+textarea.input:hover:not(:disabled):not(:focus),
+select.input:hover:not(:disabled):not(:focus) { border-color: color-mix(in srgb, var(--field-border) 65%, var(--text)); }
+.input:focus,
 .input:focus-visible,
 textarea.input:focus-visible,
 select.input:focus-visible {
-  border-color: var(--lz-primary, var(--focus-ring));
-  box-shadow: 0 0 0 3px var(--lz-primary-glow, var(--focus-ring-shadow));
-  outline: var(--focus-width) solid var(--focus-ring);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring-shadow);
+  outline: 2px solid transparent;
   outline-offset: 1px;
+}
+.input:disabled,
+textarea.input:disabled,
+select.input:disabled { color: var(--text-4); background-color: var(--surface-2); border-color: var(--line); cursor: not-allowed; }
+.input[readonly] { background-color: var(--surface-2); }
+.input[aria-invalid="true"],
+textarea.input[aria-invalid="true"],
+select.input[aria-invalid="true"] { border-color: var(--danger); }
+.input[aria-invalid="true"]:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent); }
+select.input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23727e84' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-position: right 10px center;
+  background-size: 12px 12px;
 }
 
 .ui-filter-bar {
@@ -146,62 +175,86 @@ select.input:focus-visible {
   border-radius: 0;
   box-shadow: none;
 }
+
+/* ── Table ───────────────────────────────────────────────────────────────
+   Surface card with a hairline; sticky-feeling muted header; 13px cells,
+   numbers tabular; hover is a planar tint. */
 .data-table-scroll {
   background: var(--console-surface);
   border: 1px solid var(--console-border-soft);
-  border-radius: var(--r-8);
-  box-shadow: none;
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
 }
-.tbl { background: var(--console-surface); }
+.tbl { background: var(--console-surface); font-variant-numeric: tabular-nums; }
 .tbl th {
-  height: 36px;
-  color: var(--console-muted-ink);
-  background: var(--console-muted);
+  height: 38px;
+  color: var(--text-3);
+  background: var(--surface-2);
   border-bottom-color: var(--console-border-soft);
   font-size: var(--fs-12);
   font-weight: var(--weight-heading);
   letter-spacing: normal;
+  text-align: left;
 }
 .tbl td {
+  height: var(--h-row);
   color: var(--console-ink);
   border-bottom-color: var(--console-border-soft);
   font-size: var(--fs-13);
 }
+.tbl tbody tr { transition: background-color var(--dur-1) var(--ease); }
 .tbl tbody tr:hover { background: var(--surface-hover); }
+.tbl tbody tr:last-child td { border-bottom-color: transparent; }
 
+/* ── Master/detail ───────────────────────────────────────────────────────*/
 .split-shell > aside { background: var(--console-muted); border-right-color: var(--console-border-soft); }
 .split-detail,
-.ui-detail-panel { padding: 18px 20px; background: var(--console-surface); }
-.ui-detail-panel-head { padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--console-border-soft); }
-.ui-detail-panel-title { color: var(--console-ink); font-size: 16px; }
-.ui-detail-panel-subtitle { color: var(--console-muted-ink); }
+.ui-detail-panel { padding: 20px 24px; background: var(--console-surface); }
+.ui-detail-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--console-border-soft);
+}
+.ui-detail-panel-title { margin: 0; color: var(--console-ink); font-size: var(--fs-16); line-height: var(--lh-16); font-weight: var(--weight-heading); }
+.ui-detail-panel-subtitle { margin-top: 4px; color: var(--console-muted-ink); font-size: var(--fs-12); line-height: var(--lh-12); }
+.ui-detail-panel-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; }
 
 .status-pill {
   height: 22px;
   padding: 0 8px;
   color: var(--console-muted-ink);
-  background: transparent;
+  background: var(--surface-2);
   border-color: var(--console-border-soft);
   border-radius: var(--r-pill);
   font-size: var(--fs-12);
   font-weight: var(--weight-label);
 }
-.empty { min-height: 160px; padding: 32px 20px; }
-.empty-icon {
+
+/* ── Empty / loading / error ─────────────────────────────────────────────
+   A quiet tile, a one-line title, an optional hint and action. */
+.empty { min-height: 160px; padding: 36px 24px; gap: 6px; }
+.empty-icon,
+.error-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  margin-bottom: 12px;
-  color: var(--console-muted-ink);
-  background: transparent;
-  border: 0;
-  border-radius: 0;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 10px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
 }
-.empty-text { color: var(--console-ink); font-size: var(--fs-13); font-weight: var(--weight-label); }
-.empty-hint { color: var(--console-muted-ink); font-size: var(--fs-12); max-width: 400px; }
-.empty-action { margin-top: 14px; }
-
+.error-icon { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 18%, transparent); }
+.empty-text { margin: 0; color: var(--console-ink); font-size: var(--fs-14); line-height: var(--lh-14); font-weight: var(--weight-heading); }
+.empty-hint { margin: 0; color: var(--console-muted-ink); font-size: var(--fs-13); line-height: var(--lh-13); max-width: 420px; }
+.empty-action { margin-top: 14px; display: inline-flex; gap: 8px; }
+.error-text { color: var(--console-ink); font-size: var(--fs-14); font-weight: var(--weight-heading); }
+.error-hint { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-11); margin-bottom: 12px; }
 
 }

@@ -1,3 +1,8 @@
+/* Feature description drawer (v2): a right-hand sheet. Header with a hairline,
+   content on the sunken sheet colour with framed cards, and the capability
+   directory as a two-pane card that stacks by the drawer's own width (a
+   container query) — the viewport media rules never saw the drawer's width,
+   so at 390px the detail pane was squeezed to one character per line. */
 @layer pages {
 .feature-drawer-overlay {
   position: fixed;
@@ -5,97 +10,89 @@
   z-index: 1000;
   display: flex;
   justify-content: flex-end;
-  animation: featureDrawerFadeIn 0.2s ease-out;
+  animation: featureDrawerFadeIn var(--dur-3) var(--ease-out);
 }
 
 .feature-drawer-backdrop {
   position: absolute;
   inset: 0;
   background: var(--overlay);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 .feature-drawer-panel {
   position: relative;
   z-index: 1;
-  width: min(860px, 92vw);
-  height: 100%;
-  background: var(--surface);
-  border-left: 1px solid var(--line-2);
-  box-shadow: var(--shadow-menu);
   display: flex;
   flex-direction: column;
+  width: min(920px, 94vw);
+  height: 100%;
+  background: var(--surface-2);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-menu);
   animation: featureDrawerSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .feature-drawer-header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-6);
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 20px 12px 24px;
   background: var(--surface);
-  border-bottom: 0;
-  flex-shrink: 0;
+  border-bottom: 1px solid var(--line-2);
 }
 
-.feature-drawer-title-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.feature-drawer-title-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
 
 .feature-drawer-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--r-8);
-  background: var(--surface-3);
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
   color: var(--accent);
-  box-shadow: none;
+  background: var(--accent-soft);
+  border-radius: var(--r-10);
 }
 
 .feature-drawer-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: var(--weight-heading);
   color: var(--text);
-  line-height: 1.2;
+  font-size: var(--fs-16);
+  font-weight: var(--weight-strong);
+  line-height: var(--lh-16);
 }
 
 .feature-drawer-subtitle {
   margin: 2px 0 0;
-  font-size: 12px;
   color: var(--text-3);
-  line-height: 1.3;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
 }
 
 .feature-drawer-close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--r-6);
-  border: 1px solid transparent;
-  background: transparent;
   color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
 }
-
-.feature-drawer-close-btn:hover {
-  background: var(--surface-3);
-  color: var(--text);
-  border-color: var(--line-2);
-}
+.feature-drawer-close-btn:hover { color: var(--text); background: var(--surface-hover); border-color: var(--line-2); }
+.feature-drawer-close-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 .feature-drawer-content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-3) var(--space-6) var(--space-8);
+  padding: 16px 24px 32px;
+  container: feature-drawer / inline-size;
 }
 
 .cc-in-drawer {
@@ -103,47 +100,46 @@
   max-width: 100%;
   height: auto;
   min-height: auto;
-  overflow: visible;
   padding: 0;
-}
-
-.cc-in-drawer .page-body {
-  padding: 0;
-  height: auto;
-  min-height: auto;
   overflow: visible;
+  background: transparent;
 }
+.cc-in-drawer .page-body { height: auto; min-height: auto; padding: 0; overflow: visible; }
 
-.cc-drawer-metrics-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 14px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--line-2);
-  flex-wrap: wrap;
-}
-
-.cc-drawer-metrics-row .metric-chip-btn {
-  cursor: pointer;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-pill);
-  background: var(--surface-2);
-  color: var(--text-2);
-  box-shadow: none;
-  font-family: inherit;
-  transition: all 0.15s ease;
-}
-
-.cc-drawer-metrics-row .metric-chip-btn:hover {
-  background: var(--surface-3);
-  border-color: var(--accent);
-  color: var(--text);
-  box-shadow: none;
-}
+/* Section jump links: quiet chips on the sheet, no band of their own. */
+.cc-drawer-metrics-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.cc-drawer-metrics-row .metric-chip { height: 28px; padding: 0 12px; color: var(--text-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); box-shadow: none; font-size: var(--fs-12); }
+.cc-drawer-metrics-row .metric-chip-btn { font-family: inherit; cursor: pointer; transition: border-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease); }
+.cc-drawer-metrics-row .metric-chip-btn:hover { color: var(--text); border-color: var(--accent); }
+.cc-drawer-metrics-row .metric-chip-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 .cc-in-drawer .capability-directory {
-  grid-template-columns: minmax(230px, 30%) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 30%) minmax(0, 1fr);
+  min-height: 420px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: none;
+}
+.cc-in-drawer .capability-directory-list { padding: 6px; background: var(--surface); border-right: 1px solid var(--line-2); }
+.cc-in-drawer .capability-directory-head { padding: 10px 10px 12px; border-bottom: 1px solid var(--line-2); }
+.cc-in-drawer .capability-directory-row { min-height: 56px; padding: 8px 10px; border-bottom: 0; border-radius: var(--r-control); }
+.cc-in-drawer .capability-directory-row + .capability-directory-row { margin-top: 2px; }
+.cc-in-drawer .capability-directory-row.selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.cc-in-drawer .capability-directory-detail { padding: 20px 24px; }
+.cc-in-drawer > .page-body > .card { margin-top: 16px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: none; }
+
+@container feature-drawer (max-width: 640px) {
+  .cc-in-drawer .capability-directory { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .cc-in-drawer .capability-directory-list { max-height: 248px; overflow-y: auto; border-right: 0; border-bottom: 1px solid var(--line-2); }
+  .cc-in-drawer .capability-directory-detail { padding: 16px; }
+  .cc-in-drawer > .page-body > .card { padding: 14px 16px; }
+}
+
+@media (max-width: 760px) {
+  .feature-drawer-panel { width: 100vw; border-left: 0; }
+  .feature-drawer-header { padding: 10px 12px 10px 16px; }
+  .feature-drawer-content { padding: 12px 12px 24px; }
 }
 
 @keyframes featureDrawerFadeIn {
@@ -156,4 +152,7 @@
   to { transform: translateX(0); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .feature-drawer-overlay, .feature-drawer-panel { animation: none; }
+}
 }

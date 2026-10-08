@@ -1,0 +1,20 @@
+/* Diagnostics ledger status chips; split from diagnostics-surface.css by size. */
+
+@layer pages {
+/* One scroller for the prompt table: the focusable, labelled region owns both axes. */
+.diagnostics-page .diag-prompt-list .data-table-scroll { overflow: visible; }
+.diagnostics-page .diag-prompt-list:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: -2px; }
+.diagnostics-page .diag-continuation-alert[data-status="running"] { border-left-color: var(--info); }
+.diagnostics-page .diag-op-status {
+  justify-self: start;
+  padding: 1px 8px;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+  font-style: normal;
+  font-weight: var(--weight-label);
+  line-height: var(--lh-12);
+}
+.diagnostics-page .diag-continuation-alert[data-status="running"] .diag-op-status { color: var(--info); background: var(--info-soft); }
+}

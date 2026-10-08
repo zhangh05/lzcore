@@ -164,22 +164,18 @@
 
 .card {
   background: var(--surface);
-  border: 0;
-  border-radius: var(--r-8);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
   box-shadow: var(--shadow-card);
   transition:
     border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
 
 .card:hover {
-  border-color: var(--line-2);
-  box-shadow: none;
+  border-color: var(--line);
   transform: none;
 }
 
-[data-theme="dark"] .card:hover {
-  box-shadow: none;
-}
 
 .card-title {
   display: flex;

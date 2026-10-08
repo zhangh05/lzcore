@@ -22,12 +22,12 @@
 .topology-agent > header > svg { color: var(--accent); }
 .topology-agent > header > div { display: grid; gap: 4px; }
 .topology-agent > header strong { font-size: 14px; }
-.topology-agent > header small { color: var(--text-3); font-size: 10px; }
-.topology-agent > header > span { margin-left: auto; color: var(--text-3); font-size: 10px; }
+.topology-agent > header small { color: var(--text-3); font-size: var(--fs-11); }
+.topology-agent > header > span { margin-left: auto; color: var(--text-3); font-size: var(--fs-11); }
 .topology-agent-header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .topology-agent-new-chat-btn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text-2); font-size: 11px; cursor: pointer; transition: all .15s ease; }
 .topology-agent-new-chat-btn:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
-.topology-agent-header-actions span { color: var(--text-3); font-size: 10px; }
+.topology-agent-header-actions span { color: var(--text-3); font-size: var(--fs-11); }
 .topology-agent > header .agent-pulse { color: var(--accent); }
 .topology-agent-scope { padding: 12px 16px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
 .topology-agent-scope label { display: flex; justify-content: space-between; gap: 14px; align-items: center; color: var(--text-3); }
@@ -118,4 +118,19 @@
 }
 .topology-agent-change button:disabled { opacity: 0.5; cursor: default; }
 
+/* Close control exists for the narrow sheet only; docked layouts are unchanged. */
+.topology-agent-close { display: none; align-items: center; justify-content: center; width: var(--lz-touch-min, 40px); height: var(--lz-touch-min, 40px); padding: 0; border: 0; border-radius: var(--lz-radius-sm); background: transparent; color: var(--lz-color-text-tertiary); cursor: pointer; }
+.topology-agent-close:hover { background: var(--lz-color-bg-hover); color: var(--lz-color-text-primary); }
+.topology-agent-close:focus-visible { outline: 2px solid var(--lz-color-border-focus); outline-offset: 1px; }
+@media (max-width: 760px) {
+  /* Narrow: the agent panel is a full-width sheet over the studio, not a 42vw strip. */
+  .network-admin .topology-studio.agent-open:not(.is-fullscreen) .studio-agent-dock { inset: 0; width: auto; border-left: 0; z-index: 35; box-shadow: none; }
+  .studio-agent-dock:focus-visible { outline: none; }
+  .topology-agent > header { padding: 8px 8px 8px 16px; }
+  .topology-agent > header > .topology-agent-header-actions { display: flex; gap: 4px; }
+  .topology-agent-close { display: inline-flex; }
+  .topology-agent-input-row { flex-wrap: wrap; }
+  .topology-agent-composer textarea { flex: 1 1 100%; width: 100%; }
+  .topology-agent-input-row > button { margin-left: auto; }
+}
 }

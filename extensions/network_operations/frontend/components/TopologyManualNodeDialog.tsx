@@ -2,6 +2,7 @@
 import { IconClose } from "../../../../frontend/src/components/Icon";
 import { Button } from "../../../../frontend/src/components/ui";
 import { DRAWING_DEVICE_TYPES } from "./topologyDevicePalette";
+import { useTopologyDialogFocus } from "./useTopologyDialogFocus";
 
 export type TopologyManualNodeDialogProps = {
   handleAddManualNode: (event: import("react").FormEvent) => void;
@@ -26,8 +27,12 @@ export function TopologyManualNodeDialog({
   setManualNodeType,
   setShowManualNodeModal,
 }: TopologyManualNodeDialogProps) {
+  const dialogRef = useTopologyDialogFocus<HTMLDialogElement>(() =>
+    setShowManualNodeModal(false),
+  );
   return (
     <dialog
+      ref={dialogRef}
       open
       role="dialog"
       aria-modal="true"
@@ -46,6 +51,7 @@ export function TopologyManualNodeDialog({
           <Button
             size="sm"
             type="button"
+            aria-label="关闭新建图纸设备"
             onClick={() => setShowManualNodeModal(false)}
           >
             <IconClose size={14} />

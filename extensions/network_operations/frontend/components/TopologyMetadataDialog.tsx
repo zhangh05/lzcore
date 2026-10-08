@@ -1,6 +1,7 @@
 /** TopologyMetadataDialog owns its presentation; document writes stay with the workspace controller. */
 import { IconClose } from "../../../../frontend/src/components/Icon";
 import { Button } from "../../../../frontend/src/components/ui";
+import { useTopologyDialogFocus } from "./useTopologyDialogFocus";
 
 export type TopologyMetadataDialogProps = {
   busy: boolean;
@@ -29,11 +30,18 @@ export function TopologyMetadataDialog({
   topologyModalMode,
   topologyNameInput,
 }: TopologyMetadataDialogProps) {
+  const dialogRef = useTopologyDialogFocus<HTMLDialogElement>(() =>
+    setTopologyModalMode(null),
+  );
   return (
     <dialog
+      ref={dialogRef}
       open
       role="dialog"
       aria-modal="true"
+      aria-label={
+        topologyModalMode === "create" ? "新建网络拓扑" : "编辑拓扑信息"
+      }
       className="network-dialog-modal"
     >
       <form
@@ -44,7 +52,11 @@ export function TopologyMetadataDialog({
           <h3>
             {topologyModalMode === "create" ? "新建网络拓扑" : "编辑拓扑信息"}
           </h3>
-          <Button size="sm" onClick={() => setTopologyModalMode(null)}>
+          <Button
+            size="sm"
+            aria-label="关闭拓扑信息"
+            onClick={() => setTopologyModalMode(null)}
+          >
             <IconClose size={14} />
           </Button>
         </div>

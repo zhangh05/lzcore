@@ -235,3 +235,25 @@ details[open] .task-phase-caret {
   .task-progress-header, .task-phase-list, .task-progress-footer { padding-inline: 16px; }
 }
 }
+
+/* ── Progress rail step timeline ── */
+@layer workbench {
+.wb-shell .task-phase-list {
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+}
+.wb-shell .task-stepper-item { padding-bottom: 2px; }
+.wb-shell .stepper-spine { left: 13px; top: 30px; bottom: -2px; width: 1.5px; background: var(--line); }
+.wb-shell .stepper-spine.is-done { background: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.wb-shell .task-phase-summary { gap: 10px; padding: 6px 2px; border-radius: var(--r-control); }
+.wb-shell .task-phase-summary:hover { background: var(--surface-hover); }
+.wb-shell .task-phase-index { width: 22px; height: 22px; flex-basis: 22px; border-width: 1.5px; font-size: 11px; }
+.wb-shell .task-phase.done .task-phase-index { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.wb-shell .task-phase-title-wrap h3 { color: var(--text); font-size: var(--fs-13); font-weight: var(--weight-label); }
+.wb-shell .task-phase-status-tag { padding: 0; background: transparent; color: var(--text-3); font-size: var(--fs-11); font-weight: var(--weight-label); font-variant-numeric: tabular-nums; }
+.wb-shell .task-phase-status-tag.done { color: var(--ok); }
+.wb-shell .task-phase-content { padding-left: 34px; }
+}

@@ -233,3 +233,43 @@ test('33g. saving a selected-node drag does not replay incoming-link focus or ch
   expect(await host.evaluate((el:any)=>({zoom:el._cyreg.cy.zoom(),...el._cyreg.cy.pan()}))).toEqual(before);
   await page.mouse.up();
 });
+
+test('33h. at 390px the library is a closable drawer over the canvas and the agent panel a full-width sheet',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await drawingPage(page);
+  const library=page.getByRole('button',{name:'设备库与拓扑列表'});
+  await library.click();
+  await expect(page.locator('.topology-sidebar')).toBeVisible();
+  await expect(page.getByRole('button',{name:'关闭设备库'})).toBeFocused();
+  const layout=await page.evaluate(()=>{
+    const canvas=document.querySelector('.topology-canvas-area')!.getBoundingClientRect();
+    const sheet=document.querySelector('.topology-sidebar')!.getBoundingClientRect();
+    return {canvasLeft:canvas.left,canvasWidth:canvas.width,sheetWidth:sheet.width,controls:[...document.querySelectorAll('.netops-viewport-controls button')].map(b=>b.getBoundingClientRect().height)};
+  });
+  expect(layout.canvasLeft).toBeLessThan(1);
+  expect(layout.canvasWidth).toBeGreaterThanOrEqual(389);
+  expect(layout.sheetWidth).toBeLessThanOrEqual(350);
+  for(const height of layout.controls) expect(height).toBeLessThanOrEqual(34);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.topology-sidebar')).toBeHidden();
+  await expect(library).toBeFocused();
+  await library.click();
+  await page.getByRole('button',{name:'关闭设备库'}).click();
+  await expect(page.locator('.topology-sidebar')).toBeHidden();
+  await expect(library).toBeFocused();
+
+  const agent=page.getByRole('button',{name:'绘图对话',exact:true});
+  await agent.click();
+  await expect(page.getByRole('button',{name:'关闭绘图对话'})).toBeFocused();
+  const dock=(await page.locator('.studio-agent-dock').boundingBox())!;
+  expect(dock.width).toBeGreaterThanOrEqual(390-32);
+  const input=(await page.locator('.topology-agent-composer textarea').boundingBox())!;
+  expect(input.width).toBeGreaterThanOrEqual(280);
+  await page.keyboard.press('Escape');
+  await expect(agent).toHaveAttribute('aria-pressed','false');
+  await expect(agent).toBeFocused();
+  await agent.click();
+  await page.getByRole('button',{name:'关闭绘图对话'}).click();
+  await expect(agent).toHaveAttribute('aria-pressed','false');
+  await expect(agent).toBeFocused();
+});

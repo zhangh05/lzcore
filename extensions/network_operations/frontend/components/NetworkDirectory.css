@@ -1,129 +1,142 @@
-/* NetworkDirectory owns this component surface; cascade layers stay unchanged. */
-
-
+/* NetworkDirectory owns the device / Skill / context registry surfaces of
+   the network extension (G1, G2). Visual only: every class is produced by
+   NetworkOperations.tsx. Rows are hairline-separated records; colour carries
+   outcome only (failed / fingerprint pending / write capability), healthy and
+   enabled states are a neutral pill with a small state dot. */
 @layer extension {
 .network-admin {
   height: 100%;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--lz-color-bg-canvas);
+  color: var(--lz-color-text-primary);
 }
 
+/* ── Toolbar ───────────────────────────────────────────────────────── */
 .network-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-6) 0;
+  gap: var(--lz-space-3);
+  padding: var(--lz-space-4) var(--lz-space-6) 0;
 }
+.network-filters { display: flex; flex: 1 1 auto; align-items: center; gap: var(--lz-space-2); min-width: 0; }
+.network-filters .ui-search { flex: 0 1 320px; }
+.network-filters .ui-filter-select { flex: 0 0 auto; max-width: 220px; }
 
-.network-filters { display: flex; gap: var(--space-2); min-width: 0; align-items: center; }
-.network-filters input, .network-filters .ui-search { width: 280px; }
-.network-filters .ui-search { position: relative; }
-.network-filters .ui-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 2; color: var(--text-3); pointer-events: none; }
-.network-filters .ui-search-input { width: 100%; padding-left: 32px !important; }
+/* ── Panels ────────────────────────────────────────────────────────── */
+.network-grid { width: 100%; margin: 0; padding: var(--lz-space-4) var(--lz-space-6) var(--lz-space-6); min-width: 0; }
+.network-admin .skill-page { display: grid; gap: var(--lz-space-4); }
+.network-admin :is(.network-grid, .network-context-layout) > .network-panel { background: var(--lz-color-bg-surface); border: 1px solid var(--lz-color-border-subtle); border-radius: var(--lz-radius-lg); box-shadow: var(--lz-shadow-none); }
+.network-admin .panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--lz-space-3); margin: 0; padding: var(--lz-space-4) var(--lz-space-4) var(--lz-space-3); border-bottom: 1px solid var(--lz-color-border-subtle); }
+.network-admin .panel-heading h2 { margin: 0 0 2px; font: var(--lz-font-title); color: var(--lz-color-text-primary); }
+.network-admin .panel-heading p { font: var(--lz-font-label); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); }
+.network-admin .record-count { padding-top: 2px; font: var(--lz-font-label); color: var(--lz-color-text-tertiary); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.network-grid { width: 100%; margin: 0; padding: var(--space-4) var(--space-6) var(--space-6); min-width: 0; }
-.network-admin .skill-page { display: grid; gap: var(--space-4); }
-.network-admin .drawing-skill-card .skill-title { display: flex; align-items: center; gap: 6px; }
-.network-admin .drawing-skill-card .skill-title svg { color: var(--accent); flex-shrink: 0; }
-.network-admin .drawing-skill-link { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-6); color: var(--text); background: var(--surface-2); box-shadow: none; font-size: var(--fs-12); font-weight: var(--weight-label); text-decoration: none; transition: all 0.15s ease; }
-.network-admin .drawing-skill-link:hover { background: var(--surface-3); border-color: var(--accent); color: var(--accent); box-shadow: none; }
-.network-admin .panel-heading { display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; margin: 0; padding: var(--space-4); border-bottom: 1px solid var(--line); }
-.network-admin .record-count { font-size: var(--fs-12); color: var(--text-3); white-space: nowrap; }
-.network-admin .device-list, .network-admin .skill-list { display: grid; gap: 0; }
-.network-admin .device-card, .network-admin .skill-card { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; overflow: hidden; }
+/* ── Device rows (G1) ──────────────────────────────────────────────── */
+.network-admin .device-list, .network-admin .skill-list { display: grid; }
+.network-admin .device-card, .network-admin .skill-card { border-bottom: 1px solid var(--lz-color-border-subtle); transition: background-color var(--lz-dur-fast) var(--lz-ease-standard); }
 .network-admin .device-card:last-child, .network-admin .skill-card:last-child { border-bottom: 0; }
-.network-admin .device-card-header, .network-admin .skill-card-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4); background: var(--surface); }
-.network-admin .device-card:hover .device-card-header, .network-admin .skill-card:hover .skill-card-header { background: var(--surface-hover); }
-.network-admin .device-identity { display: grid; gap: var(--space-1); min-width: 0; }
-.network-admin .device-identity strong, .network-admin .skill-title strong { font-size: var(--fs-15); overflow-wrap: anywhere; }
-.network-admin .device-identity span { color: var(--text-3); font-size: var(--fs-12); overflow-wrap: anywhere; }
-.network-admin .device-actions, .network-admin .connection-actions, .network-admin .skill-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
-.network-admin .device-actions, .network-admin .connection-actions { flex-shrink: 0; }
-.network-admin .connection-section { border-top: 1px solid var(--line); padding: 10px 16px; background: var(--surface-2); }
-.network-admin .connection-section summary { cursor: pointer; display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; min-height: var(--h-control-compact); font-size: var(--fs-12); color: var(--text-3); }
-.network-admin .connection-section summary span:last-child { color: var(--accent); }
-.network-admin .connection-section[open] summary { padding-bottom: var(--space-3); }
-.network-admin .connection-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-1); font-size: var(--fs-12); }
-.network-admin .connection-heading span { margin-left: var(--space-2); color: var(--text-3); }
-.network-admin .connection-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; }
-.network-admin .connection-summary { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--fs-13); }
-.network-admin .connection-summary small { color: var(--text-3); overflow-wrap: anywhere; }
-.network-admin .connection-empty { color: var(--text-3); font-size: var(--fs-13); padding: var(--space-2) 0; }
-.network-admin .status, .network-admin .skill-state { border-radius: var(--r-pill); padding: 3px 8px; font-size: var(--fs-12); white-space: nowrap; background: var(--surface-2); color: var(--text-3); font-weight: var(--weight-label); }
-.network-admin .status.connected, .network-admin .skill-state.enabled { background: var(--ok-soft); color: var(--ok); }
-.network-admin .skill-state.builtin { background: var(--surface-3); color: var(--text-2); border: 1px solid var(--line-2); }
-.network-admin .status.failed { background: var(--danger-soft); color: var(--danger); }
-.network-admin .status.trust_required { background: var(--warn-soft); color: var(--warn); }
-.network-admin .skill-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
-.network-admin .skill-description { padding: var(--space-3) var(--space-4) 0; margin: 0; }
-.network-admin .skill-scope { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); margin: 0; font-size: var(--fs-13); }
-.network-admin .skill-scope > div { display: grid; grid-template-columns: 60px minmax(0,1fr); gap: var(--space-2); }
-.network-admin .skill-scope dt { color: var(--text-3); white-space: nowrap; }
-.network-admin .skill-scope dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.network-admin .write-enabled { color: var(--warn); }
-.network-admin .empty { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-12) var(--space-4); text-align: center; color: var(--text-3); font-size: var(--fs-13); }
-.network-admin .empty > svg { color: var(--text-4); }
-.network-admin .empty p { margin: 0; }
-.network-admin .device-title-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.network-admin .device-card:hover, .network-admin .skill-card:hover { background: var(--lz-color-bg-hover); }
+.network-admin .device-card-header, .network-admin .skill-card-header { display: flex; justify-content: space-between; align-items: center; gap: var(--lz-space-4); padding: var(--lz-space-3) var(--lz-space-4) 0; }
+.network-admin .device-identity { display: grid; gap: 2px; min-width: 0; }
+.network-admin .device-title-row { display: flex; align-items: center; gap: var(--lz-space-3); min-width: 0; }
 .network-admin .device-type-icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; flex-shrink: 0;
-  border: 1px solid var(--line); border-radius: var(--r-6);
-  background: var(--surface-2); color: var(--accent);
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 28px; height: 28px;
+  border: 1px solid var(--lz-color-border-subtle); border-radius: var(--lz-radius-sm);
+  background: var(--lz-color-bg-sunken); color: var(--lz-color-text-secondary);
 }
-.network-admin .source-list, .network-admin .reference-list, .network-admin .observation-list, .network-admin .command-list { display: grid; }
-.network-admin .source-row, .network-admin .observation-row, .network-admin .command-row, .network-admin .reference-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
-.network-admin .source-row:last-child, .network-admin .observation-row:last-child, .network-admin .command-row:last-child, .network-admin .reference-row:last-child { border-bottom: 0; }
-.network-admin .source-row > div, .network-admin .observation-row > div, .network-admin .reference-main { display: grid; gap: var(--space-1); min-width: 0; }
-.network-admin .source-row > div, .network-admin .observation-row > div { flex: 1; }
-.network-admin .source-row strong, .network-admin .observation-row strong, .network-admin .reference-row strong { font-size: var(--fs-13); overflow-wrap: anywhere; }
-.network-admin .source-row small, .network-admin .observation-row small, .network-admin .reference-row small, .network-admin .command-row small, .network-admin .record-count { color: var(--text-3); font-size: var(--fs-12); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.network-admin .source-row > b { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--weight-label); white-space: nowrap; }
-.network-admin .source-indicator { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--text-4); }
-.network-admin .source-indicator.available { background: var(--accent); }
-.network-admin .reference-main > div { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.network-admin .reference-heading-actions, .network-admin .reference-select-all { display: flex; align-items: center; gap: var(--space-2); }
-.network-admin .reference-heading-actions { flex-wrap: wrap; justify-content: flex-end; }
-.network-admin .reference-select-all { color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; }
-.network-admin .reference-select-all input, .network-admin .reference-select { accent-color: var(--accent); }
-.network-admin .reference-select { flex: 0 0 auto; margin: 0; }
-.network-admin .reference-state, .network-admin .command-state { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.network-admin .reference-state.confirmed, .network-admin .reference-state.complete, .network-admin .command-state.accepted { background: var(--ok-soft); color: var(--ok); }
-.network-admin .reference-state.partial, .network-admin .reference-state.candidate { background: var(--warn-soft); color: var(--warn); }
-.network-admin .reference-actions { display: flex; gap: var(--space-2); flex: 0 0 auto; }
-.network-admin .command-row code { min-width: 0; color: var(--text); font-size: var(--fs-12); overflow-wrap: anywhere; }
-.network-admin .command-row > div { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
-.network-admin .context-overview, .network-admin .observation-panel { align-self: start; }
+.network-admin .device-identity strong { font: var(--lz-font-title-sm); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.network-admin .device-identity > span { padding-left: 40px; font: var(--lz-font-label); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.network-admin .device-actions, .network-admin .connection-actions, .network-admin .skill-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: var(--lz-space-1-5); }
+
+/* Connection disclosure: one quiet line under the identity, aligned with the
+   name; the expanded list is an inset sunken panel, not a full-width band. */
+.network-admin .connection-section { padding: 0 var(--lz-space-4) var(--lz-space-3) 56px; }
+.network-admin .connection-section > summary {
+  display: flex; align-items: center; gap: var(--lz-space-3);
+  min-height: 28px; margin-top: 2px;
+  font: var(--lz-font-label); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary);
+  list-style: none; cursor: pointer;
+}
+.network-admin .connection-section > summary::-webkit-details-marker { display: none; }
+.network-admin .connection-section > summary > span:first-child { font: var(--lz-font-mono-sm); color: var(--lz-color-text-secondary); }
+.network-admin .connection-section > summary > span:last-child { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: var(--lz-color-text-secondary); font-weight: var(--weight-label); }
+.network-admin .connection-section > summary > span:last-child::after { content: ""; width: 6px; height: 6px; margin: 0 2px 2px 4px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); transition: transform var(--lz-dur-fast) var(--lz-ease-standard); }
+.network-admin .connection-section[open] > summary > span:last-child::after { margin-bottom: -3px; transform: rotate(-135deg); }
+.network-admin .connection-section > summary:hover > span:last-child { color: var(--lz-color-accent); }
+.network-admin .connection-section > summary:focus-visible { outline: var(--focus-width) solid var(--lz-color-border-focus); outline-offset: 2px; border-radius: var(--lz-radius-xs); }
+.network-admin .connection-section[open] > summary { margin-bottom: var(--lz-space-2); }
+.network-admin .connection-heading,
+.network-admin .connection-list { background: var(--lz-color-bg-sunken); border: 1px solid var(--lz-color-border-subtle); }
+.network-admin .connection-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--lz-space-3); padding: var(--lz-space-2) var(--lz-space-2) var(--lz-space-2) var(--lz-space-3); border-bottom: 0; border-radius: var(--lz-radius-md) var(--lz-radius-md) 0 0; font: var(--lz-font-label); }
+.network-admin .connection-heading span { margin-left: var(--lz-space-2); color: var(--lz-color-text-tertiary); font-weight: var(--weight-body); }
+.network-admin .connection-list { border-top-color: var(--lz-color-border-subtle); border-radius: 0 0 var(--lz-radius-md) var(--lz-radius-md); }
+.network-admin .connection-row { display: flex; align-items: center; justify-content: space-between; gap: var(--lz-space-3); padding: var(--lz-space-2) var(--lz-space-2) var(--lz-space-2) var(--lz-space-3); }
+.network-admin .connection-row + .connection-row { border-top: 1px solid var(--lz-color-border-subtle); }
+.network-admin .connection-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lz-space-1) var(--lz-space-2); min-width: 0; }
+.network-admin .connection-summary b { font: var(--lz-font-mono-sm); font-weight: var(--weight-strong); }
+.network-admin .connection-summary small { font: var(--lz-font-label); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); overflow-wrap: anywhere; }
+.network-admin .connection-empty { padding: var(--lz-space-3); font: var(--lz-font-label); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); }
+
+/* State pill: neutral at rest, a dot names the state; problems get the soft
+   outcome fill so they are the only coloured rows. */
+.network-admin .status, .network-admin .skill-state {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 22px; padding: 0 8px;
+  border: 1px solid var(--lz-color-border-subtle); border-radius: var(--lz-radius-pill);
+  background: var(--lz-color-bg-surface); color: var(--lz-color-text-secondary);
+  font: var(--lz-font-caption); white-space: nowrap;
+}
+.network-admin .status::before, .network-admin .skill-state::before { content: ""; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--lz-color-text-quaternary); }
+.network-admin .status.connected::before, .network-admin .skill-state.enabled::before { background: var(--lz-color-success-fg); }
+.network-admin .skill-state.builtin::before { display: none; }
+.network-admin .status.failed { border-color: transparent; background: var(--lz-color-danger-bg); color: var(--lz-color-danger-fg); }
+.network-admin .status.failed::before { background: currentColor; }
+.network-admin .status.trust_required { border-color: transparent; background: var(--lz-color-warning-bg); color: var(--lz-color-warning-fg); }
+.network-admin .status.trust_required::before { background: currentColor; }
+
+/* ── Skill records (G2) ────────────────────────────────────────────── */
+.network-admin .skill-card { padding-bottom: var(--lz-space-3); }
+.network-admin .skill-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lz-space-2); min-width: 0; }
+.network-admin .skill-title strong { font: var(--lz-font-title-sm); overflow-wrap: anywhere; }
+.network-admin .drawing-skill-card .skill-title svg { flex: 0 0 auto; color: var(--lz-color-text-tertiary); }
+.network-admin .drawing-skill-link {
+  display: inline-flex; align-items: center; height: var(--lz-control-h-sm); padding: 0 10px;
+  border: 1px solid var(--lz-color-border-default); border-radius: var(--lz-radius-sm);
+  background: var(--lz-color-bg-surface); color: var(--lz-color-text-primary);
+  font: var(--lz-font-label); text-decoration: none;
+  transition: border-color var(--lz-dur-fast) var(--lz-ease-standard), color var(--lz-dur-fast) var(--lz-ease-standard);
+}
+.network-admin .drawing-skill-link:hover { border-color: var(--lz-color-border-strong); color: var(--lz-color-accent); }
+.network-admin .drawing-skill-link:focus-visible { outline: var(--focus-width) solid var(--lz-color-border-focus); outline-offset: 1px; }
+.network-admin .skill-description { margin: var(--lz-space-1) 0 0; padding: 0 var(--lz-space-4); font: var(--lz-font-control); font-weight: var(--weight-body); color: var(--lz-color-text-secondary); }
+.network-admin .skill-scope { display: grid; gap: var(--lz-space-1); margin: var(--lz-space-2) 0 0; padding: 0 var(--lz-space-4); font: var(--lz-font-label); font-weight: var(--weight-body); }
+.network-admin .skill-scope > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--lz-space-2); }
+.network-admin .skill-scope dt { color: var(--lz-color-text-tertiary); white-space: nowrap; }
+.network-admin .skill-scope dd { margin: 0; color: var(--lz-color-text-secondary); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.network-admin .write-enabled { color: var(--lz-color-warning-fg); font-weight: var(--weight-strong); }
+.network-admin .empty { display: flex; flex-direction: column; align-items: center; gap: var(--lz-space-2); padding: var(--lz-space-10) var(--lz-space-4); text-align: center; font: var(--lz-font-control); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); }
+.network-admin .empty > svg { color: var(--lz-color-text-quaternary); }
+.network-admin .empty p { margin: 0; }
+
 @media (max-width: 1100px) {
   .network-admin .connection-row { flex-direction: column; align-items: flex-start; }
-}
-@media (max-width: 1100px) {
-  .network-admin .skill-card-header { align-items: flex-start; flex-wrap: wrap; }
+  .network-admin .skill-card-header { flex-wrap: wrap; align-items: flex-start; }
 }
 @media (max-width: 760px) {
-  .network-admin .network-notice { margin-inline: var(--space-3); }
-}
-@media (max-width: 760px) {
-  .network-toolbar { flex-wrap: wrap; padding: var(--space-3) var(--space-3) 0; }
-}
-@media (max-width: 760px) {
-  .network-filters { flex-wrap: wrap; width: 100%; }
-}
-@media (max-width: 760px) {
-  .network-filters input { width: 100%; }
-}
-@media (max-width: 760px) {
-  .network-grid { padding: var(--space-3); }
-}
-@media (max-width: 760px) {
-  .network-admin .device-card-header, .network-admin .skill-card-header { flex-wrap: wrap; }
-}
-@media (max-width: 760px) {
-  .network-admin .reference-row, .network-admin .command-row { align-items: flex-start; flex-direction: column; }
+  .network-admin .network-notice { margin-inline: var(--lz-space-3); }
+  .network-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: var(--lz-space-3) var(--lz-space-3) 0; }
+  .network-filters { display: contents; }
+  .network-filters .ui-search { grid-column: 1 / -1; }
+  .network-filters .ui-filter-select { justify-self: start; height: var(--lz-touch-min); }
+  .network-toolbar > .btn { grid-column: 2; }
+  .network-grid { padding: var(--lz-space-3); }
+  .network-admin .device-card-header { flex-direction: column; align-items: stretch; gap: var(--lz-space-2); }
+  .network-admin .skill-card-header { flex-direction: column; align-items: stretch; gap: var(--lz-space-2); }
+  .network-admin .device-actions { order: 2; padding-left: 40px; }
 }
 .topology-device-node {
   background: var(--surface);

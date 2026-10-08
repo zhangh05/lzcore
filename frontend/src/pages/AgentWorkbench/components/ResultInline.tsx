@@ -198,7 +198,7 @@ export const ResultInline = memo(function ResultInline({
         open={detailsOpen}
         onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
       >
-        <summary className="result-overview-toggle" aria-label={detailsOpen ? "收起执行详情" : "展开执行详情"}>
+        <summary className="result-overview-toggle">
           <span className="result-overview-toggle-label">
             {detailsOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
             <span>{detailsOpen ? "收起执行详情" : "展开执行详情"}</span>

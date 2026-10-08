@@ -1,0 +1,27 @@
+/* Knowledge, users and task records. The `pages` layer refines the shared
+   console rules for these three management surfaces only: one card language
+   (radius, hairline, quiet elevation), an 8px rhythm and a clear type scale.
+   Selectors are scoped by the page root so lazily loaded page CSS in the same
+   layer cannot out-rank them. Narrow rules in `responsive` still win. */
+
+@layer pages {
+
+
+/* ── Shared page rhythm ─────────────────────────────────────────────────── */
+:is(.knowledge-library, .user-management, .operations-page) > .page-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--line-2); }
+:is(.knowledge-library, .user-management, .operations-page) > .page-header h1 { font-size: var(--fs-20); line-height: var(--lh-20); }
+:is(.knowledge-library, .user-management) > .page-body { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px 32px; }
+:is(.knowledge-library, .user-management) > .page-body > * { flex-shrink: 0; }
+.knowledge-library :is(.card, .kl-overview),
+.user-management :is(.user-access-layout, .user-access-summary) {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+}
+
+@media (max-width: 900px) {
+  :is(.knowledge-library, .user-management) > .page-body { padding: 16px; }
+  :is(.knowledge-library, .user-management, .operations-page) > .page-header { padding: 16px; }
+}
+}

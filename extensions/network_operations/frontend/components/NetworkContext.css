@@ -1,0 +1,30 @@
+/* NetworkContext owns the evidence-environment registers (sources, run
+   references, observations, command feedback) of the network extension.
+   Visual only; partial / candidate references are the only coloured state. */
+@layer extension {
+.network-admin .source-list, .network-admin .reference-list, .network-admin .observation-list, .network-admin .command-list { display: grid; }
+.network-admin .source-row, .network-admin .observation-row, .network-admin .command-row, .network-admin .reference-row { display: flex; align-items: center; justify-content: space-between; gap: var(--lz-space-3); min-width: 0; padding: var(--lz-space-3) var(--lz-space-4); border-bottom: 1px solid var(--lz-color-border-subtle); }
+.network-admin .source-row:last-child, .network-admin .observation-row:last-child, .network-admin .command-row:last-child, .network-admin .reference-row:last-child { border-bottom: 0; }
+.network-admin .source-row > div, .network-admin .observation-row > div, .network-admin .reference-main { display: grid; gap: 2px; min-width: 0; }
+.network-admin .source-row > div, .network-admin .observation-row > div { flex: 1; }
+.network-admin .source-row strong, .network-admin .observation-row strong, .network-admin .reference-row strong { font: var(--lz-font-control); overflow-wrap: anywhere; }
+.network-admin .source-row small, .network-admin .observation-row small, .network-admin .reference-row small, .network-admin .command-row small { font: var(--lz-font-label); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.network-admin .source-row > b { font: var(--lz-font-label); color: var(--lz-color-text-tertiary); white-space: nowrap; }
+.network-admin .source-indicator { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--lz-color-text-quaternary); }
+.network-admin .source-indicator.available { background: var(--lz-color-success-fg); }
+.network-admin .reference-main > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lz-space-2); }
+.network-admin .reference-heading-actions, .network-admin .reference-select-all { display: flex; align-items: center; gap: var(--lz-space-2); }
+.network-admin .reference-heading-actions { flex-wrap: wrap; justify-content: flex-end; }
+.network-admin .reference-select-all { font: var(--lz-font-label); font-weight: var(--weight-body); color: var(--lz-color-text-tertiary); white-space: nowrap; }
+.network-admin .reference-select { flex: 0 0 auto; margin: 0; }
+.network-admin .reference-state, .network-admin .command-state { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border: 1px solid var(--lz-color-border-subtle); border-radius: var(--lz-radius-pill); color: var(--lz-color-text-secondary); font: var(--lz-font-caption); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.network-admin .reference-state.partial, .network-admin .reference-state.candidate { border-color: transparent; background: var(--lz-color-warning-bg); color: var(--lz-color-warning-fg); }
+.network-admin .reference-actions { display: flex; flex: 0 0 auto; gap: var(--lz-space-2); }
+.network-admin .command-row code { min-width: 0; font: var(--lz-font-mono-sm); color: var(--lz-color-text-primary); overflow-wrap: anywhere; }
+.network-admin .command-row > div { display: flex; flex: 0 0 auto; align-items: center; gap: var(--lz-space-2); }
+.network-admin .context-overview, .network-admin .observation-panel { align-self: start; }
+
+@media (max-width: 760px) {
+  .network-admin .reference-row, .network-admin .command-row { flex-direction: column; align-items: flex-start; }
+}
+}

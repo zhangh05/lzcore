@@ -29,14 +29,13 @@ test("19. session delete action stays topmost and clickable above recent runs", 
   });
   expect(isTopmostHitTarget).toBe(true);
 
-  const dialog = new Promise<void>((resolve) => {
-    page.once("dialog", async (confirm) => {
-      expect(confirm.type()).toBe("confirm");
-      expect(confirm.message()).toContain("永久删除会话");
-      await confirm.dismiss();
-      resolve();
-    });
-  });
+  // Deletion is confirmed in the product's own dialog; cancelling keeps the session.
   await deleteAction.click();
-  await dialog;
+  const confirmDialog = page.getByTestId("confirm-dialog");
+  await expect(confirmDialog).toBeVisible();
+  await expect(confirmDialog).toContainText("永久删除会话");
+  await expect(confirmDialog).toContainText("menu layering regression");
+  await confirmDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(confirmDialog).toBeHidden();
+  await expect(page.getByTestId(`sess-btn-${sessionId}`)).toBeVisible();
 });

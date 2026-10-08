@@ -63,7 +63,7 @@ function highlightCode(html: string): string {
       }
       const langClass = lang && hljs.getLanguage(lang) ? lang : "plaintext";
       const result = hljs.highlight(decoded, { language: langClass }).value;
-      const wrapped = `<div class="code-block-wrap"><div class="code-block-header"><span>${lang || "code"}</span><button class="code-copy-btn" type="button" data-code-copy="1">复制</button></div><pre><code class="hljs language-${langClass}">${result}</code></pre></div>`;
+      const wrapped = `<div class="code-block-wrap"><div class="code-block-header"><span>${lang || "code"}</span><button class="code-copy-btn" type="button" data-code-copy="1">复制</button></div><pre tabindex="0" aria-label="${langClass === "plaintext" ? "代码" : langClass} 代码块"><code class="hljs language-${langClass}">${result}</code></pre></div>`;
       ensureHighlightCacheRoom();
       highlightCache.set(cacheKey, wrapped);
       return wrapped;
