@@ -601,16 +601,8 @@ export function OperationsPage() {
               return (
                 <article
                   key={job.job_id}
-                  role="button"
-                  tabIndex={0}
                   className={`job-card ${active ? "selected" : ""}`}
                   onClick={() => void selectJob(job)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      void selectJob(job);
-                    }
-                  }}
                 >
                   <div className="job-card-head">
                     {canHardDelete(job) && (
@@ -623,7 +615,7 @@ export function OperationsPage() {
                       />
                     )}
                     <StatusDot status={meta.dot} />
-                    <span className="job-card-title">{job.title || job.job_id?.slice(0, 12)}</span>
+                    <button type="button" className="job-card-title" onClick={(e) => { e.stopPropagation(); void selectJob(job); }}>{job.title || job.job_id?.slice(0, 12)}</button>
                     <Badge kind={meta.kind}>{meta.label}</Badge>
                   </div>
                   <div className="job-card-meta">
