@@ -16,11 +16,15 @@
 }
 .page-header h1 {
   color: var(--console-ink);
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: var(--weight-display);
 }
 .page-header {
   gap: var(--flow-loose);
   padding: var(--flow-loose) var(--page-gutter) var(--flow-base);
 }
+.page-header .subtitle { margin-top: 2px; font-size: var(--fs-13); line-height: var(--lh-13); }
 .page-header h1 span,
 .page-header .subtitle { color: var(--console-muted-ink) !important; }
 .page-body { padding: var(--flow-loose) var(--page-gutter) var(--flow-block); }
@@ -203,9 +207,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
   padding: var(--flow-tight) var(--flow-base);
   margin-bottom: var(--flow-base);
 }
-.empty {
-  padding: var(--flow-section) var(--flow-loose);
-}
 .stat-grid {
   margin-bottom: var(--flow-loose);
   border-radius: var(--r-8);
@@ -227,14 +228,6 @@ textarea.input { min-height: var(--space-16); height: auto; line-height: var(--l
 }
 
 .stat-card-box-value {
-  font-weight: var(--weight-subhead);
-}
-.empty-icon {
-  width: 40px;
-  height: 40px;
-}
-
-.empty-text {
   font-weight: var(--weight-subhead);
 }
 }

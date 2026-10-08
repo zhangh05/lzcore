@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, useCallback, useRef, type ReactNode } from "react";
 import { PortalModal } from "./PortalModal";
 import { Button } from "./ui/Button";
+import { IconWarningCircle, IconInfo } from "./Icon";
 
 /**
  * Pre-built confirm dialog state stored in a global ref so any component can
@@ -66,6 +67,7 @@ export function ConfirmHost() {
       open
       onClose={onClose}
       testId="confirm-dialog"
+      className="confirm-modal"
       ariaLabel={state.title}
       ariaLabelledBy={titleId}
       ariaDescribedBy={state.body ? bodyId : undefined}
@@ -73,13 +75,19 @@ export function ConfirmHost() {
       {/* Focus lands on the first control, which is Cancel: a destructive
           confirmation must never be one stray Enter away from running. */}
       <div className={"confirm-dialog" + (state.destructive ? " is-destructive" : "")}>
-        <h3 className="confirm-dialog-title" id={titleId}>{state.title}</h3>
-        {state.body && <div className="confirm-dialog-body" id={bodyId}>{state.body}</div>}
+        <div className="confirm-dialog-main">
+          <span className="confirm-dialog-icon" aria-hidden="true">
+            {state.destructive ? <IconWarningCircle size={20} weight="fill" /> : <IconInfo size={20} weight="fill" />}
+          </span>
+          <div className="confirm-dialog-text">
+            <h3 className="confirm-dialog-title" id={titleId}>{state.title}</h3>
+            {state.body && <div className="confirm-dialog-body" id={bodyId}>{state.body}</div>}
+          </div>
+        </div>
         <div className="row-flex-sm confirm-dialog-actions">
-          <Button onClick={onClose} size="sm">{state.cancelLabel ?? "取消"}</Button>
+          <Button onClick={onClose}>{state.cancelLabel ?? "取消"}</Button>
           <Button
             variant={state.destructive ? "danger-confirm" : "primary"}
-            size="sm"
             onClick={() => close(true)}
             data-testid="confirm-dialog-confirm"
           >

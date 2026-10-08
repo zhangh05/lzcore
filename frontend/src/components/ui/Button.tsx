@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 type ButtonVariant = "default" | "primary" | "selected" | "ghost" | "danger" | "danger-ghost" | "danger-confirm";
-type ButtonSize = "default" | "sm";
+type ButtonSize = "default" | "sm" | "lg";
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> {
   children?: ReactNode;
@@ -10,6 +10,8 @@ interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "cla
   icon?: ReactNode;
   iconOnly?: boolean;
   className?: string;
+  /** Shows a spinner, sets aria-busy and blocks repeat clicks while pending. */
+  loading?: boolean;
 }
 
 export function Button({
@@ -19,6 +21,8 @@ export function Button({
   icon,
   iconOnly,
   className = "",
+  loading = false,
+  disabled,
   ...rest
 }: ButtonProps) {
   const variantClass = variant === "default" ? "" : variant;
@@ -30,7 +34,9 @@ export function Button({
 
   return (
     <button
-      className={`btn ${variantClass} ${sizeClass} ${iconOnlyClass} ${className}`.trim()}
+      className={`btn ${variantClass} ${sizeClass} ${iconOnlyClass} ${loading ? "is-loading" : ""} ${className}`.replace(/\s+/g, " ").trim()}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       type={rest.type ?? "button"}
       {...rest}
     >

@@ -81,7 +81,7 @@
 .memory-filter-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lz-space-2); min-width: 0; }
 .memory-filter-controls > .ui-filter-select { min-inline-size: 132px; }
 .memory-history-toggle { display: inline-flex; align-items: center; gap: var(--lz-space-1-5); min-block-size: var(--lz-control-h); padding: 0 var(--lz-space-1); color: var(--lz-color-text-secondary); font: var(--lz-font-control); white-space: nowrap; cursor: pointer; }
-.memory-page input[type="checkbox"] { inline-size: 15px; block-size: 15px; margin: 0; flex-shrink: 0; accent-color: var(--lz-color-accent); cursor: pointer; }
+.memory-page input[type="checkbox"] { inline-size: 16px; block-size: 16px; margin: 0; flex-shrink: 0; accent-color: var(--lz-color-accent); cursor: pointer; }
 .memory-error { display: flex; align-items: center; gap: var(--lz-space-2); margin: 0; }
 .memory-error > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 

@@ -79,16 +79,17 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 20px;
+  min-height: 22px;
   padding: 2px 8px;
   color: var(--text-2);
-  background: var(--surface-2);
+  background: var(--surface-3);
   border: 1px solid var(--line-2);
   border-radius: var(--r-pill);
   box-shadow: none;
-  font-size: var(--fs-11);
+  font-size: var(--fs-12);
   font-weight: var(--weight-label);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   transition:
     background var(--dur-2) var(--ease),
@@ -99,8 +100,8 @@
 }
 
 .badge .dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   background: currentColor;
   border-radius: 50%;
   box-shadow: none;
