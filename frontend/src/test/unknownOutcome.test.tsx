@@ -78,8 +78,10 @@ describe("result detail disclosure", () => {
 
     const disclosure = screen.getByTestId("result-inline-disclosure");
     expect(disclosure).not.toHaveAttribute("open");
-    fireEvent.click(screen.getByLabelText("展开执行详情"));
+    // The summary's accessible name comes from its content (no aria-label that
+    // could diverge from the visible text); the hidden label leads that name.
+    fireEvent.click(screen.getByText("展开执行详情").closest("summary")!);
     expect(disclosure).toHaveAttribute("open");
-    expect(screen.getByLabelText("收起执行详情")).toBeInTheDocument();
+    expect(screen.getByText("收起执行详情").closest("summary")).not.toHaveAttribute("aria-label");
   });
 });

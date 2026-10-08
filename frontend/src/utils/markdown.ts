@@ -382,7 +382,7 @@ export function renderMarkdown(text: string): string {
     const tableResult = renderTable(lines, i);
     if (tableResult) {
       out.push(tableResult.scrollable
-        ? `<div class="markdown-table-scroll">${tableResult.html}</div>`
+        ? `<div class="markdown-table-scroll" tabindex="0" role="region" aria-label="可横向滚动的表格">${tableResult.html}</div>`
         : tableResult.html);
       i += tableResult.consumed;
       continue;
