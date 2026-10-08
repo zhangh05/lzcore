@@ -7,15 +7,20 @@ on:
     branches: [main, master]
   workflow_dispatch:
     inputs:
+      full:
+        description: Run all CI jobs and complete browser coverage
+        required: false
+        default: false
+        type: boolean
       browser_spec:
         description: Browser spec to rerun in development and production (only frontend-e2e runs)
-        required: true
+        required: false
         default: 34-file-workspace
         type: string
 
 jobs:
   frontend:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -55,7 +60,7 @@ jobs:
       - name: Exercise authenticated workbench in Chromium
         env:
           E2E_PYTHON_BIN: python
-          E2E_SPEC: ${{ inputs.browser_spec }}
+          E2E_SPEC: ${{ inputs.full != true && inputs.browser_spec || '' }}
         run: |
           if [ -n "$E2E_SPEC" ]; then
             npm --prefix frontend run e2e -- "$E2E_SPEC"
@@ -66,7 +71,7 @@ jobs:
         env:
           E2E_PYTHON_BIN: python
           E2E_PRODUCTION: "1"
-          E2E_SPEC: ${{ inputs.browser_spec }}
+          E2E_SPEC: ${{ inputs.full != true && inputs.browser_spec || '' }}
         run: |
           npm --prefix frontend run build
           if [ -n "$E2E_SPEC" ]; then
@@ -83,7 +88,7 @@ jobs:
           retention-days: 14
 
   test:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: ubuntu-latest
 
     steps:
@@ -111,7 +116,7 @@ jobs:
           python scripts/verify_docs_runtime_consistency.py
 
   docker-isolation:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -131,7 +136,7 @@ jobs:
           python -m pytest harness/integration/test_docker_runner_integration.py -q --tb=short
 
   coding-isolation:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -164,7 +169,7 @@ jobs:
           retention-days: 14
 
   distributed-adapters:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -229,7 +234,7 @@ jobs:
           python -m pytest harness/integration/test_distributed_adapters_integration.py -q --tb=short
 
   production-profile:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: ubuntu-latest
     env:
       POSTGRES_PASSWORD: integration-password
@@ -257,7 +262,7 @@ jobs:
           docker run --rm lzcore-backend:latest docker --version
 
   lint:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -308,7 +313,7 @@ jobs:
           "
 
   windows-smoke:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
