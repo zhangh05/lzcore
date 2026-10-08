@@ -36,6 +36,10 @@ import "./styles/typography.css";
 // Page refinements come last: they exist to outrank the design system above.
 // See styles/pages.css.
 import "./styles/pages.css";
+import "./styles/management-surfaces.css";
+import "./styles/management-knowledge.css";
+import "./styles/management-users.css";
+import "./styles/management-runs.css";
 // Workbench conversation surface refines the workbench and markdown rules above.
 import "./pages/AgentWorkbench/WorkbenchSurface.css";
 // Narrow-width adaptations last: they must outrank the unconditional rules they

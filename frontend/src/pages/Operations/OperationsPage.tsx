@@ -574,7 +574,7 @@ export function OperationsPage() {
       {loading ? (
         <div className="page-body"><LoadingState text="正在加载任务列表…" skeleton="list" /></div>
       ) : (
-        <div className="split-shell operations-split">
+        <div className={`split-shell operations-split${selectedJob || selRun ? " has-selection" : ""}`}>
           {/* ══════ 左侧 作业列表 ══════ */}
           <aside className="list-scroll jobs-list operations-pane-scroll">
             {selectableVisibleIds.length > 0 && (

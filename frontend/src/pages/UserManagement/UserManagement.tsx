@@ -164,13 +164,13 @@ export function UserManagement() {
         <aside className="user-access-list">
           <div className="user-access-list-title"><h2>普通用户</h2><span>{users.length}</span></div>
           {users.length ? users.map((user) => <button key={user.username} className={selectedUsername === user.username ? "selected" : ""} onClick={() => selectUser(user)}>
-            <span className={`user-status-dot ${user.enabled === false ? "disabled" : ""}`} />
-            <span><b>{user.username}</b><small>{ROLE_OPTIONS.find((item) => item.value === user.role)?.label || user.role}</small></span>
+            <span className="user-avatar user-list-avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}<span className={`user-status-dot ${user.enabled === false ? "disabled" : ""}`} /></span>
+            <span><b>{user.username}</b><small><span className="user-role-pill">{ROLE_OPTIONS.find((item) => item.value === user.role)?.label || user.role}</span>{user.enabled === false ? <span className="user-state-tag">已停用</span> : null}</small></span>
           </button>) : <EmptyState text="还没有普通用户" hint="点击“新建用户”添加第一个账户。" />}
         </aside>
         <main className="user-access-editor">
           {!creating && !selectedUsername ? <div className="user-access-placeholder"><IconUser size={24} aria-hidden="true" /><h2>选择一个用户</h2><p>在左侧选择用户查看和修改权限，或新建普通用户。</p></div> : <>
-            <div className="user-access-editor-head"><div><span>{creating ? "创建普通用户" : "编辑用户权限"}</span><h2>{creating ? "新用户" : draft.username}</h2></div>{!creating ? <label className="user-enabled-switch"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /><span>{draft.enabled ? "账户已启用" : "账户已停用"}</span></label> : null}</div>
+            <div className="user-access-editor-head"><span className={`user-avatar user-editor-avatar${creating ? " creating" : ""}`} aria-hidden="true">{creating ? "+" : draft.username.slice(0, 1).toUpperCase()}</span><div><span>{creating ? "创建普通用户" : "编辑用户权限"}</span><h2>{creating ? "新用户" : draft.username}</h2></div>{!creating ? <label className="user-enabled-switch"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /><span>{draft.enabled ? "账户已启用" : "账户已停用"}</span></label> : null}</div>
             <section className="user-access-section">
               <div className="user-access-section-title"><h3>账户信息</h3><p>用户名创建后不可修改；编辑时密码留空表示保持原密码。</p></div>
               <div className="user-access-fields"><label><span>用户名</span><input className="input" value={draft.username} disabled={!creating} onChange={(event) => setDraft({ ...draft, username: event.target.value })} placeholder="例如 zhangsan" /></label><label><span>{creating ? "初始密码" : "重置密码（可选）"}</span><input className="input" type="password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} autoComplete="new-password" /></label><label><span>所属组织</span><select className="input" value={draft.organization_id} onChange={(event) => setDraft({ ...draft, organization_id: event.target.value, workspace_ids: [FIXED_WORKSPACE_ID] })}>{organizations.map((item) => <option key={item.organization_id} value={item.organization_id}>{item.name}</option>)}</select></label></div>

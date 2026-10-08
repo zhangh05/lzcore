@@ -1,0 +1,75 @@
+/* User management surface: master list with identity, editor at a reading width. */
+
+@layer pages {
+
+/* ── Users: master list with identity, editor at a reading width ────────── */
+.user-management .user-access-summary { display: grid; grid-template-columns: 160px 160px minmax(0, 1fr); overflow: hidden; }
+.user-management .user-access-summary > :is(div, article) { min-height: 76px; padding: 14px 20px; background: transparent; border: 0; border-right: 1px solid var(--line-2); border-radius: 0; box-shadow: none; }
+.user-management .user-access-summary > article { border-right: 0; }
+.user-management .user-access-summary > div b { color: var(--text); font-size: var(--fs-24); line-height: var(--lh-24); font-weight: var(--weight-display); font-variant-numeric: tabular-nums; }
+.user-management .user-access-summary > div span { color: var(--text-3); font-size: var(--fs-12); }
+.user-management .user-access-summary article small { color: var(--text-3); font-size: var(--fs-12); }
+.user-management .user-access-layout { grid-template-columns: 300px minmax(0, 1fr); min-height: 480px; overflow: hidden; }
+.user-management .user-access-list { padding: 8px; background: var(--surface-2); border-right: 1px solid var(--line-2); }
+.user-management .user-access-list-title { min-height: 40px; margin: 0; padding: 8px 12px; }
+.user-management .user-access-list-title h2 { font-size: var(--fs-13); font-weight: var(--weight-strong); }
+.user-management .user-access-list-title span { padding: 0 8px; color: var(--text-2); background: var(--surface-3); border-radius: var(--r-pill); font-size: var(--fs-12); }
+.user-management .user-access-list > button {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 60px;
+  margin: 2px 0;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: transparent;
+  box-shadow: none;
+}
+.user-management .user-access-list > button:hover { background: var(--surface-hover); }
+.user-management .user-access-list > button.selected { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-xs), inset 3px 0 0 var(--accent); }
+.user-management .user-list-avatar { position: relative; width: 36px; height: 36px; color: var(--accent); background: var(--accent-soft); border-radius: 50%; font-size: var(--fs-14); }
+.user-management .user-list-avatar .user-status-dot { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border: 2px solid var(--surface-2); }
+.user-management .user-access-list > button.selected .user-status-dot { border-color: var(--surface); }
+.user-management .user-access-list b { color: var(--text); font-size: var(--fs-14); font-weight: var(--weight-strong); }
+.user-management .user-access-list small { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.user-management .user-role-pill { padding: 0 8px; color: var(--text-2); background: var(--surface-3); border-radius: var(--r-pill); font-size: var(--fs-12); line-height: 20px; }
+.user-management .user-state-tag { color: var(--warn); font-size: var(--fs-12); }
+.user-management .user-access-editor { padding: 24px 28px; }
+.user-management .user-access-editor > * { max-width: 880px; }
+.user-management .user-access-editor-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; padding-bottom: 20px; }
+.user-management .user-editor-avatar { width: 48px; height: 48px; border-radius: 50%; font-size: var(--fs-18); }
+.user-management .user-editor-avatar.creating { color: var(--accent); background: var(--accent-soft); }
+.user-management .user-access-editor-head > div > span { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--weight-label); }
+.user-management .user-access-editor-head h2 { margin-top: 2px; font-size: var(--fs-20); line-height: var(--lh-20); }
+.user-management .user-access-section { grid-template-columns: 200px minmax(0, 1fr); gap: 24px; padding: 24px 0; }
+.user-management .user-access-section-title h3 { font-size: var(--fs-14); }
+.user-management .user-access-section-title p { color: var(--text-3); font-size: var(--fs-12); line-height: var(--lh-18); }
+.user-management .user-access-fields label { gap: 6px; color: var(--text-2); font-size: var(--fs-12); }
+.user-management .user-role-options { gap: 8px; }
+.user-management .user-role-options label { padding: 12px 14px; background: var(--surface); border-radius: var(--r-control); }
+.user-management .user-role-options label:hover { border-color: var(--line-3); }
+.user-management .user-role-options label.selected { background: var(--accent-soft); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.user-management .user-role-options b { font-size: var(--fs-13); }
+.user-management .user-role-options small { color: var(--text-3); font-size: var(--fs-12); line-height: var(--lh-18); }
+.user-management .user-access-actions { padding-top: 16px; }
+.user-management .user-access-placeholder { min-height: 420px; gap: 4px; color: var(--text-3); }
+.user-management .user-access-placeholder h2 { font-size: var(--fs-16); }
+.user-management .user-access-placeholder p { font-size: var(--fs-13); }
+.user-management .user-access-denied { max-width: 480px; margin: 48px auto; padding: 32px; border-radius: var(--r-card); text-align: center; }
+.user-management .user-management-notice { margin: 0; border-radius: var(--r-control); font-size: var(--fs-13); }
+
+@media (max-width: 900px) {
+  .user-management .user-access-summary { grid-template-columns: 1fr 1fr; }
+  .user-management .user-access-summary > div:nth-child(2) { border-right: 0; }
+  .user-management .user-access-summary > article { grid-column: 1 / -1; border-top: 1px solid var(--line-2); }
+  .user-management .user-access-layout { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .user-management .user-access-list { border-right: 0; border-bottom: 1px solid var(--line-2); }
+  .user-management .user-access-editor { padding: 16px; }
+  .user-management .user-access-editor-head { grid-template-columns: auto minmax(0, 1fr); }
+  .user-management .user-access-editor-head > label { grid-column: 1 / -1; justify-self: start; }
+  .user-management .user-access-section { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px 0; }
+  .user-management .user-access-layout:has(.user-access-placeholder) .user-access-editor { display: none; }
+  .user-management .user-access-layout:has(.user-access-placeholder) .user-access-list { border-bottom: 0; }
+}
+}

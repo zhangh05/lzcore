@@ -430,15 +430,12 @@ export function KnowledgeLibrary() {
       </PageHeader>
 
       <div className="page-body">
-        <details className="kl-help-details">
-          <summary className="kl-help-summary">使用帮助</summary>
-          <div className="kl-help-content">
-            <strong>搜索</strong> — 输入关键词检索已导入的文档和知识片段；<br />
-            <strong>上传</strong> — 支持 TXT / PDF / Markdown / JSON，也可从数据管理导入已有任务产出；<br />
-            <strong>知识源</strong> — 列表中展示已导入的文档，可预览内容或重新索引。
+      <div className="kl-layout">
+        <section className="kl-overview" aria-labelledby="kl-overview-title">
+          <div className="kl-overview-head">
+            <h2 id="kl-overview-title">库状态</h2>
+            <span>{scope === "workspace" ? "工作区" : scope === "global" ? "全局" : "会话"}范围</span>
           </div>
-        </details>
-
         <div className="stat-grid kl-stats" data-testid="knowledge-stats">
           <div className="stat-card">
             <div className="stat-value">{counts.total ?? "—"}</div>
@@ -463,7 +460,9 @@ export function KnowledgeLibrary() {
             <div className="stat-label">失败</div>
           </div>
         </div>
+        </section>
 
+        <div className="kl-main">
         {/* 检索常驻工具条：原先是页面最底部一个独立 card，要滚到底才能用。
             搜索框提到这里，结果在下方 inline 展开。 */}
         <div className="kl-toolbar">
@@ -547,7 +546,7 @@ export function KnowledgeLibrary() {
             state={sources.state}
             onRetry={sources.reload}
             emptyText="暂无知识源"
-            emptyHint="点击下方「上传文档」或「从 artifact 导入」添加"
+            emptyHint="使用「上传文档」或「从 artifact 导入」添加第一份文档"
           >
             {(d) => (
               <DataTable
@@ -555,18 +554,23 @@ export function KnowledgeLibrary() {
                 columns={knowledgeColumns}
                 rows={d.sources ?? []}
                 keyExtractor={(s) => s.source_id}
-                empty={{ text: "暂无知识源", hint: "点击下方「上传文档」或「从 artifact 导入」添加" }}
+                empty={{ text: "暂无知识源", hint: "使用「上传文档」或「从 artifact 导入」添加第一份文档" }}
               />
             )}
           </AsyncView>
         </div>
+        </div>
 
+        <div className="kl-side">
         {/* 上传/导入改为 details 默认收起：作为辅助入口，列表可见时才方便核对。
             testid 保留以兼容现有 e2e 选择器。 */}
         <details name="kl-panel" className="card kl-collapsible-card" data-testid="knowledge-upload-card">
           <summary className="kl-collapsible-summary">
-            <IconPlus size={12} />
-            上传文档
+            <span className="kl-collapsible-icon" aria-hidden="true"><IconPlus size={14} /></span>
+            <span className="kl-collapsible-text">
+              <span className="kl-collapsible-name">上传文档</span>
+              <span className="kl-collapsible-hint">本地文件自动整理为知识源</span>
+            </span>
           </summary>
           <div className="kl-collapsible-body">
             <div className="text-xs muted mb-3">
@@ -628,8 +632,11 @@ export function KnowledgeLibrary() {
 
         <details name="kl-panel" className="card kl-collapsible-card" data-testid="knowledge-import-card">
           <summary className="kl-collapsible-summary">
-            <IconBook size={12} />
-            从 artifact 导入
+            <span className="kl-collapsible-icon" aria-hidden="true"><IconBook size={14} /></span>
+            <span className="kl-collapsible-text">
+              <span className="kl-collapsible-name">从 artifact 导入</span>
+              <span className="kl-collapsible-hint">用任务产出建立可检索文档</span>
+            </span>
             <span className="count">{artifacts.state.kind === "success" ? (artifacts.state.data.artifacts ?? []).length : "—"}</span>
           </summary>
           <div className="kl-collapsible-body">
@@ -670,7 +677,16 @@ export function KnowledgeLibrary() {
             )}
           </div>
         </details>
-
+        <details className="kl-help-details">
+          <summary className="kl-help-summary">使用帮助</summary>
+          <div className="kl-help-content">
+            <strong>搜索</strong> — 输入关键词检索已导入的文档和知识片段；<br />
+            <strong>上传</strong> — 支持 TXT / PDF / Markdown / JSON，也可从数据管理导入已有任务产出；<br />
+            <strong>知识源</strong> — 列表中展示已导入的文档，可预览内容或重新索引。
+          </div>
+        </details>
+        </div>
+      </div>
       </div>
 
       <PortalModal
