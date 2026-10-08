@@ -1,0 +1,102 @@
+/* Quick jump (Ctrl/⌘ K). A floating dialog anchored near the top so the list
+   grows downward under the query, the way desktop palettes behave. */
+@layer shell {
+.command-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: min(14vh, 120px) 16px 16px;
+  background: var(--overlay);
+  animation: overlay-in var(--dur-2) var(--ease-out) both;
+}
+.command-palette {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, 100%);
+  max-height: min(560px, 76dvh);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-dialog);
+  box-shadow: var(--shadow-float);
+  animation: dialog-in var(--dur-3) var(--ease-out) both;
+}
+.command-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--line-2);
+}
+.command-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 52px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  font-size: var(--fs-15);
+  outline: none;
+}
+.command-input::placeholder { color: var(--text-4); }
+.command-list { flex: 1 1 auto; margin: 0; padding: 6px; overflow-y: auto; list-style: none; }
+.command-group { padding: 10px 10px 4px; color: var(--text-4); font-size: var(--fs-12); font-weight: var(--weight-label); }
+.command-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 10px;
+  color: var(--text-2);
+  border-radius: var(--r-8);
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+.command-option.active { color: var(--text); background: var(--surface-selected); }
+.command-option-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-control);
+}
+.command-option.active .command-option-icon { color: var(--accent); background: var(--surface); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.command-option-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-option-hint { flex: 0 0 auto; color: var(--text-4); font-family: var(--font-mono); font-size: var(--fs-11); }
+.command-empty { padding: 28px 12px; color: var(--text-3); font-size: var(--fs-13); text-align: center; }
+.command-footer {
+  display: flex;
+  gap: 16px;
+  padding: 8px 14px;
+  color: var(--text-4);
+  background: var(--surface-2);
+  border-top: 1px solid var(--line-2);
+  font-size: var(--fs-12);
+}
+.command-footer kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 3px;
+  padding: 0 4px;
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: 16px;
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .command-backdrop { padding-top: 12px; }
+  .command-footer { display: none; }
+}
+}

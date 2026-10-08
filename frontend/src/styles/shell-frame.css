@@ -1,0 +1,46 @@
+/* Frame: header and sidebar sit directly on a quiet frame colour and the
+   routed page is one raised sheet. Phones keep a flat, full-bleed shell. */
+
+@layer shell {
+
+.app-shell {
+  --nav-active-bg: var(--surface);
+  display: grid;
+  grid-template-rows: var(--h-header) minmax(0, 1fr);
+  /* Follow the real viewport, including native desktop window resizing. */
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--surface-frame);
+}
+[data-theme="dark"] .app-shell { --nav-active-bg: var(--surface-3); }
+.app-shell .app-header { background: transparent; border-bottom: 0; box-shadow: none; }
+.app-root {
+  display: grid;
+  grid-template-columns: var(--w-sidebar) minmax(0, 1fr);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns var(--dur-3) var(--ease);
+}
+.app-root.no-sidebar { grid-template-columns: 0 minmax(0, 1fr); }
+.app-main {
+  min-width: 0;
+  min-height: 0;
+  margin: 0 8px 8px 0;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-dialog);
+  box-shadow: var(--shadow-xs);
+}
+.app-root.no-sidebar .app-main { margin-left: 8px; }
+.app-main:focus { outline: none; }
+
+@media (max-width: 900px) {
+  .app-shell { background: var(--bg); }
+  .app-shell .app-header { background: var(--surface); border-bottom: 1px solid var(--line-2); }
+  .app-main, .app-root.no-sidebar .app-main { margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+}
+
+}

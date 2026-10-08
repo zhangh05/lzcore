@@ -80,4 +80,8 @@ export {
   CheckCircle as IconCheckCircle,
   WarningCircle as IconWarningCircle,
   XCircle as IconXCircle,
+  Question as IconHelp,
+  SignOut as IconSignOut,
+  Rows as IconRows,
+  House as IconHome,
 } from "@phosphor-icons/react";

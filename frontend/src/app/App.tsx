@@ -20,9 +20,16 @@ import {
   IconMoon,
   IconSun,
   IconMenu,
-  IconSparkle,
+  IconHelp,
+  IconSearch,
   IconSidebarSimple,
+  IconSignOut,
+  IconRows,
+  IconShield,
+  IconChecklist,
+  IconWorkspace,
 } from "../components/Icon";
+import { CommandPalette } from "../components/CommandPalette";
 import { FeatureDescriptionDrawer } from "../components/FeatureDescriptionDrawer";
 import { NAV_ITEMS, buildNavGroups } from "../config/nav";
 import type { NavGroup, NavItem } from "../config/nav";
@@ -136,6 +143,7 @@ const NavGroupItem = memo(function NavGroupItem({ group, currentPath, currentSea
           sidebar, mobile navigation).
         */}
         <span>{group.label}</span>
+        {hasMenu ? <span className="app-nav-caret" aria-hidden="true" /> : null}
       </NavLink>
       {hasMenu ? (
         <div className="app-nav-menu" role="menu" aria-label={group.label}>
@@ -264,10 +272,14 @@ function AppRoutes({ canManageUsers }: { canManageUsers: boolean }) {
     <RouteFallback />
   ) : routes[location.pathname] ?? (
     <ErrorBoundary>
-      <div className="hero">
+      <div className="hero hero-not-found">
         <div className="hero-mark">404</div>
         <h1 className="hero-title">页面不存在</h1>
-        <p className="hero-sub">请通过顶栏导航回到工作台</p>
+        <p className="hero-sub">这个地址没有对应的页面，可能已移动或输入有误。可以回到工作台，或按 Ctrl K 快速跳转。</p>
+        <div className="hero-actions">
+          <Link className="btn primary" to="/workbench" viewTransition>返回工作台</Link>
+          <Link className="btn" to="/runs" viewTransition>查看任务记录</Link>
+        </div>
       </div>
     </ErrorBoundary>
   );
@@ -317,6 +329,23 @@ function LoginScreen({ onLogin }: { onLogin: (status: Awaited<ReturnType<typeof 
 
   return (
     <main className="login-page">
+      {/* Product context for wide windows; purely presentational, so it is
+          hidden from assistive technology and collapses away on narrow screens. */}
+      <aside className="login-showcase" aria-hidden="true">
+        <div className="login-showcase-brand">
+          <span className="brand-mark brand-mark-lg">联</span>
+          <span>联智中枢</span>
+        </div>
+        <div className="login-showcase-copy">
+          <h2>把运维任务交给 Agent，<br />每一步都有据可查。</h2>
+          <ul>
+            <li><IconChecklist size={18} /><span><strong>调用工具，留下证据</strong>每次读取与执行都记录来源和结果。</span></li>
+            <li><IconShield size={18} /><span><strong>写入先核对，不盲目重试</strong>结果未知的操作只回查，不自动重放。</span></li>
+            <li><IconWorkspace size={18} /><span><strong>按工作区隔离</strong>会话、文件与记忆只在授权的工作区内可见。</span></li>
+          </ul>
+        </div>
+        <small>AI Operations Workspace</small>
+      </aside>
       <section className="login-panel" aria-labelledby="login-title">
         {/*
           Brand, one line of description, then the form. The category line is set
@@ -325,15 +354,16 @@ function LoginScreen({ onLogin }: { onLogin: (status: Awaited<ReturnType<typeof 
           rather than a decorative motif with invented ids in it.
         */}
         <div className="login-brand">
-          <span className="login-kicker">AI Operations Workspace</span>
-          <h1 id="login-title">联智中枢</h1>
-          <p>把运维任务交给 Agent：它会调用工具、留下证据，并说明结论。</p>
+          <span className="brand-mark brand-mark-lg" aria-hidden="true">联</span>
+          <h1 id="login-title">登录联智中枢</h1>
+          <p>使用工作区账户继续。Agent 会调用工具、留下证据，并说明结论。</p>
         </div>
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
             <span>账户</span>
             <input
               autoComplete="username"
+              className="input"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               disabled={submitting}
@@ -343,6 +373,7 @@ function LoginScreen({ onLogin }: { onLogin: (status: Awaited<ReturnType<typeof 
             <span>密码</span>
             <input
               autoComplete="current-password"
+              className="input"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -351,7 +382,7 @@ function LoginScreen({ onLogin }: { onLogin: (status: Awaited<ReturnType<typeof 
             />
           </label>
           {error ? <div className="login-error" role="alert">{error}</div> : null}
-          <button type="submit" className="login-submit" disabled={submitting || !username.trim() || !password}>
+          <button type="submit" className={"login-submit" + (submitting ? " is-loading" : "")} disabled={submitting || !username.trim() || !password}>
             {submitting ? "正在登录…" : "登录"}
           </button>
           {oidcEnabled ? (
@@ -365,8 +396,46 @@ function LoginScreen({ onLogin }: { onLogin: (status: Awaited<ReturnType<typeof 
             </button>
           ) : null}
         </form>
+        <p className="login-footnote">登录状态仅保存在当前浏览器；共享设备使用后请退出。</p>
       </section>
     </main>
+  );
+}
+
+const ROLE_LABELS: Record<string, string> = { owner: "所有者", admin: "管理员", member: "成员", viewer: "只读成员", operator: "操作员" };
+
+function AccountMenu({ session, density, onDensity }: {
+  session: Awaited<ReturnType<typeof authApi.status>> | null;
+  density: "comfortable" | "compact";
+  onDensity: (value: "comfortable" | "compact") => void;
+}) {
+  const name = session?.username || "本地模式";
+  const role = session?.platform_admin ? "平台管理员" : (session?.role ? ROLE_LABELS[session.role] ?? session.role : "未启用登录");
+  const workspace = useSessionStore((s) => s.currentWorkspaceId);
+  return (
+    <details className="app-account">
+      <summary className="app-account-trigger" title="账户与显示偏好" data-testid="btn-account-menu">
+        <span className="app-account-avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
+        <span className="app-account-name">{name}</span>
+        <span className="sr-only">账户与显示偏好</span>
+      </summary>
+      <div className="app-nav-menu app-account-menu" role="group" aria-label="账户与显示偏好">
+        <div className="app-account-head">
+          <span className="app-account-avatar lg" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
+          <div>
+            <strong>{name}</strong>
+            <span>{role}{workspace ? ` · ${workspace}` : ""}</span>
+          </div>
+        </div>
+        <div className="app-account-section">
+          <span className="app-account-label"><IconRows size={14} aria-hidden="true" />显示密度</span>
+          <div className="segmented app-density" role="group" aria-label="显示密度">
+            <button type="button" className={density === "comfortable" ? "active" : ""} aria-pressed={density === "comfortable"} onClick={() => onDensity("comfortable")}>舒适</button>
+            <button type="button" className={density === "compact" ? "active" : ""} aria-pressed={density === "compact"} onClick={() => onDensity("compact")}>紧凑</button>
+          </div>
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -381,6 +450,9 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
   const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen);
   const currentWorkspaceId = useSessionStore((s) => s.currentWorkspaceId);
   const [featureDescOpen, setFeatureDescOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const density = useUIStore((s) => s.density);
+  const setDensity = useUIStore((s) => s.setDensity);
 
   const location = useLocation();
   const extensionRegistry = useExtensionRegistry();
@@ -393,6 +465,48 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (density === "compact") document.documentElement.dataset.density = "compact";
+    else delete document.documentElement.dataset.density;
+  }, [density]);
+
+  // Header disclosure menus (settings, account) close on an outside press or
+  // Escape, returning focus to their trigger, like any other menu.
+  useEffect(() => {
+    const closeOthers = (target: Node | null) => {
+      document.querySelectorAll<HTMLDetailsElement>(".app-header details[open]").forEach((menu) => {
+        if (!target || !menu.contains(target)) menu.removeAttribute("open");
+      });
+    };
+    const onPointer = (event: PointerEvent) => closeOthers(event.target as Node | null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const open = document.querySelector<HTMLDetailsElement>(".app-header details[open]");
+      if (!open) return;
+      open.removeAttribute("open");
+      open.querySelector<HTMLElement>("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  // Ctrl/⌘ K opens the jump list from anywhere, including text fields, the
+  // way every desktop command palette behaves.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Best-effort RUM: ship Core Web Vitals to the backend (silently no-ops if absent).
   useEffect(() => {
@@ -443,7 +557,7 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
         </button>
 
         <div className="brand-zone">
-          <Link className="brand" to="/workbench" aria-label="联智中枢" viewTransition>
+          <Link className="brand" to="/workbench" viewTransition>
             <span className="brand-mark" aria-hidden="true">联</span>
             <span className="brand-text">
               <span>联智中枢</span>
@@ -470,26 +584,41 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
         <div className="app-actions" aria-label="页面操作">
           <button
             type="button"
-            className="feature-desc-btn"
+            className="command-trigger"
+            data-testid="btn-command-palette"
+            aria-keyshortcuts="Control+K Meta+K"
+            title="快速跳转（Ctrl K）"
+            aria-haspopup="dialog"
+            onClick={() => setPaletteOpen(true)}
+          >
+            <IconSearch size={15} aria-hidden="true" />
+            <span className="command-trigger-label">搜索页面与会话</span>
+            <kbd aria-hidden="true">Ctrl K</kbd>
+          </button>
+          <button
+            type="button"
+            className="header-icon-btn feature-desc-btn"
             data-testid="btn-feature-desc"
             aria-label="功能描述"
+            data-tip="功能描述"
             onClick={() => setFeatureDescOpen(true)}
           >
-            <IconSparkle size={14} weight="duotone" />
-            <span>功能描述</span>
+            <IconHelp size={17} aria-hidden="true" />
           </button>
           <DesktopSettingsButton />
           <SettingsNav items={settingsNavigationItems} currentPath={location.pathname} />
 
           <button
             type="button"
-            className="theme-toggle"
+            className="header-icon-btn theme-toggle"
             data-tip={theme === "dark" ? "切换浅色" : "切换深色"}
             aria-label="切换主题"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           >
-            {theme === "dark" ? <IconSun size={14} /> : <IconMoon size={14} />}
+            {theme === "dark" ? <IconSun size={17} /> : <IconMoon size={17} />}
           </button>
+
+          <AccountMenu session={session} density={density} onDensity={setDensity} />
 
           {canLogout ? (
             <button
@@ -499,7 +628,8 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
             title={session?.username ? `当前用户：${session.username}` : "退出登录"}
             onClick={onLogout}
             >
-              退出
+              <IconSignOut size={15} aria-hidden="true" />
+              <span>退出</span>
             </button>
           ) : null}
         </div>
@@ -516,6 +646,7 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
       <ToastHost />
       <ConfirmHost />
       <FeatureDescriptionDrawer open={featureDescOpen} onClose={() => setFeatureDescOpen(false)} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={availableNavigationItems} />
     </div>
   );
 }

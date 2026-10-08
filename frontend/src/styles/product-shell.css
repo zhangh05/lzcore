@@ -1,759 +1,400 @@
-/* Component entrypoint. Imports stay here so route loading cannot reorder its parts. */
+/* App shell: header, primary navigation, utility actions and the account menu.
+   Imports stay here so route loading cannot reorder its parts. */
+@import "./shell-frame.css";
 @import "./sidebar.css";
+@import "./command-palette.css";
+@import "./login.css";
 
-@layer base {
+@layer shell {
 
-.app-shell {
-  display: grid;
-  grid-template-rows: var(--h-header) minmax(0, 1fr);
-  /* Follow the real viewport, including native desktop window resizing. */
-  height: 100dvh;
-  overflow: hidden;
-  background: var(--bg);
-}
-
+/* ── Header ────────────────────────────────────────────────────────────── */
 .app-header {
   z-index: 20;
   display: flex;
   align-items: center;
+  gap: 20px;
   min-width: 0;
+  min-height: var(--h-header);
+  padding: 0 16px 0 14px;
 }
 
-.app-main {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--bg);
-}
-
-.app-root {
-  display: grid;
-  grid-template-columns: var(--w-sidebar) minmax(0, 1fr);
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.app-root.no-sidebar {
-  grid-template-columns: 0 minmax(0, 1fr);
-}
-
-.brand {
-  max-width: 230px;
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.05;
-}
-
-.brand-text > span {
-  overflow: hidden;
-  color: var(--text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.brand-text small {
-  margin-top: 4px;
-  overflow: hidden;
-  letter-spacing: 0.04em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.app-nav {
+.brand-zone {
   position: relative;
-  align-items: center;
-  min-width: 0;
-  overflow: visible;
-}
-
-.app-nav-group {
-  position: relative;
-  align-self: stretch;
-}
-
-.app-nav-item {
-  flex: 0 0 auto;
-  justify-content: center;
-  height: var(--h-header);
-  border-radius: 0;
-  white-space: nowrap;
-  transition:
-    color var(--dur-2) var(--ease),
-    background var(--dur-2) var(--ease),
-    transform var(--dur-2) var(--ease);
-  font-weight: var(--weight-label);
-}
-
-.app-nav-group.has-menu .app-nav-group-trigger::before {
-  position: absolute;
-  right: 3px;
-  bottom: 15px;
-  width: 4px;
-  height: 4px;
-  content: "";
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  opacity: 0.5;
-  transform: rotate(45deg);
-}
-
-.app-nav-item:hover {
-  color: var(--text);
-  background: var(--surface-2);
-  transform: none;
-}
-
-.app-nav-item.active {
-  color: var(--text);
-}
-
-.app-nav-item.active::after {
-  position: absolute;
-  right: 9px;
-  bottom: 0;
-  left: 9px;
-  height: 2px;
-  content: "";
-  background: var(--accent);
-  border-radius: 2px 2px 0 0;
-  animation: tab-line-in var(--dur-3) var(--ease-out) both;
-}
-
-.app-nav-item svg {
-  width: 13px;
-  height: 13px;
-  opacity: 0.75;
-}
-
-.app-nav-menu {
-  position: absolute;
-  left: 0;
-  z-index: 80;
-  display: grid;
-  width: 210px;
-  visibility: hidden;
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  opacity: 0;
-  transform: translateY(4px);
-  transition:
-    opacity var(--dur-2) var(--ease),
-    transform var(--dur-2) var(--ease),
-    visibility var(--dur-2) var(--ease);
-}
-
-.app-nav-group:hover .app-nav-menu,
-.app-nav-group:focus-within .app-nav-menu {
-  visibility: visible;
-  opacity: 1;
-  transform: none;
-}
-/* Escape closes the menu while focus stays on the trigger. */
-.app-nav-group.menu-dismissed:is(:hover, :focus-within) .app-nav-menu {
-  visibility: hidden;
-  opacity: 0;
-}
-.app-nav-menu-head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 3px 8px;
-  align-items: center;
-  padding: 7px 8px 8px;
-  border-bottom: 1px solid var(--line-2);
-  margin-bottom: 4px;
-}
-
-.app-nav-menu-head > svg {
-  grid-column: 1;
-  grid-row: 1;
-  color: var(--accent);
-}
-
-.app-nav-menu-head > strong {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.app-nav-menu-head > span {
-  grid-column: 2;
-  grid-row: 2;
-}
-
-.app-nav-menu-head strong {
-  color: var(--text-1);
-  font-size: var(--fs-12);
-}
-
-.app-nav-menu-head span {
-  color: var(--text-4);
-  font-size: var(--fs-11);
-  line-height: 1.35;
-}
-
-.app-nav-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 34px;
-  padding: 0 9px;
-  color: var(--text-3);
-  border-radius: var(--r-6);
-  font-size: var(--fs-13);
-  font-weight: var(--weight-heading);
-}
-
-.app-nav-menu-item:hover {
-  color: var(--text);
-  background: var(--surface-2);
-}
-
-.app-nav-menu-item.active {
-  color: var(--accent-2);
-  background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.app-nav-menu-item svg {
-  flex: 0 0 auto;
-  opacity: 0.75;
-}
-
-.app-actions {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  min-width: max-content;
+  justify-content: space-between;
+  gap: 8px;
+  width: calc(var(--w-sidebar) - 14px - 20px);
+  min-width: 0;
 }
-
-.collapse-btn,
-.theme-toggle {
+.brand {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-8);
+}
+.brand-mark {
   display: inline-grid;
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--accent-text);
+  background: var(--accent);
+  border-radius: var(--r-8);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+  font-size: 14px;
+  font-weight: var(--weight-strong);
+  line-height: 1;
+}
+.brand-mark-lg { width: 40px; height: 40px; border-radius: 11px; font-size: 19px; }
+.brand-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.brand-text > span {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-15);
+  font-weight: var(--weight-strong);
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand-text small {
+  overflow: hidden;
+  color: var(--text-4);
+  font-size: var(--fs-11);
+  font-weight: var(--weight-label);
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand-text small:empty { display: none; }
+
+.sidebar-toggle-btn,
+.header-icon-btn,
+.nav-toggle,
+.app-settings-menu > summary {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   place-items: center;
   color: var(--text-3);
+  background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--r-6);
-  transition:
-    background var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    transform var(--dur-2) var(--ease);
+  border-radius: var(--r-8);
+  cursor: pointer;
+  list-style: none;
+  transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
 }
-
-.collapse-btn:hover,
-.theme-toggle:hover {
+.app-settings-menu > summary::-webkit-details-marker { display: none; }
+.sidebar-toggle-btn:hover,
+.header-icon-btn:hover,
+.nav-toggle:hover,
+.app-settings-menu > summary:hover,
+.app-settings-menu[open] > summary,
+.app-settings-menu.active > summary {
   color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line);
-  transform: none;
+  background: var(--surface-hover);
 }
+.sidebar-toggle-btn.is-active { color: var(--text-2); }
+.sidebar-toggle-btn:focus-visible,
+.header-icon-btn:focus-visible,
+.nav-toggle:focus-visible,
+.app-settings-menu > summary:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; }
+.nav-toggle { display: none; }
+
+/* ── Primary navigation ────────────────────────────────────────────────
+   Pills on the frame: the current domain is a raised chip, hover a soft
+   tint so the hit area reads before the click. */
+.app-nav {
+  position: relative;
+  display: flex;
+  align-self: stretch;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  overflow: visible;
+  scrollbar-width: none;
+}
+.app-nav-group { position: relative; display: flex; align-items: center; }
+.app-nav-item {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  height: var(--h-nav-item);
+  padding: 0 11px;
+  color: var(--text-3);
+  border-radius: var(--r-8);
+  font-size: var(--fs-14);
+  font-weight: var(--weight-label);
+  line-height: 1;
+  white-space: nowrap;
+  transition: color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+.app-nav-item:hover { color: var(--text); background: var(--surface-hover); }
+.app-nav-item:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; box-shadow: none; }
+.app-nav-group.active > .app-nav-item,
+.app-nav-item.active {
+  color: var(--text);
+  background: var(--nav-active-bg);
+  box-shadow: 0 0 0 1px var(--line-2), var(--shadow-xs);
+  font-weight: var(--weight-strong);
+}
+.app-nav-caret {
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 1px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  opacity: 0.55;
+  transform: rotate(45deg);
+  transition: transform var(--dur-2) var(--ease), opacity var(--dur-2) var(--ease);
+}
+.app-nav-group.has-menu:is(:hover, :focus-within):not(.menu-dismissed) .app-nav-caret { opacity: 0.9; transform: translateY(2px) rotate(225deg); }
+
+/* ── Menus (nav groups, settings, account) ─────────────────────────────── */
+.app-nav-menu {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: 0;
+  z-index: 80;
+  display: grid;
+  gap: 1px;
+  min-width: 248px;
+  padding: 6px;
+  visibility: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-menu);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease), visibility var(--dur-2) var(--ease);
+}
+.app-nav-group:hover .app-nav-menu,
+.app-nav-group:focus-within .app-nav-menu { visibility: visible; opacity: 1; transform: none; }
+/* Escape closes the menu while focus stays on the trigger. */
+.app-nav-group.menu-dismissed:is(:hover, :focus-within) .app-nav-menu { visibility: hidden; opacity: 0; }
+.app-nav-menu-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: center;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line-2);
+}
+.app-nav-menu-head > svg { grid-row: 1 / span 2; width: 18px; height: 18px; color: var(--accent); }
+.app-nav-menu-head strong { color: var(--text); font-size: var(--fs-13); line-height: var(--lh-13); }
+.app-nav-menu-head span { grid-column: 2; color: var(--text-3); font-size: var(--fs-12); line-height: var(--lh-12); }
+.app-nav-menu-head:not(:has(svg)) > * { grid-column: 1 / -1; }
+.app-nav-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--text-2);
+  border-radius: var(--r-control);
+  font-size: var(--fs-13);
+  font-weight: var(--weight-label);
+}
+.app-nav-menu-item svg { flex: 0 0 auto; width: 16px; height: 16px; color: var(--text-3); }
+.app-nav-menu-item:hover,
+.app-nav-menu-item:focus-visible { color: var(--text); background: var(--surface-hover); outline: none; }
+.app-nav-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring); }
+.app-nav-menu-item.active { color: var(--accent-2); background: var(--accent-soft); }
+.app-nav-menu-item.active svg { color: var(--accent); }
+
+/* ── Utility actions ───────────────────────────────────────────────────── */
+.app-actions {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: max-content;
+  margin-left: auto;
+}
+.command-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 232px;
+  height: 34px;
+  margin-right: 6px;
+  padding: 0 6px 0 10px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-8);
+  font-size: var(--fs-13);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.command-trigger:hover { color: var(--text-2); background: var(--surface); border-color: var(--line-3); }
+.command-trigger:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; }
+.command-trigger-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-trigger kbd,
+.command-kbd {
+  padding: 2px 6px;
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: 14px;
+}
+.theme-toggle[data-tip]:hover::after,
+.feature-desc-btn[data-tip]:hover::after { right: 0; left: auto; transform: none; }
+
+.app-settings-menu { position: relative; display: inline-flex; align-items: center; }
+.app-settings-menu > .app-nav-menu { top: calc(100% + 8px); right: 0; left: auto; pointer-events: none; }
+.app-settings-menu[open] > .app-nav-menu { visibility: visible; pointer-events: auto; opacity: 1; transform: none; }
+
+.app-account { position: relative; display: inline-flex; align-items: center; margin-left: 6px; padding-left: 10px; border-left: 1px solid var(--line-2); }
+.app-account-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 3px;
+  color: var(--text-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-13);
+  font-weight: var(--weight-label);
+  cursor: pointer;
+  list-style: none;
+  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.app-account-trigger::-webkit-details-marker { display: none; }
+.app-account-trigger:hover,
+.app-account[open] > .app-account-trigger { background: var(--surface-hover); border-color: var(--line-2); }
+.app-account-trigger:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; }
+.app-account-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-account-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  color: var(--accent-2);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 50%;
+  font-size: var(--fs-12);
+  font-weight: var(--weight-strong);
+}
+.app-account-avatar.lg { width: 36px; height: 36px; font-size: var(--fs-14); }
+.app-account-menu { top: calc(100% + 8px); right: 0; left: auto; width: 264px; padding: 8px; pointer-events: none; }
+.app-account[open] > .app-account-menu { visibility: visible; pointer-events: auto; opacity: 1; transform: none; }
+.app-account-head { display: flex; align-items: center; gap: 10px; padding: 6px 6px 12px; border-bottom: 1px solid var(--line-2); }
+.app-account-head > div { display: grid; min-width: 0; gap: 2px; }
+.app-account-head strong { overflow: hidden; color: var(--text); font-size: var(--fs-14); text-overflow: ellipsis; white-space: nowrap; }
+.app-account-head span { overflow: hidden; color: var(--text-3); font-size: var(--fs-12); text-overflow: ellipsis; white-space: nowrap; }
+.app-account-section { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 6px 4px; }
+.app-account-label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: var(--fs-13); }
+.app-account-label svg { color: var(--text-3); }
 
 .logout-btn {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-8);
+  font-size: var(--fs-13);
+  font-weight: var(--weight-label);
   line-height: 1;
   white-space: nowrap;
-  transition:
-    background var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    transform var(--dur-2) var(--ease);
+  transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.logout-btn:hover { color: var(--danger); background: var(--danger-soft); }
+.logout-btn:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; }
+
+/* ── Mobile navigation (inside the off-canvas sidebar) ─────────────────── */
+.mobile-nav { display: none; }
+.mobile-nav-advanced { display: none; }
+.mobile-nav-section-label {
+  display: block;
+  padding: 0 10px 6px;
+  color: var(--text-4);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-label);
 }
 
-.logout-btn:hover {
-  border-color: var(--line-3);
-  color: var(--text);
-  background: var(--surface-3);
-  transform: none;
+/* ── Wide → narrow ─────────────────────────────────────────────────────── */
+@media (max-width: 1360px) {
+  .command-trigger { width: 34px; padding: 0; justify-content: center; margin-right: 2px; }
+  .command-trigger kbd { display: none; }
+  /* Visually hidden, still the button's accessible name. */
+  .command-trigger-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
-.nav-toggle {
-  display: none;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  margin-right: 4px;
-  color: var(--text-2);
-  border: 1px solid transparent;
-  border-radius: var(--r-6);
-  transition:
-    background var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    transform var(--dur-2) var(--ease);
-}
-
-.nav-toggle:hover {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line);
-  transform: none;
-}
-
-.theme-toggle[data-tip]:hover::after {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
 @media (max-width: 1180px) {
-  .brand {
-    min-width: 150px;
-  }
+  .app-header { gap: 12px; }
+  .app-nav-item { padding: 0 8px; font-size: var(--fs-13); }
+  .app-account-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .app-account-trigger { padding: 0 3px; }
 }
-
-@media (max-width: 1180px) {
-
-  .app-nav-item {
-    padding: 0 10px;
-    font-weight: var(--weight-label);
-  }
-}
-
-@media (max-width: 1180px) {
-
-  .app-header > .metric-chip {
-    display: none;
-  }
-}
-
 @media (max-width: 900px) {
-
-  .app-root,
-  .app-root.no-sidebar {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 900px) {
-  .app-nav {
-    display: none;
-  }
-}
-
-@media (max-width: 900px) {
-  .collapse-btn {
-    display: none;
-  }
-}
-
-@media (max-width: 900px) {
-  .nav-toggle {
-    display: inline-grid;
-  }
-}
-
-@media (max-width: 900px) {
-
+  .app-root, .app-root.no-sidebar { grid-template-columns: minmax(0, 1fr); }
+  .app-nav { display: none; }
+  .nav-toggle { display: inline-grid; }
+  .sidebar-toggle-btn { display: none; }
+  .brand-zone { width: auto; }
   .nav-backdrop {
     position: fixed;
     inset: 0;
     z-index: 55;
     background: var(--overlay);
-    backdrop-filter: none;
     animation: surface-in var(--dur-3) var(--ease-out) both;
   }
-}
-
-@media (max-width: 900px) {
-
-  .brand {
-    min-width: 124px;
-  }
-}
-
-@media (max-width: 900px) {
-
-  .brand-text small {
-    display: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .app-header {
+  .mobile-nav { display: flex; flex-direction: column; gap: 2px; padding: 10px 10px 12px; border-bottom: 1px solid var(--line-2); }
+  .mobile-nav-advanced { display: block; margin-top: 10px; padding-top: 10px; }
+  .mobile-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 40px;
     padding: 0 12px;
+    color: var(--text-2);
+    border-radius: var(--r-8);
+    font-size: var(--fs-14);
+    font-weight: var(--weight-label);
   }
+  .mobile-nav-item svg { color: var(--text-3); }
+  .mobile-nav-item:hover { color: var(--text); background: var(--surface-hover); }
+  .mobile-nav-item.active { color: var(--accent-2); background: var(--accent-soft); font-weight: var(--weight-strong); }
+  .mobile-nav-item.active svg { color: var(--accent); }
 }
-
 @media (max-width: 640px) {
-
-  .brand {
-    min-width: 112px;
-  }
+  .app-header { gap: 8px; padding: 0 10px; }
+  .brand-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .app-settings-menu { display: none; }
+  .app-account { margin-left: 2px; padding-left: 6px; }
+  .logout-btn { width: 34px; padding: 0; }
+  .logout-btn > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .app-actions { gap: 2px; }
 }
-
-@media (max-width: 640px) {
-
-  .brand-text > span {
-    font-size: var(--fs-13);
-  }
-}
-
-@media (max-width: 640px) {
-
-  .app-nav-item span {
-    max-width: 4.5em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-}
-
-@media (max-width: 640px) {
-
-  .collapse-btn {
-    display: none;
-  }
-}
-
 @media print {
-
-  .app-main,
-  .app-root {
-    display: block;
-    height: auto;
-    overflow: visible;
-  }
+  .app-main, .app-root { display: block; height: auto; overflow: visible; }
+  .app-header { display: none; }
 }
-
-.app-nav {
-  scrollbar-width: none;
-}
-}
-
-@layer shell {
-.app-header {
-  min-height: var(--h-header);
-  gap: 18px;
-  padding: 0 var(--space-6);
-  background: var(--surface);
-  border-bottom: 1px solid var(--line-2);
-  box-shadow: none;
-}
-
-.brand-zone {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  position: relative;
-  min-width: calc(var(--w-sidebar) - var(--space-12));
-  max-width: var(--w-sidebar);
-}
-.brand-zone::after {
-  position: absolute;
-  right: -9px;
-  top: 50%;
-  width: 1px;
-  height: 16px;
-  background: var(--line-2);
-  content: "";
-  transform: translateY(-50%);
-  display: none;
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-  color: inherit;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  border-radius: 4px;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 10px;
-  font-weight: var(--weight-heading);
-  line-height: 1;
-}
-
-.brand-text > span {
-  font-size: 16px;
-  font-weight: var(--weight-heading);
-  letter-spacing: 0;
-}
-
-.brand-text small {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 5px;
-  color: var(--text-3);
-  background: var(--surface-2);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-4);
-  font-size: var(--fs-11);
-  font-weight: var(--weight-label);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  vertical-align: 1px;
-}
-
-.app-nav {
-  display: flex;
-  align-self: stretch;
-  gap: 4px;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-}
-
-.app-nav-group {
-  display: flex;
-  align-items: stretch;
-}
-
-.app-nav-item {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-height: 100%;
-  padding: 0 12px;
-  color: var(--text-3);
-  font-size: 13px;
-  font-weight: var(--weight-label);
-  line-height: 1.5;
-}
-
-.app-nav-item:hover,
-.app-nav-item.active,
-.app-nav-group.active > .app-nav-item {
-  color: var(--text);
-  background: transparent;
-}
-
-.app-nav-item.active::after,
-.app-nav-group.active > .app-nav-item::after {
-  position: absolute;
-  right: 8px;
-  bottom: 0;
-  left: 8px;
-  height: 2px;
-  content: "";
-  background: var(--accent);
-  border-radius: 2px 2px 0 0;
-  box-shadow: none;
-}
-
-.app-nav-menu {
-  top: calc(100% - 8px);
-  min-width: 240px;
-  padding: 8px;
-  border-color: var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow-menu);
-}
-
-.app-actions {
-  position: relative;
-  gap: 6px;
-  padding-left: 14px;
-  margin-left: auto;
-}
-.app-actions::before {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 1px;
-  height: 16px;
-  background: var(--line-2);
-  content: "";
-  transform: translateY(-50%);
-  display: none;
-}
-
-.collapse-btn,
-.theme-toggle,
-.nav-toggle {
-  width: 32px;
-  height: 32px;
-  color: var(--text-3);
-  border-radius: var(--r-6);
-}
-
-.collapse-btn:hover,
-.theme-toggle:hover,
-.nav-toggle:hover {
-  color: var(--text);
-  background: var(--surface-3);
-}
-
-
-
-.feature-desc-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: var(--weight-label);
-  color: var(--text-2);
-  background: var(--surface-2);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-6);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.feature-desc-btn svg {
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
-.feature-desc-btn:hover {
-  color: var(--text);
-  background: var(--surface-3);
-  border-color: var(--line);
-}
-
-.feature-desc-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.logout-btn {
-  min-width: 56px;
-  height: 32px;
-  padding: 0 10px;
-  color: var(--text-3);
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-6);
-  font-size: 12px;
-  font-weight: var(--weight-label);
-}
-
-@media (max-width: 1180px) {
-  .app-header { gap: 14px; padding-inline: var(--space-4); }
-}
-
-@media (max-width: 1180px) {
-  .brand { min-width: 154px; max-width: 154px; }
-}
-
-@media (max-width: 1180px) {
-  .app-nav { gap: 0; }
-}
-
-@media (max-width: 1180px) {
-  .app-nav-item { padding-inline: 9px; font-size: 13px; font-weight: var(--weight-label); }
-}
-
-@media (max-width: 900px) {
-  .brand { min-width: 0; }
-}
-
-@media (max-width: 900px) {
-  .app-nav { display: none; }
-}
-.app-nav-item > svg,
-.app-settings-menu > summary > svg {
-  flex-shrink: 0;
-  opacity: 0.85;
-  transition: opacity var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
-}
-.app-nav-item:hover > svg,
-.app-nav-item.active > svg,
-.app-settings-menu:hover > summary > svg,
-.app-settings-menu[open] > summary > svg {
-  opacity: 1;
-}
-.app-nav-item {
-  gap: 8px;
-  font-weight: var(--weight-label);
-}
-.app-nav-group.active > .app-nav-item {
-  color: var(--accent);
-}
-.logout-btn:hover,
-.logout-btn:focus-visible {
-  color: var(--text);
-  background: var(--surface-3);
-  border-color: var(--line);
-  outline: none;
-}
-
-.app-settings-menu {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-.app-settings-menu > summary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  color: var(--text-3);
-  border-radius: var(--r-8);
-  cursor: pointer;
-  list-style: none;
-}
-.app-settings-menu > summary::-webkit-details-marker { display: none; }
-.app-settings-menu > summary:hover,
-.app-settings-menu > summary:focus-visible,
-.app-settings-menu.active > summary {
-  color: var(--text);
-  background: var(--surface-3);
-  outline: none;
-}
-.app-settings-menu > .app-nav-menu {
-  top: calc(100% + 6px);
-  right: 0;
-  left: auto;
-  pointer-events: none;
-}
-.app-settings-menu[open] > .app-nav-menu {
-  visibility: visible;
-  pointer-events: auto;
-  opacity: 1;
-  transform: translateY(0);
-}
-.mobile-nav-advanced {
-  display: none;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-2);
-}
-.mobile-nav-section-label {
-  display: block;
-  padding: 0 10px 6px;
-  color: var(--text-4);
-  font-size: var(--fs-11);
-  font-weight: var(--weight-heading);
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
-.app-settings-menu > summary, .collapse-btn, .theme-toggle, .nav-toggle { width: var(--h-control); height: var(--h-control); }
-@media (max-width: 900px) {
-  .mobile-nav-advanced { display: block; }
-}
-@media (max-width: 900px) {
-  .app-settings-menu > summary, .theme-toggle, .nav-toggle, .mobile-nav-item { min-height: var(--h-touch); }
-}
-@media (max-width: 900px) {
-  .theme-toggle, .nav-toggle { min-width: var(--h-touch); }
-}
-
 }

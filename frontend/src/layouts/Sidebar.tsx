@@ -6,7 +6,8 @@ import { useWorkbenchStore } from "../stores/workbench";
 import { useToastStore } from "../stores/toast";
 import { isApiError } from "../types";
 import type { Session } from "../types";
-import { IconArchive, IconBolt, IconChat, IconClose, IconEdit, IconMore, IconPlus, IconTrash, IconWorkspace } from "../components/Icon";
+import { IconArchive, IconChecklist, IconChevronRight, IconClose, IconEdit, IconMore, IconPlus, IconSearch, IconTrash, IconWorkspace } from "../components/Icon";
+import { confirm } from "../components/ConfirmDialog";
 import { APP_EVENTS } from "../utils/appEvents";
 import { useNavigate } from "../router";
 
@@ -22,6 +23,7 @@ export function Sidebar() {
   const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen);
   const [editingSessId, setEditingSessId] = useState<string | null>(null);
   const [editingSessName, setEditingSessName] = useState("");
+  const [sessionQuery, setSessionQuery] = useState("");
   const pendingCreatedSessionIdRef = useRef<string | null>(null);
 
   const navigate = useNavigate();
@@ -130,7 +132,13 @@ export function Sidebar() {
 
   async function onDeleteSession(sess: Session) {
     if (!currentWorkspaceId) return;
-    if (!confirm(`永久删除会话「${sess.title || sess.session_id}」？\n\n此操作不可撤销，消息和记录将被彻底清除。`)) return;
+    const accepted = await confirm({
+      title: "永久删除会话？",
+      body: `「${sess.title || sess.session_id}」的消息和记录将被彻底清除，此操作不可撤销。`,
+      confirmLabel: "永久删除",
+      destructive: true,
+    });
+    if (!accepted) return;
     try {
       await sessionsApi.delete(sess.session_id, currentWorkspaceId);
       useWorkbenchStore.getState().clear(sess.session_id);
@@ -178,8 +186,8 @@ export function Sidebar() {
   return (
     <div data-testid="sidebar" className="sidebar-content">
       <div className="sidebar-workspace" title={currentWorkspaceId || "未选择工作区"}>
-        <IconWorkspace size={14} aria-hidden="true" />
-        <div><span>当前工作区</span><strong>{currentWorkspaceId || "未选择"}</strong></div>
+        <span className="sidebar-workspace-mark" aria-hidden="true"><IconWorkspace size={16} /></span>
+        <div><strong>{currentWorkspaceId || "未选择"}</strong><span>当前工作区</span></div>
       </div>
       <div className="sidebar-shortcuts" aria-label="工作台快捷操作">
         <button
@@ -189,16 +197,34 @@ export function Sidebar() {
           data-testid="btn-new-session"
           type="button"
         >
-          <IconEdit size={17} /><span>新会话</span><IconPlus className="sidebar-shortcut-tail" size={14} />
+          <IconPlus size={16} weight="bold" aria-hidden="true" /><span>新会话</span>
         </button>
       </div>
 
       {/* 会话 */}
       <div className="sidebar-panel sidebar-session-panel">
         <div className="sidebar-panel-title">
-          <IconChat size={12} />
           <span>最近会话</span>
+          {sessList.state.kind === "success" && (sessList.state.data.sessions ?? []).length > 0 ? (
+            <span className="sidebar-panel-count" aria-label={`共 ${(sessList.state.data.sessions ?? []).length} 个活跃会话`}>
+              {(sessList.state.data.sessions ?? []).length}
+            </span>
+          ) : null}
         </div>
+        {sessList.state.kind === "success" && (sessList.state.data.sessions ?? []).length > 3 ? (
+          <label className="sidebar-search">
+            <IconSearch size={14} aria-hidden="true" />
+            <span className="sr-only">筛选会话</span>
+            <input
+              type="search"
+              value={sessionQuery}
+              placeholder="筛选会话"
+              onChange={(event) => setSessionQuery(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Escape" && sessionQuery) { event.stopPropagation(); setSessionQuery(""); } }}
+              data-testid="sidebar-session-filter"
+            />
+          </label>
+        ) : null}
         <AsyncView
           state={sessList.state}
           onRetry={sessList.reload}
@@ -207,8 +233,12 @@ export function Sidebar() {
           emptyHint="点击 + 新建"
         >
           {(d) => {
-            const preview = previewSessions(d.sessions ?? [], currentSessionId);
-            const hiddenCount = hiddenSessionCount(d.sessions ?? [], currentSessionId);
+            const query = sessionQuery.trim().toLocaleLowerCase();
+            const source = query
+              ? (d.sessions ?? []).filter((sess) => (sess.title || sess.session_id).toLocaleLowerCase().includes(query))
+              : (d.sessions ?? []);
+            const preview = previewSessions(source, query ? null : currentSessionId);
+            const hiddenCount = hiddenSessionCount(source, query ? null : currentSessionId);
             return (
             <div className="list" data-testid="sess-list">
               {preview.map((sess) => (
@@ -280,6 +310,11 @@ export function Sidebar() {
                   )}
                 </div>
               ))}
+              {query && preview.length === 0 ? (
+                <div className="list-item muted-row" role="status">
+                  <span className="meta">没有匹配“{sessionQuery.trim()}”的会话</span>
+                </div>
+              ) : null}
               {hiddenCount > 0 && (
                 <div className="list-item muted-row">
                   <span className="meta">
@@ -296,7 +331,7 @@ export function Sidebar() {
       <button type="button" className="sidebar-history-link" onClick={() => {
         setMobileNavOpen(false);
         navigate("/runs");
-      }}><IconBolt size={15} aria-hidden="true" /><span>任务与运行记录</span></button>
+      }}><IconChecklist size={16} aria-hidden="true" /><span>任务与运行记录</span><IconChevronRight className="sidebar-history-tail" size={12} aria-hidden="true" /></button>
     </div>
   );
 }

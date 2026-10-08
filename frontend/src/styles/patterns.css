@@ -199,15 +199,6 @@ details.collapse[open] summary::before {
 
 @media (max-width: 900px) {
 
-  .mobile-nav-item.active {
-    color: var(--accent-2);
-    background: var(--accent-soft);
-    box-shadow: inset 2px 0 0 var(--accent);
-  }
-}
-
-@media (max-width: 900px) {
-
   .page-header {
     min-height: auto;
     padding: 16px 18px 12px;
