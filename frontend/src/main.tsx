@@ -27,6 +27,7 @@ import "./components/TraceDetailPanel.css";
 import "./styles/patterns.css";
 import "./styles/product-shell.css";
 import "./styles/primitives.css";
+import "./components/ui/collection.css";
 import "./styles/console-system.css";
 import "./pages/AgentWorkbench/AgentWorkbench.css";
 import "./pages/AgentWorkbench/WorkbenchComposer.css";

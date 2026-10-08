@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import { useEffect, useId, useState, useCallback, useRef, type ReactNode } from "react";
 import { PortalModal } from "./PortalModal";
 import { Button } from "./ui/Button";
 
@@ -56,14 +56,25 @@ export function ConfirmHost() {
   }, []);
 
   const onClose = useCallback(() => close(false), [close]);
+  const titleId = useId();
+  const bodyId = useId();
 
   if (!state) return null;
 
   return (
-    <PortalModal open onClose={onClose} testId="confirm-dialog" ariaLabel={state.title}>
-      <div className="confirm-dialog">
-        <h3 className="confirm-dialog-title">{state.title}</h3>
-        {state.body && <div className="confirm-dialog-body">{state.body}</div>}
+    <PortalModal
+      open
+      onClose={onClose}
+      testId="confirm-dialog"
+      ariaLabel={state.title}
+      ariaLabelledBy={titleId}
+      ariaDescribedBy={state.body ? bodyId : undefined}
+    >
+      {/* Focus lands on the first control, which is Cancel: a destructive
+          confirmation must never be one stray Enter away from running. */}
+      <div className={"confirm-dialog" + (state.destructive ? " is-destructive" : "")}>
+        <h3 className="confirm-dialog-title" id={titleId}>{state.title}</h3>
+        {state.body && <div className="confirm-dialog-body" id={bodyId}>{state.body}</div>}
         <div className="row-flex-sm confirm-dialog-actions">
           <Button onClick={onClose} size="sm">{state.cancelLabel ?? "取消"}</Button>
           <Button
