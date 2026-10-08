@@ -87,6 +87,33 @@
   justify-content: flex-end;
 }
 
+/* Form dialog: the in-app replacement for window.prompt (components/FormDialog.tsx). */
+.modal.form-dialog-modal { width: min(480px, calc(100vw - 32px)); }
+.form-dialog .confirm-dialog-body { margin-bottom: 16px; }
+.form-dialog-field { display: grid; gap: 6px; margin: 0 0 20px; }
+.form-dialog-label { font-size: var(--fs-13); font-weight: var(--weight-label); color: var(--text); }
+.form-dialog-control {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-control);
+  resize: vertical;
+}
+textarea.form-dialog-control { min-height: 96px; }
+.form-dialog-control::placeholder { color: var(--text-4); }
+.form-dialog-control:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; border-color: var(--accent); }
+.form-dialog-control.is-invalid { border-color: var(--danger); }
+.form-dialog-hint,
+.form-dialog-error { margin: 0; font-size: var(--fs-12); line-height: var(--lh-12); }
+.form-dialog-hint { color: var(--text-3); }
+.form-dialog-error { color: var(--danger); font-weight: var(--weight-label); }
+
 .toast-host {
   position: fixed;
   right: 20px;

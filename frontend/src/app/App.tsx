@@ -7,6 +7,7 @@ import { SkeletonList, SkeletonTable } from "../components/common";
 import { AppLayout } from "../layouts/AppLayout";
 import { ToastHost } from "../components/ToastHost";
 import { ConfirmHost } from "../components/ConfirmDialog";
+import { FormDialogHost } from "../components/FormDialog";
 import { useSessionStore, useUIStore } from "../stores/session";
 import { useWorkbenchStore } from "../stores/workbench";
 import { disconnectTurnTransport, recoverStreamingTurns } from "../realtime/turnTransport";
@@ -645,6 +646,7 @@ function AppShell({ canLogout, onLogout, session }: { canLogout: boolean; onLogo
       </div>
       <ToastHost />
       <ConfirmHost />
+      <FormDialogHost />
       <FeatureDescriptionDrawer open={featureDescOpen} onClose={() => setFeatureDescOpen(false)} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={availableNavigationItems} />
     </div>

@@ -17,6 +17,8 @@ import { Badge } from "../../components/common";
 import { IconAlert, IconCheck, IconRefresh } from "../../components/Icon";
 import { formatDate } from "../../utils/format";
 import { PageHeader, DataTable } from "../../components/ui";
+import { confirm } from "../../components/ConfirmDialog";
+import { promptForm } from "../../components/FormDialog";
 import { scopedLocalStorageKey } from "../../utils/userScope";
 
 const CACHE_KEY = "diagnostics_v1";
@@ -339,9 +341,26 @@ export function Diagnostics() {
   ) => {
     if (!currentWorkspaceId || resolvingOperation) return;
     const outcome = status === "succeeded" ? "已成功完成" : "执行失败";
-    const reason = window.prompt(`填写核对依据，说明为什么确认该操作${outcome}。`)?.trim();
+    // Two steps, same as before: a reason, then an explicit confirmation.
+    // Cancelling either step sends nothing; the reason is never auto-filled.
+    const reason = await promptForm({
+      title: status === "succeeded" ? "核对为成功" : "核对为失败",
+      description: `填写核对依据，说明为什么确认该操作${outcome}。\n操作 ${operationId}`,
+      label: "核对依据",
+      placeholder: "例如：已登录设备核对配置，结果与变更单一致",
+      hint: "Enter 继续，Shift+Enter 换行，Esc 取消。",
+      requiredMessage: "请填写核对依据后再继续。",
+      multiline: true,
+      confirmLabel: "继续",
+    });
     if (!reason) return;
-    if (!window.confirm(`确认已核对外部事实，并将该操作标记为“${outcome}”？`)) return;
+    const confirmed = await confirm({
+      title: `确认已核对外部事实，并将该操作标记为“${outcome}”？`,
+      body: `操作 ${operationId}\n核对依据：${reason}`,
+      confirmLabel: status === "succeeded" ? "标记为成功" : "标记为失败",
+      destructive: status === "failed",
+    });
+    if (!confirmed) return;
     setResolvingOperation(operationId);
     try {
       await operationLedgerApi.resolve(currentWorkspaceId, operationId, status, reason);
