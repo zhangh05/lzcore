@@ -6,6 +6,7 @@
 @import "./TaskProgressPhases.css";
 @import "./TaskProgressEvidence.css";
 @import "./TaskProgressPanel.css";
+@import "./WorkbenchRun.css";
 
 @layer base {
 

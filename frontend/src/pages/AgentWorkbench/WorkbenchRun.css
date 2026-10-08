@@ -1,0 +1,322 @@
+/* WorkbenchRun owns the live-run surfaces of a turn: streaming line, thinking,
+   tool-call list, approval, resume bar, background-task tracking and the
+   progress rail evidence rows. Visual only — every state class it reads is
+   produced by the existing components; colour carries outcome only (failed /
+   unknown / waiting), normal rows stay neutral. Workbench layer, scoped to
+   the workbench shell; loaded after the older component sheets it refines. */
+@layer workbench {
+
+/* ── Streaming line (D3) ───────────────────────────────────────────── */
+.wb-shell .chat-bubble.assistant.sending-line.stage-output > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-strong);
+}
+.wb-shell .chat-bubble.assistant.sending-line.stage-output > summary .muted { margin-left: 0; color: var(--text-4); font-weight: var(--weight-body); }
+.wb-shell .message-row.assistant.streaming .chat-bubble { opacity: 1; }
+.wb-shell .ssot-runtime-progress-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 0 0 10px;
+  padding: 4px 12px 4px 10px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-12);
+  line-height: 20px;
+}
+.wb-shell .ssot-runtime-progress-row .wb-progress-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.wb-shell .ssot-runtime-progress-row .wb-progress-elapsed { color: var(--text-4); font-family: var(--font-mono); font-size: var(--fs-11); }
+.wb-shell .typing-dot { width: 5px; height: 5px; }
+.wb-shell .sending-line .markdown-body,
+.wb-shell .sending-line > div:not(.ssot-runtime-progress-row):not(.wb-thinking-row) { color: var(--text); font-size: var(--fs-14); line-height: 1.72; }
+.wb-shell .wb-thinking-row { gap: 8px; color: var(--text-3); }
+
+/* ── Thinking block ───────────────────────────────────────────────── */
+.wb-shell .thinking-block {
+  margin: 0 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+}
+.wb-shell .thinking-block.is-expanded { border-color: var(--line); }
+.wb-shell .thinking-header { background: transparent; font-size: var(--fs-12); }
+.wb-shell .thinking-disclosure { min-height: 36px; padding: 0 12px; color: var(--text-2); }
+.wb-shell .thinking-icon { color: var(--text-3); }
+.wb-shell .thinking-header-toggle { padding: 0; background: none; color: var(--text-4); }
+.wb-shell .thinking-copy-btn { height: 24px; border-color: transparent; background: transparent; }
+.wb-shell .thinking-copy-btn:hover { border-color: var(--line-2); background: var(--surface-hover); }
+.wb-shell .thinking-body {
+  max-height: 320px;
+  padding: 12px 14px 14px 36px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-top-color: var(--line-2);
+  font-size: var(--fs-13);
+  line-height: 1.7;
+}
+
+/* ── Tool calls (D4): one framed list, quiet rows ─────────────────── */
+.wb-shell .tool-calls-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0 0 12px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.wb-shell .tool-calls-inline > * + * { border-top: 1px solid var(--line-2); }
+.wb-shell .tool-call-card {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: var(--fs-13);
+  user-select: text;
+}
+.wb-shell .tool-call-card:is(.fail, .error, .unknown)::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--danger);
+}
+.wb-shell .tool-call-card.unknown::before { background: var(--unknown); }
+.wb-shell .tool-call-card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.wb-shell .tool-call-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 40px;
+  padding: 8px 12px 8px 14px;
+  background: transparent;
+}
+.wb-shell .tool-call-card-header:hover { background: var(--surface-hover); }
+.wb-shell .tc-seq { min-width: 20px; color: var(--text-4); font-family: var(--font-mono); font-size: var(--fs-11); }
+.wb-shell .tc-icon { display: inline-grid; place-items: center; width: 18px; height: 18px; color: var(--text-3); }
+.wb-shell .tc-icon:is(.fail, .error) { color: var(--danger); }
+.wb-shell .tc-icon.unknown { color: var(--unknown); }
+.wb-shell .tc-icon.pending { color: var(--warn); }
+.wb-shell .tc-name {
+  flex: 1 1 9em;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-shell .tc-state { order: 4; color: var(--warn); font-size: var(--fs-12); }
+.wb-shell .tc-state-unknown { color: var(--unknown); font-weight: var(--weight-strong); }
+.wb-shell .tc-duration-pill { order: 5; margin-left: 0; padding: 0; background: none; border: 0; color: var(--text-3); font-size: var(--fs-11); }
+.wb-shell .tc-chev { order: 6; margin-left: 0; color: var(--text-4); display: inline-grid; }
+.wb-shell .tool-call-card-body {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 14px 12px 58px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--line-2);
+  font-size: var(--fs-13);
+}
+.wb-shell .tc-summary { margin: 0; color: var(--text-2); font-size: var(--fs-13); line-height: var(--lh-13); }
+.wb-shell .tc-error { margin: 0; color: var(--danger); font-family: var(--font-mono); font-size: var(--fs-12); }
+.wb-shell .tool-call-card-body > .tc-duration { display: none; }
+.wb-shell .tc-unknown {
+  margin: 2px 0 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--unknown) 30%, var(--line));
+  border-radius: var(--r-control);
+}
+.wb-shell .tc-unknown strong { font-size: var(--fs-12); }
+.wb-shell .tc-unknown p { margin: 4px 0 6px; font-size: var(--fs-12); }
+.wb-shell .tc-unknown-facts { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-11); }
+
+/* Live chips while streaming: the same list, one row per call. */
+.wb-shell .live-tool-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 14px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+.wb-shell .live-tool-chip + .live-tool-chip { border-top: 1px solid var(--line-2); }
+.wb-shell .live-tool-dot { flex: 0 0 auto; width: 7px; height: 7px; background: var(--text-4); }
+.wb-shell .live-tool-dot.running { background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent); }
+.wb-shell .live-tool-dot.fail { background: var(--danger); }
+.wb-shell .live-tool-summary {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-shell .live-tool-chip.fail .live-tool-summary { color: var(--danger); }
+
+/* ── Approval (D5) ────────────────────────────────────────────────── */
+.wb-shell .approval-actions { display: grid; gap: 10px; width: 100%; margin: 12px 0 0; }
+.wb-shell .approval-card {
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  font-size: var(--fs-13);
+}
+.wb-shell .approval-card[data-pending="true"] { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); box-shadow: inset 3px 0 0 var(--warn); }
+.wb-shell .approval-card header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-2);
+}
+.wb-shell .approval-card header strong { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: var(--fs-14); }
+.wb-shell .approval-card[data-pending="true"] header strong::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.wb-shell .approval-card header span { margin-left: auto; color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-12); }
+.wb-shell .approval-card > p { margin: 0; padding: 12px 16px 0; color: var(--text-3); font-size: var(--fs-13); }
+.wb-shell .approval-card > p code { font-size: var(--fs-12); }
+.wb-shell .approval-card pre {
+  max-height: 320px;
+  margin: 10px 16px 14px;
+  padding: 10px 14px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-control);
+  box-shadow: none;
+  font: var(--fs-12)/20px var(--font-mono);
+}
+.wb-shell .approval-card pre:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.wb-shell .approval-card-actions {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--line-2);
+}
+.wb-shell .approval-state { margin: 0; padding: 10px 16px; color: var(--text-3); background: var(--surface-2); border-top: 1px solid var(--line-2); }
+
+/* ── Resume bar (D7) — inside the reading column, above the composer ── */
+.wb-shell .wb-retry-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: calc(100% - 48px);
+  max-width: var(--wb-read);
+  margin: 0 auto 10px;
+  padding: 10px 12px 10px 16px;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: var(--r-card);
+  box-shadow: inset 3px 0 0 var(--warn);
+  font-size: var(--fs-13);
+}
+.wb-shell .wb-retry-bar > svg { color: var(--warn); }
+.wb-shell .wb-resume-note { flex: 1 1 18em; min-width: 0; color: var(--text-3); line-height: var(--lh-13); }
+.wb-shell .wb-resume-note strong { margin-right: 8px; color: var(--text); font-weight: var(--weight-strong); }
+.wb-shell .wb-retry-bar button {
+  height: 30px;
+  margin-left: auto;
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  font-size: var(--fs-13);
+  font-weight: var(--weight-label);
+}
+.wb-shell .wb-retry-bar button:hover { background: var(--surface-hover); border-color: var(--line-3); }
+.wb-shell .wb-retry-bar button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* ── Background task tracking (D10) ──────────────────────────────── */
+.wb-shell .task-tracking-card {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-control);
+}
+.wb-shell .task-tracking-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: var(--fs-13); }
+.wb-shell .task-tracking-head strong { color: var(--text); font-weight: var(--weight-strong); }
+.wb-shell .task-tracking-status {
+  padding: 0 8px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+  line-height: 18px;
+}
+.wb-shell .task-tracking-status.done { color: var(--ok); background: var(--ok-soft); }
+.wb-shell .task-tracking-id { margin-left: auto; color: var(--text-4); font-family: var(--font-mono); font-size: var(--fs-11); }
+.wb-shell .task-tracking-body { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--text-3); font-size: var(--fs-12); }
+.wb-shell .task-tracking-body .warn { color: var(--warn); font-weight: var(--weight-label); }
+
+/* ── Progress rail evidence rows (D6): names get the full width ───── */
+.wb-shell .task-footprint-card { grid-template-columns: 28px minmax(0, 1fr) auto; align-items: start; padding: 10px; }
+.wb-shell .task-footprint-card:hover { border-color: var(--line-3); background: var(--surface-hover); }
+.wb-shell .footprint-card-icon { color: var(--text-3); }
+.wb-shell .footprint-card-title-row { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; row-gap: 2px; align-items: baseline; }
+.wb-shell .footprint-card-title-row strong { color: var(--text); font-size: var(--fs-13); line-height: 18px; }
+.wb-shell .footprint-card-source { grid-column: 2; justify-self: start; padding: 0; background: none; color: var(--text-4); font-size: var(--fs-11); }
+.wb-shell .footprint-card-summary { color: var(--text-3); font-size: var(--fs-12); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.wb-shell .footprint-card-action { align-self: center; }
+.wb-shell .footprint-jump-icon { display: none; }
+.wb-shell .footprint-status-tag.done { color: var(--text-3); background: var(--surface-2); }
+
+/* ── Narrow screens ──────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  /* Name keeps the whole first line; state / duration / chevron share line 2. */
+  .wb-shell .tc-name { flex-basis: calc(100% - 64px); }
+  .wb-shell :is(.tc-name + .tc-state, .tc-name + .tc-duration-pill) { margin-left: 48px; }
+  .wb-shell .tc-chev { margin-left: auto; }
+  .wb-shell .tool-call-card-body { padding-left: 14px; }
+  .wb-shell .wb-retry-bar { width: calc(100% - 24px); }
+  .wb-shell .approval-card header span { margin-left: 0; flex-basis: 100%; }
+  .wb-shell .approval-card-actions { justify-content: stretch; }
+  .wb-shell .approval-card-actions .btn { flex: 1 1 auto; }
+}
+/* ≤620 the shell stacks: the conversation keeps the whole first screen and
+   the expanded progress rail follows below it (reached by scrolling), as a
+   compact section instead of a half-screen block under the composer. */
+@media (max-width: 620px) {
+  .wb-shell .wb-conversation-column { min-height: calc(100dvh - 56px); }
+  .wb-shell .task-progress-panel:not(.is-collapsed) { min-height: 0; }
+  .wb-shell .task-progress-header { padding: 12px 16px; }
+  .wb-shell .task-progress-body { padding: 12px 16px; }
+  .wb-shell .task-progress-footer { padding: 10px 16px 12px; }
+  .wb-shell .task-progress-audit-note { display: none; }
+}
+}

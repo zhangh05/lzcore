@@ -28,7 +28,8 @@ export function TaskResumeControl({ workspaceId, sessionId, running, turnId, onR
   }, [workspaceId, sessionId, running, turnId]);
   const task = snapshot?.workspaceId === workspaceId && snapshot?.sessionId === sessionId ? snapshot.value.task : undefined;
   if (running || !task?.task_id || !UNFINISHED_STATUSES.has(task.status)) return null;
-  return <div className="wb-retry-bar">
+  return <div className="wb-retry-bar wb-resume-bar">
+    <span className="wb-resume-note"><strong>任务未完成</strong>可从中断处继续：先核对已有结果，未知写入只回查、不重放。</span>
     <button type="button" data-testid="resume-task-btn" onClick={() => onResume(
       "继续当前任务。先核对已有结果和未完成事项；未知写入只回查，不重放。",
       { resume_task_id: task.task_id },
