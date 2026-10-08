@@ -245,6 +245,7 @@ jobs:
             ${{ runner.temp }}/desktop-qa/*/startup.json
             ${{ runner.temp }}/desktop-qa/*/result.json
             ${{ runner.temp }}/desktop-qa/*/files.json
+            ${{ runner.temp }}/desktop-qa/*/memory.json
             ${{ runner.temp }}/desktop-qa/*/native-errors.txt
           if-no-files-found: warn
 

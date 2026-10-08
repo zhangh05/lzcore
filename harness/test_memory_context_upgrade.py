@@ -43,7 +43,7 @@ def test_one_time_migration_is_explicit_and_preserves_full_data(store):
         content='以前按用户共享的完整偏好', memory_type='core_rule', metadata={'generation_origin':'user_memory_command'})
     data = record.to_dict(); data.pop('schema_version')
     root = store._dir('project-a'); root.mkdir(parents=True)
-    path = root / (record.memory_id + '.json'); path.write_text(json.dumps(data))
+    path = root / (record.memory_id + '.json'); path.write_text(json.dumps(data), encoding='utf-8')
     loaded = store.get('project-b', record.memory_id)
     assert loaded.scope == 'global' and loaded.content == record.content
     first = path.read_bytes()
@@ -51,7 +51,7 @@ def test_one_time_migration_is_explicit_and_preserves_full_data(store):
     assert path.read_bytes() == first
     ordinary = MemoryRecord(workspace_id='project-a', status='active', content='项目事实')
     data = ordinary.to_dict(); data.pop('schema_version')
-    (root/(ordinary.memory_id+'.json')).write_text(json.dumps(data))
+    (root/(ordinary.memory_id+'.json')).write_text(json.dumps(data), encoding='utf-8')
     assert store.get('project-b', ordinary.memory_id) is None
 
 
@@ -257,8 +257,8 @@ def test_archive_derived_index_damage_rebuilds_but_archive_tamper_fails(store):
     (root/'search.sqlite').write_bytes(b'corrupt derived projection')
     assert search_epochs('project-a','session','原文证据')['total'] == 1
     path=root/(record['checkpoint_id']+'.json')
-    value=json.loads(path.read_text()); value['payload']['messages'][0]['content']='改写证据'
-    path.write_text(json.dumps(value))
+    value=json.loads(path.read_text(encoding='utf-8')); value['payload']['messages'][0]['content']='改写证据'
+    path.write_text(json.dumps(value), encoding='utf-8')
     with pytest.raises(ValueError,match='integrity_failed'):
         search_epochs('project-a','session','改写证据')
 
