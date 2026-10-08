@@ -174,3 +174,25 @@
   .wb-skill-picker select { max-width: 100%; background: transparent; border-color: var(--line-2); }
 }
 }
+
+/* ── Composer: raised card on the reading column ── */
+@layer workbench {
+.wb-shell .wb-input-bar.wb-composer-dock { padding: 8px 24px 14px; background: var(--surface); border-top: 0; }
+.wb-shell .wb-composer-dock > * { width: 100%; max-width: var(--wb-read); margin-inline: auto; }
+.wb-shell .wb-input-row {
+  padding: 10px 10px 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+}
+.wb-shell .wb-input-row:hover { border-color: var(--line-3); }
+.wb-shell .wb-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring-shadow), var(--shadow-md); }
+.wb-shell .wb-input { font-size: var(--fs-14); line-height: var(--lh-14); }
+.wb-shell .wb-attach-btn { width: 34px; height: 34px; color: var(--text-3); background: transparent; border: 0; border-radius: var(--r-control); }
+.wb-shell .wb-attach-btn:hover { color: var(--text); background: var(--surface-hover); }
+.wb-shell .wb-send { width: 34px; height: 34px; color: var(--accent-text); background: var(--accent); border: 0; border-radius: 9px; box-shadow: var(--shadow-xs); }
+.wb-shell .wb-send:hover:not(:disabled) { background: var(--accent-2); }
+.wb-shell .wb-send:disabled { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 38%, var(--surface)); box-shadow: none; }
+.wb-shell .wb-composer-meta { padding: 0 4px; font-size: var(--fs-11); color: var(--text-4); }
+}

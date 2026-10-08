@@ -158,16 +158,6 @@
   border-radius: var(--r-12);
 }
 
-.wb-empty .empty-mark {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: var(--weight-heading);
-  color: var(--accent-text);
-  background: var(--accent);
-}
-
 .stat-value,
 .metric-val,
 .tc-duration-pill,

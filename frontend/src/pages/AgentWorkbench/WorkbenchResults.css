@@ -440,3 +440,18 @@
   transform: rotate(-135deg);
 }
 }
+
+/* ── Result bar: a status line with its actions ── */
+@layer workbench {
+.wb-shell .chat-result-inline { padding-top: 4px; border-top: 0; }
+.wb-shell .result-inline-disclosure {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.wb-shell .result-overview-toggle { min-height: 44px; padding: 0 14px; }
+.wb-shell .result-overview-title { font-size: var(--fs-13); font-weight: var(--weight-strong); }
+.wb-shell .result-inline-details { padding: 0 14px 12px; border-top: 1px solid var(--line-2); }
+.wb-shell .result-inline-details .result-actions { padding-top: 12px; }
+}

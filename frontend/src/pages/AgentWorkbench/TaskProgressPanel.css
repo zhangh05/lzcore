@@ -322,3 +322,27 @@
   .task-progress-panel { min-height: 280px; border-left: 0; border-top: 1px solid var(--line-2); }
 }
 }
+
+/* ── Progress rail: calm card ── */
+@layer workbench {
+.wb-shell .task-progress-panel { background: var(--surface-2); border-left: 1px solid var(--line-2); }
+.wb-shell .task-progress-header { gap: 10px; padding: 16px 20px 14px; border-bottom: 1px solid var(--line-2); }
+.wb-shell .task-progress-kicker { color: var(--text-3); font-size: var(--fs-11); font-weight: var(--weight-strong); }
+.wb-shell .task-progress-header-title { font-size: var(--fs-15); font-weight: var(--weight-strong); }
+.wb-shell .task-progress-body { padding: 16px 20px; }
+.wb-shell :is(.task-footprint-section, .task-evidence-section, .task-result-section) {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+}
+.wb-shell .task-section-title { color: var(--text-2); font-size: var(--fs-12); font-weight: var(--weight-strong); }
+.wb-shell .task-progress-footer { padding: 12px 20px 14px; background: var(--surface-2); border-top: 1px solid var(--line-2); }
+}
+
+/* The kicker is CJK: keep it off the Latin caps tracking that typography
+   gives every `[class*="kicker"]`, which needs a layer above `typography`. */
+@layer pages {
+.wb-shell .task-progress-kicker { letter-spacing: .02em; }
+}
