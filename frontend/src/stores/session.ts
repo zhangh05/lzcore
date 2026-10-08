@@ -85,6 +85,9 @@ interface UIState {
   theme: "light" | "dark";
   themePreference: "light" | "dark" | "system";
   setThemePreference: (t: "light" | "dark" | "system") => void;
+  /** Display density preference; only changes spacing, never content. */
+  density: "comfortable" | "compact";
+  setDensity: (d: "comfortable" | "compact") => void;
   syncTheme: (t: "light" | "dark") => void;
 
   toggleSidebar: () => void;
@@ -104,6 +107,8 @@ export const useUIStore = create<UIState>()(
       mobileNavOpen: false,
       theme: "light",
       themePreference: "system",
+      density: "comfortable",
+      setDensity: (density) => set({ density }),
       syncTheme: (theme) => set({ theme }),
       setThemePreference: (themePreference) => set({themePreference, theme: themePreference === "system" ? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light") : themePreference}),
       toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
@@ -121,6 +126,7 @@ export const useUIStore = create<UIState>()(
         taskProgressOpen: s.taskProgressOpen,
         theme: s.theme,
         themePreference: s.themePreference,
+        density: s.density,
       }),
     },
   ),
