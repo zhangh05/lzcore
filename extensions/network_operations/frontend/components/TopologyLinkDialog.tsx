@@ -53,12 +53,17 @@ export function TopologyLinkDialog({
       open
       role="dialog"
       aria-modal="true"
+      aria-label="新建拓扑链路"
       className="network-dialog-modal"
     >
       <form onSubmit={handleSaveLink} className="network-panel modal-panel">
         <div className="modal-header">
           <h3>新建拓扑链路</h3>
-          <Button size="sm" onClick={() => setPendingConnection(null)}>
+          <Button
+            size="sm"
+            aria-label="关闭高级连线"
+            onClick={() => setPendingConnection(null)}
+          >
             <IconClose size={14} />
           </Button>
         </div>

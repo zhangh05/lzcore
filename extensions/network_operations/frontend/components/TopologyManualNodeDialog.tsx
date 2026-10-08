@@ -46,6 +46,7 @@ export function TopologyManualNodeDialog({
           <Button
             size="sm"
             type="button"
+            aria-label="关闭新建图纸设备"
             onClick={() => setShowManualNodeModal(false)}
           >
             <IconClose size={14} />

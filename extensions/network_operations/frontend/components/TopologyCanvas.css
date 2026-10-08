@@ -121,9 +121,8 @@
   border: 0;
   border-radius: var(--r-pill);
   background: transparent;
-  color: var(--text-2);
-  font-size: 13px;
-  font-weight: var(--weight-heading);
+  color: var(--lz-color-text-secondary);
+  font: var(--lz-font-label);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -131,29 +130,23 @@
   transition: all var(--dur-2) var(--ease);
 }
 
-.topology-studio .netops-viewport-controls button:last-child {
-  font-size: 11px;
-}
-
 .topology-studio .netops-viewport-controls button:hover {
-  background: var(--surface-hover);
-  color: var(--accent);
+  background: var(--lz-color-bg-hover);
+  color: var(--lz-color-text-primary);
 }
 
 .topology-studio .netops-viewport-controls .netops-zoom-readout {
   min-width: 44px;
-  color: var(--text-3);
-  font-size: 11px;
-  font-family: var(--font-mono);
-  font-weight: var(--weight-heading);
+  color: var(--lz-color-text-tertiary);
+  font: var(--lz-font-mono-sm);
+  font-variant-numeric: tabular-nums;
   text-align: center;
   background: transparent;
 }
 
 .topology-studio .netops-viewport-controls button.is-active {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: var(--weight-heading);
+  background: var(--lz-color-bg-selected);
+  color: var(--lz-color-text-primary);
 }
 
 .topology-studio .netops-canvas-accessibility { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
@@ -254,9 +247,9 @@
   height: 12px;
   cursor: pointer;
 }
-.canvas-legend { position: absolute; left: 16px; bottom: 16px; z-index: 7; min-width: 132px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); backdrop-filter: none; box-shadow: var(--shadow-menu); font-size: 10.5px; color: var(--text-2); }
+.canvas-legend { position: absolute; left: 16px; bottom: 16px; z-index: 7; min-width: 132px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); backdrop-filter: none; box-shadow: var(--shadow-menu); font-size: var(--fs-11); color: var(--text-2); }
 .canvas-legend.is-collapsed { padding: 3px 4px; }
-.canvas-selection-count { padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: var(--weight-heading); white-space: nowrap; }
+.canvas-selection-count { padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: var(--fs-11); font-weight: var(--weight-heading); white-space: nowrap; }
 .topology-studio .topology-minimap-panel {
   position: absolute;
   right: 14px;

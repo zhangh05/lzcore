@@ -234,15 +234,10 @@ export function TopologyNodeInspector({
             style={{
               marginTop: "12px",
               paddingTop: "12px",
-              borderTop: "1px dashed var(--line, #e2e8f0)",
+              borderTop: "1px solid var(--lz-color-border-subtle)",
             }}
           >
-            <span
-              className="inspector-label"
-              style={{ fontWeight: 600, color: "var(--accent, #2563eb)" }}
-            >
-              网络规划与设备属性
-            </span>
+            <span className="inspector-label">网络规划与设备属性</span>
 
             <label className="inspector-field">
               管理 IP 地址

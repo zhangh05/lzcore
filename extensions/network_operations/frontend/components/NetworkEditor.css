@@ -140,7 +140,7 @@
 }
 
 .network-panel.modal-panel {
-  padding: var(--space-4);
+  padding: var(--lz-space-5);
   border-radius: var(--r-12);
   box-shadow: var(--shadow-menu);
   background: var(--surface);
@@ -151,24 +151,28 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--line);
+  gap: var(--lz-space-3);
+  margin: 0 0 var(--lz-space-3);
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
 }
 
 .network-panel .modal-header h3 {
   margin: 0;
-  font-size: var(--fs-16);
-  color: var(--text);
+  font: var(--lz-font-title);
+  color: var(--lz-color-text-primary);
 }
+.network-panel .modal-header > .btn { width: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--lz-color-text-tertiary); }
+.network-panel .modal-header > .btn:hover { background: var(--lz-color-bg-hover); color: var(--lz-color-text-primary); }
 
 .network-panel .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line);
+  gap: var(--lz-space-2);
+  margin-top: var(--lz-space-5);
+  padding-top: 0;
+  border-top: 0;
 }
 
 }

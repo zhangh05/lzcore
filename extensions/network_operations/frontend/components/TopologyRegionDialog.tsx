@@ -53,6 +53,7 @@ export function TopologyRegionDialog({
           <Button
             size="sm"
             type="button"
+            aria-label="关闭新建区域"
             onClick={() => setShowCreateZoneModal(false)}
           >
             <IconClose size={14} />

@@ -34,6 +34,9 @@ export function TopologyMetadataDialog({
       open
       role="dialog"
       aria-modal="true"
+      aria-label={
+        topologyModalMode === "create" ? "新建网络拓扑" : "编辑拓扑信息"
+      }
       className="network-dialog-modal"
     >
       <form
@@ -44,7 +47,11 @@ export function TopologyMetadataDialog({
           <h3>
             {topologyModalMode === "create" ? "新建网络拓扑" : "编辑拓扑信息"}
           </h3>
-          <Button size="sm" onClick={() => setTopologyModalMode(null)}>
+          <Button
+            size="sm"
+            aria-label="关闭拓扑信息"
+            onClick={() => setTopologyModalMode(null)}
+          >
             <IconClose size={14} />
           </Button>
         </div>

@@ -26,7 +26,7 @@
 .conflict-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); font-size: var(--fs-13); border: 0; border-left: 3px solid var(--warn); }
 .topology-studio .topology-editbar { position: relative; z-index: 20; flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .topology-studio .topology-editbar .btn { padding: 5px 8px; height: 30px; white-space: nowrap; box-shadow: none; }
-.studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--surface); color: var(--text-3); font-size: 10px; }
+.studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--surface); color: var(--text-3); font-size: var(--fs-11); }
 .studio-statusbar button { margin-left: auto; padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--text-2); cursor: pointer; white-space: nowrap; }
 
 .topology-studio .curve-chip {
@@ -35,7 +35,7 @@
   justify-content: center;
   gap: 4px;
   padding: 4px 5px;
-  font-size: 10px;
+  font-size: var(--fs-11);
   font-weight: var(--weight-label);
   border-radius: 4px;
   border: 1px solid var(--line-3, rgba(0, 0, 0, 0.12));
@@ -85,7 +85,7 @@
   justify-content: center;
   gap: 3px;
   padding: 4px 2px;
-  font-size: 10px;
+  font-size: var(--fs-11);
   font-weight: var(--weight-label);
   border-radius: 4px;
   border: 1px solid var(--line-3, rgba(0, 0, 0, 0.12));
@@ -122,7 +122,7 @@
   align-items: center;
   gap: 2px;
   padding: 1px 5px;
-  font-size: 9.5px;
+  font-size: var(--fs-11);
   border-radius: 3px;
   border: 1px solid var(--accent, #0f7773);
   background: var(--accent-soft, #e6f6f4);
@@ -153,7 +153,7 @@
   }
 }
 .topology-context-chip { display: flex; justify-content: space-between; color: var(--accent); font-size: 11px; gap: 12px; padding: 8px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border-radius: 6px; }
-.topology-context-chip small { color: var(--text-3); font-size: 9px; }
+.topology-context-chip small { color: var(--text-3); font-size: var(--fs-10); }
 @media (max-width: 1180px) {
   .topology-studio .topology-editbar { padding: 5px 12px; }
 }
@@ -182,7 +182,7 @@
   border: 1px solid var(--line);
   background: var(--surface-2, rgba(0, 0, 0, 0.02));
   color: var(--text-2);
-  font-size: 10.5px;
+  font-size: var(--fs-11);
   font-weight: var(--weight-label);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -229,21 +229,21 @@
 }
 
 .topology-studio .dimension-chip {
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px dashed var(--line);
-  background: transparent;
-  color: var(--text-3);
-  font-size: 10px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--lz-radius-pill);
+  border: 1px solid var(--lz-color-border-subtle);
+  background: var(--lz-color-bg-surface);
+  color: var(--lz-color-text-secondary);
+  font-size: var(--fs-11);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: border-color var(--lz-dur-fast) var(--lz-ease-standard), color var(--lz-dur-fast) var(--lz-ease-standard);
 }
 
 .topology-studio .dimension-chip:hover {
-  border-style: solid;
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--lz-color-border-strong);
+  color: var(--lz-color-text-primary);
+  background: var(--lz-color-bg-hover);
 }
 
 .topology-studio .batch-type-grid {

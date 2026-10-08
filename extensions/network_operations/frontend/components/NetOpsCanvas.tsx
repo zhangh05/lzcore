@@ -322,6 +322,7 @@ export default function NetOpsCanvas(props: Props) {
       <div
         className="netops-cytoscape"
         ref={hostRef}
+        role="group"
         aria-label="NetOps 网络画布"
       />
       <canvas
@@ -489,6 +490,8 @@ export default function NetOpsCanvas(props: Props) {
         <button
           type="button"
           data-testid="topo-batch-select"
+          tabIndex={-1}
+          aria-hidden="true"
           onClick={(e) => {
             const ids = (e.currentTarget.dataset.ids || "")
               .split(",")
@@ -499,6 +502,8 @@ export default function NetOpsCanvas(props: Props) {
         <button
           type="button"
           data-testid="topo-move-elements"
+          tabIndex={-1}
+          aria-hidden="true"
           onClick={(e) => {
             try {
               const raw = e.currentTarget.dataset.positions;

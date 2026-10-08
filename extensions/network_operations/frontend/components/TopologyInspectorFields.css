@@ -10,62 +10,76 @@
 
 .topology-studio .inspector-label-tag {
   display: inline-flex;
-  padding: 0 3px;
-  border-radius: 3px;
-  font-size: 9px;
-  line-height: 14px;
-  background: var(--surface-2);
-  color: var(--text-3);
-  border: 1px solid var(--line);
+  padding: 0 4px;
+  border-radius: var(--lz-radius-xs);
+  font-size: var(--fs-10);
+  line-height: 16px;
+  background: var(--lz-color-bg-sunken);
+  color: var(--lz-color-text-tertiary);
+  border: 1px solid var(--lz-color-border-subtle);
 }
 
 .topology-studio .topology-inspector .inspector-section {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
 .topology-studio .topology-inspector .inspector-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 11px;
-  font-weight: var(--weight-label);
-  color: var(--text-2);
+  gap: 4px;
+  font: var(--lz-font-caption);
+  color: var(--lz-color-text-secondary);
 }
 
 .topology-studio .topology-inspector .inspector-field input,
 .topology-studio .topology-inspector .inspector-field select,
 .topology-studio .topology-inspector .inspector-field textarea {
-  min-height: 25px;
-  height: 25px;
-  font-size: 11px;
-  padding: 2px 6px;
-  border: 1px solid var(--line-3);
-  border-radius: 4px;
-  background: var(--surface-2);
-  color: var(--text);
+  min-height: 28px;
+  height: 28px;
+  font: var(--lz-font-control);
+  font-size: var(--fs-12);
+  font-weight: var(--weight-body);
+  padding: 2px 8px;
+  border: 1px solid var(--lz-color-border-field);
+  border-radius: var(--lz-radius-sm);
+  background-color: var(--lz-color-bg-field);
+  color: var(--lz-color-text-primary);
+  transition: border-color var(--lz-dur-fast) var(--lz-ease-standard), box-shadow var(--lz-dur-fast) var(--lz-ease-standard);
 }
+.topology-studio .topology-inspector .inspector-field select {
+  appearance: none;
+  padding-right: 26px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23727e84' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px 12px;
+}
+.topology-studio .topology-inspector .inspector-field :is(input, select, textarea):hover:not(:focus):not(:disabled) { border-color: var(--lz-color-border-strong); }
+.topology-studio .topology-inspector .inspector-field :is(input, select, textarea):focus-visible { border-color: var(--lz-color-border-focus); box-shadow: 0 0 0 3px var(--focus-ring-shadow); outline: 2px solid transparent; }
 
 .topology-studio .topology-inspector .inspector-field textarea {
-  min-height: 44px;
-  height: 44px;
-  line-height: 1.35;
+  min-height: 52px;
+  height: 52px;
+  padding: 5px 8px;
+  line-height: 1.45;
   resize: vertical;
 }
 
 .topology-studio .topology-inspector .inspector-label {
-  font-size: 10px;
+  font-size: var(--fs-11);
   font-weight: var(--weight-heading);
-  color: var(--text-3);
+  color: var(--lz-color-text-tertiary);
 }
 
 .topology-studio .topology-inspector .inspector-endpoints-card input {
-  min-height: 22px;
-  height: 22px;
-  font-size: 10.5px;
-  padding: 1px 4px;
-  border-radius: 4px;
+  min-height: 26px;
+  height: 26px;
+  font-size: var(--fs-11);
+  padding: 1px 6px;
+  border-radius: var(--lz-radius-xs);
 }
 
 .topology-studio .topology-inspector .link-color-grid {
@@ -83,15 +97,15 @@
 }
 
 .topology-studio .topology-inspector .link-custom-color-row input {
-  height: 22px;
-  min-height: 22px;
-  font-size: 10.5px;
-  padding: 1px 4px;
+  height: 26px;
+  min-height: 26px;
+  font-size: var(--fs-11);
+  padding: 1px 6px;
 }
 
 .topology-studio .topology-inspector .link-full-reset-btn {
-  padding: 2px 5px;
-  font-size: 10px;
+  padding: 2px 6px;
+  font-size: var(--fs-11);
 }
 
 .topology-studio .topology-inspector .batch-grid {
@@ -100,10 +114,10 @@
 }
 
 .topology-studio .topology-inspector .batch-grid .btn {
-  height: 21px;
-  min-height: 21px;
-  padding: 1px 3px;
-  font-size: 9.5px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 4px;
+  font-size: var(--fs-11);
 }
 
 .topology-studio .topology-inspector .inspector-dimension-grid {
