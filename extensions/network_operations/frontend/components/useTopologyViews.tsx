@@ -84,9 +84,20 @@ export function useTopologyViews({
       setBookmarks([]);
     }
   }, [bookmarkKey]);
+  // The naming dialog belongs to the graph + workspace (bookmarkKey) and the
+  // open cycle it was opened for. A scope change or unmount aborts it, and an
+  // aborted cycle never commits — another graph's views are never overwritten.
+  const saveCycleRef = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    saveCycleRef.current?.abort();
+    saveCycleRef.current = null;
+  }, [bookmarkKey]);
   const saveBookmark = async () => {
     const view = canvasApiRef.current?.getViewport();
     if (!view) return;
+    saveCycleRef.current?.abort();
+    const cycle = new AbortController();
+    saveCycleRef.current = cycle;
     const name = await promptForm({
       title: "保存当前视图",
       label: "视图名称",
@@ -94,8 +105,9 @@ export function useTopologyViews({
       hint: "同名视图会被覆盖。",
       requiredMessage: "请输入视图名称",
       confirmLabel: "保存视图",
-    });
-    if (!name) return;
+    }, { signal: cycle.signal });
+    if (saveCycleRef.current === cycle) saveCycleRef.current = null;
+    if (!name || cycle.signal.aborted) return;
     const next = [
       ...bookmarks.filter((item) => item.name !== name),
       { name, ...view },

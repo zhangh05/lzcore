@@ -265,6 +265,26 @@ describe("TopologyAgentPanel and buildTopologyRequest", () => {
       expect(localStorage.getItem(storageKey)).toBe("s-keep-1");
     });
 
+    it("leaving the graph while the new-session dialog is open aborts it without deleting", async () => {
+      const { sessionsApi } = await import("../api");
+      const { scopedLocalStorageKey } = await import("../utils/userScope");
+      const storageKey = scopedLocalStorageKey(`drawing_session_v2:default:${mockTopology.topology_id}`);
+      localStorage.setItem(storageKey, "s-left-1");
+      const { useWorkbenchStore } = await import("../stores/workbench");
+      useWorkbenchStore.setState({ bySession: { "s-left-1": [{ id: "m1", role: "user", text: "画", status: "ready" } as never] } });
+      const deleteSpy = vi.fn().mockResolvedValue({ ok: true });
+      (sessionsApi as unknown as { delete: typeof deleteSpy }).delete = deleteSpy;
+      const view = render(<TopologyAgentPanel workspaceId="default" topology={mockTopology as never} selection={mockSelection} onCompleted={() => {}} />);
+      const host = render(<ConfirmHost />);
+      fireEvent.click(screen.getByTitle("清空当前图纸对话，开启新会话"));
+      await screen.findByRole("dialog", { name: "为当前图纸开启新会话？" });
+      view.unmount();
+      await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(deleteSpy).not.toHaveBeenCalled();
+      expect(localStorage.getItem(storageKey)).toBe("s-left-1");
+      host.unmount();
+    });
+
     it("enables the send button when user types text, even if active turn job loaded is false", async () => {
       mockActiveTurnState.loaded = false;
       const { scopedLocalStorageKey } = await import("../utils/userScope");

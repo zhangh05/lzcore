@@ -187,15 +187,24 @@ export function TopologyAgentPanel({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
+  // The panel is keyed by workspace + topology, so unmount is the scope
+  // change: an open "new session" confirmation is aborted with it and never
+  // deletes the session of a graph the user has already left.
+  const resetCycleRef = useRef<AbortController | null>(null);
+  useEffect(() => () => resetCycleRef.current?.abort(), []);
   const handleResetSession = async () => {
     if (running || !sessionId) return;
+    resetCycleRef.current?.abort();
+    const cycle = new AbortController();
+    resetCycleRef.current = cycle;
     const accepted = await confirm({
       title: "为当前图纸开启新会话？",
       body: "既有对话将被清空并重新开始。",
       confirmLabel: "开启新会话",
       destructive: true,
-    });
-    if (!accepted) return;
+    }, { signal: cycle.signal });
+    if (resetCycleRef.current === cycle) resetCycleRef.current = null;
+    if (!accepted || cycle.signal.aborted) return;
     const oldId = sessionId;
     try {
       await sessionsApi.delete(oldId, workspaceId).catch(() => {});

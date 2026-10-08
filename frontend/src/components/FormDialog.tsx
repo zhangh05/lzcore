@@ -39,12 +39,35 @@ const listeners = new Set<(state: FormDialogState | null) => void>();
 let requestSeq = 0;
 
 function emit(state: FormDialogState | null) {
+  pending = state;
   for (const listener of listeners) listener(state);
 }
 
-export function promptForm(spec: FormDialogSpec): Promise<string | null> {
+let pending: FormDialogState | null = null;
+
+/**
+ * `options.signal` ties the dialog to the scope that opened it: aborting
+ * closes this dialog if it is still the one shown and resolves `null`, so a
+ * stale submit can never commit into a scope that has since changed.
+ */
+export function promptForm(spec: FormDialogSpec, options?: { signal?: AbortSignal }): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
-    emit({ ...spec, requestId: ++requestSeq, resolve });
+    const signal = options?.signal;
+    if (signal?.aborted) { resolve(null); return; }
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    const state: FormDialogState = { ...spec, requestId: ++requestSeq, resolve: finish };
+    function onAbort() {
+      if (pending === state) emit(null);
+      finish(null);
+    }
+    signal?.addEventListener("abort", onAbort);
+    emit(state);
   });
 }
 

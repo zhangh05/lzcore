@@ -137,15 +137,28 @@ export function KnowledgeLibrary() {
     }
   }
 
+  // The delete confirmation belongs to the workspace it was opened in: a
+  // workspace change or unmount aborts it, so it never deletes or reports into
+  // a scope the user has left (the native confirm had no such window).
+  const deleteCycleRef = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    deleteCycleRef.current?.abort();
+    deleteCycleRef.current = null;
+  }, [currentWorkspaceId]);
+
   async function onDelete(source_id: string, title: string) {
     if (!currentWorkspaceId) return;
+    deleteCycleRef.current?.abort();
+    const cycle = new AbortController();
+    deleteCycleRef.current = cycle;
     const accepted = await confirm({
       title: `删除知识源「${title || source_id}」？`,
       body: "删除后需重新导入。",
       confirmLabel: "删除",
       destructive: true,
-    });
-    if (!accepted) return;
+    }, { signal: cycle.signal });
+    if (deleteCycleRef.current === cycle) deleteCycleRef.current = null;
+    if (!accepted || cycle.signal.aborted) return;
     try {
       await knowledgeApi.delete(source_id, currentWorkspaceId);
       toast({ kind: "success", title: "已删除", body: title || source_id });

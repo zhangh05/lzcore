@@ -25,12 +25,35 @@ interface ConfirmState extends ConfirmSpec {
 const listeners = new Set<(state: ConfirmState | null) => void>();
 
 function emit(state: ConfirmState | null) {
+  pending = state;
   for (const listener of listeners) listener(state);
 }
 
-export function confirm(spec: ConfirmSpec): Promise<boolean> {
+let pending: ConfirmState | null = null;
+
+/**
+ * `options.signal` ties the dialog to the scope that opened it (workspace,
+ * document, component lifetime): aborting closes this dialog if it is still
+ * the one shown and resolves `false`, so a stale confirmation can never commit.
+ */
+export function confirm(spec: ConfirmSpec, options?: { signal?: AbortSignal }): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
-    emit({ ...spec, resolve });
+    const signal = options?.signal;
+    if (signal?.aborted) { resolve(false); return; }
+    let settled = false;
+    const finish = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    const state: ConfirmState = { ...spec, resolve: finish };
+    function onAbort() {
+      if (pending === state) emit(null);
+      finish(false);
+    }
+    signal?.addEventListener("abort", onAbort);
+    emit(state);
   });
 }
 

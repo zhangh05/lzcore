@@ -1,6 +1,6 @@
 import { MemoryRouter } from "../router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { KnowledgeLibrary } from "../pages/KnowledgeLibrary/KnowledgeLibrary";
 import { ConfirmHost } from "../components/ConfirmDialog";
 import { knowledgeApi } from "../api";
@@ -60,4 +60,17 @@ describe("KnowledgeLibrary delete uses the in-app ConfirmDialog", () => {
     expect(remove).not.toHaveBeenCalled();
     expect(native).not.toHaveBeenCalled();
   });
+
+  it("a workspace change while the dialog is open cancels it and deletes nothing", async () => {
+    const remove = vi.spyOn(knowledgeApi, "delete").mockResolvedValue({ ok: true } as never);
+    renderPage();
+    fireEvent.click(await screen.findByTestId("btn-delete-ks-1"));
+    await screen.findByRole("dialog", { name: "删除知识源「交换机手册」？" });
+    enqueue("/knowledge/sources", { status: 200, data: { ok: true, sources: [], counts: {} } });
+    act(() => { useSessionStore.setState({ currentWorkspaceId: "ws-b" }); });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(remove).not.toHaveBeenCalled();
+    expect(native).not.toHaveBeenCalled();
+  });
 });
+
