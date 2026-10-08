@@ -27,7 +27,7 @@
 | B2 | 顶栏（品牌、分组导航、下拉菜单、功能描述、设置齿轮菜单、主题切换、退出） | `app/App.tsx` 顶栏、`product-shell.css` | ✅ | 5466236 | `batch2/after/09-nav-menu-dark-1440.png` | 品牌区 label-content-name-mismatch（基线已有）；不得删 `/topology` 内置入口与 nav.ts 网络快捷项 |
 | B3 | 侧栏（工作区、新会话、最近会话、重命名、会话操作菜单、快捷操作、任务与运行记录） | `layouts/AppLayout.tsx`、`layouts/Sidebar.tsx`、`styles/sidebar.css` | ✅⚠️ | 5466236, c6c5d86 | `batch2/after/01-workbench-empty-dark-1440.png` | 会话切换 / `resume_task_id` 不可变；只改视觉 |
 | B4 | 功能描述抽屉 / 能力中心 | `components/FeatureDescriptionDrawer.tsx`（内嵌 `pages/CapabilityCenter`） | ✅ | e3fc2a2 | `batch6/after/09-feature-drawer-light-1440.png`, `14-feature-drawer-light-390.png` | 第 6 批：抽屉头部 + 下沉底板 + 框卡；能力目录按抽屉宽度（容器查询）堆叠，修复 390 详情列被挤成单字宽 |
-| B5 | Toast / 通知 | `components/ToastHost.tsx`、`styles/overlays.css` | ✅ | f2786e4 | `batch2/after/14-session-delete-confirm-dark-1440.png` | role 随严重度 |
+| B5 | Toast / 通知 | `components/ToastHost.tsx`、`styles/overlays.css` | ✅ | f2786e4 | `final/shots/after/b5-toast-light-1440.png`, `b5-toast-dark-1440.png`（成功）, `b5-toast-error-{light,dark}-1440.png`（失败，含 req_id） | role 随严重度。原先引用的会话删除截图是确认对话框而非 toast，已更正为真实 toast 截图（侧栏“新会话”真实流程；失败态为浏览器内把 POST /api/sessions 应答 500） |
 | B6 | 错误边界 / 404 / 路由加载 | `components/ErrorBoundary.tsx`、`App.tsx` 404 hero、RouteFallback 骨架 | ✅ | bf6b2d1 | `batch2/after/10-not-found-dark-1440.png` | 路由加载骨架只继承 token |
 | B7 | ≤760px 外壳 | `styles/responsive.css`、移动端导航 | ✅ | 5466236 | `batch2/after/21-drawer-open-dark-390.png` | 390px 顶栏按钮完整可见；抽屉为模态对话框 |
 
@@ -71,7 +71,7 @@
 | ID | 界面 | 主要文件 | 状态 | 提交 | 截图（after） | 备注 |
 |---|---|---|---|---|---|---|
 | F1 | 任务记录（列表、筛选、批量、运行详情概览/事件） | `/runs` `pages/Operations/OperationsPage.tsx` | ✅ | 8020b00, 9a2c4e1, 003ad44 | `batch4/after/04-runs-dark-1440.png` | 第 4 批：任务卡片 + 详情面板；两处永久删除改为 ConfirmDialog |
-| F2 | 系统状态（上下文运行时、写操作账本、用量、提示词库、数据策略、自检） | `/diagnostics` `pages/Diagnostics` | ✅⚠️ | 0aa89af, f7d4191 | `batch5/after/01-diagnostics-standby-light-1440.png` | 第 5 批：状态横幅 + 计数条、带框分区、状态登记表、账本日志视图；对账 `prompt`+`confirm` → FormDialog（核对依据）+ ConfirmDialog，接口与参数不变，取消不发请求；只对账不重放 |
+| F2 | 系统状态（上下文运行时、写操作账本、用量、提示词库、数据策略、自检） | `/diagnostics` `pages/Diagnostics` | ✅⚠️ | 0aa89af, f7d4191, 3ea8649 | `batch5/after/01-diagnostics-standby-light-1440.png` | 第 5 批：状态横幅 + 计数条、带框分区、状态登记表、账本日志视图；对账 `prompt`+`confirm` → FormDialog（核对依据）+ ConfirmDialog，接口与参数不变，取消不发请求；只对账不重放。3ea8649（Codex 终审）：两步对账绑定打开时的工作区与页面生命周期，切换工作区/离开页面即取消，未发出的 resolve 不发，已发出的不重放，迟到的响应与 list(A) 不写入新范围 |
 | F3 | 系统设置（模型服务商、协议、密钥、缓存、安全模式） | `/settings` `pages/Settings` | ✅⚠️ | eaad8c8, b2090b9, 933674f | `batch5/after/04-settings-dark-1440.png` | 第 5 批：分区导航（模型服务/长期记忆/外观/危险操作）、带框编辑器、外观（复用 UI store 主题/密度）、危险区；设置项/键/持久化/请求不变；密钥处理未动 |
 
 ## G. 网络运维扩展（`extensions/network_operations/frontend`，98 个文件）
@@ -157,6 +157,7 @@
 - 截图：`/workspace/lzcore/batch9/shots/{before,after}/`；工具：`batch9/tools/{seed9.py,shots9.mjs,kb9.mjs,montage.py}`。
 
 ## 收尾边界
+- PR 规模（Codex 更正）：按 REST 分页统计，d8d09d0 时为 140 个文件 / 41 个提交（`gh pr view` 的 files 最多返回 100 条，不能用来计数）。
 - **待 Windows 原生验证**：`scripts/windows_desktop_smoke.py` 未运行；CI 的 windows-smoke 是脚本/路由测试（run 37812880728：92 passed / 1 skipped），不等价于原生桌面验证。PR 保持草稿。
 - 思考块（D3 的一部分）：在线应用里不可达——历史消息经 `stores/workbench.ts` 的 `sanitizeAssistantText`、流式经 `realtime/turnTransport.ts` 的 `filterStreamingThink` 去掉 `<think>`，`MessageRow` 拿不到思考内容；注入含 `<think>` 的历史后 3 个视口均无 `.thinking-disclosure`。因此浏览器内键盘/视觉验收未做；组件为原生 button + aria-expanded/aria-controls，单测只覆盖点击切换。
 - 快捷键帮助的 axe serious（第 9 批）不是误报：旧遮罩把顶栏压暗到 3.88:1，但顶栏仍可点击、可 Tab 到达，且帮助没有 role=dialog。已在 0d54db9 改用共享 PortalModal，复测 axe 0、焦点不逃逸。
