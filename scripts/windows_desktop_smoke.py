@@ -173,7 +173,17 @@ def run(exe: Path, mode: str, output: Path):
             assert body.evaluate("el => getComputedStyle(el, '::-webkit-scrollbar').width") == '6px'
             assert body.evaluate("el => getComputedStyle(el, '::-webkit-scrollbar-button').display") == 'none'
             assert body.evaluate("el => getComputedStyle(el).scrollbarWidth") == 'auto'
-            assert page.locator('.desktop-dialog').evaluate("el => getComputedStyle(el).backgroundColor") == 'rgb(24, 28, 31)'
+            # Validate the shared theme contract rather than a retired palette value.
+            dialog_colors = page.locator('.desktop-dialog').evaluate("""el => {
+                const probe = document.createElement('span');
+                probe.style.backgroundColor = 'var(--surface)';
+                el.appendChild(probe);
+                const surface = getComputedStyle(probe).backgroundColor;
+                probe.remove();
+                return {actual: getComputedStyle(el).backgroundColor, surface};
+            }""")
+            assert dialog_colors['surface'] != 'rgba(0, 0, 0, 0)', dialog_colors
+            assert dialog_colors['actual'] == dialog_colors['surface'], dialog_colors
             page.screenshot(path=str(output/'desktop-settings.png'), full_page=True)
             page.get_by_role('button', name='完成', exact=True).click()
             # Native resize uses the real HWND, so DPI and WebView layout agree.
