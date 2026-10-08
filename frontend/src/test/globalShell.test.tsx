@@ -136,4 +136,20 @@ describe("global shell", () => {
     expect(persisted).not.toHaveProperty("currentWorkspaceId");
     useUIStore.getState().setDensity("comfortable");
   });
+
+  it("labels recent sessions by day without reordering them", async () => {
+    const now = new Date().toISOString();
+    const old = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    enqueue("/workspaces", workspaces);
+    enqueue("/sessions", { status: 200, data: { sessions: [
+      { ...session("d-1", "今天的会话"), updated_at: now },
+      { ...session("d-2", "很早的会话"), updated_at: old },
+    ] } });
+    enqueue("/runs/recent", { status: 200, data: { runs: [] } });
+    render(<Sidebar />);
+    await screen.findByTestId("sess-d-1");
+    const list = screen.getByTestId("sess-list");
+    const order = Array.from(list.children).map((el) => el.classList.contains("sidebar-group-label") ? `#${el.textContent}` : el.getAttribute("data-testid"));
+    expect(order).toEqual(["#今天", "sess-d-1", "#更早", "sess-d-2"]);
+  });
 });

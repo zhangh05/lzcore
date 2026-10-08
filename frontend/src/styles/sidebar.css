@@ -261,6 +261,16 @@
 .sidebar-history-link:hover { color: var(--text); background: var(--surface-hover); }
 .sidebar-history-link:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: -2px; }
 
+.sidebar-group-label {
+  padding: 10px 10px 4px;
+  color: var(--text-4);
+  font-size: var(--fs-11);
+  font-weight: var(--weight-strong);
+  line-height: var(--lh-11);
+  letter-spacing: .02em;
+}
+.sidebar-group-label:first-child { padding-top: 2px; }
+
 @media (max-width: 900px) {
   .app-sidebar {
     position: fixed;

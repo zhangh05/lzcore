@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useAsync, AsyncView } from "../components/common";
 import { sessionsApi } from "../api";
 import { useSessionStore, useUIStore } from "../stores/session";
@@ -241,9 +241,12 @@ export function Sidebar() {
             const hiddenCount = hiddenSessionCount(source, query ? null : currentSessionId);
             return (
             <div className="list" data-testid="sess-list">
-              {preview.map((sess) => (
+              {preview.map((sess, index) => (
+                <Fragment key={sess.session_id}>
+                {sessionGroupLabel(preview, index) ? (
+                  <div className="sidebar-group-label" role="presentation">{sessionGroupLabel(preview, index)}</div>
+                ) : null}
                 <div
-                  key={sess.session_id}
                   className={
                     "list-item session-item" +
                     (currentSessionId === sess.session_id ? " active" : "")
@@ -309,6 +312,7 @@ export function Sidebar() {
                     </details>
                   )}
                 </div>
+                </Fragment>
               ))}
               {query && preview.length === 0 ? (
                 <div className="list-item muted-row" role="status">
@@ -334,6 +338,23 @@ export function Sidebar() {
       }}><IconChecklist size={16} aria-hidden="true" /><span>任务与运行记录</span><IconChevronRight className="sidebar-history-tail" size={12} aria-hidden="true" /></button>
     </div>
   );
+}
+
+/** Day bucket for the sidebar's group labels; a view-only reading of updated_at. */
+function sessionDayBucket(session: Session, now = new Date()): string | null {
+  const stamp = Date.parse(session.updated_at || session.created_at || "");
+  if (!Number.isFinite(stamp)) return null;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (stamp >= startOfToday) return "今天";
+  if (stamp >= startOfToday - 6 * 86_400_000) return "近 7 天";
+  return "更早";
+}
+
+/** Label shown before a row when its day bucket differs from the previous row's. */
+function sessionGroupLabel(sessions: Session[], index: number): string | null {
+  const bucket = sessionDayBucket(sessions[index]);
+  if (!bucket) return null;
+  return index === 0 || sessionDayBucket(sessions[index - 1]) !== bucket ? bucket : null;
 }
 
 function previewSessions(sessions: Session[], currentSessionId: string | null): Session[] {
