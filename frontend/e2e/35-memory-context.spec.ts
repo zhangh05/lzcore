@@ -15,6 +15,11 @@ test('35. complete scoped memory can be edited with a preserved original', async
   expect((await read.json()).record.content).toBe(content);
   await page.getByRole('button',{name:title,exact:true}).click();
   await expect(page.locator('.memory-card-detail pre').first()).toContainText('末尾约束');
+  const provenance=page.locator('.memory-provenance > summary');
+  await provenance.focus();
+  await provenance.press('Enter');
+  await expect(page.locator('.memory-record-facts')).toBeVisible();
+  await expect(page.getByRole('button',{name:title,exact:true})).toHaveAttribute('aria-expanded','true');
   await page.getByRole('button',{name:'修改记忆',exact:true}).click();
   await page.getByLabel('记忆内容',{exact:true}).fill('以后不要自动推送提交，请先核对结果。');
   const revised=page.waitForResponse(r=>r.url().endsWith('/memory/write')&&r.request().method()==='POST');

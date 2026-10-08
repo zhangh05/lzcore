@@ -24,7 +24,10 @@ describe("memory row disclosure", () => {
     disclosure.focus();
     await user.keyboard("{Enter}");
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    await user.click(screen.getByText("为什么记：用户约定"));
+    const provenance = screen.getByText("来源与记录");
+    provenance.focus();
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByText("用户约定"));
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("checkbox", { name: "选择记忆：机房访问约定" }));
     expect(disclosure).toHaveAttribute("aria-expanded", "true");

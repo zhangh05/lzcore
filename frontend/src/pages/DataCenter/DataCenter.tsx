@@ -290,17 +290,17 @@ export function DataCenter() {
   };
 
   return (
-    <div className="page data-center" data-testid="page-data-center">
-      <PageHeader title="数据管理" subtitle="管理文件、任务产出、数据关联、归档和清理">
+    <div className={`page data-center${tab === "files" ? " data-center-files" : ""}`} data-testid="page-data-center">
+      <PageHeader title={tab === "files" ? "文件与资料" : "数据管理"} subtitle={tab === "files" ? "集中整理资料、浏览原件，追溯每一份文件的来源与使用" : "管理文件、任务产出、数据关联、归档和清理"}>
         <input ref={uploadRef} type="file" className="file-upload-input" onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) void upload(file);
           event.target.value = "";
         }} />
-        <Button variant={tab === "lifecycle" ? "default" : "primary"} size="sm" disabled={busy} onClick={() => uploadRef.current?.click()}>
+        {tab !== "files" && <><Button variant={tab === "lifecycle" ? "default" : "primary"} size="sm" disabled={busy} onClick={() => uploadRef.current?.click()}>
           {busy ? "处理中…" : "导入数据"}
         </Button>
-        <Button size="sm" onClick={() => { void loadData(); void loadArtifacts(); }}>刷新</Button>
+        <Button size="sm" onClick={() => { void loadData(); void loadArtifacts(); }}>刷新</Button></>}
       </PageHeader>
 
       <FilterBar className="data-center-tabs" role="tablist">
@@ -320,9 +320,8 @@ export function DataCenter() {
         {overview && <Badge kind={overview.health.ok ? "ok" : "err"}>{overview.health.ok ? "文件存在性检查通过" : "发现数据问题"}</Badge>}
       </FilterBar>
 
-      {/* 跨 tab 概览：把 overview 的关键数字 + 待处理数集中成 5 格 stat strip。
-          "待处理"非 0 时自动上底色（warn），跟知识库的 counts 一致的语言。 */}
-      <div className="stat-grid kl-stats" data-testid="data-stats">
+      {/* 文件空间保留列表与预览的高度，其余页签显示数据概览。 */}
+      {tab !== "files" && <div className="stat-grid kl-stats" data-testid="data-stats">
         <div className="stat-card">
           <div className="stat-value">{overview?.files.active ?? "—"}</div>
           <div className="stat-label">活跃文件</div>
@@ -345,7 +344,7 @@ export function DataCenter() {
           </div>
           <div className="stat-label">总存储</div>
         </div>
-      </div>
+      </div>}
 
       {error && <div className="callout error">{error}</div>}
       {loading && !overview ? <LoadingState text="正在读取数据…" skeleton="table" /> : null}

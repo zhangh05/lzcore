@@ -41,7 +41,7 @@ export function SourceBrowser({ workspaceId }: { workspaceId: string }) {
       setSelected(null); setRevision(value => value + 1);
     } catch (reason) { setError(String((reason as Error).message || reason)); }
   }
-  return <section aria-label="工作目录">
+  return <section className="file-source-browser" aria-label="工作目录">
     <FilterBar>{['files/data', 'files/tmp', 'inbox'].map(root => <Button size="sm" key={root} onClick={() => { setPath(root); setOffset(0); setSelected(null); }}>{root}</Button>)}
       <Button size="sm" disabled={['files/data', 'files/tmp', 'inbox'].includes(path)} onClick={() => { setPath(path.slice(0, path.lastIndexOf('/'))); setOffset(0); }}>上级目录</Button>
       <span className="mono">{path}</span></FilterBar>

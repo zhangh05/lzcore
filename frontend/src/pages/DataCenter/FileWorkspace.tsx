@@ -11,6 +11,7 @@ import { confirm } from '../../components/ConfirmDialog';
 import { useToastStore } from '../../stores/toast';
 import { useSessionStore } from '../../stores/session';
 import { useNavigate } from '../../router';
+import { IconDocument, IconFolder, IconArchive, IconDownload, IconPlus, IconRefresh, IconChevronDown } from '../../components/Icon';
 import { formatFileSize } from '../../utils/format';
 import type { ManagedFile } from '../../types';
 
@@ -132,38 +133,38 @@ export function FileWorkspace({ workspaceId, initialFile }: { workspaceId: strin
     <FilterBar className="file-space-nav">
       {Object.entries({ files: '资料与文件', sources: '工作目录', deliverables: '交付物', history: '历史版本', evidence: '过程资料', recycle: '回收站', governance: '核对与备份' }).map(([key, label]) =>
         <Button key={key} size="sm" variant={view === key ? 'selected' : 'default'} onClick={() => setView(key)}>{label}</Button>)}
-      <div className="spacer" /><span>{total} 个文件</span>
     </FilterBar>
     {view === "sources" ? <SourceBrowser workspaceId={workspaceId} /> : view === "governance" ? <FileGovernance workspaceId={workspaceId} /> : <>
     <FilterBar className="file-space-toolbar"><SearchInput value={query} onClear={() => setQuery('')} onChange={event => setQuery(event.target.value)} placeholder={searchMode === 'content' ? '搜索正文（原文／已建索引文档）' : '搜索名称、路径或来源'} />
       <div className="file-space-filters">
-      <Select aria-label="搜索范围" value={searchMode} onChange={event => setSearchMode(event.target.value)}><option value="metadata">名称与路径</option><option value="content">正文</option></Select>
-      <Select aria-label="文件目录" value={directory} onChange={event => setDirectory(event.target.value)}><option value="*">所有目录</option>{directories.map(folder => <option key={folder} value={folder}>{folder || '工作区根目录'}</option>)}</Select>
-      <Select aria-label="文件排序" value={sort} onChange={event => setSort(event.target.value)}><option value="created">最近创建</option><option value="name">文件名</option><option value="size">文件大小</option></Select>
+      <span className="file-filter-field"><span>搜索范围</span><span className="file-filter-control"><Select aria-label="搜索范围" value={searchMode} onChange={event => setSearchMode(event.target.value)}><option value="metadata">名称与路径</option><option value="content">正文</option></Select><IconChevronDown size={12} aria-hidden="true" /></span></span>
+      <span className="file-filter-field"><span>文件目录</span><span className="file-filter-control"><Select aria-label="文件目录" value={directory} onChange={event => setDirectory(event.target.value)}><option value="*">所有目录</option>{directories.map(folder => <option key={folder} value={folder}>{folder || '工作区根目录'}</option>)}</Select><IconChevronDown size={12} aria-hidden="true" /></span></span>
+      <span className="file-filter-field"><span>排序方式</span><span className="file-filter-control"><Select aria-label="文件排序" value={sort} onChange={event => setSort(event.target.value)}><option value="created">最近创建</option><option value="name">文件名</option><option value="size">文件大小</option></Select><IconChevronDown size={12} aria-hidden="true" /></span></span>
       </div>
       <div className="file-space-actions">
-      <label className="btn sm file-space-import">导入多个文件<input type="file" multiple disabled={busy} className="file-upload-input" onChange={event => { void upload(Array.from(event.target.files || [])); event.target.value = ''; }} /></label>
-      <Button size="sm" disabled={!checked.length || busy} onClick={() => void remove(recycle)}>处理已选 {checked.length} 项</Button>
-      <Button size="sm" onClick={refresh}>刷新</Button>
+      <label className="btn sm file-space-import"><IconPlus size={15} aria-hidden="true" /> 导入多个文件<input type="file" multiple disabled={busy} className="file-upload-input" onChange={event => { void upload(Array.from(event.target.files || [])); event.target.value = ''; }} /></label>
+      <Button size="sm" aria-label="刷新" title="刷新" onClick={refresh}><IconRefresh size={15} aria-hidden="true" /><span className="file-refresh-label">刷新</span></Button>
       </div>
     </FilterBar>
     {error && <div className="callout err" role="alert">{error}</div>}
     {operationResults.length > 0 && <ul aria-label="逐项处理结果">{operationResults.map((item, index) => <li key={index}>{item.name}：{item.error || item.result}</li>)}</ul>}
     <div className="split-shell data-split" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (!busy) void upload(Array.from(event.dataTransfer.files)); }}>
       <aside className="data-list" aria-label="文件空间列表">
+        <div className="file-list-head"><div><strong>{recycle ? "回收站" : "文件列表"}</strong><span>{total} 个文件</span></div>{checked.length > 0 && <Button size="sm" disabled={busy} onClick={() => void remove(recycle)}>处理已选 {checked.length} 项</Button>}</div>
+        <div className="file-list-scroll">
         {files.map(file => <div key={file.file_id} className={`data-row file-space-row ${selected?.file_id === file.file_id ? 'selected' : ''}`}>
           <input type="checkbox" aria-label={`选择 ${file.original_name}`} checked={checked.includes(file.file_id)} onChange={event => setChecked(items => event.target.checked ? [...items, file.file_id] : items.filter(id => id !== file.file_id))} />
-          <button type="button" className="file-space-select" onClick={() => setSelected(file)}><b>{file.original_name}</b><small>{String(file.metadata.folder || '工作区')} · {file.file_kind} · {formatFileSize(file.size_bytes)}</small>{file.search_hit && <small>第 {file.search_hit.line} 行：{file.search_hit.snippet}</small>}</button>
+          <span className="file-type-icon" aria-hidden="true">{["zip", "tar"].includes(file.file_kind) ? <IconArchive size={21} /> : <IconDocument size={21} />}</span><button type="button" className="file-space-select" onClick={() => setSelected(file)}><b>{file.original_name}</b><small>{file.file_kind.toUpperCase()} · {formatFileSize(file.size_bytes)}</small>{Boolean(file.metadata.folder) && <span className="file-row-folder"><IconFolder size={12} aria-hidden="true" />{String(file.metadata.folder)}</span>}{file.search_hit && <small>第 {file.search_hit.line} 行：{file.search_hit.snippet}</small>}</button>
         </div>)}
         {!files.length && <EmptyState text="没有符合条件的文件" hint="导入资料或切换筛选条件" />}
-        <div className="actions-row"><Button size="sm" disabled={!cursor} onClick={() => setCursor('')}>首页</Button><Button size="sm" disabled={!nextCursor} onClick={() => setCursor(nextCursor)}>下一页</Button></div>
+        </div><div className="actions-row file-list-pagination"><Button size="sm" disabled={!cursor} onClick={() => setCursor('')}>首页</Button><Button size="sm" disabled={!nextCursor} onClick={() => setCursor(nextCursor)}>下一页</Button></div>
       </aside>
-      {!selected ? <DetailPanel empty={{ text: '选择文件', hint: '预览、下载、组织资料并查看来源' }} /> : <DetailPanel title={selected.original_name} onClose={() => setSelected(null)} actions={<>
+      {!selected ? <DetailPanel empty={{ text: '选择文件', hint: '预览、下载、组织资料并查看来源' }} /> : <DetailPanel className="file-preview-panel" title={selected.original_name} subtitle={`${selected.file_kind.toUpperCase()} · ${formatFileSize(selected.size_bytes)}`} onClose={() => setSelected(null)} actions={<>
         {recycle ? <><Button size="sm" onClick={() => void restore()}>恢复</Button><Button size="sm" variant="danger-ghost" onClick={() => void remove(true)}>永久清除</Button></> : <>
-          <a className="btn sm" href={fileUrl(selected, 'download')}>下载原件</a><Button size="sm" disabled={busy} onClick={() => void addToKnowledge()}>加入知识库</Button><Button size="sm" variant="danger-ghost" onClick={() => void remove()}>移入回收站</Button>
+          <a className="btn sm primary" href={fileUrl(selected, 'download')}><IconDownload size={14} aria-hidden="true" />下载原件</a><Button size="sm" disabled={busy} onClick={() => void addToKnowledge()}>加入知识库</Button><Button size="sm" variant="danger-ghost" onClick={() => void remove()}>移入回收站</Button>
         </>}
       </>}>
-        <dl className="file-space-properties"><dt>路径</dt><dd>{selected.path || '托管文件'}</dd><dt>文件身份</dt><dd>{selected.file_id}</dd><dt>来源</dt><dd>{selected.source}</dd><dt>使用关系</dt><dd>{selected.reference_count} 处</dd></dl>
+        <div className="file-preview-path"><span>路径</span><code>{selected.path || '托管文件'}</code></div>
         {!recycle && <>
           {selected.capabilities?.preview === 'image' && <img className="file-space-preview" src={fileUrl(selected, 'preview')} alt={selected.original_name} />}
           {selected.capabilities?.preview === 'pdf' && <iframe className="file-space-pdf" src={fileUrl(selected, 'preview')} title={selected.original_name} />}
@@ -172,8 +173,9 @@ export function FileWorkspace({ workspaceId, initialFile }: { workspaceId: strin
           {['csv', 'xlsx', 'docx', 'pptx', 'pdf', 'zip', 'tar'].includes(selected.file_kind) && <FileInspection key={selected.file_id} workspaceId={workspaceId} fileId={selected.file_id} kind={selected.file_kind} />}
           {content && <CodeBlock>{content}</CodeBlock>}
           {offset !== null && <Button size="sm" onClick={() => { const identity = selectedIdentity.current; apiRequest<{ content: string; next_offset?: number }>({ method: 'GET', url: `/storage/files/${selected.file_id}/content`, params: { workspace_id: workspaceId, offset } }).then(result => { if (selectedIdentity.current === identity) { setContent(value => value + result.content); setOffset(result.next_offset ?? null); } }).catch(reason => { if (selectedIdentity.current === identity) setError(String(reason.message || reason)); }); }}>继续读取</Button>}
-          <fieldset className="file-space-organize"><legend>名称与目录</legend><label>文件名<input className="input" value={name} onChange={event => setName(event.target.value)} /></label><label>目录<input className="input" value={folder} placeholder="例如 项目/资料" onChange={event => setFolder(event.target.value)} /></label><Button size="sm" onClick={() => void organize()}>保存</Button></fieldset>
         </>}
+        <details className="file-space-metadata"><summary>文件信息与来源 · {selected.reference_count} 处使用</summary><dl className="file-space-properties"><dt>文件身份</dt><dd>{selected.file_id}</dd><dt>来源</dt><dd>{fileSourceLabel(selected.source)}</dd><dt>使用关系</dt><dd>{selected.reference_count} 处</dd></dl></details>
+        {!recycle && <fieldset className="file-space-organize"><legend>名称与目录</legend><label>文件名<input className="input" value={name} onChange={event => setName(event.target.value)} /></label><label>目录<input className="input" value={folder} placeholder="例如 项目/资料" onChange={event => setFolder(event.target.value)} /></label><Button size="sm" onClick={() => void organize()}>保存</Button></fieldset>}
         {selected.references.map((ref, index) => <p key={index}>{ref.owner_type} · {ref.relation} · {ref.owner_id}
           {ref.owner_type === 'message' && typeof ref.metadata?.session_id === 'string' && <Button size="sm" onClick={() => { useSessionStore.getState().setCurrentSession(String(ref.metadata?.session_id)); navigate('/workbench'); }}>打开使用会话</Button>}
           {ref.owner_type === 'knowledge_source' && <Button size="sm" onClick={() => navigate(`/knowledge?source_id=${encodeURIComponent(ref.owner_id)}`)}>打开知识来源</Button>}
@@ -184,4 +186,8 @@ export function FileWorkspace({ workspaceId, initialFile }: { workspaceId: strin
       </DetailPanel>}
     </div></>}
   </section>;
+}
+
+function fileSourceLabel(source: string): string {
+  return ({ user_upload: "用户导入", upload: "用户导入", agent: "智能体生成", task: "任务产出", knowledge: "知识资料", workspace: "工作目录" } as Record<string, string>)[source] || source;
 }

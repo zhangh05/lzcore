@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { memoryApi } from "../../api";
 import { useSessionStore } from "../../stores/session";
 import { Badge, StatusDot } from "../../components/common";
-import { IconAlert, IconSearch, IconPlus, IconRefresh, IconClose, IconCheck, IconTrash, IconLayers, IconChevronDown } from "../../components/Icon";
+import { IconAlert, IconSearch, IconPlus, IconRefresh, IconClose, IconCheck, IconTrash, IconLayers, IconChevronDown, IconEdit, IconShield } from "../../components/Icon";
 import { PageHeader, FilterBar, SearchInput } from "../../components/ui";
 import { EmptyState } from "../../components/common";
 
@@ -148,7 +148,7 @@ export function MemoryPage() {
     setContent(entry.content || ""); setShowCreate(true);
   };
   const createForm = showCreate && (
-    <div className="card card-highlight">
+    <div className="card card-highlight memory-editor">
       <div className="card-title memory-form-title">{editing ? "修改记忆" : "新建记忆"}</div>
       {editing ? <p className="memory-explain-box">保存后启用新版本，并保留原记录供回查。范围：{scopeLabel(editing.scope)}。</p> : (
         <div className="memory-form-options">
@@ -234,7 +234,7 @@ export function MemoryPage() {
   return (
     <div className="page memory-page">
       <PageHeader title="长期记忆" subtitle="个人通用偏好随用户保存；项目资料、事实和经验保留在所属项目">
-        <button className="btn sm" onClick={() => { clearDraft(); setShowCreate(true); }}>
+        <button className="btn primary sm" onClick={() => { clearDraft(); setShowCreate(true); }}>
           <IconPlus size={14} /> 新建
         </button>
         <button className="btn sm ghost" onClick={() => void load()} title="刷新">
@@ -245,6 +245,7 @@ export function MemoryPage() {
       <div className="page-body">
         {/* Search + filter bar */}
         <FilterBar className="memory-toolbar">
+          <div className="memory-search-controls">
           <SearchInput
             placeholder="搜索记忆..."
             aria-label="搜索记忆"
@@ -254,7 +255,8 @@ export function MemoryPage() {
             onClear={() => { setSearchQ(""); setActiveQuery(""); }}
           />
           <button className="btn sm" onClick={handleSearch}><IconSearch size={14} /> 搜索</button>
-          <span className="memory-select-wrap"><select className="input memory-filter-select" aria-label="筛选分类" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+          </div><div className="memory-filter-controls">
+          <label className="memory-filter-field"><span>分类</span><span className="memory-select-wrap"><select className="input memory-filter-select" aria-label="筛选分类" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
             <option value="">全部分类</option>
             <option value="core_rule">核心规则</option>
             <option value="semantic_fact">稳定事实</option>
@@ -262,19 +264,20 @@ export function MemoryPage() {
             <option value="procedural_rule">操作方法</option>
             <option value="knowledge_note">知识笔记</option>
             <option value="profile">用户档案</option>
-          </select><IconChevronDown size={12} aria-hidden="true" /></span>
-          <span className="memory-select-wrap"><select className="input memory-filter-select" aria-label="筛选范围" value={scopeFilter} onChange={event => setScopeFilter(event.target.value)}>
+          </select><IconChevronDown size={12} aria-hidden="true" /></span></label>
+          <label className="memory-filter-field"><span>范围</span><span className="memory-select-wrap"><select className="input memory-filter-select" aria-label="筛选范围" value={scopeFilter} onChange={event => setScopeFilter(event.target.value)}>
             <option value="">全部范围</option><option value="workspace">当前项目</option><option value="global">个人通用</option>
             <option value="session">会话范围</option><option value="task">任务记忆</option>
-          </select><IconChevronDown size={12} aria-hidden="true" /></span>
-          <span className="memory-select-wrap"><select className="input memory-filter-select" aria-label="筛选状态" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+          </select><IconChevronDown size={12} aria-hidden="true" /></span></label>
+          <label className="memory-filter-field"><span>状态</span><span className="memory-select-wrap"><select className="input memory-filter-select" aria-label="筛选状态" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
             <option value="">全部状态</option><option value="active">已启用</option><option value="pending">待确认</option><option value="conflict">待解决冲突</option>
-          </select><IconChevronDown size={12} aria-hidden="true" /></span>
-          <label><input type="checkbox" checked={includeHistory} onChange={event => setIncludeHistory(event.target.checked)} /> 显示历史</label>
+          </select><IconChevronDown size={12} aria-hidden="true" /></span></label>
+          <label className="memory-history-toggle"><input type="checkbox" checked={includeHistory} onChange={event => setIncludeHistory(event.target.checked)} /> 显示历史</label>
+          </div></FilterBar>
+        <div className="memory-list-tools">
           {searchRes && (
             <button className="btn sm ghost" onClick={() => { setActiveQuery(""); setSearchQ(""); }}>清除结果</button>
           )}
-          <div className="spacer" />
           {display.length > 0 && (
             <label className="select-all">
               <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
@@ -289,7 +292,7 @@ export function MemoryPage() {
           <span className="count">
             {searchRes ? `搜索结果 ${display.length} 条` : `已加载 ${display.length} / ${total} 条记忆`}
           </span>
-        </FilterBar>
+        </div>
 
         {createForm}
 
@@ -375,24 +378,10 @@ export function MemoryPage() {
                           trusted, stated once in the product's metadata
                           language rather than as a row of pills. */}
                       <div className="memory-card-meta">
-                        {e.memory_type && (
-                          <span className="meta-fact"><span className="meta-label">类型</span><span className="meta">{memoryTypeLabel(e.memory_type)}</span></span>
-                        )}
-                        {origin && (
-                          <span className="meta-fact"><span className="meta-label">来源</span><span className="meta">{memoryOriginLabel(origin)}</span></span>
-                        )}
-                        {e.scope && (
-                          <span className="meta-fact"><span className="meta-label">范围</span><span className="meta">{scopeLabel(e.scope)}</span></span>
-                        )}
-                        {authority && (
-                          <span className="meta-fact"><span className="meta-label">权威</span><span className="meta">{memoryAuthorityLabel(authority)}</span></span>
-                        )}
-                        {score != null && Number.isFinite(score) && score >= 4 && (
-                          <span className="meta-fact"><span className="meta-label">建议分</span><span className="meta">{score}</span></span>
-                        )}
-                        {confidence != null && Number.isFinite(confidence) && !["user", "manual_confirm"].includes(e.source || "") && (
-                          <span className="meta-fact"><span className="meta-label">模型自评</span><span className="meta">{Math.round(confidence * 100)}%</span></span>
-                        )}
+                        {e.memory_type && <span className="memory-type-label">{memoryTypeLabel(e.memory_type)}</span>}
+                        {e.scope && <span className="memory-scope-label">{scopeLabel(e.scope)}</span>}
+                        {origin && <span>{memoryOriginLabel(origin)}</span>}
+                        {authority === "manual_confirm" && <span className="memory-reviewed"><IconShield size={12} aria-hidden="true" />已审核</span>}
                       </div>
                       <div className="memory-card-preview">
                         {e.value_preview || e.content?.substring(0, 150) || "(无内容)"}
@@ -419,29 +408,29 @@ export function MemoryPage() {
 
                   {isSelected && (
                     <div className="memory-card-detail" id={`memory-detail-${e.memory_id || i}`}>
-                      <div className="memory-explain-box">
-                        <div>记录：{e.memory_id}</div><div>所属项目：{e.workspace_id || wsId}</div>
-                        {e.updated_at && <div>更新时间：{e.updated_at}</div>}
-                        {e.superseded_by && <div>已被新版本替换：{e.superseded_by}</div>}
-                        {meta.supersedes_memory_id ? <div>替换原记录：{String(meta.supersedes_memory_id)}</div> : null}
-                        {e.citations?.length ? <details><summary>查看来源与证据</summary><pre>{JSON.stringify(e.citations, null, 2)}</pre></details> : null}
+                      <div className="memory-detail-head"><span>完整记忆</span>
+                        {e.memory_id && !isInactive && <button className="btn sm" onClick={() => beginEdit(e)}><IconEdit size={14} aria-hidden="true" />修改记忆</button>}
                       </div>
-                      {e.memory_id && !isInactive && <button className="btn sm" onClick={() => beginEdit(e)}>修改记忆</button>}
-                      {e.content && (
-                        <pre>{e.content}</pre>
-                      )}
-                      {(reason || evidenceSource || authority || memoryKey || evidenceEventIds.length > 0 || mergedFrom.length > 0) && (
-                        <div className="memory-explain-box">
-                          {reason && <div>为什么记：{memoryReasonLabel(reason)}</div>}
-                          {authority && <div>权威来源：{memoryAuthorityLabel(authority)}</div>}
-                          {evidenceSource && <div>证据来源：{evidenceSource}</div>}
-                          {memoryKey && <div>记忆主题：{memoryKey}</div>}
-                          {evidenceEventIds.length > 0 && <div>经历证据：{evidenceEventIds.length} 条</div>}
-                          {mergedFrom.length > 0 && (
-                            <div>合并来源：{mergedFrom.join(" + ")}</div>
-                          )}
-                        </div>
-                      )}
+                      {e.content && <pre className="memory-body-text">{e.content}</pre>}
+                      {e.superseded_by && <div className="memory-revision-note">已被新版本替换：{e.superseded_by}</div>}
+                      {meta.supersedes_memory_id ? <div className="memory-revision-note">替换原记录：{String(meta.supersedes_memory_id)}</div> : null}
+                      <details className="memory-provenance"><summary>来源与记录</summary>
+                        <dl className="memory-record-facts">
+                          <dt>记录身份</dt><dd>{e.memory_id}</dd>
+                          <dt>所属项目</dt><dd>{e.workspace_id || wsId}</dd>
+                          {e.updated_at && <><dt>更新时间</dt><dd title={e.updated_at}>{memoryDateLabel(e.updated_at)}</dd></>}
+                          {origin && <><dt>记忆来源</dt><dd>{memoryOriginLabel(origin)}</dd></>}
+                          {authority && <><dt>审核依据</dt><dd>{memoryAuthorityLabel(authority)}</dd></>}
+                          {reason && <><dt>记录原因</dt><dd>{memoryReasonLabel(reason)}</dd></>}
+                          {evidenceSource && <><dt>证据来源</dt><dd>{evidenceSource}</dd></>}
+                          {memoryKey && <><dt>记忆主题</dt><dd>{memoryKey}</dd></>}
+                          {evidenceEventIds.length > 0 && <><dt>经历证据</dt><dd>{evidenceEventIds.length} 条</dd></>}
+                          {mergedFrom.length > 0 && <><dt>合并来源</dt><dd>{mergedFrom.join(" + ")}</dd></>}
+                          {score != null && Number.isFinite(score) && <><dt>建议分</dt><dd>{score}</dd></>}
+                          {confidence != null && Number.isFinite(confidence) && !["user", "manual_confirm"].includes(e.source || "") && <><dt>模型自评</dt><dd>{Math.round(confidence * 100)}%</dd></>}
+                        </dl>
+                        {e.citations?.length ? <details><summary>查看来源与证据</summary><pre>{JSON.stringify(e.citations, null, 2)}</pre></details> : null}
+                      </details>
                       {e.tags && e.tags.length > 0 && (
                         <div className="tags">
                           {e.tags.map((t: string) => <Badge key={t} kind="accent">{t}</Badge>)}
@@ -449,7 +438,7 @@ export function MemoryPage() {
                       )}
                       {(e.status === "pending" || e.status === "conflict") && e.memory_id && (
                         <div className="actions">
-                          <button className="btn sm" onClick={() => void handleReview(e.memory_id!, "confirm")}>
+                          <button className="btn primary sm" onClick={() => void handleReview(e.memory_id!, "confirm")}>
                             <IconCheck size={12} /> {meta.proposed_action === "expire" ? "确认停用原记忆" : "确认并启用"}
                           </button>
                           <button className="btn sm" onClick={() => void handleReview(e.memory_id!, "reject")}>
@@ -479,6 +468,8 @@ export function MemoryPage() {
 
 function memoryOriginLabel(origin: string): string {
   const value = String(origin || "");
+  const labels: Record<string, string> = { agent_suggestion: "智能体建议", memory_tool_update: "智能体修改建议", memory_tool_profile: "智能体档案建议", manual_confirm: "人工确认", operator_confirm: "显式工具审核", tool: "工具观察", file: "文件资料", subagent: "子智能体建议" };
+  if (labels[value]) return labels[value];
   if (value.includes("task_reflection") || value.includes("memory_consolidator")) return "任务反思";
   if (value.includes("user")) return "用户明确设置";
   if (value.includes("llm")) return "智能体总结";
@@ -522,4 +513,9 @@ function memoryReasonLabel(reason: string): string {
 
 function scopeLabel(scope?: string): string {
   return ({ global: "个人通用", workspace: "当前项目", session: "会话", task: "任务" } as Record<string, string>)[scope || ""] || scope || "未指定";
+}
+
+function memoryDateLabel(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }

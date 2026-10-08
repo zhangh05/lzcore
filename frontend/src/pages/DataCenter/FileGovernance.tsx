@@ -26,7 +26,7 @@ export function FileGovernance({ workspaceId }: { workspaceId: string }) {
     const form = new FormData(); form.append('workspace_id', workspaceId); form.append('file', backup); form.append('apply', String(apply));
     await execute({ method: 'POST', url: '/storage/restore', data: form });
   }
-  return <section aria-label="文件核对与备份">
+  return <section className="file-governance" aria-label="文件核对与备份">
     <p>分别核对实际文件、摘要、引用目标以及消息／产出／知识来源。没有检查的 owner 类型会在报告中列出。</p>
     <FilterBar><Button disabled={busy} onClick={() => void execute({ method: 'GET', url: '/storage/health', params: { workspace_id: workspaceId } })}>核对关系与文件</Button>
       <Button disabled={busy} onClick={() => void execute({ method: 'GET', url: '/storage/health', params: { workspace_id: workspaceId, hashes: 'true' } })}>完整摘要核对</Button>

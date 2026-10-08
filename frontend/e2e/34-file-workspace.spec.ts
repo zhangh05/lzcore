@@ -73,5 +73,11 @@ test('34. file organization and recycling preserve identity and original bytes',
   expect(Buffer.compare(await restored.body(), payload)).toBe(0);
   await page.getByRole('button', { name: '资料与文件', exact: true }).click();
   await page.getByRole('button', { name: new RegExp('已组织-' + name) }).click();
+  await page.locator('.file-space-metadata > summary').click();
+  await expect(page.getByText(fid, { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('file-workspace.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.getByRole('button', { name: '切换主题', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('file-workspace-mobile-dark.png'), fullPage: true });
 });
