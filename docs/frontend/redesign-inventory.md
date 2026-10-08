@@ -80,13 +80,13 @@
 |---|---|---|---|---|---|---|
 | G1 | 网络设备（设备、连接、区域、证据环境、运行参考/最近观察/命令反馈批量删除） | `/extensions/network.operations/manage?tab=devices` `NetworkOperations.tsx` | ✅ | ec15203 | `batch8/after/01-devices-*`, `06-connections-*`, `03-context-*`, `04-device-editor-*` | 第 8 批：设备一行记录 + 连接披露内嵌下沉列表；状态胶囊中性 + 状态点，仅失败/待确认指纹/部分参考着色；区域管理字段组（区域名称、编辑区域 X/删除区域 X）；扩展路由/manifest/runtime/registry 契约未动 |
 | G2 | Skill 管理（已发布 Skill、绘图 Skill、工具授权） | `…/manage?tab=skills` | ✅ | ec15203 | `batch8/after/02-skills-*`, `05-skill-editor-*` | 第 8 批：Skill 记录节奏、删除降为 danger-ghost；编辑器名称整行、“设备连接”空态说明；工具授权逻辑未动 |
-| G3 | 拓扑图库 / 工作区框架 | `/topology` `TopologyPage.tsx`、`TopologyWorkspace`、`TopologyLibrary` | ✅⚠️ | e67db0e | `batch9/after/02-library-*`, `01-workspace-*` | 第 9 批：图库设备符号块改为发丝线表面、选中=selected 态；/topology 路由与 nav 网络快捷项保留 |
+| G3 | 拓扑图库 / 工作区框架 | `/topology` `TopologyPage.tsx`、`TopologyWorkspace`、`TopologyLibrary` | ✅⚠️ | e67db0e, c43596e | `batch9/after/02-library-*`, `01-workspace-*` | 第 9 批：图库设备符号块改为发丝线表面、选中=selected 态；/topology 路由与 nav 网络快捷项保留；≤760px 图库改为画布上方的抽屉（不再挤压画布、缩放条不再竖排），关闭按钮 + Esc + 焦点归还（c43596e） |
 | G4 | 拓扑工具栏 | `TopologyHeaderToolbar/EditToolbar/PresentationToolbar/DisplayTools/ToolGroups` | ✅ | e67db0e | `batch9/after/01-workspace-*`, `11-view-mode-*`, `12-insert-menu-*`, `13-arrange-menu-*` | 第 9 批：选择模式提示与查看模式胶囊改中性；缩放胶囊统一字阶 + 等宽读数；工具组/编辑栏既有 token 样式经审视保留 |
 | G5 | 画布与绘制 | `TopologyCanvasStage`、`NetOpsCanvas`、`useCanvas*`、`canvas*.ts`、`TopologyWhiteboard` | ✅⚠️ | e67db0e | `batch9/after/01-workspace-dark-1440.png`, `01-workspace-light-1440.png` | 第 9 批：节点/连线标签文字、标签底与描边在主题切换时解析 `--lz-color-*`（字面值仅作缺省）；连线描边色（e2e 30）、网格/叠加绘制、渲染与命中测试、canvas_items.item_id 区域身份均未动 |
 | G6 | 节点/链路/区域/选择检查器 | `Topology*Inspector*.tsx` | ✅ | e67db0e, 0d54db9 | `batch9/after/03-node-inspector-*`, `04-link-inspector-*`, `05-region-inspector-*`, `06-selection-inspector-*` | 第 9 批：检查器字号下限 9.5px → 11px，28px 字段（lz 字段 token + 统一箭头 + 焦点环），类型胶囊中性，尺寸预设实线胶囊；宽度保持 240（定位常量）；头部动作 24px（WCAG 2.5.8 下限）让 10 字符设备名不再截断（0d54db9） |
 | G7 | 拓扑对话框 | `Topology{Link,ManualNode,Region,Metadata,Revision,Conflict,EmptyCreate}Dialog.tsx`、`TopologyShortcutHelp` | ✅⚠️ | e67db0e, 0d54db9 | `batch9/after/08-metadata-dialog-*`, `10-revision-dialog-*`, `17-link-dialog-*`, `18-conflict-dialog-*`, `15-shortcut-help-*` | 第 9 批：对话框头部不再继承全局 24px 内缩（标题与字段对齐），去分隔线，幽灵关闭；图标关闭按钮与 3 个对话框获得可访问名称。冲突/修订行为冻结；冲突对话框未单独截图（状态未复现，单测覆盖其行为）。0d54db9：7 个拓扑对话框补齐模态键盘契约（打开即聚焦、Tab/Shift+Tab 不逃逸、Esc 执行原关闭动作、关闭后焦点归位；main 上均无）；快捷键帮助改用共享 PortalModal；冲突对话框已复现并截图（亮/暗 1440 + 390，axe 0；main 4/3/4），≤640 选项纵向排列不再重叠；冲突状态胶囊悬停不再降透明度 |
 | G8 | 右键菜单 | `TopologyContextMenu.tsx`、`TopologyMenus.css` | ✅ | e67db0e | `batch9/after/07-context-menu-*`, `14-display-menu-*` | 第 9 批：审视后右键菜单/显示菜单沿用既有 token 样式，仅把 <11px 文字提到字阶下限 |
-| G9 | 拓扑 Agent 面板 | `TopologyAgentPanel.tsx` | ✅⚠️ | 0bbb6a0, 3420acf, e67db0e | `batch9/after/09-agent-panel-*` | “开启新会话”原生 confirm → ConfirmDialog（0bbb6a0），卸载时中止（3420acf）；头部小字提到字阶下限；会话/流式契约未动（e2e 27b） |
+| G9 | 拓扑 Agent 面板 | `TopologyAgentPanel.tsx` | ✅⚠️ | 0bbb6a0, 3420acf, e67db0e, c43596e | `batch9/after/09-agent-panel-*` | “开启新会话”原生 confirm → ConfirmDialog（0bbb6a0），卸载时中止（3420acf）；头部小字提到字阶下限；会话/流式契约未动（e2e 27b）；≤760px 改为全宽面板（原约 165px 窄条），关闭按钮 + Esc + 焦点归还，输入框全宽、发送在下（c43596e） |
 | G10 | 视图书签命名 | `useTopologyViews.tsx` | ✅ | 0bbb6a0, 3420acf | `batch9/after/16-bookmark-dialog-*` | window.prompt → FormDialog（0bbb6a0）；对话框绑定图纸 + 工作区 + 打开周期，切换/卸载即取消且不写入（3420acf，renderHook 回归） |
 
 ## 原生对话框（来自源码 grep）
@@ -155,6 +155,13 @@
 - G3–G10（含 G5 画布标签主题 token）；见上表备注。
 - 检查：typecheck 0；lint:styles 73；lint:tokens 312/6 warn；vitest 拓扑/网络 23 文件 154 例；e2e 22/23/26/27/30/31/32/33 dev 52 passed（4.4m）、production 52 passed（2.4m）；axe 38 状态 1（快捷键帮助亮色：遮罩下的顶栏文字对比度，遮罩造成，非本批新增）vs main 36 状态 111（canvas/参考线 aria-prohibited-attr、隐藏测试钩子按钮无名称、对话框无名称、品牌区）；键盘 + 减少动态 10/10。
 - 截图：`/workspace/lzcore/batch9/shots/{before,after}/`；工具：`batch9/tools/{seed9.py,shots9.mjs,kb9.mjs,montage.py}`。
+
+## 390 窄屏修复记录（@c43596e）
+- 两处既有缺口（main 与 0d54db9 均存在）：拓扑 Agent 面板在 390 宽只有约 165px（桌面的 `min(400px,42vw)` 规则优先级高于 900 断点覆盖）；图库保留 252px 网格列，把画布挤窄，缩放条“适配/全景导航”竖排。
+- 修复（仅表现层，≤760px 生效）：Agent 面板 = 全宽面板（inset 0），头部“关闭绘图对话”；图库 = 画布上方抽屉 `min(320px, 100% - 40px)`，画布保持全宽，“关闭设备库”；`useTopologyNarrowSheet` 打开时焦点进关闭按钮、Esc 关闭、关闭后焦点回到工具栏触发按钮；缩放条按钮 nowrap。绘制、`canvas_items.item_id`、会话/工具契约、渲染/命中检测未动。
+- 桌面不变：01/02/09 的亮/暗 1440 与 01 亮 390 重拍，与既有 after 逐像素 0 差异；1440 下关闭按钮不可见、面板宽 400、打开时不移动焦点。
+- 检查：typecheck 0；lint:styles 73；lint:tokens 312/6 warn；vitest 全量 93 文件 493 例；e2e 22/23/26/27/30/31/32/33 dev 53 passed（4.3m）、production 53 passed（2.3m）；新增 e2e 33h（旧代码 1 failed：找不到“关闭设备库”）；`batch9/tools/narrow.mjs` 亮/暗 390 共 36 项 PASS（面板宽 390 ≥ 视口−32、输入框 344px、发送在输入框下方、抽屉 320px 画布 390px、缩放条 5 个按钮高 28px、Esc/关闭按钮/焦点进出），axe 4 个状态 0。
+- 截图：`final/shots/after/batch9-02-library-{light,dark}-390.png`、`batch9-09-agent-panel-{light,dark}-390.png`；对比 `final/compare/batch9-02-library-light-390.png`、`batch9-09-agent-panel-light-390.png`（main / 0d54db9 / c43596e 三联）。0d54db9 的旧 390 图保留在 `batch9/shots/after-0d54db9-390/`。
 
 ## 收尾边界
 - PR 规模（Codex 更正）：按 REST 分页统计，d8d09d0 时为 140 个文件 / 41 个提交（`gh pr view` 的 files 最多返回 100 条，不能用来计数）。
