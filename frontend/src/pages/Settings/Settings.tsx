@@ -13,6 +13,7 @@ import { Badge, EmptyState, LoadingState } from "../../components/common";
 import { Button, Input, Select, FormField } from "../../components/ui";
 import { confirm } from "../../components/ConfirmDialog";
 import { useSessionStore, useUIStore } from "../../stores/session";
+import { motionScrollBehavior } from "../../utils/motion";
 import { useToastStore } from "../../stores/toast";
 import { isApiError } from "../../types";
 import type { ProviderConfig, LlmTestResult } from "../../types";
@@ -314,29 +315,67 @@ export function Settings() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SettingsSectionId>("providers");
 
-  // Scroll-spy: highlight the section whose heading has scrolled to the top.
+  // Section rail ⇄ scroll position: one contract for highlight and jumps.
+  // The element that scrolls depends on the breakpoint (.settings-content on
+  // desktop, the page body at ≤900px where the rail is a sticky strip), so
+  // the spy listens to scroll events in the capture phase and reacts to any
+  // scroller that contains the sections; geometry is measured against the
+  // same visible top edge (below a sticky rail) that jumps land on.
+  const pendingJumpRef = useRef<{ id: SettingsSectionId; top: number; until: number; arrived: boolean } | null>(null);
   useEffect(() => {
-    const root = contentRef.current;
-    if (!root) return;
-    const onScroll = () => {
-      const top = root.getBoundingClientRect().top + 96;
-      let current: SettingsSectionId = "providers";
-      for (const item of SETTINGS_SECTIONS) {
-        const el = root.querySelector<HTMLElement>(`#settings-${item.id}`);
-        if (el && el.getBoundingClientRect().top <= top) current = item.id;
+    const content = contentRef.current;
+    if (!content) return;
+    const update = (scroller: HTMLElement | null) => {
+      const metrics = scrollMetrics(scroller);
+      const pending = pendingJumpRef.current;
+      if (pending) {
+        // A rail click owns the highlight while the scroller is travelling to,
+        // or resting at, its jump position (a jump clamped to the end must not
+        // be re-labelled as the last section). Moving away releases it.
+        if (Math.abs(metrics.scrollTop - pending.top) <= 2) { pending.arrived = true; return; }
+        if (!pending.arrived && Date.now() <= pending.until) return;
+        pendingJumpRef.current = null;
       }
-      if (root.scrollTop + root.clientHeight >= root.scrollHeight - 2) current = SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1].id;
+      const edge = sectionVisibleTop(content, scroller) + SECTION_ACTIVATION_SLACK;
+      let current: SettingsSectionId = SETTINGS_SECTIONS[0].id;
+      for (const item of SETTINGS_SECTIONS) {
+        const el = content.querySelector<HTMLElement>(`#settings-${item.id}`);
+        if (el && el.getBoundingClientRect().top <= edge) current = item.id;
+      }
+      if (metrics.max > 0 && metrics.scrollTop >= metrics.max - 2) current = SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1].id;
       setSection(current);
     };
-    root.addEventListener("scroll", onScroll, { passive: true });
-    return () => root.removeEventListener("scroll", onScroll);
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (target === document || target === document.documentElement) update(null);
+      else if (target instanceof HTMLElement && target.contains(content)) update(target);
+    };
+    const onResize = () => update(findScrollContainer(content));
+    const abandonJump = () => { pendingJumpRef.current = null; };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    window.addEventListener("resize", onResize);
+    for (const type of ["wheel", "touchstart", "keydown"] as const) document.addEventListener(type, abandonJump, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("resize", onResize);
+      for (const type of ["wheel", "touchstart", "keydown"] as const) document.removeEventListener(type, abandonJump, { capture: true });
+    };
   }, [loading, error, draft === null]);
 
   const goToSection = (id: SettingsSectionId) => {
+    const content = contentRef.current;
+    const el = content?.querySelector<HTMLElement>(`#settings-${id}`);
     setSection(id);
-    const el = contentRef.current?.querySelector<HTMLElement>(`#settings-${id}`);
-    el?.scrollIntoView?.({ block: "start", behavior: "smooth" });
-    el?.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
+    if (!content || !el) return;
+    const scroller = findScrollContainer(content);
+    const metrics = scrollMetrics(scroller);
+    const desired = metrics.scrollTop + el.getBoundingClientRect().top - sectionVisibleTop(content, scroller) - SECTION_JUMP_GAP;
+    const top = Math.max(0, Math.min(metrics.max, Math.round(desired)));
+    if (Math.abs(top - metrics.scrollTop) > 1) {
+      pendingJumpRef.current = { id, top, until: Date.now() + 1500, arrived: false };
+      (scroller ?? window).scrollTo({ top, behavior: motionScrollBehavior() });
+    }
+    el.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
   };
 
   // ── Render states ──
@@ -629,6 +668,34 @@ export function Settings() {
 /* ──────────────────────── Sub-components ──────────────────────── */
 
 type SettingsSectionId = "providers" | "memory" | "appearance" | "danger";
+
+/** Gap between the visible top edge and a section after a rail jump; matches .settings-group scroll-margin. */
+const SECTION_JUMP_GAP = 8;
+/** A section becomes current once its top is within this distance of the visible top edge. */
+const SECTION_ACTIVATION_SLACK = 32;
+
+/** Nearest ancestor that actually scrolls vertically; null means the document scrolls. */
+function findScrollContainer(from: HTMLElement): HTMLElement | null {
+  for (let el: HTMLElement | null = from; el; el = el.parentElement) {
+    if (/(auto|scroll|overlay)/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1) return el;
+  }
+  return null;
+}
+
+function scrollMetrics(scroller: HTMLElement | null) {
+  const root = scroller ?? document.scrollingElement ?? document.documentElement;
+  return { scrollTop: root.scrollTop, max: root.scrollHeight - root.clientHeight };
+}
+
+/** Top edge where sections become visible: the scroller's top, below the rail when the rail is sticky inside it. */
+function sectionVisibleTop(content: HTMLElement, scroller: HTMLElement | null): number {
+  const top = scroller ? scroller.getBoundingClientRect().top : 0;
+  const nav = content.parentElement?.querySelector<HTMLElement>(".settings-section-nav");
+  if (!nav) return top;
+  const style = getComputedStyle(nav);
+  if (style.position !== "sticky" || (scroller && !scroller.contains(nav))) return top;
+  return top + (parseFloat(style.top) || 0) + nav.getBoundingClientRect().height;
+}
 
 const SETTINGS_SECTIONS: { id: SettingsSectionId; label: string; hint: string }[] = [
   { id: "providers", label: "模型服务", hint: "厂商、密钥与参数" },

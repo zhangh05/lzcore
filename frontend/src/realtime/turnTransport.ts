@@ -16,6 +16,7 @@ import { decideStreamFrame } from "../utils/streamSequence";
 import { progressPatchForStreamStage, stageElapsedSince } from "../utils/streamStage";
 import { agentResultFromWsDone } from "../utils/wsResult";
 import { onTurnTerminal } from "./turnOwnership";
+import { prefersReducedMotion } from "../utils/motion";
 
 export type ChatStreamAttachment = {
   file_id: string;
@@ -545,7 +546,7 @@ async function runTurn(input: {
   } = { events: input.recovered?.runtimeEvents || [], metadata: input.recovered?.result?.metadata };
 
   await new Promise<void>((resolve) => {
-    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const reducedMotion = prefersReducedMotion();
     let pendingStartedAt: number | null = null;
     let lastRevealAt = performance.now();
     const scratch = input.effectiveSessionId;
