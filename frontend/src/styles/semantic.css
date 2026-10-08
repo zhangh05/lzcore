@@ -1,0 +1,129 @@
+/* Semantic token layer (design system v2).
+ *
+ * Every value here is an alias of a variable that tokens.css already defines,
+ * so adding this file changes no rendered pixel. Pages migrate to these names
+ * one at a time; the primitive names in tokens.css stay the single source of
+ * the actual values, and the dark theme follows automatically because each
+ * alias resolves through the variable that [data-theme="dark"] redefines.
+ *
+ * Naming: --lz-<category>-<role>[-<variant>]. Components and pages reference
+ * this layer; only tokens.css holds literal colours.
+ */
+@layer base {
+:root {
+  /* Surfaces */
+  --lz-color-bg-canvas: var(--bg);
+  --lz-color-bg-surface: var(--surface);
+  --lz-color-bg-sunken: var(--surface-2);
+  --lz-color-bg-muted: var(--surface-3);
+  --lz-color-bg-hover: var(--surface-hover);
+  --lz-color-bg-selected: var(--surface-selected);
+  --lz-color-bg-overlay: var(--overlay);
+  --lz-color-bg-field: var(--field);
+
+  /* Borders */
+  --lz-color-border-subtle: var(--line-2);
+  --lz-color-border-default: var(--line);
+  --lz-color-border-strong: var(--line-3);
+  --lz-color-border-field: var(--field-border);
+  --lz-color-border-focus: var(--focus-ring);
+
+  /* Text (all four levels clear 4.5:1 on the neutral surfaces, see tokens.css) */
+  --lz-color-text-primary: var(--text);
+  --lz-color-text-secondary: var(--text-2);
+  --lz-color-text-tertiary: var(--text-3);
+  --lz-color-text-quaternary: var(--text-4);
+
+  /* Accent: interaction and AI activity only */
+  --lz-color-accent: var(--accent);
+  --lz-color-accent-hover: var(--accent-2);
+  --lz-color-accent-subtle: var(--accent-soft);
+  --lz-color-accent-on: var(--accent-text);
+
+  /* Status: fg = text/icon on neutral surfaces, bg = tinted fill, on = ink on a solid fill */
+  --lz-color-success-fg: var(--ok);
+  --lz-color-success-bg: var(--ok-soft);
+  --lz-color-success-on: var(--ok-text);
+  --lz-color-warning-fg: var(--warn);
+  --lz-color-warning-bg: var(--warn-soft);
+  --lz-color-warning-on: var(--warn-text);
+  --lz-color-danger-fg: var(--danger);
+  --lz-color-danger-bg: var(--danger-soft);
+  --lz-color-danger-on: var(--danger-text);
+  --lz-color-info-fg: var(--info);
+  --lz-color-info-bg: var(--info-soft);
+  --lz-color-info-on: var(--info-text);
+  --lz-color-unknown-fg: var(--unknown);
+  --lz-color-unknown-bg: var(--unknown-soft);
+  --lz-color-unknown-on: var(--unknown-text);
+
+  /* Spacing: 4 px grid. Existing --space-* values are reused; the half steps
+     exist for icon-to-label gaps and dense table cells. */
+  --lz-space-0-5: 2px;
+  --lz-space-1: var(--space-1);
+  --lz-space-1-5: 6px;
+  --lz-space-2: var(--space-2);
+  --lz-space-3: var(--space-3);
+  --lz-space-4: var(--space-4);
+  --lz-space-5: 20px;
+  --lz-space-6: var(--space-6);
+  --lz-space-8: var(--space-8);
+  --lz-space-10: 40px;
+  --lz-space-12: var(--space-12);
+
+  /* Radius */
+  --lz-radius-xs: var(--r-4);
+  --lz-radius-sm: var(--r-6);
+  --lz-radius-md: var(--r-8);
+  --lz-radius-lg: var(--r-12);
+  --lz-radius-pill: var(--r-pill);
+
+  /* Type roles: size / line-height pairs on the CJK-friendly rhythm */
+  --lz-font-caption: var(--weight-label) var(--fs-11)/16px var(--font-sans);
+  --lz-font-label: var(--weight-label) var(--fs-12)/18px var(--font-sans);
+  --lz-font-control: var(--weight-label) var(--fs-13)/20px var(--font-sans);
+  --lz-font-body: var(--weight-body) var(--fs-14)/22px var(--font-sans);
+  --lz-font-title-sm: var(--weight-heading) var(--fs-15)/22px var(--font-sans);
+  --lz-font-title: var(--weight-heading) var(--fs-16)/24px var(--font-sans);
+  --lz-font-display: var(--weight-display) var(--fs-20)/28px var(--font-sans);
+  --lz-font-mono-sm: var(--weight-body) var(--fs-12)/18px var(--font-mono);
+  --lz-font-numeric: var(--weight-heading) var(--fs-20)/28px var(--font-sans);
+
+  /* Elevation: cards stay flat (DESIGN.md); only floating layers lift */
+  --lz-shadow-none: none;
+  --lz-shadow-control: var(--shadow-xs);
+  --lz-shadow-popover: var(--shadow-menu);
+  --lz-shadow-focus: var(--shadow-focus);
+
+  /* Stacking: named after the layers that already exist in the product, with
+     the values they use today, so adopting a name never reorders anything. */
+  --lz-z-raised: 1;
+  --lz-z-sticky: 10;
+  --lz-z-header: 20;
+  --lz-z-dropdown: 80;
+  --lz-z-popover: 100;
+  --lz-z-overlay: 200;
+  --lz-z-modal: 1000;
+  --lz-z-toast: 9999;
+
+  /* Motion */
+  --lz-dur-fast: var(--dur-1);
+  --lz-dur-base: var(--dur-2);
+  --lz-dur-slow: var(--dur-3);
+  --lz-ease-standard: var(--ease);
+  --lz-ease-enter: var(--ease-out);
+
+  /* Density: control and row heights. Compact mode is opt-in per subtree via
+     data-density="compact"; nothing sets it yet. */
+  --lz-control-h: var(--h-control);
+  --lz-control-h-sm: var(--h-control-compact);
+  --lz-row-h: 44px;
+  --lz-row-h-dense: 36px;
+  --lz-touch-min: var(--h-touch);
+}
+[data-density="compact"] {
+  --lz-control-h: var(--h-control-compact);
+  --lz-row-h: 36px;
+  --lz-row-h-dense: 32px;
+}
+}

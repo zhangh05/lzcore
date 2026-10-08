@@ -13,6 +13,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 // shared stylesheet is how the order became accidental in the first place.
 import "./components/RuntimeEventTimeline.css";
 import "./styles/tokens.css";
+import "./styles/semantic.css";
 import "./styles/global.css";
 import "./pages/Settings/Settings.css";
 import "./pages/Operations/Operations.css";
