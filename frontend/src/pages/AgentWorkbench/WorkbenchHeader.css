@@ -1,0 +1,75 @@
+/* WorkbenchHeader owns the sheet header: session title, model status, the
+   chat/timeline view switch, the progress toggle and the session menu.
+   Loaded from main.tsx right after AgentWorkbench.css so these rules keep the
+   cascade position they had when they lived at the end of that file. */
+
+@layer workbench {
+.wb-shell { --wb-read: 760px; background: var(--surface); }
+.wb-conversation-column { background: var(--surface); }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.wb-shell .wb-header {
+  min-height: 56px;
+  padding: 10px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-2);
+}
+.wb-shell .wb-header h1 { font-size: var(--fs-16); line-height: var(--lh-16); font-weight: var(--weight-strong); letter-spacing: 0; }
+.wb-shell .wb-header-model { color: var(--text-3); font-size: var(--fs-12); }
+.wb-shell .wb-header-actions { gap: 4px; }
+.wb-shell .wb-mode-btn {
+  height: 30px;
+  padding: 0 10px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  font-size: var(--fs-13);
+  font-weight: var(--weight-label);
+}
+.wb-shell .wb-mode-btn:hover { color: var(--text); background: var(--surface-hover); }
+.wb-shell .wb-mode-btn.active { color: var(--text); background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-xs); }
+}
+
+/* ── Header v2: title with a status pill, a segmented view switch, then the
+   panel toggle and the menu, separated by a hairline. ── */
+@layer workbench {
+.wb-shell .wb-header-context { display: flex; flex: 1 1 auto; flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; min-width: 0; text-align: left; }
+.wb-shell .wb-header h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-shell .wb-header-model {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+  white-space: nowrap;
+}
+.wb-shell .wb-header-actions { align-items: center; gap: 6px; }
+.wb-shell .wb-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: calc(var(--r-control) + 2px);
+}
+.wb-shell .wb-view-switch .wb-mode-btn { height: 28px; }
+.wb-shell .wb-view-switch .wb-mode-btn.active { color: var(--text); background: var(--surface); border-color: var(--line-2); box-shadow: var(--shadow-xs); }
+.wb-shell .wb-view-switch { margin-right: 4px; }
+.wb-shell .wb-view-switch ~ .wb-mode-btn.active { color: var(--accent); background: var(--accent-soft); border-color: transparent; box-shadow: none; }
+.wb-shell .wb-header :is(.wb-mode-btn, .wb-header-collapse, .wb-session-details summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+@media (max-width: 760px) {
+  .wb-shell .wb-header { row-gap: 6px; padding-block: 8px; }
+  .wb-shell .wb-header-context { gap: 8px; }
+  .wb-shell .wb-header-actions { width: 100%; justify-content: space-between; }
+  .wb-shell .wb-view-switch .wb-mode-btn { height: auto; }
+  .wb-shell .wb-view-switch { margin-right: auto; }
+}
+}

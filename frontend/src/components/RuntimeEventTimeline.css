@@ -1,291 +1,301 @@
-/* rt-* = RuntimeEventTimeline — v3.9 collapsible cards */
+/* rt-* = RuntimeEventTimeline: the workbench "完整时间线" view. One framed card
+   per run (question, answer snippet, outcome, counts, time), expanding into
+   the step spine. It sits in `workbench`: in `runtime`, the lowest layer, the
+   base reset (`* { padding: 0; margin: 0 }`) erased every spacing declared
+   here and collapsed the cards into one unpadded line. Colour carries outcome
+   only: a finished run stays neutral; failed and unknown runs get a rail. */
 
-@layer runtime {
-/* ── list (v3.9.1: must be the scroll container, parent .wb-chat is overflow:hidden) ── */
+@layer workbench {
+/* ── list: the scroll container (parent .wb-chat is overflow:hidden) ── */
 .rt-list {
   display: flex; flex-direction: column; gap: 10px;
-  padding: 16px 32px 28px;
-  height: 100%;
-  min-height: 0;
+  height: 100%; min-height: 0;
+  padding: 24px 24px 32px;
   overflow-y: auto;
   scroll-behavior: auto;
 }
+.rt-list > * { width: 100%; max-width: var(--wb-read); margin-inline: auto; }
 
 /* ── card ── */
 .rt-card {
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-8);
-  background: var(--surface);
-  box-shadow: none;
-  /* v3.9.1: was overflow:hidden, which clipped expanded bodies.
-     Keep radius by allowing children to render normally; the rt-list above
-     is the scroll container. */
+  position: relative;
   overflow: visible;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
   transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
 }
-.rt-card:hover {
-  border-color: var(--line-3);
-  box-shadow: none;
+.rt-card:hover { border-color: var(--line-3); }
+.rt-card.is-open { box-shadow: var(--shadow-card); }
+.rt-card:is([data-status="err"], [data-status="unknown"])::before {
+  content: "";
+  position: absolute;
+  inset: -1px auto -1px -1px;
+  width: 3px;
+  border-radius: var(--r-card) 0 0 var(--r-card);
+  background: var(--danger);
 }
+.rt-card[data-status="unknown"]::before { background: var(--unknown); }
+
 .rt-card-bar {
-  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-  cursor: pointer; user-select: none; transition: background 0.12s;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 14px 10px 16px;
+  border-radius: var(--r-card);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--dur-2) var(--ease);
 }
-.rt-card-bar:hover { background: var(--surface-2); }
-.rt-card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.rt-card-dot.ok  { background: var(--ok); }
+.rt-card.is-open .rt-card-bar { border-radius: var(--r-card) var(--r-card) 0 0; }
+.rt-card-bar:hover { background: var(--surface-hover); }
+.rt-card-bar:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.rt-card-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rt-card-dot.ok { background: var(--ok); }
 .rt-card-dot.err { background: var(--danger); }
 .rt-card-dot.unknown { background: var(--unknown); }
-.rt-card-id {
-  font-family: "SF Mono", Menlo, monospace; font-size: 13px; font-weight: var(--weight-heading);
-  color: var(--text); flex-shrink: 0;
-}
-.rt-card-ws {
-  font-size: 10px; padding: 1px 6px; border-radius: var(--r-4);
-  background: var(--surface-2); color: var(--text-3); border: 1px solid var(--line-2);
+
+.rt-card-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rt-card-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--weight-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rt-card-snippet {
-  flex: 1; min-width: 0; font-size: 12px; color: var(--text-3);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-card-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.rt-card-status {
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+  line-height: 18px;
+  font-weight: var(--weight-label);
+  white-space: nowrap;
+}
+.rt-card-status.ok { color: var(--ok); background: var(--ok-soft); }
+.rt-card-status.err { color: var(--danger); background: var(--danger-soft); }
+.rt-card-status.unknown { color: var(--unknown); background: var(--unknown-soft); }
+.rt-card-count { color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; }
+.rt-card-id, .rt-card-time {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rt-card-ws {
+  padding: 1px 6px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-4);
+  font-size: var(--fs-11);
 }
 .rt-card-chev {
-  font-size: 11px; color: var(--text-4); flex-shrink: 0; white-space: nowrap;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--text-3);
+  border-radius: var(--r-control);
+  transition: transform var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
+.rt-card-bar:hover .rt-card-chev { background: var(--surface-2); color: var(--text); }
+.rt-card.is-open .rt-card-chev { transform: rotate(180deg); }
 
 /* ── body ── */
 .rt-card-body {
-  border-top: 1px solid var(--line); padding: 10px 14px 14px;
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--line-2);
 }
 
 /* ── diagnostics ── */
 .rt-diag {
-  display: flex; flex-direction: column; gap: 4px; padding: 8px 12px;
-  border-radius: 6px; border: 0; background: var(--surface-2); border-left: 3px solid var(--warn);
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 12px;
+  background: var(--warn-soft);
+  border-radius: var(--r-control);
+  box-shadow: inset 3px 0 0 var(--warn);
 }
-.rt-diag-e { font-size: 12px; color: var(--danger); font-family: "SF Mono", Menlo, monospace; }
-.rt-diag-w { font-size: 12px; color: var(--warn); font-family: "SF Mono", Menlo, monospace; }
+.rt-diag-e, .rt-diag-w { font-family: var(--font-mono); font-size: var(--fs-12); line-height: var(--lh-12); }
+.rt-diag-e { color: var(--danger); }
+.rt-diag-w { color: var(--warn); }
 
-/* ── timeline (inside card) ── */
+/* ── step spine ── */
 .rt-timeline {
-  display: flex; flex-direction: column;
-  padding-left: 14px; border-left: 1.5px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px;
+  margin-left: 4px;
+  padding-left: 16px;
+  border-left: 1.5px solid var(--line);
 }
-
-/* ── step ── */
-.rt-step {
-  display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; position: relative;
-}
+.rt-step { position: relative; display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; }
 .rt-dot {
-  width: 6px; height: 6px; border-radius: 50%; margin-top: 7px;
-  margin-left: calc(-14px - 4px); flex-shrink: 0; border: 2px solid var(--surface);
+  flex-shrink: 0;
+  width: 8px; height: 8px;
+  margin-top: 6px;
+  margin-left: calc(-16px - 4.75px);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-sizing: content-box;
 }
 .rt-step-body { flex: 1; min-width: 0; }
-/* What kind of step this is, in words.
-   Deliberately not coloured by kind: colour on this row already means "how did
-   it go", and a second colour scale for "what kind" would make both unreadable.
-   One quiet outline tag, same treatment for every kind. */
+/* Kind as words, never as colour: colour on this row already means outcome. */
 .rt-step-kind {
   flex: 0 0 auto;
-  padding: 0 5px;
-  color: var(--text-4);
-  border: 1px solid var(--line-2);
-  border-radius: 3px;
-  font-size: 10px;
-  line-height: 15px;
+  min-width: 36px;
+  padding: 0 6px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-radius: var(--r-4);
+  font-size: var(--fs-11);
+  line-height: 18px;
+  text-align: center;
 }
-
-.rt-step-line { display: flex; align-items: center; gap: 8px; }
-.rt-step-label {
-  font-size: 13px; color: var(--text-2); font-weight: var(--weight-label);
-}
+.rt-step-line { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.rt-step-label { color: var(--text); font-size: var(--fs-13); line-height: var(--lh-13); font-weight: var(--weight-label); }
 .rt-step-ts {
-  font-size: 11px; color: var(--text-4); font-family: "SF Mono", Menlo, monospace;
-  margin-left: auto; flex-shrink: 0;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
 }
-.rt-step-msg {
-  margin-top: 2px; font-size: 12px; color: var(--text-3); line-height: 1.5;
-}
+.rt-step-msg { margin-top: 2px; padding-left: 52px; color: var(--text-3); font-size: var(--fs-12); line-height: var(--lh-12); }
 
 /* ── tool step ── */
-.rt-step-tool { padding: 2px 0; }
+.rt-step-tool { padding: 3px 0; }
 .rt-step-head {
-  display: flex; align-items: center; gap: 7px; padding: 5px 11px;
-  border: 1px solid var(--line-2); border-radius: var(--r-6); background: var(--surface-2);
-  box-shadow: none;
-  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+  display: flex; align-items: center; gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-control);
+  transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
-.rt-step-head:hover { border-color: var(--line-3); box-shadow: none; }
-.rt-step-ok { font-size: 11px; color: var(--ok); flex-shrink: 0; }
-.rt-step-name { font-size: 12px; font-weight: var(--weight-heading); color: var(--text-2); font-family: "SF Mono", Menlo, monospace; }
-.rt-tag { font-size: 10px; padding: 1px 5px; border-radius: var(--r-4); color: var(--text-3); }
-.rt-dur { font-size: 11px; color: var(--text-4); font-family: "SF Mono", Menlo, monospace; }
-.rt-chev { font-size: 10px; color: var(--text-4); margin-left: auto; flex-shrink: 0; }
-.rt-step-detail {
-  margin-top: 4px; padding: 4px 10px 4px 22px;
-  font-size: 12px; color: var(--text-3); line-height: 1.5;
-}
-.rt-step-err {
-  margin-top: 4px; padding: 4px 10px 4px 10px;
-  font-size: 11px; color: var(--danger); font-family: "SF Mono", Menlo, monospace;
-}
+.rt-step-head:hover { border-color: var(--line-3); }
+.rt-step-head[role="button"]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.rt-step-ok { display: inline-flex; flex-shrink: 0; color: var(--ok); }
+.rt-step-name { color: var(--text); font-family: var(--font-mono); font-size: var(--fs-12); font-weight: var(--weight-label); }
+.rt-tag { padding: 0 6px; color: var(--text-3); border-radius: var(--r-4); font-size: var(--fs-11); line-height: 18px; }
+.rt-tag.ok { color: var(--ok); background: var(--ok-soft); }
+.rt-tag.fail { color: var(--danger); background: var(--danger-soft); }
+.rt-dur { color: var(--text-4); font-family: var(--font-mono); font-size: var(--fs-11); }
+.rt-chev { display: inline-flex; flex-shrink: 0; margin-left: auto; color: var(--text-4); transition: transform var(--dur-2) var(--ease); }
+.rt-chev.is-open { transform: rotate(180deg); }
+.rt-step-detail { margin-top: 6px; padding: 0 10px 0 12px; color: var(--text-2); font-size: var(--fs-12); line-height: var(--lh-12); }
+.rt-step-err { margin-top: 4px; padding: 0 10px 0 12px; color: var(--danger); font-family: var(--font-mono); font-size: var(--fs-11); }
 
 /* ── 写入结果未知（与内联工具卡共用同一套语义色） ──
    放在 .rt-step-head:hover 之后：两者特异性相同，靠顺序保证
    悬停时未知态不会被 --line-3 覆盖掉。 */
 .rt-step-head.unknown,
-.rt-step-head.unknown:hover { background: var(--surface-2); border: 0; border-left: 3px solid var(--unknown);
-}
+.rt-step-head.unknown:hover { background: var(--unknown-soft); border-color: transparent; box-shadow: inset 3px 0 0 var(--unknown); }
 .rt-step-ok.unknown { color: var(--unknown); }
 /* 失败态此前继承 .rt-step-ok 的 --ok 绿色，于是「失败」旁边是个绿叉。 */
 .rt-step-ok.fail { color: var(--danger); }
 .rt-tag.unknown { color: var(--unknown); background: var(--unknown-soft); }
-.rt-step-note {
-  margin-top: 4px; padding: 0 10px 0 10px;
-  font-size: 11px; color: var(--unknown); line-height: 1.5;
-}
+.rt-step-note { margin-top: 6px; padding: 0 10px 0 12px; color: var(--unknown); font-size: var(--fs-12); line-height: var(--lh-12); }
 
 /* ── chips ── */
-.rt-chips { display: flex; gap: 4px; flex-wrap: wrap; padding: 4px 0 0; }
+.rt-chips { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 4px; }
 .rt-chip {
-  font-size: 10px; padding: 1px 6px; border-radius: var(--r-pill);
-  background: var(--ok-soft); color: var(--ok);
-  border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent);
-}
-
-/* ── artifacts bar ── */
-.rt-artifacts {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; border: 1px solid var(--line-2); border-radius: var(--r-6);
-  background: var(--surface-2); box-shadow: none;
-}
-.rt-art-label { font-size: 11px; font-weight: var(--weight-heading); color: var(--text-3); flex-shrink: 0; }
-
-.rt-retry-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-6);
-  background: var(--surface-2);
-  box-shadow: none;
-}
-.rt-retry-items { display: flex; flex-wrap: wrap; gap: 4px; }
-.rt-retry-chip {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--line-2);
-  color: var(--text-3);
+  padding: 1px 8px;
+  color: var(--text-2);
   background: var(--surface);
-}
-.rt-retry-chip.ok {
-  color: var(--ok);
-  background: var(--ok-soft);
-  border-color: color-mix(in srgb, var(--ok) 25%, transparent);
-}
-.rt-retry-chip.muted {
-  color: var(--text-4);
-}
-
-.rt-tracking-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-6);
-  background: var(--surface-2);
-  box-shadow: none;
-}
-.rt-tracking-id {
-  font-size: 11px;
-  color: var(--text-3);
-  font-family: "SF Mono", Menlo, monospace;
-}
-.rt-tracking-chip {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
   border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+}
+
+/* ── summary strips: artifacts, retries, tracking ── */
+:is(.rt-artifacts, .rt-retry-summary, .rt-tracking-summary) {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-radius: var(--r-control);
+}
+.rt-art-label { flex-shrink: 0; color: var(--text-2); font-size: var(--fs-12); font-weight: var(--weight-strong); }
+.rt-retry-items { display: flex; flex-wrap: wrap; gap: 4px; }
+:is(.rt-retry-chip, .rt-tracking-chip) {
+  padding: 1px 8px;
   color: var(--text-3);
   background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
 }
-.rt-tracking-chip.ok {
-  color: var(--ok);
-  background: var(--ok-soft);
-}
-.rt-tracking-chip.live {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.rt-tracking-chip.warn {
-  color: var(--warn);
-  background: var(--warn-soft);
-}
+:is(.rt-retry-chip, .rt-tracking-chip).ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.rt-retry-chip.muted { color: var(--text-4); }
+.rt-tracking-chip.live { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.rt-tracking-chip.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.rt-tracking-id { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-11); }
 
 /* ── empty ── */
-.rt-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; color: var(--text-4); text-align: center; min-height: 200px; }
-.rt-empty p { margin: 2px 0; font-size: 14px; }
-.rt-empty-hint { font-size: 12px; color: var(--text-4); opacity: 0.8; }
-
-/* ── fallback body (C-plan: no AgentResult attached, just text) ── */
-.rt-fallback { display: flex; flex-direction: column; gap: 6px; }
-.rt-fallback-row { display: flex; gap: 8px; align-items: flex-start; }
-.rt-fallback-role { font-size: 11px; color: var(--text-4); flex-shrink: 0; min-width: 56px; }
-.rt-fallback-text { font-size: 13px; color: var(--text-2); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
-.rt-fallback-hint {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--text-4);
-  font-style: italic;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.rt-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 240px;
+  padding: 80px 20px;
+  color: var(--text-2);
+  text-align: center;
 }
+.rt-empty p { font-size: var(--fs-15); font-weight: var(--weight-strong); }
+.rt-empty .rt-empty-hint { color: var(--text-3); font-size: var(--fs-13); font-weight: var(--weight-body); }
 
-/* ── loading spinner (v3.9.1 lazy load) ── */
-.rt-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 18px;
-  font-size: 12px;
-  color: var(--text-4);
-}
+/* ── fallback body (no AgentResult attached, just text) ── */
+.rt-fallback { display: flex; flex-direction: column; gap: 8px; }
+.rt-fallback-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.rt-fallback-role { color: var(--text-3); font-size: var(--fs-12); font-weight: var(--weight-label); }
+.rt-fallback-text { color: var(--text-2); font-size: var(--fs-13); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.rt-fallback-hint { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--text-3); font-size: var(--fs-12); }
+
+/* ── loading ── */
+.rt-loading { display: flex; align-items: center; gap: 8px; padding: 16px; color: var(--text-3); font-size: var(--fs-12); }
 .rt-spinner {
-  width: 12px;
-  height: 12px;
+  flex-shrink: 0;
+  width: 12px; height: 12px;
   border: 2px solid var(--line-2);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: rt-spin 0.8s linear infinite;
-  flex-shrink: 0;
 }
 @keyframes rt-spin { to { transform: rotate(360deg); } }
 
-/* ── retry button ── */
 .rt-retry-btn {
-  font-size: 11px;
-  padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface-2);
+  height: 24px;
+  padding: 0 10px;
   color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  font-size: var(--fs-12);
   cursor: pointer;
-  font-style: normal;
 }
-.rt-retry-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
+.rt-retry-btn:hover { color: var(--accent); border-color: var(--accent); }
 
-/* ── scrollbar (matches wb-chat-list) ── */
 .rt-list::-webkit-scrollbar { width: 8px; }
 .rt-list::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
 
-/* ── dark ── */
-[data-theme="dark"] .rt-diag { background: #3d2e0a; border-color: #ca8a04; }
-
+@media (max-width: 760px) {
+  .rt-list { padding: 14px 12px 24px; }
+  .rt-card-bar { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 6px; padding: 10px 10px 10px 14px; }
+  .rt-card-meta { grid-column: 2 / 3; grid-row: 2; flex-wrap: wrap; gap: 6px; }
+  .rt-card-chev { grid-column: 3; grid-row: 1; }
+  .rt-card-count { display: none; }
+  .rt-step-msg { padding-left: 0; }
+}
 }

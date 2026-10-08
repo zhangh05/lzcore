@@ -31,6 +31,8 @@ import "./styles/primitives.css";
 import "./components/ui/collection.css";
 import "./styles/console-system.css";
 import "./pages/AgentWorkbench/AgentWorkbench.css";
+import "./pages/AgentWorkbench/WorkbenchHeader.css";
+import "./pages/AgentWorkbench/WorkbenchEmptyState.css";
 import "./pages/AgentWorkbench/WorkbenchComposer.css";
 import "./styles/typography.css";
 // Page refinements come last: they exist to outrank the design system above.

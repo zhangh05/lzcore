@@ -185,9 +185,6 @@
   }
 }
 
-@media (max-width: 768px) {
-  .rt-card-snippet { max-width: 150px; }
-}
 .task-tracking-card {
   border: 1px solid var(--line);
   border-left: 4px solid var(--accent);

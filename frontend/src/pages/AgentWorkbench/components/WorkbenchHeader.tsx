@@ -75,28 +75,30 @@ export const WorkbenchHeader = memo(function WorkbenchHeader({
         >
           <IconChevronDown size={14} />
         </button>
-        <button
-          type="button"
-          className={`wb-mode-btn ${viewMode === "chat" ? "active" : ""}`}
-          onClick={() => onViewModeChange("chat")}
-          aria-label="对话"
-          aria-pressed={viewMode === "chat"}
-          data-testid="view-chat"
-        >
-          <IconChat size={15} />
-          <span>对话</span>
-        </button>
-        <button
-          type="button"
-          className={`wb-mode-btn ${viewMode === "timeline" ? "active" : ""}`}
-          onClick={() => onViewModeChange("timeline")}
-          aria-label="时间线"
-          aria-pressed={viewMode === "timeline"}
-          data-testid="view-timeline"
-        >
-          <IconHistory size={15} />
-          <span>时间线</span>
-        </button>
+        <div className="wb-view-switch" role="group" aria-label="视图">
+          <button
+            type="button"
+            className={`wb-mode-btn ${viewMode === "chat" ? "active" : ""}`}
+            onClick={() => onViewModeChange("chat")}
+            aria-label="对话"
+            aria-pressed={viewMode === "chat"}
+            data-testid="view-chat"
+          >
+            <IconChat size={15} />
+            <span>对话</span>
+          </button>
+          <button
+            type="button"
+            className={`wb-mode-btn ${viewMode === "timeline" ? "active" : ""}`}
+            onClick={() => onViewModeChange("timeline")}
+            aria-label="时间线"
+            aria-pressed={viewMode === "timeline"}
+            data-testid="view-timeline"
+          >
+            <IconHistory size={15} />
+            <span>时间线</span>
+          </button>
+        </div>
         {onToggleTaskProgress ? (
           <button
             type="button"

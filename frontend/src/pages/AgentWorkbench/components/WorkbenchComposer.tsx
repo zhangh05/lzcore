@@ -105,35 +105,34 @@ export const WorkbenchComposer = memo(function WorkbenchComposer({
           resourceToggleRef.current?.focus();
         }
       }}>
-      {/* 附件托盘 */}
-      {attachments.length > 0 ? (
-        <div className="wb-attachments">
-          {attachments.map((attachment) => (
-            <span key={attachment.id} className="tag wb-attachment-tag">
-              {attachment.uploading ? (
-                <span className="spinner wb-attachment-spinner" />
-              ) : attachment.previewUrl ? (
-                <img className="wb-attachment-preview" src={attachment.previewUrl} alt="待识别图片" />
-              ) : (
-                <IconDocument size={14} />
-              )}
-              <span className="wb-attachment-name" title={attachment.name}>{attachment.name}</span>
-              <button
-                onClick={() => onRemoveAttachment(attachment.id)}
-                className="wb-attachment-remove"
-                type="button"
-                aria-label={`移除 ${attachment.name}`}
-              >
-                <IconClose size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-      ) : null}
-
       {/* 核心输入行与操作 */}
       {workspaceId && onChooseFiles && <FileLibraryPicker workspaceId={workspaceId} maxCount={Math.max(0, 8 - attachments.length)} open={libraryOpen} onClose={() => setLibraryOpen(false)} onChoose={onChooseFiles} />}
       <div className="wb-input-row">
+        {/* 附件托盘 */}
+        {attachments.length > 0 ? (
+          <div className="wb-attachments">
+            {attachments.map((attachment) => (
+              <span key={attachment.id} className="tag wb-attachment-tag">
+                {attachment.uploading ? (
+                  <span className="spinner wb-attachment-spinner" />
+                ) : attachment.previewUrl ? (
+                  <img className="wb-attachment-preview" src={attachment.previewUrl} alt="待识别图片" />
+                ) : (
+                  <IconDocument size={14} />
+                )}
+                <span className="wb-attachment-name" title={attachment.name}>{attachment.name}</span>
+                <button
+                  onClick={() => onRemoveAttachment(attachment.id)}
+                  className="wb-attachment-remove"
+                  type="button"
+                  aria-label={`移除 ${attachment.name}`}
+                >
+                  <IconClose size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
         <div className="wb-input-main">
           <textarea
             ref={inputRef}
