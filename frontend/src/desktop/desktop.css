@@ -1,4 +1,9 @@
 @layer responsive {
+  /* Use the installed Windows CJK face before generic WebView fallbacks.
+     The native bootstrap scopes this to Windows desktop windows only. */
+  :root[data-desktop-platform="win32"] {
+    --font-sans: "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  }
   .desktop-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; border-radius: var(--r-12); box-shadow: var(--shadow-menu); }
   .desktop-dialog-body { overflow-y: auto; min-height: 0; padding: var(--space-3) var(--space-6) var(--space-6); display: grid; gap: var(--space-6); }
   .desktop-dialog-body section { display: grid; gap: var(--space-3); border-bottom: 0; padding-bottom: 0; }

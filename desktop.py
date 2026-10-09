@@ -47,7 +47,7 @@ def mount_frontend_spa(app, dist_dir, bootstrap=None):
     def index():
         html = (root / 'index.html').read_text(encoding='utf-8')
         if bootstrap is not None:
-            payload = json.dumps(bootstrap, ensure_ascii=True).replace('<', '\\u003c')
+            payload = json.dumps({**bootstrap, 'platform': sys.platform}, ensure_ascii=True).replace('<', '\\u003c')
             html = html.replace('<head>', '<head><script>window.__LZCORE_DESKTOP__=' + payload + ';</script>', 1)
         response = make_response(html)
         response.headers['Cache-Control'] = 'no-store'

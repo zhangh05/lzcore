@@ -58,6 +58,7 @@ import "./desktop/desktop.css";
   try {
     const desktop = window.__LZCORE_DESKTOP__;
     if (desktop) {
+      if (desktop.platform === 'win32') document.documentElement.dataset.desktopPlatform = 'win32';
       useUIStore.setState({...desktop.ui, theme: desktop.theme});
       document.documentElement.dataset.theme = desktop.theme;
       return;

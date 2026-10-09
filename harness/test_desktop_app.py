@@ -22,6 +22,24 @@ def test_web_only_spa_does_not_advertise_an_unavailable_native_bridge(tmp_path):
         assert ('window.__LZCORE_DESKTOP__' in html) is (bootstrap is not None)
 
 
+@pytest.mark.parametrize('platform', ['win32', 'darwin', 'linux'])
+def test_desktop_spa_reports_native_platform_without_changing_web_only(tmp_path, monkeypatch, platform):
+    import desktop
+    from flask import Flask
+    monkeypatch.setattr(desktop.sys, 'platform', platform)
+    (tmp_path/'index.html').write_text('<html><head></head><body></body></html>')
+    for bootstrap in [None, {'theme':'dark','ui':{}}]:
+        app = Flask(__name__)
+        app.add_url_rule('/', 'backend_root', lambda: 'placeholder')
+        desktop.mount_frontend_spa(app, tmp_path, bootstrap)
+        html = app.test_client().get('/').get_data(as_text=True)
+        if bootstrap is None:
+            assert '"platform"' not in html
+        else:
+            payload = html.split('window.__LZCORE_DESKTOP__=', 1)[1].split(';</script>', 1)[0]
+            assert json.loads(payload) == {**bootstrap, 'platform': platform}
+
+
 @pytest.mark.parametrize('platform,loaded', [('win32', False), ('darwin', True)])
 def test_non_native_exit_keeps_normal_python_finalization(monkeypatch, platform, loaded):
     import desktop

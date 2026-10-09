@@ -8,6 +8,35 @@ const surfaces = [
   ['/extensions/network.operations/manage?tab=skills', '.network-admin'], ['/topology', '.topology-route'],
 ] as const;
 
+test('26d. YaHei is scoped to Windows desktop and preserves web, other hosts and code fonts', async ({ page }) => {
+  await page.goto('/workbench');
+  const base = await page.evaluate(() => ({
+    sans: getComputedStyle(document.body).fontFamily,
+    mono: getComputedStyle(document.documentElement).getPropertyValue('--font-mono'),
+  }));
+  await expect(page.locator('html')).not.toHaveAttribute('data-desktop-platform');
+  await page.addInitScript(() => {
+    const platform = new URL(location.href).searchParams.get('fontPlatform');
+    if (platform) window.__LZCORE_DESKTOP__ = { platform, theme: 'light', ui: {} };
+  });
+  for (const platform of ['darwin', 'linux', 'win32']) {
+    await page.goto(`/workbench?fontPlatform=${platform}`);
+    const actual = await page.evaluate(() => ({
+      platform: document.documentElement.dataset.desktopPlatform,
+      sans: getComputedStyle(document.body).fontFamily,
+      mono: getComputedStyle(document.documentElement).getPropertyValue('--font-mono'),
+    }));
+    expect(actual.mono).toBe(base.mono);
+    if (platform === 'win32') {
+      expect(actual.platform).toBe('win32');
+      expect(actual.sans).toBe('"Microsoft YaHei UI", "Microsoft YaHei", sans-serif');
+    } else {
+      expect(actual.platform).toBeUndefined();
+      expect(actual.sans).toBe(base.sans);
+    }
+  }
+});
+
 for (const width of [1440, 900, 390]) {
   test(`26. visual system remains readable and contained at ${width}px`, async ({ page }, testInfo) => {
     test.setTimeout(90_000);

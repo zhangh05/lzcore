@@ -162,6 +162,19 @@ def run(exe: Path, mode: str, output: Path):
             page.get_by_role('button', name='桌面设置', exact=True).click()
             page.get_by_role('dialog').wait_for()
             assert page.get_by_text('窗口与后台运行').is_visible()
+            assert page.locator('html').get_attribute('data-desktop-platform') == 'win32'
+            font_stack = page.locator('body').evaluate('el => getComputedStyle(el).fontFamily')
+            assert font_stack.startswith('"Microsoft YaHei UI"'), font_stack
+            # Verify actual native WebView glyph rendering, not just the CSS declaration.
+            font_cdp = page.context.new_cdp_session(page)
+            font_cdp.send('DOM.enable')
+            font_cdp.send('CSS.enable')
+            font_root = font_cdp.send('DOM.getDocument')['root']['nodeId']
+            font_title = font_cdp.send('DOM.querySelector', {'nodeId':font_root, 'selector':'.desktop-dialog .modal-title'})['nodeId']
+            fonts = font_cdp.send('CSS.getPlatformFontsForNode', {'nodeId':font_title})['fonts']
+            assert any(f['familyName'] in ('Microsoft YaHei UI', 'Microsoft YaHei') and f['glyphCount'] > 0 for f in fonts), fonts
+            (output/'font-rendering.json').write_text(json.dumps({'stack':font_stack, 'fonts':fonts}, ensure_ascii=False), encoding='utf-8')
+            font_cdp.detach()
             errors = []
             page.on('pageerror', lambda e: errors.append(str(e)))
             info = page.evaluate('window.pywebview.api.get_info()')

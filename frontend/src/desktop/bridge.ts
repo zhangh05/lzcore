@@ -8,7 +8,7 @@ export type DesktopInfo = {
   update: {status: string; version?: string; progress?: number; message?: string; notes?: string};
 };
 declare global {
-  interface Window { __LZCORE_DESKTOP__?: {theme: 'light' | 'dark'; ui: Partial<ReturnType<typeof useUIStore.getState>>}; }
+  interface Window { __LZCORE_DESKTOP__?: {platform?: string; theme: 'light' | 'dark'; ui: Partial<ReturnType<typeof useUIStore.getState>>}; }
 }
 export const isDesktop = () => Boolean(window.__LZCORE_DESKTOP__);
 export async function nativeCall(method: string, ...args: unknown[]): Promise<Record<string, unknown>> {
