@@ -121,6 +121,49 @@ def verify_packaged_memory(page, origin, output):
       return {reviewed:true,original_preserved:true};
     }""",result)
     result.update(checked)
+    # Seed a list longer than the native window. A short list cannot detect
+    # flex shrink clipping the surface while the page scroll range stays zero.
+    page.evaluate("""async () => {
+      const token=(await (await fetch('/api/local-token')).json()).token;
+      for(let i=0;i<24;i++) {
+        const r=await fetch('/api/memory/write', {
+          method:'POST', headers:{'Content-Type':'application/json','X-LZCore-Local-Token':token},
+          body:JSON.stringify({workspace_id:'default',title:'桌面滚动记忆 '+i,
+            content:'记录 '+i+'\\n'+'完整滚动正文\\n'.repeat(100)+'末尾约束',user_confirmed:true})
+        });
+        if(!r.ok) throw new Error('scroll fixture:'+r.status);
+      }
+    }""")
+    page.reload()
+    page.wait_for_function("document.querySelectorAll('.memory-card').length >= 26")
+    body = page.locator('.memory-body')
+    metrics = body.evaluate('el => ({height:el.clientHeight,scroll_height:el.scrollHeight})')
+    assert metrics['scroll_height'] > metrics['height'] + 500, metrics
+    body.hover()
+    page.mouse.wheel(0, 100000)
+    page.wait_for_function("""() => {
+      const body=document.querySelector('.memory-body');
+      return body.scrollTop+body.clientHeight >= body.scrollHeight-2;
+    }""")
+    assert body.evaluate("""el => {
+      const last=el.querySelector('.memory-card:last-child').getBoundingClientRect();
+      const viewport=el.getBoundingClientRect();
+      return last.top>=viewport.top && last.bottom<=viewport.bottom;
+    }"""), 'Last memory is clipped'
+    page.screenshot(path=str(output/'memory-scroll-bottom.png'),full_page=True)
+    page.mouse.wheel(0, -100000)
+    page.wait_for_function("document.querySelector('.memory-body').scrollTop <= 1")
+    page.locator('.memory-detail-toggle').first.click()
+    text = page.locator('.memory-body-text')
+    assert text.inner_text().endswith('末尾约束')
+    assert text.evaluate('el => el.scrollHeight > el.clientHeight')
+    text.hover()
+    page.mouse.wheel(0, 100000)
+    page.wait_for_function("""() => {
+      const text=document.querySelector('.memory-body-text');
+      return text.scrollTop+text.clientHeight >= text.scrollHeight-2;
+    }""")
+    result['scrolling'] = {**metrics, 'bottom_reached':True, 'top_restored':True, 'full_text_reached':True}
     (output/'memory.json').write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
     page.screenshot(path=str(output/'memory-workspace.png'),full_page=True)
 

@@ -75,6 +75,8 @@
 /* Long-term memory, design system v2: one-row search toolbar, a single list
    surface with a selection bar, rows that expand in place. */
 .memory-page .memory-body { display: flex; flex-direction: column; gap: var(--lz-space-3); inline-size: 100%; max-inline-size: 1160px; margin-inline: auto; }
+/* Keep content at its natural height so page-body owns vertical scrolling. */
+.memory-page .memory-body > * { flex-shrink: 0; }
 .memory-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lz-space-2) var(--lz-space-3); }
 .memory-search-controls { display: flex; flex: 1 1 320px; align-items: center; gap: var(--lz-space-2); min-width: 0; max-inline-size: 460px; }
 .memory-search-controls .ui-search { flex: 1; min-width: 0; }
