@@ -359,6 +359,9 @@ def run(exe: Path, mode: str, output: Path):
             page.keyboard.press('Escape')
             page.reload()
             page.wait_for_function("document.querySelector('.netops-cytoscape')?._cyreg?.cy?.edges().length === 2")
+            # This reload retains ?node=a. Its delayed initial focus selects
+            # that node; finish it before selecting the colour-check link.
+            page.wait_for_function("document.querySelector('.netops-cytoscape')?._cyreg?.cy?.zoom() === 1.1")
             assert page.get_by_role('button', name='水平参考线 300 已锁定', exact=True).is_visible()
             page.screenshot(path=str(output/'topology-reference-lines.png'), full_page=True)
             page.locator('.studio-guides-menu summary').click()
