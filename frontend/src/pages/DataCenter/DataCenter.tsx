@@ -20,7 +20,7 @@ import type { ArchivedDataItem, Artifact, DataOverview, ManagedFile } from "../.
 import { isApiError } from "../../types";
 import { formatFileSize, formatDate } from "../../utils/format";
 import { shortId } from "../../utils/displayText";
-import { IconAlert, IconArchive, IconChevronRight, IconDocument, IconDownload, IconGauge, IconLayers, IconLink, IconPlus, IconRefresh, IconShield, IconTrash } from "../../components/Icon";
+import { IconAlert, IconArchive, IconChevronLeft, IconChevronRight, IconDocument, IconDownload, IconGauge, IconLayers, IconLink, IconPlus, IconRefresh, IconShield, IconTrash } from "../../components/Icon";
 
 type DataTab = "overview" | "files" | "artifacts" | "relations" | "lifecycle";
 type ArtifactView = "" | "current" | "history" | "deliverables";
@@ -79,6 +79,31 @@ export function DataCenter() {
   const [error, setError] = useState("");
   const uploadRef = useRef<HTMLInputElement>(null);
   const contentAbort = useRef<AbortController | null>(null);
+  const tabNavigationRef = useRef<HTMLDivElement>(null);
+  const [tabOverflow, setTabOverflow] = useState({ before: false, after: false });
+
+  useEffect(() => {
+    const bar = tabNavigationRef.current?.firstElementChild as HTMLElement | null;
+    if (!bar) return;
+    const update = () => {
+      const before = bar.scrollLeft > 1;
+      const after = bar.scrollWidth - bar.clientWidth - bar.scrollLeft > 1;
+      setTabOverflow((current) => current.before === before && current.after === after ? current : { before, after });
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(bar);
+    // Count badges can change the width without resizing the scroll viewport.
+    for (const child of bar.children) observer.observe(child);
+    bar.addEventListener("scroll", update, { passive: true });
+    update();
+    return () => { observer.disconnect(); bar.removeEventListener("scroll", update); };
+  }, []);
+
+  const scrollTabs = (direction: number) => {
+    const bar = tabNavigationRef.current?.firstElementChild as HTMLElement | null;
+    if (!bar) return;
+    bar.scrollBy({ left: direction * bar.clientWidth * 0.75, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
 
   // 把"待处理"集中到一个数：到期待清理 + 待归档 + 已软删。这三个都表示
   // "工作区有需要处理的堆积"，跨 tab 共享 stat 条上自动染色。
@@ -308,24 +333,28 @@ export function DataCenter() {
         </>}
       </PageHeader>
 
-      <FilterBar className="data-center-tabs" role="tablist" aria-label="数据管理视图">
-        {TAB_LABELS.map(([key, label, TabIcon]) => (
-          <TabButton
-            key={key}
-            className="dc-tab"
-            testId={`data-tab-${key}`}
-            icon={TabIcon}
-            label={label}
-            count={tabCounts[key]}
-            active={tab === key}
-            onClick={() => { setTab(key); setFileFocus(null); setSelectedArtifact(null); }}
-          />
-        ))}
-        <div className="spacer" />
-        {overview && <span className={`dm-health-chip ${overview.health.ok ? "is-ok" : "is-err"}`} title={`断链 ${overview.health.missing_on_disk} · 未登记路径 ${overview.health.orphan_files}`}>
-          <span className="dm-dot" aria-hidden="true" />{overview.health.ok ? "文件存在性检查通过" : "发现数据问题"}
-        </span>}
-      </FilterBar>
+      <div className="dm-tab-navigation" ref={tabNavigationRef}>
+        <FilterBar className="data-center-tabs" role="tablist" aria-label="数据管理视图">
+          {TAB_LABELS.map(([key, label, TabIcon]) => (
+            <TabButton
+              key={key}
+              className="dc-tab"
+              testId={`data-tab-${key}`}
+              icon={TabIcon}
+              label={label}
+              count={tabCounts[key]}
+              active={tab === key}
+              onClick={() => { setTab(key); setFileFocus(null); setSelectedArtifact(null); }}
+            />
+          ))}
+          <div className="spacer" />
+          {overview && <span className={`dm-health-chip ${overview.health.ok ? "is-ok" : "is-err"}`} title={`断链 ${overview.health.missing_on_disk} · 未登记路径 ${overview.health.orphan_files}`}>
+            <span className="dm-dot" aria-hidden="true" />{overview.health.ok ? "文件存在性检查通过" : "发现数据问题"}
+          </span>}
+        </FilterBar>
+        {tabOverflow.before && <button type="button" className="dm-tabs-scroll dm-tabs-scroll-before" aria-label="向左滚动数据管理标签" onClick={() => scrollTabs(-1)}><IconChevronLeft size={16} aria-hidden="true" /></button>}
+        {tabOverflow.after && <button type="button" className="dm-tabs-scroll dm-tabs-scroll-after" aria-label="向右滚动数据管理标签" onClick={() => scrollTabs(1)}><IconChevronRight size={16} aria-hidden="true" /></button>}
+      </div>
 
       {error && <div className="callout err dm-callout" role="alert">
         <IconAlert size={16} aria-hidden="true" /><span>{error}</span>
