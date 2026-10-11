@@ -359,7 +359,7 @@ def write_knowledge_document(
             source='knowledge_import', sensitivity='internal', metadata=metadata)
 
 
-def read_file_content(workspace_id: str, file_id: str) -> str:
+def read_file_content(workspace_id: str, file_id: str, *, encoding: str | None = None) -> str:
     """Read text content of a managed file by file_id."""
     rec = get_file_record(workspace_id, file_id)
     if not rec:
@@ -367,7 +367,8 @@ def read_file_content(workspace_id: str, file_id: str) -> str:
     if rec.get("binary"):
         raise ValueError(f"binary file cannot be read as text: {file_id}")
     path = resolve_file_path(workspace_id, file_id)
-    return path.read_text(encoding="utf-8", errors="replace")
+    from storage.text_encoding import decode_text
+    return decode_text(path.read_bytes(), encoding)[0]
 
 
 def resolve_file_path(workspace_id: str, file_id: str) -> Path:

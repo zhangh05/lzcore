@@ -10,9 +10,9 @@ import tarfile
 from storage.file_store import get_file_record, resolve_file_path
 
 
-def inspect_file(workspace_id, file_id, *, offset=0, limit=50):
+def inspect_file(workspace_id, file_id, *, offset=0, limit=50, encoding=None):
     try:
-        return _inspect_file(workspace_id, file_id, offset=offset, limit=limit)
+        return _inspect_file(workspace_id, file_id, offset=offset, limit=limit, encoding=encoding)
     except (ValueError, OSError):
         raise
     except ImportError as exc:
@@ -21,7 +21,7 @@ def inspect_file(workspace_id, file_id, *, offset=0, limit=50):
         raise ValueError(f'document_inspection_failed:{type(exc).__name__}') from exc
 
 
-def _inspect_file(workspace_id, file_id, *, offset=0, limit=50):
+def _inspect_file(workspace_id, file_id, *, offset=0, limit=50, encoding=None):
     if offset < 0 or not 1 <= limit <= 200:
         raise ValueError('invalid_inspection_range')
     record = get_file_record(workspace_id, file_id)
@@ -89,13 +89,14 @@ def _inspect_file(workspace_id, file_id, *, offset=0, limit=50):
         if coverage['text_pages'] < len(units):
             warnings.append('部分页面没有提取到文字。可以读取页图，或在处理器可用时明确执行 OCR。')
     elif kind == 'csv':
-        text = path.read_text(encoding='utf-8-sig', errors='replace')
+        from storage.text_encoding import decode_text
+        text, encoding, _ = decode_text(path.read_bytes(), encoding)
         try:
             dialect = csv.Sniffer().sniff(text[:8192])
         except csv.Error:
             dialect = csv.excel_tab if path.suffix.lower() == '.tsv' else csv.excel
         units = [{'row': n, 'cells': row} for n, row in enumerate(csv.reader(io.StringIO(text), dialect), 1)]
-        coverage = {'rows': len(units), 'delimiter': dialect.delimiter}
+        coverage = {'rows': len(units), 'delimiter': dialect.delimiter, 'encoding': encoding}
     elif kind == 'zip':
         with zipfile.ZipFile(path) as archive:
             units = [{'name': m.filename, 'size_bytes': m.file_size, 'compressed_bytes': m.compress_size, 'directory': m.is_dir()} for m in archive.infolist()]
@@ -105,8 +106,10 @@ def _inspect_file(workspace_id, file_id, *, offset=0, limit=50):
             units = [{'name': m.name, 'size_bytes': m.size, 'directory': m.isdir(), 'type': 'file' if m.isfile() else 'directory' if m.isdir() else 'link_or_special'} for m in archive]
         coverage = {'members': len(units), 'extracted': False}
     elif not record.get('binary'):
-        units = [{'line': n, 'text': line} for n, line in enumerate(path.read_text(encoding='utf-8', errors='replace').splitlines(), 1)]
-        coverage = {'lines': len(units)}
+        from storage.text_encoding import decode_text
+        text, encoding, _ = decode_text(path.read_bytes(), encoding)
+        units = [{'line': n, 'text': line} for n, line in enumerate(text.splitlines(), 1)]
+        coverage = {'lines': len(units), 'encoding': encoding}
     else:
         raise ValueError('no_structured_processor_for_file_kind')
     end = min(len(units), offset + limit)

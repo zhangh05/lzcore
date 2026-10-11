@@ -12,6 +12,12 @@ def _database(workspace_id):
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path, timeout=30)
     db.execute('CREATE TABLE IF NOT EXISTS documents (file_id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, content TEXT NOT NULL, coverage TEXT NOT NULL)')
+    # Older caches used replacement decoding but marked content complete.
+    # Invalidate that disposable projection once; FileRecord/payloads stay put.
+    if db.execute('PRAGMA user_version').fetchone()[0] < 1:
+        db.execute('DELETE FROM documents')
+        db.execute('PRAGMA user_version=1')
+        db.commit()
     return db
 
 
@@ -32,8 +38,9 @@ def synchronize(workspace_id, *, documents=False, rebuild=False):
                 continue
             try:
                 if not record.get('binary'):
-                    content = safe_workspace_path(workspace_id, record['path']).read_text(encoding='utf-8', errors='replace')
-                    coverage = {'kind': 'text', 'lines': content.count('\n') + 1, 'complete': True}
+                    from storage.text_encoding import decode_text
+                    content, encoding, _ = decode_text(safe_workspace_path(workspace_id, record['path']).read_bytes())
+                    coverage = {'kind': 'text', 'lines': content.count('\n') + 1, 'complete': True, 'encoding': encoding}
                 elif documents and record['file_kind'] in {'docx', 'xlsx', 'pptx', 'pdf'}:
                     from agent.modules.knowledge.parsers.base import parse_document
                     document = parse_document(safe_workspace_path(workspace_id, record['path']).read_bytes(), fmt=record['file_kind'], title=record['original_name'])
@@ -54,7 +61,7 @@ def search_content(workspace_id, query, *, limit=50, cursor='', file_ids=None):
     import json
     if not isinstance(query, str) or not query.strip() or not 1 <= limit <= 200:
         raise ValueError('invalid_content_search')
-    synchronize(workspace_id)
+    indexing = synchronize(workspace_id)
     # Escaping prevents SQL wildcard characters from changing literal search semantics.
     pattern = '%' + query.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
     with closing(_database(workspace_id)) as db:
@@ -71,4 +78,5 @@ def search_content(workspace_id, query, *, limit=50, cursor='', file_ids=None):
         hits.append({'file_id': fid, 'source_sha256': digest, 'line': content[:position].count('\n') + 1,
                      'character_offset': position, 'snippet': content[max(0, position - 80):position + len(query) + 160], 'coverage': json.loads(coverage)})
     return {'hits': hits, 'total': total, 'next_cursor': hits[-1]['file_id'] if len(rows) > limit else '', 'scope': 'managed_files',
+            'failures': indexing['failures'],
             'coverage': 'Active text files and explicitly indexed parsed documents; no model or embedding request.'}

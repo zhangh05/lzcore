@@ -59,7 +59,7 @@ def create_artifact_metadata(
         "expires_at": None,
         "metadata": dict(metadata or {}),
         "tags": [],
-        "redaction_applied": not bool(getattr(file_record, 'binary', False)),
+        "redaction_applied": False,  # Metadata projection does not rewrite bytes.
         "parent_artifact_id": None,
         "derived_from": [],
         "references": [],

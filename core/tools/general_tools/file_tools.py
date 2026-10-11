@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.tools.schemas import ToolInvocation
 from storage.ids import validate_workspace_id
+from storage.text_encoding import decode_text
 from storage.workspace_files import (
     create_workspace_text,
     is_current_workspace_write_path,
@@ -47,7 +48,7 @@ def handle_file_create(inv: ToolInvocation) -> dict:
         content = inv.arguments.get("content")
         if not isinstance(content, str):
             return _error_inv(inv, "content must be a string")
-        target = create_workspace_text(ws, filepath, content)
+        target = create_workspace_text(ws, filepath, content, encoding=inv.arguments.get('encoding') or 'utf-8')
         return _ok(inv, f"Created {filepath}.", {
             "filepath": filepath, "size": target.stat().st_size, "created": True,
         })
@@ -79,16 +80,7 @@ def handle_file_read(inv: ToolInvocation) -> dict:
         target = _workspace_path(ws, filepath)
         if not target.is_file():
             return _error_inv(inv, "file not found")
-        with open(target, "rb") as f:
-            head = f.read(1024)
-        if b"\x00" in head:
-            return _result(inv, False, {
-                "ok": False,
-                "error": "binary file cannot be read as text",
-                "file_size": target.stat().st_size,
-            })
-        with target.open(encoding="utf-8", newline="") as source:
-            content = source.read()
+        content, encoding, bom = decode_text(target.read_bytes(), inv.arguments.get('encoding'))
         line_ending = _text_line_ending(content)
         ends_with_newline = content.endswith(("\r", "\n"))
         lines = content.splitlines(keepends=True)
@@ -96,6 +88,7 @@ def handle_file_read(inv: ToolInvocation) -> dict:
         content = ''.join(lines[offset:end])
         return _ok(inv, f"Read {filepath}: {end - min(offset, len(lines))} of {len(lines)} line(s).", {
             "preview": content, "filepath": filepath,
+            "encoding": encoding, "byte_order_mark": bool(bom),
             "size": len(content), "file_size_bytes": target.stat().st_size,
             "line_ending": line_ending, "ends_with_newline": ends_with_newline,
             "total_lines": len(lines),
@@ -127,8 +120,7 @@ def handle_file_edit(inv: ToolInvocation) -> dict:
             return _error_inv(inv, "file.edit only writes to current managed workspace directories")
         if not target.is_file():
             return _error_inv(inv, "file not found")
-        with target.open(encoding="utf-8", newline="") as source:
-            content = source.read()
+        content, encoding, bom = decode_text(target.read_bytes(), inv.arguments.get('encoding'))
         count = content.count(old_string)
         if not count:
             escaped_newlines = (
@@ -149,6 +141,7 @@ def handle_file_edit(inv: ToolInvocation) -> dict:
             new_content = content.replace(old_string, new_string, 1)
         if new_content == content:
             return _ok(inv, f"{filepath}: no changes made.", {"lines_changed": 0, "note": "no changes made"})
+        new_content.encode(encoding, errors='strict')
         diff_preview = _generate_diff_preview(old_string, new_string)
         if dry_run:
             return _ok(inv, "dry_run: preview only, file NOT modified", {
@@ -157,7 +150,7 @@ def handle_file_edit(inv: ToolInvocation) -> dict:
                 "diff": diff_preview,
                 "diff_lines": abs(new_content.count("\n") - content.count("\n")),
             })
-        write_text_atomic(target, new_content)
+        write_text_atomic(target, new_content, encoding=encoding, bom=bom)
         lines_changed = abs(new_content.count("\n") - content.count("\n")) or count
         return _ok(inv, f"Edited {filepath}: {count} replacement(s).", {
             "lines_changed": lines_changed,
@@ -179,18 +172,18 @@ def handle_file_patch(inv: ToolInvocation) -> dict:
             return _error_inv(inv, "file.patch only writes to current managed workspace directories")
         if not target.is_file():
             return _error_inv(inv, "file not found")
-        with target.open(encoding="utf-8", newline="") as source:
-            original = source.read()
+        original, encoding, bom = decode_text(target.read_bytes(), inv.arguments.get('encoding'))
         try:
             new_content, lines_added, lines_removed = _apply_unified_patch(original, patch_text)
         except ValueError as exc:
             return _error_inv(inv, str(exc))
+        new_content.encode(encoding, errors='strict')
         if inv.arguments.get("dry_run"):
             return _ok(inv, "dry_run: preview only, file NOT modified", {
                 "dry_run": True, "lines_added": lines_added, "lines_removed": lines_removed,
                 "diff_preview": _generate_diff_preview(original, new_content),
             })
-        write_text_atomic(target, new_content)
+        write_text_atomic(target, new_content, encoding=encoding, bom=bom)
         return _ok(inv, f"Patched {filepath}: {lines_added} added line(s), {lines_removed} removed line(s).", {
             "lines_added": lines_added,
             "lines_removed": lines_removed,
@@ -275,7 +268,7 @@ def handle_ws_list_files(inv: ToolInvocation) -> dict:
     try:
         target = _workspace_path(ws, subdir)
         if not target.exists():
-            return _ok(inv, "", {"files": [], "count": 0})
+            return _ok(inv, "", {"files": [], "count": 0, "scope": "source_directory", "subdir": subdir})
         files = []
         for p in sorted(target.iterdir(), key=lambda entry: entry.name):
             relative_path = (Path(subdir) / p.name).as_posix()
@@ -287,7 +280,7 @@ def handle_ws_list_files(inv: ToolInvocation) -> dict:
             elif p.is_dir():
                 files.append({"name": p.name, "filepath": relative_path, "type": "directory"})
         end = min(len(files), offset + limit)
-        return _ok(inv, "", {"files": files[offset:end], "count": len(files),
+        return _ok(inv, "", {"files": files[offset:end], "count": len(files), "scope": "source_directory", "subdir": subdir,
                               "offset": offset, "has_more": end < len(files),
                               "next_offset": end if end < len(files) else None})
     except Exception as e:

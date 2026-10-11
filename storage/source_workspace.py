@@ -3,6 +3,7 @@ from pathlib import Path, PurePosixPath
 import shutil
 import zipfile
 import tarfile
+import tempfile
 from storage.paths import workspace_root
 from storage.project_changes import workspace_files_lock, IGNORED
 from storage.workspace_files import is_current_workspace_write_path
@@ -45,7 +46,7 @@ def source_entries(workspace_id, filepath='files/data', *, offset=0, limit=100):
             rows.append({'name': child.name, 'filepath': child.relative_to(root).as_posix(), 'type': 'directory' if child.is_dir() else 'file', 'size_bytes': child.stat().st_size if child.is_file() else 0, 'accessible': True})
     rows.sort(key=lambda item: (item['type'] != 'directory', item['name'].casefold(), item['name']))
     end = min(len(rows), offset + limit)
-    return {'filepath': target.relative_to(root).as_posix(), 'path_basis': 'workspace_root', 'entries': rows[offset:end], 'total': len(rows), 'next_offset': end if end < len(rows) else None}
+    return {'filepath': target.relative_to(root).as_posix(), 'path_basis': 'workspace_root', 'scope': 'source_directory', 'entries': rows[offset:end], 'total': len(rows), 'next_offset': end if end < len(rows) else None}
 
 
 def move_source(workspace_id, filepath, destination):
@@ -141,14 +142,23 @@ def extract_archive(workspace_id, file_id, destination):
             files = {p.relative_to(target).as_posix().casefold() for m, p in planned if not directory(m)}
             if any(parent.as_posix().casefold() in files for _, p in planned for parent in p.relative_to(target).parents if parent != Path('.')):
                 raise ValueError('archive_file_directory_conflict')
-            target.mkdir(parents=True, exist_ok=False)
-            for member, path in planned:
-                if directory(member):
-                    path.mkdir(parents=True, exist_ok=True)
-                else:
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    with reader(member) as src, path.open('xb') as out:
-                        shutil.copyfileobj(src, out)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix='.extract-', dir=target.parent) as staging:
+                ready = Path(staging) / 'payload'
+                ready.mkdir()
+                for member, path in planned:
+                    path = ready / path.relative_to(target)
+                    if directory(member):
+                        path.mkdir(parents=True, exist_ok=True)
+                    else:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        with reader(member) as src, path.open('xb') as out:
+                            shutil.copyfileobj(src, out)
+                if target.exists():
+                    raise FileExistsError('destination_already_exists')
+                ready.rename(target)
+        except (zipfile.BadZipFile, tarfile.TarError) as exc:
+            raise ValueError('archive_integrity_check_failed') from exc
         finally:
             archive.close()
         return {'filepath': destination, 'members': len(members), 'source_file_id': file_id, 'size_bytes': total}

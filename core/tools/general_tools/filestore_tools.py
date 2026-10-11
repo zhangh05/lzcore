@@ -91,7 +91,8 @@ def handle_file_extract_document(inv, *, file_id: str = "", limit: int = 50_000)
                     if name.startswith("word/media/") and not name.endswith("/")
                 )
         if file_kind in _TEXT_ATTACHMENT_KINDS:
-            content = raw.decode("utf-8", errors="replace")
+            from storage.text_encoding import decode_text
+            content, encoding, _ = decode_text(raw, args.get('encoding'))
             warnings: list[str] = []
             title = str(rec.get("original_name") or file_id)
         else:
@@ -105,6 +106,8 @@ def handle_file_extract_document(inv, *, file_id: str = "", limit: int = 50_000)
             content = document.normalized_markdown or ""
             warnings = list(document.warnings or [])
             title = document.title or rec.get("original_name")
+    except ValueError as exc:
+        return _fail("workspace.file", str(exc), file_id=file_id)
     except UnsupportedFormatError as exc:
         return _fail("workspace.file", "unsupported_document_format", file_id=file_id, detail=str(exc))
     except Exception as exc:

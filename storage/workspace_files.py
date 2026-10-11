@@ -47,9 +47,13 @@ def is_current_workspace_write_path(workspace_id: str, target: Path) -> bool:
     return any(rel == allowed or rel.startswith(f"{allowed}/") for allowed in _WRITE_DIRS)
 
 
-def write_text_atomic(path: Path, content: str) -> None:
+def write_text_atomic(path: Path, content: str, *, encoding='utf-8', bom=b'') -> None:
     validate_source_text(content)
-    atomic_write_text(path, content)
+    if encoding == 'utf-8' and not bom:
+        atomic_write_text(path, content)
+    else:
+        from storage.atomic_io import atomic_write_bytes
+        atomic_write_bytes(path, bom + content.encode(encoding, errors='strict'))
 
 
 def validate_source_text(content: str) -> None:
@@ -63,7 +67,7 @@ def validate_source_text(content: str) -> None:
     content.encode('utf-8', errors='strict')
 
 
-def create_workspace_text(workspace_id: str, subpath: str, content: str) -> Path:
+def create_workspace_text(workspace_id: str, subpath: str, content: str, *, encoding='utf-8') -> Path:
     """Publish a complete source file without replacing an existing path.
 
     Source trees retain their requested paths; generated attachments continue
@@ -71,6 +75,10 @@ def create_workspace_text(workspace_id: str, subpath: str, content: str) -> Path
     writer has already created the target, including a dangling symlink.
     """
     validate_source_text(content)
+    try:
+        content.encode(encoding, errors='strict')  # Reject before creating parents.
+    except (LookupError, TypeError) as exc:
+        raise ValueError('unknown_text_encoding') from exc
     if not subpath or Path(subpath).is_absolute() or "\\" in subpath:
         raise ValueError("source filepath must be workspace-relative using forward slashes")
     if ".." in Path(subpath).parts:
@@ -90,7 +98,7 @@ def create_workspace_text(workspace_id: str, subpath: str, content: str) -> Path
         raise ValueError("path_escape_denied")
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", dir=target.parent,
+        with tempfile.NamedTemporaryFile(mode="w", encoding=encoding, newline="", dir=target.parent,
                                          prefix=".source-", delete=False) as stream:
             temporary = Path(stream.name)
             stream.write(content)

@@ -190,6 +190,14 @@ def test_governed_materialize_and_binary_publish(file_client, files_ws):
     repeat = file_client.invoke('workspace.filestore', {'action': 'materialize', 'file_id': original.file_id, 'destination': material['filepath']}, context=context)
     assert repeat.status != 'succeeded'
     assert (workspace_root(files_ws) / material['filepath']).read_bytes() == b'input'
+    # Publication is a byte-preserving file operation, including text formats.
+    for name, payload in [('原件.csv', b'a,b\r\n1,2'), ('空.txt', b''),
+                          ('编码.txt', '原始中文\r\n'.encode('utf-16'))]:
+        source = book_path.parent / name
+        source.write_bytes(payload)
+        result = invoke('publish', filepath=source.relative_to(workspace_root(files_ws)).as_posix())
+        assert result['original_name'] == name
+        assert resolve_file_path(files_ws, result['file_id']).read_bytes() == payload
 
 
 def test_files_cursor_and_organization_preserve_identity(files_ws):
@@ -199,6 +207,7 @@ def test_files_cursor_and_organization_preserve_identity(files_ws):
     seen, cursor = [], ''
     while True:
         page = files_page(files_ws, limit=4, cursor=cursor)
+        assert page['scope'] == 'managed_files'
         seen += [r['file_id'] for r in page['files']]
         cursor = page['next_cursor']
         if not cursor: break
@@ -207,6 +216,52 @@ def test_files_cursor_and_organization_preserve_identity(files_ws):
     assert organized['file_id'] == records[0].file_id
     assert files_page(files_ws, folder='项目/资料')['files'][0]['file_id'] == records[0].file_id
     with pytest.raises(ValueError): organize_file(files_ws, records[0].file_id, folder='../escape')
+
+
+def test_governed_text_encoding_is_lossless_and_never_guesses(file_client, files_ws):
+    import codecs
+    from core.tools.context import ToolRuntimeContext
+    from storage.file_store import import_user_upload
+    from storage.paths import workspace_root
+    context = ToolRuntimeContext(workspace_id=files_ws, requested_by='turn_runner')
+    def invoke(tool, **args):
+        return file_client.invoke(tool, args, context=context)
+    for n, (codec, bom) in enumerate([('utf-8', codecs.BOM_UTF8),
+            ('utf-16-le', codecs.BOM_UTF16_LE), ('utf-16-be', codecs.BOM_UTF16_BE),
+            ('utf-32-le', codecs.BOM_UTF32_LE), ('gb18030', b'')]):
+        name = f'files/tmp/编码-{n}.txt'
+        path = workspace_root(files_ws) / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(bom + '原始中文\r\n尾行'.encode(codec))
+        encoding = {'encoding': codec} if codec == 'gb18030' else {}
+        read = invoke('workspace.file', action='read', filepath=name, **encoding)
+        assert read.status == 'succeeded' and read.output['preview'] == '原始中文\r\n尾行'
+        assert invoke('workspace.file', action='edit', filepath=name,
+                      old_string='原始', new_string='修改', **encoding).status == 'succeeded'
+        assert path.read_bytes() == bom + '修改中文\r\n尾行'.encode(codec)
+        record = import_user_upload(files_ws, path, path.name)
+        from storage.file_store import read_file_content
+        assert read_file_content(files_ws, record.file_id, **encoding) == '修改中文\r\n尾行'
+        extracted = invoke('workspace.file', action='extract_document', file_id=record.file_id, **encoding)
+        assert extracted.status == 'succeeded' and extracted.output['content'] == '修改中文\r\n尾行'
+        inspected = invoke('workspace.filestore', action='inspect', file_id=record.file_id, **encoding)
+        assert inspected.status == 'succeeded' and inspected.output['units'][0]['text'] == '修改中文'
+        if encoding:
+            for tool, args in [('workspace.file', {'action': 'read', 'filepath': name}),
+                              ('workspace.file', {'action': 'extract_document', 'file_id': record.file_id}),
+                              ('workspace.filestore', {'action': 'inspect', 'file_id': record.file_id})]:
+                failed = invoke(tool, **args)
+                assert failed.status == 'failed' and 'text_encoding_required' in failed.output['error']
+    from storage.file_search import synchronize
+    indexed = synchronize(files_ws, rebuild=True)
+    assert indexed['indexed'] == 4 and len(indexed['failures']) == 1
+    # An unrepresentable replacement must leave the original bytes untouched.
+    created = invoke('workspace.file', action='create', filepath='files/tmp/ascii.txt',
+                     content='value=1', encoding='ascii')
+    assert created.status == 'succeeded'
+    assert invoke('workspace.file', action='edit', filepath='files/tmp/ascii.txt',
+                  old_string='1', new_string='中文', encoding='ascii').status == 'failed'
+    assert (workspace_root(files_ws) / 'files/tmp/ascii.txt').read_bytes() == b'value=1'
 
 
 def test_read_image_produces_real_provider_evidence(file_client, files_ws):
@@ -281,6 +336,18 @@ def test_source_move_and_archive_roundtrip_preserve_bytes(files_ws):
     assert (workspace_root(files_ws) / 'files/data/extracted/moved.txt').read_text() == 'actual source'
     with pytest.raises(FileExistsError):
         extract_archive(files_ws, record.file_id, 'files/data/extracted')
+    # A late CRC error cannot publish earlier archive members as a partial tree.
+    import zipfile
+    raw = io.BytesIO()
+    with zipfile.ZipFile(raw, 'w', zipfile.ZIP_STORED) as archive:
+        archive.writestr('first.txt', b'first-valid')
+        archive.writestr('last.bin', b'CRC-TARGET-UNIQUE')
+    corrupt = raw.getvalue().replace(b'CRC-TARGET-UNIQUE', b'CRC-BROKEN-UNIQUE')
+    record = import_user_upload(files_ws, io.BytesIO(corrupt), 'corrupt.zip')
+    with pytest.raises(ValueError, match='archive_integrity_check_failed'):
+        extract_archive(files_ws, record.file_id, 'files/data/failed')
+    assert not (workspace_root(files_ws) / 'files/data/failed').exists()
+    assert not list((workspace_root(files_ws) / 'files/data').glob('.extract-*'))
 
 
 @pytest.mark.parametrize('member', ['../escape.txt', '/absolute.txt', 'C:/escape.txt', 'a\\b.txt', 'nul\x00suffix.txt'])
@@ -325,6 +392,18 @@ def test_content_search_versions_scope_and_literal_query(files_ws):
     assert not synchronize(files_ws)['updated']
     with storage_principal('another-user'):
         assert search_content(files_ws, '100%_literal')['total'] == 0
+    # The old replacement-decoding cache must not survive a payload hash match.
+    import sqlite3
+    from storage.paths import workspace_root
+    invalid = import_user_upload(files_ws, io.BytesIO(b'\xffnot-utf8'), 'legacy.txt')
+    with sqlite3.connect(workspace_root(files_ws) / 'index/file-search.sqlite') as db:
+        db.execute('INSERT INTO documents VALUES (?,?,?,?)',
+                   (invalid.file_id, invalid.sha256, 'invented_text', '{}'))
+        db.execute('PRAGMA user_version=0')
+    result = search_content(files_ws, 'invented_text')
+    assert result['total'] == 0
+    assert result['failures'][0]['file_id'] == invalid.file_id
+    assert search_content(files_ws, '100%_literal')['total'] == 1
 
 
 def test_reference_migration_preview_apply_is_idempotent(files_ws):

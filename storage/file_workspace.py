@@ -69,7 +69,8 @@ def files_page(workspace_id: str, *, query='', lifecycle='active', folder=None,
     more = len(selected) > len(page)
     next_cursor = base64.urlsafe_b64encode(json.dumps({'scope': scope, 'key': list(key(page[-1]))}).encode()).decode() if more and page else ''
     return {'files': page, 'count': len(page), 'total': total, 'next_cursor': next_cursor,
-            'folders': folders, 'sort': sort, 'path_basis': 'workspace_root', 'workspace_id': workspace_id}
+            'folders': folders, 'sort': sort, 'path_basis': 'workspace_root', 'workspace_id': workspace_id,
+            'scope': 'managed_files'}
 
 
 def resolve_reference(workspace_id: str, *, file_id='', artifact_id='', filepath='') -> dict:
@@ -167,25 +168,27 @@ def publish_file(workspace_id: str, filepath: str, *, title='', run_id='', sessi
         artifact_sensitivity = {'confidential': 'sensitive', 'restricted': 'secret'}.get(sensitivity, sensitivity)
         classification = classify_file(source.name)
         if not classification['binary']:
-            from artifacts.store import save_artifact
-            artifact = save_artifact(workspace_id=workspace_id, content=source.read_text(encoding='utf-8'),
-                title=title or source.name, artifact_type=artifact_type, run_id=run_id,
-                source='workspace_publish', sensitivity=artifact_sensitivity,
-                metadata={'source_file_ids': [r['file_id'] for r in inputs], 'session_id': session_id})
-            if artifact is None:
+            from artifacts.redaction import contains_secret
+            from storage.text_encoding import decode_text
+            try:
+                content, _, _ = decode_text(source.read_bytes())
+            except ValueError:
+                # Only retain the existing secret guard on ASCII credential
+                # syntax; this fallback is never returned as decoded content.
+                content = source.read_bytes().decode('utf-8', errors='replace')
+            if contains_secret(content) and artifact_sensitivity != 'secret':
                 raise ValueError('artifact_publication_blocked')
-            result = resolve_reference(workspace_id, file_id=artifact.file_id)
-            aid = artifact.artifact_id
-        else:
-            record = import_user_upload(workspace_id, source, source.name, logical_type='artifact_output',
-                source='workspace_publish', run_id=run_id, session_id=session_id, sensitivity=sensitivity,
-                metadata={'source_file_ids': [r['file_id'] for r in inputs], 'title': title or source.name})
-            artifact = create_artifact_metadata(workspace_id=workspace_id, file_record=record,
-                title=title or source.name, artifact_type=artifact_type, run_id=run_id, session_id=session_id,
-                source='workspace_publish', sensitivity=artifact_sensitivity,
-                metadata={'source_file_ids': [r['file_id'] for r in inputs]})
-            aid = artifact['artifact_id']
-            result = resolve_reference(workspace_id, file_id=record.file_id)
+        # A file publication registers the original bytes and extension. Text
+        # artifact generation/redaction is a separate, explicit operation.
+        record = import_user_upload(workspace_id, source, source.name, logical_type='artifact_output',
+            source='workspace_publish', run_id=run_id, session_id=session_id, sensitivity=sensitivity,
+            metadata={'source_file_ids': [r['file_id'] for r in inputs], 'title': title or source.name})
+        artifact = create_artifact_metadata(workspace_id=workspace_id, file_record=record,
+            title=title or source.name, artifact_type=artifact_type, run_id=run_id, session_id=session_id,
+            source='workspace_publish', sensitivity=artifact_sensitivity,
+            metadata={'source_file_ids': [r['file_id'] for r in inputs]})
+        aid = artifact['artifact_id']
+        result = resolve_reference(workspace_id, file_id=record.file_id)
         from storage.events import publish
         publish(workspace_id, 'artifact', 'created', aid)
         return {**result, 'artifact_id': aid, 'artifact_ids': [aid], 'filepath': result['path'],
