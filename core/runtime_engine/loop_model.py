@@ -10,7 +10,7 @@ from typing import Any
 
 from agent.llm.schemas import LLMMessage, LLMResponse, LLMToolCall
 
-from .context_budget import estimate_json_tokens, estimate_text_tokens
+from .context_budget import estimate_json_tokens
 from .context_compaction import estimate_message_tokens as _estimate_message_tokens
 from .context_continuation import ContextContinuationError
 from .evidence import evidence_manifest, mark_evidence_delivered, pending_llm_evidence
@@ -241,17 +241,23 @@ class LoopModelGateway:
                 self._cached_tools if tools_override is None else tools_override
             )
             # Provider windows and durable task history are separate. Reserve
-            # system/schema/output capacity before choosing a complete epoch.
+            # schema/output capacity before choosing a complete epoch. System
+            # messages are already counted by estimate_message_tokens; reserving
+            # the system prompt again would reject otherwise valid requests.
             # A failed archive never permits evidence deletion or tool replay.
             available_tokens = (
                 self._context_budget.context_window_tokens
                 - self._context_budget.reserved_output_tokens
                 - self._context_budget.safety_tokens
                 - estimate_json_tokens(tools_for_call)
-                - estimate_text_tokens(system_prompt)
             )
             if self._context_continuation is not None:
                 try:
+                    current_observations = tuple(
+                        LLMMessage(role="user", content=ctx.extras[key])
+                        for key in ("_runtime_fact_projection", "_cognitive_prompt_projection")
+                        if ctx.extras.get(key)
+                    )
                     # The configured message window is a preferred checkpoint
                     # boundary. Exact governing anchors retain the full actual
                     # provider allowance; no valid user input is truncated or
@@ -261,13 +267,15 @@ class LoopModelGateway:
                     )
                     try:
                         self._context_continuation.prepare(
-                            messages, ctx, max(0, int(preferred * 0.85))
+                            messages, ctx, max(0, int(preferred * 0.85)),
+                            current_observations=current_observations,
                         )
                     except ContextContinuationError as exc:
                         if str(exc) != "context_continuation_anchors_exceed_capacity":
                             raise
                         self._context_continuation.prepare(
-                            messages, ctx, max(0, int(available_tokens))
+                            messages, ctx, max(0, int(available_tokens)),
+                            current_observations=current_observations,
                         )
                 except ContextContinuationError as exc:
                     ctx.extras["context_continuation_error"] = str(exc)

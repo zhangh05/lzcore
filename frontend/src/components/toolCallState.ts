@@ -83,7 +83,7 @@ export type InlineCardState = "pending" | "ok" | "fail" | "unknown";
  *      重新渲染成「结果未知」—— 用户同样会重发，方向与漏报相反、后果一样。
  *
  *   b) `execution_outcome === "unknown"` 而触发事实缺失也是存在的
- *      （`harness/test_ssot_runtime_main_entry_contract.py` 固化了这条契约）。
+ *      （`harness/runtime/test_ssot_runtime_main_entry_contract.py` 固化了这条契约）。
  *      此时定位不到具体是哪一次调用，本函数返回 undefined，由回合级告警承载
  *      不确定性 —— 不猜，也不把整轮失败的调用统统标成未知。
  *

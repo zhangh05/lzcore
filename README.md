@@ -67,7 +67,7 @@ TaskState 负责服务端任务控制；execution_outcome 表示用户目标，t
 
 ```bash
 .venv/bin/python scripts/verify_docs_runtime_consistency.py
-.venv/bin/pytest -q harness/test_runtime_prompt_ssot.py harness/test_prompt_system_contract.py harness/test_goal_loop.py
+.venv/bin/pytest -q harness/prompts/test_runtime_prompt_ssot.py harness/prompts/test_prompt_system_contract.py harness/runtime/test_goal_loop.py
 npm --prefix frontend test -- --run
 npm --prefix frontend run build
 ```

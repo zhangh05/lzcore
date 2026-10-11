@@ -35,9 +35,11 @@ backend 负责传输与认证；agent/app 和 agent/runtime 负责会话接入�
 
 ```bash
 .venv/bin/python scripts/verify_docs_runtime_consistency.py
-.venv/bin/pytest -q harness/test_goal_loop.py harness/test_docs_consistency_script.py harness/test_runtime_prompt_ssot.py
+.venv/bin/pytest -q harness/runtime/test_goal_loop.py harness/platform/test_docs_consistency_script.py harness/prompts/test_runtime_prompt_ssot.py
 npm --prefix frontend test -- --run
 npm --prefix frontend run build
 ```
 
-对变更增补相关测试；UI 使用真实浏览器，Windows 打包使用原生 smoke，实际 LLM/设备效果需相应环境证据。报告改动、验证和未验证项，不用“测试通过”代替外部验收。只执行用户已授权的交付阶段。
+测试按 harness/ 下领域目录组织。仅为已复现缺陷或关键合同缺口增补测试，优先扩展已有用例；不因存在测试机会而新增，不重复覆盖，不用固定提示词文案或源码字符串代替行为验证。故障重试用例模拟等待并检查重试次数和延迟，日常 CI 保留多次换窗覆盖，长循环压力验证按需单独运行。目录及命令见 [harness/README.md](harness/README.md)。
+
+UI 使用真实浏览器，Windows 打包使用原生 smoke，实际 LLM/设备效果需相应环境证据。报告改动、验证和未验证项，不用“测试通过”代替外部验收。只执行用户已授权的交付阶段。

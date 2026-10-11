@@ -51,7 +51,7 @@ docker compose -f deployment/compose.server.yml ps
 curl -fsS http://127.0.0.1:8011/api/health
 curl -fsS http://127.0.0.1:5273/api/health
 curl -fsSI http://127.0.0.1:5273/
-docker compose -f deployment/compose.server.yml exec -T backend python -m pytest -q harness/test_goal_loop.py harness/test_network_read_recovery.py
+docker compose -f deployment/compose.server.yml exec -T backend python -m pytest -q harness/runtime/test_goal_loop.py harness/extensions/test_network_read_recovery.py
 ```
 
 容器内测试或 liveness 不能替代实际前端和受影响业务路径。
