@@ -45,6 +45,40 @@ def import_document(workspace_id: str, title: str, content: str,
     return result
 
 
+def import_artifact(workspace_id: str, artifact_id: str) -> dict:
+    """Import an artifact through the same document store and result contract."""
+    from artifacts.store import get_artifact, read_artifact_content
+
+    artifact = get_artifact(workspace_id, artifact_id)
+    if artifact is None:
+        return {"ok": False, "error": "artifact_not_found"}
+    art = artifact.as_dict()
+    lifecycle = art.get("lifecycle", "active")
+    if lifecycle in {"deleted", "quarantined"}:
+        return {"ok": False, "error": f"artifact_{lifecycle}"}
+    if art.get("sensitivity") == "secret":
+        return {"ok": False, "error": "secret_artifact_not_indexable"}
+    content = read_artifact_content(workspace_id, artifact_id, allow_sensitive=True)
+    if not content:
+        return {"ok": False, "error": "artifact_empty"}
+    result = import_document(
+        workspace_id=workspace_id,
+        title=art.get("title") or artifact_id,
+        content=content,
+        source=f"artifact:{artifact_id}",
+        metadata={
+            "source_type": "artifact",
+            "artifact_id": artifact_id,
+            "artifact_type": art.get("artifact_type", ""),
+            "scope": art.get("scope", "workspace"),
+        },
+    )
+    if not result.get("ok"):
+        return {**result, "error": result.get("error") or
+                (result.get("errors") or ["indexing_failed"])[0]}
+    return result
+
+
 def list_sources(workspace_id: str, include_disabled: bool = False,
                   include_deleted: bool = False, query: str = "",
                   scope: str = "") -> dict:

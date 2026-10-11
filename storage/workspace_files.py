@@ -90,7 +90,7 @@ def create_workspace_text(workspace_id: str, subpath: str, content: str) -> Path
         raise ValueError("path_escape_denied")
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent,
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", dir=target.parent,
                                          prefix=".source-", delete=False) as stream:
             temporary = Path(stream.name)
             stream.write(content)

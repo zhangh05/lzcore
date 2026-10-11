@@ -40,7 +40,7 @@ def atomic_write_text(path: Path, text: str) -> None:
     tmp = _unique_tmp(path)
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(text)
             f.flush()
             try:

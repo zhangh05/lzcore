@@ -119,6 +119,52 @@ def test_tool_reads_full_source_and_carries_retrieval_provenance(tmp_path, monke
     assert "chunk_id=" in context and "parent_chunk_id=" in context
 
 
+def test_artifact_tool_import_returns_readable_identity_and_preserves_unknown_write(tmp_path, monkeypatch):
+    _reset_context_runtime(tmp_path, monkeypatch)
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.context import ToolRuntimeContext
+
+    client = get_default_tool_runtime_client()
+    ctx = ToolRuntimeContext(workspace_id="artifact_import_ws", requested_by="turn_runner")
+    content = "# Import evidence\n\n" + "complete document line\n" * 130
+    artifact = client.invoke("workspace.artifact", {
+        "action": "save", "title": "Import evidence", "content": content,
+    }, context=ctx)
+    assert artifact.status == "succeeded"
+    args = {"action": "import", "artifact_id": artifact.output["artifact_id"]}
+    imported = client.invoke("knowledge.manage", args, context=ctx)
+    assert imported.status == "succeeded" and imported.output["source_id"]
+    read = client.invoke("knowledge.manage", {
+        "action": "read", "source_id": imported.output["source_id"],
+    }, context=ctx)
+    assert read.status == "succeeded" and read.output["content"] == content
+
+    from backend.main import app
+    response = app.test_client().post("/api/knowledge/sources/from-artifact", json={
+        "workspace_id": ctx.workspace_id, "artifact_id": args["artifact_id"],
+    })
+    assert response.status_code == 200
+    source = response.get_json()["source"]
+    assert source["source_id"] and source["workspace_id"] == ctx.workspace_id
+    assert client.invoke("knowledge.manage", {
+        "action": "read", "source_id": source["source_id"],
+    }, context=ctx).output["content"] == content
+
+    from storage.file_mutations import FileSettlementError
+    import storage.file_store as file_store
+    attempts = []
+
+    def unknown(**kwargs):
+        attempts.append(kwargs)
+        raise FileSettlementError("settlement unavailable", intent="sys/file-mutations/test.json")
+
+    monkeypatch.setattr(file_store, "write_knowledge_document", unknown)
+    failed = client.invoke("knowledge.manage", args, context=ctx)
+    assert failed.status == "failed" and failed.output["error_code"] == "EXECUTION_UNKNOWN"
+    assert failed.output["executed"] is True and failed.output["automatic_retry_allowed"] is False
+    assert len(attempts) == 1
+
+
 def test_reindex_keeps_existing_chunks_when_full_text_is_missing(tmp_path, monkeypatch):
     _reset_context_runtime(tmp_path, monkeypatch)
     from agent.modules.knowledge.ingestion import reindex_source

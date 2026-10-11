@@ -131,10 +131,16 @@ def handle_file_edit(inv: ToolInvocation) -> dict:
             content = source.read()
         count = content.count(old_string)
         if not count:
+            escaped_newlines = (
+                " old_string contains literal backslash newline escapes; JSON escapes must decode "
+                "to the original newline characters, not be double-escaped."
+                if "\\n" in old_string or "\\r" in old_string else ""
+            )
             return _error_inv(inv,
                 f"old_string not found in file (file newlines={_text_line_ending(content)}, "
                 f"old_string newlines={_text_line_ending(old_string)}). "
-                "Use exact original text/newlines, or a verified unified patch for line edits.")
+                "Use exact original text/newlines, or a verified unified patch for line edits."
+                + escaped_newlines)
         if replace_all:
             new_content = content.replace(old_string, new_string)
         else:
@@ -246,6 +252,12 @@ def _apply_unified_patch(original: str, patch_text: str) -> tuple[str, int, int]
         if len(old) != old_count or len(new) != new_count:
             raise ValueError("patch hunk counts do not match its body")
         if lines[start:start + old_count] != old:
+            actual = lines[start:start + old_count]
+            if (actual and old and not actual[-1].endswith(("\r", "\n"))
+                    and old[-1].endswith(("\r", "\n"))
+                    and actual == old[:-1] + [old[-1].rstrip("\r\n")]):
+                raise ValueError("patch context does not match: the source hunk ends without a newline; "
+                                 "include '\\ No newline at end of file' after its unterminated diff line")
             raise ValueError("patch context does not match current file; re-read before retrying")
         result.extend(new)
         position = start + old_count

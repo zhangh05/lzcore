@@ -176,13 +176,16 @@ def register_knowledge_routes(app):
         if not artifact_id:
             return jsonify({"ok": False, "error": "artifact_id required"}), 400
 
-        result = _import_artifact_as_knowledge(ws_id, artifact_id)
+        from agent.modules.knowledge.service import import_artifact
+        result = import_artifact(ws_id, artifact_id)
         if not result.get("ok"):
             status_code = 404 if result.get("error") == "artifact_not_found" else 400
             return jsonify(result), status_code
         from storage.events import publish
-        publish(ws_id, "knowledge", "created", result.get("source", {}).get("source_id", ""))
-        return jsonify({"ok": True, "source": result.get("source", {})})
+        publish(ws_id, "knowledge", "created", result["source_id"])
+        return jsonify({"ok": True, "source": {
+            "source_id": result["source_id"], "title": result["title"], "workspace_id": ws_id,
+        }})
 
     @app.route("/api/knowledge/sources/<source_id>/reindex", methods=["POST"])
     def api_knowledge_reindex(source_id):
@@ -362,44 +365,6 @@ def _filter_deleted_artifact_sources(workspace_id: str, sources: list) -> list:
             continue
         filtered.append(s)
     return filtered
-
-
-def _import_artifact_as_knowledge(workspace_id: str, artifact_id: str) -> dict:
-    from artifacts.store import get_artifact, read_artifact_content
-    from agent.modules.knowledge.service import import_document
-
-    artifact = get_artifact(workspace_id, artifact_id)
-    if artifact is None:
-        return {"ok": False, "error": "artifact_not_found"}
-    art = artifact.as_dict() if hasattr(artifact, "as_dict") else dict(artifact)
-    lifecycle = art.get("lifecycle", "active")
-    if lifecycle in {"deleted", "quarantined"}:
-        return {"ok": False, "error": f"artifact_{lifecycle}"}
-    if art.get("sensitivity") == "secret":
-        return {"ok": False, "error": "secret_artifact_not_indexable"}
-    content = read_artifact_content(workspace_id, artifact_id, allow_sensitive=True)
-    if not content:
-        return {"ok": False, "error": "artifact_empty"}
-    result = import_document(
-        workspace_id=workspace_id,
-        title=art.get("title") or artifact_id,
-        content=content,
-        source=f"artifact:{artifact_id}",
-        metadata={
-            "source_type": "artifact",
-            "artifact_id": artifact_id,
-            "artifact_type": art.get("artifact_type", ""),
-            "scope": art.get("scope", "workspace"),
-        },
-    )
-    if not result.get("ok"):
-        return {"ok": False, "error": (result.get("errors") or ["indexing_failed"])[0]}
-    source = {
-        "source_id": result.get("source_id", ""),
-        "title": result.get("title", ""),
-        "workspace_id": workspace_id,
-    }
-    return {"ok": True, "source": source}
 
 
 def _module_sources(workspace_id: str, status: str = None, scope: str = "") -> list:

@@ -42,6 +42,10 @@ def test_patch_preserves_line_endings_and_validates_entire_diff_before_write(mon
     target = tmp_path / "test_ws/files/data/config.txt"
     target.parent.mkdir(parents=True)
     target.write_bytes(b"one\r\ntwo")
+    missing_marker = "@@ -2 +2 @@\n-two\n+three\n"
+    rejected = handle_file_patch(_inv("test_ws", missing_marker))
+    assert rejected["ok"] is False and "No newline at end of file" in rejected["error"]
+    assert target.read_bytes() == b"one\r\ntwo"
     # Standard empty-range insertion at the start, including @@ in source text.
     patch = "@@ -0,0 +1 @@\n+@@ literal\n"
     inv = _inv("test_ws", patch)

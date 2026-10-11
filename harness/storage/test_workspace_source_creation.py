@@ -93,7 +93,26 @@ def test_invalid_source_text_never_publishes_or_replaces(client, bad):
     assert (workspace_root('source_test') / path).read_text() == 'const value = 1;\n'
 
 
-def test_edit_requires_unique_context_and_can_delete_text(client):
+def test_edit_requires_unique_context_and_can_delete_text(client, monkeypatch):
+    # Exercise Windows text-stream translation on every host. Exact source
+    # bytes must survive both create and the shared atomic edit writer.
+    import storage.atomic_io as atomic_io
+    import storage.workspace_files as workspace_files
+
+    fdopen = atomic_io.os.fdopen
+    named_temporary_file = workspace_files.tempfile.NamedTemporaryFile
+
+    def windows_fdopen(fd, mode="r", **kwargs):
+        if "b" not in mode:
+            kwargs.setdefault("newline", "\r\n")
+        return fdopen(fd, mode, **kwargs)
+
+    def windows_temporary_file(**kwargs):
+        kwargs.setdefault("newline", "\r\n")
+        return named_temporary_file(**kwargs)
+
+    monkeypatch.setattr(atomic_io.os, "fdopen", windows_fdopen)
+    monkeypatch.setattr(workspace_files.tempfile, "NamedTemporaryFile", windows_temporary_file)
     from core.runtime_engine.models import ExecutionNode
     from core.runtime_engine.semantic_validator import SemanticValidator
     path = "files/data/edit.txt"
@@ -114,6 +133,10 @@ def test_edit_requires_unique_context_and_can_delete_text(client):
     wrong_newlines = client.invoke("workspace.file", {"action": "edit", "filepath": path,
                                   "old_string": "unique\n", "new_string": ""}, context=ctx)
     assert wrong_newlines.status == "failed" and "CRLF" in wrong_newlines.summary
+    assert target.read_bytes() == b"same\r\nsame\r\nunique\r\n"
+    escaped = client.invoke("workspace.file", {"action": "edit", "filepath": path,
+                            "old_string": r"unique\r\n", "new_string": ""}, context=ctx)
+    assert escaped.status == "failed" and "double-escaped" in escaped.summary
     assert target.read_bytes() == b"same\r\nsame\r\nunique\r\n"
     args = {"action": "edit", "filepath": path,
             "old_string": read.output["preview"].splitlines(keepends=True)[-1], "new_string": ""}

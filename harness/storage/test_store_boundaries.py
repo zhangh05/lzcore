@@ -221,6 +221,15 @@ class TestRunStoreWriteSafety:
         assert "/Users/" not in serialized
         assert "C:\\Users\\" not in serialized
 
+        # Managed relative references must survive the same persistence path.
+        references = {
+            "filepath": "files/tmp/核对结果.json",
+            "preview": "`files/tmp/result.json` ./tmp/result.json ../tmp/result.json",
+            "url": "https://example.org/tmp/result.json",
+        }
+        assert redact_value(references) == references
+        assert redact_text('cache=/tmp/private.json') == 'cache=[REDACTED_PATH]'
+
 
 def test_storage_redaction_masks_bearer_sk_keys_with_hyphens():
     from storage.redaction import redact_text

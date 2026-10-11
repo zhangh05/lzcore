@@ -3,7 +3,7 @@ from __future__ import annotations
 from core.tools.schemas import ToolInvocation
 from storage.ids import validate_workspace_id
 
-from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok
+from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok, _result
 
 import re
 """Split general tool handlers."""
@@ -14,11 +14,11 @@ def handle_knowledge_index_artifact(inv: ToolInvocation) -> dict:
     art_id = args.get("artifact_id", "")
     try:
         validate_workspace_id(ws)
-        result = _import_artifact_as_knowledge(ws, art_id)
+        from agent.modules.knowledge.service import import_artifact
+        result = import_artifact(ws, art_id)
         if not result.get("ok"):
-            return _error_inv(inv, result.get("error", "indexing_failed"))
-        source = result.get("source", {})
-        return _ok(inv, "", {"indexed": True, "source_id": source.get("source_id", "")})
+            return _result(inv, False, result)
+        return _ok(inv, "", {"indexed": True, "source_id": result["source_id"]})
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
 
@@ -164,38 +164,6 @@ def handle_knowledge_get_chunk_summary(inv: ToolInvocation) -> dict:
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
 
-
-def _import_artifact_as_knowledge(workspace_id: str, artifact_id: str) -> dict:
-    from artifacts.store import get_artifact, read_artifact_content
-    from agent.modules.knowledge.service import import_document
-
-    artifact = get_artifact(workspace_id, artifact_id)
-    if artifact is None:
-        return {"ok": False, "error": "artifact_not_found"}
-    art = artifact.as_dict() if hasattr(artifact, "as_dict") else dict(artifact)
-    lifecycle = art.get("lifecycle", "active")
-    if lifecycle in {"deleted", "quarantined"}:
-        return {"ok": False, "error": f"artifact_{lifecycle}"}
-    if art.get("sensitivity") == "secret":
-        return {"ok": False, "error": "secret_artifact_not_indexable"}
-    content = read_artifact_content(workspace_id, artifact_id, allow_sensitive=True)
-    if not content:
-        return {"ok": False, "error": "artifact_empty"}
-    result = import_document(
-        workspace_id=workspace_id,
-        title=art.get("title") or artifact_id,
-        content=content,
-        source=f"artifact:{artifact_id}",
-        metadata={
-            "source_type": "artifact",
-            "artifact_id": artifact_id,
-            "artifact_type": art.get("artifact_type", ""),
-            "scope": art.get("scope", "workspace"),
-        },
-    )
-    if not result.get("ok"):
-        return {"ok": False, "error": (result.get("errors") or ["indexing_failed"])[0]}
-    return {"ok": True, "source": result.get("source", {})}
 
 def handle_knowledge_explain_not_found(inv: ToolInvocation) -> dict:
     args = inv.arguments
