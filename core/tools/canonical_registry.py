@@ -329,6 +329,30 @@ def _handle_location(inv: ToolInvocation) -> dict:
 
 
 def _handle_data(inv: ToolInvocation) -> dict:
+    from dataclasses import replace
+    from hashlib import sha256
+    from core.tools.general_tools.shared import _caller_workspace, _workspace_path, _error_inv
+
+    args = dict(inv.arguments or {})
+    sources = []
+    for prefix in ("", "right_"):
+        path = args.get(prefix + "source_filepath")
+        if not path:
+            continue
+        if args.get(prefix + "rows") is not None or args.get(prefix + "text"):
+            return _error_inv(inv, "supply only one input source per dataset: text, rows, or source_filepath")
+        try:
+            raw = _workspace_path(_caller_workspace(inv), path).read_bytes()
+            args[prefix + "text"] = raw.decode("utf-8-sig")
+        except (ValueError, OSError, UnicodeError) as exc:
+            return _error_inv(inv, str(exc))
+        sources.append({"filepath": path, "sha256": sha256(raw).hexdigest(), "side": prefix.rstrip("_") or "left"})
+    result = _dispatch_data(replace(inv, arguments=args))
+    result["sources"] = sources
+    return result
+
+
+def _dispatch_data(inv: ToolInvocation) -> dict:
     from core.tools.general_tools import data_engine
 
     args = inv.arguments or {}
@@ -357,7 +381,7 @@ def _handle_data(inv: ToolInvocation) -> dict:
     if action == "render":
         return data_engine.data_render(text=text, rows=rows, output=str(args.get("output") or "markdown"), max_rows=max_rows())
     if action == "pivot":
-        return data_engine.data_pivot(text=text, rows=rows, index=str(args.get("index") or ""), columns=str(args.get("columns") or ""), values=str(args.get("values") or ""), aggfunc=str(args.get("aggfunc") or "count"))
+        return data_engine.data_pivot(text=text, rows=rows, index=str(args.get("index") or ""), columns=str(args.get("columns") or ""), values=str(args.get("values") or ""), aggfunc=str(args.get("aggfunc") or "count"), max_rows=max_rows())
     if action == "join":
         return data_engine.data_join(text=text, rows=rows, right_text=str(args.get("right_text") or ""), right_rows=args.get("right_rows"), on=str(args.get("on") or ""), how=str(args.get("how") or "inner"))
     return _unsupported(inv, "parse|stats|distinct|aggregate|filter|sort|render|pivot|join")
@@ -513,7 +537,6 @@ def _handle_system(inv: ToolInvocation) -> dict:
 
 
 def _handle_text(inv: ToolInvocation) -> dict:
-    import re
     from core.tools.general_tools.runtime_tools import handle_text_extract_keywords, handle_text_redact
 
     args = inv.arguments or {}
@@ -526,16 +549,12 @@ def _handle_text(inv: ToolInvocation) -> dict:
         pattern = str(args.get("pattern") or "")
         if not pattern:
             return {"ok": False, "error": "pattern is required"}
+        import regex
+        from core.tools.general_tools.text_tools import regex_matches
         try:
-            matches = re.findall(pattern, str(args.get("text") or ""), re.MULTILINE | re.DOTALL)
-        except re.error as exc:
+            return regex_matches(pattern, str(args.get("text") or ""), inv.cancel_check)
+        except regex.error as exc:
             return {"ok": False, "error": f"invalid regex: {exc}"}
-        return {
-            "ok": True,
-            "matches": matches[:100],
-            "match_count": len(matches),
-            "summary": f"Regex matched {len(matches)} occurrence(s).",
-        }
     return _unsupported(inv, "redact|extract|extract_entities|match")
 
 
@@ -582,6 +601,7 @@ def _dispatch_workspace_file(inv: ToolInvocation) -> dict:
         handle_file_edit,
         handle_file_patch,
         handle_file_read,
+        handle_file_search,
         handle_file_read_image,
         handle_ws_list_files,
         handle_ws_write_artifact_file,
@@ -601,8 +621,9 @@ def _dispatch_workspace_file(inv: ToolInvocation) -> dict:
         "write": handle_ws_write_artifact_file,
         "write_artifact": handle_ws_write_artifact_file,
         "glob": _local_glob,
+        "search": handle_file_search,
         "delete": _local_delete,
-    }.get(action, lambda x: _unsupported(x, "list|read|read_image|extract_document|extract_document_image|extract_document_images|create|edit|patch|write|write_artifact|glob|delete"))(inv)
+    }.get(action, lambda x: _unsupported(x, "list|read|read_image|extract_document|extract_document_image|extract_document_images|create|edit|patch|write|write_artifact|glob|search|delete"))(inv)
 
 
 def _handle_workspace_artifact(inv: ToolInvocation) -> dict:
@@ -810,9 +831,9 @@ _EXEC_ARGS = {
 _BROWSER_ARGS = {
     "url": {"type": "string"}, "selector": {"type": "string"},
     "ref": {"type": "string"}, "text": {"type": "string"},
-    "script": {"type": "string"}, "key": {"type": "string"},
+    "script": {"type": "string", "description": "JavaScript for evaluate; requires server-enabled evaluation capability."}, "key": {"type": "string"},
     "value": {"type": "string"}, "wait_selector": {"type": "string"},
-    "wait_text": {"type": "string"}, "timeout": {"type": "integer", "minimum": 1},
+    "wait_text": {"type": "string"}, "timeout": {"type": "integer", "minimum": 1, "description": "Browser navigation/wait timeout in milliseconds."},
     "wait_ms": {"type": "integer", "minimum": 0},
     "compact": {"type": "boolean"}, "max_elements": {"type": "integer", "minimum": 1},
     "full_page": {"type": "boolean"}, "as_file": {"type": "boolean"},
@@ -896,8 +917,15 @@ _WEB_ARGS = {
 
 _DATA_ARGS = {
     "rows": {"type": "array"}, "text": {"type": "string"},
-    "column": {"type": "string"}, "conditions": {"type": "array"},
-    "group_by": {"type": "array", "items": {"type": "string"}}, "metrics": {"type": "array"},
+    "source_filepath": {"type": "string", "description": "Workspace-relative UTF-8 CSV/JSON/Markdown source; alternative to text/rows, reads the complete file without copying its contents through the model."},
+    "right_source_filepath": {"type": "string", "description": "Workspace-relative UTF-8 source for the right side of join; alternative to right_text/right_rows."},
+    "column": {"type": "string"}, "conditions": {"type": "array", "items": _schema({
+        "column": {"type": "string"}, "op": {"type": "string", "enum": ["eq", "neq", "gt", "lt", "gte", "lte", "contains", "in"]}, "value": {},
+    }, ["column"])},
+    "group_by": {"type": "array", "items": {"type": "string"}}, "metrics": {"type": "array", "items": _schema({
+        "column": {"type": "string", "description": "Column or * for row count."},
+        "func": {"type": "string", "enum": ["count", "sum", "avg", "min", "max"]},
+    })},
     "by": {"type": "array", "items": {"type": "string"}}, "order": {"type": "string", "enum": ["asc", "desc"]},
     "max_rows": {"type": "integer", "minimum": 1, "maximum": 200},
     "output": {"type": "string", "enum": ["markdown", "json", "csv"]},
@@ -943,11 +971,11 @@ _SYSTEM_ARGS = {
 _WORKSPACE_FILE_ARGS = {
     "filepath": {"type": "string", "description": "Path relative to the workspace root for create/read/edit/patch/delete, never relative to exec.run cwd. In coding assignments include project_dir, e.g. files/data/project/src/main.ts. Container /workspace paths belong to exec.run only."},
     "content": {"type": "string", "description": "Text content for create/write/write_artifact."},
-    "limit": {"type": "integer", "minimum": 1},
+    "limit": {"type": "integer", "minimum": 1, "description": "read: maximum lines; list/glob/search: maximum entries (up to 200); extract_document_images: up to 8 images."},
     "offset": {"type": "integer", "minimum": 0}, "subdir": {"type": "string"},
-    "pattern": {"type": "string"}, "old_string": {"type": "string"},
-    "new_string": {"type": "string"}, "replace_all": {"type": "boolean"},
-    "patch_text": {"type": "string"}, "filename": {"type": "string"},
+    "pattern": {"type": "string"}, "query": {"type": "string", "description": "Literal UTF-8 source search (up to 4 MiB per file); returns workspace paths and 1-based line numbers, with skipped-file coverage."}, "old_string": {"type": "string", "description": "Exact unique source text including original newline characters; read reports CRLF/LF/mixed. Use replace_all only for an explicitly intended global edit."},
+    "new_string": {"type": "string", "description": "Replacement text; empty string deletes the matched source text."}, "replace_all": {"type": "boolean"},
+    "patch_text": {"type": "string", "description": "Single-file unified diff with valid hunk positions/counts/context and no-newline markers where needed. Line-based patches preserve the source newline convention."}, "filename": {"type": "string"},
     "dry_run": {"type": "boolean"},
     "file_id": {"type": "string", "description": "Managed attachment id for extract_document and embedded-image extraction actions; never use it as filepath."},
     "image_index": {"type": "integer", "minimum": 1, "maximum": 50, "description": "1-based embedded DOCX image index."},
@@ -1009,7 +1037,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
             "max_batch_size": 20,
         }],
     }),
-    _entry("data.manage", _handle_data, {**_COMMON, **_DATA_ARGS, "action": {"type": "string", "enum": ["parse", "stats", "distinct", "aggregate", "filter", "sort", "render", "pivot", "join"]}}, required=["action"], description="Structured data processing. Supply text or rows; action-specific columns/options are declared in the schema."),
+    _entry("data.manage", _handle_data, {**_COMMON, **_DATA_ARGS, "action": {"type": "string", "enum": ["parse", "stats", "distinct", "aggregate", "filter", "sort", "render", "pivot", "join"]}}, required=["action"], description="Structured data processing. Supply text, rows, or source_filepath (up to 10,000 input rows); joins also accept right_source_filepath. Returned rows are bounded previews with coverage fields; pivot also bounds displayed columns to 200. Process original inputs for full-dataset statistics, never a truncated preview."),
     _entry("report.manage", _handle_report, {**_COMMON, "action": {"type": "string", "enum": ["save", "diff", "document"]}, "title": {"type": "string"}, "content": {"type": "string"}, "summary": {"type": "string"}, "text_a": {"type": "string"}, "text_b": {"type": "string"}}, required=["action"], description="Report operations. save requires content; diff requires text_a/text_b; document requires summary."),
     _entry("knowledge.manage", _handle_knowledge, {**_COMMON, "action": {"type": "string", "enum": ["search", "read", "list", "chunk", "import", "reindex"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "artifact_id": {"type": "string"}, "level": {"type": "string", "enum": ["chunk", "source"]}, "chunk_id": {"type": "string"}, "source_id": {"type": "string"}, "chunk_type": {"type": "string"}, "scope": {"type": "string"}, "include_disabled": {"type": "boolean"}, "include_deleted": {"type": "boolean"}}, required=["action"], risk="medium", description="Knowledge operations. search requires query; read requires chunk_id or source_id; list lists sources; chunk lists chunks; import requires artifact_id; reindex requires source_id."),
     _entry("memory.manage", _handle_memory, {**_COMMON, **_MEMORY_ARGS, "action": {"type": "string", "enum": ["search", "get", "review", "confirm", "create", "update", "delete", "profile_get", "profile_set"]}}, required=["action"], risk="medium", description="Scoped memory and revision operations. Tool-generated writes and profile changes are candidates; confirm records explicit operator review, not personal user verification. get returns full text and provenance by memory_id; search/review support offset pagination. create requires content; update requires memory_id and replacement content; confirm/delete require memory_id; profile_set requires field and value."),
@@ -1037,10 +1065,10 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         "session_id": {"type": "string"},
         "subtask_id": {"type": "string"},
         "parent_task_id": {"type": "string"},
-    }, required=["action"], description="Subagent task management. spawn delegates an outcome, not an invented implementation plan, and accepts only the profile_id values published in the schema; choose research_agent for external research, file_agent for workspace files, and data_agent for structured analysis. Preserve explicit user constraints, but let the child select and compose its allowed tools. get/cancel/merge use the subtask_id returned by spawn. Coding/frontend roles require coding_assignment, execute in isolated branches, and do not auto-merge. Dependencies must be integrated before start. qa_agent reviews an exact implementation candidate, preserves its source, runs the implementation contract checks, and records its judgement with agent.review; its final reply has no required presentation format. Failed or incomplete QA cannot validate a candidate. merge requires a passed independent QA verdict and rejects changed baselines. Parent task/session identities come from the runtime; omit parent_task_id and session_id rather than inventing them. start resumes a dependency-ready created task. reconcile reads back a stopped EXECUTION_UNKNOWN candidate and its resources, without replaying calls; successful reconciliation allows a new explicit QA attempt, never grants acceptance. Delegation does not extend an upstream tool or data provider's limits."),
-    _entry("system.manage", _handle_system, {**_COMMON, **_SYSTEM_ARGS, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "action": {"type": "string", "enum": ["diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_checkpoint", "session_rewind", "session_export", "session_snapshot", "context_index", "context_read", "context_search"]}}, required=["action"], risk="medium", description="context_search locates exact archived evidence by query and returns context_read offsets; context_index pages archived model-window evidence; context_read retrieves an explicit message text range. Omit checkpoint_id on context_index to discover archives after restart. Archive operations stay within the current session; context_read requires checkpoint_id and message_index. Runtime health, current local date/time and host facts, durable tasks, audit logs, run details, and session operations. local_info returns timezone-aware current time plus host/IP/OS facts; run_get requires run_id; session actions require session_id; rewind additionally requires snapshot_id."),
-    _entry("text.analyze", _handle_text, {**_COMMON, "action": {"type": "string", "enum": ["redact", "extract_entities", "match"]}, "text": {"type": "string"}, "pattern": {"type": "string"}}, required=["action"], description="Text redact, extract and match."),
-    _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "create", "write", "write_artifact", "edit", "patch", "glob", "delete"]}}, required=["action"], risk="medium", description="Workspace files. list supports offset/limit pagination with next_offset; read returns full text unless an explicit line offset/limit is supplied. extract_document reads a managed text, DOCX, PDF, XLSX, or PPTX attachment by file_id and reports embedded_image_count for DOCX. extract_document_image extracts one DOCX image by file_id and 1-based image_index. extract_document_images extracts an ordered DOCX image batch (up to 8) for visual analysis; its image evidence is automatically delivered to the next model turn. Never pass a returned file_id to read/read_image because those actions require a workspace filepath. create requires filepath and content, preserves source directory structure under files/data, files/tmp or inbox, and fails if the target exists; use read then edit/patch for existing sources. write/write_artifact require filename and content and generate FileStore attachments, not source paths.", execution_contract={
+    }, required=["action"], description='Delegate bounded outcomes with explicit user scope; choose a published profile_id. spawn returns subtask_id; list/status/get inspect roles/tasks/results. Coding/frontend/QA profiles require coding_assignment and use isolated source. start resumes a dependency-ready task; cancel stops one. Independent QA records its exact server-bound candidate with agent.review; failed/incomplete review does not validate it. merge requires passed QA and an unchanged baseline. reconcile reads stopped EXECUTION_UNKNOWN source/resources, permits a fresh explicit review but does not replay or accept writes. Parent task/session identities are server-bound; do not invent them.'),
+    _entry("system.manage", _handle_system, {**_COMMON, **_SYSTEM_ARGS, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "action": {"type": "string", "enum": ["diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_checkpoint", "session_rewind", "session_export", "session_snapshot", "context_index", "context_read", "context_search"]}}, required=["action"], risk="medium", description='Runtime diagnostics/health/selfcheck, timezone-aware local_info, durable tasks/audit_log/run_get, and session lifecycle operations. session_checkpoint persists a checkpoint; session_rewind changes the session; session_export/snapshot read saved state. context_index discovers/pages archived windows (omit checkpoint_id for discovery); context_search locates exact evidence and read offsets; context_read retrieves an explicit message range. Archives stay in the current session; ids are published in action requirements.'),
+    _entry("text.analyze", _handle_text, {**_COMMON, "action": {"type": "string", "enum": ["redact", "extract_entities", "match"]}, "text": {"type": "string"}, "pattern": {"type": "string"}}, required=["action"], description="redact removes secrets from text; extract_entities returns deterministic IP, URL and email candidates with character spans and keyword frequencies; match returns regex matches and total count, with at most 100 matches displayed and a one-second computation deadline (not a regex syntax restriction)."),
+    _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "create", "write", "write_artifact", "edit", "patch", "glob", "search", "delete"]}}, required=["action"], risk="medium", description='Workspace sources and managed attachments. list/glob discover paths; search returns literal UTF-8 source hits with path/line and paging under subdir (default files/data), reporting skipped files. read preserves UTF-8 text/newlines, returns complete text or explicit line ranges plus line_ending/ends_with_newline. read_image and extract_document_image(s) deliver image evidence to the next model call. extract_document parses text/DOCX/PDF/XLSX/PPTX by file_id; embedded_image_count and has_more describe DOCX image coverage. Path actions use filepath, not file_id. create exclusively creates sources under files/data, files/tmp or inbox; edit uses unique old_string (replace_all is explicit), patch validates unified diffs, and dry_run previews edits/patches. write/write_artifact generate FileStore attachments from filename/content, preserving source paths separately.', execution_contract={
         "batching": [{
             "source_action": "extract_document_image",
             "target_action": "extract_document_images",
@@ -1076,7 +1104,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         "source_file_ids": {"type": "array", "items": {"type": "string"}},
         "hashes": {"type": "boolean"}, "offset": {"type": "integer", "minimum": 0}, "page": {"type": "integer", "minimum": 1}, "ocr": {"type": "boolean"},
         "name": {"type": "string"}, "folder": {"type": "string"}, "force": {"type": "boolean"}, "permanent": {"type": "boolean"}},
-        required=["action"], description="reconcile_preview/reconcile verify pending FileRecord commits against actual payload hashes; settle metadata only and never replay a source write. health reports checked and unchecked consistency domains; hashes requests full payload verification. migration_preview/migrate reconstruct only proven owner references with backups; no automatic deduplication or payload rewrite. export creates a file-domain backup at destination; restore_bundle_preview/restore_bundle inspect or restore that backup by file_id within the same principal/workspace, preserving conflicts. search finds literal content hits with line positions and indexed coverage; reindex explicitly includes parsed documents without embedding/model requests. source_list browses actual managed source directories; source_move changes a real path without rewriting code imports. pack creates a real ZIP and extract_archive expands supported ZIP/TAR archives into an exclusive writable directory. inspect pages document structures including XLSX formulas/cached values, DOCX block order, PPTX object positions, CSV rows and archive members with explicit coverage. render_page renders a PDF page as actual image evidence; OCR is explicit and requires an installed Tesseract processor. Discover managed files with list/query/cursor and resolve one file_id, artifact_id or filepath. materialize preserves original bytes and returns an explicit working-copy filepath/execution_path. publish registers a real generated file, including binary Office/media/archive outputs, and its input references. rename/move organize without changing file_id. delete recycles by default; permanent clearance retains unavailable identities. restore verifies bytes. Existing import is inbox-only; reconcile_trash verifies legacy deletes.",
+        required=["action"], description='Managed file identities and original bytes. list/resolve discover file_id/artifact_id/path and processing capabilities; inspect pages document structure, tables/formulas, slides and archive members; render_page supplies PDF image evidence (OCR requires Tesseract). materialize returns a working-copy filepath/execution_path; publish registers real generated bytes and source references. rename/move organize identities; delete recycles by default and restore verifies bytes. source_list/source_move operate on managed source paths; pack/extract_archive create ZIP or expand ZIP/TAR into a new writable directory. search returns literal content hits and indexed coverage; reindex explicitly parses documents without model calls. references reports owners; import accepts inbox paths. health checks consistency; migration_preview/migrate reconstruct proven references with backups. export and restore_bundle_preview/restore_bundle back up/restore file-domain data, preserving conflicts. reconcile_preview/reconcile settle pending metadata only after payload hash verification; never replay a source write. reconcile_trash_preview/reconcile_trash verify legacy trash.',
         execution_contract={'reference_kinds': {action: {'file_id': 'managed_file', 'filepath': 'workspace_path', 'destination': 'workspace_path'} for action in ('resolve', 'materialize', 'publish', 'rename', 'move', 'restore', 'delete', 'references', 'import', 'inspect', 'render_page', 'source_list', 'source_move', 'pack', 'extract_archive', 'export', 'restore_bundle_preview', 'restore_bundle')}}),
     _entry("workspace.metadata.get", _handle_workspace_metadata, {"workspace_id": {"type": "string"}}, description="Workspace metadata."),
     _entry("workspace.document.pdf.extract_text", _handle_pdf_extract, {"workspace_id": {"type": "string"}, "filepath": {"type": "string"}, "page_range": {"type": "string"}}, required=["filepath"], description="Extract PDF text."),
@@ -1098,7 +1126,7 @@ _BINDABLE_INPUTS: dict[str, dict[str, list[str]]] = {
         "resolve": ["query"], "resolve_batch": ["queries"],
         "reverse": ["latitude", "longitude"],
     },
-    "data.manage": {"*": ["text", "rows", "right_text", "right_rows"]},
+    "data.manage": {"*": ["text", "rows", "right_text", "right_rows", "source_filepath", "right_source_filepath"]},
     "report.manage": {
         "save": ["content"], "diff": ["text_a", "text_b"],
         "document": ["summary"],
@@ -1124,7 +1152,7 @@ _BINDABLE_INPUTS: dict[str, dict[str, list[str]]] = {
     },
     "text.analyze": {"*": ["text"]},
     "workspace.file": {
-        "read": ["filepath"], "read_image": ["filepath"],
+        "read": ["filepath", "offset"], "read_image": ["filepath"], "search": ["query", "subdir"],
         "extract_document": ["file_id"], "extract_document_image": ["file_id"],
         "extract_document_images": ["file_id"],
     },
@@ -1168,14 +1196,14 @@ _REFERENCEABLE_OUTPUTS: dict[str, dict[str, list[str]]] = {
         "reverse": ["resolved", "canonical_name", "latitude", "longitude", "candidates", "confidence"],
     },
     "data.manage": {
-        "parse": ["rows", "columns", "types", "row_count"],
-        "stats": ["stats", "numeric_columns", "markdown"],
-        "distinct": ["values", "unique_count", "markdown"],
-        "aggregate": ["aggregated", "markdown"],
-        "filter": ["rows", "markdown"], "sort": ["rows", "markdown"],
+        "parse": ["rows", "columns", "types", "row_count", "truncated", "sources"],
+        "stats": ["stats", "numeric_columns", "markdown", "sources"],
+        "distinct": ["values", "unique_count", "returned", "truncated", "markdown"],
+        "aggregate": ["aggregated", "markdown", "group_count", "returned", "truncated"],
+        "filter": ["rows", "markdown", "total", "returned", "truncated"], "sort": ["rows", "markdown", "total", "returned", "truncated"],
         "render": ["columns", "returned", "total", "truncated", "format"],
-        "pivot": ["pivot", "markdown"],
-        "join": ["rows", "markdown"],
+        "pivot": ["pivot", "markdown", "row_keys", "col_keys", "total_rows", "total_columns", "truncated"],
+        "join": ["rows", "markdown", "merged_rows", "returned", "truncated"],
     },
     "report.manage": {
         "save": ["artifact_id", "artifact_ids", "title"], "diff": ["diff", "changed_lines"],
@@ -1212,12 +1240,12 @@ _REFERENCEABLE_OUTPUTS: dict[str, dict[str, list[str]]] = {
     },
     "text.analyze": {
         "redact": ["redacted", "original_length"],
-        "extract_entities": ["keywords"],
+        "extract_entities": ["keywords", "entities", "entity_count", "truncated"],
         "match": ["matches", "match_count"],
     },
     "workspace.file": {
-        "list": ["files", "count"], "glob": ["matches", "count"],
-        "read": ["preview", "size", "truncated"],
+        "list": ["files", "count"], "glob": ["matches", "count"], "search": ["matches", "count", "has_more", "next_offset", "coverage"],
+        "read": ["filepath", "preview", "size", "file_size_bytes", "line_ending", "ends_with_newline", "total_lines", "offset", "next_offset", "has_more", "truncated"],
         "read_image": ["filepath", "filename", "format", "dimensions", "file_id", "evidence_parts"],
         "edit": ["file_changes"], "patch": ["file_changes"],
         "extract_document": ["file_id", "file_kind", "title", "content", "truncated", "embedded_image_count"],
@@ -1281,7 +1309,7 @@ def to_tool_specs() -> list[tuple[ToolSpec, Callable[[ToolInvocation], dict]]]:
             tool_id=entry.canonical_tool_id,
             handler_id=entry.canonical_tool_id,
             name=ns_entry.display_name,
-            description=ns_entry.usage_hint or entry.description,
+            description=entry.description,
             category=ns_entry.category,
             risk_level=entry.risk_level,
             input_schema=entry.input_schema,
@@ -1301,43 +1329,19 @@ def to_tool_specs() -> list[tuple[ToolSpec, Callable[[ToolInvocation], dict]]]:
 
 
 def to_openai_tools() -> list[dict[str, Any]]:
+    """Project the same complete ToolSpecs used by the governed runtime."""
     from agent.llm.tool_adapter import tool_spec_to_openai_function
     from core.tools.catalog_snapshot import build_action_profiles_for_tool
-    from extensions.runtime import get_extension_tool_specs
-    from core.tools.tool_namespace import get_namespace_entry
+
     out = []
-    for tool_id, entry in CANONICAL_REGISTRY.items():
-        ns_entry = get_namespace_entry(tool_id)
-        description = ns_entry.usage_hint or entry.description
-        if ns_entry.not_for:
-            description = f"{description}\n\nAvoid: {ns_entry.not_for}"
-        out.append(tool_spec_to_openai_function({
-            "tool_id": tool_id,
-            "description": description,
-            "input_schema": entry.input_schema,
-            "risk_level": entry.risk_level,
-            "action_profiles": build_action_profiles_for_tool(
-                tool_id,
-                input_schema=entry.input_schema,
-                category=ns_entry.category,
-                base_permission=entry.permission_action or "read",
-            ),
-            "metadata": {**ns_entry.metadata(), **_execution_metadata(entry)},
-        }))
-    for spec, _handler in get_extension_tool_specs():
-        if not spec.callable_by_llm:
+    for spec, _handler in to_tool_specs():
+        if not spec.enabled or not spec.callable_by_llm:
             continue
-        out.append(tool_spec_to_openai_function({
-            "tool_id": spec.tool_id,
-            "description": spec.description or spec.name or spec.tool_id,
-            "input_schema": spec.input_schema,
-            "risk_level": spec.risk_level,
-            "action_profiles": build_action_profiles_for_tool(
-                spec.tool_id,
-                input_schema=spec.input_schema,
-                category=spec.category,
-                base_permission=spec.permission_action,
-            ),
-            "metadata": spec.metadata,
-        }))
+        public = spec.as_dict()
+        public["action_profiles"] = build_action_profiles_for_tool(
+            spec.tool_id, input_schema=spec.input_schema, category=spec.category,
+            base_permission=spec.permission_action or "read",
+            action_contracts=spec.metadata.get("action_execution_contracts"),
+        )
+        out.append(tool_spec_to_openai_function(public))
     return out

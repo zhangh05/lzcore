@@ -50,6 +50,14 @@ class ToolExecutor:
 
         # ── 3. Validate arguments against schema ──
         schema_errors = _validate_arguments(invocation.arguments, spec.input_schema)
+        from core.tools.action_requirements import missing_action_arguments
+        for missing in (missing_action_arguments(spec.tool_id, invocation.arguments, spec.metadata)
+                        if isinstance(invocation.arguments, dict) else []):
+            schema_errors.append(
+                f"Missing required field: '{missing['field']}' for action={missing['action']}"
+                if "field" in missing else
+                f"Action {missing['action']} requires one of {missing['one_of_fields']}"
+            )
         if schema_errors:
             return ToolResult(
                 invocation_id=invocation.invocation_id,
@@ -141,15 +149,22 @@ class ToolExecutor:
             invocation.workspace_id, invocation.tool_id,
             str(invocation.arguments.get("action") or ""),
         )
+        from core.runtime_engine.tool_runtime import resolve_tool_outcome
+        outcome, error_code, normalized = resolve_tool_outcome(raw)
+        payload = dict(normalized) if isinstance(normalized, dict) else {"output": normalized}
+        if error_code in {"NULL_RESULT", "TOOL_RESULT_INVALID"}:
+            payload.update(ok=False, error_code=error_code,
+                           error="Handler returned no explicit tool outcome; verify effects before any further write.",
+                           automatic_retry_allowed=False)
         output = redact_tool_output(
-            raw if isinstance(raw, dict) else {"output": str(raw)},
+            payload,
             container_paths=container_paths,
         )
 
         duration = int((time.time() - start_time) * 1000)
 
         # ── 8. Build result ──
-        ok = output.get("ok", True)  # v1.0.3.5: check ok to propagate errors
+        ok = outcome == "SUCCESS"
         summary = (
             output.get("summary")
             or output.get("_hint")
@@ -211,6 +226,8 @@ def _validate_arguments(arguments: dict, schema: dict) -> list:
     Returns list of error strings (empty = valid).
     """
     errors = []
+    if not isinstance(arguments, dict):
+        return ["Tool arguments must be an object"]
     if not schema:
         return errors
 

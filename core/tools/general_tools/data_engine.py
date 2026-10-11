@@ -10,6 +10,8 @@ import csv
 import io
 import json
 import re
+import math
+from itertools import islice
 from collections import Counter, defaultdict
 from typing import Any
 
@@ -32,6 +34,8 @@ def _normalize_rows(data: Any) -> tuple[list[dict], str | None]:
             return data, None
         if isinstance(data[0], list):
             headers = [f"col_{i}" for i in range(len(data[0]))]
+            if not all(isinstance(row, list) and len(row) == len(headers) for row in data):
+                return [], "all array rows must have the same column count"
             return [dict(zip(headers, row)) for row in data], None
         return [], "unsupported row type"
     if isinstance(data, str):
@@ -50,8 +54,9 @@ def _parse_rows(text: str) -> list[dict]:
                 return parsed
             if isinstance(parsed, dict):
                 return [parsed]
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid JSON data: {exc.msg}") from exc
+        raise ValueError("JSON data must be an object or an array of objects")
     md_rows = _parse_markdown_table(text)
     if md_rows:
         return md_rows
@@ -63,7 +68,7 @@ def _parse_text(text: str) -> tuple[list[dict], str | None]:
         rows = _parse_rows(text)
         if not rows:
             return [], "no parsable data found"
-        return rows, None
+        return _normalize_rows(rows)
     except Exception as e:
         return [], str(e)[:200]
 
@@ -73,7 +78,11 @@ def _parse_csv(text: str) -> list[dict]:
         dialect = csv.Sniffer().sniff(text[:4000], delimiters=",;\t|")
     except csv.Error:
         dialect = csv.excel
-    return list(csv.DictReader(io.StringIO(text), dialect=dialect))[:MAX_INPUT_ROWS]
+    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    rows = list(islice(reader, MAX_INPUT_ROWS + 1))
+    if any(None in row or any(value is None for value in row.values()) for row in rows):
+        raise ValueError("CSV row does not match the header column count")
+    return rows
 
 
 def _parse_markdown_table(text: str) -> list[dict]:
@@ -88,27 +97,37 @@ def _parse_markdown_table(text: str) -> list[dict]:
     rows = []
     for line in data:
         cells = [c.strip() for c in line.strip("|").split("|")]
-        rows.append(dict(zip(headers, cells[:len(headers)] + [""] * (len(headers) - len(cells)))))
+        if len(cells) != len(headers):
+            raise ValueError("Markdown row does not match the header column count")
+        rows.append(dict(zip(headers, cells)))
     return rows
 
 
 def _safe_number(val: Any) -> float | None:
+    if isinstance(val, bool):
+        return None
     if isinstance(val, (int, float)):
-        return float(val)
+        return float(val) if math.isfinite(val) else None
     if not isinstance(val, str) or not val.strip():
         return None
     v = val.strip().replace(",", "").replace(" ", "")
     try:
-        return float(v)
+        number = float(v)
+        return number if math.isfinite(number) else None
     except ValueError:
         return None
+
+
+def _columns(rows: list[dict]) -> list[str]:
+    """Keep first-seen column order across sparse object rows."""
+    return list(dict.fromkeys(key for row in rows for key in row))
 
 
 def _infer_types(rows: list[dict], max_sample: int = 10) -> dict[str, str]:
     if not rows:
         return {}
     types = {}
-    for col in rows[0]:
+    for col in _columns(rows):
         vals = [row.get(col, "") for row in rows[:max_sample]]
         n = sum(1 for v in vals if _safe_number(v) is not None and str(v).strip())
         types[col] = "number" if n >= len(vals) * 0.7 else "string"
@@ -119,7 +138,7 @@ def _md_table(rows: list[dict], max_rows: int = 50, columns: list[str] | None = 
     """Render rows as Markdown table — LLM-optimized format."""
     if not rows:
         return "(empty)"
-    cols = columns or list(rows[0].keys())
+    cols = columns or _columns(rows)
     def cell(value: Any) -> str:
         return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")[:100]
 
@@ -141,9 +160,9 @@ def data_parse(text: str = "", rows: list | None = None) -> dict:
     if err:
         return {"ok": False, "error": err, "_actions": ["检查输入数据格式，确保是CSV/JSON/Markdown表格"]}
 
-    cols = list(parsed[0].keys()) if parsed else []
+    cols = _columns(parsed)
     types = _infer_types(parsed)
-    nulls = {c: sum(1 for r in parsed if not str(r.get(c, "")).strip()) for c in cols}
+    nulls = {c: sum(1 for r in parsed if r.get(c) is None or not str(r.get(c, "")).strip()) for c in cols}
     total = len(parsed)
 
     return {
@@ -166,7 +185,7 @@ def data_parse(text: str = "", rows: list | None = None) -> dict:
             "用 distinct 查看某列的唯一值分布",
             "用 filter/sort 筛选排序",
             "用 aggregate 分组聚合",
-            "用 render 输出完整表格",
+            "用 render 输出有界预览；完整大结果可从原始数据计算并发布文件",
         ],
     }
 
@@ -180,8 +199,8 @@ def data_stats(text: str = "", rows: list | None = None) -> dict:
     if err:
         return {"ok": False, "error": err}
 
-    cols = list(parsed[0].keys()) if parsed else []
-    num_cols = [c for c in cols if _infer_types(parsed).get(c) == "number"]
+    cols = _columns(parsed)
+    num_cols = [c for c in cols if any(_safe_number(r.get(c)) is not None for r in parsed)]
 
     if not num_cols:
         return {
@@ -201,13 +220,13 @@ def data_stats(text: str = "", rows: list | None = None) -> dict:
         sv = sorted(vals)
         n = len(sv)
         stats_result[col] = {
-            "count": n,
+            "count": n, "excluded_count": len(parsed) - n,
             "mean": round(sum(sv) / n, 2),
             "std": round(_std_dev(sv), 2),
             "min": sv[0],
-            "p25": sv[int(n * 0.25)],
-            "p50": sv[int(n * 0.50)],
-            "p75": sv[int(n * 0.75)],
+            "p25": _percentile(sv, 0.25),
+            "p50": _percentile(sv, 0.50),
+            "p75": _percentile(sv, 0.75),
             "max": sv[-1],
         }
 
@@ -222,9 +241,17 @@ def data_stats(text: str = "", rows: list | None = None) -> dict:
         "stats": stats_result,
         "markdown": md,
         "numeric_columns": num_cols,
+        "statistics_method": {"std": "population", "quantiles": "linear interpolation", "non_numeric": "excluded"},
         "_hint": f"数值列 {num_cols} 的统计摘要。用 filter/sort 深入分析。",
     }
 
+
+
+def _percentile(sorted_values: list[float], fraction: float) -> float:
+    position = (len(sorted_values) - 1) * fraction
+    lower = int(position)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * (position - lower)
 
 def _std_dev(vals: list[float]) -> float:
     mean = sum(vals) / len(vals)
@@ -241,13 +268,13 @@ def data_distinct(text: str = "", rows: list | None = None, column: str = "") ->
         return {"ok": False, "error": err}
 
     if not column:
-        cols = list(parsed[0].keys()) if parsed else []
+        cols = _columns(parsed)
         return {
             "ok": False, "error": "column is required",
             "available_columns": cols,
         }
 
-    available = set(parsed[0].keys()) if parsed else set()
+    available = set(_columns(parsed))
     if column not in available:
         return {"ok": False, "error": f"unknown distinct column: {column}", "available_columns": sorted(available)}
 
@@ -266,6 +293,8 @@ def data_distinct(text: str = "", rows: list | None = None, column: str = "") ->
         "unique_count": len(counter),
         "total_rows": total,
         "values": [{"value": v, "count": cnt} for v, cnt in top],
+        "returned": len(top),
+        "truncated": len(counter) > len(top),
         "markdown": md,
         "_hint": f"'{column}' 有 {len(counter)} 个不同值。用 filter 基于这些值筛选。",
         "_actions": [
@@ -297,7 +326,7 @@ def data_aggregate(
     else:
         group_keys = []
 
-    available = set(parsed[0].keys())
+    available = set(_columns(parsed))
     missing_groups = [key for key in group_keys if key not in available]
     if missing_groups:
         return {"ok": False, "error": "unknown group_by columns", "columns": missing_groups}
@@ -335,11 +364,13 @@ def data_aggregate(
     cols = list(result_rows[0].keys()) if result_rows else []
     return {
         "ok": True,
-        "aggregated": result_rows,
+        "aggregated": result_rows[:MAX_OUTPUT_ROWS],
+        "returned": min(len(result_rows), MAX_OUTPUT_ROWS),
+        "truncated": len(result_rows) > MAX_OUTPUT_ROWS,
         "markdown": _md_table(result_rows, 100, cols),
         "group_count": len(result_rows),
         "group_by": group_keys,
-        "_hint": f"聚合结果：{len(result_rows)} 组。用 sort 按某指标排序。",
+        "_hint": f"聚合结果共 {len(result_rows)} 组；返回至多 {MAX_OUTPUT_ROWS} 组预览。截断时全量后续计算应继续使用原始数据。",
     }
 
 
@@ -347,7 +378,7 @@ def _compute_agg(rows: list[dict], column: str, func: str) -> Any:
     if func == "count":
         if column == "*":
             return len(rows)
-        return sum(1 for r in rows if str(r.get(column, "")).strip())
+        return sum(1 for r in rows if r.get(column) is not None and str(r.get(column, "")).strip())
     vals = []
     for r in rows:
         n = _safe_number(r.get(column, ""))
@@ -380,7 +411,7 @@ def data_filter(
 
     max_rows = max(1, min(int(max_rows or 50), MAX_OUTPUT_ROWS))
     if conditions:
-        available = set(parsed[0].keys()) if parsed else set()
+        available = set(_columns(parsed))
         allowed_ops = {"eq", "neq", "gt", "lt", "gte", "lte", "contains", "in"}
         for condition in conditions:
             column = str(condition.get("column") or "")
@@ -396,7 +427,7 @@ def data_filter(
     total = len(parsed)
     filtered = total - len(matched_rows)
     display = matched_rows[:max_rows]
-    cols = list(parsed[0].keys()) if total > 0 else []
+    cols = _columns(parsed) if total > 0 else []
 
     return {
         "ok": True,
@@ -467,10 +498,10 @@ def data_sort(
     else:
         sort_cols = []
     if not sort_cols:
-        cols = list(parsed[0].keys()) if parsed else []
+        cols = _columns(parsed)
         return {"ok": False, "error": "by is required", "available_columns": cols}
 
-    available = set(parsed[0].keys()) if parsed else set()
+    available = set(_columns(parsed))
     missing = [column for column in sort_cols if column not in available]
     if missing:
         return {"ok": False, "error": "unknown sort columns", "columns": missing}
@@ -487,7 +518,7 @@ def data_sort(
 
     sorted_rows = sorted(parsed, key=sort_key, reverse=reverse)
     display = sorted_rows[:max_rows]
-    cols = list(parsed[0].keys()) if parsed else []
+    cols = _columns(parsed)
 
     return {
         "ok": True,
@@ -530,7 +561,7 @@ def data_render(
 
     max_rows = max(1, min(int(max_rows or 50), MAX_OUTPUT_ROWS))
     display = parsed[:max_rows]
-    cols = list(parsed[0].keys())
+    cols = _columns(parsed)
     truncated = len(parsed) > max_rows
 
     result = {
@@ -557,6 +588,7 @@ def data_pivot(
     text: str = "", rows: list | None = None,
     index: str = "", columns: str = "", values: str = "",
     aggfunc: str = "count",
+    max_rows: int = 50,
 ) -> dict:
     if rows is not None:
         parsed, err = _normalize_rows(rows)
@@ -568,7 +600,7 @@ def data_pivot(
         return {"ok": False, "error": "index and columns are required"}
     if aggfunc not in {"sum", "avg", "count", "min", "max"}:
         return {"ok": False, "error": f"unsupported pivot aggregate: {aggfunc}"}
-    available = set(parsed[0].keys()) if parsed else set()
+    available = set(_columns(parsed))
     required = [index, columns] + ([] if aggfunc == "count" else [values])
     missing = [column for column in required if not column or column not in available]
     if missing:
@@ -588,10 +620,12 @@ def data_pivot(
         col_keys_set.update(grid[rk].keys())
     ck_sorted = sorted(col_keys_set)
 
+    display_rows = row_keys[:max(1, min(int(max_rows or 50), MAX_OUTPUT_ROWS))]
+    display_columns = ck_sorted[:MAX_OUTPUT_ROWS]
     pivot_result: dict[str, dict[str, Any]] = {}
-    for rk in row_keys:
+    for rk in display_rows:
         pivot_result[rk] = {}
-        for ck in ck_sorted:
+        for ck in display_columns:
             vals = grid[rk].get(ck, [])
             if not vals:
                 pivot_result[rk][ck] = 0
@@ -607,17 +641,22 @@ def data_pivot(
                 pivot_result[rk][ck] = round(sum(vals), 2)
 
     # Build Markdown pivot table
-    md = f"| {index} \\ {columns} | " + " | ".join(ck_sorted) + " |\n"
+    md = f"| {index} \\ {columns} | " + " | ".join(display_columns) + " |\n"
     md += "|---|" + "|".join(["---" for _ in ck_sorted]) + "|\n"
-    for rk in row_keys:
-        md += f"| {rk} | " + " | ".join(str(pivot_result[rk].get(ck, 0)) for ck in ck_sorted) + " |\n"
+    for rk in display_rows:
+        md += f"| {rk} | " + " | ".join(str(pivot_result[rk].get(ck, 0)) for ck in display_columns) + " |\n"
 
     return {
         "ok": True,
         "pivot": pivot_result,
         "markdown": md,
-        "row_keys": row_keys,
-        "col_keys": ck_sorted,
+        "row_keys": display_rows,
+        "col_keys": display_columns,
+        "total_rows": len(row_keys),
+        "total_columns": len(ck_sorted),
+        "returned": len(display_rows),
+        "returned_columns": len(display_columns),
+        "truncated": len(row_keys) > len(display_rows) or len(ck_sorted) > len(display_columns),
         "index": index,
         "columns": columns,
         "values": values,
@@ -655,8 +694,8 @@ def data_join(
         return {"ok": False, "error": f"right data: {err2}"}
 
     if not on:
-        lc = list(left[0].keys()) if left else []
-        rc = list(right[0].keys()) if right else []
+        lc = _columns(left)
+        rc = _columns(right)
         common = [c for c in lc if c in rc]
         return {
             "ok": False, "error": "on column required",
@@ -665,8 +704,9 @@ def data_join(
         }
     if how not in {"inner", "left"}:
         return {"ok": False, "error": f"unsupported join type: {how}"}
-    left_columns = set(left[0].keys()) if left else set()
-    right_columns = set(right[0].keys()) if right else set()
+    left_columns = set(_columns(left))
+    right_column_order = _columns(right)
+    right_columns = set(right_column_order)
     if on not in left_columns or on not in right_columns:
         return {
             "ok": False,
@@ -683,23 +723,28 @@ def data_join(
 
     # Merge
     merged = []
+    merged_count = 0
     matched_left_rows = 0
     for l in left:
         key = str(l.get(on, ""))
         if key in right_index:
             matched_left_rows += 1
-            for r in right_index[key]:
+            matches = right_index[key]
+            merged_count += len(matches)
+            for r in matches[:MAX_OUTPUT_ROWS - len(merged)]:
                 merged_row = dict(l)
                 merged_row.update({f"right.{k}" if k != on else k: v for k, v in r.items()})
                 merged.append(merged_row)
         elif how == "left":
             merged_row = dict(l)
-            for k in (list(right[0].keys()) if right else []):
+            for k in right_column_order:
                 if k != on:
                     merged_row[f"right.{k}"] = ""
-            merged.append(merged_row)
+            merged_count += 1
+            if len(merged) < MAX_OUTPUT_ROWS:
+                merged.append(merged_row)
 
-    cols = list(merged[0].keys()) if merged else []
+    cols = _columns(merged)
     display = merged[:MAX_OUTPUT_ROWS]
     return {
         "ok": True,
@@ -707,11 +752,11 @@ def data_join(
         "markdown": _md_table(display, 20, cols),
         "left_rows": len(left),
         "right_rows": len(right),
-        "merged_rows": len(merged),
+        "merged_rows": merged_count,
         "matched_rows": matched_left_rows,
         "returned": len(display),
-        "truncated": len(merged) > len(display),
+        "truncated": merged_count > len(display),
         "join_column": on,
         "how": how,
-        "_hint": f"{how} join on '{on}'：{len(left)}×{len(right)}→{len(merged)}行。用 render 输出完整结果。",
+        "_hint": f"{how} join on '{on}'：{len(left)}×{len(right)}→{merged_count}行。返回行是预览；全量后续计算请继续使用原始输入。",
     }

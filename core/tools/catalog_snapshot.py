@@ -226,7 +226,7 @@ def build_catalog_snapshot() -> dict:
             "action": meta["action"],
             "usage_hint": meta.get("usage_hint", ""),
             "not_for": meta.get("not_for", ""),
-            "description": manifest.description if manifest else cr_entry.description,
+            "description": cr_entry.description,
             "risk_level": manifest.risk_level if manifest else cr_entry.risk_level,
             "input_schema": cr_entry.input_schema,
             "permission_action": permission_action,

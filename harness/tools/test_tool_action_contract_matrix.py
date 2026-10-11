@@ -476,6 +476,18 @@ def test_each_required_argument_is_rejected_when_missing(tool_id, action, field_
     assert result.valid is False
     assert any(field_name in error.message for error in result.errors)
 
+    # External callers receive the same conditional contract as the model loop.
+    from core.tools.canonical_registry import to_tool_specs
+    from core.tools.executor import ToolExecutor
+    from core.tools.registry import ToolRegistry
+    from core.tools.schemas import ToolInvocation
+    spec = next(spec for spec, _ in to_tool_specs() if spec.tool_id == tool_id)
+    registry, called = ToolRegistry(), []
+    registry.register_tool(spec, lambda _: called.append(True) or {"ok": True})
+    actual = ToolExecutor(registry).execute(ToolInvocation(tool_id=tool_id, arguments=args, workspace_id="default"))
+    assert actual.status == "blocked" and actual.output["executed"] is False
+    assert called == []
+
 
 @pytest.mark.parametrize(
     "tool_id,action,alternatives",
@@ -717,3 +729,42 @@ def test_action_contract_risk_is_enforced_by_real_policy():
         )
         assert decision.risk_level == risk_level
         assert decision.allowed is True
+
+
+def test_governed_executor_does_not_invent_handler_success():
+    from core.tools.executor import ToolExecutor
+    from core.tools.registry import ToolRegistry
+    from core.tools.schemas import ToolInvocation, ToolSpec
+    from core.runtime_engine.tool_runtime import resolve_tool_outcome
+    for raw in (None, {}, {"ok": "true"}, "done", {"ok": False, "error": "failed"}, {"ok": True, "value": 7}):
+        registry = ToolRegistry()
+        registry.register_tool(ToolSpec(tool_id="contract.outcome", category="text"), lambda _, value=raw: value)
+        actual = ToolExecutor(registry).execute(ToolInvocation(tool_id="contract.outcome", workspace_id="default"))
+        expected, _, _ = resolve_tool_outcome(raw)
+        assert (actual.status == "succeeded") == (expected == "SUCCESS")
+        if raw is None or not isinstance(raw, dict) or type(raw.get("ok")) is not bool:
+            assert actual.output["ok"] is False
+            assert actual.output["automatic_retry_allowed"] is False
+
+
+def test_text_and_diff_results_preserve_coverage_and_stop_expensive_regex(monkeypatch):
+    from core.tools.canonical_registry import get_entry
+    from core.tools.schemas import ToolInvocation
+    def invoke(tool, args):
+        return get_entry(tool).handler(ToolInvocation(tool_id=tool, workspace_id="default", arguments=args))
+    text = "设备 192.0.2.1 和 2001:db8::1，联系 admin@example.org，见 https://example.org/manual。"
+    entities = invoke("text.analyze", {"action": "extract_entities", "text": text})
+    assert {e["kind"] for e in entities["entities"]} == {"ipv4", "ipv6", "email", "url"}
+    for entity in entities["entities"]:
+        assert text[entity["start"]:entity["end"]] == entity["value"]
+    matched = invoke("text.analyze", {"action": "match", "text": "x1 " * 120, "pattern": r"(x)(1)"})
+    assert matched["match_count"] == 120 and len(matched["matches"]) == 100 and matched["truncated"] is True
+    monkeypatch.setattr("core.tools.general_tools.text_tools.REGEX_TIMEOUT_SECONDS", 0.01)
+    deadline = invoke("text.analyze", {"action": "match", "text": "a" * 50000 + "!", "pattern": "(a+)+$"})
+    assert deadline["ok"] is False and deadline["error_code"] == "REGEX_TIMEOUT"
+    assert deadline["complete"] is False and deadline["automatic_retry_allowed"] is False
+    before = "same\n" * 100 + "x" * 200 + "\n"
+    after = before.replace("x" * 200, "y" * 200)
+    diff = invoke("report.manage", {"action": "diff", "text_a": before, "text_b": after})
+    assert diff["truncated"] is False and diff["lines_removed"] == diff["lines_added"] == 1
+    assert "x" * 200 in diff["diff"] and "y" * 200 in diff["diff"]

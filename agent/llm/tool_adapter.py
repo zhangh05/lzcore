@@ -40,24 +40,17 @@ def tool_spec_to_openai_function(tool: dict) -> dict:
     )
     schema = tool.get("input_schema") or {}
     properties = schema.get("properties", {})
-    required = schema.get("required", [])
 
-    params_def = {
-        "type": "object",
-        "properties": {},
-        "required": required,
-        "additionalProperties": bool(schema.get("additionalProperties", True)),
-    }
+    params_def = deepcopy(schema)
+    params_def.setdefault("type", "object")
+    params_def["properties"] = {}
+    params_def.setdefault("additionalProperties", True)
 
     for name, prop in properties.items():
         # Preserve the complete public JSON-Schema constraint surface.  The
         # previous hand-picked projection dropped minItems/maxItems and nested
         # constraints, so the model was shown a weaker contract than runtime.
         param = deepcopy(prop)
-        if "type" not in param and not any(
-            key in param for key in ("enum", "oneOf", "anyOf", "allOf")
-        ):
-            param["type"] = "string"
         description = prop.get("description") or _default_param_description(name)
         if description:
             param["description"] = _soft_truncate(str(description), 420)
@@ -97,7 +90,7 @@ def tool_spec_to_openai_function(tool: dict) -> dict:
     if not params_def["properties"]:
         params_def.pop("properties")
     if not params_def.get("required"):
-        params_def.pop("required")
+        params_def.pop("required", None)
 
     # Use LLM-safe name (dots -> double underscore)
     llm_name = to_llm_tool_name(canonical_tool_id)
@@ -124,7 +117,7 @@ def _build_tool_description(tool: dict, metadata: dict, canonical_tool_id: str) 
     usage_hint = metadata.get("usage_hint") or tool.get("usage_hint")
     not_for = metadata.get("not_for") or tool.get("not_for")
     risk = tool.get("risk_level", "")
-    if risk and str(risk).lower() not in {"low", "safe"}:
+    if risk and not tool.get("action_profiles") and str(risk).lower() not in {"low", "safe"}:
         parts.append(f"Risk: {risk}.")
     boundary = _format_action_profiles(tool.get("action_profiles") or metadata.get("action_profiles"))
     if boundary:
@@ -254,7 +247,7 @@ def _default_param_description(name: str) -> str:
 def _format_action_requirements(tool_id: str, metadata: dict | None = None) -> str:
     """Expose conditional action requirements in the LLM-visible description."""
     try:
-        from core.tools.action_requirements import ACTION_REQUIRED_ALL, ACTION_REQUIRED_ANY
+        from core.tools.action_requirements import ACTION_REQUIRED_ALL, ACTION_REQUIRED_ANY, ACTION_REQUIRED_WHEN
     except Exception:
         return ""
 
@@ -264,7 +257,7 @@ def _format_action_requirements(tool_id: str, metadata: dict | None = None) -> s
     extension_all = extension_all if isinstance(extension_all, dict) else {}
     extension_any = extension_any if isinstance(extension_any, dict) else {}
 
-    chunks: list[str] = []
+    grouped: dict[str, list[str]] = {}
     actions = sorted({
         action for (tid, action) in set(ACTION_REQUIRED_ALL) | set(ACTION_REQUIRED_ANY)
         if tid == tool_id
@@ -275,12 +268,16 @@ def _format_action_requirements(tool_id: str, metadata: dict | None = None) -> s
         if all_fields:
             bits.append("+".join(all_fields))
         for alternatives in tuple(ACTION_REQUIRED_ANY.get((tool_id, action), ())) + tuple(extension_any.get(action) or ()):
-            bits.append(" or ".join(alternatives))
+            clause = " or ".join(alternatives)
+            if clause not in bits:
+                bits.append(clause)
+        for field, values, fields in ACTION_REQUIRED_WHEN.get((tool_id, action), ()):
+            bits.append(f"if {field} in [{','.join(values)}]: {'+'.join(fields)}")
         if bits:
-            chunks.append(f"{action}=>{'; '.join(bits)}")
-    if not chunks:
+            grouped.setdefault('; '.join(bits), []).append(action)
+    if not grouped:
         return ""
-    text = ", ".join(chunks)
+    text = ", ".join(f"{'/'.join(actions)}=>{requirements}" for requirements, actions in grouped.items())
     return _soft_truncate(text, 360)
 
 

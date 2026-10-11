@@ -452,23 +452,44 @@ def handle_text_redact(inv: ToolInvocation) -> dict:
 def handle_text_diff(inv: ToolInvocation) -> dict:
     a = str(inv.arguments.get("text_a", ""))
     b = str(inv.arguments.get("text_b", ""))
-    if len(a) > 5000 or len(b) > 5000:
-        return _error_inv(inv, "text too large for diff (max 5000 chars each)")
-    la, lb = a.splitlines(), b.splitlines()
-    diff_lines = []
-    for i in range(max(len(la), len(lb))):
-        line_a = la[i] if i < len(la) else ""
-        line_b = lb[i] if i < len(lb) else ""
-        if line_a != line_b:
-            diff_lines.append(f"- {line_a[:80]}\n+ {line_b[:80]}")
-    return _ok(inv, "", {"diff": "\n".join(diff_lines[:50]), "changed_lines": len(diff_lines)})
+    from difflib import unified_diff
+    la, lb = a.splitlines(keepends=True), b.splitlines(keepends=True)
+    lines = list(unified_diff(la, lb, fromfile="before", tofile="after"))
+    removed = sum(line.startswith("-") for line in lines[2:])
+    added = sum(line.startswith("+") for line in lines[2:])
+    diff = "".join(line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in lines)
+    return _ok(inv, f"Compared complete inputs: {removed} removed line(s), {added} added line(s).", {
+        "diff": diff, "changed_lines": removed + added,
+        "lines_removed": removed, "lines_added": added, "truncated": False,
+    })
 
 def handle_text_extract_keywords(inv: ToolInvocation) -> dict:
-    text = str(inv.arguments.get("text", "")).lower()
-    words = re.findall(r'\b[a-z\u4e00-\u9fff]{2,}\b', text)
+    import ipaddress
+
+    text = str(inv.arguments.get("text", ""))
+    words = re.findall(r'\b[a-z\u4e00-\u9fff]{2,}\b', text.lower())
     from collections import Counter
     top = Counter(words).most_common(20)
-    return _ok(inv, "", {"keywords": [{"word": w, "count": c} for w, c in top]})
+    entities, total = [], 0
+    pattern = re.compile(r"https?://[^\s<>\"']+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|(?<![\w.:])[\da-fA-F:.]+(?![\w.:])")
+    for match in pattern.finditer(text):
+        value = match.group().rstrip(".,;，。；)")
+        if value.startswith(("http://", "https://")):
+            kind = "url"
+        elif "@" in value:
+            kind = "email"
+        else:
+            try:
+                kind = f"ipv{ipaddress.ip_address(value).version}"
+            except ValueError:
+                continue
+        total += 1
+        if len(entities) < 100:
+            entities.append({"kind": kind, "value": value, "start": match.start(), "end": match.start() + len(value)})
+    return _ok(inv, f"Extracted {total} deterministic entity candidate(s).", {
+        "keywords": [{"word": w, "count": c} for w, c in top], "entities": entities,
+        "entity_count": total, "truncated": total > len(entities),
+    })
 
 def handle_text_classify(inv: ToolInvocation) -> dict:
     text = str(inv.arguments.get("text", "")).lower()

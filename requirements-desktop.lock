@@ -185,7 +185,9 @@ pyyaml==6.0.3
 redis==8.1.0
     # via -r requirements.txt
 regex==2026.9.29
-    # via dateparser
+    # via
+    #   -r requirements.txt
+    #   dateparser
 requests==2.34.2
     # via -r requirements.txt
 s3transfer==0.19.2

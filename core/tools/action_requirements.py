@@ -2,7 +2,7 @@
 
 Flat function schemas expose every supported argument to the model. This table
 adds the conditional requirements that JSON Schema ``required`` cannot express
-for a merged ``tool + action`` interface. SemanticValidator consumes it before
+for a merged ``tool + action`` interface. SemanticValidator and ToolExecutor consume it before
 execution, so missing identifiers fail as planning errors rather than opaque
 handler errors.
 """
@@ -69,6 +69,7 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("text.analyze", "extract_entities"): ("text",),
     ("text.analyze", "match"): ("text", "pattern"),
     ("workspace.file", "read"): ("filepath",),
+    ("workspace.file", "search"): ("query",),
     ("workspace.file", "read_image"): ("filepath",),
     ("workspace.file", "extract_document"): ("file_id",),
     ("workspace.file", "extract_document_image"): ("file_id", "image_index"),
@@ -122,6 +123,9 @@ def required_action_arguments(tool_id: str, action: str, arguments: dict) -> tup
 # Other required text (paths, identifiers, commands) must remain non-empty.
 ACTION_ALLOW_EMPTY: dict[tuple[str, str], frozenset[str]] = {
     ("workspace.file", "create"): frozenset({"content"}),
+    ("workspace.file", "edit"): frozenset({"new_string"}),
+    ("browser.manage", "type"): frozenset({"text"}),
+    ("report.manage", "diff"): frozenset({"text_a", "text_b"}),
 }
 
 
@@ -136,17 +140,17 @@ ACTION_REQUIRED_ANY: dict[tuple[str, str], tuple[tuple[str, ...], ...]] = {
         ("location", "latitude"),
         ("location", "longitude"),
     ),
-    ("data.manage", "parse"): (("text", "rows"),),
-    ("data.manage", "stats"): (("text", "rows"),),
-    ("data.manage", "distinct"): (("text", "rows"),),
-    ("data.manage", "aggregate"): (("text", "rows"),),
-    ("data.manage", "filter"): (("text", "rows"),),
-    ("data.manage", "sort"): (("text", "rows"),),
-    ("data.manage", "render"): (("text", "rows"),),
-    ("data.manage", "pivot"): (("text", "rows"),),
+    ("data.manage", "parse"): (("text", "rows", "source_filepath"),),
+    ("data.manage", "stats"): (("text", "rows", "source_filepath"),),
+    ("data.manage", "distinct"): (("text", "rows", "source_filepath"),),
+    ("data.manage", "aggregate"): (("text", "rows", "source_filepath"),),
+    ("data.manage", "filter"): (("text", "rows", "source_filepath"),),
+    ("data.manage", "sort"): (("text", "rows", "source_filepath"),),
+    ("data.manage", "render"): (("text", "rows", "source_filepath"),),
+    ("data.manage", "pivot"): (("text", "rows", "source_filepath"),),
     ("data.manage", "join"): (
-        ("text", "rows"),
-        ("right_text", "right_rows"),
+        ("text", "rows", "source_filepath"),
+        ("right_text", "right_rows", "right_source_filepath"),
     ),
     ("agent.manage", "get"): (("subtask_id",),),
     ("agent.manage", "merge"): (("subtask_id",),),
@@ -213,7 +217,7 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts(
 ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts(
     "workspace.file",
-    ("list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "glob"),
+    ("list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "glob", "search"),
     _READ,
 ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.file", ("create", "write", "write_artifact", "edit", "patch"), _WRITE))
@@ -259,7 +263,37 @@ def action_execution_contract(tool_id: str, action: str) -> dict:
 DATA_INPUT_ACTIONS = frozenset({
     "parse", "stats", "distinct", "aggregate", "filter", "sort", "render", "pivot", "join",
 })
-for _action in DATA_INPUT_ACTIONS:
-    ACTION_REQUIRED_ANY.setdefault(("data.manage", _action), tuple())
-    ACTION_REQUIRED_ANY[("data.manage", _action)] += (("text", "rows"),)
-ACTION_REQUIRED_ANY[("data.manage", "join")] += (("right_text", "right_rows"),)
+
+
+def has_argument_value(arguments: dict, field_name: str) -> bool:
+    value = arguments.get(field_name)
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict, tuple, set)):
+        return bool(value)
+    return True
+
+
+def missing_action_arguments(tool_id: str, arguments: dict, metadata: dict | None = None,
+                             bound_fields=()) -> list[dict]:
+    """One conditional contract for planning and every execution entry point.
+
+    Pending result bindings count only during planning; execution must contain
+    the actual resolved values. False and zero are valid provided values.
+    """
+    action = str(arguments.get("action") or "").strip().lower()
+    key = (tool_id, action)
+    requirements = (metadata or {}).get("action_requirements") or {}
+    required_all = tuple((requirements.get("all") or {}).get(action) or ())
+    required_any = tuple((requirements.get("any") or {}).get(action) or ())
+    missing = []
+    for name in dict.fromkeys(required_action_arguments(tool_id, action, arguments) + required_all):
+        allowed_empty = name in ACTION_ALLOW_EMPTY.get(key, ()) and isinstance(arguments.get(name), str)
+        if not has_argument_value(arguments, name) and not allowed_empty and name not in bound_fields:
+            missing.append({"field": name, "tool_id": tool_id, "action": action})
+    for alternatives in dict.fromkeys(tuple(ACTION_REQUIRED_ANY.get(key, ())) + tuple(tuple(g) for g in required_any)):
+        if not any(has_argument_value(arguments, name) or name in bound_fields for name in alternatives):
+            missing.append({"one_of_fields": list(alternatives), "tool_id": tool_id, "action": action})
+    return missing

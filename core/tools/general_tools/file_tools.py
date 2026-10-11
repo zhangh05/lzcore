@@ -57,6 +57,14 @@ def handle_file_create(inv: ToolInvocation) -> dict:
         return _error_inv(inv, str(exc)[:200])
 
 
+def _text_line_ending(content: str) -> str:
+    crlf = content.count("\r\n")
+    counts = {"CRLF": crlf, "LF": content.count("\n") - crlf,
+              "CR": content.count("\r") - crlf}
+    endings = [kind for kind, count in counts.items() if count]
+    return endings[0] if len(endings) == 1 else ("mixed" if endings else "none")
+
+
 def handle_file_read(inv: ToolInvocation) -> dict:
     """Read a complete workspace text file. Rejects binary files.
     
@@ -79,19 +87,25 @@ def handle_file_read(inv: ToolInvocation) -> dict:
                 "error": "binary file cannot be read as text",
                 "file_size": target.stat().st_size,
             })
-        content = target.read_text(encoding="utf-8", errors="replace")
+        with target.open(encoding="utf-8", newline="") as source:
+            content = source.read()
+        line_ending = _text_line_ending(content)
+        ends_with_newline = content.endswith(("\r", "\n"))
         lines = content.splitlines(keepends=True)
         end = min(len(lines), offset + limit) if limit is not None else len(lines)
         content = ''.join(lines[offset:end])
-        return _ok(inv, "", {
-            "preview": content,
-            "size": len(content),
+        return _ok(inv, f"Read {filepath}: {end - min(offset, len(lines))} of {len(lines)} line(s).", {
+            "preview": content, "filepath": filepath,
+            "size": len(content), "file_size_bytes": target.stat().st_size,
+            "line_ending": line_ending, "ends_with_newline": ends_with_newline,
             "total_lines": len(lines),
             "offset": offset,
             "next_offset": end if end < len(lines) else None,
             "has_more": end < len(lines),
-            "truncated": end < len(lines),
+            "truncated": offset > 0 or end < len(lines),
         })
+    except UnicodeError:
+        return _error_inv(inv, "source is not valid UTF-8 text; use managed document extraction for other encodings/formats")
     except Exception as e:
         return _error_inv(inv, e)
 
@@ -113,17 +127,22 @@ def handle_file_edit(inv: ToolInvocation) -> dict:
             return _error_inv(inv, "file.edit only writes to current managed workspace directories")
         if not target.is_file():
             return _error_inv(inv, "file not found")
-        content = target.read_text(encoding="utf-8")
+        with target.open(encoding="utf-8", newline="") as source:
+            content = source.read()
+        count = content.count(old_string)
+        if not count:
+            return _error_inv(inv,
+                f"old_string not found in file (file newlines={_text_line_ending(content)}, "
+                f"old_string newlines={_text_line_ending(old_string)}). "
+                "Use exact original text/newlines, or a verified unified patch for line edits.")
         if replace_all:
-            count = content.count(old_string)
             new_content = content.replace(old_string, new_string)
         else:
-            if old_string not in content:
-                return _error_inv(inv, "old_string not found in file")
-            count = 1
+            if count != 1:
+                return _error_inv(inv, "old_string matches multiple locations; include unique context or explicitly set replace_all")
             new_content = content.replace(old_string, new_string, 1)
         if new_content == content:
-            return _ok(inv, "", {"lines_changed": 0, "note": "no changes made"})
+            return _ok(inv, f"{filepath}: no changes made.", {"lines_changed": 0, "note": "no changes made"})
         diff_preview = _generate_diff_preview(old_string, new_string)
         if dry_run:
             return _ok(inv, "dry_run: preview only, file NOT modified", {
@@ -134,7 +153,7 @@ def handle_file_edit(inv: ToolInvocation) -> dict:
             })
         write_text_atomic(target, new_content)
         lines_changed = abs(new_content.count("\n") - content.count("\n")) or count
-        return _ok(inv, "", {
+        return _ok(inv, f"Edited {filepath}: {count} replacement(s).", {
             "lines_changed": lines_changed,
             "replacements": count,
             "preview": diff_preview,
@@ -154,49 +173,19 @@ def handle_file_patch(inv: ToolInvocation) -> dict:
             return _error_inv(inv, "file.patch only writes to current managed workspace directories")
         if not target.is_file():
             return _error_inv(inv, "file not found")
-        original = target.read_text(encoding="utf-8")
-        original_lines = original.splitlines(keepends=True)
-        hunks = re.findall(
-            r"@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@\n?(.*?)(?=@@|\Z)",
-            patch_text, re.DOTALL,
-        )
-        if not hunks:
-            return _error_inv(inv, "no valid diff hunks found in patch_text")
-        lines_added = 0
-        lines_removed = 0
-        result_lines = list(original_lines)
-        for hunk in reversed(hunks):
-            old_start = int(hunk[0]) - 1
-            old_count = int(hunk[1]) if hunk[1] else 1
-            body = hunk[4]
-            if old_start < 0 or old_start > len(result_lines):
-                return _error_inv(inv, "patch hunk position is outside the current file")
-            expected_old: list[str] = []
-            new_lines = []
-            line_ending = "\r\n" if "\r\n" in original else "\n"
-            for line in body.splitlines():
-                if line.startswith("\\ No newline at end of file"):
-                    continue
-                if not line or line[0] not in {"+", "-", " "}:
-                    return _error_inv(inv, "invalid unified diff line in patch_text")
-                value = line[1:]
-                if line.startswith(("-", " ")):
-                    expected_old.append(value)
-                if line.startswith("+"):
-                    new_lines.append(value + line_ending)
-                    lines_added += 1
-                elif line.startswith("-"):
-                    lines_removed += 1
-                elif line.startswith(" "):
-                    new_lines.append(value + line_ending)
-            current_old = result_lines[old_start:old_start + old_count]
-            normalized_current = [line.rstrip("\r\n") for line in current_old]
-            if len(current_old) != old_count or normalized_current != expected_old:
-                return _error_inv(inv, "patch context does not match current file; re-read before retrying")
-            result_lines[old_start:old_start + old_count] = new_lines
-        new_content = "".join(result_lines)
+        with target.open(encoding="utf-8", newline="") as source:
+            original = source.read()
+        try:
+            new_content, lines_added, lines_removed = _apply_unified_patch(original, patch_text)
+        except ValueError as exc:
+            return _error_inv(inv, str(exc))
+        if inv.arguments.get("dry_run"):
+            return _ok(inv, "dry_run: preview only, file NOT modified", {
+                "dry_run": True, "lines_added": lines_added, "lines_removed": lines_removed,
+                "diff_preview": _generate_diff_preview(original, new_content),
+            })
         write_text_atomic(target, new_content)
-        return _ok(inv, "", {
+        return _ok(inv, f"Patched {filepath}: {lines_added} added line(s), {lines_removed} removed line(s).", {
             "lines_added": lines_added,
             "lines_removed": lines_removed,
             "diff_preview": _generate_diff_preview(original[:500], new_content[:500]),
@@ -204,6 +193,67 @@ def handle_file_patch(inv: ToolInvocation) -> dict:
     except Exception as e:
         return _error_inv(inv, e)
 
+
+
+def _apply_unified_patch(original: str, patch_text: str) -> tuple[str, int, int]:
+    """Validate the complete single-file diff before any atomic file write."""
+    header = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*")
+    patch = patch_text.splitlines()
+    lines = original.splitlines(keepends=True)
+    ending = "\r\n" if "\r\n" in original else "\n"
+    result, position, index, added, removed, hunks = [], 0, 0, 0, 0, 0
+    while index < len(patch) and not header.fullmatch(patch[index]):
+        if not patch[index].startswith(("diff ", "index ", "--- ", "+++ ")):
+            raise ValueError("no valid diff hunks found in patch_text")
+        index += 1
+    while index < len(patch):
+        match = header.fullmatch(patch[index])
+        if not match:
+            raise ValueError("invalid unified diff hunk header")
+        old_start, old_count, new_start, new_count = (int(v) if v is not None else 1 for v in match.groups())
+        start = old_start if old_count == 0 else old_start - 1
+        new_position = new_start if new_count == 0 else new_start - 1
+        if start < position or start < 0 or start + old_count > len(lines):
+            raise ValueError("patch hunk position is outside the current file or overlaps another hunk")
+        result.extend(lines[position:start])
+        if new_position != len(result):
+            raise ValueError("patch new hunk position does not match preceding hunks")
+        index += 1
+        old, new = [], []
+        last = ""
+        while index < len(patch) and not header.fullmatch(patch[index]):
+            line = patch[index]
+            index += 1
+            if line == "\\ No newline at end of file":
+                if not last:
+                    raise ValueError("newline marker has no preceding diff line")
+                if last in {"-", " "}:
+                    old[-1] = old[-1].rstrip("\r\n")
+                if last in {"+", " "}:
+                    new[-1] = new[-1].rstrip("\r\n")
+                last = ""
+                continue
+            if not line or line[0] not in {"+", "-", " "}:
+                raise ValueError("invalid unified diff line in patch_text")
+            last = line[0]
+            value = line[1:] + ending
+            if last in {"-", " "}:
+                old.append(value)
+            if last in {"+", " "}:
+                new.append(value)
+            added += last == "+"
+            removed += last == "-"
+        if len(old) != old_count or len(new) != new_count:
+            raise ValueError("patch hunk counts do not match its body")
+        if lines[start:start + old_count] != old:
+            raise ValueError("patch context does not match current file; re-read before retrying")
+        result.extend(new)
+        position = start + old_count
+        hunks += 1
+    if not hunks:
+        raise ValueError("no valid diff hunks found in patch_text")
+    result.extend(lines[position:])
+    return "".join(result), added, removed
 
 def handle_ws_list_files(inv: ToolInvocation) -> dict:
     ws = _caller_workspace(inv)
@@ -230,6 +280,78 @@ def handle_ws_list_files(inv: ToolInvocation) -> dict:
                               "next_offset": end if end < len(files) else None})
     except Exception as e:
         return _error_inv(inv, e)
+
+
+def handle_file_search(inv: ToolInvocation) -> dict:
+    """Literal source search without an index or shell; skips are explicit."""
+    import fnmatch
+    import os
+    from core.tools.path_security import _contains_traversal
+
+    ws, args = _caller_workspace(inv), inv.arguments
+    query = str(args.get("query") or "")
+    subdir, pattern = str(args.get("subdir") or "files/data"), str(args.get("pattern") or "*")
+    offset, limit = max(0, int(args.get("offset") or 0)), min(200, int(args.get("limit") or 50))
+    if not query or _contains_traversal(pattern) or pattern.startswith(("/", "\\")):
+        return _error_inv(inv, "search requires literal query and a workspace-relative glob pattern")
+    try:
+        root = _workspace_path(ws, subdir)
+        if not _is_current_workspace_write_path(ws, root):
+            return _error_inv(inv, "source search requires files/data, files/tmp or inbox; use FileStore search for managed attachments")
+        if not root.is_dir():
+            return _error_inv(inv, "source search directory not found")
+        matches, skipped, count, scanned, skipped_count, more = [], [], 0, 0, 0, False
+        for directory, dirs, names in os.walk(root, followlinks=False):
+            dirs[:] = sorted(name for name in dirs if not (Path(directory) / name).is_symlink())
+            for name in sorted(names):
+                lexical = Path(directory) / name
+                relative = lexical.relative_to(root).as_posix()
+                if not (fnmatch.fnmatchcase(relative, pattern) or (pattern.startswith("**/") and fnmatch.fnmatchcase(relative, pattern[3:]))):
+                    continue
+                if inv.cancel_check and inv.cancel_check():
+                    return _error_inv(inv, "Source search cancelled", error_code="TOOL_CANCELLED")
+                path = (Path(subdir) / relative).as_posix()
+                try:
+                    target = _workspace_path(ws, path)
+                    if lexical.is_symlink():
+                        raise ValueError("symlink skipped")
+                    if target.stat().st_size > 4 * 1024 * 1024:
+                        raise ValueError("source exceeds 4 MiB search limit")
+                    raw = target.read_bytes()
+                    if b"\x00" in raw:
+                        raise ValueError("binary source skipped")
+                    text = raw.decode("utf-8-sig")
+                except (ValueError, OSError, UnicodeError) as exc:
+                    skipped_count += 1
+                    if len(skipped) < 20:
+                        skipped.append({"filepath": path, "reason": str(exc)})
+                    continue
+                scanned += 1
+                for line_number, line in enumerate(text.splitlines(), 1):
+                    if query not in line:
+                        continue
+                    if count >= offset:
+                        if len(matches) == limit:
+                            more = True
+                            break
+                        column = line.index(query)
+                        matches.append({"filepath": path, "line": line_number, "column": column + 1,
+                                        "snippet": line[max(0, column - 80):column + len(query) + 160]})
+                    count += 1
+                if more:
+                    break
+            if more:
+                break
+        return _ok(inv, f"Source search returned {len(matches)} matching line(s).", {
+            "matches": matches, "count": len(matches), "offset": offset,
+            "has_more": more, "next_offset": offset + len(matches) if more else None,
+            "coverage": {"subdir": subdir, "pattern": pattern, "scanned_files": scanned,
+                         "skipped_files": skipped_count, "scan_complete": not more,
+                         "skipped": skipped, "skipped_details_truncated": skipped_count > len(skipped),
+                         "basis": "current UTF-8 source files; line matches, not occurrences; repeat pages against unchanged sources"},
+        })
+    except (ValueError, OSError) as exc:
+        return _error_inv(inv, exc)
 
 
 def handle_ws_write_artifact_file(inv: ToolInvocation) -> dict:

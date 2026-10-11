@@ -91,3 +91,34 @@ def test_invalid_source_text_never_publishes_or_replaces(client, bad):
         'old_string': '1', 'new_string': bad}, context=ToolRuntimeContext(workspace_id='source_test', requested_by='turn_runner'))
     assert result.status == 'failed'
     assert (workspace_root('source_test') / path).read_text() == 'const value = 1;\n'
+
+
+def test_edit_requires_unique_context_and_can_delete_text(client):
+    from core.runtime_engine.models import ExecutionNode
+    from core.runtime_engine.semantic_validator import SemanticValidator
+    path = "files/data/edit.txt"
+    assert create(client, path, "same\r\nsame\r\nunique\r\n")
+    ctx = ToolRuntimeContext(workspace_id="source_test", requested_by="turn_runner")
+    missing = client.invoke("workspace.file", {"action": "edit", "filepath": path, "new_string": "bad"}, context=ctx)
+    ambiguous = client.invoke("workspace.file", {"action": "edit", "filepath": path, "old_string": "same", "new_string": "bad"}, context=ctx)
+    target = workspace_root("source_test") / path
+    assert missing.status == "blocked" and ambiguous.status == "failed"
+    assert target.read_bytes() == b"same\r\nsame\r\nunique\r\n"
+    read = client.invoke("workspace.file", {"action": "read", "filepath": path}, context=ctx)
+    assert read.output["preview"] == "same\r\nsame\r\nunique\r\n"
+    assert read.output["line_ending"] == "CRLF" and read.output["ends_with_newline"] is True
+    assert "Read " in read.summary
+    tail = client.invoke("workspace.file", {"action": "read", "filepath": path, "offset": 2}, context=ctx)
+    assert tail.output["preview"] == "unique\r\n"
+    assert tail.output["truncated"] is True and tail.output["has_more"] is False
+    wrong_newlines = client.invoke("workspace.file", {"action": "edit", "filepath": path,
+                                  "old_string": "unique\n", "new_string": ""}, context=ctx)
+    assert wrong_newlines.status == "failed" and "CRLF" in wrong_newlines.summary
+    assert target.read_bytes() == b"same\r\nsame\r\nunique\r\n"
+    args = {"action": "edit", "filepath": path,
+            "old_string": read.output["preview"].splitlines(keepends=True)[-1], "new_string": ""}
+    assert SemanticValidator().validate([ExecutionNode(id="delete-text", tool="workspace.file", args=args)]).valid
+    assert client.invoke("workspace.file", args, context=ctx).status == "succeeded"
+    assert target.read_bytes() == b"same\r\nsame\r\n"
+    target.write_bytes(b"invalid-utf8-\xff")
+    assert client.invoke("workspace.file", {"action": "read", "filepath": path}, context=ctx).status == "failed"

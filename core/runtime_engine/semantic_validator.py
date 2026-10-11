@@ -20,16 +20,6 @@ from .models import ExecutionNode, RiskLevel
 
 
 
-def _has_argument_value(arguments: dict[str, Any], field_name: str) -> bool:
-    if field_name not in arguments or arguments[field_name] is None:
-        return False
-    value = arguments[field_name]
-    if isinstance(value, str):
-        return bool(value.strip())
-    if isinstance(value, (list, dict, tuple, set)):
-        return bool(value)
-    return True
-
 # --- Validation result types ---
 
 @dataclass
@@ -328,47 +318,18 @@ class SemanticValidator:
         result: SemanticValidationResult,
     ) -> None:
         """Validate conditional requirements for every merged tool action."""
-        from core.tools.action_requirements import required_action_arguments, ACTION_REQUIRED_ANY, ACTION_ALLOW_EMPTY
+        from core.tools.action_requirements import missing_action_arguments
 
-        action = str(node.args.get("action") or "shell").strip().lower()
-        key = (node.tool, action)
-
-        registry_item = self._registry.get(node.tool) or {}
-        metadata = registry_item.get("metadata") or {}
-        requirements = metadata.get("action_requirements") or {}
-        extension_all = requirements.get("all") if isinstance(requirements, dict) else {}
-        extension_any = requirements.get("any") if isinstance(requirements, dict) else {}
-        extension_all = extension_all if isinstance(extension_all, dict) else {}
-        extension_any = extension_any if isinstance(extension_any, dict) else {}
-
-        for field_name in required_action_arguments(node.tool, action, node.args) + tuple(extension_all.get(action) or ()):
-            present_empty = field_name in ACTION_ALLOW_EMPTY.get(key, ()) and isinstance(node.args.get(field_name), str)
-            if not _has_argument_value(node.args, field_name) and not present_empty and field_name not in node.result_bindings:
-                result.errors.append(SemanticError(
-                    node_id=node.id,
-                    code="MISSING_REQUIRED_ARG",
-                    message=f"Node '{node.id}' missing required arg '{field_name}' for {node.tool} action={action}",
-                    details={"field": field_name, "tool_id": node.tool, "action": action},
-                ))
-
-        for alternatives in tuple(ACTION_REQUIRED_ANY.get(key, ())) + tuple(extension_any.get(action) or ()):
-            if not any(
-                _has_argument_value(node.args, field_name) or field_name in node.result_bindings
-                for field_name in alternatives
-            ):
-                result.errors.append(SemanticError(
-                    node_id=node.id,
-                    code="MISSING_REQUIRED_ARG",
-                    message=(
-                        f"Node '{node.id}' requires one of {list(alternatives)} "
-                        f"for {node.tool} action={action}"
-                    ),
-                    details={
-                        "one_of_fields": list(alternatives),
-                        "tool_id": node.tool,
-                        "action": action,
-                    },
-                ))
+        metadata = (self._registry.get(node.tool) or {}).get("metadata") or {}
+        for details in missing_action_arguments(node.tool, node.args, metadata, node.result_bindings):
+            action = details["action"]
+            requirement = (f"missing required arg '{details['field']}'" if "field" in details
+                           else f"requires one of {details['one_of_fields']}")
+            result.errors.append(SemanticError(
+                node_id=node.id, code="MISSING_REQUIRED_ARG",
+                message=f"Node '{node.id}' {requirement} for {node.tool} action={action}",
+                details=details,
+            ))
 
     def _validate_path_safety(
         self,

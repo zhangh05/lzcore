@@ -416,7 +416,9 @@ def test_model_visible_tool_descriptions_keep_complete_evidence_boundaries():
     assert all("Do not use for: Do not" not in description for description in tools.values())
     assert "Writes/edits/patches/deletes" not in tools["workspace__file"]
     assert "verify by reread, relist, or relevant validation" in tools["workspace__file"]
-    assert "use exec to parse an attachment or unpack document images" in tools["workspace__file"]
+    # Discovery guidance must not force every model to one implementation.
+    assert "materialize" in tools["workspace__filestore"] and "publish" in tools["workspace__filestore"]
+    assert "source_filepath" in tools["data__manage"]
     assert "correlation" in tools["web__manage"] or "shared cause" in tools["web__manage"]
     assert "child prose as authority" in tools["agent__manage"]
 
@@ -504,6 +506,10 @@ def test_compact_orchestration_keeps_complete_catalog_and_constraints():
         original = spec['input_schema']
         assert set(parameters['properties']) == set(original.get('properties', {})) | fields
         assert parameters.get('required', []) == original.get('required', [])
+        for key, value in original.items():
+            if key not in {'properties', 'required', 'additionalProperties'}:
+                assert parameters[key] == value
+        assert spec['description'] == catalog[identity]['description']
         for name, schema in original.get('properties', {}).items():
             # Only generated explanatory defaults may be added; no published
             # constraint, nested schema, action or description may disappear.
@@ -520,3 +526,7 @@ def test_compact_orchestration_keeps_complete_catalog_and_constraints():
         assert text in prompt
     assert 'reconcile' in tools['agent__manage']['parameters']['properties']['action']['enum']
     assert 'Safe result bindings' in tools['exec__run']['description']
+    assert 'type' not in tools['memory__manage']['parameters']['properties']['value']
+    from core.tools.canonical_registry import to_openai_tools
+    direct = {item['function']['name']: item['function'] for item in to_openai_tools()}
+    assert direct == tools
