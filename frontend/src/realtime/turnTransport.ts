@@ -6,6 +6,7 @@ import type { AgentResult, CognitiveEvent, CognitiveSummary, InlineToolCall, Run
 import { isApiError } from "../types";
 import { beginModelStep, canFallbackToHttp, finalizeStreamText, runningIdempotentRedirectJobId } from "../utils/agentStream";
 import { notifyRunCompleted } from "../utils/appEvents";
+import { subagentObservations } from "../utils/subagentTracking";
 import { filterStreamingThink, sanitizeAssistantText, toolLabel, type ThinkFilterState } from "../utils/displayText";
 import { claimJobCancellation, releaseJobCancellation } from "../utils/jobCancellation";
 import { normalizeStageOutputs } from "../utils/stageOutputs";
@@ -790,7 +791,7 @@ async function runTurn(input: {
               }, scratch);
             }
             if (turn.stopRequested && data?.job_id) requestCancel(String(data.job_id), input.workspaceId, input.clientRequestId);
-            if (stageName === "tool_call" || stageName === "tool_result") {
+            if (stageName === "tool_call" || stageName === "tool_result" || stageName === "subagent_observation") {
               streamingResult.tool_calls_count = (streamingResult.tool_calls_count || 0) + 1;
               const tid = String(data?.tool_id || data?.name || "");
               const callId = String(data?.call_id || data?.node_id || tid || "");
@@ -798,10 +799,18 @@ async function runTurn(input: {
                 const storeState = useWorkbenchStore.getState();
                 const curr = storeState.bySession[scratch]?.find((item) => item.id === input.streamingMsgId);
                 const prevCalls = (curr?.toolCalls || []) as InlineToolCall[];
-                if (stageName === "tool_result") {
-                  const ok = Boolean(data?.ok ?? data?.status === "ok");
+                if (stageName === "tool_result" || stageName === "subagent_observation") {
+                  const raw = data?.result as Record<string,unknown> | undefined;
+                  const ok = Boolean(data?.ok ?? raw?.ok ?? data?.status === "ok");
+                  const nextCall: InlineToolCall = {call_id: callId, tool_id: tid, tool_name: toolLabel(tid),
+                    status: ok ? "done" : "fail", ok, result: raw, summary: String(data?.summary || raw?.summary || ""),
+                    duration_ms: typeof data?.duration_ms === "number" ? data.duration_ms : undefined};
+                  const prior = prevCalls.find(item=>item.call_id===callId);
+                  const priorTask = prior && subagentObservations(prior)[0];
+                  const nextTask = subagentObservations(nextCall)[0];
+                  if (priorTask && nextTask && priorTask.revision > nextTask.revision) break;
                   storeState.updateAssistant(input.streamingMsgId, {
-                    toolCalls: prevCalls.map((item) => item.call_id === callId ? { ...item, status: ok ? "done" : "fail", ok, summary: String(data?.summary || "") } : item),
+                    toolCalls: prior ? prevCalls.map(item=>item.call_id===callId ? {...item,...nextCall} : item) : [...prevCalls,nextCall],
                     streamSeq: lastStreamSequence,
                   }, scratch);
                 } else if (!prevCalls.find((item) => item.call_id === callId)) {
@@ -890,6 +899,7 @@ async function runTurn(input: {
     call_id: tc.call_id,
     tool_id: tc.tool_id,
     tool_name: toolLabel(tc.tool_id),
+    result: tc.result,
     ok: tc.ok,
     status: trackingPending && tc.ok ? "pending" : tc.ok ? "done" : "fail",
     summary: tc.summary,

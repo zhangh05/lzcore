@@ -195,3 +195,18 @@ it('allows four successful reconnects during one turn', async () => {
   }
   expect(fixture.state.bySession.session[0].status).toBe('streaming');
 });
+
+it('restores child activity through reconnect and rejects a stale child revision', async () => {
+  await recoverStreamingTurns('default');
+  const socket = fixture.sockets[0];
+  const observation = (seq: number, revision: number) => socket.frame({type:'event',session_id:'session',client_request_id:'request',seq,name:'subagent_observation',
+    data:{tool_id:'agent.manage',call_id:'spawn-child',result:{ok:true,subtask_id:'sub-a',task_status:'running',observation_revision:revision,progress:{model_responses:revision}}}});
+  observation(1,2);
+  observation(2,1);
+  expect(fixture.state.bySession.session[0].toolCalls).toHaveLength(1);
+  expect(fixture.state.bySession.session[0].toolCalls[0].result.observation_revision).toBe(2);
+  socket.frame({type:'done',session_id:'session',client_request_id:'request',seq:3,final_response:'child result',
+    tool_calls:[{tool_id:'agent.manage',call_id:'completed-child',ok:true,result:{subtask_id:'sub-a',task_status:'succeeded',observation_revision:3}}],metadata:{}});
+  await vi.waitFor(()=>expect(fixture.state.bySession.session[0].status).toBe('ready'));
+  expect(fixture.state.bySession.session[0].toolCalls[0].result.task_status).toBe('succeeded');
+});

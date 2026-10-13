@@ -174,6 +174,7 @@ class SubagentTask:
     result_total_chars: int = 0
     coding: dict = field(default_factory=dict)
     observations: dict = field(default_factory=dict)
+    observation_revision: int = 0
 
     def __post_init__(self):
         if not self.created_at:
@@ -445,12 +446,18 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 None,
                 timeout_seconds=0,
                 cancel_event=cancel_event,
+                emitter=_SubagentActivityEmitter(ws_id, subtask_id),
             )
         except Exception as e:
             raise RuntimeError(f"LLM turn failed: {str(e)[:200]}") from e
 
         final_resp = (getattr(llm_result, "final_response", "") or "") if llm_result is not None else ""
         is_ok = bool(getattr(llm_result, "ok", False)) if llm_result is not None else False
+
+        if llm_result is not None:
+            outcome = (getattr(llm_result, "metadata", {}) or {}).get("execution_outcome")
+            if outcome:
+                task.observations["execution_outcome"] = str(outcome)
 
         if task.coding:
             from .coding_team import finish_assignment
@@ -764,7 +771,7 @@ def list_subagent_tasks(ws_id: str, limit: int = 200) -> list[dict]:
     return rows
 
 
-def get_subagent_task(ws_id: str, subtask_id: str) -> Optional[dict]:
+def get_subagent_task(ws_id: str, subtask_id: str, *, inspect_source: bool = True) -> Optional[dict]:
     """Return one persisted subagent projection without scanning task history."""
     task = _load_task(ws_id, subtask_id)
     if task is None:
@@ -787,7 +794,8 @@ def get_subagent_task(ws_id: str, subtask_id: str) -> Optional[dict]:
         "result_artifact_id": task.result_artifact_id,
         "result_total_chars": int(task.result_total_chars or len(task.summary or "")),
         "coding": task.coding,
-        "progress": observe_progress(task) if task.coding else {},
+        "progress": observe_progress(task, inspect_source=inspect_source) if task.coding else dict(task.observations.get("activity") or {}),
+        "observation_revision": task.observation_revision,
         "domain_state": domain,
         "observations": dict(task.observations),
         "errors": list(task.errors),
@@ -880,6 +888,26 @@ def merge_subagent_result(parent_task_id: str, subtask_id: str, ws_id: str) -> d
 
 # ── Helpers ──
 
+class _SubagentActivityEmitter:
+    """Observe the child runtime without forwarding its text to the parent."""
+    def __init__(self, workspace_id, subtask_id):
+        self.workspace_id, self.subtask_id = workspace_id, subtask_id
+
+    def emit(self, event_type, data):
+        if event_type not in {"model_started", "model_completed", "execution_started", "tool_result"}:
+            return
+        if event_type == "execution_started" and not data.get("tool"):
+            return
+        from storage.subagent_store import record_subagent_activity
+        try:
+            record_subagent_activity(self.workspace_id, self.subtask_id, event_type,
+                                     str(data.get("tool") or data.get("tool_id") or ""),
+                                     str(data.get("action") or ""))
+        except (OSError, ValueError):
+            import logging
+            logging.getLogger(__name__).warning("subagent activity observation unavailable")
+
+
 def _save_task(task: SubagentTask):
     from dataclasses import asdict
     from storage.subagent_store import save_subagent
@@ -889,7 +917,7 @@ def _save_task(task: SubagentTask):
         from .coding_assignment import execution_parameters
         task.coding = execution_parameters(task.coding)
     saved = save_subagent(task.workspace_id, task.subtask_id, asdict(task))
-    for field in ("status", "summary", "finished_at", "errors", "warnings"):
+    for field in ("status", "summary", "finished_at", "errors", "warnings", "observations", "observation_revision"):
         setattr(task, field, saved[field])
     if task.coding:
         from .coding_project import record_task
@@ -997,7 +1025,7 @@ def _get_manifest(tool_id: str):
 
 def _run_ssot_runtime_with_timeout(
     run_fn, session, turn, allowed_tool_ids, *, timeout_seconds: int = 0,
-    cancel_event: threading.Event | None = None,
+    cancel_event: threading.Event | None = None, emitter=None,
 ):
     """Run a subagent turn; an aggregate timeout is optional, never implicit."""
     import concurrent.futures
@@ -1010,6 +1038,7 @@ def _run_ssot_runtime_with_timeout(
         turn,
         allowed_tool_ids=allowed_tool_ids,
         requested_by="subagent",
+        **({"emitter": emitter} if emitter is not None else {}),
     )
     try:
         if int(timeout_seconds or 0) <= 0:

@@ -5,6 +5,8 @@ import { renderAssistantHtml, sanitizeAssistantText, sanitizeUserText, toolLabel
 
 import { humanFailure } from "../../../utils/humanizeError";
 import { formatStreamElapsedSeconds } from "../../../utils/streamElapsed";
+import { SubagentTaskCard } from "../../../components/SubagentTaskCard";
+import { partitionSubagentCalls } from "../../../utils/subagentTracking";
 import { InlineToolCallCard } from "./InlineToolCallCard";
 import { ResultInline } from "./ResultInline";
 import { StreamingContent } from "./StreamingContent";
@@ -118,6 +120,8 @@ export const MessageRow = memo(function MessageRow({ m, idx: _idx, total: _total
     );
   }
 
+  const inlineCalls: InlineToolCall[] = m.toolCalls ?? (m.result?.tool_calls || []).map(call => ({...call, tool_name:toolLabel(call.tool_id), status:call.ok ? "done" : "fail", duration_ms:call.duration_ms ?? undefined}));
+  const projectedCalls = partitionSubagentCalls(inlineCalls);
   return (
     <div className={`message-row assistant${m.status === "error" ? " error" : ""}${m.status === "streaming" ? " streaming" : ""}`} data-testid="chat-assistant">
       <div className="message-avatar agent"><IconSparkle size={14} weight="fill" /></div>
@@ -126,9 +130,10 @@ export const MessageRow = memo(function MessageRow({ m, idx: _idx, total: _total
           ? normalizeStageOutputs(m.stageOutputs)
           : precedingStageOutputs(m.stageOutputs ?? m.result?.metadata.stage_outputs, m.text)} />
         {/* Live tool call chips during streaming */}
-        {m.status === "streaming" && m.toolCalls && m.toolCalls.length > 0 && (
+        {m.status === "streaming" && inlineCalls.length > 0 && (
           <div className="tool-calls-inline">
-            {m.toolCalls.map((tc: InlineToolCall, tci: number) => {
+            {projectedCalls.tasks.map(group=><SubagentTaskCard key={group.id} group={group} />)}
+            {(projectedCalls.ordinary as InlineToolCall[]).map((tc: InlineToolCall, tci: number) => {
               const chipId = tc.call_id ? `tool-call-${tc.call_id}` : `tool-call-${tc.tool_id}-${tci}`;
               return (
                 <span
@@ -146,9 +151,10 @@ export const MessageRow = memo(function MessageRow({ m, idx: _idx, total: _total
           </div>
         )}
         {/* Completed tool call cards */}
-        {m.status !== "streaming" && m.toolCalls && m.toolCalls.length > 0 && (
+        {m.status !== "streaming" && inlineCalls.length > 0 && (
           <div className="tool-calls-inline">
-            {m.toolCalls.map((tc: InlineToolCall, tci: number) => (
+            {projectedCalls.tasks.map(group=><SubagentTaskCard key={group.id} group={group} />)}
+            {(projectedCalls.ordinary as InlineToolCall[]).map((tc: InlineToolCall, tci: number) => (
               <InlineToolCallCard
                 key={tc.call_id || `${tc.tool_id}-${tci}`}
                 toolCall={tc}

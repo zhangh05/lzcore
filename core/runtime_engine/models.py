@@ -197,7 +197,7 @@ class SSOTRuntimeConfig:
     # this observer; it never terminates the producer.
     tracking_max_polls: int = 0
     tracking_max_seconds: int = 0
-    tracking_poll_interval_cap_seconds: float = 2.0
+    tracking_poll_interval_cap_seconds: float = 30.0
     tracking_no_progress_grace_seconds: float = 120.0
 
     # One input-budget contract for the active runtime. Tool definitions remain

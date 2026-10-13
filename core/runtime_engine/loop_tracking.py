@@ -48,7 +48,7 @@ class LoopTracking:
             return []
 
         cap_seconds = float(
-            getattr(self._config, "tracking_poll_interval_cap_seconds", 2.0)
+            getattr(self._config, "tracking_poll_interval_cap_seconds", 30.0)
         )
         grace_seconds = max(0.0, float(
             getattr(self._config, "tracking_no_progress_grace_seconds", 120.0)
@@ -96,7 +96,7 @@ class LoopTracking:
                     "task_id": task_id,
                     "tool_name": tool_name,
                     "poll_index": 0,
-                    "last_error_count": 0,
+                    "quiet_reads": 0,
                     # Quiet intervals are normal while a producer computes or
                     # waits for a model/tool. Require sustained inactivity before
                     # handing the same live state back to another LLM round.
@@ -106,6 +106,10 @@ class LoopTracking:
                     + self._tracking_wait(tracking, cap_seconds, deadline),
                 }
             )
+
+        states = list({(state["tool_name"], state["task_id"]): state for state in states}.values())
+        if states and all(state["tracking"].get("wait_contract") for state in states) and len({state["tool_name"] for state in states}) == 1:
+            return await self._settle_wait_tracking(ctx, states, grace_seconds, budget)
 
         state_by_source = {state["result"].call_id: state for state in states}
 
@@ -181,6 +185,7 @@ class LoopTracking:
                 poll_result = await self._executor._execute_one(
                     poll_call, ctx=ctx, budget=budget
                 )
+                poll_result.output["tracking_arguments"] = dict(poll_arguments)
                 tracked_results.append(poll_result)
 
                 new_tracking = extract_tracking_payload(poll_result.output)
@@ -221,11 +226,16 @@ class LoopTracking:
                     # exact lifecycle facts and allow a later explicit read.
                     stop_polling(state, poll_result, "tracking_no_progress")
                     continue
+                state["quiet_reads"] = 0 if observation_key != state["observation_key"] else state["quiet_reads"] + 1
                 if observation_key != state["observation_key"]:
                     state["last_progress_at"] = observed_at
                 state["observation_key"] = observation_key
+                if tracking.get("done"):
+                    break
+                next_tracking = {**state["tracking"], "next_poll_seconds":
+                    max(1, float(state["tracking"].get("next_poll_seconds") or 1)) * (2 ** min(state["quiet_reads"], 5))}
                 state["due_at"] = time.monotonic() + self._tracking_wait(
-                    state["tracking"], cap_seconds, deadline
+                    next_tracking, cap_seconds, deadline
                 )
             except Exception as e:
                 poll_result = StreamingToolResult(
@@ -248,6 +258,82 @@ class LoopTracking:
             result.output.setdefault("tracking_poll_count", int(state["poll_index"]))
             result.output.setdefault("tracking_source_call_id", source_call_id)
         return tracked_results
+
+    async def _settle_wait_tracking(self, ctx, states, grace_seconds, budget):
+        """Producer-declared batched waits through the normal governance chain.
+
+        Activity updates the UI. Terminal/error observations hand control back
+        to the parent promptly, with snapshots of unfinished peers intact.
+        """
+        tracked = []
+        contract = states[0]["tracking"]["wait_contract"]
+        ids_field, cursor_field = contract["ids_field"], contract["cursor_field"]
+        results_field = contract["results_field"]
+        while states and not self._is_cancelled(ctx):
+            active = states[:int(contract.get("max_batch_size", len(states)))]
+            now = time.monotonic()
+            remaining = min(max(0.0, grace_seconds - (now - state["last_progress_at"])) for state in active)
+            arguments = dict(contract["arguments"])
+            arguments["action"] = contract["action"]
+            arguments[ids_field] = [state["task_id"] for state in active]
+            arguments[cursor_field] = {state["task_id"]: int(state["tracking"].get("observation_token") or 0) for state in active}
+            timeout_field = contract.get("timeout_field", "wait_seconds")
+            arguments[timeout_field] = min(float(arguments.get(timeout_field, 15)), remaining)
+            for state in active:
+                state["poll_index"] += 1
+            call = LLMToolCall(id=f'{states[0]["result"].call_id}_wait_{states[0]["poll_index"]}',
+                               name=states[0]["tool_name"], arguments=arguments)
+            try:
+                batch = await self._executor._execute_one(call, ctx=ctx, budget=budget)
+                observations = {item["task_id"]: item["result"] for item in batch.output.get(results_field, [])}
+            except Exception as exc:
+                batch = StreamingToolResult(tool_name=call.name, call_id=call.id, ok=False,
+                                            output={}, error=_redact_tool_error(exc))
+                observations = {}
+            yield_to_parent = False
+            for state in active:
+                output = dict(observations.get(state["task_id"]) or {})
+                valid_read = batch.ok and bool(output)
+                if not valid_read:
+                    output = {**batch.output, "tracking": state["tracking"], "error": batch.error or "tracking_contract_missing"}
+                tracking = extract_tracking_payload(output)
+                key = self._tracking_observation_key(tracking) if tracking else ""
+                changed = key != state["observation_key"]
+                if changed:
+                    state["last_progress_at"] = time.monotonic()
+                paused = not valid_read or not tracking or (not tracking.get("done") and
+                    time.monotonic() - state["last_progress_at"] >= grace_seconds)
+                if paused:
+                    tracking = {**(tracking or state["tracking"]), "auto_polling": "stopped",
+                                "stop_reason": "tracking_no_progress" if valid_read else "tracking_poll_failed"}
+                    output["tracking"] = tracking
+                output.update(tracking_source_call_id=state["result"].call_id,
+                              tracking_poll_count=state["poll_index"], tracking_wait_call_id=call.id,
+                              tracking_arguments=dict(arguments))
+                result = StreamingToolResult(tool_name=state["tool_name"],
+                    call_id=f'{state["result"].call_id}_track_{state["poll_index"]}',
+                    output=output, ok=valid_read and bool(output.get("ok")),
+                    error=str(output.get("error") or ""), latency_ms=batch.latency_ms)
+                tracked.append(result)
+                state["tracking"], state["observation_key"] = tracking, key
+                ctx.extras["tracking_events"].append({"tool": state["tool_name"], "call_id": result.call_id,
+                    "tracking": tracking, "source": "auto_polling_stopped" if paused else "wait", "poll_index": state["poll_index"]})
+                ctx.extras["tracking_summary"] = tracking
+                if changed or paused:
+                    self._emit_tracking_update(state, output)
+                yield_to_parent |= paused or bool(tracking.get("done")) or not result.ok
+            if yield_to_parent:
+                active = next((state["tracking"] for state in states if not state["tracking"].get("done")), None)
+                if active:
+                    ctx.extras["tracking_summary"] = active
+                break
+            states = states[len(active):] + active
+        return tracked
+
+    def _emit_tracking_update(self, state, output):
+        if self._emitter:
+            self._emitter.emit("subagent_observation", {"tool_id": state["tool_name"],
+                "call_id": state["result"].call_id, "result": output})
 
     @staticmethod
     def _tracking_observation_key(tracking: dict[str, Any]) -> str:

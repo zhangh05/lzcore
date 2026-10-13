@@ -10,6 +10,8 @@
  * to the assistant message. While loading we show a spinner; on error we
  * fall back to the user/assistant text pair with a retry hint.
  */
+import { SubagentTaskCard } from "./SubagentTaskCard";
+import { partitionSubagentCalls } from "../utils/subagentTracking";
 import React, { useMemo, useState } from "react";
 import type { AgentResult, RuntimeEvent, ToolCallResult } from "../types";
 import type { ChatMsg } from "../stores/workbench";
@@ -171,7 +173,9 @@ const StepRow: React.FC<{ evt: RuntimeEvent }> = React.memo(({ evt }) => {
 
 const ResultBody: React.FC<{ result: AgentResult }> = React.memo(({ result }) => {
   const events = result.events ?? [];
-  const tools = result.tool_calls ?? [];
+  const partition = partitionSubagentCalls(result.tool_calls ?? []);
+  const tools = partition.ordinary as ToolCallResult[];
+  const subagentCallIds = new Set((result.tool_calls ?? []).filter(call => !tools.includes(call)).map(call => call.call_id));
   const hasDiag = !!(result.errors?.length) || !!(result.warnings?.length);
   const allArtifacts = tools.flatMap((t) => t.artifacts ?? []);
   const retrySummary = result.metadata?.retry_summary || {};
@@ -203,11 +207,13 @@ const ResultBody: React.FC<{ result: AgentResult }> = React.memo(({ result }) =>
 
       {/* steps */}
       <div className="rt-timeline">
+        {partition.tasks.map(group=><SubagentTaskCard key={group.id} group={group} />)}
         {events.map((evt) => {
           const t = (evt.event_type || evt.type || "").toLowerCase();
           const isTool = t.startsWith("tool_call") || evt.tool_id;
           if (isTool) {
             const callId = eventCallId(evt);
+            if (subagentCallIds.has(callId)) return null;
             const match = toolMap.get(callId);
             if (match) {
               if (renderedToolCalls.has(callId)) return null;

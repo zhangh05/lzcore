@@ -14,7 +14,7 @@ from agent.runtime.durable.subagent import BUILTIN_PROFILES, SubagentProfile
 _TERMINAL_SUBTASK_STATUSES = {"succeeded", "failed", "cancelled", "canceled"}
 
 
-def _subtask_tracking(subtask_id: str, status: str, progress=None) -> dict:
+def _subtask_tracking(subtask_id: str, status: str, progress=None, revision: int = 0) -> dict:
     normalized_status = str(status or "running").strip().lower()
     done = normalized_status in _TERMINAL_SUBTASK_STATUSES
     return {
@@ -26,6 +26,13 @@ def _subtask_tracking(subtask_id: str, status: str, progress=None) -> dict:
         "done": done,
         "terminal": done,
         "next_poll_seconds": 2,
+        "observation_token": str(revision),
+        "wait_contract": {
+            "action": "wait", "ids_field": "subtask_ids", "cursor_field": "after_revision",
+            "results_field": "observations", "max_batch_size": 32,
+            "arguments": {"subtask_ids": [subtask_id], "after_revision": {subtask_id: revision},
+                          "wait_for": "any", "until": "change", "wait_seconds": 15},
+        },
         "suggested_next_action": "synthesize_results" if done else "poll_get",
         "poll_action": "get",
         "poll_arguments": {"action": "get", "subtask_id": subtask_id},
@@ -299,6 +306,13 @@ def _spawn_agent(inv: ToolInvocation, profile_id: str) -> dict:
             coding_assignment=args.get("coding_assignment"),
             cancel_check=getattr(inv, "cancel_check", None),
         )
+        if result.get("subtask_id"):
+            from agent.runtime.durable.subagent import get_subagent_task
+            snapshot = get_subagent_task(workspace_id, result["subtask_id"], inspect_source=False)
+            if snapshot is not None:
+                projection = _subagent_read_result(inv, snapshot)
+                projection["deferred"] = snapshot["status"] in {"created", "running"}
+                return projection
         return _result(
             inv,
             result.get("ok", False),
@@ -389,101 +403,124 @@ def handle_agent_list(inv: ToolInvocation) -> dict:
     )
 
 
-def handle_agent_get_result(inv: ToolInvocation) -> dict:
-    """Get a subagent result by its canonical subtask/session identifier."""
-    args = inv.arguments or {}
+def _subagent_read_result(inv: ToolInvocation, persisted: dict | None) -> dict:
+    """One projection shared by get and wait, including full terminal evidence."""
+    if persisted is None:
+        return _error_inv(inv, "subtask not found")
     ws = _caller_workspace(inv)
-    subtask_id = str(args.get("subtask_id") or "").strip()
+    subtask_id = persisted["subtask_id"]
+    status = str(persisted.get("status") or "unknown")
+    payload = {
+        "workspace_id": ws,
+        **persisted,
+        # The tool envelope's status describes this read operation.
+        # Preserve the child's independent lifecycle under a stable
+        # name even when _ok projects status='ok'.
+        "task_status": status,
+        "tracking": _subtask_tracking(subtask_id, status, persisted.get("progress"), persisted.get("observation_revision", 0)),
+    }
+    payload.setdefault("subtask_id", subtask_id)
+    payload.setdefault("preview", str(persisted.get("summary") or ""))
+    payload.setdefault("artifact_id", "")
+    if persisted.get("coding"):
+        payload["_hint"] = (
+            "Implementation source is in its isolated branch and will not appear in the parent "
+            "project before exact independent QA and merge. running/created are live states; "
+            "use progress and dependency phase, not an empty parent directory, to assess work. "
+            "Keep observing this handle while it is progressing. An observer polling pause "
+            "is not a worker deadline or failure."
+        )
+    artifact_id = str(persisted.get("result_artifact_id") or "").strip()
+    if status == "succeeded" and artifact_id:
+        # This remains inside the registered agent.manage handler. The
+        # artifact is the durable authority for a completed child result;
+        # do not downgrade it to the diagnostic summary field.
+        from artifacts.store import read_artifact_content
 
-    if not subtask_id:
-        return _error_inv(inv, "subtask_id is required")
-
-    try:
-        validate_workspace_id(ws)
-        from agent.runtime.durable.subagent import get_subagent_task
-
-        persisted = get_subagent_task(ws, subtask_id)
-        if persisted is not None:
-            status = str(persisted.get("status") or "unknown")
-            payload = {
-                "workspace_id": ws,
-                **persisted,
-                # The tool envelope's status describes this read operation.
-                # Preserve the child's independent lifecycle under a stable
-                # name even when _ok projects status='ok'.
-                "task_status": status,
-                "tracking": _subtask_tracking(subtask_id, status, persisted.get("progress")),
-            }
-            payload.setdefault("subtask_id", subtask_id)
-            payload.setdefault("preview", str(persisted.get("summary") or ""))
-            payload.setdefault("artifact_id", "")
-            if persisted.get("coding"):
-                payload["_hint"] = (
-                    "Implementation source is in its isolated branch and will not appear in the parent "
-                    "project before exact independent QA and merge. running/created are live states; "
-                    "use progress and dependency phase, not an empty parent directory, to assess work. "
-                    "Keep observing this handle while it is progressing. An observer polling pause "
-                    "is not a worker deadline or failure."
-                )
-            artifact_id = str(persisted.get("result_artifact_id") or "").strip()
-            if status == "succeeded" and artifact_id:
-                # This remains inside the registered agent.manage handler. The
-                # artifact is the durable authority for a completed child result;
-                # do not downgrade it to the diagnostic summary field.
-                from artifacts.store import read_artifact_content
-
-                full_result = read_artifact_content(ws, artifact_id)
-                if full_result is not None:
-                    payload.update(
-                        {
-                            "artifact_id": artifact_id,
-                            "artifact_ids": [artifact_id],
-                            "artifact_type": "output_data",
-                            "preview": full_result,
-                            "content_chars": len(full_result),
-                            "content_complete": True,
-                            "subagent_result_complete": True,
-                        }
-                    )
-                    return _ok(
-                        inv,
-                        f"Subagent result ready: {len(full_result)} chars in artifact {artifact_id}",
-                        payload,
-                    )
-            if status in {"failed", "cancelled", "canceled"}:
-                error_code = (
-                    "SUBAGENT_CANCELLED"
-                    if status in {"cancelled", "canceled"}
-                    else "SUBAGENT_FAILED"
-                )
-                errors = [
-                    str(item) for item in (persisted.get("errors") or []) if str(item)
-                ]
-                summary = str(
-                    persisted.get("summary")
-                    or (errors[0] if errors else f"Subagent {status}")
-                )
-                return _result(
-                    inv,
-                    False,
-                    {
-                        **payload,
-                        "summary": summary,
-                        "error": summary,
-                        "errors": errors or [summary],
-                        "error_code": error_code,
-                        "retryable": False,
-                    },
-                )
+        full_result = read_artifact_content(ws, artifact_id)
+        if full_result is not None:
+            payload.update(
+                {
+                    "artifact_id": artifact_id,
+                    "artifact_ids": [artifact_id],
+                    "artifact_type": "output_data",
+                    "preview": full_result,
+                    "content_chars": len(full_result),
+                    "content_complete": True,
+                    "subagent_result_complete": True,
+                }
+            )
             return _ok(
                 inv,
-                str(persisted.get("summary") or f"Subagent status: {status}"),
+                f"Subagent result ready: {len(full_result)} chars in artifact {artifact_id}",
                 payload,
             )
+        return _result(inv, False, {**payload, "content_complete": False, "subagent_result_complete": False,
+            "error_code": "SUBAGENT_RESULT_UNAVAILABLE", "retryable": False,
+            "error": "Child ended but its declared complete result is unavailable; inspect the same task/artifact.",
+            "summary": "Subagent complete result unavailable"})
+    if status in {"failed", "cancelled", "canceled"}:
+        error_code = (
+            "SUBAGENT_CANCELLED"
+            if status in {"cancelled", "canceled"}
+            else "SUBAGENT_FAILED"
+        )
+        errors = [
+            str(item) for item in (persisted.get("errors") or []) if str(item)
+        ]
+        summary = str(
+            persisted.get("summary")
+            or (errors[0] if errors else f"Subagent {status}")
+        )
+        return _result(
+            inv,
+            False,
+            {
+                **payload,
+                "summary": summary,
+                "error": summary,
+                "errors": errors or [summary],
+                "error_code": error_code,
+                "retryable": False,
+            },
+        )
+    return _ok(
+        inv,
+        str(persisted.get("summary") or f"Subagent status: {status}"),
+        payload,
+    )
 
-        return _error_inv(inv, "subtask not found")
-    except Exception as e:
-        return _error_inv(inv, str(e)[:200])
+
+def handle_agent_get_result(inv: ToolInvocation) -> dict:
+    """Read one durable subtask by its canonical identity."""
+    subtask_id = str((inv.arguments or {}).get("subtask_id") or "").strip()
+    if not subtask_id:
+        return _error_inv(inv, "subtask_id is required")
+    try:
+        from agent.runtime.durable.subagent import get_subagent_task
+        return _subagent_read_result(inv, get_subagent_task(_caller_workspace(inv), subtask_id))
+    except Exception as exc:
+        return _error_inv(inv, str(exc)[:200])
+
+
+def handle_agent_wait(inv: ToolInvocation) -> dict:
+    """Bounded read-only observation of any/all handles; never starts workers."""
+    from storage.subagent_store import wait_subagent_observations
+    from agent.runtime.durable.subagent import _validated_subtask_id, get_subagent_task
+    try:
+        args = inv.arguments or {}
+        ws = validate_workspace_id(_caller_workspace(inv))
+        ids = [_validated_subtask_id(value) for value in args["subtask_ids"]]
+        waited = wait_subagent_observations(ws, ids, after_revision=args.get("after_revision") or {},
+            wait_for=args.get("wait_for") or "any", until=args.get("until") or "terminal",
+            seconds=float(args.get("wait_seconds", 15)), cancel_check=inv.cancel_check)
+        observations = [{"task_id": identity, "result": _subagent_read_result(inv,
+                        get_subagent_task(ws, identity, inspect_source=False))} for identity in ids]
+        return _ok(inv, "Observed delegated tasks; timeout/cancellation only stops this read.",
+                   {"observations": observations, "changed_ids": waited["changed_ids"],
+                    "timed_out": waited["timed_out"], "observation_cancelled": waited["observation_cancelled"]})
+    except (ValueError, TypeError, KeyError) as exc:
+        return _error_inv(inv, str(exc)[:200])
 
 
 def handle_agent_cancel(inv: ToolInvocation) -> dict:

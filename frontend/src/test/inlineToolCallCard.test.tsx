@@ -50,3 +50,21 @@ describe("InlineToolCallCard orchestration metadata", () => {
     expect(screen.getByText("依赖：parse")).toBeInTheDocument();
   });
 });
+
+import { SubagentTaskCard } from "../components/SubagentTaskCard";
+import { partitionSubagentCalls } from "../utils/subagentTracking";
+
+it("groups real observations by child identity and keeps lifecycle separate from successful reads", () => {
+  const calls = [1,2,1].map((revision): InlineToolCall => ({call_id:`read-${revision}`,tool_id:"agent.manage",tool_name:"多 Agent",ok:true,status:"done",duration_ms:2,
+    result:{subtask_id:"sub-a",task_status:"running",observation_revision:revision,profile_id:"data_agent",instruction:"统计订单",started_at:"2026-10-13T00:00:00Z",
+      progress:{event:revision===2?"tool_result":"model_started",tool:"data.manage",tool_results:revision===2?1:0}}}));
+  const grouped=partitionSubagentCalls(calls);
+  expect(grouped.tasks).toHaveLength(1);
+  expect(grouped.ordinary).toHaveLength(0);
+  expect(grouped.tasks[0].latest.revision).toBe(2);
+  render(<SubagentTaskCard group={grouped.tasks[0]}/>);
+  expect(screen.getByText("运行中")).toBeInTheDocument();
+  expect(screen.queryByText("子任务已完成")).not.toBeInTheDocument();
+  expect(screen.getByText("工具结果 1 项")).toBeInTheDocument();
+  expect(screen.getByText("观察记录 · 3 次")).toBeInTheDocument();
+});

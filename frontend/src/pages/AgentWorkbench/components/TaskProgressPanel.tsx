@@ -28,7 +28,8 @@ type Props = {
   onToggleCollapsed: () => void;
 };
 
-function statusLabel(status: string, toolCount: number): string {
+function statusLabel(status: string, toolCount: number, subagentCount = 0): string {
+  if (subagentCount) return `${toolCount} 次调用 · ${subagentCount} 个子任务`;
   if (status === "running") return toolCount > 0 ? `已调用 ${toolCount} 个工具` : "实时处理中";
   if (status === "succeeded") return toolCount > 0 ? `${toolCount} 次工具调用已完成` : "纯模型分析，无外部调用";
   if (status === "failed") return "本轮需要排查";
@@ -194,7 +195,7 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
             )}
           </span>
           <span className="task-status-desc">
-            {statusLabel(model.status, model.evidence.length)}
+            {statusLabel(model.status, model.toolCount, model.subagentCount)}
           </span>
         </div>
 

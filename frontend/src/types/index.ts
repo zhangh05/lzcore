@@ -946,6 +946,7 @@ export interface InlineToolCall {
   call_id?: string;
   tool_id: string;
   tool_name: string;
+  result?: unknown;
   ok: boolean;
   status?: string;
   summary?: string;
