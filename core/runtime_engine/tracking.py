@@ -84,6 +84,7 @@ def normalize_tracking_payload(tracking: dict[str, Any]) -> dict[str, Any]:
         "poll_arguments": dict(poll_arguments),
         "progress": progress,
         "wait_contract": dict(tracking.get("wait_contract") or {}),
+        "observation_mode": str(tracking.get("observation_mode") or "automatic"),
         "summary": summary,
         "observation_token": str(
             tracking.get("observation_token") or tracking.get("revision")
@@ -103,7 +104,7 @@ def latest_tracking_observations(events: list[dict]) -> list[dict]:
     """
     latest = {}
     fields = ("task_id", "domain", "status", "done", "terminal", "progress",
-              "observation_token", "poll_action", "poll_arguments", "wait_contract",
+              "observation_token", "poll_action", "poll_arguments", "wait_contract", "observation_mode",
               "next_poll_seconds", "auto_polling", "stop_reason")
     for event in events:
         tracking = event.get("tracking")

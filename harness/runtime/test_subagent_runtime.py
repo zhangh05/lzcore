@@ -140,10 +140,12 @@ class TestSubagentTask:
         assert result["summary"]
         assert result["tracking"]["done"] is False
         assert result["tracking"]["poll_action"] == "get"
-        assert result["tracking"]["suggested_next_action"] == "poll_get"
+        assert result["tracking"]["suggested_next_action"] == "wait_or_continue"
+        assert result["tracking"]["observation_mode"] == "manual"
+        assert result["tracking"]["wait_contract"]["action"] == "wait"
 
         from core.runtime_engine.query_loop import QueryLoop
-        assert QueryLoop._should_poll_tracking("delegate this task", result["tracking"])
+        assert not QueryLoop._should_poll_tracking("delegate this task", result["tracking"])
 
     def test_spawn_links_subtask_to_runtime_operation(self, monkeypatch, tmp_path):
         from core.tools.general_tools.agent_tools import _run_durable_subagent

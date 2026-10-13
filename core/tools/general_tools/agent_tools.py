@@ -14,7 +14,7 @@ from agent.runtime.durable.subagent import BUILTIN_PROFILES, SubagentProfile
 _TERMINAL_SUBTASK_STATUSES = {"succeeded", "failed", "cancelled", "canceled"}
 
 
-def _subtask_tracking(subtask_id: str, status: str, progress=None, revision: int = 0) -> dict:
+def _subtask_tracking(subtask_id: str, status: str, progress=None, revision: int = 0, observation_mode: str = "automatic") -> dict:
     normalized_status = str(status or "running").strip().lower()
     done = normalized_status in _TERMINAL_SUBTASK_STATUSES
     return {
@@ -27,13 +27,14 @@ def _subtask_tracking(subtask_id: str, status: str, progress=None, revision: int
         "terminal": done,
         "next_poll_seconds": 2,
         "observation_token": str(revision),
+        "observation_mode": observation_mode,
         "wait_contract": {
             "action": "wait", "ids_field": "subtask_ids", "cursor_field": "after_revision",
             "results_field": "observations", "max_batch_size": 32,
             "arguments": {"subtask_ids": [subtask_id], "after_revision": {subtask_id: revision},
                           "wait_for": "any", "until": "change", "wait_seconds": 15},
         },
-        "suggested_next_action": "synthesize_results" if done else "poll_get",
+        "suggested_next_action": "synthesize_results" if done else "wait_or_continue" if observation_mode == "manual" else "poll_get",
         "poll_action": "get",
         "poll_arguments": {"action": "get", "subtask_id": subtask_id},
     }
@@ -214,7 +215,7 @@ def _run_durable_subagent(
             "parent_task_id": parent_task_id,
             "status": status,
             "background": True,
-            "tracking": _subtask_tracking(subtask_id, status),
+            "tracking": _subtask_tracking(subtask_id, status, observation_mode="manual"),
             "summary": f"Subagent {profile.name} started in background (task: {subtask_id})",
             "_hint": f"Subagent {profile_id} launched in background (task: {subtask_id})",
         }
@@ -417,7 +418,8 @@ def _subagent_read_result(inv: ToolInvocation, persisted: dict | None) -> dict:
         # Preserve the child's independent lifecycle under a stable
         # name even when _ok projects status='ok'.
         "task_status": status,
-        "tracking": _subtask_tracking(subtask_id, status, persisted.get("progress"), persisted.get("observation_revision", 0)),
+        "tracking": _subtask_tracking(subtask_id, status, persisted.get("progress"), persisted.get("observation_revision", 0),
+                observation_mode="automatic" if (inv.arguments or {}).get("action") == "spawn" and (inv.arguments or {}).get("background") is False else "manual"),
     }
     payload.setdefault("subtask_id", subtask_id)
     payload.setdefault("preview", str(persisted.get("summary") or ""))

@@ -19,7 +19,7 @@ class LoopTracking:
     @staticmethod
     def _should_poll_tracking(user_input: str, tracking: dict) -> bool:
         """Track every producer-declared long task within runtime budgets."""
-        if tracking.get("done"):
+        if tracking.get("done") or tracking.get("observation_mode") == "manual":
             return False
         if tracking.get("auto_polling") == "stopped":
             return False
@@ -63,13 +63,6 @@ class LoopTracking:
                 continue
             tracking = normalize_tracking_payload(tracking)
 
-            if tracking.get("done"):
-                continue
-
-            # Producer-declared tracking avoids keyword or intent guessing.
-            if not self._should_poll_tracking(user_input, tracking):
-                continue
-
             task_id = str(tracking.get("task_id") or "").strip()
             # Use the canonical tool name from result, not domain from tracking
             tool_name = (r.tool_name or "").strip()
@@ -88,6 +81,10 @@ class LoopTracking:
                 }
             )
             ctx.extras["tracking_summary"] = tracking
+            # Background/explicit reads keep their handles but let the parent
+            # decide when to wait; foreground delegation stays auto-observed.
+            if not self._should_poll_tracking(user_input, tracking):
+                continue
 
             states.append(
                 {
