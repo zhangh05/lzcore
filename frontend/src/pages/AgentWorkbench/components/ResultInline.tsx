@@ -5,6 +5,7 @@ import { knowledgeApi, memoryApi } from "../../../api";
 import { IconBolt, IconBrain, IconBook, IconRefresh, IconAlert, IconShield, IconChevronDown, IconChevronRight } from "../../../components/Icon";
 import { TaskTrackingCard } from "../../../components/TaskTrackingCard";
 import { UNKNOWN_OUTCOME_COPY, unknownOutcomeParagraph } from "../../../components/toolCallState";
+import { subagentObservations, subagentStatusLabel } from "../../../utils/subagentTracking";
 import { toolLabel } from "../../../utils/displayText";
 import { isApiError } from "../../../types";
 import type { AgentResult, SourceSummary, ToolCallResult, CognitiveSummary } from "../../../types";
@@ -253,7 +254,7 @@ export const ResultInline = memo(function ResultInline({
                     <span key={tc.call_id || `${tc.tool_id}-${idx}`} className="chat-tool-call">
                       <span className="tc-name">{toolLabel(tc.tool_id)}</span>
                       <span className={"tc-status " + (trackingPending ? "pending" : tc.ok ? "ok" : "err")}>
-                        {trackingPending ? "已提交，等待结果" : tc.ok ? "已完成" : "需关注"}
+                        {subagentObservations(tc)[0] ? `${subagentStatusLabel(subagentObservations(tc)[0])} · ${tc.ok ? "读取成功" : "读取失败"}` : trackingPending ? "已提交，等待结果" : tc.ok ? "已完成" : "需关注"}
                       </span>
                     </span>
                   ))}

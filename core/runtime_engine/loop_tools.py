@@ -908,7 +908,19 @@ class StreamingToolExecutor(ReadRetryPolicy):
                     )
                 else:
                     result = await self._maybe_retry_node(node, ctx, result, budget)
-            return self._from_tool_result(result, fallback_call_id=tc.id)
+            projected = self._from_tool_result(result, fallback_call_id=tc.id)
+            if self._emitter:
+                event = {"tool_id": tool_id, "call_id": tc.id,
+                    "action": str((tc.arguments or {}).get("action") or ""), "ok": projected.ok,
+                    "summary": projected.summary or projected.output.get("summary", ""),
+                    "duration_ms": projected.latency_ms}
+                if tool_id == "agent.manage":
+                    event["result"] = projected.output
+                try:
+                    self._emitter.emit("tool_result", event)
+                except Exception:
+                    _LOG.warning("tool result observation unavailable")
+            return projected
 
         # Context-free fallback: only reached in isolated unit test harnesses or when
         # runtime lacks execute_node. Production agent turns always provide StatelessContext

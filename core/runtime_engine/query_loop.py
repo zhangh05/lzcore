@@ -694,7 +694,7 @@ class QueryLoop(
                             LLMToolCall(
                                 id=polled.call_id,
                                 name=source_call.name,
-                                arguments=dict(source_call.arguments or {}),
+                                arguments=dict((polled.output or {}).get("tracking_arguments") or source_call.arguments or {}),
                                 failure_policy=source_call.failure_policy,
                                 goal_ids=list(source_call.goal_ids),
                             )

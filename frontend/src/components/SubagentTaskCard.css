@@ -1,0 +1,16 @@
+@layer base {
+.subagent-card { border: 1px solid var(--line); border-radius: var(--r-6); padding: 12px; background: var(--surface); min-width: 0; }
+.subagent-card-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: var(--fs-12); }
+.subagent-task-status { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.subagent-task-status.complete { color: var(--ok); }
+.subagent-task-status.fail, .subagent-task-status.unknown { color: var(--warn); }
+.subagent-task-status.live { color: var(--accent); }
+.subagent-elapsed { margin-left: auto; color: var(--text-3); }
+.subagent-instruction { margin: 8px 0; overflow-wrap: anywhere; color: var(--text-2); font-size: var(--fs-12); }
+.subagent-activity { display: flex; flex-wrap: wrap; gap: 8px; color: var(--text-3); font-size: var(--fs-11); }
+.subagent-observations { margin-top: 8px; font-size: var(--fs-11); color: var(--text-3); }
+.subagent-observations summary { cursor: pointer; }
+.subagent-task-id { overflow-wrap: anywhere; margin: 8px 0; }
+.subagent-observation { display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--line); padding: 8px 0; }
+.subagent-observation p { margin: 0; width: 100%; overflow-wrap: anywhere; }
+}

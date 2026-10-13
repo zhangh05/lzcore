@@ -473,6 +473,29 @@ class LoopToolPreparation:
             )
 
         if extra_results:
+            from .tracking import extract_tracking_payload
+            groups = {}
+            for item in extra_results:
+                tracking = extract_tracking_payload(item.output)
+                identity = (item.tool_name, tracking.get("task_id"))
+                if tracking.get("task_id") and item.ok and not item.error:
+                    groups.setdefault(identity, []).append(item)
+            superseded = {item.call_id for group in groups.values() for item in group[:-1]}
+            projected = [item for item in extra_results if item.call_id not in superseded]
+            observations = []
+            for (tool, identity), group in groups.items():
+                if len(group) < 2:
+                    continue
+                changes, previous = [], None
+                for item in group[:-1]:
+                    facts = {key: value for key, value in extract_tracking_payload(item.output).items()
+                             if key in {"status", "done", "progress", "observation_token", "auto_polling", "stop_reason"}}
+                    if facts != previous:
+                        changes.append({"call_id": item.call_id, "tracking": facts})
+                    previous = facts
+                observations.append({"tool": tool, "task_id": identity, "count": len(group),
+                    "call_ids": [item.call_id for item in group], "changes": changes,
+                    "history": "Original observations remain in this run's tool_calls and audit; system.manage run_get can retrieve them."})
             payload = [
                 {
                     "tool": r.tool_name,
@@ -482,9 +505,9 @@ class LoopToolPreparation:
                     "error": r.error,
                     "output": _model_tool_payload(r),
                 }
-                for r in extra_results
+                for r in projected
             ]
-            payload = redact_tool_output(payload)
+            payload = redact_tool_output({"results": payload, "observation_history": observations})
             output_str = _json_compact(payload)
             from .prompt_contract import _escape_data
 

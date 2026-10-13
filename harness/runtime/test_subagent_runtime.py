@@ -140,10 +140,12 @@ class TestSubagentTask:
         assert result["summary"]
         assert result["tracking"]["done"] is False
         assert result["tracking"]["poll_action"] == "get"
-        assert result["tracking"]["suggested_next_action"] == "poll_get"
+        assert result["tracking"]["suggested_next_action"] == "wait_or_continue"
+        assert result["tracking"]["observation_mode"] == "manual"
+        assert result["tracking"]["wait_contract"]["action"] == "wait"
 
         from core.runtime_engine.query_loop import QueryLoop
-        assert QueryLoop._should_poll_tracking("delegate this task", result["tracking"])
+        assert not QueryLoop._should_poll_tracking("delegate this task", result["tracking"])
 
     def test_spawn_links_subtask_to_runtime_operation(self, monkeypatch, tmp_path):
         from core.tools.general_tools.agent_tools import _run_durable_subagent
@@ -901,3 +903,72 @@ def test_subagent_secret_response_is_not_persisted_when_artifact_is_rejected(mon
     assert completed["ok"] is False
     assert secret not in str(completed)
     assert secret not in str(task)
+
+
+def test_governed_wait_any_all_timeout_cancel_and_full_result(temp_dirs, monkeypatch):
+    """Waiting observes exact handles; it never starts or terminates workers."""
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.context import ToolRuntimeContext
+    from storage.subagent_store import read_subagent, record_subagent_activity
+    from agent.runtime.durable.subagent import _load_task, _save_task
+    from artifacts.store import save_artifact
+    from agent.runtime.utils import now_iso
+
+    ws = "wait-contract"
+    a, b = [create_subagent_task("parent", ws, "parent-session", "data_agent", name)["subtask_id"] for name in ("a", "b")]
+    client = get_default_tool_runtime_client()
+    context = ToolRuntimeContext(workspace_id=ws, session_id="parent-session", requested_by="turn_runner")
+    def wait(**args):
+        return client.invoke("agent.manage", {"action": "wait", "subtask_ids": [a,b], "wait_seconds": 0, **args}, context=context)
+    timed = wait(wait_for="all", until="terminal")
+    assert timed.output["timed_out"] is True
+    assert all(row["result"]["task_status"] == "created" for row in timed.output["observations"])
+    assert client.invoke("agent.manage", {"action": "wait"}, context=context).status == "blocked"
+    assert client.invoke("agent.manage", {"action": "wait", "subtask_ids": [a], "wait_seconds": 21}, context=context).status == "blocked"
+    baseline = {identity: read_subagent(ws,identity)["observation_revision"] for identity in (a,b)}
+    record_subagent_activity(ws,a,"model_started")
+    changed = wait(until="change", after_revision=baseline)
+    assert changed.output["changed_ids"] == [a]
+    assert changed.output["observations"][0]["result"]["progress"]["event"] == "model_started"
+    # Waiting all must time out even when one peer changed.
+    assert wait(until="change", wait_for="all", after_revision=baseline).output["timed_out"]
+    context.cancel_check = lambda: True
+    cancelled = wait(wait_seconds=15)
+    assert cancelled.output["observation_cancelled"] is True
+    assert read_subagent(ws,a)["status"] == "created"
+    context.cancel_check = None
+    full = "verified evidence " * 600
+    artifact = save_artifact(workspace_id=ws, content=full, artifact_type="output_data", title="result", session_id=a)
+    task = _load_task(ws,a)
+    task.status, task.summary, task.finished_at = "succeeded", "preview", now_iso()
+    task.result_artifact_id = artifact.artifact_id
+    _save_task(task)
+    terminal = wait(wait_for="any", until="terminal")
+    completed = terminal.output["observations"][0]["result"]
+    assert completed["preview"] == full and completed["subagent_result_complete"] is True
+    assert terminal.output["observations"][1]["result"]["task_status"] == "created"
+    monkeypatch.setattr("artifacts.store.read_artifact_content", lambda *_: None)
+    unavailable = wait(wait_for="any", until="terminal").output["observations"][0]["result"]
+    assert unavailable["ok"] is False and unavailable["content_complete"] is False
+    assert unavailable["task_status"] == "succeeded"
+    assert read_subagent(ws,a)["status"] == "succeeded"
+    foreign = ToolRuntimeContext(workspace_id="other-workspace", requested_by="turn_runner")
+    assert client.invoke("agent.manage", {"action":"wait","subtask_ids":[a],"wait_seconds":0}, context=foreign).status == "failed"
+
+
+def test_child_runtime_activity_keeps_raw_provider_data_out(monkeypatch):
+    from agent.runtime.durable.subagent import _load_task, _save_task, _SubagentActivityEmitter, get_subagent_task
+    from storage.subagent_store import read_subagent
+    created = create_subagent_task("parent", "activity-ws", "session", "data_agent", "Read data")
+    identity = created["subtask_id"]
+    stale = _load_task("activity-ws", identity)
+    emitter = _SubagentActivityEmitter("activity-ws", identity)
+    emitter.emit("model_started", {"text": "private-provider-payload"})
+    emitter.emit("model_completed", {"text": "private-provider-payload"})
+    emitter.emit("tool_result", {"tool_id": "data.manage", "action": "stats", "result": "private-provider-payload"})
+    _save_task(stale)
+    observed = get_subagent_task("activity-ws", identity)
+    assert observed["progress"]["model_responses"] == 1
+    assert observed["progress"]["tool_results"] == 1
+    assert observed["progress"]["tool"] == "data.manage"
+    assert "private-provider-payload" not in str(read_subagent("activity-ws", identity))

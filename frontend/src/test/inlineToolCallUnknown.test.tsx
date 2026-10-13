@@ -138,7 +138,7 @@ describe("内联工具卡区分「已确认的失败」与「写入结果未知�
     );
 
     expect(cardState(container)).toBe("pending");
-    expect(screen.getByText("已提交，等待设备结果")).toBeInTheDocument();
+    expect(screen.getByText("已提交，等待工具结果")).toBeInTheDocument();
     expect(screen.queryByText("结果未知")).not.toBeInTheDocument();
   });
 

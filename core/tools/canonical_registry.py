@@ -481,7 +481,7 @@ def _handle_agent_review(inv: ToolInvocation) -> dict:
 
 
 def _handle_agent(inv: ToolInvocation) -> dict:
-    from core.tools.general_tools.agent_tools import handle_agent_cancel, handle_agent_get_result, handle_agent_list, handle_agent_merge, handle_agent_reconcile, handle_agent_spawn, handle_agent_start, handle_agent_status
+    from core.tools.general_tools.agent_tools import handle_agent_cancel, handle_agent_get_result, handle_agent_list, handle_agent_merge, handle_agent_reconcile, handle_agent_spawn, handle_agent_start, handle_agent_status, handle_agent_wait
 
     action = _action(inv) or "list"
     return {
@@ -489,11 +489,12 @@ def _handle_agent(inv: ToolInvocation) -> dict:
         "start": handle_agent_start,
         "list": handle_agent_list,
         "get": handle_agent_get_result,
+        "wait": handle_agent_wait,
         "cancel": handle_agent_cancel,
         "status": handle_agent_status,
         "merge": handle_agent_merge,
         "reconcile": handle_agent_reconcile,
-    }.get(action, lambda x: _unsupported(x, "spawn|start|list|get|cancel|status|merge|reconcile"))(inv)
+    }.get(action, lambda x: _unsupported(x, "spawn|start|list|get|wait|cancel|status|merge|reconcile"))(inv)
 
 
 def _handle_system(inv: ToolInvocation) -> dict:
@@ -1048,7 +1049,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
            description="Record the active independent QA worker's judgement for its exact server-bound candidate. Requires review with schema, verdict, scope, blocking_findings and report. Does not modify or publish source; final chat format is unrestricted. Other callers, sessions and closed QA bindings are rejected."),
     _entry("agent.manage", _handle_agent, {
         **_COMMON,
-        "action": {"type": "string", "enum": ["spawn", "start", "list", "get", "status", "cancel", "merge", "reconcile"]},
+        "action": {"type": "string", "enum": ["spawn", "start", "list", "get", "wait", "status", "cancel", "merge", "reconcile"]},
         "instruction": {"type": "string", "description": "Required for spawn: an outcome-oriented task preserving the user's scope, evidence requirements, and output constraints. Let the subagent choose from its published tools; do not invent provider limits or force one-call-per-item execution unless the user explicitly requires that method."},
         "profile_id": _subagent_profile_schema(),
         "coding_assignment": _schema({
@@ -1065,8 +1066,13 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         "background": {"type": "boolean", "description": "Default true returns a durable task handle immediately. False waits at most 15 seconds, then returns the same running handle; this never limits the worker lifetime. Query get/status, and start only dependency-ready created tasks."},
         "session_id": {"type": "string"},
         "subtask_id": {"type": "string"},
+        "subtask_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 32, "uniqueItems": True, "description": "Required for wait: existing task handles in the current workspace."},
+        "after_revision": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}, "description": "wait/change cursor per subtask_id, obtained from observation_revision. Omit to read immediately."},
+        "wait_for": {"type": "string", "enum": ["any", "all"], "description": "wait until any or all named tasks meet the observation condition; default any."},
+        "until": {"type": "string", "enum": ["change", "terminal"], "description": "Wait for a changed observation or terminal state; default terminal. Timeout never terminates a task."},
+        "wait_seconds": {"type": "number", "minimum": 0, "maximum": 20, "description": "Bounded, cancellable observation wait; default 15 seconds. A timeout returns live snapshots, not failure."},
         "parent_task_id": {"type": "string"},
-    }, required=["action"], description='Delegate bounded outcomes with explicit user scope; choose a published profile_id. spawn returns subtask_id; list/status/get inspect roles/tasks/results. Coding/frontend/QA profiles require coding_assignment and use isolated source. start resumes a dependency-ready task; cancel stops one. Independent QA records its exact server-bound candidate with agent.review; failed/incomplete review does not validate it. merge requires passed QA and an unchanged baseline. reconcile reads stopped EXECUTION_UNKNOWN source/resources, permits a fresh explicit review but does not replay or accept writes. Parent task/session identities are server-bound; do not invent them.'),
+    }, required=["action"], description='Delegate bounded outcomes with explicit user scope; choose a published profile_id. spawn returns subtask_id; list/status/get inspect roles/tasks/results. wait observes any/all existing handles without replay, returning activity or complete terminal results; use after_revision with until=change for incremental observation. Coding/frontend/QA profiles require coding_assignment and use isolated source. start resumes a dependency-ready task; cancel stops one. Independent QA records its exact server-bound candidate with agent.review; failed/incomplete review does not validate it. merge requires passed QA and an unchanged baseline. reconcile reads stopped EXECUTION_UNKNOWN source/resources, permits a fresh explicit review but does not replay or accept writes. Parent task/session identities are server-bound; do not invent them.'),
     _entry("system.manage", _handle_system, {**_COMMON, **_SYSTEM_ARGS, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "action": {"type": "string", "enum": ["diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_checkpoint", "session_rewind", "session_export", "session_snapshot", "context_index", "context_read", "context_search"]}}, required=["action"], risk="medium", description='Runtime diagnostics/health/selfcheck, timezone-aware local_info, durable tasks/audit_log/run_get, and session lifecycle operations. session_checkpoint persists a checkpoint; session_rewind changes the session; session_export/snapshot read saved state. context_index discovers/pages archived windows (omit checkpoint_id for discovery); context_search locates exact evidence and read offsets; context_read retrieves an explicit message range. Archives stay in the current session; ids are published in action requirements.'),
     _entry("text.analyze", _handle_text, {**_COMMON, "action": {"type": "string", "enum": ["redact", "extract_entities", "match"]}, "text": {"type": "string"}, "pattern": {"type": "string"}}, required=["action"], description="redact removes secrets from text; extract_entities returns deterministic IP, URL and email candidates with character spans and keyword frequencies; match returns regex matches and total count, with at most 100 matches displayed and a one-second computation deadline (not a regex syntax restriction)."),
     _entry("workspace.file", _handle_workspace_file, {**_COMMON, **_WORKSPACE_FILE_ARGS, "action": {"type": "string", "enum": ["list", "read", "read_image", "extract_document", "extract_document_image", "extract_document_images", "create", "write", "write_artifact", "edit", "patch", "glob", "search", "delete"]}}, required=["action"], risk="medium", description='Workspace sources and managed attachments. list/glob discover paths; search returns literal UTF-8 source hits with path/line and paging under subdir (default files/data), reporting skipped files. read returns lossless text/newlines with encoding, BOM, line_ending/ends_with_newline and explicit paging; encoding applies to text create/read/edit/patch/extract_document. read_image and extract_document_image(s) deliver image evidence to the next model call. extract_document parses text/DOCX/PDF/XLSX/PPTX by file_id; embedded_image_count and has_more describe DOCX image coverage. Path actions use filepath, not file_id. create exclusively creates sources under files/data, files/tmp or inbox; edit uses unique old_string (replace_all is explicit), patch validates unified diffs, and dry_run previews edits/patches. write/write_artifact generate FileStore attachments from filename/content, preserving source paths separately.', execution_contract={

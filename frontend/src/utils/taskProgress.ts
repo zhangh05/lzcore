@@ -1,5 +1,6 @@
 import type { ActiveTurnSnapshot, RuntimeEvent } from "../types";
 import type { ChatMsg } from "../stores/workbench";
+import { partitionSubagentCalls, subagentObservations, subagentRoleLabel, subagentEvidenceState } from "./subagentTracking";
 import { deriveInlineCardState } from "../components/toolCallState";
 import { formatStreamElapsedSeconds } from "./streamElapsed";
 
@@ -182,6 +183,7 @@ export function buildTaskProgress(
   elapsedMs?: number;
   toolCount: number;
   completedToolCount: number;
+  subagentCount: number;
   activeTool?: TaskEvidence;
   totalPhaseDurationMs?: number;
 } {
@@ -275,7 +277,9 @@ export function buildTaskProgress(
   const turnEnd = parsedTime(snapshot?.finished_at) ?? parsedTime(snapshot?.updated_at) ?? lastEventAt;
   const elapsedMs = turnStart !== null && turnEnd !== null && turnEnd > turnStart ? turnEnd - turnStart : undefined;
 
-  const evidence = (liveTools.length ? liveTools : messageTools).map((tool, index) => {
+  const observedCalls = messageTools.some(call=>subagentObservations(call).length) ? messageTools : (liveTools.length ? liveTools : messageTools);
+  const partition = partitionSubagentCalls(observedCalls.map(call=>({...call,tool_id:String(call.tool_id || "")})));
+  const evidence: TaskEvidence[] = partition.ordinary.map((tool, index) => {
     const toolId = String(tool.tool_id || "");
     const rawStatus = String("status" in tool ? tool.status || "" : "");
     const cardState = deriveInlineCardState({
@@ -298,7 +302,10 @@ export function buildTaskProgress(
     };
   });
 
-  const completedToolCount = evidence.filter((item) => item.status === "done").length;
+  evidence.push(...partition.tasks.map(group=>({id:`subagent-${group.id}`,title:subagentRoleLabel(group.latest.profile),
+    toolName:subagentRoleLabel(group.latest.profile),source:"子任务",status:subagentEvidenceState(group.latest),
+    summary:group.latest.instruction || undefined,toolId:"agent.manage"})));
+  const completedToolCount = observedCalls.filter(tool=>tool.ok && !("status" in tool && ["pending","running"].includes(String(tool.status)))).length;
   const activeTool = isStreaming ? evidence.find((item) => item.status === "running") : undefined;
   const phaseDurations = phases.map((p) => p.durationMs).filter((d): d is number => typeof d === "number" && d > 0);
   const totalPhaseDurationMs = phaseDurations.length > 0 ? phaseDurations.reduce((acc, d) => acc + d, 0) : undefined;
@@ -310,7 +317,8 @@ export function buildTaskProgress(
     status: failed ? "failed" : completed ? "succeeded" : isStreaming ? "running" : "idle",
     runId,
     elapsedMs,
-    toolCount: evidence.length,
+    toolCount: observedCalls.length,
+    subagentCount: partition.tasks.length,
     completedToolCount,
     activeTool,
     totalPhaseDurationMs,

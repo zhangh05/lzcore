@@ -67,7 +67,7 @@ def parent_contract(task, references=None):
     return result
 
 
-def observe_progress(task) -> dict:
+def observe_progress(task, *, inspect_source=True) -> dict:
     """Expose source and provider observations, never a fabricated percent."""
     from storage.project_changes import IGNORED
     from storage.usage_store import read_usage
@@ -76,7 +76,7 @@ def observe_progress(task) -> dict:
     branch = project_path(assignment["branch_workspace"], assignment["project_dir"])
     files, size = 0, 0
     generated = assignment.get("generated_paths") or []
-    for directory, dirs, names in os.walk(branch, followlinks=False):
+    for directory, dirs, names in (os.walk(branch, followlinks=False) if inspect_source else []):
         relative = os.path.relpath(directory, branch)
         dirs[:] = [name for name in dirs if name not in IGNORED and not any(
             (name if relative == "." else relative + "/" + name) == output
@@ -90,13 +90,16 @@ def observe_progress(task) -> dict:
                     files += 1
             except FileNotFoundError:
                 continue
-    usage = read_usage(assignment["branch_workspace"])
+    usage = read_usage(assignment["branch_workspace"]) if inspect_source else []
     from .coding_state import candidate, review
     facts = (review(task) if task.profile_id == "qa_agent" else candidate(task)) or {}
-    return {"state": facts.get("state", task.status), "source_files": files, "source_bytes": size,
-            "recorded_model_calls": len(usage),
-            "last_model_response_at": usage[-1].get("created_at", "") if usage else "",
-            "completion_status": facts.get("validation", {}).get("status", "pending")}
+    activity = dict(task.observations.get("activity") or {})
+    return {**activity, "state": facts.get("state", task.status),
+            "domain_revision": facts.get("revision", 0),
+            "completion_status": facts.get("validation", {}).get("status", "pending"),
+            **({"source_files": files, "source_bytes": size, "recorded_model_calls": len(usage),
+                "last_model_response_at": usage[-1].get("created_at", "") if usage else ""}
+               if inspect_source else {})}
 
 
 def check_implementation(task, cancel_check=None) -> dict:

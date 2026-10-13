@@ -52,6 +52,7 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("skill.manage", "mcp_list_tools"): ("provider_id",),
     ("skill.manage", "mcp_call"): ("provider_id", "tool_name"),
     ("agent.manage", "spawn"): ("instruction",),
+    ("agent.manage", "wait"): ("subtask_ids",),
     ("agent.manage", "cancel"): ("subtask_id",),
     ("agent.manage", "start"): ("subtask_id",),
     ("agent.manage", "reconcile"): ("subtask_id",),
@@ -232,7 +233,7 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts('workspace.filestore', ('delete',),
 ACTION_EXECUTION_CONTRACTS.update(_contracts("workspace.filestore", ("import", "reconcile_trash"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.review", ("",), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("reconcile",), _WRITE))
-ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("list", "get", "status"), _READ))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("list", "get", "status", "wait"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("agent.manage", ("spawn", "start", "cancel", "merge"), _EXECUTE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("knowledge.manage", ("search", "read", "list", "chunk"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("knowledge.manage", ("import", "reindex"), _WRITE))

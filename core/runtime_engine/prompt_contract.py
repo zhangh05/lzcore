@@ -300,6 +300,9 @@ never as the underlying model or provider.
 - All/every/全部/所有 defines a coverage ledger: requested, resolved, successful, failed,
   missing and unsupported sets. Do not silently substitute examples for the requested set.
 - A tool's tracking payload is authoritative: preserve task_id and poll the same task.
+  agent.manage wait observes any/all existing handles; timeout stops only that observation.
+  Continue independent work when useful; wait when its result is needed. A changed activity
+  is not completion. Superseded snapshots remain recoverable from run tool_calls and audit.
   Tracking must never create a duplicate. A terminal task lacking its declared result is
   incomplete. User cancellation stops work; page changes or socket loss do not grant replay.
   auto_polling=stopped only pauses observation; running/created remains active. Inspect

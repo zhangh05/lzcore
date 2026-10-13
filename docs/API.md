@@ -323,7 +323,7 @@ feedback.regions 提供 members、unassigned_node_ids、missing_region_refs、ou
 
 ## Coding Team
 
-`agent.manage` 提供 spawn/start/list/get/status/cancel/merge/reconcile。角色含 coding_agent/frontend_agent/qa_agent；角色提示不注册工具或授予权限。编码 spawn 必须带 `coding_assignment`：project_dir（files/data 下工程）、responsibilities（明确文件/目录前缀，`.` 为整个工程）、depends_on（同父任务前置 subtask_id）、validation_commands（1–12 个程序及字面参数）、review_subtask_id（QA 必需）。无领域 Skill 绑定的编码任务才可创建独立工程副本，不能静默扩大 Skill 范围。
+`agent.manage` 提供 spawn/start/list/get/wait/status/cancel/merge/reconcile。角色含 coding_agent/frontend_agent/qa_agent；角色提示不注册工具或授予权限。编码 spawn 必须带 `coding_assignment`：project_dir（files/data 下工程）、responsibilities（明确文件/目录前缀，`.` 为整个工程）、depends_on（同父任务前置 subtask_id）、validation_commands（1–12 个程序及字面参数）、review_subtask_id（QA 必需）。无领域 Skill 绑定的编码任务才可创建独立工程副本，不能静默扩大 Skill 范围。
 
 `coding_assignment.phase_id` 可声明阶段归组，省略时按实现任务分配；QA 和源码修订默认继承目标阶段。Project 保存声明、依赖和 Task/Candidate/Review 引用，不生成计划或权限。`agent.manage(get).domain_state` 返回独立 candidate/review/project 事实。旧 `coding.phase`、QA/检查/资源/发布字段已删除，`coding` 仅含 `coding.assignment.v2` 执行参数；源码候选及发布由 CandidateState FSM 管理，QA 裁决、检查及资源由 Review 对象管理，Task 只表示 worker 生命周期。所有接受的并行 reviewer 都必须通过；一次 PASS 不能覆盖同批 reviewer 的失败。新显式复审保留旧记录。正式状态、事件、旧记录迁移与未知发布回查详见 `docs/architecture/CODING_RUNTIME.md`。
 
@@ -344,3 +344,7 @@ QA 必须验证准确候选、源码不变、命令实际成功；merge 检查 Q
 `GET /api/memory/list` requires workspace_id, and accepts scope, memory_type, status, session_id, include_deleted, offset and limit (1–500). Filtering precedes paging; total, next_offset and load_errors describe actual coverage. `POST /api/memory/search` accepts query, workspace_id, scope/memory_type/status filters, include_deleted, offset and limit (1–100). `GET /api/memory/<memory_id>?workspace_id=...` reads a visible canonical record in full with its replacement relation and retrievable status.
 
 `POST /api/memory/write` preserves full title/content, accepts scope, memory_type, memory_key and supersedes_memory_id, and can accept a stable client memory_id (`mem-` plus 12 hexadecimal characters) for readback. Human user_confirmed writes are explicit controls; generated records remain candidates unless the server verifies an exact journal observation. Revisions retain original records; scope/type/session/task must match the target. Existing IDs reconcile identical content and cannot overwrite different content. A storage exception returns HTTP 409 with status=execution_unknown and memory_id; read the record to reconcile, never automatically repeat the write.
+
+`agent.manage(action="wait")` 只观察已有 `subtask_ids`（1–32 个），不启动或重放任务。`wait_for=any|all` 选择等待任一个或全部；`until=terminal|change` 选择终态或变化，变化游标为 `after_revision`（以 subtask_id 为键、get 返回的 observation_revision 为值）。`wait_seconds` 为 0–20 秒，默认 15 秒；超时或取消只结束本次读取，返回 timed_out/observation_cancelled 及 observations，各项保留独立 task_status/tracking 和完整终态结果。工具读取成功不证明子任务完成。身份、caller、权限、脱敏和审计沿现有治理入口核对。
+
+后台 spawn（默认 background=true）返回 observation_mode=manual，不自动阻塞父模型；显式 get/status 是状态快照，wait 是请求指定的有界观察。foreground spawn（background=false）在原 15 秒请求等待后可继续由运行时观察变化。上述模式只决定观察，不修改 worker 生命周期或权限。

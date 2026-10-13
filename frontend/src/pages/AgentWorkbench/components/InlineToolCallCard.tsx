@@ -66,7 +66,7 @@ export function InlineToolCallCard({ toolCall, seq, turnResult }: InlineToolCall
           {succeeded ? <IconCheck size={13} weight="bold" /> : <IconAlert size={13} weight="bold" />}
         </span>
         <span className="tc-name">{toolCall.tool_name || toolCall.tool_id}</span>
-        {pending && <span className="tc-state">已提交，等待设备结果</span>}
+        {pending && <span className="tc-state">已提交，等待工具结果</span>}
         {unknown && <span className="tc-state tc-state-unknown">{UNKNOWN_OUTCOME_COPY.pill}</span>}
         {toolCall.duration_ms != null && (
           <span className="tc-duration-pill">
