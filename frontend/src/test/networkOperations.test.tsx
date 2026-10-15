@@ -4,6 +4,7 @@ import NetworkOperations from "../../../extensions/network_operations/frontend/N
 import TopologyPage from "../../../extensions/network_operations/frontend/TopologyPage";
 import { apiRequest } from "../api/client";
 import { ConfirmHost } from "../components/ConfirmDialog";
+import { NetworkInspectionPanel } from "../../../extensions/network_operations/frontend/components/NetworkInspectionPanel";
 import { MemoryRouter, useLocation, useSearchParams } from "../router";
 
 vi.mock("../api/client", () => ({ apiRequest: vi.fn() }));
@@ -628,4 +629,34 @@ test("changing SSH identity requires reviewing the exact observed fingerprint be
   expect(within(confirmation).getByText(/SHA256:new/)).toBeInTheDocument();
   fireEvent.click(within(confirmation).getByRole("button", { name: "信任此指纹并重新测试" }));
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({ method: "PUT", url: "/extensions/network.operations/connections/c1", data: expect.objectContaining({ host_key_fingerprint: "SHA256:new" }) })));
+});
+
+test("active inspections recover from a failed poll and pause while hidden", async () => {
+  vi.useFakeTimers();
+  const read = vi.mocked(apiRequest);
+  read.mockResolvedValue({ inspections: [{ task_id: "active", status: "running" }] });
+  const { unmount } = render(<NetworkInspectionPanel workspaceId="default" />);
+  const startingReads = read.mock.calls.length;
+  try {
+    await act(async () => {});
+    read.mockRejectedValueOnce(new Error("temporary read failure"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(screen.getByRole("alert")).toHaveTextContent("巡检记录读取失败");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(read.mock.calls.length).toBe(startingReads + 2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    await act(async () => { await vi.advanceTimersByTimeAsync(9000); });
+    expect(read.mock.calls.length).toBe(startingReads + 2);
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    expect(read.mock.calls.length).toBe(startingReads + 3);
+    unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+    expect(read.mock.calls.length).toBe(startingReads + 3);
+  } finally {
+    unmount();
+    delete (document as unknown as Record<string, unknown>).hidden;
+    vi.useRealTimers();
+  }
 });

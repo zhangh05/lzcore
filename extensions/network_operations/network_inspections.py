@@ -21,7 +21,7 @@ from .network_planning import (
     _new_connection_inspection_task,
     _restore_command_plan,
 )
-from .network_records import EXTENSION_ID, _store, get_inspection
+from .network_records import EXTENSION_ID, _connection_transaction, _store, get_inspection
 
 _INSPECTION_JOB_TERMINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
 
@@ -119,6 +119,7 @@ def execute_queued_inspection(
     return get_inspection(workspace_id, task_id) or task
 
 
+@_connection_transaction
 def finalize_inspection_job(workspace_id: str, task_id: str, job_id: str) -> bool:
     """Hard-delete a terminal internal Job while preserving inspection evidence."""
     from jobs.store import delete_job, get_job
@@ -204,10 +205,13 @@ def _execute_inspection(
             ]
             normalized = json.dumps(raw, ensure_ascii=False, sort_keys=True)
             from .diagnostics import execution_diagnostic
+            execution_target = live.get("target") or target
             return target_id, {
                 "status": target_status,
-                "name": target["name"],
-                "host": target["host"],
+                "name": execution_target["name"],
+                "host": execution_target["host"],
+                "target": {key: execution_target[key] for key in
+                    ("connection_id", "device_id", "name", "host", "protocol", "port") if key in execution_target},
                 "commands": selected,
                 "output_hash": hashlib.sha256(normalized.encode()).hexdigest(),
                 "facts": live.get("facts"),

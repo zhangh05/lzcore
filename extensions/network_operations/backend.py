@@ -152,7 +152,7 @@ def register_routes(app):
                     raise ValueError
             except ValueError:
                 return jsonify({"ok": False, "error": "inspection_limit_must_be_1_to_200"}), 400
-            tasks = service.list_inspections(ws)
+            tasks = service.list_inspections(ws, limit=limit + 1)
             return jsonify({"ok": True, "inspections": [
                 {**task, "presentation": _inspection_result(task)["presentation"]}
                 for task in tasks[:limit]], "has_more": len(tasks) > limit})
@@ -558,6 +558,10 @@ def device_manage(invocation):
     if action in {"read", "configure"} and isinstance(raw_commands, list):
         from extensions.network_operations.device_tools import is_read_only_command
         effective_action = "read" if all(is_read_only_command(command) for command in raw_commands) else "configure"
+    target_device = service.get_device(invocation.workspace_id, str(connection.get("device_id") or "")) or {}
+    target = {"connection_id": connection_id, "device_id": connection.get("device_id"),
+              "name": target_device.get("name", ""), "host": target_device.get("host", ""),
+              "protocol": connection.get("protocol"), "port": connection.get("port")}
     result = service.test_connection(
         invocation.workspace_id,
         connection_id,
@@ -573,10 +577,7 @@ def device_manage(invocation):
     from storage.time_utils import now_iso
     from .diagnostics import device_presentation
 
-    target_device = service.get_device(invocation.workspace_id, str(connection.get("device_id") or "")) or {}
-    target = {"connection_id": connection_id, "device_id": connection.get("device_id"),
-              "name": target_device.get("name", ""), "host": target_device.get("host", ""),
-              "protocol": connection.get("protocol"), "port": connection.get("port")}
+    target = result.get("target") or target
     result = {**result, "requested_action": action, "executed_action": effective_action,
               "observed_at": now_iso(), "target": target}
     result["presentation"] = device_presentation(

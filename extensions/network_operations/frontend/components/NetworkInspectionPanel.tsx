@@ -60,21 +60,36 @@ export function NetworkInspectionPanel({
       readRequest.current?.abort();
     };
   }, [load]);
+  const hasActiveTasks = tasks.some((task) =>
+    ["queued", "running"].includes(text(task.status)),
+  );
   useEffect(() => {
-    if (
-      !tasks.some((task) => ["queued", "running"].includes(text(task.status)))
-    )
-      return;
-    const refresh = () => {
-      if (!document.hidden) void load();
+    if (!hasActiveTasks) return;
+    let stopped = false;
+    let inFlight = false;
+    let timer: number | undefined;
+    const refresh = async () => {
+      if (stopped || inFlight || document.hidden) return;
+      inFlight = true;
+      await load();
+      inFlight = false;
+      // Schedule after either success or failure; an unchanged task list must
+      // not disable monitoring after one transient read failure.
+      if (!stopped && !document.hidden)
+        timer = window.setTimeout(() => void refresh(), 3000);
     };
-    const timer = window.setTimeout(refresh, 3000);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
+    const onVisibility = () => {
       window.clearTimeout(timer);
-      document.removeEventListener("visibilitychange", refresh);
+      if (!document.hidden) void refresh();
     };
-  }, [load, tasks]);
+    timer = window.setTimeout(() => void refresh(), 3000);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [load, hasActiveTasks]);
   const operate = async (taskId: string, action: "retry" | "cancel") => {
     const current = generation.current;
     setBusy(taskId);

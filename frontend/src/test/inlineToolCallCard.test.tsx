@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { InlineToolCallCard } from "../pages/AgentWorkbench/components/InlineToolCallCard";
 import type { InlineToolCall } from "../types";
+import { deriveInlineCardState } from "../components/toolCallState";
 
 
 describe("InlineToolCallCard orchestration metadata", () => {
@@ -81,6 +82,9 @@ it("shows partial device evidence independently of a successful tool envelope an
   expect(screen.getByText("display version")).toBeInTheDocument();
   fireEvent.click(screen.getByText("原始回显"));
   expect(screen.getByText("完整保留的部分回显")).toBeVisible();
+  for (const result of [{ ok: true, inspections: [] }, { ok: true }]) {
+    expect(deriveInlineCardState({ tool_id: "network.operations.inspection", status: "done", ok: true, result })).toBe("ok");
+  }
 });
 
 it("keeps an unknown device write visible when turn-level uncertainty metadata is absent", () => {

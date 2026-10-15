@@ -152,6 +152,20 @@ def test_probe_never_resurrects_or_overwrites_newer_state(monkeypatch, mutation)
                 assert current["source_address"] == "100.64.0.1"
             elif mutation == "newer_probe":
                 assert current["last_error"] == "newest_failure"
+        if mutation == "edit_host":
+            from types import SimpleNamespace
+            from extensions.network_operations.backend import device_manage
+            def configure_while_host_changes(target, **_kwargs):
+                assert target.host == "10.0.0.2"
+                service.save_device("default", {**device, "host": "10.0.0.3"})
+                return {"ok": True, "configuration_ok": True, "status": "succeeded"}
+            monkeypatch.setattr(device_tools, "probe_target", configure_while_host_changes)
+            written = device_manage(SimpleNamespace(workspace_id="default", skill=skill["skill_id"],
+                arguments={"action": "configure", "connection_id": cid, "commands": ["system-view"]}))
+            assert written["configuration_ok"] and written["observation_superseded"]
+            assert written["target"]["host"] == "10.0.0.2"
+            assert written["presentation"]["target"] == written["target"]
+            assert service.get_device("default", device["device_id"])["host"] == "10.0.0.3"
 
 
 def test_on_demand_semantic_inspection_uses_authenticated_storage(monkeypatch):
@@ -168,16 +182,69 @@ def test_on_demand_semantic_inspection_uses_authenticated_storage(monkeypatch):
         result = service.resolve_workbench_selection("default", {"skill_id": skill["skill_id"]})
         assert set(result["connection_ids"]) == set(ids)
         assert seen == []
+        collect = network_inspections.collect_connection
+        def collect_after_inventory_change(target, *args, **kwargs):
+            if target["connection_id"] == ids[0]:
+                service.save_device("default", {**pairs[0][0], "host": "10.0.0.9"})
+            return collect(target, *args, **kwargs)
+        monkeypatch.setattr(network_inspections, "collect_connection", collect_after_inventory_change)
         task = service.enqueue_connection_inspection("default", ids, facts=["device_version"])
         from jobs.runner import run_job
         run_job("default", task["job_id"])
         finished = service.get_inspection("default", task["task_id"])
         assert finished["status"] == "succeeded"
         assert finished["completed"] == 2
+        assert finished["results"][ids[0]]["host"] == "10.0.0.9"
+        assert finished["target_snapshots"][ids[0]]["host"] == "10.0.0.1"
+        findings = service._derive_findings("default", {**finished, "script": {"checks": [{
+            "check_id": "observed", "name": "Observed H3C", "description": "literal evidence",
+            "severity": "info", "pattern": "H3C",
+        }]}}, {ids[0]: {"display version": "H3C"}})
+        assert findings[0]["target_host"] == "10.0.0.9"
     assert seen == ["alice"] * 2
     with storage_principal("bob"):
         assert service.list_connections("default") == []
         assert service.list_inspections("default") == []
+
+
+def test_inspection_cleanup_does_not_erase_concurrent_retry_link(monkeypatch):
+    from jobs.store import update_job, get_job
+    from storage.locking import FileLock
+    with storage_principal("alice"):
+        _, connection = register()
+        task = service.enqueue_connection_inspection("default", [connection["connection_id"]], commands=["display version"])
+        task["status"] = "failed"
+        service._store("default").save("inspections", task["task_id"], task)
+        update_job("default", task["job_id"], {"status": "failed"})
+        entered, release = threading.Event(), threading.Event()
+        original_get = network_inspections.get_inspection
+        def delayed_get(*args):
+            snapshot = original_get(*args)
+            if args[1] == task["task_id"]:
+                entered.set()
+                assert release.wait(5)
+            return snapshot
+        monkeypatch.setattr(network_inspections, "get_inspection", delayed_get)
+        def attempt_retry():
+            # If cleanup owns the transaction, defer this actor until it ends.
+            try:
+                with FileLock(service._connection_lock("default").path, timeout=0):
+                    return service.retry_inspection("default", task["task_id"])
+            except TimeoutError:
+                return None
+        with ContextThreadPoolExecutor(max_workers=2) as pool:
+            cleanup = pool.submit(service.finalize_inspection_job, "default", task["task_id"], task["job_id"])
+            try:
+                assert entered.wait(5)
+                followup = pool.submit(attempt_retry).result(timeout=5)
+            finally:
+                release.set()
+            assert cleanup.result(timeout=5)
+        followup = followup or service.retry_inspection("default", task["task_id"])
+        parent = service.get_inspection("default", task["task_id"])
+        assert parent["retry_task_id"] == followup["task_id"]
+        assert "job_id" not in parent and get_job("default", task["job_id"]) is None
+        assert service.retry_inspection("default", task["task_id"])["task_id"] == followup["task_id"]
 
 
 def test_endpoint_conflict_rejects_edit_without_destroying_credentials():

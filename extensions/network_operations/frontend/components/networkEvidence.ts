@@ -27,6 +27,9 @@ export function networkEvidence(tool: string, value: unknown) {
   const supplied = object(root.presentation);
   const inspection = tool === "network.operations.inspection";
   const task = object(root.task);
+  // list/cancel acknowledge an operation without carrying a task lifecycle.
+  // Let the ordinary card use that operation's governed outcome.
+  if (inspection && !text(supplied.task_id || task.task_id)) return null;
   const state =
     text(supplied.state) || text(inspection ? task.status : root.status);
   const pending = ["queued", "running", "pending"].includes(state);

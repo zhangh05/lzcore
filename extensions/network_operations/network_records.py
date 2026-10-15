@@ -81,8 +81,8 @@ def _valid_host(host: str) -> bool:
         )
 
 
-def list_inspections(workspace_id: str) -> list[dict[str, Any]]:
-    return _store(workspace_id).list("inspections", limit=200)
+def list_inspections(workspace_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+    return _store(workspace_id).list("inspections", limit=limit)
 
 
 def get_inspection(workspace_id: str, task_id: str) -> dict[str, Any] | None:

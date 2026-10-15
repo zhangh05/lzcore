@@ -642,7 +642,7 @@ def inspection_evidence_summary(workspace_id: str, task_id: str) -> dict[str, An
         if is_connection_task:
             item["connection_id"] = target_id
             item["device_id"] = str(snapshot.get("device_id") or "")
-            item["protocol"] = str(snapshot.get("protocol") or "")
+            item["protocol"] = str((result.get("target") or snapshot).get("protocol") or "")
         else:
             item["asset_id"] = target_id
         devices.append(item)

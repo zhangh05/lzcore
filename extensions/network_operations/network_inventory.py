@@ -445,6 +445,14 @@ def test_connection(
             "status": "failed",
             "error": str(exc)[:300] or "connection_setup_failed",
         }
+    if target is not None:
+        # Execution evidence belongs to the resolved endpoint, even when its
+        # inventory record is edited or removed while network IO is in flight.
+        result["target"] = {
+            "connection_id": connection_id, "device_id": record.get("device_id"),
+            "name": target.name, "host": target.host,
+            "protocol": target.protocol, "port": target.port,
+        }
     fingerprint = str(result.get("fingerprint") or "")
     if fingerprint and accept_host_key and result.get("ok"):
         record["host_key_fingerprint"] = fingerprint

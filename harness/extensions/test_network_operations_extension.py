@@ -1181,6 +1181,13 @@ def test_extension_routes_cover_device_connection_and_skill_flow(monkeypatch, tm
     assert deleted.status_code == 200
     assert deleted.get_json()["deleted"] is True
     assert deleted.get_json()["deleted_dependent_references"] == 1
+    for index in range(201):
+        task_id = f"inspection_history_{index}"
+        service._store("default").save("inspections", task_id, {"task_id": task_id, "status": "failed"})
+    history = client.get("/api/extensions/network.operations/inspections?workspace_id=default").get_json()
+    assert len(history["inspections"]) == 200 and history["has_more"] is True
+    service._store("default").delete("inspections", "inspection_history_200")
+    assert client.get("/api/extensions/network.operations/inspections?workspace_id=default").get_json()["has_more"] is False
 
 
 def test_inspection_scripts_are_validated_and_snapshotted(monkeypatch, tmp_path):

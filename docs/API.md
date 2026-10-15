@@ -222,7 +222,11 @@ Accepting an SSH host key through the connection test endpoint requires
 a changed handshake key is refused.
 
 Device execution returns an observation timestamp, canonical target, connection
-phase diagnostic and a domain-owned `presentation`. Configuration processing is
+phase diagnostic and a domain-owned `presentation`. The target is the endpoint
+resolved for that execution, not inventory reread after completion; inspection
+results and findings retain that execution identity alongside planning snapshots.
+Inspection list/cancel acknowledgments are not task lifecycle results.
+Configuration processing is
 separate from business verification; `configuration_workflow.verification_status`
 is `not_performed` for the configuration call. Full command output stays in run
 results. Live UI events carry the governed presentation index, not arbitrary binary

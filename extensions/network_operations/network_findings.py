@@ -135,6 +135,7 @@ def _derive_findings(
         asset = current_targets.get(target_id) or snapshots.get(target_id)
         if not asset:
             continue
+        asset = {**asset, **(result.get("target") or {})}
         result_status = str(result.get("status") or "")
         evidence = {
             "task_id": task["task_id"],
