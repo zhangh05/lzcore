@@ -403,6 +403,20 @@ def test_first_inspection_is_observation_and_candidate_not_normal_baseline(monke
     assert replacement["current"] is True
     assert old["state"] == "superseded" and old["current"] is False
 
+    other = _register_connection("default", {"name": "R2", "host": "10.0.0.2", "protocol": "telnet"})
+    unrelated = service.record_inspection_observation("default", {
+        "task_id": "other-scope", "status": "succeeded", "results": {other["connection_id"]: {"status": "succeeded", "output_hash": "other"}},
+    })
+    service.transition_reference("default", unrelated["candidate_reference_id"], "confirm")
+    from extensions.network_operations.network_findings import _derive_findings
+    findings = _derive_findings("default", {
+        "task_id": "changed-current", "target_kind": "connection", "connection_ids": [connection["connection_id"]],
+        "target_snapshots": {connection["connection_id"]: {**connection, "name": "R1", "host": "10.0.0.1"}},
+        "results": {connection["connection_id"]: {"status": "succeeded", "output_hash": "changed-again"}},
+    }, {})
+    assert len(findings) == 1
+    assert findings[0]["evidence"]["baseline_id"] == replacement["reference_id"]
+
 
 def test_partial_observation_cannot_be_confirmed_as_expected_state(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
@@ -482,6 +496,30 @@ def test_command_experience_is_advisory_and_scoped(monkeypatch, tmp_path):
     assert records[0]["advisory_only"] is True
     assert context["command_experience"][0]["command"] == "display version"
     assert context["first_observation_rule"] == "never_assume_normal"
+
+    other = _register_connection("default", {
+        "name": "R2", "host": "10.0.0.2", "protocol": "telnet", "vendor": "h3c",
+    })
+    service.record_command_experience("default", other["connection_id"], {
+        "device_profile": {"driver_id": "h3c.comware"},
+        "command_results": [{"command": "display version", "complete": True, "error_code": "", "truncated": False}],
+    })
+    shared = service.record_inspection_observation("default", {
+        "task_id": "mixed", "status": "succeeded", "artifact_id": "mixed-artifact",
+        "results": {connection["connection_id"]: {"status": "succeeded"}, other["connection_id"]: {"status": "succeeded"}},
+    })
+    context = service.operational_context("default", connection_ids=[connection["connection_id"]])
+    for field in ("observations", "references"):
+        assert context[field][0]["target_ids"] == [connection["connection_id"]]
+        assert set(context[field][0]["snapshot"]) == {connection["connection_id"]}
+        assert context[field][0]["projection_complete"] is False
+        assert "artifact_id" not in context[field][0]
+    assert context["command_experience"][0]["connection_ids"] == [connection["connection_id"]]
+    assert context["command_experience"][0]["connection_id"] == connection["connection_id"]
+    assert context["command_experience"][0]["provenance_scope"] == "driver_aggregate"
+    original = next(item for item in service.list_observations("default") if item["observation_id"] == shared["observation_id"])
+    assert set(original["target_ids"]) == {connection["connection_id"], other["connection_id"]}
+    assert original["artifact_id"] == "mixed-artifact"
 
     empty_scope = service.operational_context("default", connection_ids=[])
     assert empty_scope["observations"] == []
@@ -738,11 +776,17 @@ def test_probe_requires_and_then_saves_host_key(monkeypatch, tmp_path):
     def fake_probe(_target, *, accept_host_key=False, read=False, **_kwargs):
         if not accept_host_key:
             return {"ok": False, "status": "blocked", "fingerprint": "SHA256:test", "requires_host_key_acceptance": True}
+        if _target.expected_fingerprint != "SHA256:test":
+            return {"ok": False, "error": "host_key_mismatch", "fingerprint": "SHA256:test"}
         return {"ok": True, "status": "succeeded", "fingerprint": "SHA256:test", "stages": [{"name": "auth", "status": "ok"}]}
 
     monkeypatch.setattr(device_tools, "probe_target", fake_probe)
     blocked = service.test_connection("default", asset["connection_id"])
     assert blocked["requires_host_key_acceptance"] is True
+    assert blocked["connection"]["observed_fingerprint"] == "SHA256:test"
+    changed = service.test_connection("default", asset["connection_id"], accept_host_key=True, accepted_fingerprint="SHA256:other")
+    assert changed["ok"] is False
+    assert not service.get_connection("default", asset["connection_id"]).get("host_key_fingerprint")
     accepted = service.test_connection("default", asset["connection_id"], accept_host_key=True)
     assert accepted["ok"] is True
     assert accepted["connection"]["host_key_fingerprint"] == "SHA256:test"
@@ -1294,15 +1338,45 @@ def test_inline_inspection_retry_preserves_immutable_command_plan(monkeypatch, t
     asset = _register_connection("default", {
         "name": "Core-Retry", "host": "10.0.0.23", "username": "ops", "password": "secret", "vendor": "h3c",
     })
+    successful = _register_connection("default", {"name": "Core-OK", "host": "10.0.0.24", "protocol": "telnet"})
+    def collector(target, commands):
+        if target["connection_id"] == asset["connection_id"]:
+            raise RuntimeError("temporary failure")
+        return {command: "device version" for command in commands}
     failed = _run_inspection(monkeypatch,
-        "default", [asset["connection_id"]], commands=["display version"],
-        collector=lambda _asset, _commands: (_ for _ in ()).throw(RuntimeError("temporary failure")),
+        "default", [asset["connection_id"], successful["connection_id"]], commands=["display version"],
+        collector=collector,
         background=False,
     )
-    assert failed["status"] == "failed"
+    assert failed["status"] == "partial"
     retried = service.retry_inspection("default", failed["task_id"])
     assert retried["retry_of_task_id"] == failed["task_id"]
     assert retried["command_plan"] == {"mode": "inline_commands", "commands": ["display version"]}
+    assert retried["connection_ids"] == [asset["connection_id"]]
+    assert retried["retry_scope"] == "unsuccessful_targets"
+    assert service.retry_inspection("default", failed["task_id"])["task_id"] == retried["task_id"]
+    assert service.get_inspection("default", failed["task_id"])["results"][successful["connection_id"]]["status"] == "succeeded"
+    followup = service.get_inspection("default", retried["task_id"])
+    followup["status"] = "failed"
+    service._store("default").save("inspections", followup["task_id"], followup)
+    from extensions.network_operations import network_inspection_lifecycle
+    with monkeypatch.context() as scoped:
+        def enqueue_failure(*args, **kwargs):
+            raise RuntimeError("job creation unavailable")
+        scoped.setattr(network_inspection_lifecycle, "_enqueue_prepared_inspection", enqueue_failure)
+        with pytest.raises(RuntimeError, match="job creation unavailable"):
+            service.retry_inspection("default", followup["task_id"])
+    refreshed = service.get_inspection("default", followup["task_id"])
+    child = service.get_inspection("default", refreshed["retry_task_id"])
+    assert child["status"] == "failed" and not child.get("job_id")
+    assert service.retry_inspection("default", followup["task_id"])["task_id"] == child["task_id"]
+    evidence_fault = {**failed, "task_id": "inspection_evidence_fault", "status": "failed", "error": "inspection_evidence_persist_failed", "artifact_id": ""}
+    evidence_fault.pop("retry_task_id", None)
+    evidence_fault["results"] = {target: {"status": "succeeded"} for target in failed["connection_ids"]}
+    service._store("default").save("inspections", evidence_fault["task_id"], evidence_fault)
+    recollected = service.retry_inspection("default", evidence_fault["task_id"])
+    assert set(recollected["connection_ids"]) == set(failed["connection_ids"])
+    assert recollected["retry_scope"] == "evidence_recollection"
 
 
 def test_script_inspection_retry_uses_original_snapshot_after_script_edit(monkeypatch, tmp_path):

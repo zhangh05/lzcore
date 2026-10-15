@@ -3,6 +3,7 @@ import type { ChatMsg } from "../stores/workbench";
 import { partitionSubagentCalls, subagentObservations, subagentRoleLabel, subagentEvidenceState } from "./subagentTracking";
 import { deriveInlineCardState } from "../components/toolCallState";
 import { formatStreamElapsedSeconds } from "./streamElapsed";
+import { networkEvidence } from "../../../extensions/network_operations/frontend/components/networkEvidence";
 
 export type TaskPhaseState = "idle" | "active" | "done" | "failed";
 
@@ -23,7 +24,7 @@ export type TaskEvidence = {
   id: string;
   title: string;
   source: string;
-  status: "running" | "done" | "failed" | "unknown";
+  status: "running" | "done" | "failed" | "unknown" | "partial" | "unavailable";
   summary?: string;
   toolId?: string;
   toolName?: string;
@@ -287,8 +288,10 @@ export function buildTaskProgress(
       call_id: tool.call_id,
       status: rawStatus,
       ok: Boolean(tool.ok),
+      result: tool.result,
     }, result);
     const status: TaskEvidence["status"] = cardState === "pending" ? "running"
+      : cardState === "partial" || cardState === "unavailable" ? cardState
       : cardState === "ok" ? "done" : cardState === "unknown" ? "unknown" : "failed";
     const toolName = "tool_name" in tool && tool.tool_name ? String(tool.tool_name) : displayToolName(toolId);
     return {
@@ -297,7 +300,7 @@ export function buildTaskProgress(
       toolName,
       source: toolSource(toolId),
       status,
-      summary: String(tool.summary || "").trim() || undefined,
+      summary: String(tool.summary || (cardState === "ok" && networkEvidence(toolId, tool.result)?.outcome === "unknown" ? "该次结果已在后续核对" : networkEvidence(toolId, tool.result)?.label) || "").trim() || undefined,
       toolId,
     };
   });

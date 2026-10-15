@@ -1,1 +1,1 @@
-"""Read-only network operations extension."""
+"""Network device operations and independently scoped topology drawing extension."""

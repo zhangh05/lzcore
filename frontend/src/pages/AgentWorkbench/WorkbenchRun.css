@@ -94,6 +94,7 @@
   background: var(--danger);
 }
 .wb-shell .tool-call-card.unknown::before { background: var(--unknown); }
+.wb-shell .tool-call-card:is(.partial, .unavailable)::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--warn); }
 .wb-shell .tool-call-card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .wb-shell .tool-call-card-header {
   display: flex;

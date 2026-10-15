@@ -211,6 +211,24 @@ history, references and advisory syntax outcomes; it performs no network I/O.
 Inspection completion creates an Observation and may create a candidate
 Reference. Only a complete candidate can be explicitly confirmed.
 
+Inspection GET lists accept `limit=1..200` (default 200) and return `has_more` plus
+computed per-task `presentation` evidence. Retry creates a follow-up for unsuccessful
+targets only (or recollects when original evidence persistence failed); `retry_of_task_id`/`retry_task_id` retain the relationship. Repeating a
+retry on the same source returns that same follow-up. Retry the follow-up to make
+another attempt, rather than recreating the original inspection.
+
+Accepting an SSH host key through the connection test endpoint requires
+`accept_host_key=true` and the exact `accepted_fingerprint` reviewed by the user;
+a changed handshake key is refused.
+
+Device execution returns an observation timestamp, canonical target, connection
+phase diagnostic and a domain-owned `presentation`. Configuration processing is
+separate from business verification; `configuration_workflow.verification_status`
+is `not_performed` for the configuration call. Full command output stays in run
+results. Live UI events carry the governed presentation index, not arbitrary binary
+payloads. Skill-scoped context clips target lists and snapshots before applying
+its window; mixed-target artifact references are not exposed as scoped evidence.
+
 可选审批扩展的资源入口：
 
 | Method | Path |

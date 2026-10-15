@@ -379,3 +379,7 @@
 .task-in-flight-header { flex-wrap: wrap; gap: var(--space-2); align-items: flex-start; }
 .task-in-flight-note, .in-flight-info { overflow-wrap: anywhere; }
 }
+
+@layer workbench {
+.task-evidence.partial .task-evidence-status, .task-evidence.unavailable .task-evidence-status, .footprint-status-tag.partial, .footprint-status-tag.unavailable { color: var(--warn); }
+}

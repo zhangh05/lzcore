@@ -1,6 +1,7 @@
 from __future__ import annotations
 from extensions.network_operations import device_tools, network_inventory, network_execution, network_inspections
 
+import errno
 from collections import deque
 from threading import Event
 from types import SimpleNamespace
@@ -63,6 +64,9 @@ def test_configuration_collects_every_command_result_after_a_failure(failure):
     assert result["execution_may_continue"] is (failure != "device_command_rejected")
     assert not result["ok"] and not result["automatic_retry_allowed"]
     assert result["recommended_readback"] and not result["rollback_performed"]
+    assert result["configuration_workflow"]["verification_status"] == "not_performed"
+    assert result["configuration_workflow"]["uncertain_commands"] == ([] if failure == "device_command_rejected" else calls)
+    assert result["configuration_workflow"]["deterministic_failures"] == (calls if failure == "device_command_rejected" else [])
 
 
 def test_configuration_marks_only_unsendable_remainder_after_transport_exception():
@@ -908,3 +912,19 @@ def test_raw_inspection_preserves_incomplete_command_diagnostics(monkeypatch, tm
     result = service.get_inspection("default", task["task_id"])
     assert result["status"] == "partial"
     assert result["results"][connection["connection_id"]]["command_results"][0]["error_code"] == "connection_closed"
+
+
+@pytest.mark.parametrize(('error', 'code', 'phase'), [
+    (ConnectionRefusedError('refused'), 'connection_refused', 'tcp'),
+    (TimeoutError('timeout'), 'connection_timeout', 'connection'),
+    (OSError(errno.ENETUNREACH, 'unreachable'), 'network_unreachable', 'tcp'),
+])
+def test_connection_diagnostics_preserve_failure_stage(monkeypatch, error, code, phase):
+    def fail(*args):
+        raise error
+    monkeypatch.setattr(device_tools, '_open_connection', fail)
+    result = device_tools.probe_target(device_tools.DeviceTarget(host='127.0.0.1'))
+    assert result['ok'] is False
+    assert result['diagnostic']['code'] == code
+    assert result['diagnostic']['phase'] == phase
+    assert result['diagnostic']['next_step']

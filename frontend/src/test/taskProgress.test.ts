@@ -68,10 +68,14 @@ describe("task progress projection", () => {
       toolCalls: [
         { tool_id: "web.search", tool_name: "搜索", ok: true, status: "done", summary: "3 个来源" },
         { tool_id: "device.inspect", tool_name: "检查", ok: false, status: "running" },
+        { tool_id: "network.operations.device.manage", tool_name: "设备读取", ok: true, status: "done", result: { connection_ok: false, status: "unavailable" } },
+        { tool_id: "network.operations.device.manage", tool_name: "设备读取", ok: true, status: "done", result: { read_ok: false, status: "partial" } },
       ],
     }));
 
-    expect(model.evidence).toHaveLength(2);
+    expect(model.evidence).toHaveLength(4);
+    expect(model.evidence[2]).toMatchObject({ status: "unavailable" });
+    expect(model.evidence[3]).toMatchObject({ status: "partial" });
     expect(model.evidence[0]).toMatchObject({ source: "网络检索", status: "done" });
     expect(model.evidence[1]).toMatchObject({ source: "网络设备", status: "running" });
   });

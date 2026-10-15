@@ -178,6 +178,13 @@ test('26c. populated conversation, device directory and drawing inspector share 
     { device_id: 'visual-core', name: '核心交换机', host: '192.0.2.10', vendor: 'h3c', device_type: 'switch_core', region_id: '总部' },
     { device_id: 'visual-access', name: '接入交换机', host: '192.0.2.20', vendor: 'h3c', device_type: 'switch', region_id: '总部' },
   ] } }));
+  await page.route('**/api/extensions/network.operations/connections**', route => route.fulfill({ json: { connections: [{ connection_id: 'visual-connection', device_id: 'visual-core', protocol: 'ssh', port: 22, status: 'failed', verified: false, last_tested_at: '2026-10-14T08:00:00Z', last_diagnostic: { summary: '设备认证失败', next_step: '核对账号、认证方式与凭据。' } }] } }));
+  const inspectionPresentation = { kind: 'network_inspection', task_id: 'visual-inspection', state: 'partial', artifact_id: 'visual-evidence', devices: [
+    { connection_id: 'visual-connection', name: '核心交换机', status: 'failed', error: 'authentication_failed' },
+    { connection_id: 'visual-ok', name: '接入交换机', status: 'succeeded' },
+  ] };
+  await page.route('**/api/extensions/network.operations/inspections**', route => route.fulfill({ json: { inspections: [{ task_id: 'visual-inspection', status: 'partial', presentation: inspectionPresentation }] } }));
+  await page.route('**/api/workspaces/*/artifacts/visual-evidence/content', route => route.fulfill({ json: { content: '逐行原始证据\n'.repeat(1000) + '完整证据终行' } }));
   await page.goto('/workbench');
   await page.getByTestId(`sess-btn-${id}`).click();
   await page.getByTestId('chat-input').fill('检查园区图纸的区域与连线');
@@ -191,7 +198,20 @@ test('26c. populated conversation, device directory and drawing inspector share 
     await page.goto('/extensions/network.operations/manage?tab=devices');
     if (await page.locator('html').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: '切换主题', exact: true }).click();
     await expect(page.getByText('192.0.2.10 · H3C', { exact: false })).toBeVisible();
+    await page.getByTestId('device-card-visual-core').locator('.connection-section > summary').click();
+    await expect(page.getByText('设备认证失败', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '创建此设备 Skill', exact: true }).click();
+    const deviceSkill = page.getByRole('dialog', { name: 'Skill 编辑面板' });
+    await expect(deviceSkill.locator('input').first()).toHaveValue('核心交换机 运维');
+    await deviceSkill.getByRole('button', { name: '关闭', exact: true }).click();
     await page.screenshot({ path: testInfo.outputPath(`devices-${theme}.png`) });
+    await page.goto('/extensions/network.operations/manage?tab=inspections');
+    await expect(page.getByRole('button', { name: '重试未完成设备' })).toBeVisible();
+    await page.getByRole('button', { name: '仅显示需处理设备' }).click();
+    await expect(page.locator('.network-evidence li').filter({ hasText: '接入交换机' })).toHaveCount(0);
+    await page.getByRole('button', { name: '读取完整证据' }).click();
+    await expect(page.locator('.network-evidence pre')).toContainText('完整证据终行');
+    await page.screenshot({ path: testInfo.outputPath(`inspection-evidence-${theme}.png`) });
     await page.goto('/topology?topology=visual-drawing');
     await expect(page.locator('.netops-cytoscape')).toBeVisible();
     const host = page.locator('.netops-cytoscape');
@@ -204,4 +224,9 @@ test('26c. populated conversation, device directory and drawing inspector share 
     await page.waitForTimeout(1200); // canvas centring animation is independent of CSS motion
     await page.screenshot({ path: testInfo.outputPath(`drawing-inspector-${theme}.png`) });
   }
+  await page.setViewportSize({ width: 640, height: 760 });
+  await page.goto('/extensions/network.operations/manage?tab=inspections');
+  await expect(page.getByRole('button', { name: '重试未完成设备' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath('inspection-evidence-narrow.png') });
 });

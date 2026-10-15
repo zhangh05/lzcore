@@ -79,7 +79,7 @@ test("operational context separates observations from explicitly confirmed refer
   renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
-  expect(screen.getByText("巡检候选参考")).toBeInTheDocument();
+  expect(await screen.findByText("巡检候选参考")).toBeInTheDocument();
   expect(screen.getByText(/巡检只产生候选参考/)).toBeInTheDocument();
   expect(screen.getByText("display version")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "确认参考" }));
@@ -104,7 +104,7 @@ test("selects and permanently deletes multiple operational references in one req
   renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
-  fireEvent.click(screen.getByLabelText("选择运行参考 巡检候选参考 A"));
+  fireEvent.click(await screen.findByLabelText("选择运行参考 巡检候选参考 A"));
   fireEvent.click(screen.getByLabelText("选择运行参考 巡检候选参考 B"));
   fireEvent.click(screen.getByRole("button", { name: "删除已选 (2)" }));
   fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "永久删除" }));
@@ -133,7 +133,7 @@ test("selects observations and command feedback for their own batch-delete endpo
   renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
-  fireEvent.click(screen.getByLabelText("选择全部最近观察"));
+  fireEvent.click(await screen.findByLabelText("选择全部最近观察"));
   fireEvent.click(screen.getByRole("button", { name: "删除已选 (2)" }));
   fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "永久删除" }));
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -165,7 +165,7 @@ test("command feedback renders one row for duplicate driver commands during a ro
   renderWithRouter(<NetworkOperations />);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
-  expect(screen.getAllByText(/DISPLAY\s+CPU-USAGE/i)).toHaveLength(1);
+  expect(await screen.findAllByText(/DISPLAY\s+CPU-USAGE/i)).toHaveLength(1);
   expect(screen.getByText("1 条")).toBeInTheDocument();
   expect(screen.getByText(/2 次观察/)).toBeInTheDocument();
 });
@@ -174,7 +174,7 @@ test("operational context exposes confirmed hard deletes", async () => {
   renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
   await screen.findByTestId("device-card-d1");
   fireEvent.click(screen.getByRole("tab", { name: /环境与证据/ }));
-  fireEvent.click(screen.getByRole("button", { name: "永久删除观察 inspection-1" }));
+  fireEvent.click(await screen.findByRole("button", { name: "永久删除观察 inspection-1" }));
   fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "永久删除" }));
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({
     method: "DELETE", url: "/extensions/network.operations/observations/o1", data: { workspace_id: "default" },
@@ -580,3 +580,48 @@ test("canvas does not auto-save on edit; manual save button persists changes", a
   await waitFor(() => expect(screen.getByRole("button", { name: "已保存" })).toBeInTheDocument());
 });
 
+
+test("device workflow prefills its configured scope without publishing a Skill implicitly", async () => {
+  renderWithRouter(<NetworkOperations />);
+  await screen.findByTestId("device-card-d1");
+  fireEvent.click(screen.getByRole("button", { name: "创建此设备 Skill" }));
+  const dialog = await screen.findByRole("dialog", { name: "Skill 编辑面板" });
+  expect(within(dialog).getByDisplayValue("CE_1 运维")).toBeInTheDocument();
+  expect(vi.mocked(apiRequest).mock.calls.some(([request]) => request.method === "POST" && request.url?.endsWith("/skills"))).toBe(false);
+});
+
+test("inspection page retries the original task and leaves successful device evidence available", async () => {
+  const original = vi.mocked(apiRequest).getMockImplementation();
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.url?.endsWith("/inspections")) return { inspections: [{ task_id: "inspect-one", status: "partial", presentation: {
+      kind: "network_inspection", task_id: "inspect-one", state: "partial", devices: [
+        { connection_id: "conn-ok", name: "正常设备", status: "succeeded" },
+        { connection_id: "conn-fail", name: "待处理设备", status: "failed", error: "connection_refused" },
+      ],
+    } }] } as never;
+    return original?.(request) as never;
+  });
+  renderWithRouter(<NetworkOperations initialView="inspections" />, ["/extensions/network.operations/manage?tab=inspections"]);
+  const retry = await screen.findByRole("button", { name: "重试未完成设备" });
+  expect(screen.getByText("正常设备")).toBeInTheDocument();
+  fireEvent.click(retry);
+  await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", url: "/extensions/network.operations/inspections/inspect-one/retry" })));
+  expect(vi.mocked(apiRequest).mock.calls.filter(([request]) => request.method === "POST" && request.url?.endsWith("/retry"))).toHaveLength(1);
+});
+
+test("changing SSH identity requires reviewing the exact observed fingerprint before updating trust", async () => {
+  const original = vi.mocked(apiRequest).getMockImplementation();
+  vi.mocked(apiRequest).mockImplementation(async (request) => {
+    if (request.url?.endsWith("/connections")) return { connections: [{ connection_id: "c1", device_id: "d1", protocol: "ssh", port: 22, status: "failed", host_key_fingerprint: "SHA256:old", observed_fingerprint: "SHA256:new", last_diagnostic: { code: "host_key_mismatch" } }] } as never;
+    return original?.(request) as never;
+  });
+  renderWithRouter(<><NetworkOperations /><ConfirmHost /></>);
+  const before = vi.mocked(apiRequest).mock.calls.length;
+  fireEvent.click(await screen.findByRole("button", { name: "重新核对主机身份" }));
+  expect(vi.mocked(apiRequest).mock.calls.slice(before).some(([request]) => request.method === "PUT")).toBe(false);
+  const confirmation = await screen.findByRole("dialog");
+  expect(within(confirmation).getByText(/SHA256:old/)).toBeInTheDocument();
+  expect(within(confirmation).getByText(/SHA256:new/)).toBeInTheDocument();
+  fireEvent.click(within(confirmation).getByRole("button", { name: "信任此指纹并重新测试" }));
+  await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({ method: "PUT", url: "/extensions/network.operations/connections/c1", data: expect.objectContaining({ host_key_fingerprint: "SHA256:new" }) })));
+});

@@ -1,0 +1,76 @@
+@layer extension {
+  .network-evidence {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: var(--space-3);
+    color: var(--text-2);
+    font-size: var(--fs-12);
+  }
+  .network-evidence-heading,
+  .network-evidence-stages,
+  .network-evidence-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .network-evidence p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .network-evidence code {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .network-evidence pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 32rem;
+    overflow: auto;
+    margin: 0;
+    padding: var(--space-2);
+    background: var(--surface-2);
+  }
+  .network-evidence li {
+    margin-block: var(--space-2);
+  }
+  .network-evidence li > span,
+  .network-evidence li > code {
+    display: block;
+  }
+  .network-evidence button {
+    font: inherit;
+    color: var(--text-2);
+    background: var(--surface-2);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-4);
+    padding: var(--space-1) var(--space-2);
+    cursor: pointer;
+  }
+  .network-evidence-note {
+    color: var(--text-3);
+  }
+  .network-inspections {
+    margin: var(--space-4) var(--space-6);
+    min-width: 0;
+  }
+  .network-inspection-record {
+    border-top: 1px solid var(--line-2);
+    margin-top: var(--space-3);
+    padding-block: var(--space-3);
+    min-width: 0;
+  }
+  .network-inspection-record > p {
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 760px) {
+    .network-inspections {
+      margin: var(--space-3);
+    }
+  }
+}
+
+@layer extension {
+.network-evidence-heading strong { min-width: 0; overflow-wrap: anywhere; }
+}

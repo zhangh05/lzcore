@@ -128,14 +128,8 @@ def _derive_findings(
     if not snapshots and isinstance(task.get("asset_snapshots"), dict):
         snapshots = task["asset_snapshots"]
     checks = list((task.get("script") or {}).get("checks") or [])
-    baseline = next(
-        (
-            item
-            for item in list_baselines(workspace_id)
-            if item.get("current") and item.get("confirmed")
-        ),
-        None,
-    )
+    baselines = [item for item in list_baselines(workspace_id)
+                 if item.get("current") and item.get("confirmed")]
     findings: list[dict[str, Any]] = []
     for target_id, result in sorted((task.get("results") or {}).items()):
         asset = current_targets.get(target_id) or snapshots.get(target_id)
@@ -191,6 +185,7 @@ def _derive_findings(
                         },
                     )
                 )
+        baseline = next((item for item in baselines if target_id in (item.get("devices") or {})), None)
         before = (
             (baseline or {}).get("devices", {}).get(target_id) if baseline else None
         )

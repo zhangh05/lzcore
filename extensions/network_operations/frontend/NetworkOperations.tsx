@@ -36,6 +36,7 @@ import { useSessionStore } from "../../../frontend/src/stores/session";
 import { DeviceTypeIcon } from "./components/TopologyItemControls";
 import { NetworkNotice, useNotice } from "./components/NetworkNotice";
 import "./NetworkOperations.css";
+import { NetworkInspectionPanel } from "./components/NetworkInspectionPanel";
 
 /** 空状态：此前是纯文字一行，跟拓扑画布那个带图标的空状态卡片不是一套语言。 */
 const EmptyState = ({
@@ -82,6 +83,10 @@ type Connection = {
   credential_configured?: boolean;
   last_error?: string;
   last_tested_at?: string;
+  last_success_at?: string;
+  observed_fingerprint?: string;
+  host_key_fingerprint?: string;
+  last_diagnostic?: { code?: string; summary?: string; next_step?: string; phase?: string };
   driver_id?: string;
   detected_vendor?: string;
   os_family?: string;
@@ -272,7 +277,7 @@ const displayTime = (value: string) =>
     ? new Date(value).toLocaleString("zh-CN", { hour12: false })
     : "时间未知";
 
-type NetworkView = "devices" | "skills" | "context";
+type NetworkView = "devices" | "skills" | "context" | "inspections";
 
 /**
  * 网络设备视图下的二级标签：设备与连接、环境与证据。
@@ -281,6 +286,7 @@ type NetworkView = "devices" | "skills" | "context";
 const DEVICE_VIEWS: Array<[NetworkView, string, ComponentType<IconProps>]> = [
   ["devices", "设备与连接", IconPlugs],
   ["context", "环境与证据", IconShield],
+  ["inspections", "巡检记录", IconChecklist],
 ];
 
 // The service returns a canonical list, but retain this UI-side guard for a
@@ -343,7 +349,7 @@ export default function NetworkOperations({
       ? "skills"
       : urlTab === "context"
         ? "context"
-        : "devices");
+        : urlTab === "inspections" ? "inspections" : "devices");
   const [editor, setEditor] = useState<
     "device" | "connection" | "skill" | null
   >(null);
@@ -365,7 +371,7 @@ export default function NetworkOperations({
         ? "skills"
         : urlTab === "context"
           ? "context"
-          : "devices";
+          : urlTab === "inspections" ? "inspections" : "devices";
     setView(nextTab);
     setQuery("");
     setRegionFilter("");
@@ -401,9 +407,15 @@ export default function NetworkOperations({
   const [editingRegionId, setEditingRegionId] = useState("");
   const [regionName, setRegionName] = useState("");
   const [busy, setBusy] = useState(false);
+  const loadRevision = useRef(0);
+  const activeWorkspace = useRef(workspaceId);
+  activeWorkspace.current = workspaceId;
+  const [contextUnavailable, setContextUnavailable] = useState(false);
   const { notice, setNotice, clearNotice } = useNotice(5000);
 
   const load = useCallback(async () => {
+    if (activeWorkspace.current !== workspaceId) return;
+    const revision = ++loadRevision.current;
     const params = { workspace_id: workspaceId };
     const [
       regionResult,
@@ -433,22 +445,25 @@ export default function NetworkOperations({
         url: `${base}/skills`,
         params,
       }),
-      apiRequest<OperationalContext>({
+      view === "context" ? apiRequest<OperationalContext>({
         method: "GET",
         url: `${base}/context`,
         params,
-      }).catch(() => ({
+      }).then((result) => ({ ...result, unavailable: false })).catch(() => ({
+        unavailable: true,
         observations: [],
         references: [],
         command_experience: [],
         sources: [],
-      })),
-      apiRequest<{ topologies: DrawingSheet[] }>({
+      })) : Promise.resolve({ observations: [], references: [], command_experience: [], sources: [], unavailable: false }),
+      view === "skills" ? apiRequest<{ topologies: DrawingSheet[] }>({
         method: "GET",
         url: `${base}/topologies`,
         params,
-      }).catch(() => ({ topologies: [] })),
+      }).catch(() => ({ topologies: [] })) : Promise.resolve({ topologies: [] }),
     ]);
+    if (revision !== loadRevision.current || activeWorkspace.current !== workspaceId) return;
+    setContextUnavailable(contextResult.unavailable);
     setRegions(regionResult.regions || []);
     setDevices(deviceResult.devices || []);
     setConnections(connectionResult.connections || []);
@@ -462,10 +477,11 @@ export default function NetworkOperations({
       ),
       sources: contextResult.sources || [],
     });
-  }, [workspaceId]);
+  }, [workspaceId, view]);
 
   useEffect(() => {
     void load().catch(() => setNotice("数据加载失败，请检查服务。", false));
+    return () => { loadRevision.current += 1; };
   }, [load]);
   useEffect(() => {
     const available = new Set(
@@ -531,6 +547,7 @@ export default function NetworkOperations({
     devices: devices.length,
     skills: skills.length,
     context: operationalContext.observations.length,
+    inspections: 0,
   };
 
   const run = async <T,>(
@@ -541,6 +558,7 @@ export default function NetworkOperations({
     setNotice("");
     try {
       const result = await work();
+      if (activeWorkspace.current !== workspaceId) return { ok: false };
       const message = typeof success === "function" ? success(result) : success;
       try {
         await load();
@@ -659,19 +677,27 @@ export default function NetworkOperations({
     });
   };
 
-  const testConnection = (connection: Connection) =>
-    void run(
-      () =>
-        apiRequest({
-          method: "POST",
-          url: `${base}/connections/${connection.connection_id}/test`,
-          data: {
-            workspace_id: workspaceId,
-            accept_host_key: connection.status === "trust_required",
-          },
-        }),
+  const testConnection = async (connection: Connection) => {
+    const accept = connection.status === "trust_required" && !!connection.observed_fingerprint;
+    if (accept && !(await confirm({ title: "核对设备主机指纹", body: `请确认设备身份后再信任：${connection.observed_fingerprint || "尚未取得指纹，请先测试连接"}`, confirmLabel: "信任并连接" }))) return;
+    const outcome = await run(
+      () => apiRequest({ method: "POST", url: `${base}/connections/${connection.connection_id}/test`, data: { workspace_id: workspaceId, accept_host_key: accept, ...(accept ? { accepted_fingerprint: connection.observed_fingerprint } : {}) } }),
       "连接测试完成",
     );
+    if (!outcome.ok) await load().catch(() => setNotice("连接状态未能完整核对，请刷新查看测试结果。", false));
+  };
+
+  const reviewChangedHostKey = async (connection: Connection) => {
+    if (!connection.observed_fingerprint) return;
+    if (!(await confirm({ title: "重新核对设备主机身份", body: `主机指纹发生变化，请先确认设备更换或变更原因。原信任：${connection.host_key_fingerprint || "无"}；本次观察：${connection.observed_fingerprint}`, confirmLabel: "信任此指纹并重新测试" }))) return;
+    void run(() => apiRequest({ method: "PUT", url: `${base}/connections/${connection.connection_id}`, data: { ...connection, workspace_id: workspaceId, host_key_fingerprint: connection.observed_fingerprint } }), "主机信任已按核对指纹更新，并重新测试连接");
+  };
+
+  const createSkillForDevice = (device: Device) => {
+    const selected = connections.filter((connection) => connection.device_id === device.device_id);
+    setSkillForm({ ...emptySkill, name: `${device.name} 运维`, device_ids: [device.device_id], connection_ids: selected.map((connection) => connection.connection_id) });
+    setEditor("skill");
+  };
 
   const removeConnection = async (connection: Connection) => {
     const deviceName = byDevice.get(connection.device_id)?.name || "该设备";
@@ -1098,7 +1124,7 @@ export default function NetworkOperations({
         </>
       )}
       <NetworkNotice notice={notice} onClose={clearNotice} />
-      {view !== "context" ? (
+      {view !== "context" && view !== "inspections" ? (
         <div className="network-toolbar">
           <div className="network-filters">
             <SearchInput
@@ -1771,6 +1797,7 @@ export default function NetworkOperations({
                           className="device-actions"
                           aria-label={`${device.name} 设备管理`}
                         >
+                          {deviceConnections.length > 0 && <Button size="sm" onClick={() => createSkillForDevice(device)}>创建此设备 Skill</Button>}
                           <Button
                             size="sm"
                             icon={<IconEdit size={13} />}
@@ -1827,12 +1854,12 @@ export default function NetworkOperations({
                                     className={`status ${connection.status}`}
                                   >
                                     {connection.verified
-                                      ? "最近验证成功"
+                                      ? "上次连接成功"
                                       : connection.status === "trust_required"
                                         ? "待确认指纹"
                                         : connection.status === "untested"
                                           ? "未测试"
-                                          : "连接失败"}
+                                          : "上次连接失败"}
                                   </span>
                                   <b>
                                     {connection.protocol.toUpperCase()}:
@@ -1854,12 +1881,14 @@ export default function NetworkOperations({
                                         ]
                                           .filter(Boolean)
                                           .join(" · ") ||
-                                        connection.last_tested_at
-                                      : connection.last_error ||
-                                        connection.last_tested_at ||
-                                        "尚未测试"}
+                                        ""
+                                      : connection.last_diagnostic ? "" : connection.last_error || "尚未测试"}
                                   </small>
                                 </div>
+                                {connection.last_diagnostic?.summary && <div className="connection-diagnostic"><p>{connection.last_diagnostic.summary}</p><p>{connection.last_diagnostic.next_step}</p></div>}
+                                {connection.last_tested_at && <small>上次验证：{connection.last_tested_at}；当前可达性需按需核实</small>}
+                                {connection.last_success_at && <small>上次连接成功：{connection.last_success_at}</small>}
+                                {connection.observed_fingerprint && <code className="connection-fingerprint">主机指纹：{connection.observed_fingerprint}</code>}
                                 <div
                                   className="connection-actions"
                                   aria-label={`${device.name} ${connection.protocol.toUpperCase()}:${connection.port} 连接管理`}
@@ -1872,12 +1901,13 @@ export default function NetworkOperations({
                                   </Button>
                                   <Button
                                     size="sm"
-                                    onClick={() => testConnection(connection)}
+                                    onClick={() => void testConnection(connection)}
                                   >
                                     {connection.status === "trust_required"
-                                      ? "确认并重试"
+                                      ? connection.observed_fingerprint ? "核对并信任指纹" : "重新获取指纹"
                                       : "测试连接"}
                                   </Button>
+                                  {connection.last_diagnostic?.code === "host_key_mismatch" && connection.observed_fingerprint && <Button size="sm" onClick={() => void reviewChangedHostKey(connection)}>重新核对主机身份</Button>}
                                   <Button
                                     size="sm"
                                     variant="danger-ghost"
@@ -2087,8 +2117,11 @@ export default function NetworkOperations({
             </div>
           </section>
         </div>
+      ) : view === "inspections" ? (
+        <NetworkInspectionPanel workspaceId={workspaceId} />
       ) : (
         <div className="network-context-layout">
+          {contextUnavailable && <p role="alert">历史证据暂不可用，请刷新重试；当前页面未取得有效历史记录。</p>}
           <section className="network-panel context-overview">
             <div className="panel-heading">
               <div>

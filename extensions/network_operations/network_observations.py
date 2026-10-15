@@ -170,6 +170,16 @@ def list_command_experience(
             item.get("observations") or 0
         )
     result = list(grouped.values())
+    if allowed is not None:
+        for item in result:
+            provenance = _command_experience_connections(item)
+            visible = sorted(provenance.intersection(allowed))
+            item["connection_ids"] = visible
+            if item.get("connection_id") not in allowed:
+                item["connection_id"] = visible[0] if visible else ""
+            # The syntax outcome/count belongs to the driver aggregate, not
+            # to any one selected device. Never imply it proves live state.
+            item["provenance_scope"] = "driver_aggregate"
     result.sort(key=lambda item: str(item.get("last_observed_at") or ""), reverse=True)
     return result[:limit]
 
@@ -513,8 +523,10 @@ def operational_context(
         if connection_ids is None
         else {str(item) for item in connection_ids if str(item)}
     )
-    observations = list_observations(workspace_id, limit=24)
-    references = list_references(workspace_id, limit=40)
+    # Apply the selection before the context window. Recent unrelated jobs
+    # must not evict this Skill's useful history.
+    observations = list_observations(workspace_id, limit=500 if allowed is not None else 24)
+    references = list_references(workspace_id, limit=500 if allowed is not None else 40)
     if allowed is not None:
         observations = [
             item
@@ -528,11 +540,12 @@ def operational_context(
         ]
 
     def bounded_record(item: dict[str, Any]) -> dict[str, Any]:
-        target_ids = list(item.get("target_ids") or [])
+        original_targets = list(item.get("target_ids") or [])
+        target_ids = [target for target in original_targets if allowed is None or target in allowed]
         snapshot = (
             item.get("snapshot") if isinstance(item.get("snapshot"), dict) else {}
         )
-        return {
+        projected = {
             key: value
             for key, value in item.items()
             if key not in {"snapshot", "target_ids"}
@@ -544,7 +557,14 @@ def operational_context(
                 for target_id in target_ids[:20]
                 if target_id in snapshot
             },
+            "projection_complete": len(target_ids) <= 20 and len(target_ids) == len(original_targets),
         }
+        if len(target_ids) != len(original_targets):
+            # A mixed-scope artifact contains other devices. Keep the source
+            # identity for audit without offering it as this scoped payload.
+            projected.pop("artifact_id", None)
+            projected["artifact_scope"] = "mixed_targets_not_exposed"
+        return projected
 
     command_experience = list_command_experience(
         workspace_id,

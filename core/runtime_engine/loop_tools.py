@@ -916,6 +916,10 @@ class StreamingToolExecutor(ReadRetryPolicy):
                     "duration_ms": projected.latency_ms}
                 if tool_id == "agent.manage":
                     event["result"] = projected.output
+                elif isinstance(projected.output.get("presentation"), dict):
+                    # Domain-owned, governed UI evidence. Full raw results stay
+                    # in the run; do not stream arbitrary binary tool payloads.
+                    event["result"] = {"presentation": projected.output["presentation"]}
                 try:
                     self._emitter.emit("tool_result", event)
                 except Exception:

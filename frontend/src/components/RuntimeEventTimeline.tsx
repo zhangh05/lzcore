@@ -11,6 +11,8 @@
  * fall back to the user/assistant text pair with a retry hint.
  */
 import { SubagentTaskCard } from "./SubagentTaskCard";
+import { NetworkToolResult } from "../../../extensions/network_operations/frontend/components/NetworkToolResult";
+import { networkEvidence } from "../../../extensions/network_operations/frontend/components/networkEvidence";
 import { partitionSubagentCalls } from "../utils/subagentTracking";
 import React, { useMemo, useState } from "react";
 import type { AgentResult, RuntimeEvent, ToolCallResult } from "../types";
@@ -102,8 +104,10 @@ const ToolChip: React.FC<{
   turnResult?: Pick<AgentResult, "metadata"> | null;
 }> = React.memo(({ tc, turnResult }) => {
   const [open, setOpen] = useState(false);
-  const hasBody = !!(tc.summary || tc.errors?.length || tc.artifacts?.length);
+  const network = networkEvidence(tc.tool_id, tc.result);
+  const hasBody = !!(network || tc.summary || tc.errors?.length || tc.artifacts?.length);
   const state = deriveSettledCardState(tc, turnResult);
+  const reconciledNetwork = state === "ok" && network?.outcome === "unknown";
   return (
     <div className="rt-step rt-step-tool">
       <span className={`rt-dot rt-dot-${state === "unknown" ? "unknown" : "warn"}`} />
@@ -123,7 +127,7 @@ const ToolChip: React.FC<{
             {state === "ok" ? <IconCheck size={12} aria-hidden="true" /> : state === "unknown" ? <IconAlert size={12} aria-hidden="true" /> : <IconClose size={12} aria-hidden="true" />}
           </span>
           <code className="rt-step-name">{toolLabel(tc.tool_id)}</code>
-          <span className={`rt-tag ${state}`}>{state === "ok" ? "完成" : state === "unknown" ? UNKNOWN_OUTCOME_COPY.pill : "失败"}</span>
+          <span className={`rt-tag ${state}`}>{(reconciledNetwork ? "该次结果已在后续核对" : network?.label) || (state === "ok" ? "完成" : state === "unknown" ? UNKNOWN_OUTCOME_COPY.pill : "失败")}</span>
           {tc.duration_ms != null && <span className="rt-dur">{formatMs(tc.duration_ms)}</span>}
           {hasBody && <span className={`rt-chev${open ? " is-open" : ""}`} aria-hidden="true"><IconChevronDown size={12} /></span>}
         </div>
@@ -133,6 +137,7 @@ const ToolChip: React.FC<{
           </div>
         )}
         {open && tc.summary && <div className="rt-step-detail">{tc.summary}</div>}
+        {open && network && <NetworkToolResult toolId={tc.tool_id} result={tc.result} reconciled={reconciledNetwork} />}
         {open && tc.errors?.map((e, i) => <div key={`${tc.call_id}-err-${i}-${e.slice(0, 32)}`} className="rt-step-err">{e}</div>)}
         {open && tc.artifacts?.length ? (
           <div className="rt-chips">

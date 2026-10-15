@@ -196,6 +196,8 @@
 .rt-tag { padding: 0 6px; color: var(--text-3); border-radius: var(--r-4); font-size: var(--fs-11); line-height: 18px; }
 .rt-tag.ok { color: var(--ok); background: var(--ok-soft); }
 .rt-tag.fail { color: var(--danger); background: var(--danger-soft); }
+.rt-tag.partial, .rt-tag.unavailable { color: var(--warn); background: var(--warn-soft); }
+.rt-step-ok.partial, .rt-step-ok.unavailable { color: var(--warn); }
 .rt-dur { color: var(--text-4); font-family: var(--font-mono); font-size: var(--fs-11); }
 .rt-chev { display: inline-flex; flex-shrink: 0; margin-left: auto; color: var(--text-4); transition: transform var(--dur-2) var(--ease); }
 .rt-chev.is-open { transform: rotate(180deg); }

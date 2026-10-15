@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { NetworkToolResult } from "../../../../../extensions/network_operations/frontend/components/NetworkToolResult";
+import { networkEvidence } from "../../../../../extensions/network_operations/frontend/components/networkEvidence";
 import type { AgentResult, InlineToolCall } from "../../../types";
 import { IconCheck, IconAlert, IconChevronDown, IconChevronRight, IconClock, IconDocument } from "../../../components/Icon";
 import {
@@ -34,6 +36,8 @@ export function InlineToolCallCard({ toolCall, seq, turnResult }: InlineToolCall
   const unknownFact = unknown ? unresolvedUnknownOutcome(turnResult) : undefined;
   const errText = toolCall.errors?.join(", ");
   const orchestration = toolCall.orchestration;
+  const network = networkEvidence(toolCall.tool_id, toolCall.result);
+  const reconciledNetwork = state === "ok" && network?.outcome === "unknown";
   const orchestrationStep = typeof orchestration?.step_id === "string" ? orchestration.step_id : "";
   const orchestrationLayer = typeof orchestration?.layer === "number" && Number.isFinite(orchestration.layer)
     ? orchestration.layer
@@ -66,7 +70,8 @@ export function InlineToolCallCard({ toolCall, seq, turnResult }: InlineToolCall
           {succeeded ? <IconCheck size={13} weight="bold" /> : <IconAlert size={13} weight="bold" />}
         </span>
         <span className="tc-name">{toolCall.tool_name || toolCall.tool_id}</span>
-        {pending && <span className="tc-state">已提交，等待工具结果</span>}
+        {pending && <span className="tc-state">{network?.outcome === "pending" ? network.label : "已提交，等待工具结果"}</span>}
+        {!pending && !unknown && network && <span className="tc-state">{reconciledNetwork ? "该次结果已在后续核对" : network.label}</span>}
         {unknown && <span className="tc-state tc-state-unknown">{UNKNOWN_OUTCOME_COPY.pill}</span>}
         {toolCall.duration_ms != null && (
           <span className="tc-duration-pill">
@@ -80,6 +85,7 @@ export function InlineToolCallCard({ toolCall, seq, turnResult }: InlineToolCall
       </div>
       {open && (
         <div className="tool-call-card-body">
+          {network && <NetworkToolResult toolId={toolCall.tool_id} result={toolCall.result} reconciled={reconciledNetwork} />}
           {toolCall.summary && <div className="tc-summary">{toolCall.summary}</div>}
           {errText && <div className="tc-error">{errText}</div>}
           {toolCall.duration_ms != null && (

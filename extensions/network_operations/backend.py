@@ -106,7 +106,12 @@ def register_routes(app):
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         data = _payload()
-        result = service.test_connection(ws, connection_id, accept_host_key=bool(data.get("accept_host_key")), timeout=int(data.get("timeout") or 15))
+        accept = bool(data.get("accept_host_key"))
+        fingerprint = str(data.get("accepted_fingerprint") or "").strip()
+        if accept and not fingerprint:
+            return jsonify({"ok": False, "error": "accepted_fingerprint_required"}), 400
+        result = service.test_connection(ws, connection_id, accept_host_key=accept,
+                                        accepted_fingerprint=fingerprint, timeout=int(data.get("timeout") or 15))
         return jsonify(result), (200 if result.get("ok") or result.get("requires_host_key_acceptance") else 400)
 
     @app.route("/api/extensions/network.operations/skills", methods=["GET", "POST"])
@@ -141,7 +146,16 @@ def register_routes(app):
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         if request.method == "GET":
-            return jsonify({"ok": True, "inspections": service.list_inspections(ws)})
+            try:
+                limit = int(request.args.get("limit", "200"))
+                if not 1 <= limit <= 200:
+                    raise ValueError
+            except ValueError:
+                return jsonify({"ok": False, "error": "inspection_limit_must_be_1_to_200"}), 400
+            tasks = service.list_inspections(ws)
+            return jsonify({"ok": True, "inspections": [
+                {**task, "presentation": _inspection_result(task)["presentation"]}
+                for task in tasks[:limit]], "has_more": len(tasks) > limit})
         data = _payload()
         try:
             task = service.enqueue_connection_inspection(
@@ -556,7 +570,19 @@ def device_manage(invocation):
     )
     # Preserve the server-determined execution class in the tool evidence so a
     # later synthesis cannot present a read-back as a configuration attempt.
-    result = {**result, "requested_action": action, "executed_action": effective_action}
+    from storage.time_utils import now_iso
+    from .diagnostics import device_presentation
+
+    target_device = service.get_device(invocation.workspace_id, str(connection.get("device_id") or "")) or {}
+    target = {"connection_id": connection_id, "device_id": connection.get("device_id"),
+              "name": target_device.get("name", ""), "host": target_device.get("host", ""),
+              "protocol": connection.get("protocol"), "port": connection.get("port")}
+    result = {**result, "requested_action": action, "executed_action": effective_action,
+              "observed_at": now_iso(), "target": target}
+    result["presentation"] = device_presentation(
+        {**result, **({"connection_ok": False} if not result.get("ok") and effective_action != "configure" else {})},
+        action=effective_action, target=target, observed_at=result["observed_at"],
+    )
     if effective_action == "configure":
         return result
     if result.get("ok"):
@@ -597,11 +623,14 @@ def device_manage(invocation):
         "protocol": str((current or {}).get("protocol") or ""),
         "port": int((current or {}).get("port") or 0),
         "error": str(result.get("error") or (current or {}).get("last_error") or "connection_unavailable")[:300],
-        "retryable": not bool(result.get("requires_host_key_acceptance")),
+        "retryable": bool((result.get("diagnostic") or {}).get("retryable", not result.get("requires_host_key_acceptance"))),
         "requires_host_key_acceptance": bool(result.get("requires_host_key_acceptance")),
         "decision_required": True,
         "guidance": "继续处理其他可用设备；如无替代连接，向用户说明该设备当前不可达及错误证据。",
         "connection": current or {},
+        "diagnostic": result.get("diagnostic"),
+        "stages": result.get("stages", []),
+        "presentation": result["presentation"],
     }
 
 
@@ -808,10 +837,17 @@ def _inspection_result(task: dict[str, Any]) -> dict[str, Any]:
         else "pending"
     )
     task_id = str((task or {}).get("task_id") or "")
+    projection = _inspection_analysis_projection(task)
     return {
         "ok": True,
         "task": task,
-        "analysis_projection": _inspection_analysis_projection(task),
+        "analysis_projection": projection,
+        "presentation": {"kind": "network_inspection", "state": status,
+                         "task_id": task_id, "coverage": projection["coverage"],
+                         "devices": [{key: item.get(key) for key in
+                             ("connection_id", "name", "status", "error", "diagnostic", "observed_at", "failed_commands", "retryable")}
+                             for item in projection["devices"]], "artifact_id": projection["artifact_id"],
+                         "retry_of_task_id": str(task.get("retry_of_task_id") or "")},
         "coverage_status": coverage_status,
         "tracking": {
             "kind": "long_task",
@@ -838,10 +874,13 @@ def _inspection_result(task: dict[str, Any]) -> dict[str, Any]:
 def _inspection_analysis_projection(task: dict[str, Any]) -> dict[str, Any]:
     """Return a fair, synthesis-ready view of every inspection target."""
     devices: list[dict[str, Any]] = []
-    for connection_id, result in sorted(
-        ((task or {}).get("results") or {}).items(),
-        key=lambda item: str((item[1] or {}).get("name") or item[0]),
-    ):
+    results = (task or {}).get("results") or {}
+    snapshots = (task or {}).get("target_snapshots") or {}
+    target_ids = list(dict.fromkeys([*list((task or {}).get("connection_ids") or (task or {}).get("asset_ids") or []), *results]))
+    target_ids.sort(key=lambda target: str((results.get(target) or {}).get("name") or (snapshots.get(target) or {}).get("name") or target))
+    for connection_id in target_ids:
+        result = results.get(connection_id) or {}
+        snapshot = snapshots.get(connection_id) or {}
         facts = result.get("facts") if isinstance(result.get("facts"), dict) else {}
         config = facts.get("current_config") if isinstance(facts.get("current_config"), dict) else {}
         failed_commands = [
@@ -856,8 +895,12 @@ def _inspection_analysis_projection(task: dict[str, Any]) -> dict[str, Any]:
         ]
         devices.append({
             "connection_id": str(connection_id),
-            "name": str(result.get("name") or connection_id),
-            "status": str(result.get("status") or "unknown"),
+            "name": str(result.get("name") or snapshot.get("name") or connection_id),
+            "status": str(result.get("status") or ("not_collected" if task.get("status") in {"cancelled", "failed", "partial"} else "pending")),
+            "error": str(result.get("error") or ""),
+            "diagnostic": result.get("diagnostic") or {},
+            "observed_at": str(result.get("observed_at") or ""),
+            "retryable": result.get("status") != "succeeded" and task.get("status") in {"failed", "partial", "cancelled"},
             "fact_status": {
                 str(name): str(value.get("status") or "unknown")
                 for name, value in facts.items()
@@ -1064,10 +1107,10 @@ def register():
                 },
                 "bindable_inputs": {"probe": ["connection_id"], "read": ["connection_id"], "collect": ["connection_id"], "configure": ["connection_id"]},
                 "referenceable_outputs": {
-                    "probe": ["connection_ok", "connection", "status", "error", "stages", "fingerprint"],
-                    "read": ["connection_ok", "connection", "status", "error", "stages", "fingerprint", "output", "command_results", "device_profile", "session", "command_source"],
-                    "collect": ["connection_ok", "connection", "status", "error", "stages", "fingerprint", "facts", "output", "command_results", "device_profile", "session", "command_source"],
-                    "configure": ["configuration_ok", "status", "error", "command_results", "unexecuted_commands"],
+                    "probe": ["connection_ok", "connection", "status", "error", "stages", "fingerprint", "diagnostic", "presentation", "observed_at", "target"],
+                    "read": ["connection_ok", "connection", "status", "error", "stages", "fingerprint", "output", "command_results", "device_profile", "session", "command_source", "diagnostic", "presentation", "observed_at", "target"],
+                    "collect": ["connection_ok", "connection", "status", "error", "stages", "fingerprint", "facts", "output", "command_results", "device_profile", "session", "command_source", "diagnostic", "presentation", "observed_at", "target"],
+                    "configure": ["configuration_ok", "status", "error", "command_results", "unexecuted_commands", "configuration_workflow", "diagnostic", "presentation", "observed_at", "target"],
                 },
                 "action_requirements": {
                     "all": {"probe": ["connection_id"], "read": ["connection_id", "commands"], "collect": ["connection_id", "facts"], "configure": ["connection_id", "commands"]},
@@ -1108,7 +1151,7 @@ def register():
             {
                 "tool_id": "network.operations.inspection",
                 "name": "执行只读巡检",
-                "description": "对明确选择的 connection_ids 执行持久只读任务。run 使用你自主编写的 commands；facts 或 script_id 仅为显式可选模板，三者必须且只能选一项。不同设备需要不同命令或后续步骤依赖回显时，用 device.manage 分别读取。每台设备独立执行，保留逐命令错误和完整性，单台失败不取消其他设备。任务由运行时跟踪到终态。",
+                "description": "对明确选择的 connection_ids 执行持久只读任务。run 使用你自主编写的 commands；facts 或 script_id 仅为显式可选模板，三者必须且只能选一项。不同设备需要不同命令或后续步骤依赖回显时，用 device.manage 分别读取。每台设备独立执行，保留逐命令错误和完整性，单台失败不取消其他设备。任务由运行时跟踪到终态。retry 只接续未成功设备；对同一原任务重复 retry 会返回同一后续任务，进一步重试使用后续 task_id。",
                 "category": "ops",
                 "risk_level": "medium",
                 "permission_action": "network",

@@ -23,6 +23,7 @@
  *   通常是 false，直接按失败渲染就会触发上面说的重复下发。
  */
 import type { AgentResult, InlineToolCall, ToolCallResult } from "../types";
+import { networkEvidence } from "../../../extensions/network_operations/frontend/components/networkEvidence";
 
 /** `AgentResult.metadata.unknown_outcome` —— 「写入结果未知」的触发事实。 */
 export type UnknownOutcomeFact = AgentResult["metadata"]["unknown_outcome"];
@@ -63,7 +64,7 @@ export function unknownOutcomeParagraph(): string {
 }
 
 /** 工具卡的呈现状态；比终态多一个 `pending`。 */
-export type InlineCardState = "pending" | "ok" | "fail" | "unknown";
+export type InlineCardState = "pending" | "ok" | "fail" | "unknown" | "partial" | "unavailable";
 
 /**
  * 取回「写入结果未知」的触发事实 —— 只在它**确实还没被解决**时返回。
@@ -123,11 +124,17 @@ function pointsAtCall(ref: ToolCallRef, fact?: UnknownOutcomeFact): boolean {
  * 因为「不确定性是否仍然成立」只有回合级投影能回答。
  */
 export function deriveInlineCardState(
-  toolCall: Pick<InlineToolCall, "status" | "ok" | "call_id" | "tool_id">,
+  toolCall: Pick<InlineToolCall, "status" | "ok" | "call_id" | "tool_id" | "result">,
   result?: TurnFacts | null,
 ): InlineCardState {
   if (toolCall.status === "pending" || toolCall.status === "running") return "pending";
   if (pointsAtCall(toolCall, unresolvedUnknownOutcome(result))) return "unknown";
+  const network = networkEvidence(toolCall.tool_id, toolCall.result);
+  if (network) {
+    if (network.outcome === "unknown" && result?.metadata.execution_outcome !== "unknown"
+        && result?.metadata.unknown_outcome && pointsAtCall(toolCall, result.metadata.unknown_outcome)) return "ok";
+    return network.outcome;
+  }
   return toolCall.ok ? "ok" : "fail";
 }
 
@@ -138,9 +145,8 @@ export function deriveInlineCardState(
  * 判定顺序与内联卡一致（unknown 先于 ok / fail）。
  */
 export function deriveSettledCardState(
-  toolCall: Pick<ToolCallResult, "ok" | "call_id" | "tool_id">,
+  toolCall: Pick<ToolCallResult, "ok" | "call_id" | "tool_id" | "result">,
   result?: TurnFacts | null,
-): Exclude<InlineCardState, "pending"> {
-  if (pointsAtCall(toolCall, unresolvedUnknownOutcome(result))) return "unknown";
-  return toolCall.ok ? "ok" : "fail";
+): InlineCardState {
+  return deriveInlineCardState({ ...toolCall, status: "done" }, result);
 }

@@ -174,8 +174,6 @@ def _execute_inspection(
         try:
             selected = None if facts else commands_for(target, commands, script)
             live = collector(target, selected, facts=facts, session_scope=task_id)
-            if not live.get("ok"):
-                raise RuntimeError(str(live.get("error") or "device connection failed"))
             raw = {
                 str(key): str(value)
                 for key, value in (live.get("output") or {}).items()
@@ -185,7 +183,7 @@ def _execute_inspection(
                 for item in (live.get("command_results") or [])
                 if item.get("command")
             ]
-            target_status = "succeeded" if live.get("read_ok") else "partial"
+            target_status = "failed" if not live.get("ok") else "succeeded" if live.get("read_ok") else "partial"
             diagnostics = [
                 {
                     key: item.get(key)
@@ -205,6 +203,7 @@ def _execute_inspection(
                 for item in (live.get("command_results") or [])
             ]
             normalized = json.dumps(raw, ensure_ascii=False, sort_keys=True)
+            from .diagnostics import execution_diagnostic
             return target_id, {
                 "status": target_status,
                 "name": target["name"],
@@ -215,6 +214,10 @@ def _execute_inspection(
                 "command_results": diagnostics,
                 "_raw_output": raw,
                 "duration_ms": int((time.monotonic() - started) * 1000),
+                "observed_at": now_iso(),
+                "error": str(live.get("error") or ""),
+                "diagnostic": live.get("diagnostic") or execution_diagnostic(live),
+                "stages": live.get("stages") or [],
             }
         except Exception as exc:
             return target_id, {
@@ -223,6 +226,7 @@ def _execute_inspection(
                 "host": target["host"],
                 "error": str(exc)[:300],
                 "duration_ms": int((time.monotonic() - started) * 1000),
+                "observed_at": now_iso(),
             }
         finally:
             reset_runtime_cancel_check(cancel_token)

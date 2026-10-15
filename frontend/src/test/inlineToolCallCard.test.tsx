@@ -68,3 +68,25 @@ it("groups real observations by child identity and keeps lifecycle separate from
   expect(screen.getByText("工具结果 1 项")).toBeInTheDocument();
   expect(screen.getByText("观察记录 · 3 次")).toBeInTheDocument();
 });
+
+it("shows partial device evidence independently of a successful tool envelope and preserves raw output", () => {
+  const { container } = render(<InlineToolCallCard seq={1} toolCall={{
+    tool_id: "network.operations.device.manage", tool_name: "设备读取", call_id: "read-device", status: "done", ok: true,
+    result: { ok: true, status: "partial", connection_ok: true, read_ok: false,
+      target: { connection_id: "conn-a", name: "核心交换机" },
+      command_results: [{ command: "display version", dispatch_status: "sent", complete: false, output: "完整保留的部分回显", error_code: "prompt_timeout" }] },
+  }} />);
+  expect(container.querySelector(".tool-call-card")).toHaveClass("partial");
+  fireEvent.click(screen.getByText("设备读取"));
+  expect(screen.getByText("display version")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("原始回显"));
+  expect(screen.getByText("完整保留的部分回显")).toBeVisible();
+});
+
+it("keeps an unknown device write visible when turn-level uncertainty metadata is absent", () => {
+  const { container } = render(<InlineToolCallCard seq={1} toolCall={{
+    tool_id: "network.operations.device.manage", tool_name: "设备配置", call_id: "write-device", status: "done", ok: false,
+    result: { status: "unknown", execution_may_continue: true, requested_action: "configure" },
+  }} />);
+  expect(container.querySelector(".tool-call-card")).toHaveClass("unknown");
+});

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import hashlib
 import ipaddress
 import json
@@ -33,6 +34,7 @@ from .network_records import (
     _valid_host,
 )
 from .network_scripts import _resolve_script
+from .diagnostics import execution_diagnostic
 
 
 def list_regions(workspace_id: str) -> list[dict[str, Any]]:
@@ -156,6 +158,11 @@ def save_device(workspace_id: str, payload: dict[str, Any]) -> dict[str, Any]:
                     "host_key_fingerprint": "",
                     "status": "untested",
                     "last_error": "device_identity_changed_retest_required",
+                    "last_tested_at": "",
+                    "last_success_at": "",
+                    "last_diagnostic": {},
+                    "last_stages": [],
+                    "observed_fingerprint": "",
                     "updated_at": now_iso(),
                 }
             )
@@ -350,6 +357,7 @@ def test_connection(
     connection_id: str,
     *,
     accept_host_key: bool = False,
+    accepted_fingerprint: str = "",
     read: bool = False,
     configure: bool = False,
     commands: list[str] | None = None,
@@ -371,6 +379,15 @@ def test_connection(
     target: DeviceTarget | None = None
     try:
         target = _connection_target(workspace_id, record)
+        if accept_host_key and target.protocol == "ssh":
+            accepted = str(accepted_fingerprint or record.get("observed_fingerprint") or "").strip()
+            if not accepted:
+                raise ValueError("host_key_observation_required")
+            if target.expected_fingerprint and target.expected_fingerprint != accepted:
+                raise ValueError("host_key_mismatch")
+            # Bind this approval to the key the user actually reviewed. A
+            # changed key between probe and acceptance must still be refused.
+            target = replace(target, expected_fingerprint=accepted)
         if commands is not None and facts:
             raise ValueError("commands_and_facts_are_mutually_exclusive")
         normalized_facts = _normalize_semantic_facts(facts) if facts else []
@@ -437,6 +454,7 @@ def test_connection(
         else {}
     )
     connection_observed = bool(result.get("ok") or result.get("command_results"))
+    result["diagnostic"] = execution_diagnostic(result)
     if profile and connection_observed:
         record.update(
             {
@@ -458,6 +476,10 @@ def test_connection(
                 else "failed"
             ),
             "last_tested_at": now_iso(),
+            "last_success_at": now_iso() if connection_observed else str(record.get("last_success_at") or ""),
+            "last_diagnostic": result["diagnostic"],
+            "last_stages": result.get("stages") or [],
+            "observed_fingerprint": fingerprint,
             "last_error": ""
             if result.get("ok")
             else str(result.get("error") or "connection_test_failed")[:300],
@@ -503,6 +525,10 @@ def test_connection(
         observation_keys = (
             "status",
             "last_tested_at",
+            "last_success_at",
+            "last_diagnostic",
+            "last_stages",
+            "observed_fingerprint",
             "last_error",
             "latency_ms",
             "effective_source_address",
@@ -669,7 +695,10 @@ def _save_connection_unlocked(
             or ""
         ),
         "status": "untested",
-        "last_tested_at": str(existing.get("last_tested_at") or ""),
+        "last_tested_at": "",
+        "last_success_at": "",
+        "last_diagnostic": {},
+        "last_stages": [],
         "last_error": "",
         "created_at": str(existing.get("created_at") or now_iso()),
         "updated_at": now_iso(),

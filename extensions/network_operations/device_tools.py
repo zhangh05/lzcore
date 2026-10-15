@@ -21,6 +21,7 @@ from typing import Any
 from extensions.network_operations.cli_runtime import CLICommandResult, InteractiveCLISession
 from extensions.network_operations.command_semantics import is_raw_observation
 from extensions.network_operations.device_drivers import resolve_driver
+from extensions.network_operations.diagnostics import exception_code, execution_diagnostic
 
 READ_ONLY_DENY = re.compile(
     r"(^|\s)(undo|delete|remove|erase|format|reload|reboot|shutdown|write|copy|configure|system-view|enable|install|upgrade|reset|clear)(\s|$)",
@@ -479,13 +480,17 @@ def _execute_commands(connection: _Connection, commands, facts, *, read: bool, c
                        configuration_workflow={
                            "requested_commands": list(selected),
                            "sent_commands": [item["command"] for item in results if item.get("dispatch_status") == "sent"],
-                           "uncertain_commands": [item["command"] for item in results if item.get("dispatch_status") == "uncertain"],
+                           "uncertain_commands": [item["command"] for item in results
+                               if item.get("dispatch_status") == "uncertain" or
+                               (item.get("dispatch_status") == "sent" and not item.get("complete"))],
                            "unexecuted_commands": unexecuted,
                            "deterministic_failures": [
                                item["command"] for item in results
-                               if item.get("dispatch_status") == "sent" and not item.get("complete")
+                               if item.get("dispatch_status") == "sent" and item.get("error_code")
+                               and item.get("complete")
                            ],
                            "requires_readback": True,
+                           "verification_status": "not_performed",
                        },
                        recommended_readback=True, rollback_performed=False)
     return payload
@@ -558,16 +563,19 @@ def probe_target(
     except _ConnectError as exc:
         return _result(False, exc.stages, started, error=str(exc), **exc.details)
     except Exception as exc:
-        return _result(False, [_stage("connection", "failed")], started, error=str(exc)[:300])
+        return _result(False, [_stage("connection", "failed")], started,
+                       error=str(exc)[:300], error_code=exception_code(exc))
 
 
 def _result(ok: bool, stages: list[dict[str, Any]], started: float, **extra: Any) -> dict[str, Any]:
     status = "succeeded" if ok else ("blocked" if any(s.get("status") == "blocked" for s in stages) else "failed")
-    return {
+    result = {
         "ok": ok, "status": status, "stages": stages,
         "duration_ms": int((time.monotonic() - started) * 1000),
         **{k: v for k, v in extra.items() if v not in ("", None)},
     }
+    result["diagnostic"] = execution_diagnostic(result)
+    return result
 
 
 _LOGIN_PROMPT = re.compile(r"(?:login|username|user\s*name)\s*[:：]\s*$", re.IGNORECASE)

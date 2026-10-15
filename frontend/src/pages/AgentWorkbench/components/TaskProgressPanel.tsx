@@ -358,7 +358,7 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
                             <span
                               className="task-evidence-status"
                               aria-label={
-                                item.status === "unknown"
+                                item.status === "partial" ? "证据不完整" : item.status === "unavailable" ? "设备不可达" : item.status === "unknown"
                                   ? "结果未知"
                                   : item.status === "running"
                                   ? "进行中"
@@ -477,7 +477,7 @@ export const TaskProgressPanel = memo(function TaskProgressPanel({
                   </div>
                   <div className="footprint-card-action">
                     <span className={`footprint-status-tag ${item.status}`}>
-                      {item.status === "done"
+                      {item.status === "partial" ? "证据不完整" : item.status === "unavailable" ? "设备不可达" : item.status === "done"
                         ? "已完成"
                         : item.status === "running"
                         ? "运行中"

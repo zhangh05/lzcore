@@ -262,3 +262,14 @@
 }
 
 }
+
+@layer extension {
+.network-admin .connection-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.network-admin .connection-summary { grid-column: 1; grid-row: 1; }
+.network-admin .connection-actions { grid-column: 2; grid-row: 1; }
+.network-admin .connection-row > small, .network-admin .connection-diagnostic, .network-admin .connection-fingerprint { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
+.network-admin .connection-diagnostic p { margin: 0; font-size: var(--fs-12); color: var(--text-2); }
+.network-admin .connection-row > small { color: var(--text-3); }
+.network-admin .connection-fingerprint { white-space: pre-wrap; font-size: var(--fs-11); }
+@media (max-width: 760px) { .network-admin .connection-row { grid-template-columns: minmax(0, 1fr); } .network-admin .connection-actions { grid-column: 1; grid-row: auto; } }
+}

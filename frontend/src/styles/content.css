@@ -105,6 +105,7 @@
 .tc-icon { font-size: 12px; }
 .tc-icon.pending, .tc-state { color: var(--warn); }
 .tc-icon.unknown, .tc-state-unknown { color: var(--unknown); }
+.tc-icon.partial, .tc-icon.unavailable { color: var(--warn); }
 .tc-state { font-size: var(--fs-11); white-space: nowrap; }
 .tc-name { color: var(--text-2); font-weight: var(--weight-label); }
 .tc-chev { color: var(--text-4); margin-left: auto; font-size: 10px; }
