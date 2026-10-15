@@ -604,6 +604,10 @@ test("inspection page retries the original task and leaves successful device evi
   renderWithRouter(<NetworkOperations initialView="inspections" />, ["/extensions/network.operations/manage?tab=inspections"]);
   const retry = await screen.findByRole("button", { name: "重试未完成设备" });
   expect(screen.getByText("正常设备")).toBeInTheDocument();
+  const readCount = () => vi.mocked(apiRequest).mock.calls.filter(([request]) => request.method === "GET" && request.url?.endsWith("/inspections")).length;
+  const beforeRefresh = readCount();
+  fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+  await waitFor(() => expect(readCount()).toBeGreaterThan(beforeRefresh));
   fireEvent.click(retry);
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", url: "/extensions/network.operations/inspections/inspect-one/retry" })));
   expect(vi.mocked(apiRequest).mock.calls.filter(([request]) => request.method === "POST" && request.url?.endsWith("/retry"))).toHaveLength(1);

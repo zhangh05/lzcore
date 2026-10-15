@@ -6,8 +6,10 @@ import { object, rows, text } from "./networkEvidence";
 
 export function NetworkInspectionPanel({
   workspaceId,
+  refreshVersion = 0,
 }: {
   workspaceId: string;
+  refreshVersion?: number;
 }) {
   const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
   const [error, setError] = useState("");
@@ -39,6 +41,13 @@ export function NetworkInspectionPanel({
         setError("巡检记录读取失败，请刷新核对。");
     }
   }, [workspaceId]);
+  const lastRefresh = useRef(refreshVersion);
+  useEffect(() => {
+    if (lastRefresh.current !== refreshVersion) {
+      lastRefresh.current = refreshVersion;
+      void load();
+    }
+  }, [load, refreshVersion]);
   useEffect(() => {
     generation.current += 1;
     setTasks([]);

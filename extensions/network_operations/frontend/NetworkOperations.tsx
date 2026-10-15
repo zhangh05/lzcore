@@ -407,6 +407,7 @@ export default function NetworkOperations({
   const [editingRegionId, setEditingRegionId] = useState("");
   const [regionName, setRegionName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [inspectionRefresh, setInspectionRefresh] = useState(0);
   const loadRevision = useRef(0);
   const activeWorkspace = useRef(workspaceId);
   activeWorkspace.current = workspaceId;
@@ -1054,6 +1055,11 @@ export default function NetworkOperations({
     setEditor("connection");
   };
 
+  const refreshCurrentView = () => {
+    if (view === "inspections") setInspectionRefresh((value) => value + 1);
+    else void load().catch(() => setNotice("刷新失败，请检查服务。", false));
+  };
+
   const editDevice = (device: Device) => {
     setDeviceForm({ ...device });
     setEditor("device");
@@ -1074,9 +1080,7 @@ export default function NetworkOperations({
           <Button
             icon={<IconRefresh size={14} />}
             onClick={() =>
-              void load().catch(() =>
-                setNotice("刷新失败，请检查服务。", false),
-              )
+              refreshCurrentView()
             }
             disabled={busy}
           >
@@ -1092,9 +1096,7 @@ export default function NetworkOperations({
             <Button
               icon={<IconRefresh size={14} />}
               onClick={() =>
-                void load().catch(() =>
-                  setNotice("刷新失败，请检查服务。", false),
-                )
+                refreshCurrentView()
               }
               disabled={busy}
             >
@@ -2118,7 +2120,7 @@ export default function NetworkOperations({
           </section>
         </div>
       ) : view === "inspections" ? (
-        <NetworkInspectionPanel workspaceId={workspaceId} />
+        <NetworkInspectionPanel workspaceId={workspaceId} refreshVersion={inspectionRefresh} />
       ) : (
         <div className="network-context-layout">
           {contextUnavailable && <p role="alert">历史证据暂不可用，请刷新重试；当前页面未取得有效历史记录。</p>}
