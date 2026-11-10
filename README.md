@@ -15,6 +15,8 @@ bash stop.sh
 
 默认监听 loopback。非回环监听必须启用 API token、登录或 identity；具体环境配置见 [生产运行](docs/PRODUCTION.md)。Windows 用户可选 [便携版或安装版](docs/WINDOWS.md)，不需安装源码开发环境。
 
+产品前端为 `frontend/`；`frontend-legacy/` 保留切换前实现用于回退，默认不启动。参见 [前端合同](docs/FRONTEND.md)。
+
 ## 工作方式
 
 - 工作台选择发布的网络 Skill，按需连接其范围内的设备，读取、巡检或配置。服务端逐调用校验范围；设备账号决定最终命令权限。
@@ -68,7 +70,7 @@ TaskState 负责服务端任务控制；execution_outcome 表示用户目标，t
 ```bash
 .venv/bin/python scripts/verify_docs_runtime_consistency.py
 .venv/bin/pytest -q harness/prompts/test_runtime_prompt_ssot.py harness/prompts/test_prompt_system_contract.py harness/runtime/test_goal_loop.py
-npm --prefix frontend test -- --run
+npm --prefix frontend run verify
 npm --prefix frontend run build
 ```
 

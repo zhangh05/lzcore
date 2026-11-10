@@ -4,8 +4,8 @@ import {
   IconClose,
   IconEdit,
   IconEye,
-} from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
+} from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import NetOpsCanvas, {
   type CanvasApi,
   type CanvasContextTarget,

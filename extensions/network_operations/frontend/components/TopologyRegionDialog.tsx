@@ -1,6 +1,6 @@
 /** TopologyRegionDialog owns its presentation; document writes stay with the workspace controller. */
-import { IconClose } from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
+import { IconClose } from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import type { Topology } from "./topologyDocument";
 import { ZONE_COLOR_PRESETS } from "./topologyDocument";
 import { useTopologyDialogFocus } from "./useTopologyDialogFocus";

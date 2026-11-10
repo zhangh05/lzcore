@@ -1,6 +1,6 @@
 import { type FormEvent } from "react";
-import { apiRequest } from "../../../../frontend/src/api/client";
-import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
+import { apiRequest } from "../../../../frontend-legacy/src/api/client";
+import { confirm } from "../../../../frontend-legacy/src/components/ConfirmDialog";
 import { TOPOLOGY_API_BASE as base } from "./topologyApi";
 import type { Topology } from "./topologyDocument";
 

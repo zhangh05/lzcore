@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiRequest } from "../../../../frontend/src/api/client";
+import { apiRequest } from "../../../../frontend-legacy/src/api/client";
 import {
   onTopologyUpdated,
   onTransportResumed,
-} from "../../../../frontend/src/realtime/turnTransport";
+} from "../../../../frontend-legacy/src/realtime/turnTransport";
 import { TOPOLOGY_API_BASE as base } from "./topologyApi";
 import { type DrawingEdit } from "./topologyCollaboration";
 import type { Topology } from "./topologyDocument";

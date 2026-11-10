@@ -39,7 +39,7 @@ export function dataUriToBlob(dataUri: string): Blob {
 export {
   downloadBlob,
   saveBlob as nativeSaveBlob,
-} from "../../../../frontend/src/utils/saveBlob";
+} from "../../../../frontend-legacy/src/utils/saveBlob";
 
 function escapeXml(unsafe: string): string {
   return (unsafe || "")

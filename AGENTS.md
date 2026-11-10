@@ -36,7 +36,7 @@ backend 负责传输与认证；agent/app 和 agent/runtime 负责会话接入�
 ```bash
 .venv/bin/python scripts/verify_docs_runtime_consistency.py
 .venv/bin/pytest -q harness/runtime/test_goal_loop.py harness/platform/test_docs_consistency_script.py harness/prompts/test_runtime_prompt_ssot.py
-npm --prefix frontend test -- --run
+npm --prefix frontend run verify
 npm --prefix frontend run build
 ```
 

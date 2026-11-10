@@ -1,6 +1,6 @@
-import { sessionsApi } from "../../../../frontend/src/api";
-import { scopedLocalStorageKey } from "../../../../frontend/src/utils/userScope";
-import { useSessionStore } from "../../../../frontend/src/stores/session";
+import { sessionsApi } from "../../../../frontend-legacy/src/api";
+import { scopedLocalStorageKey } from "../../../../frontend-legacy/src/utils/userScope";
+import { useSessionStore } from "../../../../frontend-legacy/src/stores/session";
 
 export interface TopologyIdentity {
   topology_id: string;

@@ -26,3 +26,5 @@ backend 不拥有任务语义，frontend 不拥有授权；行业行为不写进
 workspaces/、logs/、config/providers/、本地环境文件、虚拟环境、依赖、构建和测试产物属于环境状态。同步源码保留数据根，不把本机默认路径当用户工作区。旧别名、shim 和移除的数据根不在当前架构中。
 
 下一步见 [源码调用链](docs/architecture/README.md)、[工程约束](AGENTS.md)。
+
+产品前端 `frontend/` 使用新应用壳；`frontend-legacy/` 保留前一实现与旧浏览器回归，用于可回退维护。

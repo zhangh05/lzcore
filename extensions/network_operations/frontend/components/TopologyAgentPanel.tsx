@@ -1,29 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sessionsApi, jobsApi } from "../../../../frontend/src/api";
-import { useChatStream } from "../../../../frontend/src/hooks/useChatStream";
-import { useActiveTurn } from "../../../../frontend/src/hooks/useActiveTurn";
+import { sessionsApi, jobsApi } from "../../../../frontend-legacy/src/api";
+import { useChatStream } from "../../../../frontend-legacy/src/hooks/useChatStream";
+import { useActiveTurn } from "../../../../frontend-legacy/src/hooks/useActiveTurn";
 import {
   useWorkbenchStore,
   type ChatMsg,
-} from "../../../../frontend/src/stores/workbench";
-import { useSessionStore } from "../../../../frontend/src/stores/session";
-import { scopedLocalStorageKey } from "../../../../frontend/src/utils/userScope";
-import { isApiError } from "../../../../frontend/src/types";
-import { MessageRow } from "../../../../frontend/src/pages/AgentWorkbench/components/MessageRow";
+} from "../../../../frontend-legacy/src/stores/workbench";
+import { useSessionStore } from "../../../../frontend-legacy/src/stores/session";
+import { scopedLocalStorageKey } from "../../../../frontend-legacy/src/utils/userScope";
+import { isApiError } from "../../../../frontend-legacy/src/types";
+import { MessageRow } from "../../../../frontend-legacy/src/pages/AgentWorkbench/components/MessageRow";
 import {
   IconSparkle,
   IconSend,
   IconStop,
   IconPlus,
   IconClose,
-} from "../../../../frontend/src/components/Icon";
+} from "../../../../frontend-legacy/src/components/Icon";
 import type { Topology } from "./topologyDocument";
 import type { CanvasSelection } from "./canvasSelection";
 import { resolveTopologySession } from "./TopologySessionResolver";
-import { formatDate } from "../../../../frontend/src/utils/format";
-import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
+import { formatDate } from "../../../../frontend-legacy/src/utils/format";
+import { confirm } from "../../../../frontend-legacy/src/components/ConfirmDialog";
 import type { DrawingActivity } from "./topologyCollaboration";
-import "../../../../frontend/src/pages/AgentWorkbench/AgentWorkbench.css";
+import "../../../../frontend-legacy/src/pages/AgentWorkbench/AgentWorkbench.css";
 
 const EMPTY: ChatMsg[] = [];
 export type { CanvasSelection } from "./canvasSelection";

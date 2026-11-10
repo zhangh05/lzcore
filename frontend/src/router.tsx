@@ -1,3 +1,4 @@
+/* Copied from frontend/src/router.tsx @ f1664ce (safeTarget same-origin guard). Only this copy is edited. */
 import {
   createContext,
   useCallback,
@@ -23,7 +24,7 @@ type RouterValue = {
 
 const RouterContext = createContext<RouterValue | null>(null);
 
-function safeTarget(raw: string): string {
+export function safeTarget(raw: string): string {
   const value = String(raw || "").trim();
   if (!value.startsWith("/") || value.startsWith("//") || /[\\\u0000-\u001f]/.test(value)) {
     throw new Error("Only same-origin application paths are allowed");
@@ -33,6 +34,33 @@ function safeTarget(raw: string): string {
     throw new Error("Cross-origin navigation is not allowed");
   }
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+// ── 应用内跳转守卫（阶段 6 扩展：拓扑未保存守卫）。只拦本路由器内的 navigate / Link，外加 beforeunload。
+type NavigationGuard = (target: string) => boolean;
+let activeGuard: NavigationGuard | null = null;
+
+/** 返回 false 表示取消这次跳转。 */
+function guardAllows(target: string): boolean {
+  return activeGuard ? activeGuard(target) : true;
+}
+
+/**
+ * 有未保存改动时拦截应用内跳转与关闭页面。`shouldBlock(target)` 决定是否需要询问；
+ * 询问默认用 window.confirm，可注入 confirmFn（测试）。
+ */
+export function useNavigationGuard(when: boolean, message: string, shouldBlock: (target: string) => boolean = () => true, confirmFn: (m: string) => boolean = (m) => window.confirm(m)) {
+  useEffect(() => {
+    if (!when) return;
+    const guard: NavigationGuard = (target) => !shouldBlock(target) || confirmFn(message);
+    activeGuard = guard;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = message; return message; };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      if (activeGuard === guard) activeGuard = null;
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [when, message, shouldBlock, confirmFn]);
 }
 
 function readWindowLocation(): AppLocation {
@@ -54,6 +82,7 @@ export function BrowserRouter({ children }: { children: ReactNode }) {
 
   const navigate = useCallback((raw: string, options?: { replace?: boolean }) => {
     const target = safeTarget(raw);
+    if (!guardAllows(target)) return;
     window.history[options?.replace ? "replaceState" : "pushState"]({}, "", target);
     setLocation(readWindowLocation());
   }, []);
@@ -68,7 +97,7 @@ export function MemoryRouter({ children, initialEntries = ["/"] }: { children: R
     const parsed = new URL(target, window.location.origin);
     return { pathname: parsed.pathname, search: parsed.search, hash: parsed.hash };
   }, [target]);
-  const navigate = useCallback((next: string) => setTarget(safeTarget(next)), []);
+  const navigate = useCallback((next: string) => { const t = safeTarget(next); if (guardAllows(t)) setTarget(t); }, []);
   return <RouterContext.Provider value={{ location, navigate }}>{children}</RouterContext.Provider>;
 }
 

@@ -1,0 +1,388 @@
+/* Product tokens: themes, spacing, type, controls and semantic outcomes. */
+@layer base {
+:root {
+  --weight-body: 400;
+  --field-border: #829096;
+  --scroll-thumb: color-mix(in srgb, var(--text-3) 42%, transparent);
+  --scroll-thumb-hover: color-mix(in srgb, var(--text-3) 65%, transparent);
+  --canvas-surface: var(--surface);
+  --surface-rail: var(--surface-2);
+  /* App frame: header and sidebar sit on it; the page is a raised sheet. */
+  --surface-frame: #eaeef0;
+}
+[data-theme="dark"] { --field-border: #6b777e; }
+:root {
+  color-scheme: light;
+
+  /* Cold neutral surfaces keep teal exclusive to interaction and AI activity.
+     Success uses green; message surfaces do not borrow selection/status fills. */
+  --bg: #f3f5f6;
+  --surface: #ffffff;
+  --surface-2: #f7f9f9;
+  --surface-3: #eef1f2;
+  --overlay: rgba(16, 24, 28, 0.36);
+
+  --text: #131c1f;
+  --text-1: var(--text);
+  --text-2: #344147;
+  /* Text levels clear 4.5:1 on the four neutral product surfaces. */
+  --text-3: #535f65;
+  --text-4: #5d696e;
+
+  --line: #dae0e3;
+  --line-2: #e7ebed;
+  --line-3: #aeb9be;
+
+  --accent: #0f7773;
+  --accent-2: #085b59;
+  --accent-soft: #e5f1ee;
+  --accent-text: #ffffff;
+
+  --ok: #24733b;
+  --ok-soft: #e6f2e4;
+  /* Ink for text sitting ON a filled semantic colour. In the light theme the
+     fills are dark, so the ink is white; in the dark theme every semantic
+     colour flips to a light tint meant as a foreground, so the ink flips too.
+     Without these, `color: #fff` on `background: var(--info)` measures 2.1:1
+     in dark mode — legible in one theme and invisible in the other. */
+  --ok-text: #ffffff;
+  --warn: #925b08;
+  --warn-soft: #f7ebca;
+  --warn-text: #ffffff;
+  --danger: #bd3040;
+  --danger-soft: #f7dfe3;
+  --danger-text: #ffffff;
+  --info: #365f85;
+  --info-soft: #e3eef6;
+  --info-text: #ffffff;
+  --surface-hover: #f1f4f5;
+  --surface-selected: #e4f0ee;
+  --field: #ffffff;
+  --focus-ring: #0f7778;
+  --focus-ring-shadow: rgba(15, 119, 120, 0.2);
+  --message-assistant: #fcfdfd;
+  --message-assistant-border: #e6eaec;
+  --message-user: #eef4f2;
+  --message-user-border: #dce5e3;
+  --shadow-composer: 0 6px 20px -8px rgba(16, 24, 40, 0.14), 0 1px 2px rgba(16, 24, 40, 0.04);
+
+  --console-canvas: var(--bg);
+  --console-surface: var(--surface);
+  --console-muted: var(--surface-2);
+  --console-border: var(--line);
+  --console-border-soft: var(--line-2);
+  --console-ink: var(--text);
+  --console-muted-ink: var(--text-3);
+  --console-action: var(--lz-primary, var(--accent));
+  --console-action-strong: var(--lz-primary-hover, var(--accent-2));
+  --console-action-soft: var(--lz-primary-soft, var(--accent-soft));
+  /* Canonical semantic aliases. There is one product accent, not a second theme. */
+  --lz-primary: var(--accent);
+  --lz-primary-hover: var(--accent-2);
+  --lz-primary-soft: var(--accent-soft);
+  --lz-primary-glow: rgba(15, 119, 115, 0.16);
+  --lz-surface-glass: var(--surface);
+  --lz-surface-glass-border: var(--line-2);
+  --lz-surface-dock: var(--surface);
+  --lz-shadow-ambient: var(--shadow-sm);
+  --lz-shadow-dock: var(--shadow-menu);
+  --lz-glow-ok: rgba(36, 115, 59, 0.18);
+  --lz-glow-warn: rgba(146, 91, 8, 0.18);
+  --lz-glow-err: rgba(189, 48, 64, 0.18);
+
+  /* Latin first (Inter when present, then the platform UI face), then the CJK
+     face each platform ships, so mixed 中文/English lines share one x-height. */
+  --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK SC", ui-monospace, monospace;
+  --font-display: var(--font-sans);
+
+  --fs-9: 9px;
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-16: 16px;
+  --fs-18: 18px;
+  --fs-20: 20px;
+  --fs-22: 22px;
+  --fs-24: 24px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --r-2: 2px;
+  --r-4: 4px;
+  --r-6: 6px;
+  --r-8: 8px;
+  --r-10: 10px;
+  --r-12: 12px;
+  --r-16: 16px;
+  --r-pill: 999px;
+
+  /* Elevation scale: one light source from above. Surfaces sit on the canvas
+     with a hairline (xs/card); only floating layers (menus, dialogs, toasts)
+     cast a real shadow. */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.07), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.09), 0 2px 4px -2px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 12px 28px -6px rgba(16, 24, 40, 0.14), 0 4px 10px -4px rgba(16, 24, 40, 0.06);
+  --shadow-float: 0 24px 48px -12px rgba(16, 24, 40, 0.2), 0 8px 16px -8px rgba(16, 24, 40, 0.08);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-menu: 0 16px 36px -10px rgba(16, 24, 40, 0.2), 0 3px 10px -2px rgba(16, 24, 40, 0.08);
+  --shadow-focus: 0 0 0 2px var(--focus-ring-shadow);
+
+  --h-header: 56px;
+  /* Title and model context have their own two-line rhythm. */
+  --h-context: 68px;
+  --w-sidebar: 232px;
+  --w-sidebar-collapsed: 0px;
+  --w-progress: 280px;
+  --w-page-max: 1440px;
+  --w-reading: 1120px;
+  --h-control: 36px;
+  --h-control-compact: 32px;
+  --h-touch: 44px;
+  --weight-heading: 600;
+  --weight-label: 500;
+  --focus-width: 2px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-snap: cubic-bezier(0.34, 1.18, 0.64, 1);
+  --dur-1: 110ms;
+  --dur-2: 170ms;
+  --dur-3: 240ms;
+  --dur-4: 340ms;
+
+  --ink: var(--text);
+  --ink-soft: var(--text-2);
+  --ink-mute: var(--text-3);
+  --ink-faint: var(--text-4);
+  --bg-elev: var(--surface);
+  --bg-soft: var(--surface-2);
+  --bg-deep: var(--surface-3);
+  --bg-overlay: var(--overlay);
+  --line-soft: var(--line-2);
+  --line-strong: var(--line-3);
+  --accent-deep: var(--accent-2);
+  --accent-on: var(--accent-text);
+  --secondary: var(--info);
+  --secondary-soft: var(--info-soft);
+  --secondary-deep: #1f415e;
+  --success: var(--ok);
+  --success-soft: var(--ok-soft);
+  --warning: var(--warn);
+  --warning-soft: var(--warn-soft);
+  --st-pending: var(--warn);
+  --st-accepted: var(--ok);
+  --st-ignored: var(--text-3);
+  --st-modified: var(--info);
+  --r-xs: var(--r-4);
+  --r-sm: var(--r-6);
+  --r: var(--r-8);
+  --r-lg: var(--r-10);
+  --r-xl: var(--r-12);
+  --fs-xs: var(--fs-11);
+  --fs-sm: var(--fs-13);
+  --fs-base: var(--fs-14);
+  --fs-md: var(--fs-14);
+  --fs-lg: var(--fs-16);
+  --fs-xl: var(--fs-18);
+  --fs-2xl: var(--fs-24);
+  --fs-3xl: 30px;
+  --lh-tight: 1.25;
+  --lh-base: 1.55;
+  --lh-loose: 1.72;
+  --sh-1: none;
+  --sh-2: none;
+  --sh-3: var(--shadow-menu);
+  --sh-inset: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+
+  /* Deep brand teal for large brand surfaces (login showcase); same hue as
+     the accent, never used for interactive controls. */
+  --brand-deep: #0b4746;
+  --brand-deeper: #0c2324;
+  --brand-ink: #ffffff;
+  --brand-ink-muted: rgba(255, 255, 255, 0.76);
+  --region-purple: #7e22ce;
+  --region-purple-soft: #f3e8ff;
+  --region-amber: #a16207;
+  --region-amber-soft: #fef3c7;
+
+  /* 「写入结果未知」的独立语义色。
+     刻意不复用 --danger：把「结果未确定」渲染成与「工具失败」同色，
+     正是用户误判成「没写进去」并重复下发配置的直接原因。
+     该语义既不是成功也不是失败，因此需要自己的色相。 */
+  /* `unknown` is a first-class outcome in this product (see the outcome rules in
+     DESIGN.md), so it needs its own colour — one that reads as neither good nor
+     failed. It used to be an alias of the region palette, which meant editing a
+     categorical data colour would silently repaint every unknown state. */
+  --unknown: #7e22ce;
+  --unknown-soft: #f3e8ff;
+  --unknown-text: #ffffff;
+
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1214;
+  --surface: #171b1e;
+  --surface-2: #13171a;
+  --surface-frame: #0a0d0f;
+  --surface-3: #1f2427;
+  --overlay: rgba(0, 0, 0, 0.48);
+  --text: #eef2f4;
+  --text-2: #ccd4d9;
+  --text-3: #abb5bd;
+  --text-4: #96a2ad;
+  --line: #343d44;
+  --line-2: #273036;
+  --line-3: #65747f;
+  --accent: #7cc9bc;
+  --accent-2: #a2ded2;
+  --accent-soft: #20383a;
+  --accent-text: #09111a;
+  --ok: #85ce7d;
+  --ok-soft: #233522;
+  --ok-text: #08160f;
+  --warn: #e2ad4d;
+  --warn-soft: #372913;
+  --warn-text: #1c1206;
+  --danger: #ef7180;
+  --danger-soft: #3b1b23;
+  --danger-text: #1a070b;
+  --info: #80badc;
+  --info-soft: #183044;
+  --info-text: #09111a;
+  --surface-hover: #20262a;
+  --surface-selected: #1d3638;
+  --field: #13171a;
+  --focus-ring: #8dd1cf;
+  --focus-ring-shadow: rgba(141, 209, 207, 0.22);
+  --message-assistant: #151a1e;
+  --message-assistant-border: #2b343b;
+  --message-user: #232d30;
+  --message-user-border: #37474c;
+  --region-purple: #c084fc;
+  --region-purple-soft: #3b1f52;
+  --region-amber: #e2ad4d;
+  --region-amber-soft: #372913;
+  --unknown: #c084fc;
+  --unknown-soft: #3b1f52;
+  --unknown-text: #1a0a28;
+
+  --lz-primary: var(--accent);
+  --lz-primary-hover: var(--accent-2);
+  --lz-primary-soft: var(--accent-soft);
+  --lz-primary-glow: rgba(114, 195, 186, 0.22);
+  --lz-surface-glass: var(--surface);
+  --lz-surface-glass-border: var(--line-2);
+  --lz-surface-dock: var(--surface);
+  --lz-shadow-ambient: var(--shadow-sm);
+  --lz-shadow-dock: var(--shadow-menu);
+  --lz-glow-ok: rgba(133, 206, 125, 0.25);
+  --lz-glow-warn: rgba(226, 173, 77, 0.25);
+  --lz-glow-err: rgba(239, 113, 128, 0.25);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 28px -6px rgba(0, 0, 0, 0.6), 0 4px 10px -4px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 24px 48px -12px rgba(0, 0, 0, 0.65), 0 8px 16px -8px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-menu: 0 16px 36px -10px rgba(0, 0, 0, 0.7), 0 3px 10px -2px rgba(0, 0, 0, 0.45);
+  --shadow-composer: 0 6px 20px -8px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+:root {
+  /* ── Vertical rhythm ───────────────────────────────────────────────────
+     One 4px-based scale replaces the off-grid spacing scattered across the
+     codebase. Name by role, not by size: the role is what should be stable. */
+  --flow-hair: 4px; /* between list items, inline marker to text */
+  --flow-tight: 8px; /* elements inside one group */
+  --flow-base: 12px; /* between paragraphs */
+  --flow-loose: 20px; /* above a minor heading */
+  --flow-block: 28px; /* above a major heading, between blocks */
+  --flow-section: 40px; /* between page-level sections */
+
+  /* ── Line height ───────────────────────────────────────────────────────
+     Chinese text needs more leading than Latin: 1.72 on a 14px base gives a
+     ~24px line box, which keeps dense CJK glyphs from touching. */
+  --lh-display: 1.24; /* page title */
+  --lh-heading: 1.34; /* content heading */
+  --lh-body: 1.72; /* body copy — shared by paragraphs AND list items so the
+                      two never drift apart again */
+  --lh-compact: 1.45; /* table cells, chips, short labels */
+
+  /* ── Weight ────────────────────────────────────────────────────────────
+     The heading block, the page title and table headers used to render at
+     720 / 740 / 760 respectively. Three values, no intent behind any of them. */
+  --weight-display: 600; /* page and document titles */
+  --weight-subhead: 600; /* h3-h6, table headers */
+  --weight-minor: 500; /* kickers, meta labels */
+
+  /* ── Letter spacing ────────────────────────────────────────────────────
+     Negative tracking is a Latin display convention. Applied to CJK it pushes
+     glyphs into each other, so content tracking is explicitly zero. */
+  --tracking-cjk: 0;
+  --tracking-caps: 0.04em; /* uppercase Latin labels only */
+
+  /* ── Page gutter ───────────────────────────────────────────────────────
+     The page header used 26px and the page body 24px, so every page title sat
+     2px off the content column it was labelling. One gutter, both surfaces. */
+  --page-gutter: 24px;
+}
+:root {
+  /* ── Type scale (v2) ───────────────────────────────────────────────────
+     Eight steps; each size carries its own line box so CJK never collides.
+     11 caption · 12 meta/label · 13 control/table · 14 body · 16 section
+     · 18 panel title · 20 page title · 24 display. */
+  --lh-11: 16px;
+  --lh-12: 18px;
+  --lh-13: 20px;
+  --lh-14: 22px;
+  --lh-16: 24px;
+  --lh-18: 26px;
+  --lh-20: 28px;
+  --lh-22: 30px;
+  --lh-24: 32px;
+  --weight-strong: 600;
+
+  /* ── Shape ─────────────────────────────────────────────────────────────
+     Controls 6 · cards and panels 10 · dialogs and drawers 12. */
+  --r-control: 6px;
+  --r-card: 10px;
+  --r-dialog: 12px;
+
+  /* ── Rows and chrome ───────────────────────────────────────────────────*/
+  --h-row: 40px;
+  --h-row-dense: 32px;
+  --h-nav-item: 32px;
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Density is a user preference (account menu). Compact trims control and row
+   height and the page gutter; type sizes never shrink below the scale. */
+[data-density="compact"] {
+  --h-control: 32px;
+  --h-control-compact: 28px;
+  --h-row: 34px;
+  --h-row-dense: 28px;
+  --page-gutter: 18px;
+  --flow-loose: 16px;
+  --flow-block: 22px;
+}
+:root {
+  --meta-size: 11.5px;
+  --meta-label-size: 10px;
+  --meta-tracking: 0.02em;
+  --meta-label-tracking: 0.08em;
+  --meta-color: var(--text-4);
+}
+
+}

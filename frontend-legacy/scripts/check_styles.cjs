@@ -5,6 +5,7 @@ const path = require('node:path');
 const { transform } = require('lightningcss');
 const postcss = require('postcss'); // supplied by the existing Vite toolchain
 const root = path.resolve(__dirname, '../..');
+const frontendRoot = path.resolve(__dirname, '..');
 const known = new Set(['runtime', 'base', 'shell', 'console', 'workbench', 'typography', 'pages', 'extension', 'responsive']);
 const files = [];
 function walk(directory) {
@@ -14,7 +15,7 @@ function walk(directory) {
     else if (file.endsWith('.css')) files.push(file);
   }
 }
-walk(path.join(root, 'frontend/src'));
+walk(path.join(frontendRoot, 'src'));
 walk(path.join(root, 'extensions/network_operations/frontend'));
 const failures = [];
 for (const file of files) {
@@ -49,11 +50,11 @@ for (const file of files) {
   });
 }
 if (process.argv.includes('--built')) {
-  const dist = path.join(root, 'frontend/dist');
+  const dist = path.join(frontendRoot, 'dist');
   const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
   const href = html.match(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"/);
   if (!href) throw new Error('Production entry stylesheet missing');
-  const declaration = postcss.parse(fs.readFileSync(path.join(root, 'frontend/src/styles/layers.css'), 'utf8'))
+  const declaration = postcss.parse(fs.readFileSync(path.join(frontendRoot, 'src/styles/layers.css'), 'utf8'))
     .nodes.find(node => node.type === 'atrule' && node.name === 'layer');
   const expected = declaration.params.split(',').map(name => name.trim());
   const seen = [];

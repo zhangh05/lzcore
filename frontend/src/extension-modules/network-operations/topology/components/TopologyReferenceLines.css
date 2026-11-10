@@ -1,0 +1,17 @@
+@layer extension {
+.topology-reference-lines { position: absolute; inset: 0; pointer-events: none; z-index: 6; overflow: hidden; }
+.topology-reference-lines .reference-line { position: absolute; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--accent); pointer-events: none; touch-action: none; }
+.reference-line.axis-x { top: 0; bottom: 0; width: 9px; transform: translateX(-50%); cursor: ew-resize; }
+.reference-line.axis-y { left: 0; right: 0; height: 9px; transform: translateY(-50%); cursor: ns-resize; }
+.reference-line::before { content: ''; position: absolute; border-color: currentColor; opacity: .7; }
+.reference-line.axis-x::before { top: 0; bottom: 0; left: 4px; border-left: 1px dashed; }
+.reference-line.axis-y::before { left: 0; right: 0; top: 4px; border-top: 1px dashed; }
+.reference-line span { pointer-events: auto; position: absolute; padding: 2px 5px; font: var(--fs-11) var(--font-mono); background: var(--surface); border: 1px solid var(--line); border-radius: 3px; white-space: nowrap; }
+.reference-line.axis-x span { top: 58px; left: 8px; }
+.reference-line.axis-y span { left: 12px; top: 8px; }
+.reference-line[data-locked=true] { cursor: default; }
+.reference-line:focus-visible::before { opacity: 1; border-width: 2px; }
+.reference-line-editor { display: grid; gap: 6px; }
+.reference-line-row { display: flex; align-items: center; gap: 6px; }
+.reference-line-row input[type=number] { width: 90px; min-width: 0; }
+}

@@ -2,33 +2,30 @@
   "name": "lzcore-workbench",
   "private": true,
   "version": "3.3.19",
-  "description": "联智中枢 v3.3.19",
+  "description": "联智中枢产品前端",
   "type": "module",
   "engines": {
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/check_styles.cjs --built",
+    "dev": "vite --host 127.0.0.1 --port 5273 --strictPort",
+    "build": "tsc -b --noEmit && vite build",
     "preview": "vite preview",
+    "mock": "python3 mock/mock_server.py",
     "typecheck": "tsc -b --noEmit",
-    "lint:styles": "node scripts/check_styles.cjs",
-    "lint:tokens": "python3 ../scripts/check_css_tokens.py",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint:core": "node scripts/check_core_isolation.mjs",
+    "verify": "npm run typecheck && npm run lint:core && npm test",
+    "lint:tokens": "python3 ../scripts/check_css_tokens.py",
     "e2e": "playwright test",
     "e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
-    "@tanstack/react-virtual": "^3.14.5",
-    "@xyflow/react": "^12.11.6",
-    "axios": "^1.20.0",
-    "elkjs": "^0.11.0",
-    "highlight.js": "^11.11.1",
+    "elkjs": "^0.11.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "web-vitals": "^5.3.0",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
@@ -40,7 +37,7 @@
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^6.0.5",
-    "happy-dom": "^20.11.1",
+    "happy-dom": "^21.0.4",
     "typescript": "^5.6.3",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"

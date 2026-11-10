@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiRequest } from "../../../../frontend/src/api/client";
-import { desktopDirty } from "../../../../frontend/src/desktop/bridge";
+import { apiRequest } from "../../../../frontend-legacy/src/api/client";
+import { desktopDirty } from "../../../../frontend-legacy/src/desktop/bridge";
 import {
   type DrawingActivity,
   type DrawingEdit,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { artifactsApi } from "../../../../frontend/src/api";
-import { useSessionStore } from "../../../../frontend/src/stores/session";
+import { artifactsApi } from "../../../../frontend-legacy/src/api";
+import { useSessionStore } from "../../../../frontend-legacy/src/stores/session";
 import { networkEvidence, object, rows, text } from "./networkEvidence";
 import "./NetworkEvidence.css";
 

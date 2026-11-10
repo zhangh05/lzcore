@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IconClose } from "../../../../frontend/src/components/Icon";
+import { IconClose } from "../../../../frontend-legacy/src/components/Icon";
 
 export interface NoticeState {
   text: string;

@@ -5,8 +5,8 @@ import {
   IconLock,
   IconTrash,
   IconUnlock,
-} from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
+} from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import { type CanvasApi } from "./NetOpsCanvas";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import { batchTypeOptions } from "./topologyDevicePalette";

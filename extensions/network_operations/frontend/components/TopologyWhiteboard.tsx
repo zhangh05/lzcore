@@ -1,6 +1,6 @@
-import { activeUsername } from "../../../../frontend/src/utils/userScope";
-import { apiRequest } from "../../../../frontend/src/api/client";
-import { desktopDirty } from "../../../../frontend/src/desktop/bridge";
+import { activeUsername } from "../../../../frontend-legacy/src/utils/userScope";
+import { apiRequest } from "../../../../frontend-legacy/src/api/client";
+import { desktopDirty } from "../../../../frontend-legacy/src/desktop/bridge";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   IconPencil,
@@ -12,8 +12,8 @@ import {
   IconTrash,
   IconDownload,
   IconClose,
-} from "../../../../frontend/src/components/Icon";
-import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
+} from "../../../../frontend-legacy/src/components/Icon";
+import { confirm } from "../../../../frontend-legacy/src/components/ConfirmDialog";
 import { nativeSaveBlob } from "./topologyExport";
 
 export type WhiteboardTool = "pen" | "highlighter" | "arrow" | "rect" | "note";

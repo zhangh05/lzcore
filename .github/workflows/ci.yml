@@ -29,16 +29,83 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Audit, test and build frontend
+      - name: Audit, verify and build product frontend
         run: |
           npm --prefix frontend ci
           npm --prefix frontend audit
           npm --prefix frontend run lint:tokens
-          npm --prefix frontend run lint:styles
-          npm --prefix frontend test -- --run
+          npm --prefix frontend run verify
           npm --prefix frontend run build
 
+  frontend-legacy:
+    if: github.event_name != 'workflow_dispatch' || inputs.full == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend-legacy/package-lock.json
+      - name: Audit, test and build frontend
+        run: |
+          npm --prefix frontend-legacy ci
+          npm --prefix frontend-legacy audit
+          npm --prefix frontend-legacy run lint:tokens
+          npm --prefix frontend-legacy run lint:styles
+          npm --prefix frontend-legacy test -- --run
+          npm --prefix frontend-legacy run build
+
   frontend-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend-legacy/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          npm --prefix frontend-legacy ci
+          npm --prefix frontend-legacy run e2e:install
+      - name: Exercise authenticated workbench in Chromium
+        env:
+          E2E_PYTHON_BIN: python
+          E2E_SPEC: ${{ inputs.full != true && inputs.browser_spec || '' }}
+        run: |
+          if [ -n "$E2E_SPEC" ]; then
+            npm --prefix frontend-legacy run e2e -- "$E2E_SPEC"
+          else
+            npm --prefix frontend-legacy run e2e
+          fi
+      - name: Verify production CSS and visual flows
+        env:
+          E2E_PYTHON_BIN: python
+          E2E_PRODUCTION: "1"
+          E2E_SPEC: ${{ inputs.full != true && inputs.browser_spec || '' }}
+        run: |
+          npm --prefix frontend-legacy run build
+          if [ -n "$E2E_SPEC" ]; then
+            npm --prefix frontend-legacy run e2e -- "$E2E_SPEC"
+          else
+            npm --prefix frontend-legacy run e2e -- 23-topology-editing 21-management-width 25-workbench-hierarchy 26-visual-system 27-compact-chat 28-login-cascade 29-neutral-hierarchy 30-topology-theme-colors 31-topology-drawing-semantics 32-gentle-drag 33-topology-tool-groups 34-file-workspace 35-memory-context
+          fi
+      - name: Preserve browser visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-browser-validation
+          path: frontend-legacy/test-results/
+          retention-days: 14
+
+  product-frontend-e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -51,39 +118,27 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install browser test dependencies
+      - name: Install product browser dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
           npm --prefix frontend ci
           npm --prefix frontend run e2e:install
-      - name: Exercise authenticated workbench in Chromium
+      - name: Verify product with isolated real backend
         env:
           E2E_PYTHON_BIN: python
-          E2E_SPEC: ${{ inputs.full != true && inputs.browser_spec || '' }}
-        run: |
-          if [ -n "$E2E_SPEC" ]; then
-            npm --prefix frontend run e2e -- "$E2E_SPEC"
-          else
-            npm --prefix frontend run e2e
-          fi
-      - name: Verify production CSS and visual flows
+        run: npm --prefix frontend run e2e
+      - name: Verify production product bundle
         env:
           E2E_PYTHON_BIN: python
           E2E_PRODUCTION: "1"
-          E2E_SPEC: ${{ inputs.full != true && inputs.browser_spec || '' }}
         run: |
           npm --prefix frontend run build
-          if [ -n "$E2E_SPEC" ]; then
-            npm --prefix frontend run e2e -- "$E2E_SPEC"
-          else
-            npm --prefix frontend run e2e -- 23-topology-editing 21-management-width 25-workbench-hierarchy 26-visual-system 27-compact-chat 28-login-cascade 29-neutral-hierarchy 30-topology-theme-colors 31-topology-drawing-semantics 32-gentle-drag 33-topology-tool-groups 34-file-workspace 35-memory-context
-          fi
-      - name: Preserve browser visual evidence
+          npm --prefix frontend run e2e
+      - name: Preserve product browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-browser-validation
+          name: product-frontend-browser-validation
           path: frontend/test-results/
           retention-days: 14
 

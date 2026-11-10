@@ -1,7 +1,7 @@
 /** TopologyShortcutHelp owns its presentation; document writes stay with the workspace controller. */
 import { useCallback } from "react";
-import { IconClose } from "../../../../frontend/src/components/Icon";
-import { PortalModal } from "../../../../frontend/src/components/PortalModal";
+import { IconClose } from "../../../../frontend-legacy/src/components/Icon";
+import { PortalModal } from "../../../../frontend-legacy/src/components/PortalModal";
 
 export type TopologyShortcutHelpProps = {
   setShowShortcutHelp: import("react").Dispatch<

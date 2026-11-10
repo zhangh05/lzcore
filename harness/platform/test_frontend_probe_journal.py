@@ -7,7 +7,7 @@ import pytest
 
 @pytest.fixture
 def journal(tmp_path, monkeypatch):
-    source = Path(__file__).resolve().parents[2] / "frontend/scripts/probe_journal.py"
+    source = Path(__file__).resolve().parents[2] / "frontend-legacy/scripts/probe_journal.py"
     spec = importlib.util.spec_from_file_location("probe_journal", source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

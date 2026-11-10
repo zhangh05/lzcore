@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { DesktopHost, DesktopSettingsButton } from '../desktop/DesktopHost';
 import { desktopDirty } from '../desktop/bridge';
-import { useUIStore } from '../stores/session';
+import { usePrefs } from '../app/prefs';
 const api = {get_info: vi.fn(), request_exit: vi.fn(), save_preferences: vi.fn(), report_state: vi.fn()};
 const info = () => ({ok:true,version:'3.3.0',commit:'abc',mode:'portable',data_dir:'D:/中文数据',signed:false,webview2:'154',active_jobs:0,dirty:false,tray:true,restore:'',settings:{},shutdown:{status:'idle'},update:{status:'idle'}});
 beforeEach(() => {
   window.__LZCORE_DESKTOP__={theme:'light',ui:{}};
   Object.assign(window,{pywebview:{api}});
   api.get_info.mockResolvedValue(info()); api.request_exit.mockResolvedValue({ok:true}); api.save_preferences.mockResolvedValue({ok:true}); api.report_state.mockResolvedValue({ok:true});
-  useUIStore.setState({theme:'light',themePreference:'system'});
+  usePrefs.setState({theme:'light',themePreference:'system'});
 });
 afterEach(() => {cleanup(); delete window.__LZCORE_DESKTOP__; vi.clearAllMocks();});
 describe('desktop lifecycle UI', () => {

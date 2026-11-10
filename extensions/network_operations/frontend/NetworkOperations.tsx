@@ -9,8 +9,8 @@ import {
   type FormEvent,
 } from "react";
 import type { IconProps } from "@phosphor-icons/react";
-import { apiRequest } from "../../../frontend/src/api/client";
-import { confirm } from "../../../frontend/src/components/ConfirmDialog";
+import { apiRequest } from "../../../frontend-legacy/src/api/client";
+import { confirm } from "../../../frontend-legacy/src/components/ConfirmDialog";
 import {
   IconBolt,
   IconChecklist,
@@ -23,16 +23,16 @@ import {
   IconShield,
   IconTrash,
   IconTree,
-} from "../../../frontend/src/components/Icon";
+} from "../../../frontend-legacy/src/components/Icon";
 import {
   Button,
   FilterSelect,
   PageHeader,
   TabButton,
   SearchInput,
-} from "../../../frontend/src/components/ui";
-import { Link, useSearchParams } from "../../../frontend/src/router";
-import { useSessionStore } from "../../../frontend/src/stores/session";
+} from "../../../frontend-legacy/src/components/ui";
+import { Link, useSearchParams } from "../../../frontend-legacy/src/router";
+import { useSessionStore } from "../../../frontend-legacy/src/stores/session";
 import { DeviceTypeIcon } from "./components/TopologyItemControls";
 import { NetworkNotice, useNotice } from "./components/NetworkNotice";
 import "./NetworkOperations.css";

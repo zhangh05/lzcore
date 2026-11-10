@@ -1,6 +1,6 @@
 /** TopologyRevisionDialog owns its presentation; document writes stay with the workspace controller. */
-import { IconClose } from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
+import { IconClose } from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import {
   DIFF_FIELD_LABELS,
   RevisionDiff,

@@ -102,7 +102,7 @@ def test_knowledge_upload_writes_through_filestore(monkeypatch, tmp_path):
 
 
 def test_frontend_knowledge_search_uses_current_query_contract():
-    text = _read("frontend/src/api/index.ts")
+    text = _read("frontend-legacy/src/api/index.ts")
     search_block = text.split("search: (", 1)[1].split("getChunk:", 1)[0]
     assert "workspace_id" in search_block
     assert "q:" in search_block

@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import { apiRequest } from "../../../../frontend/src/api/client";
+import { apiRequest } from "../../../../frontend-legacy/src/api/client";
 import { TOPOLOGY_API_BASE as base } from "./topologyApi";
 import {
   applyDrawingEdit,

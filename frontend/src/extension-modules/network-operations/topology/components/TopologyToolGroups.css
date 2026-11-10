@@ -1,0 +1,50 @@
+/* Grouped topology actions own their layout; drawing geometry stays in the canvas. */
+@layer extension {
+.network-admin .topology-studio details[data-toolbar-menu] { position: relative; flex: 0 0 auto; }
+.network-admin .topology-studio details[data-toolbar-menu] > summary { display: inline-flex; align-items: center; justify-content: flex-start; gap: 5px; height: var(--h-control-compact); padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--text-2); font-size: var(--fs-13); cursor: pointer; list-style: none; white-space: nowrap; }
+.network-admin .topology-studio details[data-toolbar-menu] > summary::-webkit-details-marker { display: none; }
+.network-admin .topology-studio details[data-toolbar-menu][open] > summary { color: var(--accent); border-color: var(--accent); }
+.network-admin .topology-studio details[data-toolbar-menu] > div { position: absolute; top: calc(100% + 6px); left: var(--menu-offset, 0px); right: auto; z-index: 40; display: grid; gap: 6px; width: max-content; min-width: 220px; max-width: min(360px, calc(100vw - 32px)); max-height: min(65vh, 560px); overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-8); background: var(--surface); box-shadow: var(--shadow-menu); }
+.network-admin .topology-studio details[data-toolbar-menu] label { display: flex; align-items: center; gap: 7px; padding: 4px 0; font-size: var(--fs-13); color: var(--text-2); }
+.network-admin .topology-studio details[data-toolbar-menu] small { color: var(--text-3); font-size: var(--fs-11); line-height: 1.5; white-space: normal; }
+.network-admin .topology-studio details[data-toolbar-menu] strong { font-size: var(--fs-12); color: var(--text); margin-top: 4px; }
+.network-admin .topology-studio details[data-toolbar-menu] button { text-align: left; padding: 6px 8px; border-radius: var(--r-sm); }
+.network-admin .topology-studio details[data-toolbar-menu] button:not(.btn) { border: 1px solid transparent; background: transparent; color: var(--text-2); font-size: var(--fs-13); cursor: pointer; }
+.network-admin .topology-studio details[data-toolbar-menu] button:hover:not(:disabled) { background: var(--accent-soft); }
+.network-admin .topology-studio details[data-toolbar-menu] button:disabled { opacity: .45; cursor: default; }
+.network-admin .topology-studio .studio-file-menu .btn.danger { margin-top: 8px; color: var(--danger); border-top: 1px solid var(--line); }
+.arrange-align > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.reference-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.studio-layout-options > div, .studio-view-options > div { display: grid; gap: 4px; }
+
+/* Primary tools stay left; document and secondary action groups sit right. */
+.network-admin .topology-studio .topology-canvas-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px 16px; min-height: 56px; padding: 8px 16px; }
+.network-admin .topology-studio .topology-canvas-toolbar > .toolbar-left { display: flex; align-items: center; flex: 0 1 auto; flex-wrap: nowrap; min-width: 0; gap: 8px; }
+.network-admin .topology-studio .topology-canvas-title { flex: 0 1 auto; min-width: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-admin .topology-studio .topology-canvas-toolbar > .toolbar-right { display: flex; align-items: center; justify-content: flex-start; flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; margin-left: auto; }
+.network-admin .topology-studio .studio-workspace-mode-switch { flex: 0 0 auto; margin-left: 8px; }
+.network-admin .topology-studio .topology-chat-actions { display: flex; align-items: center; gap: 0; flex: 0 0 auto; }
+.network-admin .topology-studio .topology-chat-actions > button { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.network-admin .topology-studio .topology-chat-actions summary { border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0 7px; }
+.network-admin .topology-studio .topology-editbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px 16px; padding: 6px 16px; }
+.network-admin .topology-studio .topology-editbar > .toolbar-right { display: flex; align-items: center; justify-content: flex-start; flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; margin: 0 0 0 auto; width: auto; }
+.network-admin .topology-studio .studio-secondary-tools { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; }
+.network-admin .topology-studio .studio-edit-tools { display: flex; align-items: center; flex: 0 0 auto; flex-wrap: nowrap; padding: 0; gap: 4px; }
+.network-admin .topology-studio .studio-edit-tools > .studio-mode-button { height: var(--h-control-compact); font-size: var(--fs-13); padding: 0 10px; }
+.network-admin .topology-studio .topology-canvas-toolbar button, .network-admin .topology-studio .topology-editbar button { min-height: var(--h-control-compact); font-size: var(--fs-13); flex-shrink: 0; }
+.network-admin .topology-studio .tool-action-label { display: none; }
+.network-admin .topology-studio .topology-editbar .btn.icon-only, .network-admin .topology-studio .topology-canvas-toolbar .btn.icon-only { width: 30px; min-width: 30px; padding: 0; justify-content: center; }
+.network-admin .topology-studio .studio-canvas-caption { max-width: calc(100% - 24px); flex-wrap: wrap; }
+@media (max-width: 1100px) {
+  .network-admin .topology-studio .annotation-label { display: none; }
+  .network-admin .topology-studio .annotation-action { width: 30px; padding-inline: 0; justify-content: center; }
+  .network-admin .topology-studio .topology-canvas-title { max-width: 160px; }
+}
+@media (max-width: 760px) {
+  .network-admin .topology-studio .topology-canvas-toolbar { gap: 8px 12px; padding: 8px; }
+  .network-admin .topology-studio .topology-editbar { padding: 6px 8px; }
+  .network-admin .topology-studio .topology-canvas-title { max-width: 100px; }
+  .network-admin .topology-studio .studio-workspace-mode-switch { margin-left: 4px; }
+  .network-admin .topology-studio .studio-workspace-mode-switch .mode-pill { padding-inline: 6px; }
+}
+}

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { confirm } from "../../../../frontend/src/components/ConfirmDialog";
+import { confirm } from "../../../../frontend-legacy/src/components/ConfirmDialog";
 import { type CanvasApi } from "./NetOpsCanvas";
 import { alignBodies } from "./topologyAlignment";
 import type {

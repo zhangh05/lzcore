@@ -54,8 +54,8 @@ def test_api_docs_only_list_registered_backend_routes():
 def test_frontend_docs_match_navigation_routes():
     root = Path(__file__).resolve().parents[2]
     docs = (root / "docs" / "FRONTEND.md").read_text(encoding="utf-8")
-    nav_text = (root / "frontend" / "src" / "config" / "nav.ts").read_text(encoding="utf-8")
-    nav_routes = re.findall(r'to:\s*"([^"]+)"', nav_text)
+    nav_text = (root / "frontend" / "src" / "contracts" / "naming.ts").read_text(encoding="utf-8")
+    nav_routes = re.findall(r'path:\s*"([^"]+)"', nav_text)
     assert nav_routes, "Navigation extraction must not pass on an empty selection"
     for route in nav_routes:
         assert route in docs, f"Route '{route}' not mentioned in FRONTEND.md"

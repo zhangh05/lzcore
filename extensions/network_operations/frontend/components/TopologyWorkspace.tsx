@@ -47,16 +47,16 @@ export {
 export { DeviceTypeIcon } from "./TopologyItemControls";
 // 图标全部走平台统一出口 components/Icon.tsx —— 这是全站唯一的 Phosphor
 // 门面，直接 import "@phosphor-icons/react" 会让扩展页与平台图标语义脱钩。
-import { apiRequest } from "../../../../frontend/src/api/client";
+import { apiRequest } from "../../../../frontend-legacy/src/api/client";
 import {
   IconBranch,
   IconPlus,
   IconRefresh,
   IconShield,
-} from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
-import { useNavigate } from "../../../../frontend/src/router";
-import { useSessionStore } from "../../../../frontend/src/stores/session";
+} from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
+import { useNavigate } from "../../../../frontend-legacy/src/router";
+import { useSessionStore } from "../../../../frontend-legacy/src/stores/session";
 import { buildCanvasSelection, type CanvasSelection } from "./canvasSelection";
 import { type CanvasApi, type CanvasContextTarget } from "./NetOpsCanvas";
 import { type NodeOverlay } from "./nodeOverlay";

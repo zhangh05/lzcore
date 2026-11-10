@@ -1,7 +1,7 @@
 /** TopologyLibrary owns its presentation; document writes stay with the workspace controller. */
 import { type DragEvent } from "react";
-import { IconClose, IconPlus } from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
+import { IconClose, IconPlus } from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import { type CanvasApi } from "./NetOpsCanvas";
 import { DRAWING_DEVICE_TYPES } from "./topologyDevicePalette";
 import type {

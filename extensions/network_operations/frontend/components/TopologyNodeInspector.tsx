@@ -1,14 +1,14 @@
 import { TOPOLOGY_API_BASE as base } from "./topologyApi";
 /** TopologyNodeInspector owns its presentation; document writes stay with the workspace controller. */
-import { apiRequest } from "../../../../frontend/src/api/client";
+import { apiRequest } from "../../../../frontend-legacy/src/api/client";
 import {
   IconClose,
   IconCopy,
   IconTrash,
   IconUnlock,
-} from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
-import { Link } from "../../../../frontend/src/router";
+} from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
+import { Link } from "../../../../frontend-legacy/src/router";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import { overlayCaption, type NodeOverlay } from "./nodeOverlay";
 import { deviceTypeMap, DRAWING_DEVICE_TYPES } from "./topologyDevicePalette";

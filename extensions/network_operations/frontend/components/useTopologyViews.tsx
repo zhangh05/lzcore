@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type CanvasApi } from "./NetOpsCanvas";
-import { promptForm } from "../../../../frontend/src/components/FormDialog";
+import { promptForm } from "../../../../frontend-legacy/src/components/FormDialog";
 import type { SelectedElement, Topology } from "./topologyDocument";
 
 export type useTopologyViewsPorts = {

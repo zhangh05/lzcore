@@ -12,8 +12,8 @@ import {
   IconRedo,
   IconUndo,
   IconUnlock,
-} from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
+} from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import { type CanvasApi } from "./NetOpsCanvas";
 import { overlayObservationStatus, type NodeOverlay } from "./nodeOverlay";
 import { type DrawingEdit } from "./topologyCollaboration";

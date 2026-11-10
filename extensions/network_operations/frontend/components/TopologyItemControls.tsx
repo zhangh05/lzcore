@@ -9,7 +9,7 @@ import {
   IconShield,
   IconSplit,
   IconWifi,
-} from "../../../../frontend/src/components/Icon";
+} from "../../../../frontend-legacy/src/components/Icon";
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import type { TopologyCanvasItem } from "./topologyDocument";
 

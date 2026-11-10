@@ -3,7 +3,7 @@
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2] / "frontend" / "scripts"
+ROOT = Path(__file__).resolve().parents[2] / "frontend-legacy" / "scripts"
 
 
 def test_probes_do_not_hardcode_a_production_topology():

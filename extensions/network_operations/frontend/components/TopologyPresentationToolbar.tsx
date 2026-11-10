@@ -5,7 +5,7 @@ import {
   IconChevronRight,
   IconEdit,
   IconExpand,
-} from "../../../../frontend/src/components/Icon";
+} from "../../../../frontend-legacy/src/components/Icon";
 import { type CanvasApi } from "./NetOpsCanvas";
 import type { Topology } from "./topologyDocument";
 

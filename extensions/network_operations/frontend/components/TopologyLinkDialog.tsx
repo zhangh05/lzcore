@@ -1,7 +1,7 @@
 /** TopologyLinkDialog owns its presentation; document writes stay with the workspace controller. */
 import { type FormEvent } from "react";
-import { IconClose } from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
+import { IconClose } from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import type { Topology } from "./topologyDocument";
 import { nextFreeInterface } from "./topologyInterfaceAllocation";
 import { useTopologyDialogFocus } from "./useTopologyDialogFocus";

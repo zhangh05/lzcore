@@ -84,4 +84,9 @@ export {
   SignOut as IconSignOut,
   Rows as IconRows,
   House as IconHome,
+  Database as IconDatabase,
+  FlowArrow as IconFlow,
+  PuzzlePiece as IconPuzzle,
+  Tray as IconInbox,
+  Command as IconCommand,
 } from "@phosphor-icons/react";

@@ -90,6 +90,7 @@ export default defineConfig({
     baseURL: FRONTEND_URL,
     trace: "retain-on-failure",
     headless: true,
+    channel: process.env.E2E_BROWSER_CHANNEL,
     actionTimeout: 8_000,
     navigationTimeout: 12_000,
   },
@@ -108,7 +109,7 @@ export default defineConfig({
     },
     {
       command: `npm run ${process.env.E2E_PRODUCTION === "1" ? "preview" : "dev"} -- --host 127.0.0.1 --port ${FRONTEND_PORT}`,
-      cwd: path.resolve(REPO_ROOT, "frontend"),
+      cwd: CONFIG_DIR,
       env: { ...commonEnv, VITE_DEV_API_TARGET: BACKEND_URL },
       url: FRONTEND_URL,
       reuseExistingServer: false,

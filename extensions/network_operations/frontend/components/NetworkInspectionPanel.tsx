@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiRequest } from "../../../../frontend/src/api/client";
-import { Button } from "../../../../frontend/src/components/ui";
+import { apiRequest } from "../../../../frontend-legacy/src/api/client";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import { NetworkToolResult } from "./NetworkToolResult";
 import { object, rows, text } from "./networkEvidence";
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSessionStore } from "../../../frontend/src/stores/session";
-import { apiRequest } from "../../../frontend/src/api/client";
+import { useSessionStore } from "../../../frontend-legacy/src/stores/session";
+import { apiRequest } from "../../../frontend-legacy/src/api/client";
 import TopologyWorkspace, { type Topology } from "./components/TopologyWorkspace";
 import { NetworkNotice, useNotice } from "./components/NetworkNotice";
 import "./NetworkOperations.css";

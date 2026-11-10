@@ -10,7 +10,7 @@
 | 工具怎样核验 | core/tools/manifest_registry.py | core/tools/canonical_registry.py、executor.py |
 | 领域范围和对象 | extensions/runtime.py | 对应 extensions/<id>/ |
 | 数据和记忆 | storage/ | core/context/、agent/runtime/memory_write/ |
-| UI 和续流 | frontend/src/app/App.tsx | frontend/src/api/、stores/、pages/ |
+| UI 和续流 | frontend/src/app/AppShell.tsx | frontend/src/api/、app/、pages/ |
 
 设计原则见 [DESIGN](../../DESIGN.md)，循环语义见 [Loop](../LOOP_ENGINEERING.md)，资源和端点见 [API](../API.md)。历史审计不作为现行接口依据。
 

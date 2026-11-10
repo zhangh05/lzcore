@@ -3,8 +3,8 @@ import {
   IconBranch,
   IconClose,
   IconTrash,
-} from "../../../../frontend/src/components/Icon";
-import { Button } from "../../../../frontend/src/components/ui";
+} from "../../../../frontend-legacy/src/components/Icon";
+import { Button } from "../../../../frontend-legacy/src/components/ui";
 import { LinkColorControl } from "./LinkColorControl";
 import type {
   SelectedElement,
