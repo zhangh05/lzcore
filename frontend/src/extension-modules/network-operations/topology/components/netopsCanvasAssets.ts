@@ -27,4 +27,3 @@ export function netOpsIconForDeviceType(deviceType: string): string {
   if (type.includes("wireless") || type.includes("wifi") || type.includes("ap")) return "/netops-canvas/icons/icon202.svg";
   return "/netops-canvas/icons/switch.svg";
 }
-
