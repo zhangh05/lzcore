@@ -31,9 +31,19 @@ describe("Vite 监听地址守卫：只绑 127.0.0.1", () => {
     expect(assertLoopbackListenHost(undefined)).toBe("127.0.0.1");
   });
   it("拒绝 0.0.0.0 / :: / 局域网地址 / 不带值的 --host", () => {
-    expect(() => assertLoopbackListenHost("0.0.0.0")).toThrow(/0\.0\.0\.0/);
-    expect(() => assertLoopbackListenHost("::")).toThrow(/127\.0\.0\.1/);
-    expect(() => assertLoopbackListenHost("192.168.1.10")).toThrow(/127\.0\.0\.1/);
-    expect(() => assertLoopbackListenHost(true)).toThrow(/127\.0\.0\.1/);
+    const off = {};
+    expect(() => assertLoopbackListenHost("0.0.0.0", "server", off)).toThrow(/0\.0\.0\.0/);
+    expect(() => assertLoopbackListenHost("::", "server", off)).toThrow(/127\.0\.0\.1/);
+    expect(() => assertLoopbackListenHost("192.168.1.10", "server", off)).toThrow(/127\.0\.0\.1/);
+    expect(() => assertLoopbackListenHost(true, "server", off)).toThrow(/127\.0\.0\.1/);
+  });
+
+  it("部署方显式开启局域网访问时接受显式地址，但仍拒绝不带值的 --host", () => {
+    for (const env of [{ LZCORE_ALLOW_LAN: "true" }, { LZCORE_ALLOW_UNAUTHENTICATED_NETWORK: "1" }]) {
+      expect(assertLoopbackListenHost("0.0.0.0", "server", env)).toBe("0.0.0.0");
+      expect(assertLoopbackListenHost("192.168.1.10", "server", env)).toBe("192.168.1.10");
+      expect(() => assertLoopbackListenHost(true, "server", env)).toThrow(/127\.0\.0\.1/);
+    }
+    expect(() => assertLoopbackListenHost("0.0.0.0", "server", { LZCORE_ALLOW_LAN: "false" })).toThrow();
   });
 });

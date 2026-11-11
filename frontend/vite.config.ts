@@ -9,7 +9,8 @@ import { assertLoopbackListenHost, resolveDevApiTarget } from "./vite.guard.ts";
  * - `vite`（dev）与 `vite preview` 都 REQUIRE `VITE_DEV_API_TARGET`；没有默认后端。
  *   缺失 / 非 http://127.0.0.1:<port> 的目标直接中止启动。start.sh / start.ps1
  *   会显式设为 http://127.0.0.1:$BACKEND_PORT（默认 8011）。
- * - 监听地址只允许 127.0.0.1（CLI `--host` 覆盖同样经过守卫）。
+ * - 监听地址默认 127.0.0.1；显式开启局域网访问时才接受 start.sh 传入的地址（见 vite.guard.ts）。
+ * - 代理追加 X-Forwarded-For（xfwd），后端据此区分本机与经代理的局域网客户端。
  * - 默认端口 5273（产品默认）；`npm run dev` 仍显式用 5280 跑本地 mock 预览。
  * - `vite build` 与 vitest 不启动代理、不联网。
  */
@@ -32,10 +33,10 @@ export default defineConfig(({ command, mode }) => {
     : null;
   const proxy = proxyTarget
     ? {
-        "/api": { target: proxyTarget, changeOrigin: false },
-        "/__mock": { target: proxyTarget, changeOrigin: false },
+        "/api": { target: proxyTarget, changeOrigin: false, xfwd: true },
+        "/__mock": { target: proxyTarget, changeOrigin: false, xfwd: true },
         // 工作台 WebSocket（/ws/agent）。目标同样经过 resolveDevApiTarget 守卫。
-        "/ws": { target: proxyTarget.replace(/^http/, "ws"), ws: true, changeOrigin: false },
+        "/ws": { target: proxyTarget.replace(/^http/, "ws"), ws: true, changeOrigin: false, xfwd: true },
       }
     : undefined;
 
