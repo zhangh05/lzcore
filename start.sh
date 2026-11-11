@@ -14,8 +14,13 @@ if [ -f "$ROOT/.env.local" ]; then
 fi
 BACKEND_PORT="${BACKEND_PORT:-8011}"
 FRONTEND_PORT="${FRONTEND_PORT:-5273}"
-BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
-FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
+# Listen on 0.0.0.0 by default; scripts/startup_security.sh falls back to
+# loopback only when no authentication / LAN switch makes that safe.
+# shellcheck source=scripts/startup_security.sh
+. "$ROOT/scripts/startup_security.sh"
+read -r DEFAULT_BACKEND_HOST DEFAULT_FRONTEND_HOST < <(startup_security_default_hosts)
+BACKEND_HOST="${BACKEND_HOST:-$DEFAULT_BACKEND_HOST}"
+FRONTEND_HOST="${FRONTEND_HOST:-$DEFAULT_FRONTEND_HOST}"
 FRONTEND_MODE="${FRONTEND_MODE:-preview}"
 LZCORE_EMBEDDED_WORKER="${LZCORE_EMBEDDED_WORKER:-true}"
 INSTALL_DEPS="${INSTALL_DEPS:-auto}"
@@ -45,10 +50,6 @@ PYTHON_BIN="${PYTHON_BIN:-$(find_cmd python3 "$HOME/.local/bin/python3" /opt/hom
 NODE_BIN="${NODE_BIN:-$(find_cmd node "$HOME/.local/node/bin/node" /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node)}"
 NPM_BIN="${NPM_BIN:-$(find_cmd npm "$HOME/.local/node/bin/npm" /opt/homebrew/bin/npm /usr/local/bin/npm /usr/bin/npm)}"
 VITE_BIN="${VITE_BIN:-$ROOT/frontend/node_modules/.bin/vite}"
-# This policy is intentionally kept outside the launcher so tests can exercise
-# it without starting services or binding ports.
-# shellcheck source=scripts/startup_security.sh
-. "$ROOT/scripts/startup_security.sh"
 
 process_cwd() {
     lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1
@@ -318,6 +319,9 @@ print_summary() {
 main() {
     log "LZCore"
     startup_security_validate_network_exposure "$BACKEND_HOST" "$FRONTEND_HOST" || fail "Unsafe network startup configuration."
+    if [ "$FRONTEND_HOST" = "127.0.0.1" ] && [ "$DEFAULT_FRONTEND_HOST" = "127.0.0.1" ]; then
+        log "[security] Listening on loopback only: set LZCORE_ALLOW_LAN=true with login/identity/API-token authentication in .env.local to listen on 0.0.0.0."
+    fi
     mkdir -p "$LOG_DIR"
     detect_venv || true
     check_version

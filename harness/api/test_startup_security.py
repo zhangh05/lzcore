@@ -129,3 +129,43 @@ def test_dangerous_explicit_override_warns_and_allows_network_listener():
     )
     assert result.returncode == 0
     assert "DANGER" in result.stderr
+
+
+def _default_hosts(extra_env: dict[str, str] | None = None) -> list[str]:
+    env = os.environ.copy()
+    for key in (
+        "LZCORE_AUTH_ENABLED", "LZCORE_API_TOKEN", "LZCORE_LOGIN_ENABLED", "LZCORE_LOGIN_USERNAME",
+        "LZCORE_LOGIN_PASSWORD", "LZCORE_IDENTITY_ENABLED", "LZCORE_ALLOW_UNAUTHENTICATED_NETWORK", "LZCORE_ALLOW_LAN",
+    ):
+        env.pop(key, None)
+    env.update(extra_env or {})
+    result = subprocess.run(
+        ["bash", "-c", 'source "$1"; startup_security_default_hosts', "--", str(POLICY)],
+        env=env, capture_output=True, text=True, check=True,
+    )
+    return result.stdout.split()
+
+
+def test_default_hosts_fall_back_to_loopback_without_authentication():
+    assert _default_hosts() == ["127.0.0.1", "127.0.0.1"]
+    # The LAN switch alone is not authentication: the exposure check would refuse it.
+    assert _default_hosts({"LZCORE_ALLOW_LAN": "true"}) == ["127.0.0.1", "127.0.0.1"]
+
+
+def test_default_hosts_listen_on_all_interfaces_when_authenticated_and_lan_allowed():
+    login = {"LZCORE_LOGIN_USERNAME": "tester", "LZCORE_LOGIN_PASSWORD": "secret"}
+    assert _default_hosts({**login, "LZCORE_ALLOW_LAN": "true"}) == ["0.0.0.0", "0.0.0.0"]
+    # Without the LAN switch the Vite guard refuses 0.0.0.0, so only the backend opens up.
+    assert _default_hosts(login) == ["0.0.0.0", "127.0.0.1"]
+
+
+def test_default_hosts_follow_explicit_unauthenticated_network_opt_in():
+    assert _default_hosts({"LZCORE_ALLOW_UNAUTHENTICATED_NETWORK": "true"}) == ["0.0.0.0", "0.0.0.0"]
+
+
+def test_default_hosts_are_always_accepted_by_the_exposure_check():
+    for env in ({}, {"LZCORE_ALLOW_LAN": "true"}, {"LZCORE_IDENTITY_ENABLED": "true"},
+                {"LZCORE_IDENTITY_ENABLED": "true", "LZCORE_ALLOW_LAN": "true"},
+                {"LZCORE_ALLOW_UNAUTHENTICATED_NETWORK": "true"}):
+        backend, frontend = _default_hosts(env)
+        assert _run_policy(backend, frontend, env).returncode == 0, env
