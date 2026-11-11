@@ -14,6 +14,7 @@ import { Composer, type SendOptions } from "./Composer";
 import type { ChatMessage, SessionSummary, StopState } from "./model";
 import { ProgressPanel, hasProgressContent } from "./ProgressPanel";
 import { SessionColumn } from "./SessionColumn";
+import type { SubagentCall } from "./subagents";
 import { Thread } from "./Thread";
 import { createSession } from "./useSessions";
 
@@ -30,7 +31,33 @@ export interface SessionTask {
   updated_at?: string;
 }
 
-interface LiveTurn { clientRequestId: string; text: string; events: string[]; status: string; jobId?: string }
+export interface LiveStep { callId: string; toolId: string; state: "running" | "ok" | "fail"; summary?: string; durationMs?: number }
+export interface LiveTurn { clientRequestId: string; text: string; events: string[]; status: string; jobId?: string; steps?: LiveStep[]; subagentCalls?: SubagentCall[] }
+
+/** 把实时事件投影进本轮的步骤与子任务观察；只是展示，终态仍以服务端 done/回读为准。 */
+export function applyLiveEvent(l: LiveTurn, name: string, data: Record<string, unknown>): LiveTurn {
+  const callId = String(data.call_id ?? data.node_id ?? "");
+  const toolId = String(data.tool_id ?? "");
+  let steps = l.steps ?? [];
+  if (name === "tool_call" && toolId) {
+    const key = callId || `${toolId}-${steps.length}`;
+    if (!steps.some((s) => s.callId === key)) steps = [...steps, { callId: key, toolId, state: "running" }];
+  } else if (name === "tool_result" && toolId) {
+    const done: LiveStep = { callId: callId || `${toolId}-${steps.length}`, toolId, state: data.ok === false ? "fail" : "ok", summary: typeof data.summary === "string" ? data.summary : undefined, durationMs: typeof data.duration_ms === "number" ? data.duration_ms : undefined };
+    steps = steps.some((s) => s.callId === done.callId) ? steps.map((s) => (s.callId === done.callId ? done : s)) : [...steps, done];
+  }
+  const subagentCalls = name === "subagent_observation" && data.result && typeof data.result === "object"
+    ? [...(l.subagentCalls ?? []), { call_id: callId || undefined, tool_id: toolId || "agent.manage", ok: data.ok !== false, result: data.result as Record<string, unknown> }]
+    : l.subagentCalls;
+  return {
+    ...l,
+    steps,
+    subagentCalls,
+    events: [...l.events, `${name}${toolId ? ` · ${toolId}` : ""}${data.title ? ` · ${String(data.title)}` : ""}`],
+    jobId: String(data.job_id ?? l.jobId ?? "") || undefined,
+    status: name === "model_started" ? "模型处理中" : name === "tool_call" ? `调用工具 ${toolId}` : name === "subagent_observation" ? "子任务进行中" : l.status,
+  };
+}
 
 function useTransport(ws: string | null, readback: (sid: string, crid: string) => Promise<boolean>) {
   const ref = useRef<TurnTransport | null>(null);
@@ -167,12 +194,7 @@ export function Workbench() {
       workspaceId: ws, sessionId, text, clientRequestId, metadata,
       handlers: {
         onToken: (t) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
-        onEvent: (name, data) => setLive((l) => l && {
-          ...l,
-          events: [...l.events, `${name}${data.tool_id ? ` · ${String(data.tool_id)}` : ""}${data.title ? ` · ${String(data.title)}` : ""}`],
-          jobId: String(data.job_id ?? l.jobId ?? "") || undefined,
-          status: name === "model_started" ? "模型处理中" : name === "tool_call" ? `调用工具 ${String(data.tool_id ?? "")}` : l.status,
-        }),
+        onEvent: (name, data) => setLive((l) => l && applyLiveEvent(l, name, data)),
         onDone: () => void settle(),
         onError: (f: Frame) => void settle(`本轮报错：${String(f.message ?? f.error ?? "未知错误")}`),
         onTransport: (s) => {

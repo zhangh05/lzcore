@@ -7,13 +7,16 @@ import { drawingSessionBinding } from "./network-operations/sessionBinding";
  */
 import { lazy, type ComponentType, type ReactNode } from "react";
 import { ApprovalCard } from "./approval/ApprovalCard";
+import { matchNetworkEvidence, NetworkEvidence } from "./network-operations/NetworkEvidence";
 
 export interface ExtensionPageProps { ws: string; mountPath: string; subPath: string }
 
+export interface EvidenceCall { tool_id: string; call_id?: string; result?: Record<string, unknown> }
+
 export interface EvidenceRenderer {
   /** 返回非空 key 表示由本渲染器接管这条工具结果。 */
-  match: (call: { tool_id: string; result?: Record<string, unknown> }) => string | null;
-  render: (ws: string, key: string) => ReactNode;
+  match: (call: EvidenceCall) => string | null;
+  render: (ws: string, key: string, call: EvidenceCall) => ReactNode;
 }
 
 export interface ExtensionModule {
@@ -30,6 +33,10 @@ export const EXTENSION_MODULES: Record<string, ExtensionModule> = {
     extensionId: "network.operations",
     sessionBinding: drawingSessionBinding,
     pages: { "/extensions/network.operations/manage": NetworkOperationsModule },
+    evidence: [{
+      match: matchNetworkEvidence,
+      render: (ws, _key, call) => <NetworkEvidence ws={ws} toolId={call.tool_id} result={call.result} />,
+    }],
   },
   approval: {
     extensionId: "approval",

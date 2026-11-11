@@ -46,6 +46,30 @@
   .tool-card { border: 1px solid var(--line-2); border-radius: var(--r-control); padding: var(--space-1) var(--space-2); font-size: var(--fs-sm); }
   .tool-card summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .tool-card .json-block { margin-top: var(--space-2); }
+  .subagent-list { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-2) 0; }
+  .subagent-card { border: 1px solid var(--line-2); border-left: 3px solid currentColor; border-radius: var(--r-control); padding: var(--space-2) var(--space-3); background: var(--surface); font-size: var(--fs-sm); display: grid; gap: var(--space-1); }
+  .subagent-card > * { color: var(--text); }
+  .subagent-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .subagent-instruction { margin: 0; color: var(--text-2); white-space: pre-wrap; }
+  .subagent-progress { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--text-2); }
+  .subagent-progress:empty { display: none; }
+  .subagent-observations summary { cursor: pointer; color: var(--text-2); }
+  .subagent-observations ol { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--text-2); }
+  .network-evidence { display: grid; gap: var(--space-1); margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px dashed var(--line-2); font-size: var(--fs-sm); }
+  .network-evidence p { margin: 0; }
+  .network-evidence-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .network-evidence-stages { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--text-2); }
+  .network-evidence .btn { justify-self: start; }
+  .network-evidence-devices, .network-commands { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
+  .network-commands li { display: grid; gap: var(--space-1); }
+  .network-commands li > code { font-weight: 600; }
+  .network-commands .status-chip { justify-self: start; }
+  .network-evidence-artifact { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .network-evidence-artifact details { flex-basis: 100%; }
+  .live-progress { display: grid; gap: var(--space-2); margin: var(--space-2) 0; }
+  .live-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font-size: var(--fs-sm); }
+  .live-steps li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+  .live-step-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 48ch; }
   .outcome-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; font-size: var(--fs-sm); color: var(--text-2); }
   .outcome-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
   .resume-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
@@ -83,6 +107,14 @@
   .job-item { padding: var(--space-2) 0; border-bottom: 1px solid var(--line-2); font-size: var(--fs-sm); }
   .job-item:last-child { border-bottom: 0; }
   .job-item .row-actions { margin: var(--space-1) 0 0; }
+  .job-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-2); }
+  .job-filters .btn.is-active { background: var(--surface-2); border-color: var(--line); }
+  .job-head { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  .job-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin-top: 2px; font-size: var(--fs-xs); }
+  .job-progress { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0 0; }
+  .job-progress progress { width: 80px; }
+  .job-error { margin: var(--space-1) 0 0; color: var(--danger); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .job-item .inline-alert { margin: var(--space-1) 0 0; }
   .report-content { white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--fs-sm); }
   .topology-preview { width: 100%; max-height: 360px; border: 1px solid var(--line-2); border-radius: var(--r-card); background: var(--surface-3); }
@@ -113,4 +145,12 @@
   .netops-canvas-host { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 560px; }
   .netops-canvas-host > .topology-mount { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
   .topology-mount > .network-admin.is-topology { flex: 1 1 auto; min-height: 0; }
+}
+@layer pages {
+  .file-preview-media { margin: var(--space-2) 0 0; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-control); padding: var(--space-2); }
+  .file-preview-media img { max-width: 100%; max-height: 60vh; object-fit: contain; }
+  .file-preview-media video { max-width: 100%; max-height: 60vh; }
+  .file-preview-media audio { width: 100%; }
+  .file-preview-pdf { width: 100%; height: 60vh; border: 0; }
+  .file-preview-text { max-height: 60vh; overflow: auto; }
 }

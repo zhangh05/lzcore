@@ -24,6 +24,10 @@
 
 工作台通过 WebSocket /ws/agent 发起和续传回合，client_request_id 标识请求。断线只续传/回读，不自动重发写入。终态消息和 task-state 来自服务端；工具尝试、用户目标、作业队列状态和未知写入分别呈现。未知写入仅核对，不自动重放。当前实时连接在工作台组件卸载时释放，不能声称已恢复旧版所有跨页回合体验。
 
+子 Agent 进展来自 `agent.manage` 结果与实时 `subagent_observation` 事件，按 `subtask_id` 分组、取最新 `observation_revision`；工具信封成功不代表子任务完成，`content_complete=false` 或执行未知显示为待核对。回合进行中把 `tool_call`/`tool_result` 投影为步骤列表，仅作展示，终态以服务端为准。网络设备读取与巡检结果由扩展证据渲染器呈现（部分回显、不可达、写入未知、完整证据原件）。资料文件按 `mime_type` 预览：图片、音视频与 PDF 走 `/api/storage/files/<id>/preview`，其余读取文本内容，二进制提示下载。
+
+读取经 `frontend/src/kit/useApi.ts`：同 key 合并请求、缓存后台刷新、超过 3 秒提示较慢、刷新失败保留上次数据并标明可能过期；退出登录清空缓存。待核对优先读 `/api/runtime/session-tasks`，旧后端回退逐会话 task-state。
+
 助手终态使用既有安全 Markdown 渲染，流式阶段保留轻量纯文本路径。布局按可用宽度将导航、会话与进度移入抽屉，关闭恢复焦点；宽桌面保留辅助栏。
 
 ## 启动与验证

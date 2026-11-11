@@ -1,3 +1,4 @@
+import { FilePreview } from "./FilePreview";
 import { useState } from "react";
 import { FactSummary } from "../../kit/factSummary";
 import { api, bodyOf, describeFailure, enc, uploadMultipart } from "../../api/client";
@@ -88,7 +89,6 @@ function FileDetail({ ws, file, trash, onClose }: { ws: string; file: FileRec; t
   const base = `/api/storage/files/${enc(file.file_id)}`;
   const [meta, reloadMeta] = useApi(base, { workspace_id: ws });
   const [view, setView] = useState<"preview" | "inspect" | "edit">("preview");
-  const [content] = useApi(view === "preview" ? `${base}/content` : null, { workspace_id: ws, limit: 20000 });
   const [inspect] = useApi(view === "inspect" ? `${base}/inspect` : null, { workspace_id: ws });
   // 标题 / 表单 / 回读都以 GET /api/storage/files/<id> 的回读为准，而不是列表里打开时的旧快照。
   const current: FileRec = (meta.state === "ok" ? (meta.data as { file?: FileRec }).file : undefined) ?? file;
@@ -132,7 +132,7 @@ function FileDetail({ ws, file, trash, onClose }: { ws: string; file: FileRec; t
         <p className="readback-note" role="status" data-testid="file-readback">保存后回读：名称「{readback.name}」 · 文件夹「{readback.folder || "（根目录）"}」{readback.at ? ` · ${fmtTime(readback.at)}` : ""}</p>
       )) : null}
       <Tabs label="文件详情" current={view} onChange={setView} tabs={[{ key: "preview", label: "预览" }, { key: "inspect", label: "检查" }, { key: "edit", label: "整理" }]} />
-      {view === "preview" ? <LoadState value={content}>{(d) => <pre className="json-block" data-testid="file-preview">{String((d as { content?: string }).content ?? JSON.stringify(d, null, 2))}</pre>}</LoadState> : null}
+      {view === "preview" ? <FilePreview ws={ws} fileId={file.file_id} mime={current.mime_type} name={fileName(current)} active={(current.lifecycle ?? "active") === "active"} /> : null}
       {view === "inspect" ? <LoadState value={inspect}>{(d) => <FactSummary value={(d as { inspect?: unknown }).inspect ?? d} testId="file-inspect" />}</LoadState> : null}
       {view === "edit" ? (
         <form onSubmit={(e) => { e.preventDefault(); void save(); }} data-testid="file-edit-form">
