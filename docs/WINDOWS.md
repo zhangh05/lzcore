@@ -6,12 +6,12 @@
 
 | 附件 | 启动 | 默认数据 | 集成 |
 | --- | --- | --- | --- |
-| lzcore-v3.3.16-windows-portable.zip | 解压后 lzcore/lzcore.exe | 程序旁 data/ | 默认无快捷方式/注册表/自启动 |
-| lzcore-v3.3.16-windows-setup.exe | 每用户安装向导 | %LOCALAPPDATA%/LZCore | 开始菜单、可选桌面快捷方式、卸载项 |
+| lzcore-vX.Y.Z-windows-portable.zip | 解压后 lzcore/lzcore.exe | 程序旁 data/ | 默认无快捷方式/注册表/自启动 |
+| lzcore-vX.Y.Z-windows-setup.exe | 每用户安装向导 | %LOCALAPPDATA%/LZCore | 开始菜单、可选桌面快捷方式、卸载项 |
 
 固定版本 WebView2 随包附带，不需另装 Python/Node 或在线下载运行时。版本与 Microsoft URL 在 packaging/webview2.json，构建验证 Microsoft 签名；固定运行时随应用更新，不采用 Evergreen 自动更新。Windows 10 启动会为运行时授予 App Container 读取/执行权限，不从 UNC 目录运行。平台限制见 [Microsoft 部署文档](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。
 
-安装器拒绝带 portable.json 的目录，迁移时选独立安装目录。另一个 windows-x64.zip 是 start.bat 源码/浏览器包，带 `runtime\python\python.exe` 和 `runtime\node\node.exe`，不要求用户另行安装开发环境；不是原生桌面包。
+安装器拒绝带 portable.json 的目录，迁移时选独立安装目录。升级先清空安装目录下的 `_internal`，不会残留旧版本的模块或前端资源；用户数据不在安装目录。发行只有这两个原生包；源码目录的 start.bat 仍可用于开发，但不再发布内置 Node/Vite 的浏览器包。
 
 ## 数据和单实例
 
@@ -43,21 +43,27 @@ LocalLifecycle 在退出/备份/恢复/更新前停止新操作，取消通过�
 
 回退只接受同数据格式且有清单的已发布版本，只换程序、不撤销数据。3.2.x 没有该清单；旧数据仍可迁移。SHA256SUMS.txt 可用于手工核验。
 
-已有版本修复可从 main 手动运行 Release，release_tag 填 v3.3.16：流程核对版本、验证后替换附件，**不移动 tag**。以 windows-update.json.source_commit 判断实际构建来源。应用内按版本号检测，同版本重建不会自动提示升级，需要重新下载安装器或便携包，保留数据目录。
+已有版本修复可从 main 手动运行 Release，release_tag 填对应版本（如 v4.0.0）：流程核对版本、验证后替换附件，**不移动 tag**。以 windows-update.json.source_commit 判断实际构建来源。应用内按版本号检测，同版本重建不会自动提示升级，需要重新下载安装器或便携包，保留数据目录。
 
 GitHub Secrets LZCORE_SIGNING_PFX（Base64 PFX）和 LZCORE_SIGNING_PASSWORD 可签主程序/安装器/卸载器；未配置时标明未签名，不能宣称 SmartScreen 信誉。
 
 ## 构建和验收
 
+本机和 CI 用同一个入口 `packaging/windows/build.py`（Windows、64 位 Python 3.12、Node.js 24、Inno Setup 6）：
+
 ```powershell
 python -m pip install -r requirements-desktop.lock
-npm --prefix frontend ci
-npm --prefix frontend run build
 ./scripts/download_webview2.ps1
-python scripts/build_windows_exe.py --webview2-runtime $env:LZCORE_WEBVIEW2_DIR
+python packaging/windows/build.py build --webview2 $env:LZCORE_WEBVIEW2_DIR
+python packaging/windows/smoke.py --exe dist/lzcore/lzcore.exe --mode portable --output build/windows/qa
+python packaging/windows/build.py package
 ```
 
-Release workflow 使用锁定 Windows/Python 依赖、Inno Setup，每用户安装、升级前退出，卸载保留数据。windows_desktop_smoke.py 启动真实 EXE，经 CDP 验证页面、bridge、主题、缩放、托盘、第二次启动、原生导出、WebSocket 和带终态历史的关闭；安装/升级/卸载数据保留也单独验证。报告/截图在 windows-desktop-validation 产物。
+- build：预检（打包工具版本必须与 requirements-desktop.lock 一致）→ 清空 build/windows、dist/lzcore、release、frontend/dist → `npm ci` 后全新构建前端 → PyInstaller（`packaging/windows/lzcore.spec`）→ 装配 WebView2、build-info.json、便携标记 → 可选签名 → 校验产物：必需文件齐全、前端入口引用的资源都在、没有真实配置/密钥/`node_modules`/前端源码。版本只取 `agent/__init__.py`，版本资源生成在 build/windows/，不改仓库文件。
+- smoke：启动真实 EXE，经 CDP 验证每个一级页面和网络设备/拓扑/Skill 页面无脚本错误与缺失资源、雅黑字形、桌面设置与主题持久化、窄窗口、冻结后的 PDF/XLSX 处理、原生保存对话框、后台与第二次启动唤醒、WebSocket、原生关闭退出码 0 并重复启动关闭。
+- package：便携 ZIP（单一 lzcore/ 根目录）→ 每用户安装器（`packaging/windows/installer.iss`）→ windows-update.json 与 SHA256SUMS.txt。
+
+Release workflow 在 tag 与代码版本不一致时直接失败，安装、升级（含旧文件清理检查）、卸载保留数据单独验证。报告/截图在 windows-desktop-validation 产物。
 
 新 tag 的 Release 先生成草稿，缺失附件会使上传步骤失败。核对该提交的 CI、Windows 原生验证、全部附件及更新清单的版本、源码提交、大小与 SHA-256 后再公开草稿。已有公开 Release 的同版本重建仍替换附件，不移动 tag；不能把工作流启动或单独上传成功当成发布完成。
 

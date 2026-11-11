@@ -9,6 +9,7 @@ import { CommandPalette } from "./CommandPalette";
 import { Drawer } from "../kit/ui";
 import { useMediaQuery } from "../kit/useMediaQuery";
 import { RouteView } from "./routes";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 export function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -41,7 +42,9 @@ export function AppShell() {
       <div className="app-column">
         <TopBar onToggleNav={compactNav ? () => setNavOpen(true) : undefined} onOpenPalette={() => setPaletteOpen(true)} />
         <main id="app-main" className="app-main" tabIndex={-1}>
-          <RouteView />
+          <ErrorBoundary scope="page" key={location.pathname}>
+            <RouteView />
+          </ErrorBoundary>
         </main>
       </div>
       <DesktopHost onTask={(target) => {

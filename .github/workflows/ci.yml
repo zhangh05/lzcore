@@ -74,7 +74,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           npm --prefix frontend-legacy ci
-          npm --prefix frontend-legacy run e2e:install
+          (cd frontend-legacy && npx playwright install chromium)
+          (cd frontend-legacy && npx playwright install-deps chromium) || echo "::warning::系统浏览器依赖安装失败（多为 runner 软件源临时故障），继续使用 runner 预装依赖；真缺依赖时后续测试会失败"
       - name: Exercise authenticated workbench in Chromium
         env:
           E2E_PYTHON_BIN: python
@@ -122,7 +123,8 @@ jobs:
         run: |
           pip install -r requirements.txt
           npm --prefix frontend ci
-          npm --prefix frontend run e2e:install
+          (cd frontend && npx playwright install chromium)
+          (cd frontend && npx playwright install-deps chromium) || echo "::warning::系统浏览器依赖安装失败（多为 runner 软件源临时故障），继续使用 runner 预装依赖；真缺依赖时后续测试会失败"
       - name: Verify product with isolated real backend
         env:
           E2E_PYTHON_BIN: python
@@ -162,7 +164,8 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium
+          python -m playwright install-deps chromium || echo "::warning::系统浏览器依赖安装失败（多为 runner 软件源临时故障），继续使用 runner 预装依赖；真缺依赖时后续测试会失败"
           python -m pytest harness/ -q --tb=short
           python scripts/platform_contract.py > /tmp/platform-contract.json
           python scripts/platform_runtime_check.py
