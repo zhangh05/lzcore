@@ -1,33 +1,27 @@
 import { useMemo } from "react";
 import { PageHeader } from "../components/EmptyState";
-import { InboxList } from "../app/InboxList";
 import { useShell } from "../app/shellContext";
-import { NAMES } from "../contracts/naming";
 import { UNKNOWN_FLOW_COPY } from "../contracts/unknownFlow";
-import { useSearchParams } from "../router";
+import { Navigate, useSearchParams } from "../router";
 import { ReviewDetail, targetFromParams } from "./ReviewDetail";
 
 /**
- * 待核对收件箱（A18-审阅）。深链参数 source/id（+ artifact / session / task）直接打开核对详情面板（阶段 3）。
+ * 单条核对（A18-审阅）：从任务 / 工作台的「去核对」深链进入，参数 source/id（+ artifact / session / task）。
+ * 没有目标时回到任务页；不再提供全局「待核对」列表。
  */
 export function ReviewPage() {
-  const { refreshInbox, workspaceId } = useShell();
+  const { workspaceId, hrefFor } = useShell();
   const [params] = useSearchParams();
-  const source = params.get("source");
-  const id = params.get("id");
-  const highlight = source && id ? `${source}:${id}` : null;
   const key = params.toString();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const target = useMemo(() => (workspaceId ? targetFromParams(params, workspaceId) : null), [key, workspaceId]);
+  if (!workspaceId) return null;
+  if (!target) return <Navigate to={hrefFor("/tasks")} replace />;
   return (
     <div className="page" data-testid="review-page">
-      <PageHeader title={NAMES.reviewInbox} subtitle="需要你确认的事项：结果未知的写入、待审阅的内容和状态不明的任务。">
-        <button type="button" className="btn" onClick={refreshInbox}>重新读取</button>
-      </PageHeader>
+      <PageHeader title="核对" subtitle="回读最新状态，确认后再标记结果。" />
       <p className="inline-alert tone-unknown" role="note">{UNKNOWN_FLOW_COPY.rule}</p>
-      {highlight ? <p className="inline-alert tone-info" role="status" data-testid="review-focus">已定位：{highlight}</p> : null}
-      {target ? <ReviewDetail target={target} sessionId={params.get("session")} /> : null}
-      <InboxList highlight={highlight} />
+      <ReviewDetail target={target} sessionId={params.get("session")} />
     </div>
   );
 }

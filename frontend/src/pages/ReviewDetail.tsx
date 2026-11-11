@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, bodyOf, describeFailure, enc } from "../api/client";
 import { withWorkspace } from "../app/shellContext";
 import { Button } from "../components/Button";
-import type { LedgerOperation, ReviewItem } from "../contracts/reviewInbox";
+import type { LedgerOperation, ReviewItem } from "../contracts/reviewRecords";
 import {
   advanceUnknownFlow, canSubmitMark, expectedConfirmation, initialUnknownFlow, UNKNOWN_FLOW_STEP_LABEL,
   type Resolution, type UnknownFlowEvent, type UnknownFlowState, type UnknownTarget,
@@ -105,7 +105,7 @@ export function ReviewDetail({ target, sessionId }: { target: UnknownTarget; ses
       {record ? <details open><summary>服务端记录</summary><JsonBlock value={record} /></details> : null}
       {flow.step === "verified_still_unknown" ? (
         target.kind === "task"
-          ? <p className="muted">任务级未知项需在写操作账本逐条标记。<Link to={withWorkspace("/review", target.workspaceId)}>查看全部待核对</Link></p>
+          ? <p className="muted">任务级未知项需逐条核对对应的写操作。</p>
           : <Button variant="primary" onClick={() => step({ type: "begin_mark" })} data-testid="begin-mark">人工标记结果</Button>
       ) : null}
       {flow.step === "marking" ? (

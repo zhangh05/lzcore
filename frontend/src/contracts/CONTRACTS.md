@@ -10,8 +10,8 @@
 | 命名表 | `naming.ts` | `naming.test.ts` |
 | 扩展注册表 | `extensions.ts` | `extensions.test.ts`、`test/shell.test.tsx` |
 | 鉴权三态 | `auth.ts` | `auth.test.ts`、`test/shell.test.tsx` |
-| 工作区选择 | `workspace.ts` | `reviewInbox.test.ts` |
-| 待核对收件箱数据源 | `reviewInbox.ts` | `reviewInbox.test.ts`、`test/shell.test.tsx` |
+| 工作区选择 | `workspace.ts` | `workspace.test.ts` |
+| 单条核对记录形态 | `reviewRecords.ts` | `test/tasksReview.test.tsx` |
 
 ## 1. 三层状态
 
@@ -37,7 +37,7 @@
 
 ## 4. 命名表
 
-工作台 · 任务 · 资料（文件 / 知识 / 记忆）· 工作流 · 扩展区 · 系统（系统状态 / 设置）。顶栏：工作区、全局搜索、待核对、头像菜单。
+工作台 · 任务 · 资料（文件 / 知识 / 记忆）· 工作流 · 扩展区 · 系统（系统状态 / 设置）。顶栏：工作区、全局搜索、头像菜单。
 禁用旧别名：任务记录、任务与运行记录、运行记录、文件与数据、资料中心、数据管理、系统管理、长期记忆、网络设备与 Skill。
 核心名词不含「网络 / 设备 / 拓扑 / 巡检 / 运维」；扩展页标题 = `扩展名 · manifest 路由名`。
 
@@ -47,11 +47,8 @@
 `/extensions/**` 解析结果：`overview | loading | mounted | unavailable(原因) | not_installed(原因) | registry_error(原因)`，**没有 404**。
 扩展前端模块（manifest `module`）阶段 6 挂载；核心不 import `extensions/**`（`npm run lint:core` 检查）。
 
-## 6. 待核对收件箱
+## 6. 单条核对
 
-三类来源并行读取：
-- `GET /api/workspaces/<ws>/review-items?status=pending`（按 artifact：`/api/workspaces/<ws>/artifacts/<id>/review-items`；标记：`PUT /api/review-items/<id>?workspace_id=&artifact_id=`）
-- `GET /api/admin/operation-ledger?workspace_id=<ws>`：`planned / running / unknown / indeterminate / blocked` 计入
-- `GET /api/runtime/tasks?workspace_id=<ws>`：按 `taskHasUnknown` 判定（`execution_outcome` / 未 reconcile 的 `unknown_outcome` / 会话 task-state 的 `unknowns` 非空）。**待确认**：基线的 durable TaskState 列表没有这些字段，真实后端下该来源可能恒为 0，阶段 3 须与后端确认字段来源。
-
-某来源 403 或失败 → `incomplete=true`，徽标显示 `N+` 并列出原因，不能当成 0。每条只有「去核对」一个动作，深链到 `/review?ws=&source=&id=`。
+不提供全局「待核对」收件箱和顶栏计数（账本里重启遗留的 `indeterminate` 记录对用户没有可操作意义）。
+任务、工作台等处的「去核对」深链到 `/review?ws=&source=&id=`（`source`：`ledger` / `review_item` / `task`），
+只打开那一条的核对面板：先回读，再人工标记；没有目标时跳回任务页。

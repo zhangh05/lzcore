@@ -14,7 +14,7 @@ function renderApp(opts?: FixtureOptions, url = "/") {
 
 async function ready() {
   await screen.findByRole("navigation", { name: "主导航" });
-  await waitFor(() => expect(screen.getByTestId("inbox-count").textContent).not.toBe("…"));
+  await screen.findByTestId("workspace-switcher");
 }
 
 describe("应用壳", () => {
@@ -38,33 +38,12 @@ describe("应用壳", () => {
     expect(new URLSearchParams(window.location.search).get("ws")).toBe("ws-demo-1");
   });
 
-  it("待核对计数可用：汇总三类来源，动作是「去核对」而不是重试；切到空工作区有空态说明", async () => {
-    renderApp();
+  it("顶栏不再有全局「待核对」；/review 没有目标时回到任务页", async () => {
+    renderApp(undefined, "/review?ws=ws-demo-1");
     await ready();
-    expect(screen.getByTestId("inbox-count").textContent).toBe("5");
-    fireEvent.click(screen.getByTestId("inbox-button"));
-    const list = await screen.findByTestId("inbox-list");
-    const entries = within(list).getAllByTestId("inbox-entry");
-    expect(entries.map((e) => e.getAttribute("data-source"))).toEqual(["task", "ledger", "ledger", "review_item", "review_item"]);
-    expect(within(list).getAllByText("去核对")).toHaveLength(5);
-    expect(list.textContent).not.toMatch(/重试|重发|完成|成功/);
-    expect(within(entries[0]).getByText("结果未知 · 需核对")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByTestId("workspace-switcher"), { target: { value: "ws-demo-2" } });
-    await waitFor(() => expect(screen.getByTestId("inbox-count").textContent).toBe("0"));
-    if (!screen.queryByTestId("inbox-list")) fireEvent.click(screen.getByTestId("inbox-button"));
-    expect(await screen.findByTestId("inbox-empty")).toHaveTextContent("暂无待核对项");
-  });
-
-  it("从待核对一步到达对应条目（深链）", async () => {
-    renderApp();
-    await ready();
-    fireEvent.click(screen.getByTestId("inbox-button"));
-    const list = await screen.findByTestId("inbox-list");
-    fireEvent.click(within(list).getAllByText("去核对")[0]);
-    expect(await screen.findByTestId("review-page")).toBeInTheDocument();
-    expect(screen.getByTestId("review-focus")).toHaveTextContent("task:t-unknown");
-    expect(window.location.pathname).toBe("/review");
+    expect(screen.queryByTestId("inbox-button")).toBeNull();
+    expect(screen.queryByText("待核对")).toBeNull();
+    await waitFor(() => expect(window.location.pathname).toBe("/tasks"));
   });
 
   it("Ctrl K 命令面板：第一项是「新建会话」，真的创建会话（阶段 2 起，见 workbench.test.tsx）", async () => {

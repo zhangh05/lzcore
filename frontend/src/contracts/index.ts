@@ -4,4 +4,4 @@ export * from "./naming";
 export * from "./extensions";
 export * from "./auth";
 export * from "./workspace";
-export * from "./reviewInbox";
+export * from "./reviewRecords";

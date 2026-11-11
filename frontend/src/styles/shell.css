@@ -85,7 +85,6 @@
   /* Popovers and menus */
   .popover-anchor { position: relative; }
   .popover { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 240px; padding: var(--space-1); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-menu); transform-origin: top right; animation: pop-in var(--dur-3) var(--ease-out); }
-  .inbox-popover { width: 420px; padding: var(--space-2); }
   .popover-footer { width: 100%; justify-content: center; margin-top: var(--space-2); }
   .menu { display: flex; flex-direction: column; gap: 1px; }
   .menu [role="menuitem"] { display: flex; align-items: center; gap: var(--space-2); text-align: left; padding: 0 var(--space-2); min-height: var(--h-control-compact); border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--fs-sm); border-radius: calc(var(--r-card) - 6px); cursor: pointer; transition: background var(--dur-1) var(--ease); }

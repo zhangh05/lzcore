@@ -3,13 +3,11 @@ import { COMMAND_HINT, COMMAND_LABEL } from "./CommandPalette";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { canSignOut } from "../contracts/auth";
 import { NAMES } from "../contracts/naming";
-import { inboxBadge } from "../contracts/reviewInbox";
 import { workspaceDisplayName } from "../contracts/workspace";
-import { IconChevronDown, IconInbox, IconMenu, IconMoon, IconRows, IconSearch, IconSettings, IconSignOut, IconSun } from "../components/Icon";
+import { IconChevronDown, IconMenu, IconMoon, IconRows, IconSearch, IconSettings, IconSignOut, IconSun } from "../components/Icon";
 import { useNavigate } from "../router";
 import { usePrefs } from "./prefs";
 import { useShell } from "./shellContext";
-import { InboxList } from "./InboxList";
 import { Breadcrumb } from "./Breadcrumb";
 
 function WorkspaceSwitcher() {
@@ -40,30 +38,6 @@ function usePopover() {
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
   }, [open]);
   return { open, setOpen, ref };
-}
-
-function ReviewInboxButton() {
-  const { inbox, inboxError, hrefFor } = useShell();
-  const navigate = useNavigate();
-  const { open, setOpen, ref } = usePopover();
-  const badge = inboxBadge(inbox);
-  const n = inbox?.entries.length ?? 0;
-  return (
-    <div className="popover-anchor" ref={ref}>
-      <button type="button" className="topbar-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}
-        aria-label={NAMES.reviewInbox} title={inboxError ? `待核对读取失败：${inboxError}` : badge.title} data-testid="inbox-button">
-        <IconInbox size={17} aria-hidden="true" />
-        <span>{NAMES.reviewInbox}</span>
-        <span className={`count-badge ${n ? "tone-unknown" : ""}`} data-testid="inbox-count">{inboxError ? "!" : badge.text}</span>
-      </button>
-      {open ? (
-        <div className="popover inbox-popover" role="dialog" aria-label={NAMES.reviewInbox}>
-          <InboxList compact onNavigate={() => setOpen(false)} />
-          <button type="button" className="btn ghost popover-footer" onClick={() => { setOpen(false); navigate(hrefFor("/review")); }}>查看全部待核对</button>
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function AvatarMenu() {
@@ -116,7 +90,6 @@ export function TopBar({ onOpenPalette, onToggleNav }: { onOpenPalette: () => vo
         <IconSearch size={15} aria-hidden="true" /><span>{COMMAND_LABEL}：跳转或新建…</span><kbd>Ctrl K</kbd>
       </button>
       <div className="topbar-right">
-        <ReviewInboxButton />
         <DesktopSettingsButton />
         <AvatarMenu />
       </div>

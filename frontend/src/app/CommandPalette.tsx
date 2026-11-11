@@ -48,7 +48,6 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         if (!workspaceId) return;
         void createSession(workspaceId).then((r) => navigate(withWorkspace(r.session ? `/workbench?session=${enc(r.session.session_id)}` : "/workbench?notice=create_failed", workspaceId)));
       } },
-      { id: "open-review", group: "动作", label: `打开${NAMES.reviewInbox}`, run: go("/review") },
     ];
     for (const s of [...CORE_NAV_BEFORE_EXTENSIONS, ...CORE_NAV_AFTER_EXTENSIONS]) {
       list.push({ id: `go:${s.key}`, group: "前往", label: s.label, run: go(s.path) });
