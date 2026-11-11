@@ -34,7 +34,7 @@
   .status-chip.tone-danger { background: var(--danger-soft); color: var(--danger); }
   .status-chip.tone-info { background: var(--info-soft); color: var(--info); }
   .status-chip:is(.tone-ok, .tone-warn, .tone-danger, .tone-info, .tone-unknown)::before { content: ""; width: 6px; height: 6px; flex: none; border-radius: var(--r-pill); background: currentColor; }
-  /* Count badge (top bar inbox). Lives here so it outranks the generic .tone-* colours. */
+  /* Count badge. Lives here so it outranks the generic .tone-* colours. */
   .count-badge { display: inline-grid; place-items: center; min-width: 20px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--surface-3); color: var(--text-2); font-size: var(--fs-xs); font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; text-align: center; }
   .count-badge.tone-unknown { background: var(--unknown); color: var(--unknown-text); }
   .status-dot { width: 8px; height: 8px; flex: none; border-radius: var(--r-pill); background: currentColor; box-shadow: 0 0 0 3px color-mix(in oklab, currentColor 18%, transparent); }

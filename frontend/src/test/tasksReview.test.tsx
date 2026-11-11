@@ -112,6 +112,6 @@ describe("核对详情面板（阶段 3）", () => {
     fireEvent.click(within(panel).getByTestId("readback-btn"));
     await waitFor(() => expect(panel.getAttribute("data-step")).toBe("verified_still_unknown"));
     expect(within(panel).queryByTestId("begin-mark")).toBeNull();
-    expect(panel).toHaveTextContent("逐条标记");
+    expect(panel).toHaveTextContent("逐条核对");
   });
 });

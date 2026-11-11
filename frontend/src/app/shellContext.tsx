@@ -1,10 +1,9 @@
 import { setDesktopPrincipal } from "../desktop/bridge";
 import { clearLocalAuth } from "../api/localAuth";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { httpGet } from "../api/http";
 import type { AuthStatus } from "../contracts/auth";
 import { registryFromResponse, type ExtensionRegistryState } from "../contracts/extensions";
-import { loadReviewInbox, type ReviewInbox } from "../contracts/reviewInbox";
 import { pickCurrentWorkspace, type WorkspaceSummary } from "../contracts/workspace";
 import { useLocation, useNavigate } from "../router";
 import { scopedKey } from "./prefs";
@@ -21,9 +20,6 @@ interface ShellValue {
   workspaceId: string | null;
   switchWorkspace: (id: string) => void;
   extensions: ExtensionRegistryState;
-  inbox: ReviewInbox | null;
-  inboxError: string | null;
-  refreshInbox: () => void;
   /** 带上当前工作区的应用内路径。 */
   hrefFor: (path: string) => string;
   signOut: () => Promise<void>;
@@ -53,9 +49,6 @@ export function ShellProvider({ auth, onSignedOut, children }: { auth: AuthStatu
   const rememberKey = scopedKey(auth.username, "workspace");
   const [workspaces, setWorkspaces] = useState<WorkspacesState>({ kind: "loading" });
   const [extensions, setExtensions] = useState<ExtensionRegistryState>({ kind: "loading" });
-  const [inbox, setInbox] = useState<ReviewInbox | null>(null);
-  const [inboxError, setInboxError] = useState<string | null>(null);
-  const [inboxTick, setInboxTick] = useState(0);
 
   useEffect(() => {
     let off = false;
@@ -89,18 +82,6 @@ export function ShellProvider({ auth, onSignedOut, children }: { auth: AuthStatu
     }
   }, [workspaceId, urlWs, location.pathname, location.search, location.hash, navigate]);
 
-  const latestWs = useRef(workspaceId);
-  latestWs.current = workspaceId;
-  useEffect(() => {
-    if (!workspaceId) return;
-    let off = false;
-    setInbox(null);
-    setInboxError(null);
-    loadReviewInbox(httpGet, workspaceId)
-      .then((value) => { if (!off && latestWs.current === value.workspaceId) setInbox(value); })
-      .catch((e) => { if (!off) setInboxError(e instanceof Error ? e.message : String(e)); });
-    return () => { off = true; };
-  }, [workspaceId, inboxTick]);
 
   const switchWorkspace = useCallback((id: string) => {
     try { localStorage.setItem(rememberKey, id); } catch { /* ignore */ }
@@ -108,7 +89,6 @@ export function ShellProvider({ auth, onSignedOut, children }: { auth: AuthStatu
   }, [rememberKey, navigate, location.pathname]);
 
   const hrefFor = useCallback((path: string) => withWorkspace(path, workspaceId), [workspaceId]);
-  const refreshInbox = useCallback(() => setInboxTick((n) => n + 1), []);
   const signOut = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
     clearLocalAuth();
@@ -116,6 +96,6 @@ export function ShellProvider({ auth, onSignedOut, children }: { auth: AuthStatu
     onSignedOut();
   }, [onSignedOut]);
 
-  const value: ShellValue = { auth, workspaces, workspaceId, switchWorkspace, extensions, inbox, inboxError, refreshInbox, hrefFor, signOut };
+  const value: ShellValue = { auth, workspaces, workspaceId, switchWorkspace, extensions, hrefFor, signOut };
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }

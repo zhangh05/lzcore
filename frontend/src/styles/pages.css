@@ -1,17 +1,6 @@
-/* Page layouts: workbench columns, tasks split, inbox, system. Shared parts live in components.css. */
+/* Page layouts: workbench columns, tasks split, system. Shared parts live in components.css. */
 @layer pages {
   /* ── Inbox (top bar popover + review page) ─────────────────────────── */
-  .inbox-entries, .inbox-sources { list-style: none; margin: 0; padding: 0; }
-  .inbox-sources li { font-size: var(--fs-sm); padding: var(--space-1) 0; }
-  .inbox-entry { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line-2); transition: background var(--dur-1) var(--ease); }
-  .inbox-entry:hover { background: var(--surface-2); }
-  .inbox-entry:last-child { border-bottom: 0; }
-  .inbox-entry.is-highlighted { background: var(--unknown-soft); }
-  .inbox-entry-main { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-  .inbox-entry-title { font-weight: var(--weight-strong); }
-  .inbox-entry-src { color: var(--text-3); font-size: var(--fs-xs); font-family: var(--font-mono); }
-  .inbox-entry-detail { width: 100%; margin: 0; color: var(--text-3); font-size: var(--fs-sm); }
-  .inbox-note { margin: var(--space-2); color: var(--text-3); font-size: var(--fs-sm); }
 
   /* ── Workbench: sessions · thread · progress (progress only when it has content) ── */
   .workbench { display: flex; height: 100%; min-height: 0; }

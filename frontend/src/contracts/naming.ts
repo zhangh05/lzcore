@@ -23,7 +23,7 @@ export const NAMES = {
   systemStatus: "系统状态",
   settings: "设置",
   skill: "Skill",
-  reviewInbox: "待核对",
+  reviewInbox: "核对",
   workspace: "工作区",
   search: "全局搜索",
   // 阶段 5 扩展（只追加，不改已冻结的名字）
