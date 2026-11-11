@@ -8,6 +8,7 @@ import { loadReviewInbox, type ReviewInbox } from "../contracts/reviewInbox";
 import { pickCurrentWorkspace, type WorkspaceSummary } from "../contracts/workspace";
 import { useLocation, useNavigate } from "../router";
 import { scopedKey } from "./prefs";
+import { clearApiCache } from "../kit/useApi";
 
 type WorkspacesState =
   | { kind: "loading" }
@@ -111,6 +112,7 @@ export function ShellProvider({ auth, onSignedOut, children }: { auth: AuthStatu
   const signOut = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
     clearLocalAuth();
+    clearApiCache();
     onSignedOut();
   }, [onSignedOut]);
 

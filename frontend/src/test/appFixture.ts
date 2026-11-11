@@ -143,6 +143,11 @@ export function appHandler(opts: AppFixtureOptions, log: Logged[]): FakeHandler 
       if (seg[4] === "restore") { s.status = "active"; return { status: 200, body: { session: s } }; }
       if (seg[4] === "messages") return { status: 200, body: { messages: messages[s.session_id] ?? [] } };
     }
+    if (p === "/api/runtime/session-tasks" && method === "GET") {
+      const active = q.get("workspace_id") === "ws-demo-2" ? [] : sessions.filter((s) => s.status === "active");
+      const items = active.filter((s) => taskState[s.session_id]).map((s) => ({ session_id: s.session_id, title: s.title, task: taskState[s.session_id] }));
+      return { status: 200, body: { ok: true, workspace_id: q.get("workspace_id"), items, sessions_scanned: active.length, truncated: false, errors: [] } };
+    }
     if (seg[2] === "runtime" && seg[3] === "sessions" && seg[5] === "task-state") {
       const t = taskState[seg[4]];
       return { status: 200, body: { ok: true, task_state: t ? { task: t } : null } };

@@ -1,4 +1,5 @@
 import { clearLocalAuth } from "../api/localAuth";
+import { clearApiCache } from "../kit/useApi";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
@@ -24,6 +25,7 @@ void OriginalWebSocket;
 afterEach(() => {
   cleanup();
   clearLocalAuth();
+  clearApiCache();
   globalThis.fetch = blockedFetch as unknown as typeof fetch;
   globalThis.WebSocket = BlockedWebSocket as unknown as typeof WebSocket;
   localStorage.clear();

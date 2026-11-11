@@ -30,9 +30,23 @@ export function LoadState<T>({ value, onReload, children, empty }: {
   value: Loadable<T>; onReload?: () => void; children: (data: T) => ReactNode; empty?: ReactNode;
 }) {
   if (value.state === "idle") return <>{empty ?? null}</>;
-  if (value.state === "loading") return <p role="status" className="muted">读取中…</p>;
+  if (value.state === "loading") {
+    return value.slow
+      ? <p role="status" className="muted" data-testid="load-slow">读取中…后端响应较慢，请求仍在进行。</p>
+      : <p role="status" className="muted">读取中…</p>;
+  }
   if (value.state === "error") return <FailureNote outcome={value.outcome} onRetryRead={onReload} />;
-  return <>{children(value.data)}</>;
+  return (
+    <>
+      {value.refreshError ? (
+        <p className="inline-alert tone-warn" role="alert" data-testid="stale-data-note">
+          重新读取失败，以下是 {value.at ? new Date(value.at).toLocaleTimeString("zh-CN", { hour12: false }) : "此前"} 读取的数据，可能已过期。{describeFailure(value.refreshError)}
+          {onReload ? <> <button type="button" className="btn ghost" onClick={onReload}>重新读取</button></> : null}
+        </p>
+      ) : null}
+      {children(value.data)}
+    </>
+  );
 }
 
 /** tab 进 URL（?tab=）。 */
