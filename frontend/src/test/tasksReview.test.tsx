@@ -16,7 +16,7 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
 describe("任务中心（阶段 3）", () => {
   it("主视图来自 runtime tasks；说明该接口不含 execution_outcome（数据源问题）", async () => {
     renderAt("/tasks?ws=ws-demo-1");
-    expect(await screen.findByTestId("outcome-missing-note")).toHaveTextContent("execution_outcome");
+    expect(await screen.findByTestId("outcome-missing-note")).toHaveTextContent("执行结束不代表目标完成");
     const table = await screen.findByTestId("runtime-tasks");
     expect(within(table).getAllByText("结论未上报（该接口不含 execution_outcome）").length).toBe(2);
     expect(table.textContent).not.toMatch(/完成|成功/);

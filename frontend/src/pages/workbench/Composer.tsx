@@ -3,14 +3,14 @@ import { boundSessionSelection } from "../../extension-modules/registry";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Button } from "../../components/Button";
 import { useApi, listOf } from "../../kit/useApi";
-import { Drawer, FailureNote } from "../../kit/ui";
+import { Drawer, FailureNote, fmtTime } from "../../kit/ui";
 import { admitAttachments, attachmentKind, scopeLocked, stopLabel, type PendingAttachment, type SessionSummary, type StopState } from "./model";
 
 interface Skill { extension_id: string; skill_id: string; name: string; description?: string; resources: { resource_id: string; name: string; description?: string }[]; default_resource_ids?: string[]; selection_mode?: "single" | "multiple" }
 const skillKey = (skill: Skill) => JSON.stringify([skill.extension_id, skill.skill_id]);
 export interface SendOptions { attachments: PendingAttachment[]; workbenchSelection?: WorkbenchSelection; resumeTaskId?: string }
 
-interface ManagedFile { file_id: string; original_name?: string; name?: string; filename?: string; size_bytes?: number; mime_type?: string }
+interface ManagedFile { file_id: string; original_name?: string; name?: string; filename?: string; size_bytes?: number; mime_type?: string; created_at?: string; metadata?: { folder?: string } }
 
 let seq = 0;
 const nextId = () => `att-${++seq}`;
@@ -143,9 +143,11 @@ function ManagedFilePicker({ ws, selected, onClose, onPick }: { ws: string; sele
       {files.state === "error" ? <p className="inline-alert tone-warn">文件列表不可读。</p> : null}
       <ul className="nav-list">
         {list.map((f) => (
-          <li key={f.file_id}><label><input type="checkbox" checked={sel.has(f.file_id)} onChange={(e) => { const n = new Set(sel); if (e.target.checked) n.add(f.file_id); else n.delete(f.file_id); setSel(n); }} /> {f.original_name ?? f.name ?? f.filename ?? f.file_id}</label></li>
+          <li key={f.file_id}><label><input type="checkbox" checked={sel.has(f.file_id)} onChange={(e) => { const n = new Set(sel); if (e.target.checked) n.add(f.file_id); else n.delete(f.file_id); setSel(n); }} /> {f.original_name ?? f.name ?? f.filename ?? f.file_id}</label>
+            <p className="muted picker-meta" data-testid="picker-file-meta">{[f.metadata?.folder ? `文件夹 ${f.metadata.folder}` : "根目录", f.size_bytes != null ? `${Math.max(1, Math.round(f.size_bytes / 1024))} KB` : null, f.created_at ? fmtTime(f.created_at) : null, f.file_id].filter(Boolean).join(" · ")}</p></li>
         ))}
       </ul>
+      {files.state === "ok" && !list.length ? <p role="status" className="muted">这个工作区还没有托管文件。</p> : null}
       <div className="row-actions">
         <Button onClick={() => onPick(list.filter((f) => sel.has(f.file_id)))}>作为附件</Button>
       </div>

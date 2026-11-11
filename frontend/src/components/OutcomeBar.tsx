@@ -12,7 +12,7 @@ export function OutcomeBar({ facts, toolCalls = [], verifyHref, resumeHref, runn
   const tools = toolCalls.length ? toolAttemptSummary(toolCalls, facts) : "未调用工具";
   return (
     <div className={`outcome-bar tone-${v.tone}`} role={v.persistentAlert ? "alert" : "status"} data-testid={testId ?? "outcome-bar"} data-goal={v.goal}>
-      <span className={`status-chip tone-${v.tone}`} data-testid="goal-label">{v.goalLabel}</span>
+      <span className={`status-chip tone-${v.tone}`} data-testid="goal-label" title="来源：本条回复 metadata.execution_outcome（缺失即「结论未上报」，不由 task-state 推断）">{v.goalLabel}</span>
       <span className="outcome-tools">{tools}</span>
       <span className="outcome-actions">
         {v.actions.map((a) => {

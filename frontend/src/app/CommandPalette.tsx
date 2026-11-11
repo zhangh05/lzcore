@@ -6,6 +6,7 @@ import { extensionNavItems } from "../contracts/extensions";
 import { workspaceDisplayName } from "../contracts/workspace";
 import { useNavigate } from "../router";
 import { useShell, withWorkspace } from "./shellContext";
+import { Portal } from "../kit/ui";
 
 export interface PaletteCommand {
   id: string;
@@ -13,6 +14,13 @@ export interface PaletteCommand {
   label: string;
   run: () => void;
 }
+
+/**
+ * 这里只匹配「动作 / 页面 / 工作区」命令，不检索会话、文件、知识或记忆内容，所以界面上叫「命令」，
+ * 不再沿用 NAMES.search（"全局搜索"，属于 contracts/naming，需 Codex 同步改名）。
+ */
+export const COMMAND_LABEL = "命令";
+export const COMMAND_HINT = "只搜索动作、页面和工作区；会话、文件、知识与记忆的内容请在对应页面检索。";
 
 /** Ctrl K 命令面板：分组结果 + 动作（不只是跳转）。「新建会话」永远在第一位。 */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
@@ -71,9 +79,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   let lastGroup = "";
   return (
-    <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label={NAMES.search} onKeyDown={onKey} data-testid="command-palette">
-        <input ref={inputRef} className="palette-input" placeholder="输入命令或页面名" value={query} onChange={(e) => setQuery(e.target.value)}
+    <Portal><div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label={COMMAND_LABEL} onKeyDown={onKey} data-testid="command-palette">
+        <input ref={inputRef} className="palette-input" placeholder="输入动作、页面或工作区名称" value={query} onChange={(e) => setQuery(e.target.value)}
           role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={filtered[index] ? `cmd-${index}` : undefined} />
         <ul id="palette-list" className="palette-list" role="listbox">
           {filtered.length === 0 ? <li className="palette-empty">没有匹配的命令</li> : null}
@@ -89,7 +97,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             );
           })}
         </ul>
+        <p className="palette-hint" data-testid="palette-hint">{COMMAND_HINT}</p>
       </div>
-    </div>
+    </div></Portal>
   );
 }

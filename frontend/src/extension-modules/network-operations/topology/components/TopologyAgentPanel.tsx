@@ -1,13 +1,19 @@
 /**
- * 迁移适配：旧画布内嵌的 Agent 对话面板依赖旧工作台（useChatStream / useActiveTurn / workbench store /
- * MessageRow），新前端的工作台是另一套实现，这里**没有迁移画布内对话**。
- * 面板保留原入口与 props：说明原因、列出本图的协作改动（可定位 / 撤销），并能在新工作台打开本图专属会话
- * （仍由旧 resolveTopologySession 保证 1 图 1 会话）。导出的 buildTopology* 与旧文件一致。
+ * 绘图助手（画布内对话）：迁自 frontend-legacy 版 TopologyAgentPanel，改接新前端的回合合同。
+ * - 会话：仍由 resolveTopologySession 保证「1 张图 1 个会话」；首次发送才创建。
+ * - 发送：新前端 /ws/agent 回合通道（realtime/TurnTransport，按 client_request_id 幂等；断线只续传 / 回读，绝不自动重发）。
+ *   metadata.workbench_selection 带 drawing skill、resource_ids、allow_edit、drawing_version 与画布选择。
+ * - 发送前先 prepareDrawing()：冲刷本地未保存改动并以服务端版本为基线（失败则不发送）。
+ * - 回合终态后：回读会话消息（服务端终态优先），再 onCompleted() 让画布回读服务端图纸版本；面板显示发送时 / 回读后的版本号。
+ * - 未知写入（连接中断、结果未知）只提示核对，不自动重放。
  */
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, bodyOf, describeFailure, enc, stableId } from "../../../../api/client";
+import { ensureLocalBrowserToken } from "../../../../api/localAuth";
+import { TurnTransport, wsUrl, type Frame } from "../../../../realtime/turnTransport";
+import { renderMarkdown } from "../../../../utils/markdown";
 import { useNavigate } from "../platform/router";
-import { Button } from "../platform/components/ui";
-import { IconSparkle, IconClose } from "../platform/components/Icon";
+import { IconSparkle, IconClose, IconSend, IconStop } from "../platform/components/Icon";
 import type { Topology } from "./topologyDocument";
 import type { CanvasSelection } from "./canvasSelection";
 import { resolveTopologySession } from "./TopologySessionResolver";
@@ -30,13 +36,17 @@ export function buildTopologySelection(topology: Topology, selection: CanvasSele
   };
 }
 
+interface PanelMessage { message_id?: string; role: string; content: string; created_at?: string; run_id?: string; ok?: boolean; errors?: unknown[]; metadata?: Record<string, unknown> }
+interface LivePanelTurn { clientRequestId: string; sessionId: string; text: string; status: string; jobId?: string; baseVersion: number }
+
+const PROMPTS: [string, string][] = [
+  ["绘制结构", "在当前图纸中添加两台交换机与一台路由器，分别命名并连线，排列整齐。"],
+  ["整理布局", "整理当前图纸布局，保留已有对象与连接关系，避免标签重叠。"],
+  ["添加标注", "为当前选中对象添加清晰的文字标注；如未选择对象，先询问标注内容。"],
+];
+
 export function TopologyAgentPanel({
-  workspaceId,
-  topology,
-  activities = [],
-  onLocate,
-  onUndoChange,
-  onClose,
+  workspaceId, topology, selection, onCompleted, prepareDrawing, activities = [], onLocate, onUndoChange, onClose,
 }: {
   workspaceId: string;
   topology: Topology;
@@ -49,39 +59,195 @@ export function TopologyAgentPanel({
   onClose?: () => void;
 }) {
   const navigate = useNavigate();
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<PanelMessage[]>([]);
+  const [live, setLive] = useState<LivePanelTurn | null>(null);
+  const [input, setInput] = useState("");
+  const [allowEdit, setAllowEdit] = useState(true);
+  const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const open = async () => {
-    setBusy(true); setError("");
+  const [versionNote, setVersionNote] = useState<{ before: number; awaiting: boolean } | null>(null);
+  const submittingRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const transportRef = useRef<TurnTransport | null>(null);
+
+  const loadMessages = useCallback(async (sid: string) => {
+    const o = await api.get(`/api/sessions/${enc(sid)}/messages`, { workspace_id: workspaceId });
+    const list = bodyOf<{ messages?: PanelMessage[] }>(o)?.messages;
+    if (o.kind === "http" && o.status === 200 && Array.isArray(list)) { setMessages(list); return true; }
+    if (o.kind === "http" && o.status === 404) { setSessionId(null); setMessages([]); return false; }
+    setError(`会话记录读取失败：${describeFailure(o)}`);
+    return false;
+  }, [workspaceId]);
+
+  // 只查找已有的本图会话，不在打开面板时创建。
+  useEffect(() => {
+    let off = false;
+    resolveTopologySession(workspaceId, topology, false).then((id) => { if (!off && id) setSessionId(id); }).catch(() => undefined);
+    return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, topology.topology_id]);
+  useEffect(() => { if (sessionId) void loadMessages(sessionId); }, [sessionId, loadMessages]);
+
+  useEffect(() => {
+    const t = new TurnTransport({
+      url: wsUrl(),
+      readback: async (sid, crid) => {
+        const o = await api.get(`/api/sessions/${enc(sid)}/messages`, { workspace_id: workspaceId });
+        return (bodyOf<{ messages?: PanelMessage[] }>(o)?.messages ?? []).some((m) => m.role === "assistant" && m.metadata?.client_request_id === crid);
+      },
+    });
+    transportRef.current = t;
+    return () => { t.close(); transportRef.current = null; };
+  }, [workspaceId]);
+
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, live?.text]);
+
+  // 画布回读到的版本号在 topology.version 上更新；回合结束后等它变化（或确认未变）。
+  useEffect(() => { if (versionNote?.awaiting && topology.version !== versionNote.before) setVersionNote({ ...versionNote, awaiting: false }); }, [topology.version, versionNote]);
+
+  const settle = useCallback(async (sid: string, before: number, note?: string) => {
+    await loadMessages(sid);
+    setLive(null);
+    if (note) setError(note);
+    setVersionNote({ before, awaiting: true });
+    onCompleted(); // 画布按服务端版本回读（reconcileServerTopology），不在这里拼本地结果
+  }, [loadMessages, onCompleted]);
+
+  const running = !!live;
+  const submit = async (request = input) => {
+    const text = buildTopologyRequest(request);
+    if (!text || running || preparing || submittingRef.current || !transportRef.current) return;
+    submittingRef.current = true;
+    setPreparing(true); setError(""); setVersionNote(null);
+    const captured: CanvasSelection = { ...selection, node_ids: [...selection.node_ids], link_ids: [...selection.link_ids], canvas_item_ids: [...selection.canvas_item_ids], group_ids: [...selection.group_ids] };
     try {
-      const sid = await resolveTopologySession(workspaceId, topology);
-      navigate(`/workbench?ws=${encodeURIComponent(workspaceId)}${sid ? `&session=${encodeURIComponent(sid)}` : ""}`);
-    } catch {
-      setError("无法打开本图的专属会话（会话接口失败），请稍后重试。");
-    } finally { setBusy(false); }
+      const baseline = prepareDrawing ? await prepareDrawing() : topology;
+      let id = sessionId;
+      if (!id) {
+        id = await resolveTopologySession(workspaceId, topology, true);
+        if (!id) { setError("无法创建本图的专属会话，指令尚未发送。"); return; }
+        setSessionId(id);
+      }
+      await ensureLocalBrowserToken();
+      const clientRequestId = stableId("cr");
+      setInput("");
+      setMessages((m) => [...m, { role: "user", content: text }]);
+      const sid = id;
+      setLive({ clientRequestId, sessionId: sid, text: "", status: "已发送 · 等待服务端受理", baseVersion: baseline.version });
+      transportRef.current.sendMessage({
+        workspaceId, sessionId: sid, text, clientRequestId,
+        metadata: { workbench_selection: buildTopologySelection(baseline, captured, allowEdit) },
+        handlers: {
+          onToken: (t) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
+          onEvent: (name, data) => setLive((l) => l && { ...l, jobId: String(data.job_id ?? l.jobId ?? "") || undefined, status: name === "tool_call" ? `调用工具 ${String(data.tool_id ?? "")}` : name === "model_started" ? "模型处理中" : l.status }),
+          onDone: () => void settle(sid, baseline.version),
+          onError: (f: Frame) => void settle(sid, baseline.version, `本轮报错：${String(f.message ?? f.error ?? "未知错误")}`),
+          onTransport: (s) => {
+            if (s === "interrupted") setLive((l) => l && { ...l, status: "连接中断 · 回合可能仍在执行，正在续传 / 回读（不会自动重发）" });
+            if (s === "resumed") setLive((l) => l && { ...l, status: "已重新连接 · 续传中" });
+            if (s === "readback_terminal") void settle(sid, baseline.version);
+          },
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? `${err.message}（指令尚未发送）` : "准备图纸失败，指令尚未发送。");
+    } finally {
+      setPreparing(false);
+      submittingRef.current = false;
+    }
   };
+
+  const stop = async () => {
+    if (!live) return;
+    if (!live.jobId) { setError("尚未拿到本轮的作业编号，暂不能请求停止；可以等待回合结束。"); return; }
+    const o = await api.post(`/api/jobs/${enc(live.jobId)}/cancel`, { workspace_id: workspaceId, client_request_id: live.clientRequestId }, { workspace_id: workspaceId });
+    setError(o.kind === "http" && o.status < 300 ? "已请求停止（受理回执，以回合终态为准）。" : `停止请求失败：${describeFailure(o)}`);
+  };
+
+  const openWorkbench = async () => {
+    try {
+      const sid = sessionId ?? await resolveTopologySession(workspaceId, topology, true);
+      navigate(`/workbench?ws=${encodeURIComponent(workspaceId)}${sid ? `&session=${encodeURIComponent(sid)}` : ""}`);
+    } catch { setError("无法打开本图的专属会话（会话接口失败），请稍后重试。"); }
+  };
+
   return (
-    <section className="topology-agent-panel" data-testid="topology-agent-panel" aria-label="绘图助手">
-      <header className="topology-agent-head">
-        <IconSparkle size={16} /> <strong>绘图助手</strong>
-        {onClose ? <Button variant="ghost" iconOnly aria-label="关闭" icon={<IconClose size={14} />} onClick={onClose} /> : null}
+    <section className="topology-agent" data-testid="topology-agent-panel" aria-label="绘图助手">
+      <header>
+        <IconSparkle size={18} />
+        <div><strong>绘图助手</strong><small>围绕这张图持续对话 · 本图专属会话</small></div>
+        <div className="topology-agent-header-actions">
+          <span className={running ? "agent-pulse" : ""} data-testid="agent-run-state">{running ? live.status : preparing ? "正在确认图纸版本…" : "就绪"}</span>
+          {onClose ? <button type="button" className="topology-agent-close" aria-label="关闭绘图助手" data-sheet-close="" onClick={onClose}><IconClose size={16} /></button> : null}
+        </div>
       </header>
-      <p className="muted" data-testid="agent-panel-not-migrated">
-        画布内对话尚未迁入新前端。请在工作台打开本图的专属会话，助手的改动会带版本写回本图，画布回读服务端版本后显示。
-      </p>
-      <Button variant="primary" onClick={() => void open()} disabled={busy} data-testid="agent-open-workbench">在工作台打开本图会话</Button>
-      {error ? <p role="alert">{error}</p> : null}
-      {activities.length ? (
-        <ul className="topology-agent-activities">
-          {activities.map((a) => (
-            <li key={`${a.version}:${a.revision_id ?? ""}`}>
-              v{a.version} · 新增 {a.added} / 修改 {a.modified} / 删除 {a.removed}
-              {a.ids.length && onLocate ? <Button size="sm" onClick={() => onLocate(a.ids)}>定位</Button> : null}
-              {onUndoChange ? <Button size="sm" onClick={() => onUndoChange(a.version)}>撤销此改动</Button> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <div className="topology-agent-scope">
+        <strong>{allowEdit ? "拓扑绘图 Skill（可修改本图）" : "拓扑只读分析"}</strong>
+        <div className="topology-context-chip">{selection.label}<small>当前图纸 v{topology.version}{sessionId ? ` · 会话 ${sessionId}` : " · 首次发送时创建会话"}</small></div>
+        <button type="button" className="btn ghost sm" onClick={() => void openWorkbench()} data-testid="agent-open-workbench">在工作台打开本图会话</button>
+      </div>
+      {activities.length > 0 && (
+        <details className="topology-agent-activity" aria-label="图纸变化">
+          <summary><strong>图纸变化记录</strong><span>{activities.length} 条 · 最新 v{activities[activities.length - 1].version}</span></summary>
+          <div className="topology-agent-activity-list">
+            {[...activities].reverse().map((a) => (
+              <div key={`${a.version}:${a.revision_id ?? ""}`} className="topology-agent-change">
+                <strong>图纸 v{a.version} · {a.source === "manual" ? "手动编辑" : "助手"} · {a.status === "displayed" ? "已保存并显示" : "已保存 · 待合并"}</strong>
+                <span>新增 {a.added} · 修改 {a.modified} · 删除 {a.removed}</span>
+                <div>
+                  <button type="button" disabled={a.status !== "displayed" || !a.ids.length} onClick={() => onLocate?.(a.ids)}>定位变化</button>
+                  {a.status === "displayed" && (a.revision_id || a.before) ? <button type="button" onClick={() => onUndoChange?.(a.version)}>撤销这次变化</button> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+      <div className="topology-agent-messages" ref={scrollRef} data-testid="agent-messages">
+        {!messages.length && !live ? (
+          <div className="topology-agent-intro">
+            <IconSparkle size={28} />
+            <h3>把想法画出来</h3>
+            <p>描述设备、连线与布局，或选中图纸对象让助手修改。不连接真实设备；改动带版本写回本图，画布回读服务端版本后显示。</p>
+            {PROMPTS.map(([label, prompt]) => <button type="button" key={label} onClick={() => setInput(prompt)}>{label}<span>→</span></button>)}
+          </div>
+        ) : null}
+        {messages.map((m, i) => (
+          <div key={m.message_id ?? `${i}:${m.role}`} className={`agent-msg is-${m.role}`} data-testid={`agent-msg-${m.role}`}>
+            {m.role === "assistant"
+              ? <div className="markdown-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content ?? "") }} />
+              : <div className="agent-msg-text">{m.content}</div>}
+            {m.role === "assistant" && (m.ok === false || (m.errors ?? []).length) ? <small className="agent-msg-meta tone-warn">本轮报错</small> : null}
+          </div>
+        ))}
+        {live ? <div className="agent-msg is-assistant is-live" role="status">{live.text ? <div className="agent-msg-text">{live.text}</div> : null}<small className="agent-msg-meta">{live.status}</small></div> : null}
+        {versionNote ? (
+          <p className="agent-version-note" role="status" data-testid="agent-version-readback">
+            {versionNote.awaiting && topology.version === versionNote.before
+              ? `回合已结束；画布已按服务端回读，图纸仍为 v${topology.version}（发送时 v${versionNote.before}，本轮未产生新版本）。`
+              : `回合已结束；画布已回读服务端图纸 v${topology.version}（发送时 v${versionNote.before}）。`}
+          </p>
+        ) : null}
+      </div>
+      {error ? <div className="topology-agent-error" role="alert">{error}{sessionId ? <button type="button" onClick={() => { setError(""); void loadMessages(sessionId); }}>重新读取</button> : null}</div> : null}
+      <form className="topology-agent-composer" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div className="topology-agent-input-row">
+          <textarea aria-label="绘图指令" data-testid="agent-input" rows={1} value={input}
+            placeholder={allowEdit ? "描述你想画的设备、连线、分组或文字…" : "咨询拓扑结构、单点故障或连线分析（只读）…"}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void submit(); } }} />
+          {running
+            ? <button type="button" className="topology-agent-stop-btn" onClick={() => void stop()} data-testid="agent-stop"><IconStop size={14} /><span>停止</span></button>
+            : <button type="submit" className="topology-agent-send-btn" disabled={!input.trim() || preparing} data-testid="agent-send"><IconSend size={14} /><span>{preparing ? "确认版本中" : "发送"}</span></button>}
+        </div>
+        <footer>
+          <div className="topology-agent-composer-meta">
+            <label className="topology-agent-allow-edit"><input type="checkbox" checked={allowEdit} onChange={(e) => setAllowEdit(e.target.checked)} disabled={running || preparing} /><span>允许修改拓扑</span></label>
+            <small>上下文：{selection.label}</small>
+          </div>
+        </footer>
+      </form>
     </section>
   );
 }

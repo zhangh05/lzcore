@@ -1,0 +1,116 @@
+/* Page layouts: workbench columns, tasks split, inbox, system. Shared parts live in components.css. */
+@layer pages {
+  /* ── Inbox (top bar popover + review page) ─────────────────────────── */
+  .inbox-entries, .inbox-sources { list-style: none; margin: 0; padding: 0; }
+  .inbox-sources li { font-size: var(--fs-sm); padding: var(--space-1) 0; }
+  .inbox-entry { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2); border-bottom: 1px solid var(--line-2); }
+  .inbox-entry.is-highlighted { background: var(--unknown-soft); }
+  .inbox-entry-main { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .inbox-entry-title { font-weight: var(--weight-strong); }
+  .inbox-entry-src { color: var(--text-3); font-size: var(--fs-xs); font-family: var(--font-mono); }
+  .inbox-entry-detail { width: 100%; margin: 0; color: var(--text-3); font-size: var(--fs-sm); }
+  .inbox-note { margin: var(--space-2); color: var(--text-3); font-size: var(--fs-sm); }
+
+  /* ── Workbench: sessions · thread · progress (progress only when it has content) ── */
+  .workbench { display: flex; height: 100%; min-height: 0; }
+  .wb-sessions { width: clamp(216px, 14vw, var(--w-sessions)); flex: none; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) var(--space-2) var(--space-3); border-right: 1px solid var(--line); background: var(--surface-2); overflow-y: auto; }
+  .wb-sessions.is-collapsed, .wb-progress.is-collapsed { width: auto; padding: var(--space-2) var(--space-1); }
+  .wb-sessions .row-actions { margin: 0; flex-wrap: nowrap; }
+  .wb-sessions .row-actions .btn.primary { flex: 1; }
+  .wb-sessions .input { width: 100%; }
+  .session-group-title { margin: var(--space-2) var(--space-2) 2px; font-size: var(--fs-xs); font-weight: var(--weight-label); color: var(--text-3); }
+  .session-item { display: flex; align-items: center; gap: 2px; border-radius: var(--r-control); }
+  .session-item:hover { background: var(--surface-hover); }
+  .session-item.is-active { background: var(--surface-selected); }
+  .session-open { flex: 1; min-width: 0; min-height: var(--h-nav-item); text-align: left; border: 0; background: transparent; font: inherit; font-size: var(--fs-sm); color: var(--text); padding: 0 var(--space-2); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-menu-button { flex: none; height: var(--h-control-compact); padding-inline: var(--space-2); }
+  .session-rename { display: flex; min-width: 0; gap: var(--space-1); }
+  .session-rename input { width: 100%; min-width: 0; }
+
+  .wb-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .wb-main > .inline-alert { margin: var(--space-2) var(--page-gutter) 0; }
+  .wb-header { flex-shrink: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2); min-height: var(--h-header); padding: var(--space-1) var(--space-3) var(--space-1) var(--page-gutter); border-bottom: 1px solid var(--line); }
+  .wb-header > * { min-width: 0; }
+  .wb-header .page-title { flex: 0 1 auto; margin: 0; font-size: var(--fs-lg); line-height: var(--lh-16); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wb-header .page-title { min-width: 6em; }
+  .wb-header .status-chip { flex: 0 1 auto; display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wb-header .btn { flex: none; }
+  .wb-thread { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--space-4) var(--page-gutter); }
+  .wb-thread > .muted, .wb-thread > .resume-bar { max-width: var(--w-reading); margin-inline: auto; }
+  .messages { list-style: none; margin: 0 auto; padding: 0; width: 100%; max-width: var(--w-reading); display: flex; flex-direction: column; gap: var(--space-3); }
+  .message { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .message.role-user { align-self: flex-end; max-width: min(72%, 720px); background: var(--message-user); border: 1px solid var(--message-user-border); padding: var(--space-2) var(--space-3); border-radius: var(--r-card); }
+  .message.role-assistant .row-actions { margin-bottom: 0; }
+  .message-body { white-space: pre-wrap; }
+  .tool-cards { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); }
+  .tool-card { border: 1px solid var(--line-2); border-radius: var(--r-control); padding: var(--space-1) var(--space-2); font-size: var(--fs-sm); }
+  .tool-card summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .tool-card .json-block { margin-top: var(--space-2); }
+  .outcome-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; font-size: var(--fs-sm); color: var(--text-2); }
+  .outcome-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
+  .resume-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+
+  .wb-composer { flex-shrink: 0; max-height: 50%; overflow-y: auto; border-top: 1px solid var(--line); padding: var(--space-2) var(--page-gutter) var(--space-3); background: var(--surface); }
+  .wb-composer > * { max-width: var(--w-reading); margin-inline: auto; }
+  .wb-composer .row-actions { margin: var(--space-1) auto; }
+  .composer-scope { font-size: var(--fs-sm); }
+  .composer-input { display: block; width: 100%; min-height: 64px; resize: vertical; font-size: var(--fs-base); line-height: var(--lh-ui); padding: var(--space-2) var(--space-3); }
+  .attachments { list-style: none; margin: 0 auto var(--space-1); padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+
+  .wb-progress { position: relative; flex: none; min-height: 0; max-width: 36%; padding: var(--space-2) var(--space-3); border-left: 1px solid var(--line); background: var(--surface-2); overflow-y: auto; overflow-wrap: anywhere; }
+  .wb-progress .row-actions { margin: 0 0 var(--space-2); flex-wrap: nowrap; border-bottom: 1px solid var(--line); }
+  .wb-progress .row-actions .tab { margin-bottom: -1px; }
+  .wb-progress h3 { margin: var(--space-3) 0 var(--space-1); font-size: var(--fs-sm); font-weight: var(--weight-heading); color: var(--text-2); }
+  .wb-progress p { margin: 0 0 var(--space-1); font-size: var(--fs-sm); }
+  .wb-panel-drawer .wb-sessions, .wb-panel-drawer .wb-progress { width: 100% !important; max-width: 100%; padding: 0; border: 0; background: transparent; }
+  .wb-panel-drawer .resize-handle { display: none; }
+  .resize-handle { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; }
+  .resize-handle:hover, .resize-handle:focus-visible { background: var(--accent-soft); }
+  .stage-list, .timeline { padding-left: var(--lz-space-5); margin: 0 0 var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--fs-sm); }
+  .stage-list .muted { margin: 0; }
+  .skill-tool-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-1) var(--space-3); }
+  .stage-list .status-chip { margin-left: var(--space-1); }
+  /* Empty workbench: the call to action sits in the middle of the thread area. */
+  .wb-main > .empty-state { flex: 1; }
+
+  /* ── Tasks: list · queue side column ───────────────────────────────── */
+  .tasks-layout { display: grid; grid-template-columns: minmax(0, 1fr) var(--w-side-panel); gap: var(--space-4); align-items: start; }
+  .tasks-layout > * { min-width: 0; }
+  .jobs-column { position: sticky; top: 0; max-height: calc(100vh - var(--h-header) - var(--space-8)); overflow-y: auto; padding: var(--space-3); }
+  .jobs-column h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); margin: 0 0 var(--space-2); font-size: var(--fs-md); }
+  .jobs-column h2 .muted { font-size: var(--fs-xs); font-weight: var(--weight-body); }
+  .job-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+  .job-item { padding: var(--space-2) 0; border-bottom: 1px solid var(--line-2); font-size: var(--fs-sm); }
+  .job-item:last-child { border-bottom: 0; }
+  .job-item .row-actions { margin: var(--space-1) 0 0; }
+  .job-item .inline-alert { margin: var(--space-1) 0 0; }
+  .report-content { white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--fs-sm); }
+  .topology-preview { width: 100%; max-height: 360px; border: 1px solid var(--line-2); border-radius: var(--r-card); background: var(--surface-3); }
+  @media (max-width: 1100px) { .tasks-layout { grid-template-columns: minmax(0, 1fr); } .jobs-column { position: static; max-height: none; } }
+
+  /* ── System status ─────────────────────────────────────────────────── */
+  .health-components .status-chip { min-width: 3.5em; justify-content: center; }
+  .detail-pairs { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--text-3); font-size: var(--fs-xs); }
+  .detail-pairs b { color: var(--text-2); font-weight: var(--weight-label); }
+
+  @media (max-width: 760px) {
+    .wb-header, .wb-thread, .wb-composer { padding: var(--space-3); }
+    .wb-header { gap: var(--space-1); flex-wrap: wrap; }
+    .wb-header .page-title { order: -1; flex-basis: 100%; }
+    .wb-composer { max-height: 55%; }
+    .composer-input { min-height: 72px; }
+    .message.role-user { max-width: 100%; }
+  }
+
+  /* ── 扩展页：画布类模块铺满可视区 ──
+     高度链：.app-main(滚动容器) → .page-ext(min-height:100%, flex 列) → .netops-page.is-canvas(flex:1)
+     → .netops-canvas-host(flex:1, 下限 560px) → .topology-mount(flex:1) → .network-admin.is-topology(flex:1)。
+     旧画布内部用 height:100% 逐层取高，任何一层是 auto 高度都会塌成 0（基线 1c9cfbc 同样塌陷）。 */
+  .page-ext { display: flex; flex-direction: column; min-height: 100%; }
+  .page-ext > * { flex: 0 0 auto; }
+  .netops-page { display: flex; flex-direction: column; min-width: 0; }
+  .page-ext > .netops-page.is-canvas { flex: 1 1 auto; min-height: 0; }
+  .netops-canvas-host { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 560px; }
+  .netops-canvas-host > .topology-mount { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .topology-mount > .network-admin.is-topology { flex: 1 1 auto; min-height: 0; }
+}

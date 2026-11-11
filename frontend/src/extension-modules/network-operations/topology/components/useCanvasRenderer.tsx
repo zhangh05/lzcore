@@ -175,7 +175,8 @@ export function useCanvasRenderer({
           snapTargetRef,
         });
       })
-      .catch(() => undefined);
+      // 渲染库加载失败要可见：节点数据已读到但画不出来，不能只留一张空网格。
+      .catch(() => { if (!disposed) hostRef.current?.setAttribute("data-renderer-error", "library_load_failed"); });
     return () => {
       disposed = true;
       host?.removeEventListener("contextmenu", preventContextMenu, {

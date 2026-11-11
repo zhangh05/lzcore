@@ -2,7 +2,9 @@
  * 页面通用部件：统一页头 / 空态已在 components/EmptyState；这里是表格、tab、对话框、抽屉、
  * 回执提示、失败说明、409 冲突面板、preview|apply 两段式。
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { FIELD_ZH } from "./fieldLabels";
 import type { HttpOutcome } from "../contracts/auth";
 import { describeFailure } from "../api/client";
 import { Button } from "../components/Button";
@@ -145,17 +147,25 @@ function useFocusTrap(open: boolean, onClose: () => void) {
   return ref;
 }
 
-export function Dialog({ title, children, onClose, footer, testId }: { title: string; children: ReactNode; onClose: () => void; footer?: ReactNode; testId?: string }) {
+/**
+ * 浮层统一挂到 document.body：遮罩永远全窗，不受触发点所在容器的 max-width / overflow / transform 影响
+ * （上一轮工作台输入区 `.wb-composer > *` 的 max-width 把托管文件抽屉压到了中间）。
+ */
+export function Portal({ children }: { children: ReactNode }) {
+  return typeof document === "undefined" ? <>{children}</> : createPortal(children, document.body);
+}
+
+export function Dialog({ title, children, onClose, footer, testId, wide }: { title: string; children: ReactNode; onClose: () => void; footer?: ReactNode; testId?: string; wide?: boolean }) {
   const ref = useFocusTrap(true, onClose);
   const id = useId();
   return (
-    <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={id} ref={ref} data-testid={testId}>
+    <Portal><div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={`dialog${wide ? " is-wide" : ""}`} role="dialog" aria-modal="true" aria-labelledby={id} ref={ref} data-testid={testId}>
         <h2 id={id} className="dialog-title">{title}</h2>
         <div className="dialog-body">{children}</div>
         {footer ? <div className="dialog-footer">{footer}</div> : null}
       </div>
-    </div>
+    </div></Portal>
   );
 }
 
@@ -163,12 +173,12 @@ export function Drawer({ title, children, onClose, testId }: { title: string; ch
   const ref = useFocusTrap(true, onClose);
   const id = useId();
   return (
-    <div className="overlay overlay-drawer" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <Portal><div className="overlay overlay-drawer" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby={id} ref={ref} data-testid={testId}>
         <header className="drawer-header"><h2 id={id}>{title}</h2><Button variant="ghost" onClick={onClose} aria-label="关闭">关闭</Button></header>
         <div className="drawer-body">{children}</div>
       </aside>
-    </div>
+    </div></Portal>
   );
 }
 
@@ -247,7 +257,7 @@ export function PreviewApply({ label, preview, apply, renderPreview, confirmText
 }
 
 export function KeyValues({ items }: { items: [string, ReactNode][] }) {
-  return <dl className="kv">{items.map(([k, v]) => <div key={k} className="kv-row"><dt>{k}</dt><dd>{v ?? "—"}</dd></div>)}</dl>;
+  return <dl className="kv">{items.map(([k, v], i) => <div key={`${k}-${i}`} className="kv-row"><dt>{k}</dt><dd>{v ?? "—"}</dd></div>)}</dl>;
 }
 
 export function JsonBlock({ value }: { value: unknown }) {
@@ -258,4 +268,198 @@ export function fmtTime(v?: unknown): string {
   if (!v || typeof v !== "string") return "—";
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? v : d.toLocaleString("zh-CN", { hour12: false });
+}
+
+// ── 产品化数据呈现（系统 / 用量等页）：状态、指标、条目在前；完整原始数据折叠在后。 ──
+// 交互范式参考 Arc UI 免费组件 metric-card / json-viewer / copy-button 的文档（uiarc.dev），
+// 代码为本仓库自写，未复制 Arc 源码。
+
+export function StatusBanner({ tone, title, detail, children, testId }: { tone: Tone | "neutral"; title: ReactNode; detail?: ReactNode; children?: ReactNode; testId?: string }) {
+  return (
+    <div className={`status-banner tone-${tone}`} role="status" data-testid={testId}>
+      <span className={`status-dot tone-${tone}`} aria-hidden="true" />
+      <span className="status-banner-title">{title}</span>
+      {detail ? <span className="status-banner-detail">{detail}</span> : null}
+      <span className="grow" />
+      {children}
+    </div>
+  );
+}
+
+export interface MetricItem { label: string; value: ReactNode; context?: ReactNode; tone?: Tone | "neutral" }
+export function MetricGrid({ items, testId }: { items: MetricItem[]; testId?: string }) {
+  return (
+    <dl className="metric-grid" data-testid={testId}>
+      {items.map((m) => (
+        <div key={m.label} className={`metric tone-${m.tone ?? "neutral"}`}>
+          <dt className="metric-label">{m.label}</dt>
+          <dd className="metric-value">{m.value}</dd>
+          {m.context ? <dd className="metric-context">{m.context}</dd> : null}
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** 完整原始响应：默认折叠，可展开、可复制；请求路径只出现在这里。 */
+export function RawData({ value, path, label = "原始数据", testId }: { value: unknown; path?: string; label?: string; testId?: string }) {
+  const [copied, setCopied] = useState<"idle" | "ok" | "fail">("idle");
+  const text = JSON.stringify(value, null, 2) ?? "null";
+  return (
+    <details className="raw-data" data-testid={testId ?? "raw-data"}>
+      <summary>
+        <span>{label}</span>
+        {path ? <span className="raw-data-path">GET {path}</span> : null}
+      </summary>
+      <div className="raw-data-body">
+        <div className="row-actions">
+          <Button className="sm" onClick={async () => {
+            try { await navigator.clipboard.writeText(text); setCopied("ok"); } catch { setCopied("fail"); }
+          }} data-testid="raw-copy">复制 JSON</Button>
+          {copied === "ok" ? <span className="muted" role="status">已复制</span> : copied === "fail" ? <span className="muted" role="status">浏览器不允许复制，请手动选择文本</span> : null}
+        </div>
+        <pre className="json-block">{text}</pre>
+      </div>
+    </details>
+  );
+}
+
+const isScalar = (v: unknown) => v === null || ["string", "number", "boolean"].includes(typeof v);
+export function scalarText(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "是" : "否";
+  return String(v);
+}
+
+/**
+ * 通用对象投影：标量 → 键值；字符串数组 → 标签；对象数组 → 表格；嵌套对象 → 小节。
+ * 不丢字段：超过深度的部分仍以 JSON 显示；完整原文另由 RawData 提供。
+ */
+export function ObjectView({ value, labels: own = {}, depth = 0 }: { value: unknown; labels?: Record<string, string>; depth?: number }) {
+  const labels: Record<string, string> = depth ? own : { ...FIELD_ZH, ...own };
+  if (isScalar(value)) return <span>{scalarText(value)}</span>;
+  if (Array.isArray(value)) {
+    if (!value.length) return <span className="muted">（空）</span>;
+    if (value.every(isScalar)) return <ul className="chip-list">{value.map((x, i) => <li key={i} className="status-chip">{scalarText(x)}</li>)}</ul>;
+    if (value.every((x) => x && typeof x === "object" && !Array.isArray(x))) {
+      const keys = [...new Set(value.flatMap((x) => Object.keys(x as object)))];
+      return (
+        <div className="table-wrap"><table className="table">
+          <thead><tr>{keys.map((k) => <th key={k} scope="col">{labels[k] ?? k}</th>)}</tr></thead>
+          <tbody>{value.map((row, i) => <tr key={i}>{keys.map((k) => {
+            const cell = (row as Record<string, unknown>)[k];
+            return <td key={k}>{isScalar(cell) || cell === undefined ? scalarText(cell) : <code>{JSON.stringify(cell)}</code>}</td>;
+          })}</tr>)}</tbody>
+        </table></div>
+      );
+    }
+    return <JsonBlock value={value} />;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (!entries.length) return <span className="muted">（空）</span>;
+    const flat = entries.filter(([, v]) => isScalar(v) || (Array.isArray(v) && v.every(isScalar)));
+    const nested = entries.filter(([, v]) => !(isScalar(v) || (Array.isArray(v) && v.every(isScalar))));
+    return (
+      <>
+        {flat.length ? <KeyValues items={flat.map(([k, v]) => [labels[k] ?? k, <ObjectView key={k} value={v} labels={labels} depth={depth + 1} />])} /> : null}
+        {nested.map(([k, v]) => (
+          <details key={k} className="section object-fold">
+            <summary className="section-title">{labels[k] ?? k} <span className="muted">（{Array.isArray(v) ? `${v.length} 项` : `${Object.keys((v ?? {}) as object).length} 个字段`}，展开查看）</span></summary>
+            {depth >= 3 ? <JsonBlock value={v} /> : <ObjectView value={v} labels={labels} depth={depth + 1} />}
+          </details>
+        ))}
+      </>
+    );
+  }
+  return <span className="muted">—</span>;
+}
+
+/**
+ * 锚定浮层（小动作 / 状态细节）：挂到 body，按触发按钮定位（右对齐，靠底时向上翻），
+ * Esc / 点外部 / 滚动 / 缩放关闭并把焦点还给触发按钮。小动作不再用整高抽屉。
+ */
+export function Popover({ anchor, open, onClose, children, role = "dialog", label, testId, className = "" }: {
+  anchor: RefObject<HTMLElement | null>; open: boolean; onClose: () => void; children: ReactNode;
+  role?: "dialog" | "menu"; label: string; testId?: string; className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const place = useCallback(() => {
+    const a = anchor.current?.getBoundingClientRect();
+    const el = ref.current;
+    if (!a || !el) return;
+    const w = el.offsetWidth, h = el.offsetHeight, gap = 4;
+    const left = Math.max(8, Math.min(a.right - w, window.innerWidth - w - 8));
+    const below = a.bottom + gap;
+    const top = below + h > window.innerHeight - 8 && a.top - gap - h > 8 ? a.top - gap - h : below;
+    setPos({ top, left });
+  }, [anchor]);
+  useLayoutEffect(() => { if (open) place(); }, [open, place]);
+  // 锚点所在列表可能在菜单打开后重排（列表回读、排序变化）：逐帧跟随锚点位置，避免菜单盖住别的行。
+  useEffect(() => {
+    if (!open) return;
+    let frame = 0, last = "";
+    const tick = () => {
+      const a = anchor.current?.getBoundingClientRect();
+      const key = a ? `${a.top}|${a.right}|${a.bottom}` : "";
+      if (key !== last) { last = key; place(); }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [open, anchor, place]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { const t = e.target as Node; if (ref.current?.contains(t) || anchor.current?.contains(t)) return; onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); onClose(); anchor.current?.focus(); } };
+    const onMove = () => place();
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); window.removeEventListener("resize", onMove); window.removeEventListener("scroll", onMove, true); };
+  }, [open, onClose, anchor, place]);
+  if (!open) return null;
+  return (
+    <Portal>
+      <div ref={ref} className={`float-panel ${className}`} role={role} aria-label={label} data-testid={testId}
+        style={pos ? { top: pos.top, left: pos.left } : { visibility: "hidden", top: 0, left: 0 }}>
+        {children}
+      </div>
+    </Portal>
+  );
+}
+
+export interface MenuItem { key: string; label: ReactNode; onSelect: () => void; danger?: boolean; disabled?: boolean; testId?: string; hint?: string }
+
+/** 「⋯ / 更多」菜单：role=menu，方向键移动、Enter 选择、Esc 关闭。 */
+export function MenuButton({ label, items, children, testId, menuTestId, className = "btn ghost" }: {
+  label: string; items: MenuItem[]; children: ReactNode; testId?: string; menuTestId?: string; className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const btn = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (open) requestAnimationFrame(() => document.querySelector<HTMLElement>(".float-panel.is-menu [role=menuitem]:not([disabled])")?.focus()); }, [open]);
+  const onKey = (e: ReactKeyboardEvent) => {
+    const list = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("[role=menuitem]:not([disabled])"));
+    const i = list.indexOf(document.activeElement as HTMLElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); list[(i + 1) % list.length]?.focus(); }
+    if (e.key === "ArrowUp") { e.preventDefault(); list[(i - 1 + list.length) % list.length]?.focus(); }
+    if (e.key === "Tab") setOpen(false);
+  };
+  return (
+    <>
+      <button type="button" ref={btn} className={className} aria-haspopup="menu" aria-expanded={open} aria-label={label} title={label} onClick={() => setOpen((o) => !o)} data-testid={testId}>{children}</button>
+      <Popover anchor={btn} open={open} onClose={close} role="menu" label={label} testId={menuTestId} className="is-menu">
+        <div ref={menuRef} className="menu" onKeyDown={onKey}>
+          {items.map((it) => (
+            <button key={it.key} type="button" role="menuitem" disabled={it.disabled} title={it.hint} className={it.danger ? "is-danger" : undefined} data-testid={it.testId}
+              onClick={() => { setOpen(false); btn.current?.focus(); it.onSelect(); }}>{it.label}</button>
+          ))}
+        </div>
+      </Popover>
+    </>
+  );
 }

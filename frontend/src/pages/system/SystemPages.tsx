@@ -7,7 +7,8 @@ import { IconWarningCircle } from "../../components/Icon";
 import type { HttpOutcome } from "../../contracts/auth";
 import { ASSIGNABLE_ROLES, NAMES, isAdmin, roleLabel } from "../../contracts/naming";
 import { listOf, useApi } from "../../kit/useApi";
-import { Chip, ConfirmDialog, Dialog, Drawer, FailureNote, JsonBlock, KeyValues, LoadState, PreviewApply, ReceiptNote, Table, Tabs, fmtTime, useUrlTab } from "../../kit/ui";
+import { Chip, ConfirmDialog, Dialog, Drawer, FailureNote, KeyValues, LoadState, ObjectView, PreviewApply, RawData, ReceiptNote, Table, Tabs, fmtTime, useUrlTab } from "../../kit/ui";
+import { ContextView, HealthView, ReadSection, SelfcheckView, UsageView, statusLabel } from "./statusViews";
 
 function Result({ r }: { r: { label: string; o: HttpOutcome } | null }) {
   if (!r) return null;
@@ -31,35 +32,48 @@ export function SystemStatusPage() {
   if (!ws) return null;
   return (
     <div className="page" data-testid="system-status">
-      <PageHeader title={NAMES.systemStatus} subtitle="运行时健康、用量、自检、提示词库、上下文运行时与保留 / 归档策略。写操作账本已并入「待核对」，不再是这里的主入口。" />
+      <PageHeader title={NAMES.systemStatus} subtitle="运行时健康、用量、自检、提示词库、上下文运行时与保留 / 归档。写操作账本在「待核对」。" />
       <Tabs label="系统状态" current={tab} onChange={setTab} tabs={[
         { key: "health", label: "运行时健康" }, { key: "usage", label: "用量" }, { key: "selfcheck", label: "自检" },
         { key: "prompts", label: "提示词库" }, { key: "context", label: "上下文运行时" }, { key: "retention", label: "保留与归档" }]} />
-      {tab === "health" ? <Read path="/api/runtime/health" extra={<Read path="/api/runtime/summary" query={{ workspace_id: ws }} />} /> : null}
-      {tab === "usage" ? <Read path="/api/agent/usage" query={{ workspace_id: ws }} /> : null}
-      {tab === "selfcheck" ? <Read path={`/api/workspaces/${enc(ws)}/selfcheck`} extra={<Read path="/api/runtime/selfcheck" />} /> : null}
+      {tab === "health" ? <HealthView ws={ws} /> : null}
+      {tab === "usage" ? <UsageView ws={ws} /> : null}
+      {tab === "selfcheck" ? <SelfcheckView ws={ws} /> : null}
       {tab === "prompts" ? <Prompts /> : null}
-      {tab === "context" ? <Read path="/api/context/status" query={{ workspace_id: ws }} /> : null}
+      {tab === "context" ? <ContextView ws={ws} /> : null}
       {tab === "retention" ? <RetentionArchive ws={ws} /> : null}
     </div>
   );
 }
 
-function Read({ path, query, extra }: { path: string; query?: Record<string, string>; extra?: ReactNode }) {
-  const [v, reload] = useApi(path, query);
-  return <><section className="card"><h3><code>{path}</code></h3><LoadState value={v} onReload={reload}>{(d) => <JsonBlock value={d} />}</LoadState></section>{extra}</>;
+/** 通用读取分区：标题 + 产品化投影 + 折叠原始数据（路径只在折叠区）。 */
+function Read({ title, path, query }: { title: string; path: string; query?: Record<string, string> }) {
+  return <ReadSection title={title} path={path} query={query} />;
 }
 
+interface PromptRec { prompt_id: string; title?: string; version?: string; task?: string; status?: string; description?: string; allowed_providers?: string[] }
 function Prompts() {
   const [list, reload] = useApi("/api/prompts");
   const [open, setOpen] = useState<string | null>(null);
   const [one] = useApi(open ? `/api/prompts/${enc(open)}` : null);
   return (
-    <LoadState value={list} onReload={reload}>{() => (
+    <LoadState value={list} onReload={reload}>{(d) => (
       <>
-        <Table rows={listOf<{ prompt_id: string; title?: string; version?: string }>(list, "prompts")} rowKey={(p) => p.prompt_id} onRowOpen={(p) => setOpen(p.prompt_id)}
-          columns={[{ key: "id", label: "提示词", render: (p) => p.title ?? p.prompt_id }, { key: "v", label: "版本", render: (p) => p.version ?? "—" }]} />
-        {open ? <LoadState value={one}>{(d) => <JsonBlock value={d} />}</LoadState> : null}
+        <Table testId="prompts-table" rows={listOf<PromptRec>(list, "prompts")} rowKey={(p) => p.prompt_id} onRowOpen={(p) => setOpen(p.prompt_id)}
+          columns={[
+            { key: "id", label: "提示词", render: (p) => p.title ?? p.prompt_id, sortValue: (p) => p.prompt_id },
+            { key: "task", label: "任务", render: (p) => p.task ?? "—", sortValue: (p) => p.task ?? "" },
+            { key: "v", label: "版本", render: (p) => p.version ?? "—" },
+            { key: "status", label: "状态", render: (p) => <Chip tone={p.status === "enabled" ? "ok" : "neutral"}>{p.status === "enabled" ? "启用" : statusLabel(p.status)}</Chip> },
+            { key: "desc", label: "说明", render: (p) => p.description ?? "—" },
+            { key: "prov", label: "允许的 Provider", render: (p) => (p.allowed_providers ?? []).join("、") || "—" },
+          ]} />
+        <RawData value={d} path="/api/prompts" />
+        {open ? (
+          <Drawer title={`提示词 ${open}`} onClose={() => setOpen(null)} testId="prompt-detail">
+            <LoadState value={one}>{(x) => <><ObjectView value={(x as { prompt?: unknown }).prompt ?? x} /><RawData value={x} path={`/api/prompts/${enc(open)}`} /></>}</LoadState>
+          </Drawer>
+        ) : null}
       </>
     )}</LoadState>
   );
@@ -75,11 +89,11 @@ function RetentionArchive({ ws }: { ws: string }) {
       <PreviewApply label="保留策略（retention）" testId="retention"
         preview={() => api.get(`${base}/retention/preview`)}
         apply={() => api.post(`${base}/retention/apply`, { dry_run: false, confirm: true })}
-        renderPreview={(b) => <JsonBlock value={b} />} />
+        renderPreview={(b) => <><ObjectView value={b} /><RawData value={b} label="原始数据（预览响应）" /></>} />
       <PreviewApply label="归档（archive）" testId="archive"
         preview={() => api.get(`${base}/archive/preview`)}
         apply={() => api.post(`${base}/archive/apply`, { dry_run: false, confirm: true })}
-        renderPreview={(b) => <JsonBlock value={b} />} />
+        renderPreview={(b) => <><ObjectView value={b} /><RawData value={b} label="原始数据（预览响应）" /></>} />
       <section className="card"><h3>已归档条目</h3>
         <Result r={r} />
         <LoadState value={items} onReload={reloadItems}>{() => (
@@ -88,8 +102,10 @@ function RetentionArchive({ ws }: { ws: string }) {
               { key: "a", label: "", render: (i) => <Button onClick={() => setRestore(i)} data-testid="archive-restore">恢复</Button> }]} />
         )}</LoadState>
       </section>
-      <Read path={`${base}/retention/audits`} />
-      <Read path={`${base}/archive/audits`} />
+      <div className="grid-2">
+        <Read title="保留策略审计" path={`${base}/retention/audits`} />
+        <Read title="归档审计" path={`${base}/archive/audits`} />
+      </div>
       {restore ? <ConfirmDialog title="从归档恢复？" details={<KeyValues items={[["月份", restore.month], ["类型", restore.kind], ["名称", restore.name]]} />} confirmLabel="恢复"
         onCancel={() => setRestore(null)} onConfirm={async () => { const x = restore; setRestore(null); setR({ label: "恢复", o: await api.post(`${base}/archive/restore`, { ...x, confirm: true }) }); reloadItems(); }} /> : null}
     </>
@@ -98,6 +114,34 @@ function RetentionArchive({ ws }: { ws: string }) {
 
 // ── 设置：Provider 管理（按 role / platform_admin 渲染） ──────────────
 interface Provider { provider: string; label?: string; provider_type?: string; protocol?: string; base_url?: string; model?: string; key_configured?: boolean; key_preview?: string | null; is_active?: boolean }
+interface LlmStatus {
+  provider?: string; model?: string; provider_type?: string; enabled?: boolean; connected?: boolean; safe_mode?: boolean; key_configured?: boolean; key_source?: string;
+  config_source?: string; prompt_cache_enabled?: boolean; vision_supported?: boolean; allowed_tasks?: string[]; blocked_tasks?: string[]; red_lines?: string[];
+  health?: { connected?: boolean; checked_at?: string; last_checked_at?: string; last_error?: string | null; last_error_type?: string | null; chat_completion_ok?: boolean };
+  last_success?: { at?: string } | null; recent_failure?: { at?: string; error_type?: string; error_summary?: string } | null;
+}
+const yn = (v?: boolean) => (v === undefined ? "未上报" : v ? "是" : "否");
+/** 模型健康：中文状态 + 摘要；字段级原文折叠在「诊断原文」。探测时间只认 health 自己的时间，不拿最近成功冒充。 */
+function LlmStatusSummary({ d }: { d: LlmStatus }) {
+  const probe = d.health?.connected;
+  const probeAt = d.health?.checked_at ?? d.health?.last_checked_at;
+  return (
+    <div data-testid="llm-status-summary">
+      <p><Chip tone={probe ? "ok" : probe === false ? "danger" : "info"}>{probe ? "连接探测正常" : probe === false ? "连接探测失败" : "探测未上报"}</Chip>{" "}
+        <span className="muted">{d.provider ?? "未上报"} / {d.model ?? "未上报"}{d.provider_type ? `（${d.provider_type}）` : ""} · 最近检测{probeAt ? `：${fmtTime(probeAt)}` : "（时间未上报）"}</span></p>
+      <KeyValues items={[
+        ["已启用", yn(d.enabled)], ["安全模式", yn(d.safe_mode)], ["密钥", d.key_configured ? `已配置（${d.key_source ?? "来源未上报"}）` : "未配置"],
+        ["配置来源", d.config_source ?? "未上报"], ["提示缓存", yn(d.prompt_cache_enabled)], ["支持图像", yn(d.vision_supported)],
+        ["最近成功", d.last_success?.at ? fmtTime(d.last_success.at) : "未上报"],
+        ["最近失败", d.recent_failure?.at ? `${fmtTime(d.recent_failure.at)}${d.recent_failure.error_type ? ` · ${d.recent_failure.error_type}` : ""}` : "无"],
+        ["探测错误", d.health?.last_error ? `${d.health.last_error_type ?? ""} ${d.health.last_error}` : "无"],
+        ["允许的模型任务", `${d.allowed_tasks?.length ?? 0} 项`], ["禁止的模型任务", `${d.blocked_tasks?.length ?? 0} 项`], ["红线", `${d.red_lines?.length ?? 0} 条`],
+      ]} />
+      {d.connected !== undefined && probe !== undefined && d.connected !== probe ? <p className="readback-note is-warn">顶层 connected={String(d.connected)} 与探测 health.connected={String(probe)} 不一致，以探测为准。</p> : null}
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { auth } = useShell();
   const admin = isAdmin(auth);
@@ -112,9 +156,9 @@ export function SettingsPage() {
   return (
     <div className="page" data-testid="settings-page">
       <PageHeader title={NAMES.settings} subtitle={admin ? "模型 Provider 管理。" : "当前账户只能查看 Provider 状态。"} />
-      <section className="card"><h3>模型健康</h3><LoadState value={status}>{(d) => <JsonBlock value={d} />}</LoadState>
+      <section className="card"><h3>模型健康</h3><LoadState value={status}>{(d) => <><LlmStatusSummary d={d as LlmStatus} /><RawData value={d} path="/api/agent/llm/status" label="诊断原文" /></>}</LoadState>
         <Button onClick={async () => setTest(await api.post("/api/agent/llm/test", { message: "ping" }))}>测试当前 Provider</Button>
-        {test ? (test.kind === "http" && test.status < 300 ? <JsonBlock value={test.body} /> : <FailureNote outcome={test} />) : null}
+        {test ? (test.kind === "http" && test.status < 300 ? <><p data-testid="llm-test-result">{(test.body as { ok?: boolean })?.ok === false ? "测试未通过" : "测试已完成"}{(test.body as { message?: string; reply?: string })?.message || (test.body as { reply?: string })?.reply ? `：${(test.body as { message?: string; reply?: string }).message ?? (test.body as { reply?: string }).reply}` : ""}</p><RawData value={test.body} label="诊断原文（测试响应）" /></> : <FailureNote outcome={test} />) : null}
       </section>
       <Result r={r} />
       {admin ? <Button variant="primary" onClick={() => setEdit("new")} data-testid="provider-new">新增 Provider</Button> : null}
@@ -402,11 +446,11 @@ function WorkspaceDetail({ ws, onClose }: { ws: string; onClose: () => void }) {
   const memoryEnabled = state.state === "ok" ? ((state.data as { state?: { memory_enabled?: boolean }; workspace?: { memory_enabled?: boolean } }).state?.memory_enabled ?? (state.data as { workspace?: { memory_enabled?: boolean } }).workspace?.memory_enabled) : undefined;
   return (
     <Dialog title={`工作区 ${ws}`} onClose={onClose} testId="ws-detail">
-      <LoadState value={state} onReload={reloadState}>{(d) => <JsonBlock value={d} />}</LoadState>
+      <LoadState value={state} onReload={reloadState}>{(d) => <><ObjectView value={d} /><RawData value={d} path={`${base}/state`} /></>}</LoadState>
       <label><input type="checkbox" checked={memoryEnabled !== false} disabled={memoryEnabled === undefined} onChange={async (e) => { setR({ label: "设置", o: await api.put(`${base}/settings`, { memory_enabled: e.target.checked }) }); reloadState(); }} /> 启用记忆（唯一可改的工作区设置）</label>
       <Result r={r} />
-      <Read path={`${base}/status`} />
-      <Read path={`${base}/storage/health`} />
+      <Read title="工作区状态" path={`${base}/status`} />
+      <Read title="存储健康" path={`${base}/storage/health`} />
     </Dialog>
   );
 }
@@ -433,7 +477,7 @@ export function BackupsPage() {
             columns={[{ key: "id", label: "备份", render: (b) => <code>{b.backup_id}</code> }, { key: "t", label: "时间", render: (b) => fmtTime(b.created_at) },
               { key: "a", label: "", render: (b) => <Button variant="danger" onClick={() => setRestore(b.backup_id)} data-testid="backup-restore">恢复</Button> }]} />
         )}</LoadState>
-        <Read path="/api/admin/production" />
+        <Read title="生产就绪检查" path="/api/admin/production" />
         {restore ? <ConfirmDialog title="从备份恢复？" testId="restore-dialog" confirmText="RESTORE" confirmLabel="恢复" onCancel={() => setRestore(null)}
           details={<p>将用备份 <code>{restore}</code> 覆盖当前全部数据（后端会先保留回滚副本）。这一步影响所有工作区。</p>}
           onConfirm={async ({ confirmation }) => { const id = restore; setRestore(null); setR({ label: "恢复", o: await api.post(`/api/admin/backups/${enc(id)}/restore`, { confirmation }) }); reload(); }} /> : null}
@@ -454,12 +498,12 @@ export function EcosystemPage() {
     <AdminGate title={NAMES.ecosystem}>
       <div className="page" data-testid="ecosystem-page">
         <PageHeader title={NAMES.ecosystem} subtitle="从外部生态导入 Skill / 工具配置。必须先预览，确认后才应用；没有一键应用。" />
-        <LoadState value={providers}>{(d) => <JsonBlock value={d} />}</LoadState>
+        <LoadState value={providers}>{(d) => <><ObjectView value={d} /><RawData value={d} path="/api/ecosystem/providers" /></>}</LoadState>
         <label className="field"><span>导入源（provider / 路径）</span><input value={source} onChange={(e) => setSource(e.target.value)} /></label>
         <PreviewApply label="导入" testId="ecosystem-import"
           preview={() => api.post("/api/ecosystem/import/preview", { source }, { workspace_id: ws })}
           apply={() => api.post("/api/ecosystem/import/apply", { source, confirm: true }, { workspace_id: ws })}
-          renderPreview={(b) => <JsonBlock value={b} />} />
+          renderPreview={(b) => <><ObjectView value={b} /><RawData value={b} label="原始数据（预览响应）" /></>} />
       </div>
     </AdminGate>
   );
@@ -474,7 +518,7 @@ export function WorkersPage() {
     <AdminGate title={NAMES.workers}>
       <div className="page" data-testid="workers-page">
         <PageHeader title={NAMES.workers} subtitle="查看作业 worker 状态；手动执行一轮会处理队列中的作业。" />
-        <LoadState value={status} onReload={reload}>{(d) => <JsonBlock value={d} />}</LoadState>
+        <LoadState value={status} onReload={reload}>{(d) => <><ObjectView value={d} /><RawData value={d} path="/api/jobs/worker/status" /></>}</LoadState>
         <Button onClick={() => setConfirm(true)}>手动执行一轮</Button>
         <Result r={r} />
         {confirm ? <ConfirmDialog title="手动执行一轮 worker？" details={<p>会从队列取作业执行，可能产生外部写入。</p>} confirmLabel="执行" onCancel={() => setConfirm(false)}

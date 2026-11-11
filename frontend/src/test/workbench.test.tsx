@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { sessionOps } from "../pages/workbench/useSessions";
 import { Thread } from "../pages/workbench/Thread";
 import { AuthGateView } from "../app/AuthGate";
 import { BrowserRouter } from "../router";
@@ -30,6 +31,8 @@ describe("工作台（阶段 2）", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(openProgress).toHaveFocus();
     expect(new URLSearchParams(window.location.search).get("session")).toBe("s-partial");
+    // 次要状态收进「状态细节」浮层（挂在 body，不丢信息）
+    fireEvent.click(await screen.findByTestId("open-status-details"));
     expect(await screen.findByTestId("agent-status")).toHaveTextContent("ready");
     expect(await screen.findByTestId("llm-health")).toHaveTextContent("已连接");
   });
@@ -138,7 +141,7 @@ describe("工作台（阶段 2）", () => {
     fireEvent.click(await screen.findByTestId("remember-btn"));
     expect(await screen.findByTestId("memory-written")).toBeInTheDocument();
     const write = log.find((l) => l.path.startsWith("/api/memory/write"))!;
-    expect((write.body as { memory_id: string }).memory_id).toMatch(/^mem_/);
+    expect((write.body as { memory_id: string }).memory_id).toMatch(/^mem-[a-f0-9]{12}$/); // 后端合同；上一轮的 mem_+24 位会被 400 invalid_memory_id 拒绝
   });
 
   it("会话：归档 → 已归档 tab 永久删除需要确认串", async () => {
@@ -156,9 +159,40 @@ describe("工作台（阶段 2）", () => {
 
   it("能力目录 dry-run 只演示", async () => {
     renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    fireEvent.click(await screen.findByTestId("wb-more"));
     fireEvent.click(await screen.findByTestId("open-catalog"));
     fireEvent.click(await screen.findByTestId("dry-run-workspace.file.write"));
     expect(await screen.findByTestId("dry-run-result")).toHaveTextContent("仅演示");
+  });
+
+  it("能力目录：分类 + 搜索，完整合同可展开", async () => {
+    renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    fireEvent.click(await screen.findByTestId("wb-more"));
+    fireEvent.click(await screen.findByTestId("open-catalog"));
+    await screen.findByTestId("catalog-section-workspace");
+    expect(screen.getByTestId("catalog-section-knowledge")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("catalog-cat-knowledge"));
+    expect(screen.queryByTestId("catalog-section-workspace")).toBeNull();
+    fireEvent.click(screen.getByText(/^全部/));
+    fireEvent.change(screen.getByTestId("catalog-search"), { target: { value: "写入" } });
+    expect(screen.getAllByTestId("catalog-tool")).toHaveLength(1);
+    expect(screen.getByTestId("catalog-contract")).toHaveTextContent("Write a managed workspace file.");
+  });
+
+  it("会话操作是锚定菜单（不是整高抽屉）；改名后主标题与列表来自同一次回读", async () => {
+    const { log } = renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    await waitFor(() => expect(screen.getByTestId("wb-title")).toHaveTextContent("部分达成"));
+    fireEvent.click(await screen.findByRole("button", { name: "管理会话 部分达成" }));
+    const menu = await screen.findByTestId("session-menu");
+    expect(menu.getAttribute("role")).toBe("menu");
+    expect(menu.parentElement).toBe(document.body);
+    expect(screen.queryByRole("dialog", { name: "会话操作" })).toBeNull();
+    fireEvent.click(within(menu).getByTestId("session-rename"));
+    const input = await screen.findByLabelText("新名称");
+    fireEvent.change(input, { target: { value: "部分达成（改名）" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(screen.getByTestId("wb-title")).toHaveTextContent("部分达成（改名）"));
+    expect(log.some((l) => l.method === "PUT" && l.path.startsWith("/api/sessions/s-partial"))).toBe(true);
   });
 });
 
@@ -192,6 +226,17 @@ describe("现有框架合同对齐", () => {
   });
 });
 
+describe("会话写入的真实范围合同", () => {
+  it("重命名、归档与恢复将 workspace_id 传到服务端读取的 query", async () => {
+    const { log } = renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    await screen.findByTestId("composer-input");
+    for (const outcome of [await sessionOps.rename("ws-demo-1", "s-partial", "验收"), await sessionOps.archive("ws-demo-1", "s-partial"), await sessionOps.restore("ws-demo-1", "s-partial")]) {
+      expect(outcome.kind === "http" && outcome.status).toBe(200);
+    }
+    for (const request of log.filter((r) => r.path.startsWith("/api/sessions/s-partial"))) expect(new URL(request.path, "http://synthetic").searchParams.get("workspace_id")).toBe("ws-demo-1");
+  });
+});
+
 describe("附件使用托管文件合同", () => {
   it.each([200, 409])("上传 HTTP %i：使用 file.file_id；未知写入保留草稿和附件且不发起回合", async (status) => {
     const { Fake } = renderAt("/workbench?ws=ws-demo-1&session=s-partial");
@@ -220,5 +265,26 @@ describe("附件使用托管文件合同", () => {
       expect(screen.getByTestId("composer-input")).toHaveValue("检查附件");
       expect(screen.getByRole("button", { name: "移除 original.txt" })).toBeInTheDocument();
     }
+  });
+});
+
+describe("浮层层级（R2）", () => {
+  it("托管文件选择抽屉挂到 body，遮罩覆盖整个窗口（不被输入区 max-width 限制）", async () => {
+    renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    fireEvent.click(await screen.findByRole("button", { name: "从托管文件选" }));
+    const drawer = await screen.findByTestId("managed-picker");
+    const overlay = drawer.parentElement!;
+    expect(overlay.classList.contains("overlay")).toBe(true);
+    expect(overlay.parentElement).toBe(document.body);
+    expect(overlay.closest(".wb-composer")).toBeNull();
+  });
+
+  it("顶部入口如实叫「命令」，并说明只搜动作 / 页面 / 工作区", async () => {
+    renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    const btn = await screen.findByTestId("open-palette");
+    expect(btn).toHaveTextContent("命令");
+    expect(btn).not.toHaveTextContent("全局搜索");
+    fireEvent.click(btn);
+    expect(await screen.findByTestId("palette-hint")).toHaveTextContent("只搜索动作、页面和工作区");
   });
 });

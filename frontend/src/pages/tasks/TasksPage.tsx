@@ -6,7 +6,10 @@ import { PageHeader } from "../../components/EmptyState";
 import { NAMES } from "../../contracts/naming";
 import type { HttpOutcome } from "../../contracts/auth";
 import { listOf, useApi } from "../../kit/useApi";
-import { Chip, Drawer, FailureNote, JsonBlock, KeyValues, LoadState, ReceiptNote, Table, Tabs, fmtTime, useUrlTab } from "../../kit/ui";
+import { Chip, Drawer, FailureNote, KeyValues, LoadState, RawData, ReceiptNote, Table, Tabs, fmtTime, useUrlTab } from "../../kit/ui";
+import { FactSummary } from "../../kit/factSummary";
+import { outcomeZh, type RunAudit, type TraceEvent } from "../workbench/ProgressPanel";
+import { renderMarkdown } from "../../utils/markdown";
 import { Link, useSearchParams } from "../../router";
 import { JobsColumn } from "./JobsColumn";
 import { OUTCOME_FIELD_MISSING, runtimeActionGate, runtimeStatusLabel, type RuntimeTask, type SessionTaskView } from "./model";
@@ -24,7 +27,7 @@ export function TasksPage() {
   if (!ws) return <div className="page"><p role="status">正在确定工作区…</p></div>;
   return (
     <div className="page" data-testid="tasks-page">
-      <PageHeader title={NAMES.tasks} subtitle="主模型是运行时任务（runtime tasks）；作业队列只作为附列展示队列态。" />
+      <PageHeader title={NAMES.tasks} subtitle="查看任务进度、运行记录和报告；右侧作业队列单独显示排队与执行状态。" />
       <Tabs label="任务视图" current={tab} onChange={(t: Tab) => setTab(t)} tabs={[{ key: "tasks", label: "运行时任务" }, { key: "runs", label: "运行 / 追踪" }, { key: "reports", label: "报告" }, { key: "trajectories", label: "轨迹" }]} />
       <div className="tasks-layout">
         <div className="tasks-main">
@@ -45,7 +48,7 @@ function RuntimeTaskList({ ws, onOpen }: { ws: string; onOpen: (id: string) => v
   const [tasks, reload] = useApi("/api/runtime/tasks", { workspace_id: ws });
   return (
     <>
-      <p className="inline-alert tone-info" role="note" data-testid="outcome-missing-note">该列表来自 <code>GET /api/runtime/tasks</code>（durable TaskState），后端不返回 <code>execution_outcome</code> / <code>unknown_outcome</code>；目标层结论与未知项请打开详情，从该任务所属会话的 task-state 读取。</p>
+      <p className="inline-alert tone-info" role="note" data-testid="outcome-missing-note">执行结束不代表目标完成。目标结论和待核对事项请打开任务详情查看。</p>
       <LoadState value={tasks} onReload={reload}>{() => (
         <Table testId="runtime-tasks" rows={listOf<RuntimeTask>(tasks, "tasks")} rowKey={(t) => t.task_id} onRowOpen={(t) => onOpen(t.task_id)}
           empty={<p className="muted">还没有运行时任务。</p>}
@@ -134,7 +137,7 @@ function SubList({ path, ws, listKey }: { path: string; ws: string; listKey: str
   const [v, reload] = useApi(path, { workspace_id: ws });
   return <LoadState value={v} onReload={reload}>{() => {
     const list = listOf<Record<string, unknown>>(v, listKey);
-    return list.length ? <ol className="timeline">{list.map((e, i) => <li key={i}><JsonBlock value={e} /></li>)}</ol> : <p className="muted">没有记录。</p>;
+    return list.length ? <ol className="timeline">{list.map((e, i) => <li key={i}><EventLine e={e} /></li>)}</ol> : <p className="muted">没有记录。</p>;
   }}</LoadState>;
 }
 
@@ -145,8 +148,27 @@ function AuditReport({ ws, base }: { ws: string; base: string }) {
     <>
       <Button onClick={async () => { setO(await api.post(`${base}/audit-report`, {}, { workspace_id: ws })); reload(); }}>生成审计报告</Button>
       {o ? (o.kind === "http" && o.status < 300 ? <ReceiptNote text="审计报告生成请求已提交" /> : <FailureNote outcome={o} />) : null}
-      <LoadState value={v} onReload={reload}>{(d) => <JsonBlock value={d} />}</LoadState>
+      <LoadState value={v} onReload={reload}>{(d) => {
+        const b = d as { markdown?: string; report?: { markdown?: string } & Record<string, unknown>; content?: string };
+        const md = b.markdown ?? b.report?.markdown ?? b.content;
+        return typeof md === "string" ? <><div className="markdown-body report-content" data-testid="audit-report-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(md) }} /><RawData value={d} label="诊断原文" /></> : <FactSummary value={b.report ?? d} />;
+      }}</LoadState>
     </>
+  );
+}
+
+const EVENT_TEXT_KEYS = ["visible_summary", "summary", "message", "text", "title", "description", "name", "type", "event", "status"] as const;
+/** 一条事件读成一句中文：时间 + 最能说明它的字段，原文折叠。 */
+function EventLine({ e }: { e: Record<string, unknown> }) {
+  const payload = (e.payload ?? {}) as Record<string, unknown>;
+  const key = EVENT_TEXT_KEYS.find((k) => typeof payload[k] === "string" || typeof e[k] === "string");
+  const text = key ? String(payload[key] ?? e[key]) : "（事件未带说明）";
+  const at = (e.created_at ?? e.timestamp ?? e.at) as string | number | undefined;
+  return (
+    <div className="event-line">
+      <span>{text}</span> <span className="muted">{at === undefined ? "" : fmtTime(typeof at === "number" ? new Date(at * 1000).toISOString() : at)}{typeof e.type === "string" && key !== "type" ? ` · ${e.type}` : ""}</span>
+      <RawData value={e} label="原文" />
+    </div>
   );
 }
 
@@ -159,8 +181,8 @@ function RunsView({ ws, onOpen }: { ws: string; onOpen: (id: string) => void }) 
         <Table testId="runs-table" rows={listOf<Record<string, string>>(runs, "runs")} rowKey={(r) => r.run_id} onRowOpen={(r) => onOpen(r.run_id)} empty={<p className="muted">没有运行记录。</p>}
           columns={[
             { key: "id", label: "run", render: (r) => <code>{r.run_id}</code> },
-            { key: "status", label: "状态", render: (r) => <Chip>{r.status ?? "未上报"}</Chip> },
-            { key: "title", label: "说明", render: (r) => r.title ?? r.goal ?? "—" },
+            { key: "status", label: "状态", render: (r) => <Chip>{r.execution_outcome ? outcomeZh(r.execution_outcome) : r.status ?? "未上报"}</Chip> },
+            { key: "title", label: "说明", render: (r) => r.title ?? r.goal ?? r.final_response_summary ?? r.intent ?? "—" },
             { key: "time", label: "时间", render: (r) => fmtTime(r.created_at) },
           ]} />
       )}</LoadState>
@@ -170,6 +192,8 @@ function RunsView({ ws, onOpen }: { ws: string; onOpen: (id: string) => void }) 
   );
 }
 
+const TRACE_ZH: Record<string, string> = { turn_start: "回合开始", model: "模型调用", final: "生成最终回复", tool: "工具调用", tool_call: "工具调用", error: "错误" };
+
 function RunDetail({ ws, runId, onClose }: { ws: string; runId: string; onClose: () => void }) {
   const base = `/api/workspaces/${enc(ws)}/runs/${enc(runId)}`;
   const [run, reload] = useApi(base);
@@ -178,10 +202,52 @@ function RunDetail({ ws, runId, onClose }: { ws: string; runId: string; onClose:
   const [sub] = useApi(view === "report" ? null : `${base}/${view}`);
   return (
     <Drawer title={`运行 ${runId}`} onClose={onClose} testId="run-detail">
-      <LoadState value={run} onReload={reload}>{(d) => <JsonBlock value={d} />}</LoadState>
+      <LoadState value={run} onReload={reload}>{(d) => <RunSummary run={((d as { run?: RunAudit }).run ?? d) as RunAudit & Record<string, unknown>} />}</LoadState>
       <Tabs label="运行详情" current={view} onChange={setView} tabs={[{ key: "trace", label: "追踪" }, { key: "report", label: "报告" }, { key: "artifacts", label: "产出" }]} />
-      {view === "report" ? <RunReports ws={ws} runId={runId} /> : <LoadState value={sub}>{(d) => <JsonBlock value={d} />}</LoadState>}
+      {view === "report" ? <RunReports ws={ws} runId={runId} /> : <LoadState value={sub}>{(d) => view === "trace" ? <TraceList body={d} /> : <ArtifactList body={d} />}</LoadState>}
     </Drawer>
+  );
+}
+
+function RunSummary({ run }: { run: RunAudit & Record<string, unknown> }) {
+  const llm = run.llm_metadata;
+  const cog = run.metadata?.cognitive_events ?? [];
+  return (
+    <section data-testid="run-summary">
+      <p><Chip tone={run.execution_outcome === "complete" ? "ok" : run.execution_outcome === "failed" ? "danger" : "info"}>执行结果：{outcomeZh(run.execution_outcome)}</Chip></p>
+      {run.final_response_summary ? <p data-testid="run-summary-text">{run.final_response_summary}</p> : null}
+      <KeyValues items={[
+        ["开始", fmtTime(run.created_at)], ["结束", fmtTime(run.finished_at)],
+        ["意图", String(run.intent ?? "未上报")],
+        ["模型", llm ? `${llm.provider ?? "?"} / ${llm.model ?? "?"}${llm.used === false ? "（未调用）" : ""}` : "未上报"],
+        ["写入记忆", run.memory_written ? "是" : "否"],
+        ["错误", run.error ? String(typeof run.error === "string" ? run.error : JSON.stringify(run.error)) : "无"],
+      ]} />
+      {cog.length ? <><h4>推理过程摘要</h4><ol className="timeline">{cog.map((c, i) => <li key={i}>{c.payload?.visible_summary ?? c.type} <span className="muted">{fmtTime(c.created_at)}</span></li>)}</ol></> : null}
+      <RawData value={run} label="运行审计诊断原文" />
+    </section>
+  );
+}
+
+function TraceList({ body }: { body: unknown }) {
+  const b = (body ?? {}) as { events?: TraceEvent[]; trace?: { events?: TraceEvent[]; total_duration_ms?: number; synthetic_event_count?: number; missing_event_count?: number } };
+  const events = b.events ?? b.trace?.events ?? [];
+  return (
+    <section data-testid="run-trace">
+      <p className="muted">共 {events.length} 个事件{typeof b.trace?.total_duration_ms === "number" ? ` · 总耗时 ${b.trace.total_duration_ms} ms` : ""}{b.trace?.synthetic_event_count ? ` · 其中补记 ${b.trace.synthetic_event_count}` : ""}{b.trace?.missing_event_count ? ` · 缺失 ${b.trace.missing_event_count}` : ""}</p>
+      {events.length ? <ol className="timeline">{events.map((e, i) => <li key={i}><strong>{TRACE_ZH[e.type ?? ""] ?? e.name ?? e.type}</strong> <span className="muted">{e.timestamp === undefined ? "时间未上报" : fmtTime(typeof e.timestamp === "number" ? new Date(e.timestamp * 1000).toISOString() : e.timestamp)}{typeof e.duration_ms === "number" ? ` · ${e.duration_ms} ms` : ""}</span></li>)}</ol> : <p className="muted">该运行没有追踪事件。</p>}
+      <RawData value={body} label="追踪诊断原文" />
+    </section>
+  );
+}
+
+function ArtifactList({ body }: { body: unknown }) {
+  const list = (((body ?? {}) as { artifacts?: { artifact_id?: string; title?: string; artifact_type?: string; created_at?: string }[] }).artifacts) ?? (Array.isArray(body) ? body : []);
+  return (
+    <section data-testid="run-artifacts">
+      {list.length ? <ul className="nav-list">{list.map((a, i) => <li key={a.artifact_id ?? i}>{a.title || a.artifact_id} <span className="muted">{a.artifact_type ?? ""} · {fmtTime(a.created_at)}</span></li>)}</ul> : <p className="muted">该运行没有产出。</p>}
+      <RawData value={body} label="产出诊断原文" />
+    </section>
   );
 }
 
@@ -218,7 +284,18 @@ export function ReportReader({ ws, report, onClose }: { ws: string; report: Repo
       ) : (
         <LoadState value={content} onReload={reload}>{(d) => {
           const text = (d as { content?: unknown }).content;
-          return typeof text === "string" ? <pre className="report-content" data-testid="report-content">{text}</pre> : <p className="muted">后端未返回正文文本。</p>;
+          if (typeof text !== "string") return <p className="muted">后端未返回正文文本。</p>;
+          // 前端完整渲染后端给的 content；若 content 本身只有一行标题，如实说明（这是后端正文的问题，不是前端截断）。
+          const lines = text.split(/\r?\n/).filter((l) => l.trim());
+          const titleOnly = lines.length <= 1 && /^#{1,6}\s|^.{0,80}$/.test(lines[0] ?? "");
+          return (
+            <>
+              <p className="muted" data-testid="report-length">正文 {text.length} 字符 · {lines.length} 行</p>
+              {titleOnly ? <p className="readback-note is-warn" data-testid="report-title-only">报告正文尚不完整，目前只有标题。</p> : null}
+              <div className="markdown-body report-content" data-testid="report-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+              <details className="raw-data"><summary>查看原始文本</summary><pre className="json-block">{text}</pre></details>
+            </>
+          );
         }}</LoadState>
       )}
     </Drawer>
@@ -279,7 +356,7 @@ function TrajectoriesView({ ws }: { ws: string }) {
         <Table rows={listOf<Record<string, string>>(v, "trajectories")} rowKey={(t) => t.trajectory_id ?? t.id} onRowOpen={(t) => setOpen(t.trajectory_id ?? t.id)} empty={<p className="muted">没有轨迹。</p>}
           columns={[{ key: "id", label: "轨迹", render: (t) => <code>{t.trajectory_id ?? t.id}</code> }, { key: "task", label: "任务", render: (t) => t.task_id ?? "—" }, { key: "time", label: "时间", render: (t) => fmtTime(t.created_at) }]} />
       )}</LoadState>
-      {open ? <Drawer title={`轨迹 ${open}`} onClose={() => setOpen(null)}><LoadState value={one}>{(d) => <JsonBlock value={d} />}</LoadState></Drawer> : null}
+      {open ? <Drawer title={`轨迹 ${open}`} onClose={() => setOpen(null)}><LoadState value={one}>{(d) => <FactSummary value={(d as { trajectory?: unknown }).trajectory ?? d} />}</LoadState></Drawer> : null}
     </>
   );
 }
