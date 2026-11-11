@@ -33,6 +33,8 @@ Provider 的有界空响应重试及候选回退耗尽后，返回 `llm_empty_re
 
 个人模式（未启用 token/login/identity）的 `/api/auth/status` 仅在请求来源为回环地址时投影 `platform_admin=true`。显式开放 LAN 无认证访问不授予管理员能力；有效 API token 仍投影管理员能力，identity 会话沿用其已有 owner 权限规则。此投影不代替特权写入的服务端校验。
 
+本机反向代理（含 `start.sh` 的 Vite preview）必须向 `X-Forwarded-For` 末尾追加实际客户端地址：后端仅在直连来源为回环时取最后一项判断本机权限及 WebSocket 连接额度，非回环直连忽略该头。多级代理部署必须启用认证。
+
 ### WebSocket 与持久回合
 
 /ws/agent 接受 ping、message、resume。message 发起一次请求，resume 带 workspace_id/session_id/client_request_id/stream_seq，只读取 seq 大于游标的日志帧，不重新提交消息或执行工具。done/error 也占正文序号，心跳不入日志。

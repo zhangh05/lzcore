@@ -152,6 +152,22 @@ def _unauthorized_response(message: str = "Missing or invalid API token") -> fla
     }), 401
 
 
+def get_effective_client_address() -> str:
+    """Resolve the client for local authority checks, trusting one local proxy.
+
+    A loopback proxy must append its peer to X-Forwarded-For. Only the last
+    entry is trusted; earlier entries may have been supplied by the client.
+    A present but empty entry stays empty so it cannot grant local authority.
+    Non-loopback peers cannot assert a client address through headers.
+    """
+    remote_addr = flask.request.remote_addr or ""
+    if _is_loopback_host(remote_addr):
+        forwarded = flask.request.headers.get("X-Forwarded-For")
+        if forwarded is not None:
+            return forwarded.rsplit(",", 1)[-1].strip()
+    return remote_addr
+
+
 def deny_remote_admin_write() -> flask.Response | None:
     """Defense in depth for privileged mutating routes.
 
@@ -163,7 +179,7 @@ def deny_remote_admin_write() -> flask.Response | None:
     """
     if _request_has_valid_api_token() or is_current_session_authenticated():
         return None
-    if _is_loopback_host(flask.request.remote_addr or ""):
+    if _is_loopback_host(get_effective_client_address()):
         return None
     return flask.jsonify({
         "ok": False,
@@ -243,7 +259,7 @@ def handle_auth_status():
     # Token/login/identity deployments must never inherit this UI capability.
     personal_mode = not (_is_auth_enabled() or _is_login_enabled() or _is_identity_enabled())
     platform_admin = api_token_authenticated or (
-        personal_mode and _is_loopback_host(flask.request.remote_addr or "")
+        personal_mode and _is_loopback_host(get_effective_client_address())
     )
     if session_authenticated and _is_identity_enabled() and not api_token_authenticated:
         try:

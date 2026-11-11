@@ -1,4 +1,69 @@
 import queue
+from types import SimpleNamespace
+
+import pytest
+
+
+@pytest.mark.parametrize("trusted_proxy", ["false", "true"])
+@pytest.mark.parametrize("remote,forwarded,client_ip,local", [
+    ("127.0.0.1", None, "127.0.0.1", True),
+    ("127.0.0.1", "192.168.1.20", "192.168.1.20", False),
+    ("127.0.0.1", "127.0.0.1, 192.168.1.20", "192.168.1.20", False),
+    ("127.0.0.1", "127.0.0.1", "127.0.0.1", True),
+    ("192.168.1.20", "127.0.0.1", "192.168.1.20", False),
+    ("::1", "192.168.1.20", "192.168.1.20", False),
+])
+def test_ws_handshake_connection_allowance_uses_effective_client(
+    monkeypatch, trusted_proxy, remote, forwarded, client_ip, local,
+):
+    """Run the registered handler without opening a socket or an agent turn."""
+    import json
+    from flask import Flask
+    from backend.ws import agent_ws
+
+    for key in ("LZCORE_AUTH_ENABLED", "LZCORE_LOGIN_ENABLED", "LZCORE_IDENTITY_ENABLED"):
+        monkeypatch.setenv(key, "false")
+    monkeypatch.setenv("TRUSTED_PROXY", trusted_proxy)
+    monkeypatch.setattr(agent_ws, "_WS_MAX_CONNECTIONS", 10)
+    monkeypatch.setattr(agent_ws, "_WS_MAX_CONNECTIONS_PER_IP", 1)
+    monkeypatch.setattr(agent_ws, "_WS_MAX_CONNECTIONS_PER_LOOPBACK", 2)
+    counts = {client_ip: 1}
+    monkeypatch.setattr(agent_ws, "_ws_connection_counts", counts)
+    monkeypatch.setattr(agent_ws, "_ws_connection_total", 1)
+    handlers = {}
+
+    def route(path):
+        def register(handler):
+            handlers[path] = handler
+            return handler
+        return register
+
+    monkeypatch.setattr(agent_ws, "sock", SimpleNamespace(init_app=lambda app: None, route=route))
+    monkeypatch.setattr(agent_ws, "_ensure_broadcast_listener", lambda: None)
+    monkeypatch.setattr("agent.runtime.turn_replay.ensure_replay_listener", lambda: None)
+    app = Flask(__name__)
+    agent_ws.register_ws_routes(app)
+    sent = []
+    received = []
+    socket = SimpleNamespace(
+        send=lambda raw: sent.append(json.loads(raw)),
+        receive=lambda **kwargs: received.append(kwargs) or None,
+    )
+    headers = {"X-Forwarded-For": forwarded} if forwarded is not None else {}
+    with app.test_request_context(
+        "/ws/agent", base_url="http://127.0.0.1:8011", headers=headers,
+        environ_base={"REMOTE_ADDR": remote},
+    ):
+        handlers["/ws/agent"](socket)
+
+    if local:
+        assert received
+        assert sent == []
+    else:
+        assert received == []
+        assert sent == [{"type": "error", "message": "connection_limit_exceeded"}]
+    assert counts == {client_ip: 1}
+    assert agent_ws._ws_connection_total == 1
 
 
 def test_ws_auth_stays_open_for_personal_use_and_closes_when_enabled():
