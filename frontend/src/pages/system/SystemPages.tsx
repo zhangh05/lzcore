@@ -32,7 +32,7 @@ export function SystemStatusPage() {
   if (!ws) return null;
   return (
     <div className="page" data-testid="system-status">
-      <PageHeader title={NAMES.systemStatus} subtitle="运行时健康、用量、自检、提示词库、上下文运行时与保留 / 归档。写操作账本在「待核对」。" />
+      <PageHeader title={NAMES.systemStatus} subtitle="运行是否健康、用了多少资源、自检结果，以及数据保留策略。" />
       <Tabs label="系统状态" current={tab} onChange={setTab} tabs={[
         { key: "health", label: "运行时健康" }, { key: "usage", label: "用量" }, { key: "selfcheck", label: "自检" },
         { key: "prompts", label: "提示词库" }, { key: "context", label: "上下文运行时" }, { key: "retention", label: "保留与归档" }]} />
@@ -155,13 +155,14 @@ export function SettingsPage() {
   const active = list.state === "ok" ? String((list.data as { active?: string }).active ?? "") : "";
   return (
     <div className="page" data-testid="settings-page">
-      <PageHeader title={NAMES.settings} subtitle={admin ? "模型 Provider 管理。" : "当前账户只能查看 Provider 状态。"} />
+      <PageHeader title={NAMES.settings} subtitle={admin ? "配置助手使用的模型服务。" : "查看助手使用的模型服务（修改需要管理员）。"}>
+        {admin ? <Button variant="primary" onClick={() => setEdit("new")} data-testid="provider-new">新增 Provider</Button> : null}
+      </PageHeader>
       <section className="card"><h3>模型健康</h3><LoadState value={status}>{(d) => <><LlmStatusSummary d={d as LlmStatus} /><RawData value={d} path="/api/agent/llm/status" label="诊断原文" /></>}</LoadState>
         <Button onClick={async () => setTest(await api.post("/api/agent/llm/test", { message: "ping" }))}>测试当前 Provider</Button>
         {test ? (test.kind === "http" && test.status < 300 ? <><p data-testid="llm-test-result">{(test.body as { ok?: boolean })?.ok === false ? "测试未通过" : "测试已完成"}{(test.body as { message?: string; reply?: string })?.message || (test.body as { reply?: string })?.reply ? `：${(test.body as { message?: string; reply?: string }).message ?? (test.body as { reply?: string }).reply}` : ""}</p><RawData value={test.body} label="诊断原文（测试响应）" /></> : <FailureNote outcome={test} />) : null}
       </section>
       <Result r={r} />
-      {admin ? <Button variant="primary" onClick={() => setEdit("new")} data-testid="provider-new">新增 Provider</Button> : null}
       <LoadState value={list} onReload={reload}>{() => (
         <Table testId="providers-table" rows={listOf<Provider>(list, "providers")} rowKey={(p) => p.provider}
           columns={[
@@ -226,7 +227,7 @@ export function UsersPage() {
   return (
     <AdminGate title={NAMES.users}>
       <div className="page" data-testid="users-page">
-        <PageHeader title={NAMES.users} subtitle={platform ? "平台管理员：可编辑用户与组织。" : "非平台管理员只能查看。"} />
+        <PageHeader title={NAMES.users} subtitle={platform ? "管理账号、角色和所属组织。" : "查看账号与角色（修改需要平台管理员）。"} />
         <Tabs label="用户与组织" current={tab} onChange={setTab} tabs={[{ key: "users", label: "用户" }, { key: "orgs", label: "组织" }]} />
         <Result r={r} />
         {tab === "users" ? (
@@ -411,7 +412,7 @@ export function WorkspacesAdminPage() {
   return (
     <AdminGate title={NAMES.workspaceAdmin}>
       <div className="page" data-testid="workspaces-admin">
-        <PageHeader title={NAMES.workspaceAdmin} subtitle="创建 / 改名 / 删除工作区；查看状态、设置与存储健康。保留与归档在「系统状态 / 保留与归档」（先预览再应用）。" />
+        <PageHeader title={NAMES.workspaceAdmin} subtitle="创建、重命名或删除工作区，查看各工作区的存储状态。" />
         <form className="row-actions" onSubmit={async (e) => { e.preventDefault(); setR({ label: "创建", o: await api.post("/api/workspaces", { workspace_id: create.trim() }) }); setCreate(""); reload(); }}>
           <input className="input" value={create} onChange={(e) => setCreate(e.target.value)} placeholder="新工作区 id" aria-label="新工作区 id" />
           <Button type="submit" disabled={!create.trim()}>创建</Button>
@@ -465,7 +466,7 @@ export function BackupsPage() {
   return (
     <AdminGate title={NAMES.backups}>
       <div className="page" data-testid="backups-page">
-        <PageHeader title={NAMES.backups} subtitle="创建、列出、清理与恢复备份；生产就绪检查。" />
+        <PageHeader title={NAMES.backups} subtitle="创建与恢复备份，并检查是否满足上线条件。" />
         <div className="row-actions">
           <Button variant="primary" onClick={async () => { setR({ label: "创建备份", o: await api.post("/api/admin/backups", {}) }); reload(); }}>创建备份</Button>
           <label className="field-inline">保留最近 <input type="number" min={1} value={keep} onChange={(e) => setKeep(Number(e.target.value) || 1)} aria-label="保留数量" /> 份</label>
@@ -497,7 +498,7 @@ export function EcosystemPage() {
   return (
     <AdminGate title={NAMES.ecosystem}>
       <div className="page" data-testid="ecosystem-page">
-        <PageHeader title={NAMES.ecosystem} subtitle="从外部生态导入 Skill / 工具配置。必须先预览，确认后才应用；没有一键应用。" />
+        <PageHeader title={NAMES.ecosystem} subtitle="从外部导入 Skill 与工具配置，先预览、确认后再应用。" />
         <LoadState value={providers}>{(d) => <><ObjectView value={d} /><RawData value={d} path="/api/ecosystem/providers" /></>}</LoadState>
         <label className="field"><span>导入源（provider / 路径）</span><input value={source} onChange={(e) => setSource(e.target.value)} /></label>
         <PreviewApply label="导入" testId="ecosystem-import"
@@ -517,7 +518,7 @@ export function WorkersPage() {
   return (
     <AdminGate title={NAMES.workers}>
       <div className="page" data-testid="workers-page">
-        <PageHeader title={NAMES.workers} subtitle="查看作业 worker 状态；手动执行一轮会处理队列中的作业。" />
+        <PageHeader title={NAMES.workers} subtitle="后台执行作业的进程状态；可手动处理一轮排队作业。" />
         <LoadState value={status} onReload={reload}>{(d) => <><ObjectView value={d} /><RawData value={d} path="/api/jobs/worker/status" /></>}</LoadState>
         <Button onClick={() => setConfirm(true)}>手动执行一轮</Button>
         <Result r={r} />

@@ -78,7 +78,7 @@
   .network-evidence-artifact { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .network-evidence-artifact details { flex-basis: 100%; }
   .live-status { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; }
-  .live-dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--text); animation: live-pulse 1.4s var(--ease-in-out) infinite; }
+  .live-dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--accent); animation: live-pulse 1.4s var(--ease-in-out) infinite; }
   .stream-caret { display: inline-block; width: .5em; height: 1.1em; margin-left: 2px; vertical-align: -.18em; border-radius: 2px; background: var(--text); animation: caret-blink 1s steps(2, start) infinite; }
   @keyframes live-pulse { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: 1; transform: scale(1); } }
   @keyframes caret-blink { to { visibility: hidden; } }
@@ -132,17 +132,23 @@
   .job-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
   .job-item { padding: var(--space-3) 0; border-bottom: 1px solid var(--line-2); font-size: var(--fs-sm); }
   .job-item:last-child { border-bottom: 0; }
+  .job-item { position: relative; }
   .job-item .row-actions { margin: var(--space-1) 0 0; }
+  /* Per-job actions sit top-right and appear on hover/focus instead of costing a whole row per job. */
+  .job-item > .row-actions:last-child { position: absolute; top: var(--space-2); right: 0; margin: 0; opacity: 0; transition: opacity var(--dur-2) var(--ease); }
+  .job-item:hover > .row-actions:last-child, .job-item:focus-within > .row-actions:last-child { opacity: 1; }
+  @media (hover: none) { .job-item > .row-actions:last-child { opacity: 1; } }
+  .job-head { padding-right: 72px; }
   .job-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-2); }
-  .job-filters .btn.is-active { background: var(--text); border-color: var(--text); color: var(--surface); }
+  .job-filters .btn.is-active { background: var(--accent-soft); border-color: color-mix(in oklab, var(--accent) 35%, transparent); color: var(--accent-2); }
   .job-head { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
   .job-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .job-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin-top: 2px; font-size: var(--fs-xs); }
   .job-progress { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0 0; }
   .job-progress progress { width: 96px; height: 6px; appearance: none; -webkit-appearance: none; border: 0; border-radius: var(--r-pill); background: var(--surface-3); overflow: hidden; }
   .job-progress progress::-webkit-progress-bar { background: var(--surface-3); border-radius: var(--r-pill); }
-  .job-progress progress::-webkit-progress-value { background: var(--text); border-radius: var(--r-pill); }
-  .job-progress progress::-moz-progress-bar { background: var(--text); border-radius: var(--r-pill); }
+  .job-progress progress::-webkit-progress-value { background: var(--accent); border-radius: var(--r-pill); }
+  .job-progress progress::-moz-progress-bar { background: var(--accent); border-radius: var(--r-pill); }
   .job-error { margin: var(--space-1) 0 0; color: var(--danger); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .job-item .inline-alert { margin: var(--space-1) 0 0; }
   .report-content { white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--fs-sm); }
@@ -164,16 +170,53 @@
   }
 
   /* ── 扩展页：画布类模块铺满可视区 ──
-     高度链：.app-main(滚动容器) → .page-ext(min-height:100%, flex 列) → .netops-page.is-canvas(flex:1)
-     → .netops-canvas-host(flex:1, 下限 560px) → .topology-mount(flex:1) → .network-admin.is-topology(flex:1)。
-     旧画布内部用 height:100% 逐层取高，任何一层是 auto 高度都会塌成 0（基线 1c9cfbc 同样塌陷）。 */
+     高度链：.app-main → .page-ext(height:100%, flex 列) → .netops-page.is-canvas(flex:1)
+     → .netops-canvas-host(flex:1) → .topology-mount(flex:1) → .network-admin.is-topology(flex:1)。
+     旧画布内部用 height:100% 逐层取高，任何一层是 auto 高度都会塌成 0。
+     画布模式下：页头只留给读屏（位置由顶栏面包屑表达），页签贴顶，画布贴满白色主区，主区不再滚动。 */
   .page-ext { display: flex; flex-direction: column; min-height: 100%; }
   .page-ext > * { flex: 0 0 auto; }
   .netops-page { display: flex; flex-direction: column; min-width: 0; }
+  .app-main:has(.netops-page.is-canvas) { overflow: hidden; scrollbar-gutter: auto; }
+  .page-ext:has(> .netops-page.is-canvas) { height: 100%; min-height: 0; padding: 0; }
+  .page-ext:has(> .netops-page.is-canvas) > .page-header { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); margin: 0; }
   .page-ext > .netops-page.is-canvas { flex: 1 1 auto; min-height: 0; }
-  .netops-canvas-host { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 560px; }
+  .netops-page.is-canvas > .tabs { margin: 0; padding: var(--space-1) var(--space-4) 0; }
+  .netops-canvas-host { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 420px; }
   .netops-canvas-host > .topology-mount { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
   .topology-mount > .network-admin.is-topology { flex: 1 1 auto; min-height: 0; }
+
+  /* ── 扩展目录：卡片 ── */
+  .ext-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-3); }
+  .ext-card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-xs); }
+  .ext-card-head { display: flex; align-items: center; gap: var(--space-3); }
+  .ext-card-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: var(--r-control); background: var(--accent-soft); color: var(--accent); }
+  .ext-card-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .ext-card-title .muted { font-size: var(--fs-xs); }
+  .ext-card-desc { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+  .ext-card-reason { margin: 0; color: var(--warn); font-size: var(--fs-xs); }
+  .ext-card-links { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: auto; padding-top: var(--space-2); border-top: 1px solid var(--line-2); }
+
+  /* ── 分区布局：系统等多子页入口，左侧页内二级导航 + 右侧内容 ── */
+  .section-layout { display: grid; grid-template-columns: 208px minmax(0, 1fr); min-height: 100%; }
+  .subnav { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 2px; padding: var(--space-5) var(--space-3) var(--space-5) var(--space-4); }
+  .subnav-title { margin: 0 0 var(--space-2); padding: 0 var(--space-2); font-family: var(--font-display); font-size: var(--fs-md); font-weight: var(--weight-heading); color: var(--text); }
+  .subnav-group { margin: var(--space-3) 0 2px; padding: 0 var(--space-2); font-size: var(--fs-xs); font-weight: var(--weight-label); color: var(--text-4); }
+  .subnav-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .subnav-item { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-2); border-radius: var(--r-control); color: var(--text-2); font-size: var(--fs-sm); text-decoration: none; transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease); }
+  .subnav-item svg { flex: none; color: var(--text-3); }
+  .subnav-item:hover { background: var(--surface-hover); color: var(--text); }
+  .subnav-item.is-active { background: var(--accent-soft); color: var(--accent-2); font-weight: var(--weight-label); }
+  .subnav-item.is-active svg { color: var(--accent); }
+  .section-content { min-width: 0; border-left: 1px solid var(--line-2); }
+  @media (max-width: 900px) {
+    .section-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+    .subnav { position: static; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line-2); scrollbar-width: none; }
+    .subnav-title, .subnav-group { display: none; }
+    .subnav-list { flex-direction: row; }
+    .subnav-item { white-space: nowrap; }
+    .section-content { border-left: 0; }
+  }
 }
 @layer pages {
   .file-preview-media { margin: var(--space-2) 0 0; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-control); padding: var(--space-2); }

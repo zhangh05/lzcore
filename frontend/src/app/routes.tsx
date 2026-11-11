@@ -8,6 +8,7 @@ import { Workbench } from "../pages/workbench/Workbench";
 import { WorkflowsPage } from "../pages/workflows/WorkflowsPage";
 import { Navigate, useLocation } from "../router";
 import { useShell } from "./shellContext";
+import { SystemLayout } from "./SystemLayout";
 
 /** 路由表（阶段 2–6）。旧前端的死路径（/network、/capabilities 等）不提供静默重定向，而是说明。 */
 export function RouteView() {
@@ -18,13 +19,13 @@ export function RouteView() {
   if (pathname === "/tasks") return <TasksPage />;
   if (pathname === "/library" || pathname === "/library/files" || pathname === "/library/knowledge" || pathname === "/library/memory") return <LibraryPage />;
   if (pathname === "/workflows") return <WorkflowsPage />;
-  if (pathname === "/system") return <SystemStatusPage />;
-  if (pathname === "/system/settings") return <SettingsPage />;
-  if (pathname === "/system/users") return <UsersPage />;
-  if (pathname === "/system/workspaces") return <WorkspacesAdminPage />;
-  if (pathname === "/system/backups") return <BackupsPage />;
-  if (pathname === "/system/ecosystem") return <EcosystemPage />;
-  if (pathname === "/system/workers") return <WorkersPage />;
+  if (pathname === "/system") return <SystemLayout><SystemStatusPage /></SystemLayout>;
+  if (pathname === "/system/settings") return <SystemLayout><SettingsPage /></SystemLayout>;
+  if (pathname === "/system/users") return <SystemLayout><UsersPage /></SystemLayout>;
+  if (pathname === "/system/workspaces") return <SystemLayout><WorkspacesAdminPage /></SystemLayout>;
+  if (pathname === "/system/backups") return <SystemLayout><BackupsPage /></SystemLayout>;
+  if (pathname === "/system/ecosystem") return <SystemLayout><EcosystemPage /></SystemLayout>;
+  if (pathname === "/system/workers") return <SystemLayout><WorkersPage /></SystemLayout>;
   if (pathname === "/review") return <ReviewPage />;
   if (pathname === "/extensions") return <ExtensionsOverview />;
   if (pathname.startsWith("/extensions/")) return <ExtensionRoutePage pathname={pathname} />;

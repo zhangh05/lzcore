@@ -17,7 +17,7 @@ export function EmptyState({ icon, title, reason, action, testId }: {
 export function PageHeader({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children?: ReactNode }) {
   return (
     <header className="page-header">
-      <div>
+      <div className="page-header-text">
         <h1 className="page-title">{title}</h1>
         {subtitle ? <p className="page-subtitle">{subtitle}</p> : null}
       </div>

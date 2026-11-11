@@ -29,9 +29,13 @@ const arcDark = decls(block(foundation, ':root[data-theme="dark"] {'));
 const darkStart = tokens.indexOf('[data-theme="dark"] {\n  color-scheme: dark;');
 const tokLight = decls(tokens.slice(0, darkStart) + tokens.slice(tokens.indexOf('\n}\n', darkStart)));
 const tokDark = decls(block(tokens, '[data-theme="dark"] {\n  color-scheme: dark;'));
+// The product accent is chosen on <html data-accent>; resolve it the same way the browser does.
+const accentName = read('index.html').match(/data-accent="([a-z]+)"/)?.[1] ?? 'neutral';
+const accentLight = decls(block(foundation, `:root[data-accent="${accentName}"] {`));
+const accentDark = decls(block(foundation, `:root[data-theme="dark"][data-accent="${accentName}"] {`));
 const themes = {
-  light: { ...tokLight, ...arcLight },
-  dark: { ...tokLight, ...arcLight, ...tokDark, ...arcDark },
+  light: { ...tokLight, ...arcLight, ...accentLight },
+  dark: { ...tokLight, ...arcLight, ...tokDark, ...arcDark, ...accentLight, ...accentDark },
 };
 
 function resolve(defs: Record<string, string>, name: string, depth = 0): string {
@@ -60,7 +64,8 @@ function oklchToHex(value: string): string {
   return `#${rgb.map((x) => Math.round(gamma(x) * 255).toString(16).padStart(2, '0')).join('')}`;
 }
 
-const token = (theme: keyof typeof themes, name: string) => oklchToHex(resolve(themes[theme], name));
+const toHex = (value: string) => (/^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : oklchToHex(value));
+const token = (theme: keyof typeof themes, name: string) => toHex(resolve(themes[theme], name));
 
 describe('CSS/canvas semantic colour contract', () => {
   for (const [theme, palette] of [['light', NODE_STATUS_COLORS], ['dark', NODE_STATUS_COLORS_DARK]] as const) {

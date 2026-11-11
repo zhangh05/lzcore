@@ -11,23 +11,25 @@ import { MemoryWriteView } from "../../kit/MemoryWriteView";
 import { reviewMemory, stableMemoryId, writeMemory, type MemoryWriteState } from "../../kit/memoryWrite";
 import { listOf, useApi } from "../../kit/useApi";
 import { Chip, ConfirmDialog, Drawer, FailureNote, KeyValues, LoadState, PreviewApply, RawData, ReceiptNote, Table, Tabs, fmtTime } from "../../kit/ui";
-import { useLocation, useNavigate } from "../../router";
-import { withWorkspace } from "../../app/shellContext";
+import { useLocation } from "../../router";
 
 type LibTab = "files" | "knowledge" | "memory";
 const TAB_LABEL: Record<LibTab, string> = { files: NAMES.files, knowledge: NAMES.knowledge, memory: NAMES.memory };
+const TAB_HINT: Record<LibTab, string> = {
+  files: "上传和管理原始文件；助手引用资料时以这里的原件为准。",
+  knowledge: "建立索引后可被检索的资料，助手回答时据此引用。",
+  memory: "助手跨会话记住的事实与偏好，写入前可审阅。",
+};
 
 /** 资料：文件 / 知识 / 记忆统一页头 + 表格；tab 即路径（/library/<tab>），可深链。 */
 export function LibraryPage() {
   const { workspaceId: ws } = useShell();
   const { pathname } = useLocation();
-  const navigate = useNavigate();
   const tab: LibTab = pathname.endsWith("/knowledge") ? "knowledge" : pathname.endsWith("/memory") ? "memory" : "files";
   if (!ws) return <div className="page"><p role="status">正在确定工作区…</p></div>;
   return (
     <div className="page" data-testid={`library-${tab}`}>
-      <PageHeader title={`${NAMES.library} / ${TAB_LABEL[tab]}`} subtitle="文件、知识与记忆统一管理。" />
-      <Tabs label="资料分类" current={tab} onChange={(t: LibTab) => navigate(withWorkspace(`/library/${t}`, ws))} tabs={(["files", "knowledge", "memory"] as const).map((k) => ({ key: k, label: TAB_LABEL[k] }))} />
+      <PageHeader title={TAB_LABEL[tab]} subtitle={TAB_HINT[tab]} />
       {tab === "files" ? <FilesView ws={ws} /> : null}
       {tab === "knowledge" ? <KnowledgeView ws={ws} /> : null}
       {tab === "memory" ? <MemoryView ws={ws} /> : null}

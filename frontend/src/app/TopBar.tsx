@@ -10,6 +10,7 @@ import { useNavigate } from "../router";
 import { usePrefs } from "./prefs";
 import { useShell } from "./shellContext";
 import { InboxList } from "./InboxList";
+import { Breadcrumb } from "./Breadcrumb";
 
 function WorkspaceSwitcher() {
   const { workspaces, workspaceId, switchWorkspace } = useShell();
@@ -109,8 +110,10 @@ export function TopBar({ onOpenPalette, onToggleNav }: { onOpenPalette: () => vo
     <header className="app-topbar">
       {onToggleNav ? <button type="button" className="topbar-btn" onClick={onToggleNav} aria-label="打开主导航"><IconMenu size={18} aria-hidden="true" /></button> : null}
       <WorkspaceSwitcher />
+      <span className="topbar-divider" aria-hidden="true" />
+      <Breadcrumb />
       <button type="button" className="topbar-search" onClick={onOpenPalette} aria-label={`${COMMAND_LABEL}（Ctrl K）`} title={COMMAND_HINT} data-testid="open-palette">
-        <IconSearch size={15} aria-hidden="true" /><span>{COMMAND_LABEL}：跳转页面、新建会话、切换工作区</span><kbd>Ctrl K</kbd>
+        <IconSearch size={15} aria-hidden="true" /><span>{COMMAND_LABEL}：跳转或新建…</span><kbd>Ctrl K</kbd>
       </button>
       <div className="topbar-right">
         <ReviewInboxButton />

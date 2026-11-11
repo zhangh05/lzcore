@@ -267,7 +267,7 @@ export function Workbench() {
           </Popover>
           <span className="grow" />
           {!progressRail || collapsed.progress ? <Button className="sm" onClick={() => setPanel("progress")} data-testid="open-progress">进度与证据</Button> : null}
-          <Button className="sm" variant="primary" onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
+          <Button className="sm" onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
           <MenuButton label="更多操作" className="btn ghost sm" testId="wb-more" menuTestId="wb-more-menu" items={[
             { key: "catalog", label: "能力目录", onSelect: () => setDrawer("catalog"), testId: "open-catalog" },
             ...(sessionId ? [{ key: "info", label: "会话信息", onSelect: () => setDrawer("info"), testId: "open-session-info" }] : []),

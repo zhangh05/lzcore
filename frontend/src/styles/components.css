@@ -9,15 +9,15 @@
   .btn svg { flex: none; }
   .btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--line-3); box-shadow: var(--shadow-md); }
   .btn:active:not(:disabled) { transform: scale(.97); box-shadow: var(--shadow-xs); }
-  .btn.primary { background: var(--text); border-color: var(--text); color: var(--surface); box-shadow: var(--shadow-xs), inset 0 1px 0 color-mix(in oklab, var(--surface) 14%, transparent); }
-  .btn.primary:hover:not(:disabled) { background: var(--text); border-color: var(--text); opacity: .9; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); box-shadow: var(--shadow-xs), inset 0 1px 0 color-mix(in oklab, white 18%, transparent); }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
   .btn.danger { color: var(--danger); }
   .btn.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: color-mix(in oklab, var(--danger) 45%, var(--line)); }
   .btn.ghost { border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
   .btn.ghost:hover:not(:disabled) { background: var(--surface-hover); border-color: transparent; box-shadow: none; color: var(--text); }
   .btn.sm { height: var(--h-control-compact); padding: 0 var(--space-2); font-size: var(--fs-sm); }
   .btn:disabled { cursor: not-allowed; opacity: 1; color: var(--text-4); background: var(--surface-2); border-color: var(--line-2); box-shadow: none; }
-  .btn.primary:disabled { color: color-mix(in oklab, var(--surface) 75%, transparent); background: color-mix(in oklab, var(--text) 35%, var(--surface)); border-color: transparent; }
+  .btn.primary:disabled { color: color-mix(in oklab, var(--accent-text) 80%, transparent); background: color-mix(in oklab, var(--accent) 40%, var(--surface)); border-color: transparent; }
   .btn.ghost:disabled { background: transparent; }
   .icon-btn { width: var(--h-control-compact); padding: 0; }
 
@@ -47,16 +47,18 @@
   .conflict-panel { display: flex; flex-direction: column; gap: var(--space-2); }
 
   /* Page frame: fills the main sheet. Only running text is capped (--w-measure). */
-  .page { width: 100%; min-width: 0; padding: var(--space-6) var(--page-gutter) var(--space-8); animation: page-in var(--dur-3) var(--ease-out); }
-  @keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-  .page-header { display: flex; align-items: flex-end; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-4); }
+  .page { width: 100%; min-width: 0; padding: var(--space-5) var(--page-gutter) var(--space-8); }
+  .page-header { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-5); }
+  .page-header-text { flex: 1 1 320px; min-width: 0; }
   .page-header > * { min-width: 0; }
-  .page-title { margin: 0; font-family: var(--font-display); font-size: var(--fs-2xl); line-height: var(--lh-24); font-weight: var(--weight-heading); letter-spacing: -.025em; overflow-wrap: anywhere; }
+  .page-title { margin: 0; font-family: var(--font-display); font-size: var(--fs-xl); line-height: 1.3; font-weight: var(--weight-heading); letter-spacing: -.025em; overflow-wrap: anywhere; }
   .page-title:focus { outline: none; }
-  .page-subtitle { margin: var(--space-1) 0 0; max-width: var(--w-measure); color: var(--text-3); font-size: var(--fs-sm); }
+  .page-subtitle { margin: 2px 0 0; max-width: var(--w-measure); color: var(--text-3); font-size: var(--fs-sm); }
   .page-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
   .row-actions > * { min-width: 0; }
+  /* A lone primary action belongs on the right, where page actions live; left-aligned it reads as content. */
+  .row-actions:has(> .btn.primary:only-child) { justify-content: flex-end; }
   .table .row-actions { margin: 0; flex-wrap: nowrap; }
   /* Toolbar: filters on the left, actions on the right, one row above the content it filters. */
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
@@ -69,10 +71,10 @@
   .tabs::-webkit-scrollbar { display: none; }
   .tab { position: relative; flex-shrink: 0; display: inline-flex; align-items: center; white-space: nowrap; border: 0; background: transparent; font: inherit; font-size: var(--fs-sm); font-weight: var(--weight-label); color: var(--text-3); padding: var(--space-2) var(--space-2) calc(var(--space-2) + 2px); margin-bottom: -1px; cursor: pointer; border-radius: var(--r-control) var(--r-control) 0 0; transition: color var(--dur-2) var(--ease); }
   .tab:hover { color: var(--text); }
-  .tab.is-active { color: var(--text); }
-  .tab-indicator { position: absolute; left: var(--space-1); right: var(--space-1); bottom: 0; height: 2px; border-radius: var(--r-pill); background: var(--text); }
+  .tab.is-active { color: var(--accent-2); }
+  .tab-indicator { position: absolute; left: var(--space-1); right: var(--space-1); bottom: 0; height: 2px; border-radius: var(--r-pill); background: var(--accent); }
   .tab-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: var(--r-pill); background: var(--surface-3); font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
-  .tab.is-active .tab-count { background: var(--text); color: var(--surface); }
+  .tab.is-active .tab-count { background: var(--accent-soft); color: var(--accent-2); }
   /* Segmented sub-switch (secondary views inside a tab): Arc segmented control. */
   .seg { position: relative; display: inline-flex; gap: 2px; padding: 3px; border-radius: calc(var(--r-control) + 2px); background: var(--surface-3); box-shadow: inset 0 1px 2px color-mix(in oklab, var(--text) 5%, transparent); }
   .seg .tab { z-index: 0; border: 0; margin: 0; padding: 5px var(--space-3); border-radius: calc(var(--r-control) - 2px); color: var(--text-3); }
@@ -103,7 +105,7 @@
   .status-banner .grow { flex: 1; }
 
   /* Metric grid: Arc metric-card language — muted label, large display numerals. */
-  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-4); }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-4); }
   .metric { position: relative; display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-xs); transition: box-shadow var(--dur-2) var(--ease), transform var(--dur-2) var(--ease); }
   .metric:hover { box-shadow: var(--shadow-md); }
   .metric dt, .metric dd { margin: 0; }
@@ -167,7 +169,7 @@
   .input, .field input, .field textarea, .field select, .composer-input, .code-input, .page select, .composer-scope select {
     min-width: 0; max-width: 100%; font: inherit; font-size: var(--fs-sm); color: var(--text); background: var(--field); border: 1px solid var(--field-border); border-radius: var(--r-control); padding: var(--space-1) var(--space-3); box-shadow: var(--shadow-xs); transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease); }
   :is(.input, .field input, .field textarea, .field select, .code-input, .page select, .composer-scope select):hover { border-color: var(--line-3); }
-  :is(.input, .field input, .field textarea, .field select, .code-input, .page select, .composer-scope select):focus { outline: none; border-color: color-mix(in oklab, var(--text) 55%, var(--field-border)); box-shadow: 0 0 0 3px var(--focus-ring-shadow); }
+  :is(.input, .field input, .field textarea, .field select, .code-input, .page select, .composer-scope select):focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring-shadow); }
   :is(.input, .field input, .field textarea, .code-input)::placeholder { color: var(--text-4); }
   .input, .field input, .field select, .page select, .composer-scope select { min-height: var(--h-control); }
   :is(.field select, .page select, .composer-scope select, .form-field select) { appearance: none; -webkit-appearance: none; padding-right: calc(var(--space-6) + 2px); background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%); background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%; background-size: 5px 5px; background-repeat: no-repeat; cursor: pointer; }
@@ -216,7 +218,7 @@
   .dialog-title { margin: 0; padding: var(--space-5) var(--space-5) var(--space-2); font-size: var(--fs-lg); font-weight: var(--weight-heading); }
   .dialog-body { padding: 0 var(--space-5); overflow: auto; }
   .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-3) var(--space-5); border-top: 1px solid var(--line-2); background: var(--surface-2); }
-  @media (prefers-reduced-motion: reduce) { .page, .dialog, .drawer, .float-panel, .empty-state { animation: none; } .btn, .metric, .table tbody tr { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .dialog, .drawer, .float-panel, .empty-state { animation: none; } .btn, .metric, .table tbody tr { transition: none; } }
 
   /* Auth / status screens */
   .status-screen, .login-screen { min-height: 100%; display: flex; align-items: center; justify-content: center; background: var(--surface-frame); background-image: radial-gradient(60rem 30rem at 50% -10%, color-mix(in oklab, var(--arc-gradient-from) 55%, transparent), transparent 70%), radial-gradient(40rem 24rem at 100% 100%, color-mix(in oklab, var(--arc-gradient-to) 45%, transparent), transparent 70%); padding: var(--space-6); }
@@ -236,7 +238,7 @@
   }
 
   /* R2：读回说明、链接按钮、检索命中、片段阅读、记忆全文 */
-  .link-button { padding: 0; border: 0; background: none; color: var(--text); font-weight: var(--weight-label); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in oklab, currentColor 30%, transparent); text-underline-offset: 2px; overflow-wrap: anywhere; }
+  .link-button { padding: 0; border: 0; background: none; color: var(--accent-2); font-weight: var(--weight-label); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in oklab, currentColor 30%, transparent); text-underline-offset: 2px; overflow-wrap: anywhere; }
   .link-button:hover, .link-button:focus-visible { text-decoration-color: currentColor; }
   .readback-note { margin: var(--space-2) 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--info); background: var(--info-soft); border-radius: var(--r-control); font-size: var(--fs-sm); }
   .readback-note.is-warn { border-left-color: var(--warn); background: var(--warn-soft); }
@@ -255,7 +257,7 @@
   .chip-filter { display: flex; flex-wrap: wrap; gap: var(--space-1); }
   .filter-chip { height: var(--h-control-compact); padding: 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--text-2); font: inherit; font-size: var(--fs-sm); font-weight: var(--weight-label); cursor: pointer; transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease); }
   .filter-chip:hover { border-color: var(--line-3); color: var(--text); }
-  .filter-chip.is-active { border-color: var(--text); background: var(--text); color: var(--surface); }
+  .filter-chip.is-active { border-color: color-mix(in oklab, var(--accent) 35%, transparent); background: var(--accent-soft); color: var(--accent-2); }
   .catalog-section h3 { margin: var(--space-3) 0 var(--space-2); font-size: var(--fs-md); }
   .catalog-section h3 .muted { font-weight: 400; font-size: var(--fs-sm); }
   .tool-catalog { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }

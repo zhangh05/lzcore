@@ -21,7 +21,7 @@ export function ReviewPage() {
   const target = useMemo(() => (workspaceId ? targetFromParams(params, workspaceId) : null), [key, workspaceId]);
   return (
     <div className="page" data-testid="review-page">
-      <PageHeader title={NAMES.reviewInbox} subtitle="汇总审阅项、写操作账本中待处理 / 未知的记录，以及会话任务状态里的未知项。">
+      <PageHeader title={NAMES.reviewInbox} subtitle="需要你确认的事项：结果未知的写入、待审阅的内容和状态不明的任务。">
         <button type="button" className="btn" onClick={refreshInbox}>重新读取</button>
       </PageHeader>
       <p className="inline-alert tone-unknown" role="note">{UNKNOWN_FLOW_COPY.rule}</p>

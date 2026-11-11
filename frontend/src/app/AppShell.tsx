@@ -37,7 +37,7 @@ export function AppShell() {
 
   return (
     <div className="app-frame">
-      {!compactNav ? <Sidebar /> : navOpen ? <Drawer title="主导航" onClose={() => setNavOpen(false)}><Sidebar /></Drawer> : null}
+      {!compactNav ? <Sidebar /> : navOpen ? <Drawer title="主导航" onClose={() => setNavOpen(false)}><Sidebar inDrawer /></Drawer> : null}
       <div className="app-column">
         <TopBar onToggleNav={compactNav ? () => setNavOpen(true) : undefined} onOpenPalette={() => setPaletteOpen(true)} />
         <main id="app-main" className="app-main" tabIndex={-1}>

@@ -33,7 +33,7 @@ export function WorkflowsPage() {
   if (!ws) return null;
   return (
     <div className="page" data-testid="workflows-page">
-      <PageHeader title={NAMES.workflows} subtitle="定义、模板实例化与运行。运行入队只是回执，结论看运行详情与任务。" />
+      <PageHeader title={NAMES.workflows} subtitle="把多个步骤编排成可重复运行的流程。" />
       <Tabs label="工作流" current={tab} onChange={setTab} tabs={[{ key: "workflows", label: "工作流" }, { key: "templates", label: "模板" }, { key: "runs", label: "运行" }]} />
       {tab === "workflows" ? <WorkflowList ws={ws} onRun={setRun} /> : null}
       {tab === "templates" ? <Templates ws={ws} /> : null}
@@ -54,7 +54,7 @@ function WorkflowList({ ws }: { ws: string; onRun: (id: string) => void }) {
   const [jsonError, setJsonError] = useState<string | null>(null);
   return (
     <>
-      <Button variant="primary" onClick={() => setEdit("new")} data-testid="workflow-new">新建工作流</Button>
+      <div className="row-actions"><Button variant="primary" onClick={() => setEdit("new")} data-testid="workflow-new">新建工作流</Button></div>
       {saved ? <p className="readback-note" role="status" data-testid="workflow-readback">{saved}</p> : null}
       <Result r={r} />
       {r && r.o.kind === "http" && r.o.status === 202 ? <p className="muted">已入队的作业：<code>{String(bodyOf<{ job?: { job_id?: string } }>(r.o)?.job?.job_id ?? "未返回")}</code>，可在「{NAMES.tasks}」的作业队列中查看。</p> : null}

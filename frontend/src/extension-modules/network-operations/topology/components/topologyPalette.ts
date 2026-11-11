@@ -32,7 +32,7 @@ export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, strin
 }
 
 /** Transient canvas feedback: selection, drag-to-connect, alignment guides. */
-export const CANVAS_ACCENT = { light: "#353535", dark: "#bebebe" };
+export const CANVAS_ACCENT = { light: "#0562ef", dark: "#6ba3ff" };
 /** Group containers are neutral structure; custom drawing colours remain intact. */
 export const CANVAS_GROUP = {
   light: { fill: "#f8f8f8", border: "#e9e9e9", text: "#585858" },
