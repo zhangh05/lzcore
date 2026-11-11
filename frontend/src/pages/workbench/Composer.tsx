@@ -2,6 +2,7 @@ import { readWorkbenchSelection, type WorkbenchSelection } from "../../contracts
 import { boundSessionSelection } from "../../extension-modules/registry";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Button } from "../../components/Button";
+import { IconAttachment, IconFolder, IconSend } from "../../components/Icon";
 import { useApi, listOf } from "../../kit/useApi";
 import { Drawer, FailureNote, fmtTime } from "../../kit/ui";
 import { admitAttachments, attachmentKind, scopeLocked, stopLabel, type PendingAttachment, type SessionSummary, type StopState } from "./model";
@@ -76,22 +77,6 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
 
   return (
     <div className="wb-composer" onDragOver={(e) => e.preventDefault()} onDrop={onDrop} data-testid="composer">
-      <div className="row-actions composer-scope">
-        <label className="field-inline">Skill
-          <select value={skillId} onChange={(e) => {
-            setSkillId(e.target.value);
-            const next = skillList.find((s) => skillKey(s) === e.target.value);
-            const defaults = next?.default_resource_ids?.filter((id) => next.resources.some((r) => r.resource_id === id)) ?? [];
-            setScope(next?.selection_mode === "single" ? defaults.slice(0, 1) : defaults);
-          }} disabled={lock.locked} aria-label="Skill" data-testid="skill-select">
-            <option value="">不指定</option>
-            {skillId && !skill ? <option value={skillId}>{saved?.skill_name ?? "已选 Skill"}（当前不可用）</option> : null}
-            {skillList.map((s) => <option key={skillKey(s)} value={skillKey(s)}>{s.name ?? s.skill_id}</option>)}
-          </select>
-        </label>
-        <Button onClick={() => setPicker("resources")} disabled={lock.locked || !skill} data-testid="scope-btn">资源范围（{validScope.length}）</Button>
-        {lock.locked ? <span className="muted" data-testid="scope-locked">{lock.reason}</span> : null}
-      </div>
       {skills.state === "error" ? <FailureNote outcome={skills.outcome} /> : null}
       {skillId && !skill ? <p className="inline-alert tone-warn" role="status">当前 Skill 不在可用目录中，请检查扩展状态和资源权限。</p> : null}
       {needsResources ? <p className="muted" role="status">请选择此 Skill 的可用资源后发送。</p> : null}
@@ -101,19 +86,37 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
         </ul>
       ) : null}
       {rejected.length ? <p className="inline-alert tone-warn" role="alert" data-testid="attachment-rejected">{rejected.map((r) => `${r.name}：${r.reason}`).join("；")}</p> : null}
-      <textarea className="composer-input" value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste} rows={3}
-        aria-label="输入消息" placeholder={running ? "本轮运行中，可以先写下一句" : "输入消息，Enter 发送，Shift+Enter 换行"} data-testid="composer-input"
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
-      <div className="row-actions">
-        <input ref={fileInput} type="file" multiple hidden onChange={(e) => { if (e.target.files) fromFiles(e.target.files, "upload"); e.target.value = ""; }} />
-        <Button onClick={() => fileInput.current?.click()}>添加附件</Button>
-        <Button onClick={() => setPicker("files")}>从托管文件选</Button>
-        <span className="muted">最多 8 个；图片 ≤5MB，文件 ≤100MB</span>
-        <span className="grow" />
-        {running ? (
-          <Button variant="danger" onClick={onStop} disabled={stopState === "requesting" || stopState === "requested"} data-testid="stop-btn" data-stop={stopState}>{stopLabel(stopState)}</Button>
-        ) : null}
-        <Button variant="primary" onClick={() => void submit()} disabled={running || submitting || !text.trim() || needsResources || (!!skillId && !skill)} data-testid="send-btn">{running ? "运行中" : submitting ? "提交中" : "发送"}</Button>
+      <div className="composer-card">
+        <textarea className="composer-input" value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste} rows={3}
+          aria-label="输入消息" placeholder={running ? "本轮运行中，可以先写下一句" : "输入消息，Enter 发送，Shift+Enter 换行"} data-testid="composer-input"
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
+        <div className="composer-toolbar">
+          <div className="composer-scope">
+            <label className="field-inline">Skill
+              <select value={skillId} onChange={(e) => {
+                setSkillId(e.target.value);
+                const next = skillList.find((s) => skillKey(s) === e.target.value);
+                const defaults = next?.default_resource_ids?.filter((id) => next.resources.some((r) => r.resource_id === id)) ?? [];
+                setScope(next?.selection_mode === "single" ? defaults.slice(0, 1) : defaults);
+              }} disabled={lock.locked} aria-label="Skill" data-testid="skill-select">
+                <option value="">不指定</option>
+                {skillId && !skill ? <option value={skillId}>{saved?.skill_name ?? "已选 Skill"}（当前不可用）</option> : null}
+                {skillList.map((s) => <option key={skillKey(s)} value={skillKey(s)}>{s.name ?? s.skill_id}</option>)}
+              </select>
+            </label>
+            <Button variant="ghost" className="sm" onClick={() => setPicker("resources")} disabled={lock.locked || !skill} data-testid="scope-btn">资源范围（{validScope.length}）</Button>
+            {lock.locked ? <span className="muted" data-testid="scope-locked">{lock.reason}</span> : null}
+          </div>
+          <div className="composer-actions">
+            <input ref={fileInput} type="file" multiple hidden onChange={(e) => { if (e.target.files) fromFiles(e.target.files, "upload"); e.target.value = ""; }} />
+            <Button variant="ghost" className="sm" icon={<IconAttachment size={15} aria-hidden="true" />} title="最多 8 个；图片 ≤5MB，文件 ≤100MB" onClick={() => fileInput.current?.click()}>添加附件</Button>
+            <Button variant="ghost" className="sm" icon={<IconFolder size={15} aria-hidden="true" />} onClick={() => setPicker("files")}>从托管文件选</Button>
+            {running ? (
+              <Button variant="danger" onClick={onStop} disabled={stopState === "requesting" || stopState === "requested"} data-testid="stop-btn" data-stop={stopState}>{stopLabel(stopState)}</Button>
+            ) : null}
+            <Button variant="primary" icon={<IconSend size={15} aria-hidden="true" />} onClick={() => void submit()} disabled={running || submitting || !text.trim() || needsResources || (!!skillId && !skill)} data-testid="send-btn">{running ? "运行中" : submitting ? "提交中" : "发送"}</Button>
+          </div>
+        </div>
       </div>
       {picker === "resources" && skill ? <Drawer title={`${skill.name} · 资源范围`} onClose={() => setPicker(null)}>
         <p className="muted">{skill.description}</p>

@@ -156,7 +156,7 @@ function FormDialogView({ spec, onCancel, onSubmit }: { spec: FormDialogSpec; on
     >
       <form className="confirm-dialog form-dialog" noValidate onSubmit={submit}>
         <div className="confirm-dialog-main">
-          <span className="confirm-dialog-icon" aria-hidden="true"><IconInfo size={20} weight="fill" /></span>
+          <span className="confirm-dialog-icon" aria-hidden="true"><IconInfo size={20} /></span>
           <div className="confirm-dialog-text">
             <h3 className="confirm-dialog-title" id={titleId}>{spec.title}</h3>
             {spec.description && <div className="confirm-dialog-body" id={descId}>{spec.description}</div>}

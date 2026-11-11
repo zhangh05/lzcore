@@ -8,22 +8,23 @@ export type NodeRuntimeStatus = "ok" | "warning" | "error" | "unknown";
  * Cytoscape paints to a canvas and cannot resolve CSS custom properties, so the
  * product's semantic colours are mirrored here as literals. This is the only
  * place allowed to duplicate them — keep in sync with `styles/tokens.css`
- * (`:root` and `[data-theme="dark"]`). The values used to be a second palette
+ * and the Arc foundation it resolves through (`components/arc/foundation.css`);
+ * the hex values are those oklch colours converted to sRGB. The values used to be a second palette
  * (Tailwind emerald/amber/red plus blue for selection), which is exactly the
  * "second brand colour" the design rules forbid.
  */
 export const NODE_STATUS_COLORS: Record<NodeRuntimeStatus, string> = {
-  ok: "#24733b",
-  warning: "#925b08",
-  error: "#bd3040",
-  unknown: "#7e22ce",
+  ok: "#00774d",
+  warning: "#9f6202",
+  error: "#bb2c54",
+  unknown: "#943fa2",
 };
 
 export const NODE_STATUS_COLORS_DARK: Record<NodeRuntimeStatus, string> = {
-  ok: "#85ce7d",
-  warning: "#e2ad4d",
-  error: "#ef7180",
-  unknown: "#c084fc",
+  ok: "#55d69f",
+  warning: "#f2bd68",
+  error: "#f0738f",
+  unknown: "#dd8fe9",
 };
 
 export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, string> {
@@ -31,11 +32,11 @@ export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, strin
 }
 
 /** Transient canvas feedback: selection, drag-to-connect, alignment guides. */
-export const CANVAS_ACCENT = { light: "#0f7773", dark: "#7cc9bc" };
+export const CANVAS_ACCENT = { light: "#353535", dark: "#bebebe" };
 /** Group containers are neutral structure; custom drawing colours remain intact. */
 export const CANVAS_GROUP = {
-  light: { fill: "#f7f9f9", border: "#dae0e3", text: "#535f65" },
-  dark: { fill: "#13171a", border: "#343d44", text: "#abb5bd" },
+  light: { fill: "#f8f8f8", border: "#e9e9e9", text: "#585858" },
+  dark: { fill: "#151515", border: "#2b2b2b", text: "#ababab" },
 };
 
 /** Compatibility export: drawing colours do not use operational state. */

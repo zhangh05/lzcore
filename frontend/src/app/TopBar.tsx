@@ -5,7 +5,7 @@ import { canSignOut } from "../contracts/auth";
 import { NAMES } from "../contracts/naming";
 import { inboxBadge } from "../contracts/reviewInbox";
 import { workspaceDisplayName } from "../contracts/workspace";
-import { IconInbox, IconSearch, IconUser } from "../components/Icon";
+import { IconChevronDown, IconInbox, IconMenu, IconMoon, IconRows, IconSearch, IconSettings, IconSignOut, IconSun } from "../components/Icon";
 import { useNavigate } from "../router";
 import { usePrefs } from "./prefs";
 import { useShell } from "./shellContext";
@@ -22,6 +22,7 @@ function WorkspaceSwitcher() {
       <select aria-label={`切换${NAMES.workspace}`} value={workspaceId ?? ""} onChange={(e) => switchWorkspace(e.target.value)} data-testid="workspace-switcher">
         {workspaces.list.map((w) => <option key={w.workspace_id} value={w.workspace_id}>{workspaceDisplayName(w)}</option>)}
       </select>
+      <IconChevronDown size={14} className="ws-switch-caret" aria-hidden="true" />
     </label>
   );
 }
@@ -50,7 +51,7 @@ function ReviewInboxButton() {
     <div className="popover-anchor" ref={ref}>
       <button type="button" className="topbar-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}
         aria-label={NAMES.reviewInbox} title={inboxError ? `待核对读取失败：${inboxError}` : badge.title} data-testid="inbox-button">
-        <IconInbox size={18} aria-hidden="true" />
+        <IconInbox size={17} aria-hidden="true" />
         <span>{NAMES.reviewInbox}</span>
         <span className={`count-badge ${n ? "tone-unknown" : ""}`} data-testid="inbox-count">{inboxError ? "!" : badge.text}</span>
       </button>
@@ -83,15 +84,19 @@ function AvatarMenu() {
   return (
     <div className="popover-anchor" ref={ref}>
       <button type="button" className="topbar-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} aria-label={label} data-testid="avatar-button">
-        <IconUser size={18} aria-hidden="true" /><span>{label}</span>
+        <span className="topbar-avatar" aria-hidden="true">{label.slice(0, 1).toUpperCase()}</span><span>{label}</span>
       </button>
       {open ? (
         <div className="popover menu" role="menu" aria-label="账户菜单" ref={menuRef} onKeyDown={onMenuKey}>
-          <button role="menuitem" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>主题：{theme === "dark" ? "深色" : "浅色"}</button>
-          <button role="menuitem" type="button" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>密度：{density === "compact" ? "紧凑" : "舒适"}</button>
-          <button role="menuitem" type="button" onClick={() => { setOpen(false); navigate(hrefFor("/system/settings")); }}>{NAMES.settings}</button>
+          <div className="menu-header" aria-hidden="true">
+            <span className="topbar-avatar">{label.slice(0, 1).toUpperCase()}</span>
+            <span><span className="menu-header-name">{label}</span><br /><span className="menu-header-meta">{auth.auth_type === "session" ? "已登录" : auth.auth_type === "api_token" ? "API token" : "未启用登录"}</span></span>
+          </div>
+          <button role="menuitem" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <IconMoon size={16} aria-hidden="true" /> : <IconSun size={16} aria-hidden="true" />}主题<span className="menu-value">{theme === "dark" ? "深色" : "浅色"}</span></button>
+          <button role="menuitem" type="button" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}><IconRows size={16} aria-hidden="true" />密度<span className="menu-value">{density === "compact" ? "紧凑" : "舒适"}</span></button>
+          <button role="menuitem" type="button" onClick={() => { setOpen(false); navigate(hrefFor("/system/settings")); }}><IconSettings size={16} aria-hidden="true" />{NAMES.settings}</button>
           {canSignOut(auth)
-            ? <button role="menuitem" type="button" onClick={() => { setOpen(false); void signOut(); }}>退出</button>
+            ? <button role="menuitem" type="button" onClick={() => { setOpen(false); void signOut(); }}><IconSignOut size={16} aria-hidden="true" />退出</button>
             : <span role="menuitem" aria-disabled="true" tabIndex={-1} className="menu-note">{auth.auth_type === "api_token" ? "API token 模式下不提供退出" : "未启用登录，无需退出"}</span>}
         </div>
       ) : null}
@@ -102,10 +107,10 @@ function AvatarMenu() {
 export function TopBar({ onOpenPalette, onToggleNav }: { onOpenPalette: () => void; onToggleNav?: () => void }) {
   return (
     <header className="app-topbar">
-      {onToggleNav ? <button type="button" className="topbar-btn" onClick={onToggleNav} aria-label="打开主导航">☰</button> : null}
+      {onToggleNav ? <button type="button" className="topbar-btn" onClick={onToggleNav} aria-label="打开主导航"><IconMenu size={18} aria-hidden="true" /></button> : null}
       <WorkspaceSwitcher />
       <button type="button" className="topbar-search" onClick={onOpenPalette} aria-label={`${COMMAND_LABEL}（Ctrl K）`} title={COMMAND_HINT} data-testid="open-palette">
-        <IconSearch size={16} aria-hidden="true" /><span>{COMMAND_LABEL}：跳转页面、新建会话、切换工作区</span><kbd>Ctrl K</kbd>
+        <IconSearch size={15} aria-hidden="true" /><span>{COMMAND_LABEL}：跳转页面、新建会话、切换工作区</span><kbd>Ctrl K</kbd>
       </button>
       <div className="topbar-right">
         <ReviewInboxButton />

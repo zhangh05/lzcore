@@ -58,7 +58,7 @@ function FilesView({ ws }: { ws: string }) {
   return (
     <>
       <div className="row-actions">
-        <Tabs label="文件视图" current={view} onChange={setView} tabs={[{ key: "list", label: "托管文件" }, { key: "sources", label: "来源浏览" }, { key: "governance", label: "治理" }]} />
+        <Tabs label="文件视图" variant="segmented" current={view} onChange={setView} tabs={[{ key: "list", label: "托管文件" }, { key: "sources", label: "来源浏览" }, { key: "governance", label: "治理" }]} />
       </div>
       {view === "list" ? (
         <>

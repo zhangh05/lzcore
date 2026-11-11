@@ -100,7 +100,7 @@ export function ConfirmHost() {
       <div className={"confirm-dialog" + (state.destructive ? " is-destructive" : "")}>
         <div className="confirm-dialog-main">
           <span className="confirm-dialog-icon" aria-hidden="true">
-            {state.destructive ? <IconWarningCircle size={20} weight="fill" /> : <IconInfo size={20} weight="fill" />}
+            {state.destructive ? <IconWarningCircle size={20} /> : <IconInfo size={20} />}
           </span>
           <div className="confirm-dialog-text">
             <h3 className="confirm-dialog-title" id={titleId}>{state.title}</h3>

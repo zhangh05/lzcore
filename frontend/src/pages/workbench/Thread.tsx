@@ -133,9 +133,9 @@ export function Thread({ ws, sessionId, messages, live, task, availableExtension
         })}
         {live ? (
           <li className="message role-assistant is-live" aria-live="polite" data-testid="live-turn">
-            <div className="message-body">{live.text || "…"}</div>
+            {live.text ? <div className="message-body">{live.text}<span className="stream-caret" aria-hidden="true" /></div> : null}
             <LiveProgress live={live} />
-            <p className="muted">{live.status}</p>
+            <p className="live-status"><span className="live-dot" aria-hidden="true" /><span className="shimmer-text">{live.status || "思考中…"}</span></p>
           </li>
         ) : null}
       </ol>

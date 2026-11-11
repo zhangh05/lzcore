@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } fr
 import { api, bodyOf, enc } from "../../api/client";
 import { Button } from "../../components/Button";
 import { outcomeView } from "../../contracts/outcomeState";
-import { RawData, fmtTime } from "../../kit/ui";
+import { RawData, TabGroup, TabIndicator, fmtTime } from "../../kit/ui";
 import { stageViews, turnFacts, type ChatMessage } from "./model";
 import type { SessionTask } from "./Workbench";
 import { renderMarkdown } from "../../utils/markdown";
@@ -81,8 +81,10 @@ export function ProgressPanel({ ws, last, task, liveEvents, collapsed, onToggle 
       <div className="resize-handle" role="separator" aria-orientation="vertical" aria-label="拖动调整进度栏宽度" aria-valuenow={width} aria-valuemin={240} aria-valuemax={640} tabIndex={0}
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => { drag.current = null; }} onKeyDown={onKey} />
       <div className="row-actions">
-        <button type="button" className={`tab ${view === "progress" ? "is-active" : ""}`} onClick={() => setView("progress")}>进度</button>
-        <button type="button" className={`tab ${view === "timeline" ? "is-active" : ""}`} onClick={() => setView("timeline")} data-testid="timeline-tab">时间线</button>
+        <TabGroup>
+          <button type="button" className={`tab ${view === "progress" ? "is-active" : ""}`} onClick={() => setView("progress")}>进度{view === "progress" ? <TabIndicator /> : null}</button>
+          <button type="button" className={`tab ${view === "timeline" ? "is-active" : ""}`} onClick={() => setView("timeline")} data-testid="timeline-tab">时间线{view === "timeline" ? <TabIndicator /> : null}</button>
+        </TabGroup>
         <span className="grow" />
         <Button variant="ghost" onClick={onToggle} aria-label="收起进度栏">»</Button>
       </div>

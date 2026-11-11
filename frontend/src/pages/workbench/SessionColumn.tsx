@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { NAMES } from "../../contracts/naming";
-import { ConfirmDialog, FailureNote, MenuButton } from "../../kit/ui";
+import { ConfirmDialog, FailureNote, MenuButton, TabGroup, TabIndicator } from "../../kit/ui";
 import type { HttpOutcome } from "../../contracts/auth";
 import { filterSessions, groupSessionsByDay, type SessionSummary } from "./model";
 import { sessionOps, useSessions } from "./useSessions";
@@ -42,10 +42,10 @@ export function SessionColumn({ ws, currentId, onOpen, onNew, collapsed, onToggl
         <Button variant="ghost" onClick={onToggle} aria-label="收起会话栏">«</Button>
       </div>
       <input className="input" placeholder="筛选会话" value={q} onChange={(e) => setQ(e.target.value)} aria-label="筛选会话" />
-      <div className="seg" role="group" aria-label="会话状态">
-        <button type="button" className={`tab ${status === "active" ? "is-active" : ""}`} onClick={() => setStatus("active")}>进行中</button>
-        <button type="button" className={`tab ${status === "archived" ? "is-active" : ""}`} onClick={() => setStatus("archived")} data-testid="sessions-archived-tab">已归档</button>
-      </div>
+      <TabGroup><div className="seg" role="group" aria-label="会话状态">
+        <button type="button" className={`tab ${status === "active" ? "is-active" : ""}`} onClick={() => setStatus("active")}>进行中{status === "active" ? <TabIndicator /> : null}</button>
+        <button type="button" className={`tab ${status === "archived" ? "is-active" : ""}`} onClick={() => setStatus("archived")} data-testid="sessions-archived-tab">已归档{status === "archived" ? <TabIndicator /> : null}</button>
+      </div></TabGroup>
       {error ? <FailureNote outcome={error} onRetryRead={reload} /> : null}
       {opError ? <FailureNote outcome={opError} /> : null}
       {list && list.length === 0 && !error ? <p className="muted">{status === "active" ? "还没有会话。点「新建会话」开始。" : "没有已归档的会话。"}</p> : null}

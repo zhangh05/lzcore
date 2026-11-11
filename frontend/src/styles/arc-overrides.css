@@ -1,0 +1,16 @@
+/* App-level tuning of the Arc foundation (components/arc/foundation.css).
+   Unlayered like the foundation, imported right after it, so these win over Arc's
+   marketing-scale defaults: a denser console needs shorter controls and tighter radii,
+   and CJK text needs a platform face after the Latin variable fonts. */
+:root, :root[data-theme] {
+  --font-body: "Inter Variable", Inter, system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-display: "Geist Variable", "Inter Variable", system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --control-height-sm: 1.875rem;
+  --control-height-md: 2.125rem;
+  --control-height-lg: 2.5rem;
+  --radius-control: .625rem;
+  --radius-panel: 1rem;
+  --radius-surface: 1.25rem;
+  /* Arc leaves the field halo transparent; product CSS still draws keyboard focus with it. */
+  --focus-ring: color-mix(in oklab, var(--accent-strong) 72%, transparent);
+}

@@ -7,6 +7,9 @@ import { workspaceDisplayName } from "../contracts/workspace";
 import { useNavigate } from "../router";
 import { useShell, withWorkspace } from "./shellContext";
 import { Portal } from "../kit/ui";
+import { IconArrowUpRight, IconBolt, IconSearch, IconWorkspace } from "../components/Icon";
+
+const GROUP_ICON = { "动作": IconBolt, "前往": IconArrowUpRight, "切换工作区": IconWorkspace } as const;
 
 export interface PaletteCommand {
   id: string;
@@ -81,18 +84,23 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   return (
     <Portal><div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="palette" role="dialog" aria-modal="true" aria-label={COMMAND_LABEL} onKeyDown={onKey} data-testid="command-palette">
-        <input ref={inputRef} className="palette-input" placeholder="输入动作、页面或工作区名称" value={query} onChange={(e) => setQuery(e.target.value)}
-          role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={filtered[index] ? `cmd-${index}` : undefined} />
+        <div className="palette-search">
+          <IconSearch size={18} aria-hidden="true" />
+          <input ref={inputRef} className="palette-input" placeholder="输入动作、页面或工作区名称" value={query} onChange={(e) => setQuery(e.target.value)}
+            role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={filtered[index] ? `cmd-${index}` : undefined} />
+          <kbd className="kbd">Esc</kbd>
+        </div>
         <ul id="palette-list" className="palette-list" role="listbox">
           {filtered.length === 0 ? <li className="palette-empty">没有匹配的命令</li> : null}
           {filtered.map((c, i) => {
             const header = c.group !== lastGroup ? c.group : null;
+            const GroupIcon = GROUP_ICON[c.group];
             lastGroup = c.group;
             return (
               <li key={c.id} role="presentation">
                 {header ? <div className="palette-group">{header}</div> : null}
                 <div id={`cmd-${i}`} role="option" aria-selected={i === index} className={`palette-item ${i === index ? "is-active" : ""}`}
-                  onMouseEnter={() => setIndex(i)} onClick={() => runAt(i)} data-command={c.id}>{c.label}</div>
+                  onMouseEnter={() => setIndex(i)} onClick={() => runAt(i)} data-command={c.id}><GroupIcon size={16} aria-hidden="true" className="palette-item-icon" />{c.label}</div>
               </li>
             );
           })}

@@ -9,7 +9,7 @@ const MAP = {
   probe: IconProbe, puzzle: IconPuzzle,
 } as const;
 
-/** 名称 → Phosphor 图标。扩展 manifest 的 icon 不认识时回落到拼图。 */
+/** 名称 → Lucide 图标。扩展 manifest 的 icon 不认识时回落到拼图。 */
 export function NavIcon({ name, size = 18 }: { name: string; size?: number }) {
   const Icon = (MAP as Record<string, typeof IconPuzzle>)[name] ?? IconPuzzle;
   return <Icon size={size} aria-hidden="true" />;
