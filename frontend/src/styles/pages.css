@@ -46,6 +46,30 @@
   .tool-card { border: 1px solid var(--line-2); border-radius: var(--r-control); padding: var(--space-1) var(--space-2); font-size: var(--fs-sm); }
   .tool-card summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .tool-card .json-block { margin-top: var(--space-2); }
+  .subagent-list { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-2) 0; }
+  .subagent-card { border: 1px solid var(--line-2); border-left: 3px solid currentColor; border-radius: var(--r-control); padding: var(--space-2) var(--space-3); background: var(--surface); font-size: var(--fs-sm); display: grid; gap: var(--space-1); }
+  .subagent-card > * { color: var(--text); }
+  .subagent-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .subagent-instruction { margin: 0; color: var(--text-2); white-space: pre-wrap; }
+  .subagent-progress { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--text-2); }
+  .subagent-progress:empty { display: none; }
+  .subagent-observations summary { cursor: pointer; color: var(--text-2); }
+  .subagent-observations ol { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--text-2); }
+  .network-evidence { display: grid; gap: var(--space-1); margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px dashed var(--line-2); font-size: var(--fs-sm); }
+  .network-evidence p { margin: 0; }
+  .network-evidence-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .network-evidence-stages { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--text-2); }
+  .network-evidence .btn { justify-self: start; }
+  .network-evidence-devices, .network-commands { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
+  .network-commands li { display: grid; gap: var(--space-1); }
+  .network-commands li > code { font-weight: 600; }
+  .network-commands .status-chip { justify-self: start; }
+  .network-evidence-artifact { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .network-evidence-artifact details { flex-basis: 100%; }
+  .live-progress { display: grid; gap: var(--space-2); margin: var(--space-2) 0; }
+  .live-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font-size: var(--fs-sm); }
+  .live-steps li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+  .live-step-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 48ch; }
   .outcome-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; font-size: var(--fs-sm); color: var(--text-2); }
   .outcome-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
   .resume-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
