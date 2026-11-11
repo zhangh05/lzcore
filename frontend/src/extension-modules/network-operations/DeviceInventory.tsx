@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import { bodyOf } from "../../api/client";
 import { Button } from "../../components/Button";
-import { IconPlus, IconRefresh, IconSearch, IconServer, IconShield, IconTrash, IconEdit, IconLink, IconCheckCircle } from "../../components/Icon";
+import { IconPlus, IconRefresh, IconServer, IconShield, IconTrash, IconEdit, IconLink, IconCheckCircle } from "../../components/Icon";
 import type { HttpOutcome } from "../../contracts/auth";
 import type { Loadable } from "../../kit/useApi";
 import { Chip, ConfirmDialog, FailureNote, JsonBlock, KeyValues, LoadState, fmtTime } from "../../kit/ui";
+import { EmptyState } from "../../components/arc/empty-state/empty-state";
+import { SearchField } from "../../components/arc/search-field/search-field";
+import SegmentedControl from "../../components/arc/segmented-control/segmented-control";
 import { enc, net } from "./api";
 import { ConnectionFormDialog, DeviceFormDialog, type Connection, type Device, type Region } from "./forms";
 import {
@@ -16,7 +19,7 @@ type Filter = "all" | "warn" | "untested";
 
 /**
  * 设备清单：左侧可搜索的设备列表（按连接健康着色），右侧是选中设备的详情、它的全部连接与测试。
- * 连接不再单独占一个页签——连接总是属于某台设备，在设备详情里管理。
+ * 连接总是属于某台设备，在设备详情里管理。搜索、筛选、空态用 Arc UI 的 SearchField / SegmentedControl / EmptyState。
  */
 export function DeviceInventory({ ws, devices, devicesState, reloadDevices, connections, reloadConnections, regions, selectedId, onSelect }: {
   ws: string;
@@ -51,17 +54,10 @@ export function DeviceInventory({ ws, devices, devicesState, reloadDevices, conn
   return (
     <div className="inv" data-testid="net-devices">
       <div className="inv-toolbar">
-        <label className="inv-search">
-          <IconSearch size={15} aria-hidden="true" />
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索名称、地址、型号、区域" aria-label="搜索设备" />
-        </label>
-        <div className="seg" role="radiogroup" aria-label="按健康筛选">
-          {([["all", "全部"], ["warn", "需关注"], ["untested", "未测试"]] as const).map(([k, label]) => (
-            <button key={k} type="button" role="radio" aria-checked={filter === k} className={`tab ${filter === k ? "is-active" : ""}`} onClick={() => setFilter(k)}>
-              {label}<span className="tab-count">{counts[k]}</span>
-            </button>
-          ))}
-        </div>
+        <SearchField label="搜索设备" value={query} onValueChange={setQuery} placeholder="搜索名称、地址、型号、区域" className="inv-search" />
+        <SegmentedControl label="按健康筛选" value={filter} onValueChange={(v) => setFilter(v as Filter)} options={([["all", "全部"], ["warn", "需关注"], ["untested", "未测试"]] as const).map(([k, label]) => ({
+          value: k, label, accessory: <span className="tab-count">{counts[k]}</span>,
+        }))} />
         <span className="grow" />
         <Button onClick={() => setAddConn(selected?.device_id ?? "")} data-testid="connection-new"><IconLink size={15} aria-hidden="true" />添加连接</Button>
         <Button variant="primary" onClick={() => setEdit("new")} data-testid="device-new"><IconPlus size={15} aria-hidden="true" />登记设备</Button>
@@ -69,12 +65,9 @@ export function DeviceInventory({ ws, devices, devicesState, reloadDevices, conn
       {note ? <SavedNote label={note.label} text={note.text} testId={note.testId} /> : null}
 
       <LoadState value={devicesState} onReload={reloadDevices}>{() => devices.length === 0 ? (
-        <div className="inv-empty">
-          <span className="inv-empty-icon" aria-hidden="true"><IconServer size={22} /></span>
-          <h3>还没有登记设备</h3>
-          <p className="muted">先登记一台设备，再为它添加 SSH / Telnet 连接并测试连通，之后就能在拓扑、巡检和 Skill 里使用它。</p>
-          <Button variant="primary" onClick={() => setEdit("new")}>登记第一台设备</Button>
-        </div>
+        <EmptyState title="还没有登记设备" icon={<IconServer size={20} />}
+          description="先登记一台设备，再为它添加 SSH / Telnet 连接并测试连通，之后就能在巡检、拓扑和 Skill 里使用它。"
+          action={<Button variant="primary" onClick={() => setEdit("new")}>登记第一台设备</Button>} />
       ) : (
         <div className="inv-split">
           <ul className="inv-list" aria-label="设备列表" data-testid="devices-table">

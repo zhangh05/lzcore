@@ -11,17 +11,18 @@
 | 文件、知识、记忆 | /library/files、/library/knowledge、/library/memory |
 | 工作流 | /workflows |
 | 扩展目录 | /extensions |
-| 网络设备（清单、拓扑、巡检、上下文） | /extensions/network.operations/manage |
+| 网络设备（清单与连接、巡检、观察记录） | /extensions/network.operations/manage |
+| 网络拓扑（拓扑画布） | /extensions/network.operations/topology |
 | 网络 Skill（Skill、巡检脚本） | /extensions/network.operations/skills |
 | 系统状态与设置 | /system、/system/settings |
 | 身份与工作区 | /system/users、/system/workspaces |
 | 备份、生态与 worker | /system/backups、/system/ecosystem、/system/workers |
 
-网络扩展 UI 通过 `frontend/src/extension-modules/registry.tsx` 挂载。设备、连接、Skill 与图纸仍由扩展后端管理，前端不能授予权限。网络扩展的当前产品 UI 在 frontend/src/extension-modules/network-operations；根 extensions/network_operations/frontend 仅保留旧版回退桥接。两个入口来自扩展清单的两条 `frontend_routes`，挂同一模块，按挂载路径分派到设备工作区或 Skill 工作区；旧深链 `/manage?tab=skills|scripts` 自动跳到 `/skills`。改清单后需重启后端（扩展清单有缓存）。
+网络扩展 UI 通过 `frontend/src/extension-modules/registry.tsx` 挂载。设备、连接、Skill 与图纸仍由扩展后端管理，前端不能授予权限。网络扩展的当前产品 UI 在 frontend/src/extension-modules/network-operations；根 extensions/network_operations/frontend 仅保留旧版回退桥接。三个入口来自扩展清单的三条 `frontend_routes`，互相独立，挂同一模块按挂载路径分派；旧深链 `/manage?tab=topologies` 跳到 `/topology`（保留 `topology`、`node`），`/manage?tab=skills|scripts` 跳到 `/skills`。改清单后需重启后端（扩展清单有缓存）。
 
 ## 视觉系统
 
-视觉语言基于 [Arc UI](https://uiarc.dev) 的免费 MIT 基础层：`frontend/src/components/arc/foundation.css`（中性 oklch 色阶、单一强调色、冷色调分类色、柔和分层阴影、焦点规则）与 `lib/motion-tokens.ts`（时长、缓动、弹簧）。基础层不进 CSS layer，同名变量（`--surface`、`--accent`、`--danger` 等）以它为准；`styles/arc-overrides.css` 把控件高度、圆角调到适合高密度控制台的尺寸，并补上中文字体回退；`styles/tokens.css` 的产品变量全部从基础层取值，深色主题随之切换。只有 `tokens.css` 与基础层持有字面颜色；拓扑画布无法读取 CSS 变量，`topologyPalette.ts` 保存换算后的十六进制，并由测试校验与 CSS 一致。字体为 Inter Variable（正文）与 Geist Variable（标题、数字），中文回落到各平台系统字体。需要更多 Arc 组件时，从 `https://uiarc.dev/r/<name>.json` 取免费组件源码放入 `components/arc/`，保留 LICENSE。
+视觉语言基于 [Arc UI](https://uiarc.dev) 的免费 MIT 基础层：`frontend/src/components/arc/foundation.css`（中性 oklch 色阶、单一强调色、冷色调分类色、柔和分层阴影、焦点规则）与 `lib/motion-tokens.ts`（时长、缓动、弹簧）。基础层不进 CSS layer，同名变量（`--surface`、`--accent`、`--danger` 等）以它为准；`styles/arc-overrides.css` 把控件高度、圆角调到适合高密度控制台的尺寸，并补上中文字体回退；`styles/tokens.css` 的产品变量全部从基础层取值，深色主题随之切换。只有 `tokens.css` 与基础层持有字面颜色；拓扑画布无法读取 CSS 变量，`topologyPalette.ts` 保存换算后的十六进制，并由测试校验与 CSS 一致。字体为 Inter Variable（正文）与 Geist Variable（标题、数字），中文回落到各平台系统字体。界面控件优先用 Arc 组件（`components/arc/<name>/`，CSS Modules + Motion + Radix）：共享的 `Button`、`Chip`（Arc Badge）、`Tabs`（Arc Tabs）已经走 Arc，页面里直接用 MetricCard、SearchField、SegmentedControl、EmptyState、Drawer、Input、PasswordField、Combobox、Slider、Alert 等。需要更多组件时，从 `https://uiarc.dev/r/<name>.json` 取免费组件源码放入 `components/arc/`，保留 LICENSE；Arc 面向 React 19 类型，本仓库为 React 18 打的兼容补丁记在 `components/arc/README.md`。
 
 ## 版式
 
@@ -30,9 +31,10 @@
 - 页头：标题 + 一句面向用户的说明，页面级主操作放在页头右侧；单独一个主按钮的操作行靠右。
 - 系统等多子页入口用 `app/SystemLayout.tsx`：主导航只占一项，子页导航在页内左栏（非管理员看不到管理页），窄屏变为横向滚动条。
 - 画布型扩展页（网络扩展「拓扑」）：页头只留给读屏，位置由面包屑表达，页签贴顶，画布铺满主区且主区不滚动；画布外围工具栏收紧。
-- 网络设备：顶部「设备概览」四格（设备数、连接健康条、需关注、最近巡检），下方主从布局——左侧设备清单带搜索与健康筛选（全部 / 需关注 / 未测试），右侧设备详情；连接以卡片挂在所属设备下，测试、指纹确认、删除都在卡片里完成，选中设备存在 `?device=`。
-- 网络 Skill：顶部三步流程（设备与连接 → 编排 Skill → 发布到工作台）带实时计数，Skill 与巡检脚本以卡片网格呈现，卡片给出发布状态、范围计数、审批标记、工具与命令预览。
-- 模型服务（`pages/system/ModelSettings.tsx`）：顶部「当前模型」卡显示状态、端点与一键连通测试（含耗时）；下方分「已接入」（有密钥、当前、本机地址或自定义的服务）与「添加模型服务」画廊。点画廊或「配置」打开侧边抽屉：协议、名称、API Key（可显隐）、模型（带建议），高级项收起地址、温度与 max_tokens；「测试连接」用抽屉里的草稿参数直接探测，不落盘；可「保存」或「保存并设为当前」。非平台管理员不能改已有服务的地址。
+- 网络设备：顶部 MetricCard 一行（设备、连接健康、需关注、巡检），页签「设备 / 巡检 / 观察记录」；设备页签是主从布局——左侧清单带 SearchField 与 SegmentedControl 健康筛选（全部 / 需关注 / 未测试），右侧设备详情，连接以卡片挂在所属设备下（测试、指纹确认、删除），选中设备存在 `?device=`。
+- 网络拓扑：独占整页的画布，离开页面或换图前有未保存守卫。
+- 网络 Skill：顶部 MetricCard 一行（已发布、草稿、写入需审批、巡检脚本），Skill 与巡检脚本以卡片网格呈现；不再挂设备页的入口。
+- 模型服务（`pages/system/ModelSettings.tsx`）：顶部「当前模型」卡显示状态、端点与一键连通测试（含耗时）；下方分「已接入」（有密钥、当前、本机地址或自定义的服务）与「添加模型服务」画廊。点画廊或「配置」打开 Arc Drawer：协议、名称、接口地址、API Key（PasswordField）、模型；填好地址与密钥（本机地址可不填密钥）后自动调用 `POST /api/agent/llm/models` 获取模型列表，用 Combobox 搜索选择，也可切换手动输入，获取失败给出原因；高级项是温度（Slider）与 max_tokens。「测试连接」用抽屉里的草稿参数直接探测，不落盘；可「保存」或「保存并设为当前」。非平台管理员不能改已有服务的地址。
 - 强调色为 Arc `blue`（`index.html` 的 `data-accent`）：主按钮、当前导航、页签指示、链接与焦点用强调色，结构保持中性。拓扑画布的选中色随之取同一值，测试按 `data-accent` 解析校验。
 
 ## 框架合同

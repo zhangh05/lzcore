@@ -15,7 +15,7 @@ const workspaces = [
 
 const extensions = [
   { extension_id: "demo.notes", name: "演示笔记", frontend_routes: [{ path: "/extensions/demo.notes/board", label: "笔记看板", order: 10 }], lifecycle: { enabled: true, status: "ready" } },
-  { extension_id: "network.operations", name: "网络扩展", frontend_routes: [{ path: "/extensions/network.operations/manage", label: "网络 Skill 管理", icon: "probe", order: 30 }, { path: "/extensions/network.operations/skills", label: "网络 Skill", icon: "spark", order: 31 }], lifecycle: { enabled: true, status: "failed", last_error: "依赖未就绪（合成）" } },
+  { extension_id: "network.operations", name: "网络扩展", frontend_routes: [{ path: "/extensions/network.operations/manage", label: "网络设备", icon: "probe", order: 30 }, { path: "/extensions/network.operations/topology", label: "网络拓扑", icon: "network", order: 31 }, { path: "/extensions/network.operations/skills", label: "网络 Skill", icon: "spark", order: 32 }], lifecycle: { enabled: true, status: "failed", last_error: "依赖未就绪（合成）" } },
 ];
 
 /** 与 mock/mock_server.py 同形的内存后端，供组件测试使用（不发真实请求）。 */

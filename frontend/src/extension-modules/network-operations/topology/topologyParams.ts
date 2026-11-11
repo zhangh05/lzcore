@@ -1,7 +1,7 @@
 /**
  * 拓扑深链参数统一（方案 P-30）：读写都用 `topology`。
  * 入参兼容旧 `topology_id` 与新壳通用的 `id`，进入画布时规范化成 `topology`（replace，不新增历史）。
- * `tab=topologies` 由外层页面负责；`node` 继续表示选中节点。
+ * 拓扑页是独立入口（/extensions/network.operations/topology）；`node` 继续表示选中节点。
  */
 export const TOPOLOGY_PARAM = "topology";
 const LEGACY_PARAMS = ["topology_id", "id"] as const;

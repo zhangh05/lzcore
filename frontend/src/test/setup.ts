@@ -22,6 +22,14 @@ const OriginalWebSocket = globalThis.WebSocket;
 globalThis.WebSocket = BlockedWebSocket as unknown as typeof WebSocket;
 void OriginalWebSocket;
 
+/**
+ * happy-dom 只实现了一部分 Web Animations：卸载时 cancel 会让 finished 以 AbortError 拒绝，
+ * 变成未处理的 rejection。去掉 animate，让 motion（Arc UI 组件的动效）走 JS 动画路径；真实浏览器不受影响。
+ */
+for (const proto of [Element.prototype, HTMLElement.prototype] as unknown as Record<string, unknown>[]) {
+  if (Object.prototype.hasOwnProperty.call(proto, "animate")) delete proto.animate;
+}
+
 afterEach(() => {
   cleanup();
   clearLocalAuth();

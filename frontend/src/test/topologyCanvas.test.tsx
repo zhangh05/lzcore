@@ -12,7 +12,7 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
   render(<BrowserRouter><AuthGateView /></BrowserRouter>);
   return backend;
 }
-const BASE = "/extensions/network.operations/manage?ws=ws-demo-1&tab=topologies";
+const BASE = "/extensions/network.operations/topology?ws=ws-demo-1";
 
 afterEach(() => { resetDirty(); });
 
@@ -36,7 +36,6 @@ describe("拓扑画布（旧编辑器迁入扩展区）", () => {
     const q = new URLSearchParams(window.location.search);
     expect(q.get("topology")).toBe("topo1");
     expect(q.has("topology_id")).toBe(false);
-    expect(q.get("tab")).toBe("topologies");
     // 编辑工具栏存在（不是只读预览）
     expect(screen.getByRole("toolbar", { name: "拓扑操作" })).toBeInTheDocument();
     expect(screen.queryByTestId("topology-preview")).toBeNull();
@@ -54,11 +53,11 @@ describe("拓扑画布（旧编辑器迁入扩展区）", () => {
     window.confirm = confirmSpy;
     fireEvent.click(within(screen.getByRole("navigation", { name: "主导航" })).getByText("任务").closest("a")!);
     expect(confirmSpy).toHaveBeenCalledWith("拓扑有未保存的改动，确定离开吗？");
-    expect(window.location.pathname).toBe("/extensions/network.operations/manage");
-    // 切到同页别的 tab 也要确认
-    fireEvent.click(screen.getByRole("tab", { name: /^设备/ }));
+    expect(window.location.pathname).toBe("/extensions/network.operations/topology");
+    // 去网络设备页（独立入口）同样要确认
+    fireEvent.click(within(screen.getByRole("navigation", { name: "主导航" })).getByText("网络设备").closest("a")!);
     expect(confirmSpy).toHaveBeenCalledTimes(2);
-    expect(new URLSearchParams(window.location.search).get("tab")).toBe("topologies");
+    expect(window.location.pathname).toBe("/extensions/network.operations/topology");
 
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(log.some((l) => l.method === "PUT" && l.path.startsWith("/api/extensions/network.operations/topologies/topo1"))).toBe(true));

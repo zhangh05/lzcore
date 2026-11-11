@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Button } from "../../components/Button";
-import { IconArrowUpRight, IconBolt, IconChecklist, IconEdit, IconLink, IconPlus, IconServer, IconShield, IconSparkle, IconTrash } from "../../components/Icon";
+import { IconChecklist, IconEdit, IconLink, IconPlus, IconServer, IconShield, IconSparkle, IconTrash } from "../../components/Icon";
+import { EmptyState } from "../../components/arc/empty-state/empty-state";
+import { MetricCard } from "../../components/arc/metric-card/metric-card";
 import { Chip, ConfirmDialog, KeyValues, LoadState, fmtTime } from "../../kit/ui";
 import { enc, net } from "./api";
 import { ScriptFormDialog, type Connection, type Device, type Script } from "./forms";
@@ -9,25 +11,17 @@ import { Result, SavedNote, VENDOR_ZH, listOf, useNet, type ActionResult } from 
 
 const TOOL_LABEL = Object.fromEntries(TOOLS) as Record<string, string>;
 
-/** 从「设备连接」到「工作台可选」的三步流程，同时给出每一步的实时计数。 */
-export function SkillPipeline({ devices, connections, skills, onGoDevices }: { devices: number; connections: number; skills: NetworkSkill[]; onGoDevices: () => void }) {
+/** Skill 概览：Arc MetricCard 一行——已发布、草稿、写入需审批、巡检脚本。 */
+export function SkillSummary({ skills, scripts }: { skills: NetworkSkill[]; scripts: number }) {
   const published = skills.filter((s) => s.enabled).length;
+  const approval = skills.filter((s) => s.approval_enabled).length;
   return (
-    <ol className="pipeline" aria-label="Skill 的使用流程">
-      <li>
-        <span className="pipeline-icon" aria-hidden="true"><IconServer size={16} /></span>
-        <span className="pipeline-text"><strong>设备与连接</strong><span>{devices} 台设备 · {connections} 条连接</span></span>
-        <button type="button" className="pipeline-link" onClick={onGoDevices}>管理<IconArrowUpRight size={13} aria-hidden="true" /></button>
-      </li>
-      <li>
-        <span className="pipeline-icon" aria-hidden="true"><IconSparkle size={16} /></span>
-        <span className="pipeline-text"><strong>编排 Skill</strong><span>限定设备、连接与可用工具</span></span>
-      </li>
-      <li>
-        <span className="pipeline-icon is-accent" aria-hidden="true"><IconBolt size={16} /></span>
-        <span className="pipeline-text"><strong>发布到工作台</strong><span>{published} 个已发布，可在会话中选择</span></span>
-      </li>
-    </ol>
+    <div className="metric-row" role="group" aria-label="Skill 概览">
+      <MetricCard label="已发布" value={published} context={published ? "工作台会话可选择" : "还没有可用的 Skill"} />
+      <MetricCard label="草稿" value={skills.length - published} context="发布前只在这里可见" />
+      <MetricCard label="写入需审批" value={approval} context="配置写入前需人工批准" />
+      <MetricCard label="巡检脚本" value={scripts} context="只读命令与检查规则" />
+    </div>
   );
 }
 
@@ -140,7 +134,8 @@ export function ScriptLibrary({ ws }: { ws: string }) {
               );
             })}
           </ul>
-        ) : <p className="muted">还没有巡检脚本。</p>;
+        ) : <EmptyState title="还没有巡检脚本" description="巡检脚本是一组只读命令和检查规则，可在巡检里批量执行，也可作为 Skill 的默认脚本。" icon={<IconChecklist size={20} />}
+          action={<Button variant="primary" onClick={() => setEdit("new")}>新建巡检脚本</Button>} />;
       }}</LoadState>
       {edit ? <ScriptFormDialog ws={ws} script={edit === "new" ? null : edit} onClose={() => setEdit(null)}
         onSaved={({ readback }) => { setEdit(null); setNote(readback ? `回读：「${readback.name}」v${readback.version ?? "?"} · ${readback.commands?.length ?? 0} 条命令 · ${readback.checks?.length ?? 0} 个检查项 · ${(readback.vendors ?? []).map((v) => VENDOR_ZH[v] ?? v).join("、")}` : null); reload(); }} /> : null}

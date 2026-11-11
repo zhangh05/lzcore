@@ -25,7 +25,7 @@ describe("应用壳", () => {
     for (const label of ["工作台", "任务", "资料", "工作流", "扩展区", "系统"]) expect(within(nav).getByText(label)).toBeInTheDocument();
     const ext = within(nav).getByTestId("nav-extensions");
     await within(ext).findByText("笔记看板");
-    expect(within(ext).getByText("网络 Skill 管理").closest("a")).toHaveClass("is-unavailable");
+    expect(within(ext).getByText("网络设备").closest("a")).toHaveClass("is-unavailable");
     expect(within(ext).getAllByText("不可用").length).toBeGreaterThan(0);
   });
 

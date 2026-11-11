@@ -58,9 +58,17 @@
       "path": "/extensions/network.operations/manage",
       "module": "frontend/NetworkOperations.tsx",
       "label": "网络设备",
-      "description": "登记设备、验证连接、查看拓扑与巡检",
+      "description": "登记设备、管理连接、巡检与观察记录",
       "icon": "probe",
       "order": 30
+    },
+    {
+      "path": "/extensions/network.operations/topology",
+      "module": "frontend/NetworkOperations.tsx",
+      "label": "网络拓扑",
+      "description": "绘制与维护网络拓扑图",
+      "icon": "network",
+      "order": 31
     },
     {
       "path": "/extensions/network.operations/skills",
@@ -68,7 +76,7 @@
       "label": "网络 Skill",
       "description": "编排设备操作 Skill 与巡检脚本，发布到工作台",
       "icon": "spark",
-      "order": 31
+      "order": 32
     }
   ],
   "entrypoint": "backend.py:register",

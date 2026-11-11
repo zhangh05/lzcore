@@ -30,6 +30,13 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
         ? { status: 200, body: { ok: false, fallback_reason: "API key not configured" } }
         : { status: 200, body: { ok: true, response: "OK" } };
     }
+    if (p === "/api/agent/llm/models") {
+      const b = body as { api_key?: string; provider?: string; base_url?: string };
+      const saved = providers.find((x) => x.provider === b.provider);
+      return b.api_key || saved?.key_configured
+        ? { status: 200, body: { ok: true, source: "api.openai.com", models: [{ id: "gpt-4.1", owned_by: "openai" }, { id: "gpt-4o-mini", owned_by: "openai" }, { id: "o4-mini", owned_by: "openai" }] } }
+        : { status: 200, body: { ok: false, error: "provider rejected the request", http_status: 401 } };
+    }
     const save = /^\/api\/agent\/llm\/providers\/([^/]+)$/.exec(p);
     if (save && method === "POST") {
       const rec = providers.find((x) => x.provider === save[1])!;
@@ -49,7 +56,7 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
   return { log };
 }
 
-describe("网络扩展拆成设备与 Skill 两个工作区", () => {
+describe("网络设备、网络拓扑、网络 Skill 是三个独立入口", () => {
   it("旧深链 /manage?tab=skills 跳到 Skill 工作区；卡片显示发布状态与范围", async () => {
     renderAt("/extensions/network.operations/manage?ws=ws-demo-1&tab=skills");
     const grid = await screen.findByTestId("skills-grid", {}, { timeout: 4000 });
@@ -58,7 +65,21 @@ describe("网络扩展拆成设备与 Skill 两个工作区", () => {
     expect(within(grid).getByText("已发布")).toBeInTheDocument();
     expect(within(grid).getByText("草稿")).toBeInTheDocument();
     expect(within(grid).getByText("写入需审批")).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Skill 的使用流程" })).toHaveTextContent("1 个已发布");
+    expect(screen.getByRole("group", { name: "Skill 概览" })).toHaveTextContent("已发布");
+    // Skill 页不再挂设备入口：没有指向设备页的链接或按钮
+    expect(screen.queryByRole("button", { name: /管理/ })).toBeNull();
+  });
+
+  it("旧深链 /manage?tab=topologies 跳到独立的拓扑页，保留图纸参数", async () => {
+    renderAt("/extensions/network.operations/manage?ws=ws-demo-1&tab=topologies&topology=topo1");
+    expect(await screen.findByTestId("netops-topology", {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/extensions/network.operations/topology");
+    const q = new URLSearchParams(window.location.search);
+    expect(q.get("topology")).toBe("topo1");
+    expect(q.has("tab")).toBe(false);
+    // 主导航里三个入口各自独立
+    const nav = screen.getByRole("navigation", { name: "主导航" });
+    for (const label of ["网络设备", "网络拓扑", "网络 Skill"]) expect(within(nav).getByText(label)).toBeInTheDocument();
   });
 
   it("设备清单：连接在设备详情里管理，带健康筛选", async () => {
@@ -66,12 +87,43 @@ describe("网络扩展拆成设备与 Skill 两个工作区", () => {
     const list = await screen.findByRole("list", { name: "设备列表" }, { timeout: 4000 });
     await waitFor(() => expect(within(list).getAllByRole("button").length).toBeGreaterThan(0));
     expect(screen.getByRole("group", { name: "设备概览" })).toHaveTextContent("连接健康");
-    fireEvent.click(screen.getByRole("radio", { name: /需关注/ }));
-    expect(screen.getByRole("radio", { name: /需关注/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByTestId("net-topologies")).toBeNull();
+    expect(screen.getByRole("tablist", { name: "网络设备视图" })).not.toHaveTextContent("拓扑");
+    fireEvent.click(screen.getByRole("button", { name: /需关注/ }));
+    expect(screen.getByRole("button", { name: /需关注/ })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
 describe("模型服务", () => {
+  it("填好地址和密钥后自动获取模型列表，从列表里选模型再测试", async () => {
+    const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    fireEvent.click(await screen.findByTestId("provider-add-openai", {}, { timeout: 4000 }));
+    const sheet = await screen.findByTestId("provider-sheet");
+    // 没有密钥时不去拉
+    expect(log.some((l) => l.path === "/api/agent/llm/models")).toBe(false);
+    fireEvent.change(within(sheet).getByTestId("provider-key"), { target: { value: "sk-new-1234" } });
+    const combo = await within(sheet).findByRole("combobox", { name: "模型" }, { timeout: 3000 });
+    expect(log.filter((l) => l.path === "/api/agent/llm/models").pop()?.body).toMatchObject({ provider: "openai", provider_type: "openai_compatible", api_key: "sk-new-1234", base_url: "https://api.openai.com/v1" });
+    expect(within(sheet).getByText(/获取 3 个模型/)).toBeInTheDocument();
+    fireEvent.click(combo);
+    fireEvent.click(await within(sheet).findByRole("option", { name: "gpt-4.1" }));
+    fireEvent.click(within(sheet).getByTestId("provider-test"));
+    await waitFor(() => expect(within(sheet).getByTestId("llm-test-result")).toHaveTextContent("连接正常"));
+    expect(log.filter((l) => l.path === "/api/agent/llm/test").pop()?.body).toMatchObject({ model: "gpt-4.1", api_key: "sk-new-1234" });
+  });
+
+  it("获取模型失败时给出原因，仍可手动填写", async () => {
+    renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    fireEvent.click(await screen.findByTestId("provider-add-openai", {}, { timeout: 4000 }));
+    const sheet = await screen.findByTestId("provider-sheet");
+    fireEvent.change(within(sheet).getByTestId("provider-url"), { target: { value: "https://gateway.example.test/v1" } });
+    // 既没密钥也非本机：按钮不可用，不发请求
+    expect(within(sheet).getByTestId("provider-fetch-models")).toBeDisabled();
+    fireEvent.change(within(sheet).getByTestId("provider-url"), { target: { value: "http://localhost:11434/v1" } });
+    expect(await within(sheet).findByTestId("provider-models-error", {}, { timeout: 3000 })).toHaveTextContent("401");
+    expect(within(sheet).getByTestId("provider-model")).toHaveValue("gpt-4o-mini");
+  });
+
   it("已接入与可添加分开：有密钥 / 当前 / 本机服务算已接入", () => {
     expect(isConnected({ provider: "openai", key_configured: false, base_url: "https://api.openai.com/v1" }, "deepseek")).toBe(false);
     expect(isConnected({ provider: "ollama", base_url: "http://localhost:11434/v1" }, "deepseek")).toBe(true);

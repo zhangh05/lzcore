@@ -1,59 +1,70 @@
 import { Suspense, lazy, useState } from "react";
 import { bodyOf } from "../../api/client";
 import { Button } from "../../components/Button";
-import { IconActivity, IconLink, IconServer, IconWarningCircle } from "../../components/Icon";
 import type { HttpOutcome } from "../../contracts/auth";
 import type { Loadable } from "../../kit/useApi";
 import { api } from "../../api/client";
 import { Chip, ConfirmDialog, Dialog, Drawer, JsonBlock, KeyValues, LoadState, Table, Tabs, fmtTime } from "../../kit/ui";
-import { Navigate, useLocation, useNavigate, useSearchParams } from "../../router";
+import { Navigate, useSearchParams } from "../../router";
 import { useShell } from "../../app/shellContext";
 import type { ExtensionPageProps } from "../registry";
 import { NET_BASE, enc, inspectionRetryGate, net, type Inspection, type InspectionDevice } from "./api";
 import type { NetworkSkill } from "./SkillForm";
 import type { Connection, Device, Region } from "./forms";
 import { DeviceInventory } from "./DeviceInventory";
-import { ScriptLibrary, SkillPipeline, SkillsBoard } from "./SkillStudio";
+import { ScriptLibrary, SkillSummary, SkillsBoard } from "./SkillStudio";
+import { MetricCard } from "../../components/arc/metric-card/metric-card";
 import { Result, connHealth, deviceHealth, listOf, useNet } from "./shared";
 
-export const SKILLS_PATH = "/extensions/network.operations/skills";
 export const DEVICES_PATH = "/extensions/network.operations/manage";
+export const TOPOLOGY_PATH = "/extensions/network.operations/topology";
+export const SKILLS_PATH = "/extensions/network.operations/skills";
 
-type DeviceView = "devices" | "topologies" | "inspections" | "context";
+type DeviceView = "devices" | "inspections" | "context";
 type SkillView = "skills" | "scripts";
-const DEVICE_VIEWS: readonly DeviceView[] = ["devices", "topologies", "inspections", "context"];
+const DEVICE_VIEWS: readonly DeviceView[] = ["devices", "inspections", "context"];
 const SKILL_VIEWS: readonly SkillView[] = ["skills", "scripts"];
 
 /**
- * network.operations 扩展的前端模块，按 manifest 拆成两个工作区：
- * - 网络设备（/manage）：设备清单（含连接）、拓扑画布、巡检、上下文观察；
- * - 网络 Skill（/skills）：Skill 编排与巡检脚本库。
- * 旧深链 /manage?tab=skills|scripts 跳到 Skill 工作区；?tab=connections 落到设备清单。
+ * network.operations 扩展的前端模块。manifest 给出三个互相独立的入口，同一模块按挂载路径分派：
+ * - 网络设备（/manage）：设备清单与连接、巡检、观察记录；
+ * - 网络拓扑（/topology）：拓扑画布，独占整页；
+ * - 网络 Skill（/skills）：Skill 与巡检脚本。
+ * 旧深链：/manage?tab=topologies → /topology（保留 topology、node）；/manage?tab=skills|scripts → /skills。
  */
 export default function NetworkOperationsPage({ ws, mountPath }: ExtensionPageProps) {
   const [params] = useSearchParams();
-  const { search } = useLocation();
   const raw = params.get("tab");
-  if (mountPath === SKILLS_PATH) return <SkillsWorkspace ws={ws} />;
-  if (raw === "skills" || raw === "scripts") return <Navigate to={`${SKILLS_PATH}${search}`} replace />;
-  return <DevicesWorkspace ws={ws} />;
+  if (mountPath === SKILLS_PATH) return <SkillsPage ws={ws} />;
+  if (mountPath === TOPOLOGY_PATH) return <TopologyPage ws={ws} />;
+  if (raw === "topologies") return <Navigate to={legacyHref(TOPOLOGY_PATH, params, ["topology", "topology_id", "node"])} replace />;
+  if (raw === "skills" || raw === "scripts") return <Navigate to={legacyHref(SKILLS_PATH, params, raw === "scripts" ? [] : ["id"], raw === "scripts" ? "scripts" : null)} replace />;
+  return <DevicesPage ws={ws} />;
+}
+
+/** 旧深链换到独立入口：保留工作区与指定参数，丢掉旧的 tab。 */
+function legacyHref(path: string, params: URLSearchParams, keep: string[], tab: string | null = null) {
+  const n = new URLSearchParams();
+  for (const k of ["ws", ...keep]) { const v = params.get(k); if (v) n.set(k, v); }
+  if (tab) n.set("tab", tab);
+  const q = n.toString();
+  return q ? `${path}?${q}` : path;
 }
 
 function useView<T extends string>(views: readonly T[], fallback: T, alias: Record<string, T> = {}) {
   const [params, setParams] = useSearchParams();
   const raw = params.get("tab") ?? "";
   const view = (views as readonly string[]).includes(raw) ? (raw as T) : alias[raw] ?? fallback;
-  // 统一深链：?tab=<区块>&id=<对象>；拓扑区块按 P-30 只用 `topology`（见 topology/topologyParams.ts）。
   const go = (t: T, nextId?: string | null) => {
     const n = new URLSearchParams(params); n.set("tab", t);
-    for (const k of ["id", "topology", "topology_id", "node"]) n.delete(k);
+    n.delete("id");
     if (nextId) n.set("id", nextId);
     setParams(n);
   };
   return { view, go, id: params.get("id"), params, setParams };
 }
 
-function DevicesWorkspace({ ws }: { ws: string }) {
+function DevicesPage({ ws }: { ws: string }) {
   const { view, go, id, params, setParams } = useView<DeviceView>(DEVICE_VIEWS, "devices", { connections: "devices" });
   const [devState, reloadDevices] = useNet("/devices", ws);
   const [connState, reloadConnections] = useNet("/connections", ws);
@@ -63,83 +74,65 @@ function DevicesWorkspace({ ws }: { ws: string }) {
   const connections = listOf<Connection>(connState, "connections");
   const inspections = listOf<Inspection>(inspState, "inspections");
   const selectDevice = (deviceId: string | null) => { const n = new URLSearchParams(params); if (deviceId) n.set("device", deviceId); else n.delete("device"); setParams(n, { replace: true }); };
-  const canvas = view === "topologies";
   return (
-    <div className={`netops-page${canvas ? " is-canvas" : ""}`} data-testid="netops-page">
-      {!canvas ? <FleetSummary devices={devices} connections={connections} inspections={inspections} onGo={(v) => go(v)} /> : null}
+    <div className="netops-page" data-testid="netops-page">
+      <FleetSummary devices={devices} connections={connections} inspections={inspections} />
       <Tabs label="网络设备视图" current={view} onChange={(t: DeviceView) => go(t)} tabs={[
         { key: "devices", label: "设备", count: devices.length },
-        { key: "topologies", label: "拓扑" },
         { key: "inspections", label: "巡检", count: inspections.length },
-        { key: "context", label: "上下文观察" },
+        { key: "context", label: "观察记录" },
       ]} />
       {view === "devices" ? <DeviceInventory ws={ws} devices={devices} devicesState={devState} reloadDevices={reloadDevices} connections={connections}
         reloadConnections={reloadConnections} regions={listOf<Region>(regionState, "regions")} selectedId={params.get("device")} onSelect={selectDevice} /> : null}
       {view === "inspections" ? <Inspections ws={ws} openId={id} onOpen={(x) => go("inspections", x)} /> : null}
-      {view === "topologies" ? <Topologies ws={ws} /> : null}
       {view === "context" ? <ContextView ws={ws} /> : null}
     </div>
   );
 }
 
-/** 机群概览：一眼看出有多少设备、连接是否健康、哪些需要处理、最近一次巡检结果。 */
-function FleetSummary({ devices, connections, inspections, onGo }: { devices: Device[]; connections: Connection[]; inspections: Inspection[]; onGo: (v: DeviceView) => void }) {
+/** 设备概览：Arc MetricCard 一行四格——设备数、可连通连接、需关注设备、巡检。 */
+function FleetSummary({ devices, connections, inspections }: { devices: Device[]; connections: Connection[]; inspections: Inspection[] }) {
   const tones = connections.map((c) => connHealth(c.status));
   const ok = tones.filter((t) => t === "ok").length;
   const warn = tones.filter((t) => t === "warn").length;
   const untested = tones.length - ok - warn;
   const attention = devices.filter((d) => { const h = deviceHealth(connections.filter((c) => c.device_id === d.device_id)); return h === "warn" || h === "none"; }).length;
   const latest = [...inspections].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")))[0];
-  const pct = (n: number) => `${tones.length ? (n / tones.length) * 100 : 0}%`;
+  const vendors = new Set(devices.map((d) => d.vendor).filter(Boolean)).size;
   return (
-    <div className="fleet" role="group" aria-label="设备概览">
-      <div className="fleet-tile">
-        <span className="fleet-icon" aria-hidden="true"><IconServer size={16} /></span>
-        <span className="fleet-label">设备</span>
-        <span className="fleet-value">{devices.length}</span>
-        <span className="fleet-sub">{new Set(devices.map((d) => d.vendor).filter(Boolean)).size} 个厂商</span>
-      </div>
-      <div className="fleet-tile is-wide">
-        <span className="fleet-icon" aria-hidden="true"><IconLink size={16} /></span>
-        <span className="fleet-label">连接健康</span>
-        <span className="fleet-value">{ok}<small>/{tones.length} 可连通</small></span>
-        <span className="fleet-bar" role="img" aria-label={`可连通 ${ok}，未测试 ${untested}，异常 ${warn}`}>
-          <span className="is-ok" style={{ width: pct(ok) }} /><span className="is-neutral" style={{ width: pct(untested) }} /><span className="is-warn" style={{ width: pct(warn) }} />
-        </span>
-      </div>
-      <button type="button" className={`fleet-tile is-action ${attention ? "is-alert" : ""}`} onClick={() => onGo("devices")}>
-        <span className="fleet-icon" aria-hidden="true"><IconWarningCircle size={16} /></span>
-        <span className="fleet-label">需关注</span>
-        <span className="fleet-value">{attention}</span>
-        <span className="fleet-sub">{attention ? "无连接或测试失败" : "全部正常"}</span>
-      </button>
-      <button type="button" className="fleet-tile is-action" onClick={() => onGo("inspections")}>
-        <span className="fleet-icon" aria-hidden="true"><IconActivity size={16} /></span>
-        <span className="fleet-label">最近巡检</span>
-        <span className="fleet-value is-text">{latest ? INSPECTION_STATUS[latest.status ?? ""] ?? latest.status ?? "未上报" : "暂无"}</span>
-        <span className="fleet-sub">{latest ? fmtTime(latest.created_at) : "从「巡检」发起"}</span>
-      </button>
+    <div className="metric-row" role="group" aria-label="设备概览">
+      <MetricCard label="设备" value={devices.length} context={vendors ? `${vendors} 个厂商` : "尚未登记"} />
+      <MetricCard label="连接健康" value={ok} suffix={`/${tones.length}`} context={tones.length ? `可连通 ${ok} · 未测试 ${untested} · 异常 ${warn}` : "还没有连接"} />
+      <MetricCard label="需关注" value={attention} context={attention ? "无连接或测试失败" : "全部正常"} />
+      <MetricCard label="巡检" value={inspections.length} context={latest ? `最近：${INSPECTION_STATUS[latest.status ?? ""] ?? latest.status ?? "未上报"} · ${fmtTime(latest.created_at)}` : "暂无巡检"} />
     </div>
   );
 }
 
-function SkillsWorkspace({ ws }: { ws: string }) {
+function TopologyPage({ ws }: { ws: string }) {
+  return (
+    <div className="netops-page is-canvas" data-testid="netops-topology">
+      <Topologies ws={ws} />
+    </div>
+  );
+}
+
+function SkillsPage({ ws }: { ws: string }) {
   const { view, go } = useView<SkillView>(SKILL_VIEWS, "skills");
   const [skillState, reloadSkills] = useNet("/skills", ws);
   const [devState] = useNet("/devices", ws);
   const [connState] = useNet("/connections", ws);
   const [scriptState] = useNet("/scripts", ws);
-  const { hrefFor } = useShell();
-  const navigate = useNavigate();
   const skills = listOf<NetworkSkill>(skillState, "skills");
   const devices = listOf<Device>(devState, "devices");
   const connections = listOf<Connection>(connState, "connections");
+  const scripts = listOf(scriptState, "scripts");
   return (
     <div className="netops-page" data-testid="netops-skills">
-      <SkillPipeline devices={devices.length} connections={connections.length} skills={skills} onGoDevices={() => navigate(hrefFor(DEVICES_PATH))} />
+      <SkillSummary skills={skills} scripts={scripts.length} />
       <Tabs label="网络 Skill 视图" current={view} onChange={(t: SkillView) => go(t)} tabs={[
         { key: "skills", label: "Skill", count: skills.length },
-        { key: "scripts", label: "巡检脚本", count: listOf(scriptState, "scripts").length },
+        { key: "scripts", label: "巡检脚本", count: scripts.length },
       ]} />
       {view === "skills" ? <SkillsBoard ws={ws} skillsState={skillState} skills={skills} reload={reloadSkills} devices={devices} connections={connections} /> : null}
       {view === "scripts" ? <ScriptLibrary ws={ws} /> : null}
@@ -247,7 +240,7 @@ function evidenceDevices(evidence: Loadable<Record<string, unknown>>, t?: Inspec
   return Object.entries(t?.results ?? {}).map(([id, v]) => ({ connection_id: id, name: v.name, status: v.status }));
 }
 
-// ── 拓扑：旧可编辑画布原样迁入 topology/，经 TopologyMount 接新壳（深链 / 未保存守卫 / 工作区）──
+// ── 拓扑：可编辑画布在 topology/，经 TopologyMount 接新壳（深链 / 未保存守卫 / 工作区）──
 const TopologyMount = lazy(() => import("./topology/TopologyMount"));
 
 function Topologies({ ws }: { ws: string }) {
