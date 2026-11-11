@@ -134,3 +134,14 @@
   .topology-agent-input-row > button { margin-left: auto; }
 }
 }
+
+/* 迁入新前端后的消息样式（新前端不复用旧 MessageRow） */
+@layer extension {
+.topology-agent .agent-msg { margin: 0 0 12px; display: grid; gap: 4px; min-width: 0; }
+.topology-agent .agent-msg.is-user { justify-items: end; }
+.topology-agent .agent-msg.is-user .agent-msg-text { max-width: 88%; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.topology-agent .agent-msg.is-assistant .markdown-body { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.topology-agent .agent-msg-meta { color: var(--text-3); font-size: var(--fs-11); }
+.topology-agent .agent-version-note { margin: 4px 0 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--surface-2); color: var(--text-2); font-size: 11px; }
+.topology-agent-scope .btn.sm { justify-self: start; }
+}

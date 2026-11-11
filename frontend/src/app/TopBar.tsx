@@ -1,4 +1,5 @@
 import { DesktopSettingsButton } from "../desktop/DesktopHost";
+import { COMMAND_HINT, COMMAND_LABEL } from "./CommandPalette";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { canSignOut } from "../contracts/auth";
 import { NAMES } from "../contracts/naming";
@@ -103,8 +104,8 @@ export function TopBar({ onOpenPalette, onToggleNav }: { onOpenPalette: () => vo
     <header className="app-topbar">
       {onToggleNav ? <button type="button" className="topbar-btn" onClick={onToggleNav} aria-label="打开主导航">☰</button> : null}
       <WorkspaceSwitcher />
-      <button type="button" className="topbar-search" onClick={onOpenPalette} aria-label={NAMES.search} data-testid="open-palette">
-        <IconSearch size={16} aria-hidden="true" /><span>{NAMES.search}</span><kbd>Ctrl K</kbd>
+      <button type="button" className="topbar-search" onClick={onOpenPalette} aria-label={`${COMMAND_LABEL}（Ctrl K）`} title={COMMAND_HINT} data-testid="open-palette">
+        <IconSearch size={16} aria-hidden="true" /><span>{COMMAND_LABEL}：跳转页面、新建会话、切换工作区</span><kbd>Ctrl K</kbd>
       </button>
       <div className="topbar-right">
         <ReviewInboxButton />

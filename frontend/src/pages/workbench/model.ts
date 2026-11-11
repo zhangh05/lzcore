@@ -11,7 +11,28 @@ export interface SessionSummary {
   metadata?: Record<string, unknown> | null;
 }
 
-export interface StageOutput { stage?: string; title?: string; summary?: string; status?: string }
+/**
+ * 阶段输出。真实后端（core/runtime_engine/loop_model.py）写入 { id, label, text }；
+ * 旧形状 { stage, title, summary, status } 仍兼容。
+ */
+export interface StageOutput { id?: string; label?: string; text?: string; stage?: string; title?: string; summary?: string; status?: string }
+export interface StageView { key: string; title: string; text: string; status?: string }
+
+/** 按公开字段投影阶段；既无标题也无正文的阶段不渲染（不出现空白「1.」）。 */
+export function stageViews(stages: unknown): StageView[] {
+  if (!Array.isArray(stages)) return [];
+  const out: StageView[] = [];
+  stages.forEach((raw, i) => {
+    if (!raw || typeof raw !== "object") return;
+    const s = raw as StageOutput;
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const title = str(s.label) || str(s.title) || str(s.stage) || str(s.id);
+    const text = str(s.text) || str(s.summary);
+    if (!title && !text) return;
+    out.push({ key: str(s.id) || `${i}`, title: title || `阶段 ${i + 1}`, text, status: str(s.status) || undefined });
+  });
+  return out;
+}
 
 export interface ChatMessage {
   message_id?: string;

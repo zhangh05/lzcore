@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 118 97" width="118" height="97">
+  <rect width="118" height="97" rx="11" fill="#1262aa"/>
+  <!-- Storage Array Shelves -->
+  <rect x="22" y="18" width="74" height="18" rx="3" fill="none" stroke="#ffffff" stroke-width="4"/>
+  <circle cx="32" cy="27" r="3" fill="#ffffff"/>
+  <line x1="42" y1="27" x2="86" y2="27" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+
+  <rect x="22" y="40" width="74" height="18" rx="3" fill="none" stroke="#ffffff" stroke-width="4"/>
+  <circle cx="32" cy="49" r="3" fill="#ffffff"/>
+  <line x1="42" y1="49" x2="86" y2="49" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+
+  <rect x="22" y="62" width="74" height="18" rx="3" fill="none" stroke="#ffffff" stroke-width="4"/>
+  <circle cx="32" cy="71" r="3" fill="#ffffff"/>
+  <line x1="42" y1="71" x2="86" y2="71" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+</svg>

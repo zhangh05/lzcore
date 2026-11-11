@@ -183,6 +183,7 @@ export function reviewInboxPaths(ws: string) {
     /** 0–1 时的来源；仅保留路径供任务中心使用，收件箱不再用它判定未知（字段缺失）。 */
     tasks: `/api/runtime/tasks?workspace_id=${w}`,
     sessions: `/api/sessions?workspace_id=${w}&status=active&limit=${INBOX_SESSION_LIMIT}`,
+    sessionTasks: `/api/runtime/session-tasks?workspace_id=${w}&status=active&limit=${INBOX_SESSION_LIMIT}`,
     sessionTaskState: (sid: string) => `/api/runtime/sessions/${encodeURIComponent(sid)}/task-state?workspace_id=${w}`,
   };
 }
@@ -192,8 +193,38 @@ export const INBOX_SESSION_LIMIT = 50;
 
 interface SessionTaskStateBody { task_state?: { task?: { task_id?: string; objective?: string; status?: string; unknowns?: { kind?: string; reason?: string }[] } | null } | null }
 
-/** 会话 task-state 聚合：返回有任务的会话的任务摘要；任一会话读失败 → 来源标记 error。 */
+interface SessionTasksBody {
+  items?: { session_id?: string; title?: string; task?: { task_id?: string; objective?: string; status?: string; unknowns?: { kind?: string; reason?: string }[] } | null }[];
+  truncated?: boolean;
+  errors?: { session_id?: string; reason?: string }[];
+}
+
+/**
+ * 服务端聚合（GET /api/runtime/session-tasks）：一次读取全部活跃会话的任务。
+ * 返回 null 表示后端没有该接口（404/405/501，旧后端），调用方退回逐会话读取。
+ */
+async function loadSessionTasksAggregated(get: HttpGet, ws: string): Promise<{ status: SourceStatus; list: RuntimeTaskSummary[] } | null> {
+  const o = await get(reviewInboxPaths(ws).sessionTasks);
+  if (o.kind === "http" && (o.status === 404 || o.status === 405 || o.status === 501)) return null;
+  if (o.kind !== "http" || o.status !== 200) return { status: sourceFrom(o, "items").status, list: [] };
+  const body = (o.body ?? {}) as SessionTasksBody;
+  if (!Array.isArray(body.items)) return null;
+  const list: RuntimeTaskSummary[] = [];
+  for (const it of body.items) {
+    const task = it?.task;
+    if (!task?.task_id || !it.session_id) continue;
+    list.push({ task_id: task.task_id, status: task.status, title: task.objective || it.title, session_id: it.session_id, unknowns: task.unknowns ?? [] });
+  }
+  const failed = Array.isArray(body.errors) ? body.errors.length : 0;
+  if (failed) return { status: { state: "error", reason: `${failed} 个会话的任务状态不可读，计数不完整` }, list };
+  if (body.truncated) return { status: { state: "error", reason: `只聚合了最近 ${INBOX_SESSION_LIMIT} 个会话，计数可能不完整` }, list };
+  return { status: { state: "ok", count: list.length }, list };
+}
+
+/** 会话 task-state 聚合：优先服务端聚合；旧后端退回逐会话读取。任一会话读失败 → 来源标记 error。 */
 async function loadSessionTasks(get: HttpGet, ws: string): Promise<{ status: SourceStatus; list: RuntimeTaskSummary[] }> {
+  const aggregated = await loadSessionTasksAggregated(get, ws);
+  if (aggregated) return aggregated;
   const paths = reviewInboxPaths(ws);
   const s = sourceFrom(await get(paths.sessions), "sessions");
   if (s.status.state !== "ok") return { status: s.status, list: [] };

@@ -29,8 +29,8 @@ export async function createSession(ws: string, title = ""): Promise<{ session?:
 }
 
 export const sessionOps = {
-  rename: (ws: string, id: string, title: string) => api.put(`/api/sessions/${enc(id)}`, { workspace_id: ws, title }),
-  archive: (ws: string, id: string) => api.post(`/api/sessions/${enc(id)}/archive`, { workspace_id: ws }),
-  restore: (ws: string, id: string) => api.post(`/api/sessions/${enc(id)}/restore`, { workspace_id: ws }),
+  rename: (ws: string, id: string, title: string) => api.put(`/api/sessions/${enc(id)}`, { title }, { workspace_id: ws }),
+  archive: (ws: string, id: string) => api.post(`/api/sessions/${enc(id)}/archive`, {}, { workspace_id: ws }),
+  restore: (ws: string, id: string) => api.post(`/api/sessions/${enc(id)}/restore`, {}, { workspace_id: ws }),
   remove: (ws: string, id: string) => api.del(`/api/sessions/${enc(id)}`, { workspace_id: ws }, { workspace_id: ws }),
 };

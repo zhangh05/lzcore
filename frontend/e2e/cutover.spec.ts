@@ -64,7 +64,15 @@ for (const width of [1366, 390]) test(`layout stays inside ${width}px and auxili
     await expect(page.getByRole("dialog", { name: "会话列表", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "关闭", exact: true }).press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-  } else await expect(page.getByTestId("progress-panel")).toBeVisible();
+  } else {
+    // 宽屏：有进度内容时常驻辅助栏；空会话不占位，通过「进度与证据」打开抽屉。两种情况都必须可达。
+    const rail = page.getByTestId("progress-panel");
+    if (!(await rail.isVisible())) {
+      await page.getByTestId("open-progress").click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+    }
+    await expect(page.getByTestId("progress-panel")).toBeVisible();
+  }
   const geometry = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }));
   expect(geometry.content).toBeLessThanOrEqual(geometry.viewport);
 });

@@ -26,7 +26,7 @@ export function ExtensionRoutePage({ pathname }: { pathname: string }) {
         <EmptyState icon={<IconWarningCircle size={24} />} title="扩展暂不可用" reason={r.reason} action={back} /></div>;
     case "mounted": {
       const Module = moduleFor(r.mount.extensionId, r.mount.path);
-      return <div className="page" data-testid="ext-mounted"><PageHeader title={extensionRouteTitle(r.mount.extensionName, r.mount.label)} subtitle={r.mount.description} />
+      return <div className="page page-ext" data-testid="ext-mounted"><PageHeader title={extensionRouteTitle(r.mount.extensionName, r.mount.label)} subtitle={r.mount.description} />
         {Module && workspaceId ? (
           <Suspense fallback={<p role="status">加载扩展界面…</p>}>
             <Module ws={workspaceId} mountPath={r.mount.path} subPath={pathname.slice(r.mount.path.length)} />
@@ -51,7 +51,7 @@ export function ExtensionsOverview() {
       {extensions.kind === "ready" && extensions.extensions.length === 0
         ? <EmptyState icon={<IconPuzzle size={24} />} title="暂无已安装扩展" reason="安装扩展后，它提供的页面会出现在左侧导航的扩展区。" /> : null}
       {extensions.kind === "ready" && extensions.extensions.length > 0 ? (
-        <table className="table">
+        <div className="table-wrap"><table className="table">
           <thead><tr><th scope="col">扩展</th><th scope="col">版本</th><th scope="col">状态</th><th scope="col">界面入口</th></tr></thead>
           <tbody>
             {extensions.extensions.map((ext) => {
@@ -66,7 +66,7 @@ export function ExtensionsOverview() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       ) : null}
     </div>
   );

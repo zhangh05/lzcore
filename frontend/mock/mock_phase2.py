@@ -37,6 +37,7 @@ def _sid() -> str:
 # ── 会话与消息 ──────────────────────────────────────────────
 SESSIONS = {
     "ws-demo-1": [
+        {"session_id": "s_real42", "title": "真实形状样例：回复 42（无 execution_outcome）", "status": "active", "created_at": NOW, "updated_at": NOW, "metadata": {}},
         {"session_id": "s_unknown", "title": "整理周报并写入共享目录", "status": "active", "created_at": NOW, "updated_at": NOW, "metadata": {}},
         {"session_id": "s_mapping2", "title": "映射二样例：ok=true 但结果未知", "status": "active", "created_at": NOW, "updated_at": NOW, "metadata": {}},
         {"session_id": "s_partial", "title": "汇总三份资料（部分达成）", "status": "active", "created_at": YESTERDAY, "updated_at": YESTERDAY, "metadata": {}},
@@ -57,7 +58,8 @@ def _assistant(content, outcome=None, unknown=None, ok=True, errors=None, crid="
         md["task_id"] = task_id
     return {"message_id": "m_" + _sid(), "role": "assistant", "content": content, "ok": ok, "errors": errors or [], "metadata": md, "created_at": NOW}
 
-STAGES = [{"stage": "plan", "title": "规划", "status": "done", "summary": "合成：拆成 2 步。"}, {"stage": "act", "title": "执行", "status": "done", "summary": "合成：调用 1 个写入工具。"}]
+# 与真实后端同形：core/runtime_engine/loop_model.py 写入 {id, label, text}
+STAGES = [{"id": "model-1", "label": "模型输出 1", "text": "合成：拆成 2 步。"}, {"id": "model-2", "label": "模型输出 2", "text": "合成：调用 1 个写入工具。"}]
 WRITE_CALL_UNKNOWN = {"call_id": "call_demo_1", "tool_id": "workspace.file.write", "status": "unknown", "summary": "写入 weekly.md", "result": {"ok": False, "error": "receipt_lost"}}
 
 MESSAGES = {
@@ -84,6 +86,12 @@ MESSAGES = {
         _assistant("写入已回读确认。", outcome="complete", unknown={"tool_id": "workspace.file.write", "call_id": "call_demo_2", "status": "reconciled"}, stage_outputs=STAGES, task_id="task_demo_reconciled"),
     ],
     "s_drawing": [], "s_archived": [],
+    # 真实历史消息形状：没有 execution_outcome，只有 stage_outputs {id,label,text} 与 run_id。
+    "s_real42": [
+        {"message_id": "m_42u", "role": "user", "content": "6 乘 7 等于多少？", "created_at": NOW, "run_id": "run_demo_42"},
+        {"message_id": "m_42a", "role": "assistant", "content": "42", "created_at": NOW, "run_id": "run_demo_42",
+         "metadata": {"client_request_id": "cr_demo_42", "trace_id": "tr_demo_42", "stage_outputs": [{"id": "model-1", "label": "模型输出 1", "text": "42"}]}},
+    ],
 }
 
 SESSION_TASKS = {
@@ -95,6 +103,7 @@ SESSION_TASKS = {
     "s_partial": {"task_id": "task_demo_partial", "objective": "汇总三份资料", "status": "partial", "unknowns": [],
                   "recovery_goals": [{"goal_id": "g1", "status": "done", "description": "资料 A"}, {"goal_id": "g2", "status": "done", "description": "资料 B"}, {"goal_id": "g3", "status": "pending", "description": "资料 C"}]},
     "s_reconciled": {"task_id": "task_demo_reconciled", "objective": "写入一条记录", "status": "succeeded", "unknowns": [], "recovery_goals": []},
+    "s_real42": {"task_id": "task_demo_42", "last_run_id": "run_demo_42", "status": "completed", "unknowns": [], "recovery_goals": []},
 }
 
 # durable TaskState（agent/runtime/durable/models.py:53-62 的字段；无 outcome 字段）
@@ -132,9 +141,9 @@ JOBS_BASE = {
 JOBS = {k: [dict(j) for j in v] for k, v in JOBS_BASE.items()}
 
 FILES = {"ws-demo-1": [
-    {"file_id": "file_demo_1", "name": "weekly.md", "folder": "reports", "size_bytes": 2048, "mime_type": "text/markdown", "lifecycle": "active", "created_at": NOW, "logical_type": "document", "content": "# 周报（合成）\n- 完成 A\n- 进行中 B\n"},
-    {"file_id": "file_demo_2", "name": "data.csv", "folder": "data", "size_bytes": 512, "mime_type": "text/csv", "lifecycle": "active", "created_at": YESTERDAY, "logical_type": "table", "content": "a,b\n1,2\n"},
-    {"file_id": "file_demo_3", "name": "old.txt", "folder": "", "size_bytes": 10, "mime_type": "text/plain", "lifecycle": "trash", "created_at": YESTERDAY, "logical_type": "document", "content": "old"},
+    {"file_id": "file_demo_1", "original_name": "weekly.md", "metadata": {"folder": "reports"}, "size_bytes": 2048, "mime_type": "text/markdown", "lifecycle": "active", "created_at": NOW, "logical_type": "document", "content": "# 周报（合成）\n- 完成 A\n- 进行中 B\n"},
+    {"file_id": "file_demo_2", "original_name": "data.csv", "metadata": {"folder": "data"}, "size_bytes": 512, "mime_type": "text/csv", "lifecycle": "active", "created_at": YESTERDAY, "logical_type": "table", "content": "a,b\n1,2\n"},
+    {"file_id": "file_demo_3", "original_name": "old.txt", "metadata": {"folder": ""}, "size_bytes": 10, "mime_type": "text/plain", "lifecycle": "trash", "created_at": YESTERDAY, "logical_type": "document", "content": "old"},
 ], "ws-demo-2": []}
 
 KNOWLEDGE = {"ws-demo-1": [
@@ -143,8 +152,8 @@ KNOWLEDGE = {"ws-demo-1": [
 ], "ws-demo-2": []}
 
 MEMORY = {"ws-demo-1": [
-    {"memory_id": "mem_demo_1", "summary": "周报每周五 17:00 前提交", "content": "周报每周五 17:00 前提交", "status": "active", "scope": "workspace", "memory_type": "knowledge_note", "updated_at": NOW, "metadata": {}},
-    {"memory_id": "mem_demo_2", "summary": "周报每周四提交", "content": "周报每周四提交", "status": "conflict", "scope": "workspace", "memory_type": "knowledge_note", "updated_at": NOW, "metadata": {"conflict_memory_ids": ["mem_demo_1"]}},
+    {"memory_id": "mem-0d0d0d000001", "summary": "周报每周五 17:00 前提交", "content": "周报每周五 17:00 前提交", "status": "active", "scope": "workspace", "memory_type": "knowledge_note", "updated_at": NOW, "metadata": {}},
+    {"memory_id": "mem-0d0d0d000002", "summary": "周报每周四提交", "content": "周报每周四提交", "status": "conflict", "scope": "workspace", "memory_type": "knowledge_note", "updated_at": NOW, "metadata": {"conflict_memory_ids": ["mem-0d0d0d000001"]}},
 ], "ws-demo-2": []}
 
 APPROVAL_OPS = {
@@ -170,7 +179,7 @@ MEMBERSHIPS = [{"username": "alice", "organization_id": "org-demo", "role": "ope
 PROVIDERS = [
     {"provider": "mock-llm", "label": "合成模型", "provider_type": "openai_compatible", "base_url": "http://127.0.0.1:0/mock", "model": "mock-1", "key_configured": False, "key_preview": None},
 ]
-WORKFLOWS = {"ws-demo-1": [{"workflow_id": "wf_demo_1", "name": "周报流程（合成）", "steps": [{"id": "s1"}, {"id": "s2"}], "updated_at": NOW}], "ws-demo-2": []}
+WORKFLOWS = {"ws-demo-1": [{"workflow_id": "wf_demo_1", "name": "周报流程（合成）", "version": 1, "status": "active", "nodes": [{"node_id": "s1", "name": "读取", "tool_id": "workspace.file.read", "arguments": {}, "depends_on": []}, {"node_id": "s2", "name": "写入", "tool_id": "workspace.file.write", "arguments": {}, "depends_on": ["s1"]}], "execution_layers": [["s1"], ["s2"]], "updated_at": NOW}], "ws-demo-2": []}
 WORKFLOW_RUNS = {"wfr_demo_1": {"run_id": "wfr_demo_1", "workflow_id": "wf_demo_1", "status": "running", "task_id": "task_demo_running", "steps": [{"step_id": "s1", "status": "succeeded"}, {"step_id": "s2", "status": "running"}], "created_at": NOW}}
 TEMPLATES = [{"template_id": "tpl_weekly", "name": "周报模板（合成）", "description": "两步：整理 + 写入"}]
 
@@ -406,7 +415,11 @@ def handle(h, method, path, parts, q, sc):  # noqa: C901
     if path == "/api/agent/llm/test":
         return J(200, {"ok": True, "reply": "pong（合成）"}) or True
     if path == "/api/agent/usage":
-        return J(200, {"ok": True, "usage": {"turns": 12, "tokens": 34567, "note": "合成"}}) or True
+        # 真实后端（backend/main.py api_agent_usage）：缺 workspace_id → 400；返回扁平计数。
+        if not q.get("workspace_id"): return J(400, {"ok": False, "error": "workspace_id is required"}) or True
+        return J(200, {"ok": True, "workspace_id": q["workspace_id"], "session_id": "", "call_count": 12, "input_tokens": 30000, "output_tokens": 4567, "total_tokens": 34567,
+                       "cache_read_input_tokens": 12000, "cache_creation_input_tokens": 3000, "cache_hit_ratio": 0.4, "estimated_cost": 0, "last_updated": NOW,
+                       "latest_prompt_profile": {}, "prompt_cache_strategies": {}}) or True
 
     # sessions
     if path == "/api/sessions" and method == "GET":
@@ -457,11 +470,19 @@ def handle(h, method, path, parts, q, sc):  # noqa: C901
     if path.startswith("/api/runtime/trajectories/"):
         return J(200, {"ok": True, "trajectory": {"trajectory_id": parts[4], "steps": [{"tool_id": "workspace.file.write", "status": "unknown"}]}}) or True
     if path == "/api/runtime/health":
-        return J(200, {"ok": True, "status": "healthy（合成）", "components": {"jobs": "ok", "storage": "ok"}}) or True
+        # 真实后端（backend/api/runtime_routes.py）：缺 workspace_id → 400 invalid_workspace_id。
+        if not q.get("workspace_id"): return J(400, {"ok": False, "error": "invalid_workspace_id"}) or True
+        comps = [{"name": "workspace", "status": "ok", "message": "Workspace exists（合成）", "details": {}},
+                 {"name": "jobs", "status": "ok", "message": f"{len(JOBS.get(ws, []))} jobs", "details": {"count": len(JOBS.get(ws, []))}},
+                 {"name": "llm", "status": "warning", "message": "合成：最近一次检测超时", "details": {"enabled": True, "provider": "mock"}},
+                 {"name": "production_record_storage", "status": "ok", "message": "filesystem · 0.1 ms", "details": {"root_writable": True}}]
+        return J(200, {"components": comps, "summary": {"total": len(comps), "ok": 3, "warning": 1, "error": 0}}) or True
     if path == "/api/runtime/summary":
-        return J(200, {"ok": True, "tasks": len(RUNTIME_TASKS.get(ws, [])), "jobs": len(JOBS.get(ws, []))}) or True
+        # 真实形状（backend/api/runtime_routes.py runtime_summary）
+        return J(200, {"capabilities": {"enabled": 8, "total": 8}, "tools": {"hidden_or_non_llm": ["workspace.internal_index"], "model_visible": 24, "registered": 25}}) or True
     if path == "/api/runtime/selfcheck":
-        return J(200, {"ok": True, "checks": [{"name": "storage", "ok": True}]}) or True
+        if not q.get("workspace_id"): return J(400, {"ok": False, "error": "invalid_workspace_id"}) or True
+        return J(200, {"status": "healthy", "issues": [], "checks": {"jobs_count": len(JOBS.get(ws, [])), "runs_count": 1, "state_json": "ok", "tool_runtime": "ok", "enabled_capabilities": ["workspace_read"], "tool_governance": {"active": 18, "disabled": 0}}}) or True
 
     # jobs
     if path == "/api/jobs" and method == "GET":
@@ -533,17 +554,19 @@ def handle(h, method, path, parts, q, sc):  # noqa: C901
     # storage
     if path == "/api/storage/files" and method == "GET":
         lc = q.get("lifecycle", "active"); qq = q.get("q", "")
-        lst = [dict({k: v for k, v in f.items() if k != "content"}) for f in FILES.get(ws, []) if f["lifecycle"] == lc and qq.lower() in f["name"].lower()]
+        lst = [dict({k: v for k, v in f.items() if k != "content"}) for f in FILES.get(ws, []) if f["lifecycle"] == lc and qq.lower() in f["original_name"].lower()]
         return J(200, {"ok": True, "files": lst}) or True
     if len(parts) >= 5 and parts[2] == "storage" and parts[3] == "files":
         f = _find(FILES.get(ws, []), "file_id", parts[4])
         if not f: return J(404, {"ok": False, "error": "file_not_found"}) or True
         tail = parts[5] if len(parts) > 5 else ""
-        if not tail and method == "GET": return J(200, {"ok": True, "record": {k: v for k, v in f.items() if k != "content"}}) or True
+        # 与 storage/managed_files 同形：GET / PATCH 返回 {"file": …}；名称在 original_name，文件夹在 metadata.folder。
+        if not tail and method == "GET": return J(200, {"ok": True, "file": {k: v for k, v in f.items() if k != "content"}}) or True
         if not tail and method == "PATCH":
-            if b.get("name"): f["name"] = b["name"]
-            if "folder" in b: f["folder"] = b["folder"]
-            return J(200, {"ok": True, "record": {k: v for k, v in f.items() if k != "content"}}) or True
+            if b.get("name"): f["original_name"] = b["name"]
+            if "folder" in b: f["metadata"] = {**f.get("metadata", {}), "folder": b["folder"]}
+            f["updated_at"] = NOW
+            return J(200, {"ok": True, "file": {k: v for k, v in f.items() if k != "content"}}) or True
         if not tail and method == "DELETE":
             if q.get("confirm") != "true": return J(400, {"ok": False, "error": "confirm_required"}) or True
             f["lifecycle"] = "trash"; return J(200, {"ok": True}) or True
@@ -563,7 +586,9 @@ def handle(h, method, path, parts, q, sc):  # noqa: C901
     # knowledge
     if path == "/api/knowledge/sources" and method == "GET": return J(200, {"ok": True, "sources": KNOWLEDGE.get(ws, [])}) or True
     if path == "/api/knowledge/search":
-        return J(200, {"ok": True, "results": [{"chunk_id": "ch1", "source_id": "ks_demo_1", "text": f"（合成）与「{q.get('q', '')}」相关的片段", "score": 0.8}]}) or True
+        # 与 backend/api/knowledge_routes 同形：title / artifact_name / summary / safe_excerpt / content（没有 text）。
+        excerpt = f"（合成）与「{q.get('q', '')}」相关的片段"
+        return J(200, {"ok": True, "results": [{"chunk_id": "ch1", "source_id": "ks_demo_1", "title": "运维手册（合成）", "artifact_name": "manual.md", "summary": "", "safe_excerpt": excerpt, "content": excerpt, "score": 0.8}]}) or True
     if path == "/api/knowledge/sources/from-artifact":
         s = {"source_id": "ks_" + _sid(), "title": "来自产出", "status": "pending"}; KNOWLEDGE.setdefault(ws, []).append(s)
         return J(200, {"ok": True, "source": s}) or True
@@ -575,22 +600,30 @@ def handle(h, method, path, parts, q, sc):  # noqa: C901
             s["status"] = "indexing"  # 受理 ≠ 成功：回读会看到 indexing
             return J(202, {"ok": True, "accepted": True}) or True
         if method == "DELETE": KNOWLEDGE[ws].remove(s); return J(200, {"ok": True, "deleted": True}) or True
-        return J(200, {"ok": True, "source": s}) or True
+        return J(200, {"ok": True, "source": {**s, "chunks": [{"chunk_id": "ch1", "source_id": s["source_id"], "content": "（合成）第一段：设备上架前登记管理地址。"}], "chunk_count": 1}}) or True
 
     # memory
     if path == "/api/memory/list": return J(200, {"ok": True, "records": MEMORY.get(ws, [])}) or True
     if path == "/api/memory/write":
-        mid = str(b.get("memory_id") or ("mem_" + _sid()))
+        mid = str(b.get("memory_id") or "")
+        # 与 core memory 合同一致：^mem-[a-f0-9]{12}$，不合规 400（上一轮前端生成 mem_+24 位就是在这里被拒）。
+        import re as _re
+        if not _re.fullmatch(r"mem-[a-f0-9]{12}", mid): return J(400, {"ok": False, "error": "invalid_memory_id"}) or True
         if sc.get("conflict") == "memory":
             return J(409, {"ok": False, "status": "execution_unknown", "memory_id": mid, "error": "memory_write_unknown_readback_required"}) or True
         existing = _find(MEMORY.setdefault(ws, []), "memory_id", mid)
         if existing: return J(200, {"ok": True, "status": existing["status"], "memory_id": mid, "reconciled": True}) or True
-        rec = {"memory_id": mid, "summary": b.get("title", ""), "content": b.get("content", ""), "status": "active", "scope": "workspace", "updated_at": NOW, "metadata": {}}
-        MEMORY[ws].append(rec); return J(200, {"ok": True, "status": "active", "memory_id": mid}) or True
-    if path == "/api/memory/confirm":
+        st = "active" if b.get("user_confirmed") else "pending"
+        rec = {"memory_id": mid, "summary": b.get("title", ""), "content": b.get("content", ""), "status": st, "scope": "workspace", "updated_at": NOW, "metadata": {}}
+        MEMORY[ws].append(rec); return J(200, {"ok": True, "status": st, "memory_id": mid}) or True
+    if path in {"/api/memory/confirm", "/api/memory/reject"}:
         m = _find(MEMORY.get(ws, []), "memory_id", b.get("memory_id"))
-        if not m: return J(404, {"ok": False, "error": "memory_not_found"}) or True
-        m["status"] = "active"; return J(200, {"ok": True}) or True
+        if not m: return J(200, {"ok": False, "error": "not found"}) or True
+        if path.endswith("confirm"):
+            if m["status"] not in ("pending", "conflict"): return J(200, {"ok": False, "error": f"cannot confirm status {m['status']}"}) or True
+            m["status"] = "active"
+        else: m["status"] = "rejected"
+        return J(200, {"ok": True, "status": m["status"], "memory_id": m["memory_id"]}) or True
     if path == "/api/memory/batch-delete":
         if b.get("confirm") is not True: return J(400, {"ok": False, "error": "confirm_required"}) or True
         ids = set(b.get("memory_ids") or []); before = len(MEMORY.get(ws, []))
@@ -724,11 +757,15 @@ def handle(h, method, path, parts, q, sc):  # noqa: C901
     # workflows
     if path == "/api/workflow-templates": return J(200, {"ok": True, "templates": TEMPLATES}) or True
     if len(parts) == 5 and parts[2] == "workflow-templates" and parts[4] == "instantiate":
-        w = {"workflow_id": "wf_" + _sid(), "name": b.get("name") or "来自模板", "steps": [], "updated_at": NOW}; WORKFLOWS.setdefault(ws, []).append(w)
+        w = {"workflow_id": "wf_" + _sid(), "name": b.get("name") or "来自模板", "version": 1, "status": "active", "nodes": [], "execution_layers": [], "updated_at": NOW}; WORKFLOWS.setdefault(ws, []).append(w)
         return J(201, {"ok": True, "workflow": w}) or True
     if path == "/api/workflows" and method == "GET": return J(200, {"ok": True, "workflows": WORKFLOWS.get(ws, [])}) or True
     if path == "/api/workflows" and method == "POST":
-        w = {"workflow_id": "wf_" + _sid(), "name": b.get("name") or "", "steps": b.get("steps") or [], "updated_at": NOW}; WORKFLOWS.setdefault(ws, []).append(w)
+        # 与 workflows/service.validate_definition 同口径：name 必填，nodes ≥ 1（不认 steps）。
+        if not b.get("name"): return J(400, {"ok": False, "error": "workflow name is required"}) or True
+        nodes = b.get("nodes")
+        if not isinstance(nodes, list) or not nodes: return J(400, {"ok": False, "error": "workflow must contain 1 to 16 nodes"}) or True
+        w = {"workflow_id": "wf_" + _sid(), "name": b["name"], "version": 1, "status": b.get("status") or "active", "nodes": nodes, "execution_layers": [[n.get("node_id") for n in nodes]], "updated_at": NOW}; WORKFLOWS.setdefault(ws, []).append(w)
         return J(201, {"ok": True, "workflow": w}) or True
     if len(parts) >= 4 and parts[2] == "workflows":
         w = _find(WORKFLOWS.get(ws, []), "workflow_id", parts[3])
@@ -741,7 +778,7 @@ def handle(h, method, path, parts, q, sc):  # noqa: C901
         if method == "DELETE":
             if b.get("confirm") != "delete": return J(400, {"ok": False, "error": "confirm_required"}) or True
             WORKFLOWS[ws].remove(w); return J(200, {"ok": True, "deleted": True}) or True
-        if method == "PUT": w.update({k: v for k, v in b.items() if k in ("name", "steps", "description")}); return J(200, {"ok": True, "workflow": w}) or True
+        if method == "PUT": w.update({k: v for k, v in b.items() if k in ("name", "nodes", "description", "status")}); return J(200, {"ok": True, "workflow": w}) or True
         return J(200, {"ok": True, "workflow": w}) or True
     if len(parts) >= 4 and parts[2] == "workflow-runs":
         r = WORKFLOW_RUNS.get(parts[3])

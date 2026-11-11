@@ -51,6 +51,54 @@ def register_state_routes(app):
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
 
+    @app.route("/api/runtime/session-tasks")
+    def api_session_tasks():
+        from flask import request, jsonify
+        from storage.ids import validate_session_id
+        from storage.session_store import list_sessions
+        from agent.runtime.task_state import load_task_state
+
+        ws_id, error = _validated_ws_id(request.args.get("workspace_id", ""))
+        if error:
+            return error
+        status = request.args.get("status", "active")
+        try:
+            limit = int(request.args.get("limit", "50"))
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid_limit"}), 400
+        if not 1 <= limit <= 200:
+            return jsonify({"ok": False, "error": "invalid_limit"}), 400
+        if status not in {"active", "archived", "deleted"}:
+            return jsonify({"ok": False, "error": "invalid_status"}), 400
+
+        # The session store and TaskState loader share the request's storage
+        # principal. Bound sessions examined, including empty/failed states.
+        sessions = list_sessions(ws_id, status=status, limit=limit)
+        items, errors = [], []
+        for session in sessions:
+            session_id = session.get("session_id", "")
+            try:
+                session_id = validate_session_id(session_id)
+                state = load_task_state(ws_id, session_id)
+                task = state.get("task")
+                if not task:
+                    continue
+                items.append({
+                    "session_id": session_id,
+                    "title": session.get("title", ""),
+                    "updated_at": session.get("updated_at", ""),
+                    "task": {key: task.get(key, [] if key == "unknowns" else "")
+                             for key in ("task_id", "objective", "status", "unknowns")},
+                })
+            except Exception:
+                # Storage exceptions can contain credentials or local paths.
+                errors.append({"session_id": session_id, "reason": "task_state_read_failed"})
+        return jsonify({
+            "ok": True, "workspace_id": ws_id, "items": items,
+            "sessions_scanned": len(sessions), "truncated": len(sessions) >= limit,
+            "errors": errors,
+        })
+
     @app.route("/api/runtime/tasks")
     def api_runtime_tasks():
         from flask import request, jsonify

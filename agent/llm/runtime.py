@@ -558,6 +558,6 @@ from agent.llm.prompt_guard import sanitize_provider_output
 _sanitize_provider_output = sanitize_provider_output
 
 
-def get_llm_status() -> dict:
+def get_llm_status(*, probe_provider: bool = True) -> dict:
     from agent.llm.config import get_llm_status as _gs
-    return _gs()
+    return _gs() if probe_provider else _gs(probe_provider=False)

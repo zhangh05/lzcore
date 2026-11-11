@@ -9,6 +9,8 @@ import { useSearchParams } from "../../router";
 import { useShell } from "../../app/shellContext";
 import type { ExtensionPageProps } from "../registry";
 import { NET_BASE, NET_TABS, enc, inspectionRetryGate, net, type Inspection, type InspectionDevice, type NetTab } from "./api";
+import { SkillFormDialog, type NetworkSkill } from "./SkillForm";
+import { ConnectionFormDialog, DEVICE_ROLES, DeviceFormDialog, ScriptFormDialog, VENDORS, type Connection, type Device, type Region, type Script } from "./forms";
 
 const TAB_LABEL: Record<NetTab, string> = { devices: "设备", connections: "连接", skills: "网络 Skill", inspections: "巡检", scripts: "巡检脚本", topologies: "拓扑", context: "上下文观察" };
 
@@ -30,7 +32,7 @@ export default function NetworkOperationsPage({ ws }: ExtensionPageProps) {
   // 统一深链：?tab=<区块>&id=<对象>；拓扑区块按 P-30 只用 `topology`（见 topology/topologyParams.ts）。
   const go = (t: NetTab, nextId?: string | null) => { const n = new URLSearchParams(params); n.set("tab", t); for (const k of ["id", "topology", "topology_id", "node"]) n.delete(k); if (nextId) n.set("id", nextId); setParams(n); };
   return (
-    <div data-testid="netops-page">
+    <div className={`netops-page${tab === "topologies" ? " is-canvas" : ""}`} data-testid="netops-page">
       <Tabs label="网络扩展" current={tab} onChange={(t: NetTab) => go(t)} tabs={NET_TABS.map((k) => ({ key: k, label: TAB_LABEL[k] }))} />
       {tab === "devices" ? <Devices ws={ws} /> : null}
       {tab === "connections" ? <Connections ws={ws} /> : null}
@@ -43,57 +45,100 @@ export default function NetworkOperationsPage({ ws }: ExtensionPageProps) {
   );
 }
 
-function SimpleCrud({ ws, path, listKey, idKey, columns, testId, template }: {
-  ws: string; path: string; listKey: string; idKey: string; testId: string; template: Record<string, unknown>;
-  columns: { key: string; label: string; render: (r: Record<string, unknown>) => React.ReactNode }[];
-}) {
-  const [list, reload] = useNet(path, ws);
-  const [edit, setEdit] = useState<{ id?: string; json: string } | null>(null);
-  const [del, setDel] = useState<string | null>(null);
+const VENDOR_ZH = Object.fromEntries(VENDORS) as Record<string, string>;
+const ROLE_ZH = Object.fromEntries(DEVICE_ROLES) as Record<string, string>;
+const CONN_STATUS: Record<string, string> = { untested: "未测试", connected: "已连通", verified: "已验证", failed: "测试失败", trust_required: "需核对主机指纹", host_key_changed: "主机指纹已变化", unreachable: "不可达" };
+
+/** 保存后的回读说明：显示服务端回读的关键字段，回读失败如实说「未能回读」。 */
+function SavedNote({ label, text, testId }: { label: string; text: string | null; testId: string }) {
+  return <p className="readback-note" role="status" data-testid={testId}>{label}已保存；{text ?? "未能回读，状态以列表刷新为准"}</p>;
+}
+
+function Devices({ ws }: { ws: string }) {
+  const [list, reload] = useNet("/devices", ws);
+  const [regions] = useNet("/regions", ws);
+  const [conns, reloadConns] = useNet("/connections", ws);
+  const [edit, setEdit] = useState<Device | "new" | null>(null);
+  const [addConn, setAddConn] = useState<string | null>(null);
+  const [del, setDel] = useState<Device | null>(null);
+  const [note, setNote] = useState<{ label: string; text: string | null } | null>(null);
   const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const devices = listOf<Device>(list, "devices");
+  const regionList = listOf<Region>(regions, "regions");
+  const regionName = (id?: string) => regionList.find((x) => x.region_id === id)?.name ?? (id || "—");
+  const connCount = (id: string) => listOf<Connection>(conns, "connections").filter((c) => c.device_id === id).length;
   return (
-    <section data-testid={testId}>
-      <Button variant="primary" onClick={() => setEdit({ json: JSON.stringify(template, null, 2) })}>新增</Button>
+    <section data-testid="net-devices">
+      <div className="row-actions"><Button variant="primary" onClick={() => setEdit("new")} data-testid="device-new">登记设备</Button></div>
+      {note ? <SavedNote label={note.label} text={note.text} testId="device-readback" /> : null}
       <Result r={r} />
       <LoadState value={list} onReload={reload}>{() => (
-        <Table rows={listOf<Record<string, unknown>>(list, listKey)} rowKey={(x) => String(x[idKey])} empty={<p className="muted">暂无记录。</p>}
-          columns={[...columns, { key: "_a", label: "", render: (x) => <span className="row-actions">
-            <Button onClick={() => setEdit({ id: String(x[idKey]), json: JSON.stringify(x, null, 2) })}>编辑</Button>
-            <Button variant="ghost" onClick={() => setDel(String(x[idKey]))}>删除</Button></span> }]} />
+        <Table testId="devices-table" rows={devices} rowKey={(d) => d.device_id} empty={<p className="muted">还没有登记设备。</p>}
+          columns={[
+            { key: "n", label: "设备", render: (d) => d.name ?? d.device_id, sortValue: (d) => d.name ?? "" },
+            { key: "h", label: "管理地址", render: (d) => d.host ?? "—" },
+            { key: "v", label: "厂商 / 角色", render: (d) => `${VENDOR_ZH[d.vendor ?? ""] ?? d.vendor ?? "—"} · ${ROLE_ZH[d.device_type ?? ""] ?? d.device_type ?? "—"}` },
+            { key: "m", label: "型号", render: (d) => d.device_model || "—" },
+            { key: "r", label: "区域", render: (d) => regionName(d.region_id) },
+            { key: "c", label: "连接", render: (d) => String(connCount(d.device_id)) },
+            { key: "_a", label: "", render: (d) => <span className="row-actions">
+              <Button className="sm" onClick={() => setAddConn(d.device_id)} data-testid="device-add-connection">添加连接</Button>
+              <Button className="sm" onClick={() => setEdit(d)}>编辑</Button>
+              <Button variant="ghost" className="sm" onClick={() => setDel(d)}>删除</Button></span> },
+          ]} />
       )}</LoadState>
-      {edit ? <Dialog title={edit.id ? `编辑 ${edit.id}` : "新增"} onClose={() => setEdit(null)} footer={<><Button onClick={() => setEdit(null)}>取消</Button>
-        <Button variant="primary" onClick={async () => {
-          let body: Record<string, unknown>; try { body = JSON.parse(edit.json); setErr(null); } catch { setErr("JSON 格式不正确"); return; }
-          setR({ label: "保存", o: edit.id ? await net.put(`${path}/${enc(edit.id)}`, ws, body) : await net.post(path, ws, body) }); setEdit(null); reload();
-        }}>保存</Button></>}>
-        <textarea className="code-input" rows={14} value={edit.json} onChange={(e) => setEdit({ ...edit, json: e.target.value })} aria-label="JSON" />
-        {err ? <p className="inline-alert tone-warn" role="alert">{err}</p> : null}
-      </Dialog> : null}
-      {del ? <ConfirmDialog title="删除？" details={<p>将删除 <code>{del}</code>。</p>} confirmText={del} confirmLabel="删除" onCancel={() => setDel(null)}
-        onConfirm={async () => { const x = del; setDel(null); setR({ label: "删除", o: await net.del(`${path}/${enc(x)}`, ws) }); reload(); }} /> : null}
+      {edit ? <DeviceFormDialog ws={ws} device={edit === "new" ? null : edit} regions={regionList} onClose={() => setEdit(null)}
+        onSaved={({ readback }) => { setEdit(null); setNote({ label: "设备", text: readback ? `回读：${readback.name} · ${readback.host} · ${VENDOR_ZH[readback.vendor ?? ""] ?? readback.vendor} · ${ROLE_ZH[readback.device_type ?? ""] ?? readback.device_type}` : null }); reload(); }} /> : null}
+      {addConn ? <ConnectionFormDialog ws={ws} devices={devices} deviceId={addConn} onClose={() => setAddConn(null)}
+        onSaved={({ readback }) => { setAddConn(null); setNote({ label: "连接", text: readback ? connReadbackText(readback) : null }); reloadConns(); }} /> : null}
+      {del ? <ConfirmDialog title="永久删除设备？" details={<p>将硬删除「{del.name}」及其 {connCount(del.device_id)} 条连接；失去全部设备或连接的 Skill 会一并删除。</p>} confirmText={del.name ?? del.device_id} confirmLabel="永久删除" onCancel={() => setDel(null)}
+        onConfirm={async () => { const x = del; setDel(null); setR({ label: "删除", o: await net.del(`/devices/${enc(x.device_id)}`, ws) }); reload(); reloadConns(); }} /> : null}
     </section>
   );
 }
 
-function Devices({ ws }: { ws: string }) {
-  return <SimpleCrud ws={ws} path="/devices" listKey="devices" idKey="device_id" testId="net-devices" template={{ name: "", vendor: "", model: "", region_id: "" }}
-    columns={[{ key: "n", label: "设备", render: (d) => String(d.name ?? d.device_id) }, { key: "v", label: "厂商", render: (d) => String(d.vendor ?? "—") }, { key: "r", label: "区域", render: (d) => String(d.region_id ?? "—") }]} />;
+function connReadbackText(c: Connection) {
+  return `回读：${String(c.protocol ?? "").toUpperCase()}:${c.port ?? "?"} · 用户 ${c.username || "—"} · 状态 ${CONN_STATUS[c.status ?? ""] ?? c.status ?? "未上报"}${c.last_error ? `（${c.last_error}）` : ""}`;
 }
 
 function Connections({ ws }: { ws: string }) {
-  const [tick, setTick] = useState(0);
-  const reload = () => setTick((n) => n + 1);
+  const [list, reloadList] = useNet("/connections", ws);
+  const [devs] = useNet("/devices", ws);
+  const devices = listOf<Device>(devs, "devices");
+  const connections = listOf<Connection>(list, "connections");
+  const deviceName = (id?: string) => devices.find((d) => d.device_id === id)?.name ?? id ?? "—";
+  const [edit, setEdit] = useState<Connection | "new" | null>(null);
+  const [del, setDel] = useState<Connection | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
+  const reload = reloadList;
   const [test, setTest] = useState<{ id: string; o: HttpOutcome } | null>(null);
   const [accept, setAccept] = useState<{ id: string; fingerprint: string } | null>(null);
   const runTest = async (id: string, extra: Record<string, unknown> = {}) => { setTest({ id, o: await net.post(`/connections/${enc(id)}/test`, ws, extra) }); reload(); };
   const testBody = test ? bodyOf<{ ok?: boolean; requires_host_key_acceptance?: boolean; fingerprint?: string; observed_fingerprint?: string; error?: string }>(test.o) : null;
   return (
     <section data-testid="net-connections">
-      <SimpleCrud key={tick} ws={ws} path="/connections" listKey="connections" idKey="connection_id" testId="net-connections-crud" template={{ name: "", device_id: "", host: "", port: 22, protocol: "ssh", username: "" }}
-        columns={[{ key: "n", label: "连接", render: (c) => String(c.name ?? c.connection_id) }, { key: "h", label: "主机", render: (c) => String(c.host ?? "—") },
-          { key: "fp", label: "主机指纹", render: (c) => (c.host_key_fingerprint ? <code>{String(c.host_key_fingerprint)}</code> : "未登记") },
-          { key: "t", label: "", render: (c) => <Button onClick={() => void runTest(String(c.connection_id))} data-testid="conn-test">测试连接</Button> }]} />
+      <div className="row-actions"><Button variant="primary" onClick={() => setEdit("new")} data-testid="connection-new">添加连接</Button></div>
+      {note ? <SavedNote label="连接" text={note} testId="connection-readback" /> : null}
+      <Result r={r} />
+      <LoadState value={list} onReload={reloadList}>{() => (
+        <Table testId="connections-table" rows={connections} rowKey={(c) => c.connection_id} empty={<p className="muted">还没有连接。先在「设备」里登记设备。</p>}
+          columns={[
+            { key: "d", label: "设备", render: (c) => deviceName(c.device_id) },
+            { key: "n", label: "连接", render: (c) => `${c.name ?? ""} ${String(c.protocol ?? "").toUpperCase()}:${c.port ?? "?"}`.trim() },
+            { key: "u", label: "用户", render: (c) => c.username || "—" },
+            { key: "s", label: "状态", render: (c) => <Chip tone={c.status === "connected" || c.status === "verified" ? "ok" : c.status === "untested" ? "neutral" : "warn"}>{CONN_STATUS[c.status ?? ""] ?? c.status ?? "未上报"}</Chip> },
+            { key: "fp", label: "主机指纹", render: (c) => (c.host_key_fingerprint ? <code>{String(c.host_key_fingerprint)}</code> : "未登记") },
+            { key: "t", label: "", render: (c) => <span className="row-actions">
+              <Button className="sm" onClick={() => void runTest(String(c.connection_id))} data-testid="conn-test">测试连接</Button>
+              <Button className="sm" onClick={() => setEdit(c)}>编辑</Button>
+              <Button variant="ghost" className="sm" onClick={() => setDel(c)}>删除</Button></span> },
+          ]} />
+      )}</LoadState>
+      {edit ? <ConnectionFormDialog ws={ws} connection={edit === "new" ? null : edit} devices={devices} onClose={() => setEdit(null)}
+        onSaved={({ readback }) => { setEdit(null); setNote(readback ? connReadbackText(readback) : null); reloadList(); }} /> : null}
+      {del ? <ConfirmDialog title="删除连接？" details={<p>将硬删除 {deviceName(del.device_id)} 的 {String(del.protocol ?? "").toUpperCase()} 连接；失去全部有效连接的 Skill 将一并删除。</p>} confirmLabel="删除" onCancel={() => setDel(null)}
+        onConfirm={async () => { const x = del; setDel(null); setR({ label: "删除", o: await net.del(`/connections/${enc(x.connection_id)}`, ws) }); reloadList(); }} /> : null}
       {test ? (
         <div className="card" data-testid="conn-test-result">
           {testBody?.requires_host_key_acceptance ? (
@@ -113,27 +158,66 @@ function Connections({ ws }: { ws: string }) {
 }
 
 function Skills({ ws }: { ws: string }) {
-  const [tick, setTick] = useState(0);
-  const reload = () => setTick((n) => n + 1);
-  const [pub, setPub] = useState<{ skill: Record<string, unknown>; enable: boolean } | null>(null);
+  const [list, reload] = useNet("/skills", ws);
+  const [devs] = useNet("/devices", ws);
+  const [conns] = useNet("/connections", ws);
+  const [scripts] = useNet("/scripts", ws);
+  const [edit, setEdit] = useState<NetworkSkill | "new" | null>(null);
+  const [del, setDel] = useState<NetworkSkill | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [pub, setPub] = useState<{ skill: NetworkSkill; enable: boolean } | null>(null);
   const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
   return (
     <section data-testid="net-skills">
-      <p className="muted">网络 Skill 属于本扩展；「发布」= 启用后可被工作台选择执行，含配置写入的 Skill 会直接改设备。</p>
+      <p className="muted">网络 Skill 属于本扩展；发布后可在工作台选择。设备读取与配置是内置能力，设备账号决定实际权限。</p>
+      <Button variant="primary" onClick={() => setEdit("new")}>新建网络 Skill</Button>
+      {note ? <p className="readback-note" role="status">{note}</p> : null}
       <Result r={r} />
-      <SimpleCrud key={tick} ws={ws} path="/skills" listKey="skills" idKey="skill_id" testId="net-skills-crud" template={{ name: "", description: "", steps: [], enabled: false }}
-        columns={[{ key: "n", label: "Skill", render: (s) => String(s.name ?? s.skill_id) }, { key: "e", label: "状态", render: (s) => <Chip tone={s.enabled ? "ok" : "neutral"}>{s.enabled ? "已发布" : "草稿"}</Chip> },
-          { key: "p", label: "", render: (s) => <Button onClick={() => setPub({ skill: s, enable: !s.enabled })} data-testid="skill-publish">{s.enabled ? "撤回发布" : "发布"}</Button> }]} />
-      {pub ? <ConfirmDialog title={pub.enable ? "发布这个网络 Skill？" : "撤回发布？"} confirmText={pub.enable ? String(pub.skill.skill_id) : undefined} confirmLabel={pub.enable ? "发布" : "撤回"}
-        details={<><p>{pub.enable ? "发布后，工作台可以选择它执行；若含配置步骤，会写入设备。" : "撤回后工作台不能再选择它。"}</p><JsonBlock value={pub.skill.steps ?? pub.skill} /></>}
-        onCancel={() => setPub(null)} onConfirm={async () => { const p = pub; setPub(null); setR({ label: p.enable ? "发布" : "撤回", o: await net.put(`/skills/${enc(String(p.skill.skill_id))}`, ws, { ...p.skill, enabled: p.enable }) }); reload(); }} /> : null}
+      <LoadState value={list} onReload={reload}>{() => <Table rows={listOf<NetworkSkill>(list, "skills")} rowKey={(s) => s.skill_id} columns={[
+        { key: "n", label: "Skill", render: (s) => s.name },
+        { key: "e", label: "状态", render: (s) => <Chip tone={s.enabled ? "ok" : "neutral"}>{s.enabled ? "已发布" : "草稿"}</Chip> },
+        { key: "scope", label: "范围", render: (s) => `${s.device_ids.length} 台设备 · ${s.connection_ids.length} 条连接 · ${s.allowed_tool_ids.length} 项工具` },
+        { key: "a", label: "", render: (s) => <span className="row-actions"><Button onClick={() => setEdit(s)}>编辑</Button><Button onClick={() => setPub({ skill: s, enable: !s.enabled })} data-testid="skill-publish">{s.enabled ? "撤回发布" : "发布"}</Button><Button variant="ghost" onClick={() => setDel(s)}>删除</Button></span> },
+      ]} />}</LoadState>
+      {edit ? <SkillFormDialog ws={ws} skill={edit === "new" ? null : edit} devices={listOf<Device>(devs, "devices")} connections={listOf<Connection>(conns, "connections")} scripts={listOf<Script>(scripts, "scripts")} onClose={() => setEdit(null)} onSaved={(back) => { setEdit(null); setNote(back ? `已保存并回读：${back.name} · ${back.enabled ? "已发布" : "草稿"} · ${back.device_ids.length} 台设备 · ${back.connection_ids.length} 条连接` : "已保存；未能回读，请刷新核对。"); reload(); }} /> : null}
+      {pub ? <ConfirmDialog title={pub.enable ? "发布这个网络 Skill？" : "撤回发布？"} confirmText={pub.enable ? pub.skill.skill_id : undefined} confirmLabel={pub.enable ? "发布" : "撤回"}
+        details={<><p>{pub.enable ? "发布后，工作台可以选择它执行；设备配置操作会写入设备。" : "撤回后工作台不能再选择它。"}</p><KeyValues items={[["设备", pub.skill.device_ids.join("、")], ["连接", pub.skill.connection_ids.join("、")], ["工具", pub.skill.allowed_tool_ids.join("、")]]} /></>}
+        onCancel={() => setPub(null)} onConfirm={async () => { const p = pub; setPub(null); setR({ label: p.enable ? "发布" : "撤回", o: await net.put(`/skills/${enc(p.skill.skill_id)}`, ws, { ...p.skill, enabled: p.enable }) }); reload(); }} /> : null}
+      {del ? <ConfirmDialog title="永久删除网络 Skill？" details={<p>将删除「{del.name}」。</p>} confirmText={del.name} confirmLabel="永久删除" onCancel={() => setDel(null)} onConfirm={async () => { const s = del; setDel(null); setR({ label: "删除", o: await net.del(`/skills/${enc(s.skill_id)}`, ws) }); reload(); }} /> : null}
     </section>
   );
 }
 
 function Scripts({ ws }: { ws: string }) {
-  return <SimpleCrud ws={ws} path="/scripts" listKey="scripts" idKey="script_id" testId="net-scripts" template={{ name: "", commands: [] }}
-    columns={[{ key: "n", label: "脚本", render: (s) => String(s.name ?? s.script_id) }, { key: "c", label: "命令数", render: (s) => String(Array.isArray(s.commands) ? s.commands.length : "—") }]} />;
+  const [list, reload] = useNet("/scripts", ws);
+  const [edit, setEdit] = useState<Script | "new" | null>(null);
+  const [del, setDel] = useState<Script | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
+  return (
+    <section data-testid="net-scripts">
+      <div className="row-actions"><Button variant="primary" onClick={() => setEdit("new")} data-testid="script-new">新建巡检脚本</Button></div>
+      {note ? <SavedNote label="脚本" text={note} testId="script-readback" /> : null}
+      <Result r={r} />
+      <LoadState value={list} onReload={reload}>{() => (
+        <Table testId="scripts-table" rows={listOf<Script>(list, "scripts")} rowKey={(x) => x.script_id} empty={<p className="muted">还没有巡检脚本。</p>}
+          columns={[
+            { key: "n", label: "脚本", render: (x) => <>{x.name ?? x.script_id}{x.description ? <div className="muted">{x.description}</div> : null}</> },
+            { key: "v", label: "厂商", render: (x) => (x.vendors ?? []).map((v) => VENDOR_ZH[v] ?? v).join("、") || "—" },
+            { key: "c", label: "命令 / 检查项", render: (x) => `${x.commands?.length ?? 0} 条命令 · ${x.checks?.length ?? 0} 个检查项` },
+            { key: "s", label: "来源 / 版本", render: (x) => `${x.builtin ? "内置" : x.source === "starter" ? "入门模板" : "自定义"} · v${x.version ?? 1}` },
+            { key: "t", label: "更新", render: (x) => fmtTime(x.updated_at) },
+            { key: "_a", label: "", render: (x) => <span className="row-actions">
+              <Button className="sm" onClick={() => setEdit(x)} data-testid="script-edit">编辑</Button>
+              <Button variant="ghost" className="sm" onClick={() => setDel(x)}>删除</Button></span> },
+          ]} />
+      )}</LoadState>
+      {edit ? <ScriptFormDialog ws={ws} script={edit === "new" ? null : edit} onClose={() => setEdit(null)}
+        onSaved={({ readback }) => { setEdit(null); setNote(readback ? `回读：「${readback.name}」v${readback.version ?? "?"} · ${readback.commands?.length ?? 0} 条命令 · ${readback.checks?.length ?? 0} 个检查项 · ${(readback.vendors ?? []).map((v) => VENDOR_ZH[v] ?? v).join("、")}` : null); reload(); }} /> : null}
+      {del ? <ConfirmDialog title="删除巡检脚本？" details={<p>将删除「{del.name}」。已发起的巡检不受影响。</p>} confirmLabel="删除" onCancel={() => setDel(null)}
+        onConfirm={async () => { const x = del; setDel(null); setR({ label: "删除", o: await net.del(`/scripts/${enc(x.script_id)}`, ws) }); reload(); }} /> : null}
+    </section>
+  );
 }
 
 const INSPECTION_STATUS: Record<string, string> = { queued: "已入队", running: "执行中", succeeded: "全部目标已采集", partial: "部分目标未采集", failed: "执行报错", cancelled: "已取消", cancel_requested: "已请求取消 · 等待终态", unknown: "结果未知 · 需核对" };
@@ -242,7 +326,7 @@ const TopologyMount = lazy(() => import("./topology/TopologyMount"));
 function Topologies({ ws }: { ws: string }) {
   const { auth } = useShell();
   return (
-    <section data-testid="net-topologies">
+    <section className="netops-canvas-host" data-testid="net-topologies">
       <Suspense fallback={<p className="muted">正在加载拓扑画布…</p>}>
         <TopologyMount ws={ws} username={auth.username ?? ""} />
       </Suspense>

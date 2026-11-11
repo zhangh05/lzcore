@@ -57,4 +57,32 @@ describe("报告完整可查（A7）", () => {
     expect(detail.textContent).not.toMatch(/报告已生成成功|生成成功/);
     expect(calls.filter(isPostOnlyGet)).toEqual([]);
   });
+
+  it("正文按 Markdown 完整渲染并标注长度；后端正文只有标题时如实说明（不是前端截断）", async () => {
+    renderAt("/tasks?ws=ws-demo-1&tab=reports&report=rep-1");
+    const reader = await screen.findByTestId("report-reader");
+    const body = await within(reader).findByTestId("report-content");
+    expect(body.querySelector("h1")).toHaveTextContent("周报");
+    expect(body.querySelector("li")).toHaveTextContent("已汇总两份");
+    expect(within(reader).getByTestId("report-length")).toHaveTextContent("2 行");
+    expect(within(reader).queryByTestId("report-title-only")).toBeNull();
+  });
+
+  it("只有标题的报告：明确正文尚不完整", async () => {
+    renderAt("/tasks?ws=ws-demo-1&tab=reports&report=rep-t");
+    const reader = await screen.findByTestId("report-reader");
+    expect(await within(reader).findByTestId("report-title-only")).toHaveTextContent("正文尚不完整");
+  });
+
+  it("运行详情：中文执行结果 + 摘要 + 追踪列表，原始 JSON 折叠在诊断原文", async () => {
+    renderAt("/tasks?ws=ws-demo-1&tab=runs&run=run-42");
+    const detail = await screen.findByTestId("run-detail");
+    const summary = await within(detail).findByTestId("run-summary");
+    expect(summary).toHaveTextContent("执行结果：完成（complete）");
+    expect(summary).toHaveTextContent("offline_mock / mock-safe");
+    const trace = await within(detail).findByTestId("run-trace");
+    expect(trace).toHaveTextContent("回合开始");
+    expect(trace).toHaveTextContent("共 3 个事件");
+    expect(detail.querySelector(".raw-data:not([open])")).not.toBeNull();
+  });
 });

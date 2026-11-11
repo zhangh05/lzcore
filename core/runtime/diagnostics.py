@@ -77,7 +77,7 @@ def get_diagnostics(workspace_id: str = "default") -> DiagnosticReport:
     # 6. Agent runtime
     try:
         from agent.runtime_status import get_runtime_status
-        agent_status = get_runtime_status()
+        agent_status = get_runtime_status(probe_llm=False)
         components.append(ComponentStatus("agent", "ok",
             f"Runtime: {agent_status.get('runtime_engine', '?')}",
             {"runtime_mode": agent_status.get("runtime_engine", "")}))
@@ -98,7 +98,7 @@ def get_diagnostics(workspace_id: str = "default") -> DiagnosticReport:
     # 8. LLM
     try:
         from agent.llm.runtime import get_llm_status
-        llm = get_llm_status()
+        llm = get_llm_status(probe_provider=False)
         components.append(ComponentStatus("llm", "ok",
             f"Enabled: {llm.get('enabled')}, Provider: {llm.get('provider', 'disabled')}",
             {"enabled": llm.get("enabled"), "provider": llm.get("provider", "disabled"),

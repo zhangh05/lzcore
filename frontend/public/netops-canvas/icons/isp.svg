@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 118 97" width="118" height="97">
+  <rect width="118" height="97" rx="11" fill="#1262aa"/>
+  <!-- Optical Carrier Signal / Telecom Transmission Tower & Trunk Lines -->
+  <!-- Base tower lines -->
+  <line x1="59" y1="20" x2="38" y2="80" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <line x1="59" y1="20" x2="80" y2="80" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <!-- Tower cross struts -->
+  <line x1="48" y1="50" x2="70" y2="50" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <line x1="43" y1="65" x2="75" y2="65" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="48" y1="50" x2="75" y2="65" stroke="#ffffff" stroke-width="2.5"/>
+  <line x1="70" y1="50" x2="43" y2="65" stroke="#ffffff" stroke-width="2.5"/>
+  <!-- Top emitter signal beacon -->
+  <circle cx="59" cy="18" r="4.5" fill="#ffffff"/>
+  <!-- Transmission Waves -->
+  <path d="M47 18 A14 14 0 0 0 47 28" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M39 12 A24 24 0 0 0 39 34" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M71 18 A14 14 0 0 1 71 28" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M79 12 A24 24 0 0 1 79 34" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,14 @@
+/* Rendered assistant markdown (utils/markdown.ts output). Long-form prose keeps --lh-body. */
+@layer pages {
+  .markdown-body { white-space: normal; line-height: var(--lh-14); }
+  .markdown-body > :first-child { margin-top: 0; }
+  .markdown-body > :last-child { margin-bottom: 0; }
+  .markdown-body p, .markdown-body ul, .markdown-body ol { margin-block: var(--space-2); }
+  .markdown-body pre { max-width: 100%; overflow-x: auto; padding: var(--space-3); background: var(--surface-3); border-radius: var(--r-control); white-space: pre; }
+  .markdown-body code { font-family: var(--font-mono); font-size: var(--fs-sm); }
+  .markdown-body .markdown-table-scroll { max-width: 100%; overflow-x: auto; }
+  .markdown-body table { border-collapse: collapse; width: 100%; }
+  .markdown-body th, .markdown-body td { border: 1px solid var(--line); padding: var(--space-1) var(--space-2); text-align: left; }
+  .markdown-body a { color: var(--accent-2); }
+  .markdown-body blockquote { border-left: 3px solid var(--line-3); margin-inline: 0; padding-left: var(--space-3); color: var(--text-2); }
+}

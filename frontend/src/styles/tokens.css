@@ -1,4 +1,6 @@
 /* Product tokens: themes, spacing, type, controls and semantic outcomes. */
+/* Cascade order for the whole app: tokens → shell → shared components → pages. */
+@layer base, shell, components, pages;
 @layer base {
 :root {
   --weight-body: 400;
@@ -139,16 +141,21 @@
   --shadow-menu: 0 16px 36px -10px rgba(16, 24, 40, 0.2), 0 3px 10px -2px rgba(16, 24, 40, 0.08);
   --shadow-focus: 0 0 0 2px var(--focus-ring-shadow);
 
-  --h-header: 56px;
+  /* Desktop-first layout. Pages fill the main column (no centred page
+     max-width); only long running text is capped by --w-measure, and the
+     conversation by --w-reading. Columns: nav · sessions · thread · progress. */
+  --h-header: 48px;
   /* Title and model context have their own two-line rhythm. */
   --h-context: 68px;
-  --w-sidebar: 232px;
+  --w-sidebar: 216px;
   --w-sidebar-collapsed: 0px;
-  --w-progress: 280px;
-  --w-page-max: 1440px;
-  --w-reading: 1120px;
-  --h-control: 36px;
-  --h-control-compact: 32px;
+  --w-sessions: 248px;
+  --w-progress: 320px;
+  --w-side-panel: 360px;
+  --w-reading: 1040px;
+  --w-measure: 72ch;
+  --h-control: 32px;
+  --h-control-compact: 28px;
   --h-touch: 44px;
   --weight-heading: 600;
   --weight-label: 500;
@@ -337,6 +344,8 @@
      The page header used 26px and the page body 24px, so every page title sat
      2px off the content column it was labelling. One gutter, both surfaces. */
   --page-gutter: 24px;
+  /* UI chrome line box; --lh-body stays for long-form prose. */
+  --lh-ui: 1.5;
 }
 :root {
   /* ── Type scale (v2) ───────────────────────────────────────────────────
@@ -369,8 +378,8 @@
 /* Density is a user preference (account menu). Compact trims control and row
    height and the page gutter; type sizes never shrink below the scale. */
 [data-density="compact"] {
-  --h-control: 32px;
-  --h-control-compact: 28px;
+  --h-control: 28px;
+  --h-control-compact: 24px;
   --h-row: 34px;
   --h-row-dense: 28px;
   --page-gutter: 18px;

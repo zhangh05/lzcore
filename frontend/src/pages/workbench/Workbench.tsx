@@ -6,13 +6,13 @@ import { Button } from "../../components/Button";
 import { NAMES } from "../../contracts/naming";
 import { useMediaQuery } from "../../kit/useMediaQuery";
 import { useApi } from "../../kit/useApi";
-import { Drawer, FailureNote, JsonBlock, KeyValues, fmtTime } from "../../kit/ui";
+import { Drawer, FailureNote, KeyValues, MenuButton, Popover, RawData, fmtTime } from "../../kit/ui";
 import { TurnTransport, wsUrl, type Frame } from "../../realtime/turnTransport";
 import { useNavigate, useSearchParams } from "../../router";
 import { CatalogDrawer } from "./CatalogDrawer";
 import { Composer, type SendOptions } from "./Composer";
 import type { ChatMessage, SessionSummary, StopState } from "./model";
-import { ProgressPanel } from "./ProgressPanel";
+import { ProgressPanel, hasProgressContent } from "./ProgressPanel";
 import { SessionColumn } from "./SessionColumn";
 import { Thread } from "./Thread";
 import { createSession } from "./useSessions";
@@ -24,6 +24,10 @@ export interface SessionTask {
   unknowns?: { kind?: string; reason?: string }[];
   recovery_goals?: { goal_id?: string; status?: string; description?: string }[];
   next_action?: string;
+  run_id?: string;
+  last_run_id?: string;
+  objective_run_id?: string;
+  updated_at?: string;
 }
 
 interface LiveTurn { clientRequestId: string; text: string; events: string[]; status: string; jobId?: string }
@@ -63,6 +67,10 @@ export function Workbench() {
   const narrow = useMediaQuery("(max-width: 760px)");
   const compact = useMediaQuery("(max-width: 1280px)");
   const [panel, setPanel] = useState<"sessions" | "progress" | null>(null);
+  const [sessionsVersion, setSessionsVersion] = useState(0);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const statusBtn = useRef<HTMLButtonElement>(null);
+  const closeStatus = useCallback(() => setStatusOpen(false), []);
   useEffect(() => setPanel(null), [ws, sessionId, narrow, compact]);
 
   const available = useMemo(() => new Set(extensions.kind === "ready" ? extensions.extensions.filter((e) => e.lifecycle?.enabled !== false && (e.lifecycle?.status ?? "ready") === "ready").map((e) => e.extension_id) : []), [extensions]);
@@ -97,13 +105,23 @@ export function Workbench() {
     setTask(bodyOf<{ task_state?: { task?: SessionTask } }>(o)?.task_state?.task ?? null);
   }, [ws, sessionId]);
 
+  // 当前会话详情只从这里回读（GET /api/sessions/<id>）：首次进入、会话栏改名 / 归档 / 恢复之后、回合结束（可能自动起标题）之后。
+  const loadSession = useCallback(async () => {
+    if (!ws || !sessionId) { setSession(null); return; }
+    const o = await api.get(`/api/sessions/${enc(sessionId)}`, { workspace_id: ws });
+    if (o.kind === "http" && o.status === 200) setSession(bodyOf<{ session?: SessionSummary }>(o)?.session ?? null);
+  }, [ws, sessionId]);
+
   useEffect(() => {
     setLive(null); setStopState("idle"); setStopError(null);
-    void loadMessages(); void loadTask();
-    if (ws && sessionId) {
-      void api.get(`/api/sessions/${enc(sessionId)}`, { workspace_id: ws }).then((o) => setSession(bodyOf<{ session?: SessionSummary }>(o)?.session ?? null));
-    } else setSession(null);
-  }, [ws, sessionId, loadMessages, loadTask]);
+    void loadMessages(); void loadTask(); void loadSession();
+  }, [ws, sessionId, loadMessages, loadTask, loadSession]);
+
+  const onSessionChanged = useCallback((id: string, op: "rename" | "archive" | "restore" | "remove") => {
+    if (id !== sessionId) return;
+    if (op === "remove") { navigate(withWorkspace("/workbench", ws)); return; }
+    void loadSession();
+  }, [sessionId, loadSession, navigate, ws]);
 
   const readback = useCallback(async (sid: string, crid: string) => {
     if (!ws) return false;
@@ -117,10 +135,12 @@ export function Workbench() {
     // 服务端终态优先：回合结束后用服务端消息替换本地流式内容。
     await loadMessages();
     await loadTask();
+    await loadSession();
+    setSessionsVersion((n) => n + 1); // 回合可能自动起标题：列表与主标题一起回读
     setLive(null);
     setStopState("idle");
     if (note) setStopError(note);
-  }, [loadMessages, loadTask]);
+  }, [loadMessages, loadTask, loadSession]);
 
   const send = useCallback(async (text: string, opts: SendOptions) => {
     if (!ws || !sessionId || !transport.current) return false;
@@ -179,22 +199,57 @@ export function Workbench() {
   if (!ws) return <div className="page"><p role="status">正在确定工作区…</p></div>;
   const statusBody = agentStatus.state === "ok" ? agentStatus.data : null;
   const llmBody = llm.state === "ok" ? llm.data : null;
-  const modelSnapshot = (llmBody ?? {}) as { status?: string; connected?: boolean; enabled?: boolean; key_configured?: boolean };
-  const modelLabel = modelSnapshot.status ?? (modelSnapshot.enabled === false ? "未启用" : modelSnapshot.connected === true ? "已连接" : modelSnapshot.key_configured === false ? "待配置" : modelSnapshot.connected === false ? "未连接" : "未上报");
+  const modelSnapshot = (llmBody ?? {}) as { status?: string; connected?: boolean; enabled?: boolean; key_configured?: boolean;
+    health?: { checked_at?: string; last_checked_at?: string; connected?: boolean; configured?: boolean; last_error_type?: string | null } | null;
+    last_success?: { at?: string } | null; recent_failure?: { at?: string } | null };
+  // 「最近检测」优先读连接探测结果 health（它才是检测本身）；health 缺失时再回落到顶层字段。顶层与探测不一致时在 title 里如实写出。
+  const probe = modelSnapshot.health ?? null;
+  const modelLabel = modelSnapshot.status ?? (modelSnapshot.enabled === false ? "未启用"
+    : probe?.connected === true ? "已连接" : probe?.connected === false ? (probe.last_error_type ? `未连接（${probe.last_error_type}）` : "未连接")
+    : modelSnapshot.connected === true ? "已连接" : modelSnapshot.key_configured === false ? "待配置" : modelSnapshot.connected === false ? "未连接" : "未上报");
+  const probeMismatch = probe && typeof probe.connected === "boolean" && typeof modelSnapshot.connected === "boolean" && probe.connected !== modelSnapshot.connected;
+  // 「最近检测」来自 GET /api/agent/llm/status（连接探测 / 最近成功失败记录）；「本轮响应」来自本会话消息。二者分开显示，不互相代替。
+  // 「最近检测」只认探测自身的时间；最近成功 / 最近失败是另外两件事，分开写，不拿一个多月前的成功时间冒充检测时间。
+  const probeAt = modelSnapshot.health?.checked_at ?? modelSnapshot.health?.last_checked_at;
+  const probeText = llm.state === "ok" ? `${modelLabel}${probeAt ? `（${fmtTime(probeAt)}）` : "（时间未上报）"}` : llm.state === "error" ? "不可读" : "读取中";
+  const lastSuccessText = llm.state === "ok" ? (modelSnapshot.last_success?.at ? fmtTime(modelSnapshot.last_success.at) : "未上报") : "—";
+  const recentFailure = modelSnapshot.recent_failure as { at?: string; error_type?: string; error_summary?: string } | null | undefined;
+  const recentFailureText = llm.state === "ok" ? (recentFailure?.at ? `${fmtTime(recentFailure.at)}${recentFailure.error_type ? ` · ${recentFailure.error_type}` : ""}` : "无") : "—";
+  const runtimeText = agentStatus.state === "ok" ? String((statusBody as Record<string, unknown>)?.status ?? ((statusBody as Record<string, unknown>)?.runtime_engine ? "已接入" : "未上报")) : agentStatus.state === "error" ? "不可读" : "读取中";
+  const modelTone = llm.state !== "ok" ? "unknown" : modelLabel === "已连接" ? "ok" : modelLabel === "未上报" ? "unknown" : "warn";
+  const turnText = live ? live.status : lastAssistant
+    ? `${lastAssistant.ok === false || lastAssistant.metadata?.status === "error" || (lastAssistant.errors ?? []).length ? "本轮报错" : "已收到回复"}${lastAssistant.created_at ? `（${fmtTime(lastAssistant.created_at)}）` : ""}`
+    : sessionId ? "本会话暂无回复" : "未选择会话";
+  const progressFacts = hasProgressContent(lastAssistant, task, live?.events ?? []);
+  const progressRail = !compact && progressFacts;
   return (
     <div className="workbench" data-testid="workbench">
-      {!narrow ? <SessionColumn ws={ws} currentId={sessionId} onOpen={openSession} onNew={() => void newSession()} collapsed={collapsed.sessions} onToggle={() => setCollapsed((c) => ({ ...c, sessions: !c.sessions }))} /> : null}
+      {!narrow ? <SessionColumn ws={ws} currentId={sessionId} onOpen={openSession} onNew={() => void newSession()} collapsed={collapsed.sessions} onToggle={() => setCollapsed((c) => ({ ...c, sessions: !c.sessions }))} onChanged={onSessionChanged} refreshKey={sessionsVersion} /> : null}
       <section className="wb-main" aria-label="对话">
         <header className="wb-header">
           {narrow ? <Button onClick={() => setPanel("sessions")}>会话列表</Button> : null}
-          <h1 className="page-title" tabIndex={-1}>{session?.title || (sessionId ? "未命名会话" : NAMES.workbench)}</h1>
-          <span className="status-chip" data-testid="agent-status" title="GET /api/agent/status">运行时：{agentStatus.state === "ok" ? String((statusBody as Record<string, unknown>)?.status ?? ((statusBody as Record<string, unknown>)?.runtime_engine ? "已接入" : "未上报")) : agentStatus.state === "error" ? "不可读" : "读取中"}</span>
-          <span className="status-chip" data-testid="llm-health">模型：{llm.state === "ok" ? modelLabel : llm.state === "error" ? "不可读" : "读取中"}</span>
+          <h1 className="page-title" tabIndex={-1} title={session?.title || undefined} data-testid="wb-title">{session?.title || (sessionId ? "未命名会话" : NAMES.workbench)}</h1>
+          <span className="status-chip" data-testid="turn-response" title={`本轮响应：${turnText}（来源：本会话消息 / 实时回合；完整状态见「状态细节」）`}>本轮响应：{turnText}</span>
+          <button type="button" ref={statusBtn} className="btn ghost sm wb-status-btn" aria-haspopup="dialog" aria-expanded={statusOpen} onClick={() => setStatusOpen((o) => !o)} data-testid="open-status-details">
+            <span className={`status-dot tone-${modelTone}`} aria-hidden="true" />状态细节
+          </button>
+          <Popover anchor={statusBtn} open={statusOpen} onClose={closeStatus} label="运行状态细节" className="status-details" testId="status-details">
+            <dl>
+              <div><dt>运行时（GET /api/agent/status）</dt><dd data-testid="agent-status">运行时：{runtimeText}</dd></div>
+              <div><dt>模型连接探测（GET /api/agent/llm/status · health）</dt>
+                <dd data-testid="llm-health" title={probeMismatch ? `顶层 connected=${String(modelSnapshot.connected)} 与探测 health.connected=${String(probe?.connected)} 不一致，以探测为准` : "连接检测，不代表本轮回复"}>模型最近检测：{probeText}{probeMismatch ? "（顶层字段与探测不一致，以探测为准）" : ""}</dd></div>
+              <div><dt>模型最近成功调用（last_success）</dt><dd data-testid="llm-last-success">最近成功：{lastSuccessText}</dd></div>
+              <div><dt>模型最近失败（recent_failure）</dt><dd data-testid="llm-recent-failure">最近失败：{recentFailureText}</dd></div>
+              <div><dt>本轮响应（本会话消息 / 实时回合）</dt><dd>{turnText}</dd></div>
+            </dl>
+          </Popover>
           <span className="grow" />
-          {compact ? <Button onClick={() => setPanel("progress")}>进度与证据</Button> : null}
-          <Button onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
-          <Button onClick={() => setDrawer("catalog")} data-testid="open-catalog">能力目录</Button>
-          {sessionId ? <Button onClick={() => setDrawer("info")}>会话信息</Button> : null}
+          {!progressRail || collapsed.progress ? <Button className="sm" onClick={() => setPanel("progress")} data-testid="open-progress">进度与证据</Button> : null}
+          <Button className="sm" variant="primary" onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
+          <MenuButton label="更多操作" className="btn ghost sm" testId="wb-more" menuTestId="wb-more-menu" items={[
+            { key: "catalog", label: "能力目录", onSelect: () => setDrawer("catalog"), testId: "open-catalog" },
+            ...(sessionId ? [{ key: "info", label: "会话信息", onSelect: () => setDrawer("info"), testId: "open-session-info" }] : []),
+          ]}>更多 ▾</MenuButton>
         </header>
         {params.get("notice") === "create_failed" && !createError ? <p className="inline-alert tone-warn" role="alert" data-testid="create-failed">新建会话失败（服务端未创建会话），可以再点「新建会话」重试。</p> : null}
         {createError ? <p className="inline-alert tone-warn" role="alert">新建会话失败：{createError}</p> : null}
@@ -220,11 +275,11 @@ export function Workbench() {
           </div>
         )}
       </section>
-      {!compact ? <ProgressPanel last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={collapsed.progress} onToggle={() => setCollapsed((c) => ({ ...c, progress: !c.progress }))} /> : null}
+      {progressRail ? <ProgressPanel ws={ws} last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={collapsed.progress} onToggle={() => setCollapsed((c) => ({ ...c, progress: !c.progress }))} /> : null}
       {panel ? <Drawer title={panel === "sessions" ? "会话列表" : "进度与证据"} onClose={() => setPanel(null)}>
         <div className="wb-panel-drawer">
-          {panel === "sessions" ? <SessionColumn ws={ws} currentId={sessionId} onOpen={openSession} onNew={() => void newSession()} collapsed={false} onToggle={() => setPanel(null)} />
-            : <ProgressPanel last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={false} onToggle={() => setPanel(null)} />}
+          {panel === "sessions" ? <SessionColumn ws={ws} currentId={sessionId} onOpen={openSession} onNew={() => void newSession()} collapsed={false} onToggle={() => setPanel(null)} onChanged={onSessionChanged} refreshKey={sessionsVersion} />
+            : <ProgressPanel ws={ws} last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={false} onToggle={() => setPanel(null)} />}
         </div>
       </Drawer> : null}
       {drawer === "catalog" ? <CatalogDrawer ws={ws} onClose={() => setDrawer(null)} /> : null}
@@ -235,7 +290,7 @@ export function Workbench() {
             const blob = new Blob([JSON.stringify({ session, messages }, null, 2)], { type: "application/json" });
             const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `session-${sessionId}.json`; a.click();
           }} data-testid="export-session">导出 JSON</Button>
-          {task ? <><h3>任务状态（task-state）</h3><JsonBlock value={task} /></> : null}
+          {task ? <><h3>任务状态（task-state）</h3><KeyValues items={[["状态", task.status ?? "未上报"], ["任务", task.task_id], ["目标", task.objective], ["下一步", task.next_action], ["未知项", String(task.unknowns?.length ?? 0)]]} /><RawData value={task} label="task-state 原始数据" /></> : null}
           {llm.state === "error" ? <FailureNote outcome={llm.outcome} /> : null}
         </Drawer>
       ) : null}
