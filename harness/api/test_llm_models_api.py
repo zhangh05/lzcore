@@ -213,3 +213,12 @@ def test_saved_key_never_follows_a_draft_address(catalog):
     # A typed key goes with the typed address.
     catalog.client.post("/api/agent/llm/models", json={"base_url": "https://other.example/v1", "api_key": "test-draft-key"})
     assert catalog.calls[2][0].get_header("Authorization") == "Bearer test-draft-key"
+
+
+def test_discovery_does_not_require_a_model(catalog, monkeypatch):
+    """Models are listed before one is chosen (a new service or bare preset has no model yet)."""
+    import backend.api.llm_api as llm_api
+    monkeypatch.setattr(llm_api, "load_provider_config", lambda pid: {"provider": pid, "provider_type": "openai_compatible", "base_url": "https://saved.example/v1", "api_key": "", "model": ""})
+    catalog.response["payload"] = {"data": [{"id": "m1"}]}
+    response = catalog.client.post("/api/agent/llm/models", json={"provider_type": "openai_compatible", "base_url": "https://other.example/v1", "api_key": "test-draft-key"})
+    assert response.status_code == 200 and response.json["ok"] is True, response.json

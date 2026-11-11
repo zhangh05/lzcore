@@ -136,7 +136,8 @@ def handle_llm_models():
         # without its own key (e.g. a new custom service) must not borrow it.
         if str(cfg.get("base_url") or "").rstrip("/") != saved_base and not data.get("api_key"):
             cfg["api_key"] = ""
-    errors = validate_llm_settings(cfg)
+    # Discovery runs before a model is chosen, so the model field is not required here.
+    errors = validate_llm_settings({**cfg, "model": cfg.get("model") or "model-discovery"})
     if errors:
         return jsonify({"ok": False, "errors": errors}), 400
     return jsonify(list_models(cfg))
