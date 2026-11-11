@@ -74,12 +74,30 @@ def test_anonymous_auth_status_projects_only_actual_personal_mode_authority(
     assert status["role"] == ""
 
 
-def test_lan_personal_mode_status_matches_privileged_write_guard(monkeypatch):
+@pytest.mark.parametrize("remote,forwarded,local", [
+    ("127.0.0.1", None, True),
+    ("192.168.1.20", None, False),
+    ("127.0.0.1", "192.168.1.20", False),
+    ("127.0.0.1", "127.0.0.1, 192.168.1.20", False),
+    ("127.0.0.1", "127.0.0.1", True),
+    ("192.168.1.20", "127.0.0.1", False),
+    ("::1", " 127.0.0.1, 192.168.1.20 ", False),
+    ("::ffff:127.0.0.1", "192.168.1.20", False),
+    ("127.0.0.1", "::1", True),
+    ("127.0.0.1", "invalid-address", False),
+    ("127.0.0.1", "127.0.0.1, ", False),
+    ("127.0.0.1", "", False),
+])
+@pytest.mark.parametrize("valid_token", [False, True])
+def test_lan_personal_mode_status_matches_privileged_write_guard(
+    monkeypatch, remote, forwarded, local, valid_token,
+):
     from backend.core.auth import register_auth_middleware, handle_auth_status, deny_remote_admin_write
 
     for key in ("LZCORE_AUTH_ENABLED", "LZCORE_LOGIN_ENABLED", "LZCORE_IDENTITY_ENABLED"):
         monkeypatch.setenv(key, "false")
-    monkeypatch.setenv("LZCORE_API_TOKEN", "")
+    monkeypatch.setenv("LZCORE_AUTH_ENABLED", "true" if valid_token else "false")
+    monkeypatch.setenv("LZCORE_API_TOKEN", "test-service-token" if valid_token else "")
     monkeypatch.setenv("LZCORE_ALLOW_LAN", "true")
     monkeypatch.setenv("LZCORE_ALLOW_UNAUTHENTICATED_NETWORK", "true")
     app = Flask(__name__)
@@ -88,12 +106,21 @@ def test_lan_personal_mode_status_matches_privileged_write_guard(monkeypatch):
     app.add_url_rule("/api/auth/status", view_func=handle_auth_status)
     app.add_url_rule("/api/admin/test-write", view_func=lambda: deny_remote_admin_write() or {"ok": True}, methods=["POST"])
     client = app.test_client()
-    for remote, admin, code in [("127.0.0.1", True, 200), ("192.168.1.20", False, 403)]:
-        options = {"base_url": "http://192.168.1.8", "environ_overrides": {"REMOTE_ADDR": remote}}
-        response = client.get("/api/auth/status", **options)
-        assert response.status_code == 200
-        assert response.json["platform_admin"] is admin
-        assert client.post("/api/admin/test-write", **options).status_code == code
+    headers = {"X-Forwarded-For": forwarded} if forwarded is not None else {}
+    if valid_token:
+        headers["Authorization"] = "Bearer test-service-token"
+    options = {
+        "base_url": "http://192.168.1.8", "environ_overrides": {"REMOTE_ADDR": remote},
+        "headers": headers,
+    }
+    response = client.get("/api/auth/status", **options)
+    assert response.status_code == 200
+    assert response.json["platform_admin"] is (local or valid_token)
+    assert response.json["authenticated"] is valid_token
+    write = client.post("/api/admin/test-write", **options)
+    assert write.status_code == (200 if local or valid_token else 403)
+    if not local and not valid_token:
+        assert write.json["error"] == "remote_admin_write_denied"
 
 
 def test_valid_token_keeps_admin_projection_with_ordinary_identity_cookie(monkeypatch):

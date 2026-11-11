@@ -28,7 +28,7 @@ import uuid
 from flask import request
 from flask_sock import Sock
 from simple_websocket.errors import ConnectionClosed
-from backend.core.auth import is_allowed_browser_origin
+from backend.core.auth import _is_loopback_host, get_effective_client_address, is_allowed_browser_origin
 
 sock = Sock()
 _log = logging.getLogger("ws.agent")
@@ -55,7 +55,7 @@ def _acquire_ws_slot(client_ip: str) -> bool:
     with _ws_connection_lock:
         if _ws_connection_total >= _WS_MAX_CONNECTIONS:
             return False
-        per_ip_limit = _WS_MAX_CONNECTIONS_PER_LOOPBACK if key in {"127.0.0.1", "::1", "localhost"} else _WS_MAX_CONNECTIONS_PER_IP
+        per_ip_limit = _WS_MAX_CONNECTIONS_PER_LOOPBACK if _is_loopback_host(key) else _WS_MAX_CONNECTIONS_PER_IP
         if _ws_connection_counts.get(key, 0) >= per_ip_limit:
             return False
         _ws_connection_total += 1
@@ -395,8 +395,9 @@ def register_ws_routes(app):
             ws.send(json.dumps({"type": "error", "message": "csrf_origin_denied"}))
             return
 
-        from backend.core.rate_limit import get_client_ip
-        client_ip = get_client_ip()
+        # Local connection allowances must not use the HTTP rate limiter's
+        # independently configured proxy trust or a client-supplied XFF prefix.
+        client_ip = get_effective_client_address()
         if not _acquire_ws_slot(client_ip):
             ws.send(json.dumps({"type": "error", "message": "connection_limit_exceeded"}))
             return

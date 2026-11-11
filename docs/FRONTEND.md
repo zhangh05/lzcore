@@ -32,7 +32,7 @@
 
 ## 启动与验证
 
-在仓库根运行 `bash start.sh`；脚本设置 VITE_DEV_API_TARGET 指向本机后端。手动 Vite 开发/preview 必须显式设置该变量，目标只接受 http://127.0.0.1 的显式端口；监听默认127.0.0.1。生产 Nginx 提供同源 API 与 WebSocket 代理。
+在仓库根运行 `bash start.sh`；脚本设置 VITE_DEV_API_TARGET 指向本机后端。手动 Vite 开发/preview 必须显式设置该变量，目标只接受 http://127.0.0.1 的显式端口；监听默认127.0.0.1，仅当环境显式开启 `LZCORE_ALLOW_LAN` 或 `LZCORE_ALLOW_UNAUTHENTICATED_NETWORK` 时接受 `FRONTEND_HOST` 指定的地址（如 0.0.0.0）。代理追加 X-Forwarded-For，后端据此把经代理的局域网客户端与本机区分开。生产 Nginx 提供同源 API 与 WebSocket 代理。
 
 ```bash
 npm --prefix frontend ci
