@@ -29,12 +29,11 @@ export default function TopologyMount({ ws, username }: { ws: string; username: 
 
   const [dirty, setDirty] = useState(isAnyDirty());
   useEffect(() => onDirtyChange(setDirty), []);
-  // 同一画布内（仍在拓扑 tab、且是同一张图）的 URL 改动不拦；离开拓扑或换图都要确认。
+  // 拓扑是独立入口：同一页面、同一张图内的 URL 改动不拦；离开拓扑页或换图都要确认。
   const shouldBlock = useCallback((target: string) => {
     const t = new URL(target, window.location.origin);
     const here = new URL(window.location.href);
     if (t.pathname !== here.pathname) return true;
-    if ((t.searchParams.get("tab") ?? "") !== "topologies") return true;
     const want = readTopologyParam(t.search);
     return Boolean(want) && want !== readTopologyParam(here.search);
   }, []);

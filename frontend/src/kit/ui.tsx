@@ -10,12 +10,17 @@ import { FIELD_ZH } from "./fieldLabels";
 import type { HttpOutcome } from "../contracts/auth";
 import { describeFailure } from "../api/client";
 import { Button } from "../components/Button";
+import { Badge, type BadgeTone } from "../components/arc/badge/badge";
+import { Tabs as ArcTabs, TabsList, TabsTrigger } from "../components/arc/tabs/tabs";
 import { useSearchParams } from "../router";
 import type { Loadable } from "./useApi";
 import type { Tone } from "../contracts/outcomeState";
 
+const BADGE_TONE: Record<Tone, BadgeTone> = { neutral: "neutral", ok: "success", warn: "warning", danger: "danger", unknown: "neutral", info: "info" };
+
+/** 状态标签：Arc UI Badge，tone 沿用产品语义（ok / warn / danger / info / unknown）。 */
 export function Chip({ tone = "neutral", children, testId }: { tone?: Tone | "neutral"; children: ReactNode; testId?: string }) {
-  return <span className={`status-chip tone-${tone}`} data-testid={testId}>{children}</span>;
+  return <Badge tone={BADGE_TONE[tone]} size="sm" dot={tone !== "neutral" && tone !== "unknown"} data-tone={tone} data-testid={testId}>{children}</Badge>;
 }
 
 export function FailureNote({ outcome, onRetryRead }: { outcome: HttpOutcome; onRetryRead?: () => void }) {
@@ -82,21 +87,21 @@ export function TabGroup({ children }: { children: ReactNode }) {
 }
 
 /** `line` for a page's primary views; `segmented` for a second level nested under them. */
-export function Tabs<T extends string>({ tabs, current, onChange, label, variant = "line" }: {
+/** 页签：Arc UI Tabs（滑动高亮、溢出滚动）。只渲染页签条，面板由调用方按 current 渲染。 */
+export function Tabs<T extends string>({ tabs, current, onChange, label }: {
   tabs: readonly { key: T; label: string; count?: number }[]; current: T; onChange: (t: T) => void; label: string; variant?: "line" | "segmented";
 }) {
   return (
-    <TabGroup>
-      <div className={variant === "segmented" ? "seg seg-tabs" : "tabs"} role="tablist" aria-label={label}>
+    <ArcTabs value={current} onValueChange={(v) => onChange(v as T)} className="kit-tabs">
+      <TabsList aria-label={label}>
         {tabs.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={current === t.key} className={`tab ${current === t.key ? "is-active" : ""}`}
-            onClick={() => onChange(t.key)} data-tab={t.key}>
+          // Radix 在 mousedown 时切换；补 onClick 让键盘外的程序化点击（含测试）同样生效，重复触发幂等。
+          <TabsTrigger key={t.key} value={t.key} data-tab={t.key} onClick={() => { if (t.key !== current) onChange(t.key); }}>
             {t.label}{typeof t.count === "number" ? <span className="tab-count">{t.count}</span> : null}
-            {current === t.key ? <TabIndicator /> : null}
-          </button>
+          </TabsTrigger>
         ))}
-      </div>
-    </TabGroup>
+      </TabsList>
+    </ArcTabs>
   );
 }
 

@@ -31,6 +31,10 @@ for f in FILES:
             fallback = m.group(2)
             refs.append((f, i, token, bool(fallback and fallback.strip())))
 
+# Radix primitives (used by Arc UI components) set --radix-* inline at runtime.
+RUNTIME_PREFIXES = ("radix-",)
+refs = [r for r in refs if not r[2].startswith(RUNTIME_PREFIXES)]
+
 undefined_no_fb = [(f, i, t) for f, i, t, fb in refs if t not in defs and not fb]
 undefined_fb = [(f, i, t) for f, i, t, fb in refs if t not in defs and fb]
 

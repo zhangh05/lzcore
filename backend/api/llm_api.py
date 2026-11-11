@@ -10,6 +10,7 @@ import logging
 
 from flask import request, jsonify
 from agent.llm.client import LLMClient
+from agent.llm.model_catalog import list_models
 from agent.llm.settings import (
     load_llm_settings, save_llm_settings, delete_llm_settings,
     sanitize_llm_settings, validate_llm_settings,
@@ -115,6 +116,33 @@ def probe_allows_draft_overrides() -> bool:
         return False
 
 
+def handle_llm_models():
+    """Discover models using saved config and authorized, unsaved drafts."""
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "model config must be an object"}), 400
+    provider_id = data.get("provider") or get_active_provider()
+    if not provider_exists(provider_id):
+        return jsonify({"ok": False, "error": "unknown provider"}), 404
+    cfg = dict(load_provider_config(provider_id))
+    if probe_allows_draft_overrides():
+        saved_base = str(cfg.get("base_url") or "").rstrip("/")
+        for key in ("provider_type", "base_url", "api_key"):
+            if key in data:
+                cfg[key] = data[key]
+        # A saved key only ever goes to the host it was saved for: a draft address
+        # without its own key (e.g. a new custom service) must not borrow it.
+        if str(cfg.get("base_url") or "").rstrip("/") != saved_base and not data.get("api_key"):
+            cfg["api_key"] = ""
+    # Discovery runs before a model is chosen, so the model field is not required here.
+    errors = validate_llm_settings({**cfg, "model": cfg.get("model") or "model-discovery"})
+    if errors:
+        return jsonify({"ok": False, "errors": errors}), 400
+    return jsonify(list_models(cfg))
+
+
 def handle_llm_test():
     """Test one provider's real chat-completions transport.
     
@@ -138,6 +166,10 @@ def handle_llm_test():
         return jsonify({"ok": False, "error": "unknown provider"}), 404
     if is_platform_admin and overrides:
         cfg = load_provider_config(overrides.get("provider") or get_active_provider())
+        # A saved key only goes to the host it was saved for (see handle_llm_models).
+        draft_base = str(overrides.get("base_url") or "").rstrip("/")
+        if draft_base and draft_base != str(cfg.get("base_url") or "").rstrip("/") and not overrides.get("api_key"):
+            overrides["clear_api_key"] = True
         errors = validate_llm_settings({**cfg, **overrides})
         if errors:
             return jsonify({"ok": False, "errors": errors}), 400

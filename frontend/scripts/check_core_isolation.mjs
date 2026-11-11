@@ -30,7 +30,8 @@ for (const file of files) {
   if (!isTest && /(8011|5273)/.test(text)) problems.push(`${rel}: mentions forbidden port 8011/5273`);
   // 旧拓扑画布原样迁入（src/extension-modules/network-operations/topology/）：其中 "default" 是按钮样式 / 光标 / 外观来源等 UI 取值，
   // 这里只拦「工作区回落 default」这一类写法；其余目录仍然禁止任何 "default" 字面量。
-  const isMigratedLegacy = rel.startsWith("src/extension-modules/network-operations/topology/");
+  // Arc UI 第三方组件（src/components/arc/）同理："default" 是组件内部的取值（如复制反馈的 key），只拦工作区回落写法。
+  const isMigratedLegacy = rel.startsWith("src/extension-modules/network-operations/topology/") || rel.startsWith("src/components/arc/");
   const workspaceDefault = { test: (t) => t.split("\n").some((line) => /["']default["']/.test(line) && /workspace|\bws\b|\bws_/i.test(line)) };
   if (!isTest && (isMigratedLegacy ? workspaceDefault.test(text) : /["']default["']/.test(text))) problems.push(`${rel}: hard-coded "default"`);
   const inExtModules = rel.startsWith("src/extension-modules/");

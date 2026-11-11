@@ -51,7 +51,7 @@ describe("网络 Skill：真实设备 / 连接范围合同", () => {
     render(<SkillFormDialog ws="ws-demo-1" skill={{ skill_id: "skill-1", name: "合成", enabled: false, device_ids: ["d1"], connection_ids: ["c1"], allowed_tool_ids: [] }} devices={[]} connections={[]} scripts={[]} onClose={() => {}} onSaved={() => {}} />);
     fireEvent.click(screen.getByText("保存并回读"));
     expect(await screen.findByText(/保存结果未知/)).toBeInTheDocument();
-    expect(screen.getByText("保存并回读")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存并回读" })).toBeDisabled();
     fireEvent.click(screen.getByText("核对保存结果"));
     expect(await screen.findByText(/尚未确认保存结果/)).toBeInTheDocument();
     expect(identity).toBe("skill-1");

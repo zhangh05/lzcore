@@ -1,10 +1,17 @@
-import { useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, bodyOf, enc } from "../../api/client";
 import { Button } from "../../components/Button";
-import { IconCheckCircle, IconChevronDown, IconEye, IconKey, IconPlus, IconRefresh, IconSparkle, IconTrash, IconWarningCircle, IconBolt, IconEdit } from "../../components/Icon";
+import { IconCheckCircle, IconKey, IconPlus, IconRefresh, IconSparkle, IconTrash, IconWarningCircle, IconBolt, IconEdit } from "../../components/Icon";
+import { Alert } from "../../components/arc/alert/alert";
+import { Combobox } from "../../components/arc/combobox/combobox";
+import { Drawer as ArcDrawer, DrawerContent } from "../../components/arc/drawer/drawer";
+import { Input } from "../../components/arc/input/input";
+import { PasswordField } from "../../components/arc/password-field/password-field";
+import SegmentedControl from "../../components/arc/segmented-control/segmented-control";
+import { Slider } from "../../components/arc/slider/slider";
 import type { HttpOutcome } from "../../contracts/auth";
 import { listOf, useApi, type Loadable } from "../../kit/useApi";
-import { Chip, ConfirmDialog, Drawer, FailureNote, LoadState, RawData, ReceiptNote, fmtTime } from "../../kit/ui";
+import { Chip, ConfirmDialog, FailureNote, LoadState, RawData, ReceiptNote, fmtTime } from "../../kit/ui";
 
 export interface Provider {
   provider: string; label?: string; provider_type?: string; protocol?: string; base_url?: string; model?: string;
@@ -175,6 +182,19 @@ function CurrentModel({ current, status, test, onTest, onEdit }: { current?: Pro
   );
 }
 
+interface ModelOption { id: string; label?: string; owned_by?: string }
+type Catalog = { phase: "idle" } | { phase: "loading" } | { phase: "ok"; models: ModelOption[]; source?: string } | { phase: "fail"; error: string };
+
+/** 用填写中的地址与密钥向服务端要模型列表（服务端代为请求 /models，密钥不出后端日志）。 */
+async function fetchModels(body: Record<string, unknown>): Promise<Catalog> {
+  const o = await api.post("/api/agent/llm/models", body);
+  const b = bodyOf<{ ok?: boolean; models?: ModelOption[]; source?: string; error?: string; errors?: string[]; http_status?: number }>(o);
+  if (o.kind === "http" && o.status < 300 && b?.ok) return { phase: "ok", models: b.models ?? [], source: b.source };
+  if (o.kind === "http" && o.status === 404 && !b?.error) return { phase: "fail", error: "服务端暂不支持自动获取模型，请手动填写" };
+  const reason = b?.error || b?.errors?.join("；") || (o.kind === "http" ? `HTTP ${o.status}` : "无法连接服务端");
+  return { phase: "fail", error: b?.http_status ? `${reason}（服务商返回 ${b.http_status}）` : reason };
+}
+
 function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: {
   provider: Provider; isNew: boolean; platform: boolean; active: string; onClose: () => void; onSaved: (label: string, o: HttpOutcome) => void;
 }) {
@@ -183,17 +203,42 @@ function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: 
     base_url: provider.base_url ?? "", model: provider.model ?? "", api_key: "",
     temperature: provider.temperature ?? 0.2, max_tokens: provider.max_tokens ?? 4096,
   });
-  const [showKey, setShowKey] = useState(false);
-  const [advanced, setAdvanced] = useState(isNew);
+  const [open, setOpen] = useState(true);
   const [test, setTest] = useState<TestState>({ phase: "idle" });
+  const [catalog, setCatalog] = useState<Catalog>({ phase: "idle" });
+  const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-  const keyRef = useRef<HTMLInputElement>(null);
-  const ids = { label: useId(), key: useId(), model: useId(), url: useId(), list: `models-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}` };
-  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF({ ...f, [k]: v }); setTest({ phase: "idle" }); };
+  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((prev) => ({ ...prev, [k]: v })); setTest({ phase: "idle" }); };
   const lockUrl = !isNew && !platform;
   const missing = [!f.label.trim() && "名称", !f.base_url.trim() && "接口地址", !f.model.trim() && "模型"].filter(Boolean) as string[];
   const isActive = provider.provider === active || provider.is_active;
+  const hasKey = !!f.api_key || !!provider.key_configured || isLocal(f.base_url);
+  const close = () => { setOpen(false); onClose(); };
+
+  // 地址、密钥或协议变化后（停顿片刻）自动拉取模型列表；已有服务打开时立即拉取一次。
+  const seq = useRef(0);
+  const loadModels = useCallback(async () => {
+    if (!f.base_url.trim() || !hasKey) return;
+    const n = ++seq.current;
+    setCatalog({ phase: "loading" });
+    const body: Record<string, unknown> = { provider_type: f.provider_type };
+    if (!isNew) body.provider = provider.provider;
+    if (!lockUrl) body.base_url = f.base_url.trim();
+    if (f.api_key) body.api_key = f.api_key;
+    const next = await fetchModels(body);
+    if (n === seq.current) setCatalog(next);
+  }, [f.base_url, f.api_key, f.provider_type, hasKey, isNew, lockUrl, provider.provider]);
+  useEffect(() => {
+    const t = window.setTimeout(() => void loadModels(), catalog.phase === "idle" && !isNew ? 0 : 500);
+    return () => window.clearTimeout(t);
+  }, [f.base_url, f.api_key, f.provider_type]); // 只随地址 / 密钥 / 协议变化触发
+
+  const models = catalog.phase === "ok" ? catalog.models : [];
+  const options = [...models.map((m) => ({ value: m.id, label: m.label && m.label !== m.id ? `${m.label} · ${m.id}` : m.id, keywords: [m.id, m.owned_by ?? ""] })),
+    ...(f.model && !models.some((m) => m.id === f.model) ? [{ value: f.model, label: `${f.model}（当前）`, keywords: [f.model] }] : [])];
+  const useCombobox = !manual && models.length > 0;
+
   const fields = () => {
     const body: Record<string, unknown> = { label: f.label.trim(), provider_type: f.provider_type, model: f.model.trim(), temperature: Number(f.temperature), max_tokens: Number(f.max_tokens) };
     if (!lockUrl) body.base_url = f.base_url.trim();
@@ -230,76 +275,68 @@ function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: 
       } else onSaved(`保存 ${f.label || id}`, o);
     } finally { setBusy(false); }
   };
+
   return (
-    <Drawer title={isNew ? "添加自定义模型服务" : `配置 ${provider.label ?? provider.provider}`} onClose={onClose} testId="provider-sheet">
-      <div className="sheet">
-        <div className="sheet-head">
-          <Avatar p={isNew ? { provider: "custom", label: f.label || "自定义" } : provider} size={44} />
-          <div><strong>{f.label || "新的模型服务"}</strong><span className="muted">{hostOf(f.base_url) || "填写接口地址"} · {protocolLabel(f.provider_type)}</span></div>
-        </div>
-
-        {isNew ? (
-          <div className="sheet-field">
-            <span className="sheet-label">接口协议</span>
-            <div className="seg sheet-seg" role="radiogroup" aria-label="接口协议">
-              {PROTOCOLS.map(([k, label]) => (
-                <button key={k} type="button" role="radio" aria-checked={f.provider_type === k} className={`tab ${f.provider_type === k ? "is-active" : ""}`} onClick={() => set("provider_type", k)}>{label}</button>
-              ))}
+    <ArcDrawer open={open} onOpenChange={(v) => { if (!v) close(); }}>
+      <DrawerContent title={isNew ? "添加自定义模型服务" : `配置 ${provider.label ?? provider.provider}`} description={`${hostOf(f.base_url) || "填写接口地址"} · ${protocolLabel(f.provider_type)}`}
+        className="sheet-drawer" data-testid="provider-sheet">
+        <div className="sheet">
+          {isNew ? (
+            <div className="sheet-field">
+              <span className="sheet-label">接口协议</span>
+              <SegmentedControl label="接口协议" value={f.provider_type} onValueChange={(v) => set("provider_type", v)} options={PROTOCOLS.map(([value, label]) => ({ value, label }))} />
             </div>
-          </div>
-        ) : null}
-        <label className="sheet-field" htmlFor={ids.label}><span className="sheet-label">名称</span>
-          <input id={ids.label} className="input" value={f.label} onChange={(e) => set("label", e.target.value)} placeholder="例如：公司网关 · GPT" data-testid="provider-label" /></label>
+          ) : null}
+          <Input label="名称" value={f.label} onChange={(e) => set("label", e.target.value)} placeholder="例如：公司网关 · GPT" data-testid="provider-label" />
+          <Input label="接口地址" className="mono" value={f.base_url} onChange={(e) => set("base_url", e.target.value)} disabled={lockUrl} placeholder="https://…/v1"
+            description={lockUrl ? "非平台管理员不能修改已有服务的地址。" : "OpenAI 兼容接口通常以 /v1 结尾。"} data-testid="provider-url" />
+          <PasswordField label="API Key" autoComplete="new-password" spellCheck={false} value={f.api_key} onChange={(e) => set("api_key", e.target.value)}
+            placeholder={provider.key_configured ? `已保存 ${provider.key_preview ?? ""}，留空不修改` : isLocal(f.base_url) ? "本机服务通常不需要" : "粘贴密钥"}
+            description="密钥只发送到服务端保存，保存后不会回显。" messages={{ showPassword: "显示密钥", hidePassword: "隐藏密钥" }} data-testid="provider-key" />
 
-        <div className="sheet-field">
-          <label className="sheet-label" htmlFor={ids.key}>API Key</label>
-          <div className="key-input">
-            <IconKey size={15} aria-hidden="true" />
-            <input id={ids.key} ref={keyRef} type={showKey ? "text" : "password"} autoComplete="new-password" spellCheck={false} value={f.api_key}
-              onChange={(e) => set("api_key", e.target.value)} placeholder={provider.key_configured ? `已保存 ${provider.key_preview ?? ""}，留空不修改` : isLocal(f.base_url) ? "本机服务通常不需要" : "粘贴密钥"} data-testid="provider-key" />
-            <button type="button" className="key-toggle" onClick={() => setShowKey((v) => !v)} aria-label={showKey ? "隐藏密钥" : "显示密钥"} aria-pressed={showKey}><IconEye size={15} aria-hidden="true" /></button>
-          </div>
-          <span className="sheet-hint">密钥只发送到服务端保存，保存后不会回显。</span>
-        </div>
-
-        <label className="sheet-field" htmlFor={ids.model}><span className="sheet-label">模型</span>
-          <input id={ids.model} className="input mono" list={ids.list} value={f.model} onChange={(e) => set("model", e.target.value)} placeholder="模型名，例如服务商控制台里的 model id" data-testid="provider-model" />
-          <datalist id={ids.list}>{[provider.model].filter(Boolean).map((m) => <option key={m} value={m} />)}</datalist></label>
-
-        <button type="button" className="sheet-advanced" aria-expanded={advanced} onClick={() => setAdvanced((v) => !v)}>
-          <IconChevronDown size={15} aria-hidden="true" />高级设置<span className="muted">接口地址、温度、最大输出</span>
-        </button>
-        {advanced ? (
-          <div className="sheet-adv">
-            <label className="sheet-field" htmlFor={ids.url}><span className="sheet-label">接口地址</span>
-              <input id={ids.url} className="input mono" value={f.base_url} onChange={(e) => set("base_url", e.target.value)} disabled={lockUrl} placeholder="https://…/v1" data-testid="provider-url" />
-              {lockUrl ? <span className="sheet-hint">非平台管理员不能修改已有服务的地址。</span> : null}</label>
-            <div className="sheet-row">
-              <label className="sheet-field"><span className="sheet-label">温度 <span className="muted">{Number(f.temperature).toFixed(1)}</span></span>
-                <input type="range" min={0} max={2} step={0.1} value={f.temperature} onChange={(e) => set("temperature", Number(e.target.value))} aria-label="温度" /></label>
-              <label className="sheet-field"><span className="sheet-label">最大输出 tokens</span>
-                <input className="input" type="number" min={256} step={256} value={f.max_tokens} onChange={(e) => set("max_tokens", Number(e.target.value))} /></label>
+          <div className="sheet-field" data-testid="provider-models">
+            {useCombobox ? (
+              <Combobox label="模型" options={options} value={f.model} onValueChange={(v) => set("model", v)} placeholder="搜索或选择模型"
+                emptyMessage="没有匹配的模型，可切换为手动输入" description={`已从 ${catalog.phase === "ok" && catalog.source ? catalog.source : "服务商"} 获取 ${models.length} 个模型`} data-testid="provider-model" />
+            ) : (
+              <Input label="模型" className="mono" value={f.model} onChange={(e) => set("model", e.target.value)} placeholder="模型名，例如服务商控制台里的 model id"
+                description={catalog.phase === "loading" ? "正在获取模型列表…" : !hasKey || !f.base_url.trim() ? "填好接口地址和密钥后会自动获取可用模型。" : undefined} data-testid="provider-model" />
+            )}
+            <div className="sheet-model-actions">
+              <Button className="sm" variant="ghost" onClick={() => void loadModels()} loading={catalog.phase === "loading"} disabled={!f.base_url.trim() || !hasKey} data-testid="provider-fetch-models">
+                <IconRefresh size={14} aria-hidden="true" />{catalog.phase === "ok" ? "重新获取" : "获取模型列表"}
+              </Button>
+              {models.length ? <Button className="sm" variant="ghost" onClick={() => setManual((v) => !v)}>{manual ? "从列表选择" : "手动输入"}</Button> : null}
             </div>
+            {catalog.phase === "fail" ? <Alert tone="warning" title="没能获取模型列表" data-testid="provider-models-error">{catalog.error}。仍可手动填写模型名。</Alert> : null}
           </div>
-        ) : null}
 
-        <div className="sheet-test">
-          <Button onClick={() => void probe()} disabled={test.phase === "running" || !f.model.trim() || !f.base_url.trim()} data-testid="provider-test">
-            <IconRefresh size={15} aria-hidden="true" className={test.phase === "running" ? "spin" : undefined} />测试连接
-          </Button>
-          <span className="sheet-hint">用当前填写的内容发一条真实请求，不会保存。</span>
-        </div>
-        <TestResult t={test} />
-        {errors.length ? <ul className="sheet-errors" role="alert">{errors.map((e) => <li key={e}>{e}</li>)}</ul> : null}
-        {missing.length ? <p className="sheet-hint">还需填写：{missing.join("、")}</p> : null}
+          <details className="sheet-advanced">
+            <summary>高级设置<span className="muted">温度、最大输出</span></summary>
+            <div className="sheet-adv">
+              <Slider label="温度" min={0} max={2} step={0.1} value={Number(f.temperature)} onValueChange={(v) => set("temperature", v)} format={(v) => v.toFixed(1)} showValue />
+              <Input label="最大输出 tokens" type="number" min={256} step={256} value={f.max_tokens} onChange={(e) => set("max_tokens", Number(e.target.value))} />
+            </div>
+          </details>
 
-        <div className="sheet-foot">
-          <Button onClick={onClose}>取消</Button>
-          <span className="grow" />
-          <Button onClick={() => void save(false)} disabled={busy || missing.length > 0} data-testid="provider-save">保存</Button>
-          {!isActive ? <Button variant="primary" onClick={() => void save(true)} disabled={busy || missing.length > 0} data-testid="provider-save-activate">保存并设为当前</Button> : null}
+          <div className="sheet-test">
+            <Button onClick={() => void probe()} loading={test.phase === "running"} disabled={!f.model.trim() || !f.base_url.trim()} data-testid="provider-test">
+              <IconBolt size={15} aria-hidden="true" />测试连接
+            </Button>
+            <span className="sheet-hint">用当前填写的内容发一条真实请求，不会保存。</span>
+          </div>
+          <TestResult t={test} />
+          {errors.length ? <Alert tone="danger" title="保存失败">{errors.join("；")}</Alert> : null}
+
+          <div className="sheet-foot">
+            {missing.length ? <span className="sheet-hint">还需填写：{missing.join("、")}</span> : null}
+            <span className="grow" />
+            <Button variant="ghost" onClick={close}>取消</Button>
+            <Button onClick={() => void save(false)} loading={busy} disabled={missing.length > 0} data-testid="provider-save">保存</Button>
+            {!isActive ? <Button variant="primary" onClick={() => void save(true)} loading={busy} disabled={missing.length > 0} data-testid="provider-save-activate">保存并设为当前</Button> : null}
+          </div>
         </div>
-      </div>
-    </Drawer>
+      </DrawerContent>
+    </ArcDrawer>
   );
 }

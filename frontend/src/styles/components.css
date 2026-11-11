@@ -75,6 +75,11 @@
   .tab-indicator { position: absolute; left: var(--space-1); right: var(--space-1); bottom: 0; height: 2px; border-radius: var(--r-pill); background: var(--accent); }
   .tab-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: var(--r-pill); background: var(--surface-3); font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
   .tab.is-active .tab-count { background: var(--accent-soft); color: var(--accent-2); }
+  /* Kit Tabs 由 Arc Tabs 渲染：只补外边距与计数徽标的选中态，内部样式归 Arc。 */
+  .kit-tabs { margin: 0 0 var(--space-4); }
+  [role="tab"][data-state="active"] .tab-count, [aria-pressed="true"] .tab-count { background: var(--accent-soft); color: var(--accent-2); }
+  /* 共享 Button 带图标时：图标与文字同一行，间距随 Arc 控件。 */
+  .btn-icon-row { display: inline-flex; align-items: center; gap: 6px; }
   /* Segmented sub-switch (secondary views inside a tab): Arc segmented control. */
   .seg { position: relative; display: inline-flex; gap: 2px; padding: 3px; border-radius: calc(var(--r-control) + 2px); background: var(--surface-3); box-shadow: inset 0 1px 2px color-mix(in oklab, var(--text) 5%, transparent); }
   .seg .tab { z-index: 0; border: 0; margin: 0; padding: 5px var(--space-3); border-radius: calc(var(--r-control) - 2px); color: var(--text-3); }
