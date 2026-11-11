@@ -4,6 +4,8 @@
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { LayoutGroup, motion, useReducedMotion } from "motion/react";
+import { motionTokens } from "../components/arc/lib/motion-tokens";
 import { FIELD_ZH } from "./fieldLabels";
 import type { HttpOutcome } from "../contracts/auth";
 import { describeFailure } from "../api/client";
@@ -31,9 +33,14 @@ export function LoadState<T>({ value, onReload, children, empty }: {
 }) {
   if (value.state === "idle") return <>{empty ?? null}</>;
   if (value.state === "loading") {
-    return value.slow
-      ? <p role="status" className="muted" data-testid="load-slow">读取中…后端响应较慢，请求仍在进行。</p>
-      : <p role="status" className="muted">读取中…</p>;
+    return (
+      <div className="load-state" aria-busy="true">
+        <div className="skeleton" aria-hidden="true"><span /><span /><span /></div>
+        {value.slow
+          ? <p role="status" className="shimmer-text" data-testid="load-slow">读取中…后端响应较慢，请求仍在进行。</p>
+          : <p role="status" className="shimmer-text">读取中…</p>}
+      </div>
+    );
   }
   if (value.state === "error") return <FailureNote outcome={value.outcome} onRetryRead={onReload} />;
   return (
@@ -62,18 +69,34 @@ export function useUrlTab<T extends string>(tabs: readonly T[], fallback: T, par
   return [current, set];
 }
 
-export function Tabs<T extends string>({ tabs, current, onChange, label }: {
-  tabs: readonly { key: T; label: string; count?: number }[]; current: T; onChange: (t: T) => void; label: string;
+/** Sliding active marker shared by tabs and segmented switches (Arc tabs motion: critically damped, no overshoot). */
+export function TabIndicator() {
+  const reduced = useReducedMotion();
+  return <motion.span layoutId="tab-indicator" className="tab-indicator" aria-hidden="true"
+    transition={reduced ? { duration: 0 } : motionTokens.spring.smooth} />;
+}
+
+/** Wraps one tab set so its indicator animates only between its own tabs. */
+export function TabGroup({ children }: { children: ReactNode }) {
+  return <LayoutGroup id={useId()}>{children}</LayoutGroup>;
+}
+
+/** `line` for a page's primary views; `segmented` for a second level nested under them. */
+export function Tabs<T extends string>({ tabs, current, onChange, label, variant = "line" }: {
+  tabs: readonly { key: T; label: string; count?: number }[]; current: T; onChange: (t: T) => void; label: string; variant?: "line" | "segmented";
 }) {
   return (
-    <div className="tabs" role="tablist" aria-label={label}>
-      {tabs.map((t) => (
-        <button key={t.key} type="button" role="tab" aria-selected={current === t.key} className={`tab ${current === t.key ? "is-active" : ""}`}
-          onClick={() => onChange(t.key)} data-tab={t.key}>
-          {t.label}{typeof t.count === "number" ? <span className="tab-count">{t.count}</span> : null}
-        </button>
-      ))}
-    </div>
+    <TabGroup>
+      <div className={variant === "segmented" ? "seg seg-tabs" : "tabs"} role="tablist" aria-label={label}>
+        {tabs.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={current === t.key} className={`tab ${current === t.key ? "is-active" : ""}`}
+            onClick={() => onChange(t.key)} data-tab={t.key}>
+            {t.label}{typeof t.count === "number" ? <span className="tab-count">{t.count}</span> : null}
+            {current === t.key ? <TabIndicator /> : null}
+          </button>
+        ))}
+      </div>
+    </TabGroup>
   );
 }
 

@@ -45,8 +45,8 @@ export {
   occupiedInterfaces,
 } from "./topologyInterfaceAllocation";
 export { DeviceTypeIcon } from "./TopologyItemControls";
-// 图标全部走平台统一出口 components/Icon.tsx —— 这是全站唯一的 Phosphor
-// 门面，直接 import "@phosphor-icons/react" 会让扩展页与平台图标语义脱钩。
+// 图标全部走平台统一出口 components/Icon.tsx —— 这是全站唯一的 Lucide
+// 门面，直接 import "lucide-react" 会让扩展页与平台图标语义脱钩。
 import { apiRequest } from "../platform/api/client";
 import {
   IconBranch,

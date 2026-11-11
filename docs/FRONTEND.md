@@ -1,6 +1,6 @@
 # 前端：产品入口与框架合同
 
-产品源码位于 `frontend/`，React 18、TypeScript、Vite、Zustand 与 Phosphor Icons；入口 `frontend/src/main.tsx`，共享壳 `frontend/src/app/AppShell.tsx`，导航 `frontend/src/contracts/naming.ts`，路由 `frontend/src/app/routes.tsx`。默认启动、Docker、桌面宿主与 Windows 打包继续沿用 frontend/dist，不变更后端或运行数据目录。
+产品源码位于 `frontend/`，React 18、TypeScript、Vite、Zustand、Lucide 图标与 Motion 动效；入口 `frontend/src/main.tsx`，共享壳 `frontend/src/app/AppShell.tsx`，导航 `frontend/src/contracts/naming.ts`，路由 `frontend/src/app/routes.tsx`。默认启动、Docker、桌面宿主与 Windows 打包继续沿用 frontend/dist，不变更后端或运行数据目录。
 
 ## 当前路由
 
@@ -17,6 +17,10 @@
 | 备份、生态与 worker | /system/backups、/system/ecosystem、/system/workers |
 
 网络扩展 UI 通过 `frontend/src/extension-modules/registry.tsx` 挂载。设备、连接、Skill 与图纸仍由扩展后端管理，前端不能授予权限。网络扩展的当前产品 UI 在 frontend/src/extension-modules/network-operations；根 extensions/network_operations/frontend 仅保留旧版回退桥接。
+
+## 视觉系统
+
+视觉语言基于 [Arc UI](https://uiarc.dev) 的免费 MIT 基础层：`frontend/src/components/arc/foundation.css`（中性 oklch 色阶、单一强调色、冷色调分类色、柔和分层阴影、焦点规则）与 `lib/motion-tokens.ts`（时长、缓动、弹簧）。基础层不进 CSS layer，同名变量（`--surface`、`--accent`、`--danger` 等）以它为准；`styles/arc-overrides.css` 把控件高度、圆角调到适合高密度控制台的尺寸，并补上中文字体回退；`styles/tokens.css` 的产品变量全部从基础层取值，深色主题随之切换。只有 `tokens.css` 与基础层持有字面颜色；拓扑画布无法读取 CSS 变量，`topologyPalette.ts` 保存换算后的十六进制，并由测试校验与 CSS 一致。字体为 Inter Variable（正文）与 Geist Variable（标题、数字），中文回落到各平台系统字体。需要更多 Arc 组件时，从 `https://uiarc.dev/r/<name>.json` 取免费组件源码放入 `components/arc/`，保留 LICENSE。
 
 ## 框架合同
 

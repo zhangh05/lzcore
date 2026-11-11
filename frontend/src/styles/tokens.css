@@ -4,69 +4,68 @@
 @layer base {
 :root {
   --weight-body: 400;
-  --field-border: #829096;
+  --field-border: oklch(64% 0 0);
   --scroll-thumb: color-mix(in srgb, var(--text-3) 42%, transparent);
   --scroll-thumb-hover: color-mix(in srgb, var(--text-3) 65%, transparent);
   --canvas-surface: var(--surface);
   --surface-rail: var(--surface-2);
   /* App frame: header and sidebar sit on it; the page is a raised sheet. */
-  --surface-frame: #eaeef0;
+  --surface-frame: var(--neutral-2);
 }
-[data-theme="dark"] { --field-border: #6b777e; }
 :root {
   color-scheme: light;
 
-  /* Cold neutral surfaces keep teal exclusive to interaction and AI activity.
-     Success uses green; message surfaces do not borrow selection/status fills. */
-  --bg: #f3f5f6;
-  --surface: #ffffff;
-  --surface-2: #f7f9f9;
-  --surface-3: #eef1f2;
-  --overlay: rgba(16, 24, 28, 0.36);
+  /* Values derive from the Arc foundation (components/arc/foundation.css): a neutral
+     oklch scale, one accent, a cool categorical tone family and soft layered shadows. */
+  --bg: var(--neutral-1);
 
-  --text: #131c1f;
+  --surface-2: var(--neutral-2);
+  --surface-3: var(--neutral-3);
+  --overlay: oklch(0% 0 0 / .28);
+
+  --text: var(--foreground);
   --text-1: var(--text);
-  --text-2: #344147;
+  --text-2: var(--neutral-9);
   /* Text levels clear 4.5:1 on the four neutral product surfaces. */
-  --text-3: #535f65;
-  --text-4: #5d696e;
+  --text-3: var(--neutral-8);
+  --text-4: oklch(52% 0 0);
 
-  --line: #dae0e3;
-  --line-2: #e7ebed;
-  --line-3: #aeb9be;
+  --line: var(--border);
+  --line-2: var(--border-subtle);
+  --line-3: var(--border-strong);
 
-  --accent: #0f7773;
-  --accent-2: #085b59;
-  --accent-soft: #e5f1ee;
-  --accent-text: #ffffff;
 
-  --ok: #24733b;
-  --ok-soft: #e6f2e4;
+  --accent-2: var(--accent-strong);
+  --accent-soft: var(--accent-subtle);
+  --accent-text: var(--accent-foreground);
+
+  --ok: var(--success);
+  --ok-soft: color-mix(in oklab, var(--success) 11%, var(--surface));
   /* Ink for text sitting ON a filled semantic colour. In the light theme the
      fills are dark, so the ink is white; in the dark theme every semantic
      colour flips to a light tint meant as a foreground, so the ink flips too.
      Without these, `color: #fff` on `background: var(--info)` measures 2.1:1
      in dark mode — legible in one theme and invisible in the other. */
-  --ok-text: #ffffff;
-  --warn: #925b08;
-  --warn-soft: #f7ebca;
-  --warn-text: #ffffff;
-  --danger: #bd3040;
-  --danger-soft: #f7dfe3;
-  --danger-text: #ffffff;
-  --info: #365f85;
-  --info-soft: #e3eef6;
-  --info-text: #ffffff;
-  --surface-hover: #f1f4f5;
-  --surface-selected: #e4f0ee;
-  --field: #ffffff;
-  --focus-ring: #0f7778;
-  --focus-ring-shadow: rgba(15, 119, 120, 0.2);
-  --message-assistant: #fcfdfd;
-  --message-assistant-border: #e6eaec;
-  --message-user: #eef4f2;
-  --message-user-border: #dce5e3;
-  --shadow-composer: 0 6px 20px -8px rgba(16, 24, 40, 0.14), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --ok-text: var(--background);
+  --warn: var(--warning);
+  --warn-soft: color-mix(in oklab, var(--warning) 13%, var(--surface));
+  --warn-text: var(--background);
+
+  --danger-soft: color-mix(in oklab, var(--danger) 10%, var(--surface));
+  --danger-text: var(--background);
+
+  --info-soft: color-mix(in oklab, var(--info) 10%, var(--surface));
+  --info-text: var(--background);
+  --surface-hover: var(--surface-muted);
+  --surface-selected: color-mix(in oklab, var(--foreground) 6.5%, var(--surface));
+  --field: var(--surface);
+
+  --focus-ring-shadow: color-mix(in oklab, var(--accent) 16%, transparent);
+  --message-assistant: var(--surface);
+  --message-assistant-border: var(--border-subtle);
+  --message-user: var(--surface-muted);
+  --message-user-border: transparent;
+  --shadow-composer: var(--shadow-raised);
 
   --console-canvas: var(--bg);
   --console-surface: var(--surface);
@@ -82,19 +81,19 @@
   --lz-primary: var(--accent);
   --lz-primary-hover: var(--accent-2);
   --lz-primary-soft: var(--accent-soft);
-  --lz-primary-glow: rgba(15, 119, 115, 0.16);
+  --lz-primary-glow: color-mix(in oklab, var(--accent) 16%, transparent);
   --lz-surface-glass: var(--surface);
   --lz-surface-glass-border: var(--line-2);
   --lz-surface-dock: var(--surface);
   --lz-shadow-ambient: var(--shadow-sm);
   --lz-shadow-dock: var(--shadow-menu);
-  --lz-glow-ok: rgba(36, 115, 59, 0.18);
-  --lz-glow-warn: rgba(146, 91, 8, 0.18);
-  --lz-glow-err: rgba(189, 48, 64, 0.18);
+  --lz-glow-ok: color-mix(in oklab, var(--success) 18%, transparent);
+  --lz-glow-warn: color-mix(in oklab, var(--warning) 18%, transparent);
+  --lz-glow-err: color-mix(in oklab, var(--danger) 18%, transparent);
 
   /* Latin first (Inter when present, then the platform UI face), then the CJK
      face each platform ships, so mixed 中文/English lines share one x-height. */
-  --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter Variable", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK SC", ui-monospace, monospace;
   --font-display: var(--font-sans);
 
@@ -132,19 +131,19 @@
   /* Elevation scale: one light source from above. Surfaces sit on the canvas
      with a hairline (xs/card); only floating layers (menus, dialogs, toasts)
      cast a real shadow. */
-  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.07), 0 1px 2px rgba(16, 24, 40, 0.04);
-  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.09), 0 2px 4px -2px rgba(16, 24, 40, 0.05);
-  --shadow-lg: 0 12px 28px -6px rgba(16, 24, 40, 0.14), 0 4px 10px -4px rgba(16, 24, 40, 0.06);
-  --shadow-float: 0 24px 48px -12px rgba(16, 24, 40, 0.2), 0 8px 16px -8px rgba(16, 24, 40, 0.08);
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04);
-  --shadow-menu: 0 16px 36px -10px rgba(16, 24, 40, 0.2), 0 3px 10px -2px rgba(16, 24, 40, 0.08);
+  --shadow-xs: var(--shadow-resting);
+  --shadow-sm: var(--shadow-resting);
+  --shadow-md: var(--shadow-raised);
+  --shadow-lg: var(--shadow-raised);
+  --shadow-float: var(--shadow-floating);
+  --shadow-card: var(--shadow-resting);
+  --shadow-menu: var(--shadow-floating);
   --shadow-focus: 0 0 0 2px var(--focus-ring-shadow);
 
   /* Desktop-first layout. Pages fill the main column (no centred page
      max-width); only long running text is capped by --w-measure, and the
      conversation by --w-reading. Columns: nav · sessions · thread · progress. */
-  --h-header: 48px;
+  --h-header: 52px;
   /* Title and model context have their own two-line rhythm. */
   --h-context: 68px;
   --w-sidebar: 216px;
@@ -154,18 +153,18 @@
   --w-side-panel: 360px;
   --w-reading: 1040px;
   --w-measure: 72ch;
-  --h-control: 32px;
-  --h-control-compact: 28px;
+  --h-control: 34px;
+  --h-control-compact: 30px;
   --h-touch: 44px;
   --weight-heading: 600;
   --weight-label: 500;
   --focus-width: 2px;
 
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
   --ease-snap: cubic-bezier(0.34, 1.18, 0.64, 1);
-  --dur-1: 110ms;
-  --dur-2: 170ms;
+  --dur-1: 120ms;
+  --dur-2: 160ms;
   --dur-3: 240ms;
   --dur-4: 340ms;
 
@@ -183,10 +182,10 @@
   --accent-on: var(--accent-text);
   --secondary: var(--info);
   --secondary-soft: var(--info-soft);
-  --secondary-deep: #1f415e;
-  --success: var(--ok);
+  --secondary-deep: var(--info);
+
   --success-soft: var(--ok-soft);
-  --warning: var(--warn);
+
   --warning-soft: var(--warn-soft);
   --st-pending: var(--warn);
   --st-accepted: var(--ok);
@@ -211,18 +210,18 @@
   --sh-1: none;
   --sh-2: none;
   --sh-3: var(--shadow-menu);
-  --sh-inset: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --sh-inset: inset 0 1px 0 oklch(100% 0 0 / .6);
 
   /* Deep brand teal for large brand surfaces (login showcase); same hue as
      the accent, never used for interactive controls. */
-  --brand-deep: #0b4746;
-  --brand-deeper: #0c2324;
+  --brand-deep: var(--neutral-11);
+  --brand-deeper: oklch(10% 0 0);
   --brand-ink: #ffffff;
-  --brand-ink-muted: rgba(255, 255, 255, 0.76);
-  --region-purple: #7e22ce;
-  --region-purple-soft: #f3e8ff;
-  --region-amber: #a16207;
-  --region-amber-soft: #fef3c7;
+  --brand-ink-muted: oklch(100% 0 0 / .72);
+  --region-purple: var(--tone-violet);
+  --region-purple-soft: color-mix(in oklab, var(--tone-violet) 12%, var(--surface));
+  --region-amber: var(--tone-amber);
+  --region-amber-soft: color-mix(in oklab, var(--tone-amber) 13%, var(--surface));
 
   /* 「写入结果未知」的独立语义色。
      刻意不复用 --danger：把「结果未确定」渲染成与「工具失败」同色，
@@ -232,80 +231,26 @@
      DESIGN.md), so it needs its own colour — one that reads as neither good nor
      failed. It used to be an alias of the region palette, which meant editing a
      categorical data colour would silently repaint every unknown state. */
-  --unknown: #7e22ce;
-  --unknown-soft: #f3e8ff;
-  --unknown-text: #ffffff;
+  --unknown: var(--tone-orchid);
+  --unknown-soft: color-mix(in oklab, var(--tone-orchid) 11%, var(--surface));
+  --unknown-text: var(--background);
 
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1214;
-  --surface: #171b1e;
-  --surface-2: #13171a;
-  --surface-frame: #0a0d0f;
-  --surface-3: #1f2427;
-  --overlay: rgba(0, 0, 0, 0.48);
-  --text: #eef2f4;
-  --text-2: #ccd4d9;
-  --text-3: #abb5bd;
-  --text-4: #96a2ad;
-  --line: #343d44;
-  --line-2: #273036;
-  --line-3: #65747f;
-  --accent: #7cc9bc;
-  --accent-2: #a2ded2;
-  --accent-soft: #20383a;
-  --accent-text: #09111a;
-  --ok: #85ce7d;
-  --ok-soft: #233522;
-  --ok-text: #08160f;
-  --warn: #e2ad4d;
-  --warn-soft: #372913;
-  --warn-text: #1c1206;
-  --danger: #ef7180;
-  --danger-soft: #3b1b23;
-  --danger-text: #1a070b;
-  --info: #80badc;
-  --info-soft: #183044;
-  --info-text: #09111a;
-  --surface-hover: #20262a;
-  --surface-selected: #1d3638;
-  --field: #13171a;
-  --focus-ring: #8dd1cf;
-  --focus-ring-shadow: rgba(141, 209, 207, 0.22);
-  --message-assistant: #151a1e;
-  --message-assistant-border: #2b343b;
-  --message-user: #232d30;
-  --message-user-border: #37474c;
-  --region-purple: #c084fc;
-  --region-purple-soft: #3b1f52;
-  --region-amber: #e2ad4d;
-  --region-amber-soft: #372913;
-  --unknown: #c084fc;
-  --unknown-soft: #3b1f52;
-  --unknown-text: #1a0a28;
-
-  --lz-primary: var(--accent);
-  --lz-primary-hover: var(--accent-2);
-  --lz-primary-soft: var(--accent-soft);
-  --lz-primary-glow: rgba(114, 195, 186, 0.22);
-  --lz-surface-glass: var(--surface);
-  --lz-surface-glass-border: var(--line-2);
-  --lz-surface-dock: var(--surface);
-  --lz-shadow-ambient: var(--shadow-sm);
-  --lz-shadow-dock: var(--shadow-menu);
-  --lz-glow-ok: rgba(133, 206, 125, 0.25);
-  --lz-glow-warn: rgba(226, 173, 77, 0.25);
-  --lz-glow-err: rgba(239, 113, 128, 0.25);
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 28px -6px rgba(0, 0, 0, 0.6), 0 4px 10px -4px rgba(0, 0, 0, 0.4);
-  --shadow-float: 0 24px 48px -12px rgba(0, 0, 0, 0.65), 0 8px 16px -8px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-menu: 0 16px 36px -10px rgba(0, 0, 0, 0.7), 0 3px 10px -2px rgba(0, 0, 0, 0.45);
-  --shadow-composer: 0 6px 20px -8px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.3);
+  /* Dark values come from the Arc foundation (components/arc/foundation.css);
+     only the app frame and text steps that Arc does not name are set here. */
+  --field-border: oklch(48% 0 0);
+  --surface-frame: oklch(16.5% 0 0);
+  --bg: oklch(18% 0 0);
+  --surface-2: oklch(19.5% 0 0);
+  --surface-3: oklch(26% 0 0);
+  --overlay: oklch(0% 0 0 / .5);
+  --text-2: oklch(86% 0 0);
+  --text-3: oklch(74% 0 0);
+  --text-4: oklch(66% 0 0);
+  --sh-inset: inset 0 1px 0 oklch(100% 0 0 / .04);
 }
 :root {
   /* ── Vertical rhythm ───────────────────────────────────────────────────
@@ -365,21 +310,21 @@
 
   /* ── Shape ─────────────────────────────────────────────────────────────
      Controls 6 · cards and panels 10 · dialogs and drawers 12. */
-  --r-control: 6px;
-  --r-card: 10px;
-  --r-dialog: 12px;
+  --r-control: 10px;
+  --r-card: 14px;
+  --r-dialog: 20px;
 
   /* ── Rows and chrome ───────────────────────────────────────────────────*/
   --h-row: 40px;
   --h-row-dense: 32px;
-  --h-nav-item: 32px;
+  --h-nav-item: 34px;
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 }
 /* Density is a user preference (account menu). Compact trims control and row
    height and the page gutter; type sizes never shrink below the scale. */
 [data-density="compact"] {
-  --h-control: 28px;
-  --h-control-compact: 24px;
+  --h-control: 34px;
+  --h-control-compact: 30px;
   --h-row: 34px;
   --h-row-dense: 28px;
   --page-gutter: 18px;

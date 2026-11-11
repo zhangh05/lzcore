@@ -4,11 +4,16 @@
   .markdown-body > :first-child { margin-top: 0; }
   .markdown-body > :last-child { margin-bottom: 0; }
   .markdown-body p, .markdown-body ul, .markdown-body ol { margin-block: var(--space-2); }
-  .markdown-body pre { max-width: 100%; overflow-x: auto; padding: var(--space-3); background: var(--surface-3); border-radius: var(--r-control); white-space: pre; }
+  .markdown-body pre { max-width: 100%; overflow-x: auto; padding: var(--space-3) var(--space-4); background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-card); white-space: pre; }
+  .markdown-body :not(pre) > code { padding: 1px 5px; border-radius: 6px; background: var(--surface-3); font-size: .9em; }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3 { margin: var(--space-5) 0 var(--space-2); line-height: var(--lh-heading); letter-spacing: -.015em; }
   .markdown-body code { font-family: var(--font-mono); font-size: var(--fs-sm); }
   .markdown-body .markdown-table-scroll { max-width: 100%; overflow-x: auto; }
   .markdown-body table { border-collapse: collapse; width: 100%; }
-  .markdown-body th, .markdown-body td { border: 1px solid var(--line); padding: var(--space-1) var(--space-2); text-align: left; }
-  .markdown-body a { color: var(--accent-2); }
+  .markdown-body th, .markdown-body td { border-bottom: 1px solid var(--line-2); padding: var(--space-2) var(--space-3); text-align: left; }
+  .markdown-body th { color: var(--text-3); font-size: var(--fs-xs); font-weight: var(--weight-label); background: var(--surface-2); }
+  .markdown-body .markdown-table-scroll { border: 1px solid var(--line); border-radius: var(--r-card); }
+  .markdown-body a { color: var(--text); text-decoration: underline; text-decoration-color: color-mix(in oklab, currentColor 35%, transparent); text-underline-offset: 2px; }
+  .markdown-body a:hover { text-decoration-color: currentColor; }
   .markdown-body blockquote { border-left: 3px solid var(--line-3); margin-inline: 0; padding-left: var(--space-3); color: var(--text-2); }
 }

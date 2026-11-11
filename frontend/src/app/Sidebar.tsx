@@ -1,6 +1,7 @@
 import { CORE_NAV_AFTER_EXTENSIONS, CORE_NAV_BEFORE_EXTENSIONS, NAMES, isAdmin, type NavSection } from "../contracts/naming";
 import { extensionNavItems } from "../contracts/extensions";
 import { NavIcon } from "../components/NavIcon";
+import { IconSparkle } from "../components/Icon";
 import { Link, useLocation } from "../router";
 import { useShell } from "./shellContext";
 
@@ -47,7 +48,7 @@ export function Sidebar() {
   const mounts = extensionNavItems(extensions);
   return (
     <nav className="app-sidebar" aria-label="主导航">
-      <div className="brand">{NAMES.product}</div>
+      <div className="brand"><span className="brand-mark" aria-hidden="true"><IconSparkle size={15} strokeWidth={2.2} /></span><span className="brand-name">{NAMES.product}</span></div>
       <ul className="nav-list">
         {CORE_NAV_BEFORE_EXTENSIONS.map((s) => <CoreSection key={s.key} section={s} />)}
       </ul>
