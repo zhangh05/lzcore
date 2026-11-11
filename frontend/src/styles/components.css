@@ -218,8 +218,8 @@
   .float-panel.status-details dt { color: var(--text-3); font-size: var(--fs-xs); }
   .float-panel.status-details dd { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
   .picker-meta { margin: 0 0 var(--space-2) 1.6em; font-size: var(--fs-xs); overflow-wrap: anywhere; }
-  .dialog.is-wide { width: min(780px, 96vw); max-height: 88vh; }
-  .dialog { width: min(560px, 94vw); max-height: 80vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-dialog); box-shadow: var(--shadow-float); align-self: flex-start; overflow: hidden; animation: rise-in var(--dur-4) var(--ease-out); }
+  .dialog.is-wide { width: min(780px, 96vw); max-height: calc(100dvh - 12vh - var(--space-4)); }
+  .dialog { width: min(560px, 94vw); max-height: min(80vh, calc(100dvh - 12vh - var(--space-4))); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-dialog); box-shadow: var(--shadow-float); align-self: flex-start; overflow: hidden; animation: rise-in var(--dur-4) var(--ease-out); }
   .dialog-title { margin: 0; padding: var(--space-5) var(--space-5) var(--space-2); font-size: var(--fs-lg); font-weight: var(--weight-heading); }
   .dialog-body { padding: 0 var(--space-5); overflow: auto; }
   .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-3) var(--space-5); border-top: 1px solid var(--line-2); background: var(--surface-2); }
