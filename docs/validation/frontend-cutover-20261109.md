@@ -6,7 +6,7 @@
 
 正式本机 5273 已切入新版并连接原8011后端，后端进程与业务数据未重启或迁移。旧版仅作为回退与兼容基线；旧版测试和浏览器 CI 保留，新产品浏览器检查独立执行，使用隔离真实后端，不调用真实模型或设备。本机核验结果见下表，完整远端 CI 随 main 提交运行。
 
-迁移边界：新版尚缺旧版完整子任务聚合、领域证据、画布内 Agent 协作及图片/PDF/音视频预览。不能把本次切换说成这些业务能力已完成。原始框架和旧版完整源码仍可回退；根 extensions/network_operations/frontend 仅服务旧版回退桥接，当前产品 UI 维护源为 frontend/src/extension-modules/network-operations。
+迁移边界：切换时新版尚缺旧版完整子任务聚合、领域证据、画布内 Agent 协作及图片/PDF/音视频预览（2026-11-10 已补齐，见 [前端合同](../FRONTEND.md)；真实模型子任务与真实设备证据仍待环境验收）。不能把本次切换说成这些业务能力已完成。原始框架和旧版完整源码仍可回退；根 extensions/network_operations/frontend 仅服务旧版回退桥接，当前产品 UI 维护源为 frontend/src/extension-modules/network-operations。
 
 ## 本机验证
 

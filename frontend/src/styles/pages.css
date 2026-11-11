@@ -107,6 +107,14 @@
   .job-item { padding: var(--space-2) 0; border-bottom: 1px solid var(--line-2); font-size: var(--fs-sm); }
   .job-item:last-child { border-bottom: 0; }
   .job-item .row-actions { margin: var(--space-1) 0 0; }
+  .job-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-2); }
+  .job-filters .btn.is-active { background: var(--surface-2); border-color: var(--line); }
+  .job-head { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  .job-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin-top: 2px; font-size: var(--fs-xs); }
+  .job-progress { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0 0; }
+  .job-progress progress { width: 80px; }
+  .job-error { margin: var(--space-1) 0 0; color: var(--danger); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .job-item .inline-alert { margin: var(--space-1) 0 0; }
   .report-content { white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--fs-sm); }
   .topology-preview { width: 100%; max-height: 360px; border: 1px solid var(--line-2); border-radius: var(--r-card); background: var(--surface-3); }
@@ -137,4 +145,12 @@
   .netops-canvas-host { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 560px; }
   .netops-canvas-host > .topology-mount { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
   .topology-mount > .network-admin.is-topology { flex: 1 1 auto; min-height: 0; }
+}
+@layer pages {
+  .file-preview-media { margin: var(--space-2) 0 0; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-control); padding: var(--space-2); }
+  .file-preview-media img { max-width: 100%; max-height: 60vh; object-fit: contain; }
+  .file-preview-media video { max-width: 100%; max-height: 60vh; }
+  .file-preview-media audio { width: 100%; }
+  .file-preview-pdf { width: 100%; height: 60vh; border: 0; }
+  .file-preview-text { max-height: 60vh; overflow: auto; }
 }
