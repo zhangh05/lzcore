@@ -335,7 +335,12 @@ The operation ledger uses `planned`, `running`, and `unknown` only for records
 that still have a live reconciliation path. On backend restart, an unresolved
 record from the previous process without a durable linked resource becomes the
 terminal `indeterminate` state. This preserves uncertainty for audit without
-reporting the record as actively pending forever.
+reporting the record as actively pending forever. An administrator may resolve
+an `indeterminate` record manually as `succeeded` or `failed` through
+`POST /api/admin/operation-ledger/<operation_id>/resolve`, providing a verification
+`reason` and `confirmation: "RESOLVE <operation_id>"`. The prior state is kept as
+`previous_status`, and its original errors and summary as `previous_error_code`,
+`previous_error` and `previous_result_summary`; automatic settlement cannot overwrite an `indeterminate` record.
 
 ## 错误投影
 
