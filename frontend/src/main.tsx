@@ -14,12 +14,15 @@ import "./desktop/desktop.css";
 import { BrowserRouter } from "./router";
 import { AuthGateView } from "./app/AuthGate";
 import { applyStoredPrefs } from "./app/prefs";
+import { ErrorBoundary } from "./app/ErrorBoundary";
 
 applyStoredPrefs();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
-      <AuthGateView />
-    </BrowserRouter>
+    <ErrorBoundary scope="app">
+      <BrowserRouter>
+        <AuthGateView />
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>,
 );

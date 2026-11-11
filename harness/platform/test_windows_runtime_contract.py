@@ -123,27 +123,18 @@ def test_windows_launchers_delegate_to_single_powershell_implementation():
     assert "ForEach-Object" in start_ps1
 
 
-def test_windows_release_verifies_every_supported_python_cache_offline():
+def test_windows_release_ships_only_native_desktop_packages():
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-
-    assert 'python-version: "3.12"' in workflow
-    assert 'python-version: "3.13"' in workflow
-    assert workflow.count("pip download --only-binary=:all:") == 2
-    assert "Verify dependency cache offline" in workflow
-    assert "--no-index --find-links wheelhouse -r requirements.txt" in workflow
-    assert "import flask, flask_sock, yaml" in workflow
-    assert "test_session_management.py harness/storage/test_storage_filestore_foundation.py" in workflow
-    assert 'runtime/python' in workflow
-    assert 'runtime/node' in workflow
-    assert 'frontend/node_modules' in workflow
-    assert 'start.ps1\") -NoBrowser -ValidateOnly' in workflow
+    assert "lzcore-*-windows-portable.zip" in workflow
+    assert "lzcore-*-windows-setup.exe" in workflow
+    # 不再发布内置 Node / Vite 的源码浏览器包。
+    assert "windows-x64.zip" not in workflow and "runtime/node" not in workflow
 
 
 def test_windows_release_docs_require_no_system_runtime():
     windows_doc = (ROOT / "docs" / "WINDOWS.md").read_text(encoding="utf-8")
-    assert "不要求用户另行安装开发环境" in windows_doc
-    assert "runtime\\python\\python.exe" in windows_doc
-    assert "runtime\\node\\node.exe" in windows_doc
+    assert "不需另装 Python/Node" in windows_doc
+    assert "packaging/windows/build.py" in windows_doc
 
 
 def test_windows_persistence_never_uses_rename_for_atomic_overwrite():
