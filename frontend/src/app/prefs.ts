@@ -6,6 +6,7 @@ export type Density = "comfortable" | "compact";
 
 const THEME_KEY = "lzcore-next:theme";
 const DENSITY_KEY = "lzcore-next:density";
+const NAV_KEY = "lzcore-next:nav-collapsed";
 
 function read<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -22,6 +23,9 @@ interface PrefsState {
   density: Density;
   setTheme: (t: Theme) => void;
   setDensity: (d: Density) => void;
+  /** Primary navigation collapsed to an icon rail (frees width for canvas pages). */
+  navCollapsed: boolean;
+  setNavCollapsed: (v: boolean) => void;
 }
 
 function apply(theme: Theme, density: Density) {
@@ -41,6 +45,8 @@ export const usePrefs = create<PrefsState>((set, get) => ({
   density: read<Density>(DENSITY_KEY, ["comfortable", "compact"], "comfortable"),
   setTheme: (theme) => { try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ } apply(theme, get().density); set({ theme, themePreference: theme }); },
   setDensity: (density) => { try { localStorage.setItem(DENSITY_KEY, density); } catch { /* ignore */ } apply(get().theme, density); set({ density }); },
+  navCollapsed: read<"1" | "0">(NAV_KEY, ["1", "0"], "0") === "1",
+  setNavCollapsed: (v) => { try { localStorage.setItem(NAV_KEY, v ? "1" : "0"); } catch { /* ignore */ } set({ navCollapsed: v }); },
 }));
 
 export function applyStoredPrefs() {

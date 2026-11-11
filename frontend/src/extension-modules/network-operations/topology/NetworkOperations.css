@@ -108,3 +108,10 @@
 }
 
 }
+
+/* 嵌入新壳时压缩画布外围：两条工具栏与状态栏都收紧，把高度还给画布。 */
+@layer extension {
+  .netops-canvas-host .network-admin .topology-studio .topology-canvas-toolbar { min-height: 44px; padding: 4px var(--space-4); gap: 6px 12px; }
+  .netops-canvas-host .network-admin .topology-studio .topology-editbar { padding: 4px var(--space-4); background: var(--surface-2); }
+  .netops-canvas-host .network-admin .topology-studio .studio-statusbar { flex-basis: 26px; padding: 0 var(--space-4); }
+}

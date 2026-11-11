@@ -27,7 +27,7 @@ export function TasksPage() {
   if (!ws) return <div className="page"><p role="status">正在确定工作区…</p></div>;
   return (
     <div className="page" data-testid="tasks-page">
-      <PageHeader title={NAMES.tasks} subtitle="查看任务进度、运行记录和报告；右侧作业队列单独显示排队与执行状态。" />
+      <PageHeader title={NAMES.tasks} subtitle="跟踪任务进度、运行记录和报告。" />
       <Tabs label="任务视图" current={tab} onChange={(t: Tab) => setTab(t)} tabs={[{ key: "tasks", label: "运行时任务" }, { key: "runs", label: "运行 / 追踪" }, { key: "reports", label: "报告" }, { key: "trajectories", label: "轨迹" }]} />
       <div className="tasks-layout">
         <div className="tasks-main">

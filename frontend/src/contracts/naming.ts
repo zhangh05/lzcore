@@ -79,13 +79,13 @@ export const CORE_NAV_AFTER_EXTENSIONS: readonly NavSection[] = [
   {
     key: "system", label: NAMES.system, path: "/system", icon: "settings",
     children: [
-      { key: "system-status", label: NAMES.systemStatus, path: "/system", icon: "gauge" },
-      { key: "settings", label: NAMES.settings, path: "/system/settings", icon: "settings" },
-      { key: "users", label: NAMES.users, path: "/system/users", icon: "settings", adminOnly: true },
-      { key: "workspaces", label: NAMES.workspaceAdmin, path: "/system/workspaces", icon: "settings", adminOnly: true },
-      { key: "backups", label: NAMES.backups, path: "/system/backups", icon: "settings", adminOnly: true },
-      { key: "ecosystem", label: NAMES.ecosystem, path: "/system/ecosystem", icon: "settings", adminOnly: true },
-      { key: "workers", label: NAMES.workers, path: "/system/workers", icon: "settings", adminOnly: true },
+      { key: "system-status", label: NAMES.systemStatus, path: "/system", icon: "activity" },
+      { key: "settings", label: NAMES.settings, path: "/system/settings", icon: "sliders" },
+      { key: "users", label: NAMES.users, path: "/system/users", icon: "users", adminOnly: true },
+      { key: "workspaces", label: NAMES.workspaceAdmin, path: "/system/workspaces", icon: "workspace", adminOnly: true },
+      { key: "backups", label: NAMES.backups, path: "/system/backups", icon: "backup", adminOnly: true },
+      { key: "ecosystem", label: NAMES.ecosystem, path: "/system/ecosystem", icon: "package", adminOnly: true },
+      { key: "workers", label: NAMES.workers, path: "/system/workers", icon: "cpu", adminOnly: true },
     ],
   },
 ];

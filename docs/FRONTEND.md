@@ -22,6 +22,15 @@
 
 视觉语言基于 [Arc UI](https://uiarc.dev) 的免费 MIT 基础层：`frontend/src/components/arc/foundation.css`（中性 oklch 色阶、单一强调色、冷色调分类色、柔和分层阴影、焦点规则）与 `lib/motion-tokens.ts`（时长、缓动、弹簧）。基础层不进 CSS layer，同名变量（`--surface`、`--accent`、`--danger` 等）以它为准；`styles/arc-overrides.css` 把控件高度、圆角调到适合高密度控制台的尺寸，并补上中文字体回退；`styles/tokens.css` 的产品变量全部从基础层取值，深色主题随之切换。只有 `tokens.css` 与基础层持有字面颜色；拓扑画布无法读取 CSS 变量，`topologyPalette.ts` 保存换算后的十六进制，并由测试校验与 CSS 一致。字体为 Inter Variable（正文）与 Geist Variable（标题、数字），中文回落到各平台系统字体。需要更多 Arc 组件时，从 `https://uiarc.dev/r/<name>.json` 取免费组件源码放入 `components/arc/`，保留 LICENSE。
 
+## 版式
+
+- 主导航按「做事（工作台、任务、工作流）→ 资料（文件、知识、记忆）→ 扩展区 → 系统」分组平铺，每个入口常显，不靠展开子级寻找；可收起为图标栏（偏好存 `lzcore-next:nav-collapsed`）。资料的分类只在导航里，页内不再重复分类页签。
+- 顶栏：工作区切换 │ 面包屑（`app/Breadcrumb.tsx`，从导航表与扩展目录推出「一级入口 › 子页」）… 命令入口、待核对、账户。
+- 页头：标题 + 一句面向用户的说明，页面级主操作放在页头右侧；单独一个主按钮的操作行靠右。
+- 系统等多子页入口用 `app/SystemLayout.tsx`：主导航只占一项，子页导航在页内左栏（非管理员看不到管理页），窄屏变为横向滚动条。
+- 画布型扩展页（网络扩展「拓扑」）：页头只留给读屏，位置由面包屑表达，页签贴顶，画布铺满主区且主区不滚动；画布外围工具栏收紧。
+- 强调色为 Arc `blue`（`index.html` 的 `data-accent`）：主按钮、当前导航、页签指示、链接与焦点用强调色，结构保持中性。拓扑画布的选中色随之取同一值，测试按 `data-accent` 解析校验。
+
 ## 框架合同
 
 工作区来自已认证的 GET /api/workspaces，不伪造默认身份。Skill 与 resource_ids 来自服务端目录，使用 metadata.workbench_selection；后端重新校验范围与权限。附件使用托管 file.file_id，不使用 artifact_id 替代原件身份。个人模式写请求、multipart 与实时消息沿用内存 local-token，不将令牌持久化。

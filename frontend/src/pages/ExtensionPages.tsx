@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { EmptyState, PageHeader } from "../components/EmptyState";
 import { moduleFor } from "../extension-modules/registry";
-import { IconPuzzle, IconWarningCircle } from "../components/Icon";
+import { IconArrowUpRight, IconPuzzle, IconWarningCircle } from "../components/Icon";
+import { NavIcon } from "../components/NavIcon";
 import { extensionAvailability, resolveExtensionRoute } from "../contracts/extensions";
 import { extensionRouteTitle, NAMES } from "../contracts/naming";
 import { Link } from "../router";
@@ -42,31 +43,40 @@ export function ExtensionRoutePage({ pathname }: { pathname: string }) {
 }
 
 export function ExtensionsOverview() {
-  const { extensions, auth } = useShell();
+  const { extensions, auth, hrefFor } = useShell();
   return (
     <div className="page" data-testid="extensions-overview">
-      <PageHeader title={NAMES.extensions} subtitle="由 /api/extensions 动态生成；核心不写死任何扩展入口。" />
+      <PageHeader title={NAMES.extensions} subtitle="已安装的扩展，以及它们提供的页面。" />
       {extensions.kind === "loading" ? <p role="status">读取扩展目录…</p> : null}
       {extensions.kind === "error" ? <EmptyState icon={<IconWarningCircle size={24} />} title="扩展目录不可读" reason={extensions.reason} /> : null}
       {extensions.kind === "ready" && extensions.extensions.length === 0
         ? <EmptyState icon={<IconPuzzle size={24} />} title="暂无已安装扩展" reason="安装扩展后，它提供的页面会出现在左侧导航的扩展区。" /> : null}
       {extensions.kind === "ready" && extensions.extensions.length > 0 ? (
-        <div className="table-wrap"><table className="table">
-          <thead><tr><th scope="col">扩展</th><th scope="col">版本</th><th scope="col">状态</th><th scope="col">界面入口</th></tr></thead>
-          <tbody>
-            {extensions.extensions.map((ext) => {
-              const a = extensionAvailability(ext, auth.role || undefined);
-              return (
-                <tr key={ext.extension_id} data-testid="ext-row">
-                  <td><strong>{ext.name}</strong><div className="muted">{ext.description}</div></td>
-                  <td>{ext.version ?? "—"}</td>
-                  <td>{a.available ? <span className="status-chip tone-ok">可用</span> : <span className="status-chip tone-warn" title={a.reason}>不可用：{a.reason}</span>}</td>
-                  <td>{(ext.frontend_routes ?? []).length ? `${(ext.frontend_routes ?? []).length} 个` : "无界面（仅后端能力）"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table></div>
+        <ul className="ext-grid">
+          {extensions.extensions.map((ext) => {
+            const a = extensionAvailability(ext, auth.role || undefined);
+            const pages = extensions.mounts.filter((m) => m.extensionId === ext.extension_id);
+            return (
+              <li key={ext.extension_id} className="ext-card" data-testid="ext-row">
+                <div className="ext-card-head">
+                  <span className="ext-card-icon" aria-hidden="true"><NavIcon name={pages[0]?.icon ?? "puzzle"} size={18} /></span>
+                  <div className="ext-card-title">
+                    <strong>{ext.name}</strong>
+                    <span className="muted">{ext.version ? `v${ext.version}` : "未标版本"}</span>
+                  </div>
+                  {a.available ? <span className="status-chip tone-ok">可用</span> : <span className="status-chip tone-warn" title={a.reason}>不可用</span>}
+                </div>
+                {ext.description ? <p className="ext-card-desc">{ext.description}</p> : null}
+                {!a.available ? <p className="ext-card-reason">{a.reason}</p> : null}
+                <div className="ext-card-links">
+                  {pages.length ? pages.map((m) => (
+                    <Link key={m.path} to={hrefFor(m.path)} className="btn sm">{m.label}<IconArrowUpRight size={14} aria-hidden="true" /></Link>
+                  )) : <span className="muted">无界面（仅后端能力）</span>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       ) : null}
     </div>
   );
