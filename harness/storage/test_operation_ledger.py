@@ -1,6 +1,9 @@
 from pathlib import Path
 from types import SimpleNamespace
 import asyncio
+import json
+
+import pytest
 
 
 def _ctx():
@@ -230,32 +233,98 @@ def test_startup_reconciliation_preserves_current_process_unknown(monkeypatch, t
     assert list_operations("default")[0]["status"] == "unknown"
 
 
-def test_manual_resolution_requires_reason_and_preserves_audit(monkeypatch, tmp_path):
+@pytest.mark.parametrize("initial_status", ["planned", "running", "unknown", "indeterminate"])
+@pytest.mark.parametrize("status", ["succeeded", "failed"])
+def test_manual_resolution_requires_reason_and_preserves_audit(monkeypatch, tmp_path, initial_status, status):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     from core.runtime_engine.operation_ledger import (
         finish_operation,
         plan_operation,
         resolve_operation_manually,
+        settle_operation,
         start_operation,
     )
     operation = plan_operation(_ctx(), "workspace.file", "call-manual", {"action": "write"})
-    start_operation("default", operation["operation_id"])
-    finish_operation("default", operation["operation_id"], SimpleNamespace(
-        ok=False, error="uncertain", error_code="TOOL_TIMEOUT_UNCERTAIN",
-        execution_may_continue=True, output={"executed": True},
-    ))
+    if initial_status != "planned":
+        start_operation("default", operation["operation_id"])
+    if initial_status == "unknown":
+        finish_operation("default", operation["operation_id"], SimpleNamespace(
+            ok=False, error="uncertain", error_code="TOOL_TIMEOUT_UNCERTAIN",
+            execution_may_continue=True, output={"executed": True},
+        ))
+    if initial_status == "indeterminate":
+        settle_operation(
+            "default", operation["operation_id"], status="indeterminate",
+            resolved_by="startup_reconciliation",
+            error_code="OPERATION_RESULT_INDETERMINATE_AFTER_RESTART",
+            error="Previous process ended without a reconciliation path",
+            result_summary="前一运行进程结束，保留结果不确定事实",
+        )
     try:
-        resolve_operation_manually("default", operation["operation_id"], status="succeeded", reason="")
+        resolve_operation_manually("default", operation["operation_id"], status=status, reason="")
     except ValueError as exc:
         assert str(exc) == "resolution_reason_required"
     else:
         raise AssertionError("manual resolution must require evidence")
     resolved = resolve_operation_manually(
-        "default", operation["operation_id"], status="succeeded", reason="已核对目标系统记录",
+        "default", operation["operation_id"], status=status, reason="已核对目标系统记录",
     )
-    assert resolved["status"] == "succeeded"
+    assert resolved["status"] == status
     assert resolved["resolved_by"] == "manual"
     assert resolved["resolution_reason"] == "已核对目标系统记录"
+    if initial_status == "indeterminate":
+        assert resolved["previous_status"] == "indeterminate"
+        assert resolved["previous_error_code"] == "OPERATION_RESULT_INDETERMINATE_AFTER_RESTART"
+        assert resolved["previous_error"] == "Previous process ended without a reconciliation path"
+        assert resolved["previous_result_summary"] == "前一运行进程结束，保留结果不确定事实"
+        assert resolved["error_code"] == ""
+        assert resolved["error"] == ""
+    path = tmp_path / "workspaces" / "default" / "operations" / f'{operation["operation_id"]}.json'
+    assert json.loads(path.read_text(encoding="utf-8")) == resolved
+
+
+@pytest.mark.parametrize("status", ["succeeded", "failed", "blocked", "reconciled"])
+def test_manual_resolution_rejects_resolved_operations(monkeypatch, tmp_path, status):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
+    from core.runtime_engine.operation_ledger import plan_operation, resolve_operation_manually, settle_operation
+
+    operation = plan_operation(_ctx(), "workspace.file", "call-resolved", {"action": "write"})
+    settle_operation("default", operation["operation_id"], status=status, resolved_by="system")
+    path = tmp_path / "workspaces" / "default" / "operations" / f'{operation["operation_id"]}.json'
+    original = path.read_bytes()
+
+    with pytest.raises(RuntimeError, match="^operation_already_resolved$"):
+        resolve_operation_manually(
+            "default", operation["operation_id"], status="succeeded", reason="checked again",
+        )
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("require_unresolved", [False, True])
+def test_system_settlement_preserves_indeterminate(monkeypatch, tmp_path, require_unresolved):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
+    from core.runtime_engine.operation_ledger import plan_operation, settle_operation
+
+    operation = plan_operation(_ctx(), "workspace.file", "call-system", {"action": "write"})
+    indeterminate = settle_operation(
+        "default", operation["operation_id"], status="indeterminate",
+        resolved_by="startup_reconciliation",
+        error_code="OPERATION_RESULT_INDETERMINATE_AFTER_RESTART", error="uncertain after restart",
+    )
+    path = tmp_path / "workspaces" / "default" / "operations" / f'{operation["operation_id"]}.json'
+    original = path.read_bytes()
+
+    if require_unresolved:
+        with pytest.raises(RuntimeError, match="^operation_already_resolved$"):
+            settle_operation(
+                "default", operation["operation_id"], status="succeeded",
+                resolved_by="system", require_unresolved=True,
+            )
+    else:
+        assert settle_operation(
+            "default", operation["operation_id"], status="succeeded", resolved_by="system",
+        ) == indeterminate
+    assert path.read_bytes() == original
 
 
 def test_readback_reconciliation_is_a_terminal_audit_state(monkeypatch, tmp_path):
@@ -324,11 +393,14 @@ def test_detached_handler_eventually_settles_timeout_truth(monkeypatch, tmp_path
     assert settled["resource_id"] == "sub-87654321"
 
 
-def test_operation_resolution_admin_route_requires_confirmation(monkeypatch, tmp_path):
+@pytest.mark.parametrize("initial_status", ["unknown", "indeterminate"])
+def test_operation_resolution_admin_route_requires_confirmation(monkeypatch, tmp_path, initial_status):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     monkeypatch.setenv("LZCORE_LOGIN_ENABLED", "false")
     from backend.main import create_app
-    from core.runtime_engine.operation_ledger import finish_operation, plan_operation, start_operation
+    from core.runtime_engine.operation_ledger import (
+        finish_operation, plan_operation, reconcile_operations, start_operation,
+    )
 
     # Runtime operations are created after the backend startup boundary.  A
     # record created before create_app() correctly represents a previous
@@ -340,6 +412,10 @@ def test_operation_resolution_admin_route_requires_confirmation(monkeypatch, tmp
         ok=False, error="uncertain", error_code="TOOL_TIMEOUT_UNCERTAIN",
         execution_may_continue=True, output={"executed": True},
     ))
+    if initial_status == "indeterminate":
+        assert reconcile_operations(
+            "default", started_before="2999-01-01T00:00:00+00:00",
+        )["indeterminate"] == 1
     url = f'/api/admin/operation-ledger/{operation["operation_id"]}/resolve'
     assert client.post(url, json={"workspace_id": "default", "status": "succeeded", "reason": "checked"}).status_code == 400
     response = client.post(url, json={
@@ -350,3 +426,11 @@ def test_operation_resolution_admin_route_requires_confirmation(monkeypatch, tmp
     })
     assert response.status_code == 200
     assert response.get_json()["status"] == "succeeded"
+    response = client.post(url, json={
+        "workspace_id": "default",
+        "status": "succeeded",
+        "reason": "已再次核对目标系统记录",
+        "confirmation": f'RESOLVE {operation["operation_id"]}',
+    })
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "operation_already_resolved"

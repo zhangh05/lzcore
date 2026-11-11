@@ -150,6 +150,36 @@ def settle_operation(
     require_unresolved: bool = False,
 ) -> dict[str, Any]:
     """Resolve planned/running/unknown state from durable or human evidence."""
+    return _settle_operation(
+        workspace_id, op_id,
+        status=status,
+        resolved_by=resolved_by,
+        error_code=error_code,
+        error=error,
+        result_summary=result_summary,
+        resource_kind=resource_kind,
+        resource_id=resource_id,
+        resolution_reason=resolution_reason,
+        require_unresolved=require_unresolved,
+    )
+
+
+def _settle_operation(
+    workspace_id: str,
+    op_id: str,
+    *,
+    status: str,
+    resolved_by: str,
+    error_code: str = "",
+    error: str = "",
+    result_summary: str = "",
+    resource_kind: str = "",
+    resource_id: str = "",
+    resolution_reason: str = "",
+    require_unresolved: bool = False,
+    allow_indeterminate: bool = False,
+) -> dict[str, Any]:
+    """Settle under one lock; only the manual entry point may replace indeterminate."""
     if status not in {"succeeded", "failed", "blocked", "reconciled", "indeterminate"}:
         raise ValueError("invalid_operation_resolution_status")
     path = _path(workspace_id, op_id)
@@ -158,12 +188,18 @@ def settle_operation(
     with FileLock(path.with_suffix(".lock")):
         record = json.loads(path.read_text(encoding="utf-8"))
         current = str(record.get("status") or "")
-        if current in {"succeeded", "failed", "blocked", "reconciled", "indeterminate"}:
+        replacing_indeterminate = allow_indeterminate and current == "indeterminate"
+        if current in {"succeeded", "failed", "blocked", "reconciled", "indeterminate"} and not replacing_indeterminate:
             if require_unresolved:
                 raise RuntimeError("operation_already_resolved")
             return record
-        if current not in {"planned", "running", "unknown"}:
+        if current not in {"planned", "running", "unknown"} and not replacing_indeterminate:
             raise RuntimeError("operation_not_resolvable")
+        if replacing_indeterminate:
+            record["previous_status"] = current
+            for field in ("error_code", "error", "result_summary"):
+                if field in record:
+                    record[f"previous_{field}"] = record[field]
         now = _now()
         record.update({
             "status": status,
@@ -193,13 +229,14 @@ def resolve_operation_manually(
     reason = str(reason or "").strip()
     if not reason:
         raise ValueError("resolution_reason_required")
-    return settle_operation(
+    return _settle_operation(
         workspace_id, op_id,
         status=status,
         resolved_by="manual",
         resolution_reason=reason,
         result_summary="人工核对完成",
         require_unresolved=True,
+        allow_indeterminate=True,
     )
 
 
