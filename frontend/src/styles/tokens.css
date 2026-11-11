@@ -36,6 +36,11 @@
 
 
   --accent-2: var(--accent-strong);
+  /* Generated identity avatars (model providers): lightness/chroma pairs; hue comes from the id. */
+  --avatar-from: 70% .14;
+  --avatar-to: 52% .16;
+  --avatar-ink: oklch(100% 0 0);
+  --avatar-sheen: oklch(100% 0 0 / .25);
   --accent-soft: var(--accent-subtle);
   --accent-text: var(--accent-foreground);
 

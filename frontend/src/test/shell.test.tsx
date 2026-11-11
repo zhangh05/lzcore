@@ -26,7 +26,7 @@ describe("应用壳", () => {
     const ext = within(nav).getByTestId("nav-extensions");
     await within(ext).findByText("笔记看板");
     expect(within(ext).getByText("网络 Skill 管理").closest("a")).toHaveClass("is-unavailable");
-    expect(within(ext).getByText("不可用")).toBeInTheDocument();
+    expect(within(ext).getAllByText("不可用").length).toBeGreaterThan(0);
   });
 
   it("工作区切换器来自 /api/workspaces，没有写死 default，URL 带 ws", async () => {

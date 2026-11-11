@@ -8,6 +8,7 @@ import type { HttpOutcome } from "../../contracts/auth";
 import { ASSIGNABLE_ROLES, NAMES, isAdmin, roleLabel } from "../../contracts/naming";
 import { listOf, useApi } from "../../kit/useApi";
 import { Chip, ConfirmDialog, Dialog, Drawer, FailureNote, KeyValues, LoadState, ObjectView, PreviewApply, RawData, ReceiptNote, Table, Tabs, fmtTime, useUrlTab } from "../../kit/ui";
+import { ModelSettings } from "./ModelSettings";
 import { ContextView, HealthView, ReadSection, SelfcheckView, UsageView, statusLabel } from "./statusViews";
 
 function Result({ r }: { r: { label: string; o: HttpOutcome } | null }) {
@@ -113,96 +114,14 @@ function RetentionArchive({ ws }: { ws: string }) {
 }
 
 // ── 设置：Provider 管理（按 role / platform_admin 渲染） ──────────────
-interface Provider { provider: string; label?: string; provider_type?: string; protocol?: string; base_url?: string; model?: string; key_configured?: boolean; key_preview?: string | null; is_active?: boolean }
-interface LlmStatus {
-  provider?: string; model?: string; provider_type?: string; enabled?: boolean; connected?: boolean; safe_mode?: boolean; key_configured?: boolean; key_source?: string;
-  config_source?: string; prompt_cache_enabled?: boolean; vision_supported?: boolean; allowed_tasks?: string[]; blocked_tasks?: string[]; red_lines?: string[];
-  health?: { connected?: boolean; checked_at?: string; last_checked_at?: string; last_error?: string | null; last_error_type?: string | null; chat_completion_ok?: boolean };
-  last_success?: { at?: string } | null; recent_failure?: { at?: string; error_type?: string; error_summary?: string } | null;
-}
-const yn = (v?: boolean) => (v === undefined ? "未上报" : v ? "是" : "否");
-/** 模型健康：中文状态 + 摘要；字段级原文折叠在「诊断原文」。探测时间只认 health 自己的时间，不拿最近成功冒充。 */
-function LlmStatusSummary({ d }: { d: LlmStatus }) {
-  const probe = d.health?.connected;
-  const probeAt = d.health?.checked_at ?? d.health?.last_checked_at;
-  return (
-    <div data-testid="llm-status-summary">
-      <p><Chip tone={probe ? "ok" : probe === false ? "danger" : "info"}>{probe ? "连接探测正常" : probe === false ? "连接探测失败" : "探测未上报"}</Chip>{" "}
-        <span className="muted">{d.provider ?? "未上报"} / {d.model ?? "未上报"}{d.provider_type ? `（${d.provider_type}）` : ""} · 最近检测{probeAt ? `：${fmtTime(probeAt)}` : "（时间未上报）"}</span></p>
-      <KeyValues items={[
-        ["已启用", yn(d.enabled)], ["安全模式", yn(d.safe_mode)], ["密钥", d.key_configured ? `已配置（${d.key_source ?? "来源未上报"}）` : "未配置"],
-        ["配置来源", d.config_source ?? "未上报"], ["提示缓存", yn(d.prompt_cache_enabled)], ["支持图像", yn(d.vision_supported)],
-        ["最近成功", d.last_success?.at ? fmtTime(d.last_success.at) : "未上报"],
-        ["最近失败", d.recent_failure?.at ? `${fmtTime(d.recent_failure.at)}${d.recent_failure.error_type ? ` · ${d.recent_failure.error_type}` : ""}` : "无"],
-        ["探测错误", d.health?.last_error ? `${d.health.last_error_type ?? ""} ${d.health.last_error}` : "无"],
-        ["允许的模型任务", `${d.allowed_tasks?.length ?? 0} 项`], ["禁止的模型任务", `${d.blocked_tasks?.length ?? 0} 项`], ["红线", `${d.red_lines?.length ?? 0} 条`],
-      ]} />
-      {d.connected !== undefined && probe !== undefined && d.connected !== probe ? <p className="readback-note is-warn">顶层 connected={String(d.connected)} 与探测 health.connected={String(probe)} 不一致，以探测为准。</p> : null}
-    </div>
-  );
-}
-
 export function SettingsPage() {
   const { auth } = useShell();
   const admin = isAdmin(auth);
-  const platform = auth.platform_admin === true;
-  const [list, reload] = useApi("/api/agent/llm/providers");
-  const [status] = useApi("/api/agent/llm/status");
-  const [edit, setEdit] = useState<Provider | "new" | null>(null);
-  const [del, setDel] = useState<Provider | null>(null);
-  const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
-  const [test, setTest] = useState<HttpOutcome | null>(null);
-  const active = list.state === "ok" ? String((list.data as { active?: string }).active ?? "") : "";
   return (
     <div className="page" data-testid="settings-page">
-      <PageHeader title={NAMES.settings} subtitle={admin ? "配置助手使用的模型服务。" : "查看助手使用的模型服务（修改需要管理员）。"}>
-        {admin ? <Button variant="primary" onClick={() => setEdit("new")} data-testid="provider-new">新增 Provider</Button> : null}
-      </PageHeader>
-      <section className="card"><h3>模型健康</h3><LoadState value={status}>{(d) => <><LlmStatusSummary d={d as LlmStatus} /><RawData value={d} path="/api/agent/llm/status" label="诊断原文" /></>}</LoadState>
-        <Button onClick={async () => setTest(await api.post("/api/agent/llm/test", { message: "ping" }))}>测试当前 Provider</Button>
-        {test ? (test.kind === "http" && test.status < 300 ? <><p data-testid="llm-test-result">{(test.body as { ok?: boolean })?.ok === false ? "测试未通过" : "测试已完成"}{(test.body as { message?: string; reply?: string })?.message || (test.body as { reply?: string })?.reply ? `：${(test.body as { message?: string; reply?: string }).message ?? (test.body as { reply?: string }).reply}` : ""}</p><RawData value={test.body} label="诊断原文（测试响应）" /></> : <FailureNote outcome={test} />) : null}
-      </section>
-      <Result r={r} />
-      <LoadState value={list} onReload={reload}>{() => (
-        <Table testId="providers-table" rows={listOf<Provider>(list, "providers")} rowKey={(p) => p.provider}
-          columns={[
-            { key: "name", label: "Provider", render: (p) => <>{p.label ?? p.provider} {p.provider === active || p.is_active ? <Chip tone="ok">当前</Chip> : null}</> },
-            { key: "model", label: "模型", render: (p) => p.model ?? "—" },
-            { key: "url", label: "地址", render: (p) => p.base_url ?? "—" },
-            { key: "key", label: "密钥", render: (p) => (p.key_configured ? `已配置 ${p.key_preview ?? ""}` : "未配置") },
-            { key: "act", label: "", render: (p) => admin ? <span className="row-actions">
-              {p.provider !== active ? <Button onClick={async () => { setR({ label: "切换", o: await api.post("/api/agent/llm/activate", { provider: p.provider }) }); reload(); }}>设为当前</Button> : null}
-              <Button onClick={() => setEdit(p)}>编辑</Button>
-              {p.provider !== active ? <Button variant="ghost" onClick={() => setDel(p)}>删除</Button> : null}
-            </span> : null },
-          ]} />
-      )}</LoadState>
-      {edit ? <ProviderDialog provider={edit === "new" ? null : edit} platform={platform} onClose={() => setEdit(null)} onSaved={(o) => { setR({ label: "保存", o }); setEdit(null); reload(); }} /> : null}
-      {del ? <ConfirmDialog title="删除 Provider？" details={<p>将删除「{del.label ?? del.provider}」的配置（含已保存的密钥）。</p>} confirmText={del.provider} confirmLabel="删除"
-        onCancel={() => setDel(null)} onConfirm={async () => { const p = del; setDel(null); setR({ label: "删除", o: await api.del(`/api/agent/llm/providers/${enc(p.provider)}`) }); reload(); }} /> : null}
+      <PageHeader title={NAMES.settings} subtitle={admin ? "模型服务：助手当前使用的模型，以及可以切换或接入的服务。" : "查看助手使用的模型服务（修改需要管理员）。"} />
+      <ModelSettings admin={admin} platform={auth.platform_admin === true} />
     </div>
-  );
-}
-
-function ProviderDialog({ provider, platform, onClose, onSaved }: { provider: Provider | null; platform: boolean; onClose: () => void; onSaved: (o: HttpOutcome) => void }) {
-  const [f, setF] = useState({ provider: provider?.provider ?? "", label: provider?.label ?? "", provider_type: provider?.provider_type ?? provider?.protocol ?? "openai_compatible", base_url: provider?.base_url ?? "", model: provider?.model ?? "", api_key: "" });
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
-  return (
-    <Dialog title={provider ? `编辑 ${provider.label ?? provider.provider}` : "新增 Provider"} onClose={onClose} footer={<>
-      <Button onClick={onClose}>取消</Button>
-      <Button variant="primary" onClick={async () => {
-        const body: Record<string, unknown> = { label: f.label, provider_type: f.provider_type, base_url: f.base_url, model: f.model };
-        if (f.api_key) body.api_key = f.api_key;
-        onSaved(provider ? await api.post(`/api/agent/llm/providers/${enc(provider.provider)}`, body) : await api.post("/api/agent/llm/providers", { ...body, provider: f.provider }));
-      }}>保存</Button></>}>
-      {!provider ? <label className="field"><span>Provider id</span><input value={f.provider} onChange={set("provider")} /></label> : null}
-      <label className="field"><span>名称</span><input value={f.label} onChange={set("label")} /></label>
-      <label className="field"><span>协议</span><input value={f.provider_type} onChange={set("provider_type")} /></label>
-      <label className="field"><span>地址</span><input value={f.base_url} onChange={set("base_url")} disabled={!platform && !!provider} /></label>
-      <label className="field"><span>模型</span><input value={f.model} onChange={set("model")} /></label>
-      <label className="field"><span>API Key（留空不修改；不会回显）</span><input type="password" autoComplete="new-password" value={f.api_key} onChange={set("api_key")} /></label>
-      {!platform ? <p className="muted">非平台管理员不能修改已有 Provider 的地址。</p> : null}
-    </Dialog>
   );
 }
 

@@ -13,7 +13,7 @@ export interface NetworkSkill {
 }
 // 领域表单选项；保存与执行的最终校验仍由 network_records / network_inventory 完成。
 const BASE_TOOL = "network.operations.device.manage";
-const TOOLS = [
+export const TOOLS = [
   [BASE_TOOL, "设备读取与配置（内置）"],
   ["network.operations.devices_read", "设备与连接目录"],
   ["network.operations.skills_read", "Skill 配置读取"],

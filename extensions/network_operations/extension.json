@@ -1,6 +1,6 @@
 {
   "extension_id": "network.operations",
-  "name": "网络设备与 Skill",
+  "name": "网络运维",
   "version": "3.1.2",
   "api_version": "1",
   "min_platform_version": "1.1.0",
@@ -57,10 +57,18 @@
     {
       "path": "/extensions/network.operations/manage",
       "module": "frontend/NetworkOperations.tsx",
-      "label": "网络设备与 Skill",
-      "description": "登记设备、验证连接并配置工作台 Skill",
+      "label": "网络设备",
+      "description": "登记设备、验证连接、查看拓扑与巡检",
       "icon": "probe",
       "order": 30
+    },
+    {
+      "path": "/extensions/network.operations/skills",
+      "module": "frontend/NetworkOperations.tsx",
+      "label": "网络 Skill",
+      "description": "编排设备操作 Skill 与巡检脚本，发布到工作台",
+      "icon": "spark",
+      "order": 31
     }
   ],
   "entrypoint": "backend.py:register",
