@@ -47,6 +47,8 @@
 
 读取经 `frontend/src/kit/useApi.ts`：同 key 合并请求、缓存后台刷新、超过 3 秒提示较慢、刷新失败保留上次数据并标明可能过期；退出登录清空缓存。待核对优先读 `/api/runtime/session-tasks`，旧后端回退逐会话 task-state。
 
+待核对页（`/review`，`pages/ReviewBulk.tsx`）用 Arc 可排序表格列出写操作账本、审阅项和结果未知的任务，可按来源筛选、搜索、多选后批量标记「已生效 / 未生效」：写操作走 `POST /api/admin/operation-ledger/<id>/resolve`（`RESOLVE <id>` 确认），审阅项走 `PUT /api/review-items/<id>`（accepted / modified）。批量前必须填写核对说明并输入「标记 N 项」；逐条顺序提交，失败逐条列出，只更新核对记录，不重试、不回滚、不下发操作。任务和已阻断的写操作不能批量标记，需单独处理。
+
 助手终态使用既有安全 Markdown 渲染，流式阶段保留轻量纯文本路径。布局按可用宽度将导航、会话与进度移入抽屉，关闭恢复焦点；宽桌面保留辅助栏。
 
 ## 启动与验证

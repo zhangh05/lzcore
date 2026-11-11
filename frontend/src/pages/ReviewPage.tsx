@@ -1,10 +1,11 @@
 import { useMemo } from "react";
+import { Button } from "../components/Button";
 import { PageHeader } from "../components/EmptyState";
-import { InboxList } from "../app/InboxList";
 import { useShell } from "../app/shellContext";
 import { NAMES } from "../contracts/naming";
 import { UNKNOWN_FLOW_COPY } from "../contracts/unknownFlow";
 import { useSearchParams } from "../router";
+import { ReviewBulk } from "./ReviewBulk";
 import { ReviewDetail, targetFromParams } from "./ReviewDetail";
 
 /**
@@ -21,13 +22,13 @@ export function ReviewPage() {
   const target = useMemo(() => (workspaceId ? targetFromParams(params, workspaceId) : null), [key, workspaceId]);
   return (
     <div className="page" data-testid="review-page">
-      <PageHeader title={NAMES.reviewInbox} subtitle="需要你确认的事项：结果未知的写入、待审阅的内容和状态不明的任务。">
-        <button type="button" className="btn" onClick={refreshInbox}>重新读取</button>
+      <PageHeader title={NAMES.reviewInbox} subtitle="结果不确定的写操作、待审阅的内容和状态不明的任务。可以逐条核对，也可以勾选后批量标记。">
+        <Button onClick={refreshInbox}>重新读取</Button>
       </PageHeader>
       <p className="inline-alert tone-unknown" role="note">{UNKNOWN_FLOW_COPY.rule}</p>
       {highlight ? <p className="inline-alert tone-info" role="status" data-testid="review-focus">已定位：{highlight}</p> : null}
       {target ? <ReviewDetail target={target} sessionId={params.get("session")} /> : null}
-      <InboxList highlight={highlight} />
+      <ReviewBulk highlight={highlight} />
     </div>
   );
 }

@@ -231,6 +231,22 @@
   /* Arc MetricCard 一行：等高、自动换行（composition.md：minmax(200px, 1fr)）。 */
   .metric-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-4); }
   .metric-row > * { min-width: 0; }
+  /* 待核对批量管理：Arc SegmentedControl / SearchField / SortableDataTable / Dialog，这里只排版。 */
+  .review-bulk { display: flex; flex-direction: column; gap: var(--space-3); }
+  .review-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .review-search { flex: 0 1 320px; min-width: 200px; }
+  .bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: 44px; padding: var(--space-2) var(--space-3); border: 1px solid var(--line-2); border-radius: var(--r-card); background: var(--surface-2); font-size: var(--fs-sm); }
+  .bulk-bar.is-active { border-color: color-mix(in oklab, var(--accent) 35%, var(--line-2)); background: var(--accent-soft); }
+  .review-cell { display: flex; flex-direction: column; min-width: 0; }
+  .review-cell .muted { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .review-cell.is-highlighted strong { color: var(--accent-2); }
+  .review-link { white-space: nowrap; font-size: var(--fs-sm); }
+  .bulk-failures { margin: var(--space-1) 0 0; padding-left: var(--space-5); }
+  .bulk-dialog { display: flex; flex-direction: column; gap: var(--space-3); }
+  .bulk-groups { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line-2); border-radius: var(--r-control); }
+  .bulk-groups li { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); font-size: var(--fs-sm); }
+  .bulk-groups li + li { border-top: 1px solid var(--line-2); }
+  .bulk-dialog-foot { display: flex; justify-content: flex-end; gap: var(--space-2); }
   @media (max-width: 640px) { .metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); } }
   .inv-search { flex: 0 1 320px; min-width: 200px; }
 

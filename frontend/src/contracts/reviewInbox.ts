@@ -92,6 +92,10 @@ export interface InboxEntry {
   /** 唯一动作：去核对。永远没有一键重试。 */
   action: "verify";
   updatedAt?: string;
+  /** 审阅项所属的产出物（标记接口需要）。 */
+  artifactId?: string;
+  /** 能否人工标记结论（已阻断的写操作没有执行过，不能标记为已生效/未生效）。 */
+  markable?: boolean;
 }
 
 export type SourceStatus =
@@ -127,6 +131,8 @@ export function reviewItemEntries(items: ReviewItem[], ws: string): InboxEntry[]
     href: `/review?ws=${encodeURIComponent(ws)}&source=review_item&id=${encodeURIComponent(i.item_id)}&artifact=${encodeURIComponent(i.artifact_id)}`,
     action: "verify" as const,
     updatedAt: i.updated_at,
+    artifactId: i.artifact_id,
+    markable: true,
   }));
 }
 
@@ -142,6 +148,7 @@ export function ledgerEntries(ops: LedgerOperation[], ws: string): InboxEntry[] 
     href: `/review?ws=${encodeURIComponent(ws)}&source=ledger&id=${encodeURIComponent(o.operation_id)}`,
     action: "verify" as const,
     updatedAt: o.updated_at,
+    markable: o.status !== "blocked",
   }));
 }
 
