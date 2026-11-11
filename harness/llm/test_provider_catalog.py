@@ -238,3 +238,17 @@ def test_provider_enum_values(catalog):
     response = client.get("/api/agent/llm/providers")
     ids = {item["provider"] for item in response.get_json()["providers"]}
     assert {"minimax", "openai", "deepseek", "ollama", "custom"} <= ids
+
+
+def test_probe_never_sends_saved_key_to_a_draft_address(catalog, protocol_server):
+    """Testing a new custom service with no key must not borrow the active vendor's key."""
+    client, _ = catalog
+    origin, requests = protocol_server
+    saved = add(client, base_url="https://saved-gateway.example/v1")
+    client.post("/api/agent/llm/activate", json={"provider": saved["provider"]})
+    response = client.post("/api/agent/llm/test", json={"provider_type": "openai_compatible", "base_url": origin + "/v1", "model": "gateway-model"})
+    assert response.status_code == 200
+    assert all("sk-test-catalog" not in str(r.get("authorization", "")) for r in requests)
+    typed = client.post("/api/agent/llm/test", json={"base_url": origin + "/v1", "model": "gateway-model", "api_key": "sk-typed-draft"})
+    assert typed.get_json()["llm_used"] is True
+    assert "sk-typed-draft" in requests[-1]["authorization"]

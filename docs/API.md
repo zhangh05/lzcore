@@ -23,7 +23,12 @@
 | `POST` | `/api/agent/llm/providers` | Add a named vendor with an explicit protocol and server-generated identity. |
 | `POST/DELETE` | `/api/agent/llm/providers/<provider_id>` | Provider save/delete. |
 | `POST` | `/api/agent/llm/activate`, `/api/agent/llm/test` | Activate or test an LLM configuration. |
+| `POST` | `/api/agent/llm/models` | Discover a provider's available models for the settings picker. |
 | `GET` | `/api/agent/llm/status` | Safe LLM availability projection. |
+
+`POST /api/agent/llm/models` 接受可选 JSON 字段 `provider`（已保存的厂商 ID，默认当前厂商）、`provider_type`（`openai_compatible` 或 `anthropic_messages`）、`base_url`、`api_key`。从厂商配置合并草稿；仅个人模式或 identity 下启用的 owner/admin 可覆盖草稿，其他调用仅采用 `provider`。identity 下端点沿用 LLM 配置写入的管理员鉴权，普通用户返回 403。请求不保存或激活配置。
+
+成功返回 `{"ok":true,"models":[{"id":"model-id","label":"model-id","owned_by":"vendor"}],"source":"gateway.example"}`；`owned_by` 可省略，Anthropic 使用 `display_name` 作为 label，source 仅含主机名。结果按 ID 排序去重，最多 500 项；兼容 OpenAI `data[]` 与 Ollama `models[]`，Anthropic 使用 `/v1/models`（已有 `/v1` 时不重复）。查询超时 10 秒、响应上限 2 MB。厂商 HTTP/网络错误返回 HTTP 200、`ok:false` 和脱敏短错误，厂商 HTTP 错误另带 `http_status`；配置无效返回 400（`errors`），未知厂商返回 404（`error: "unknown provider"`）。
 
 HTTP message 带 session_id 和 client_request_id 时，实际 Agent 运行绑定已认领的 session job：阶段事件更新该回合，取消检查读取同一作业。回合结束恢复原事件回调，过期回调不更新后续请求。HTTP 响应仍是整轮结果，不因此提供 token 续流。
 

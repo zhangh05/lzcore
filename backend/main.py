@@ -21,7 +21,7 @@ from flask import Flask, jsonify, request
 
 from backend.api.version import get_version
 from backend.api.llm_api import (
-    handle_llm_status, handle_llm_test,
+    handle_llm_status, handle_llm_test, handle_llm_models,
     handle_llm_config_get, handle_llm_config_post, handle_llm_config_delete,
     handle_providers_list, handle_provider_get, handle_provider_save,
     handle_provider_delete, handle_llm_activate, handle_provider_create,
@@ -243,6 +243,10 @@ def create_app():
     @app.route("/api/agent/llm/test", methods=["POST"])
     def api_agent_llm_test():
         return handle_llm_test()
+
+    @app.route("/api/agent/llm/models", methods=["POST"])
+    def api_agent_llm_models():
+        return handle_llm_models()
 
     @app.route("/api/agent/llm/config")
     def api_agent_llm_config_get():

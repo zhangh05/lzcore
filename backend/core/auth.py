@@ -724,7 +724,8 @@ def _request_workspace_id() -> str:
         values.append(query_value)
     if flask.request.is_json:
         data = flask.request.get_json(silent=True) or {}
-        json_value = str(data.get("workspace_id") or "").strip()
+        # Let the route validate non-object JSON rather than failing before it.
+        json_value = str(data.get("workspace_id") or "").strip() if isinstance(data, dict) else ""
         if json_value:
             values.append(json_value)
     else:
