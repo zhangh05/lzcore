@@ -56,7 +56,7 @@ describe("拓扑画布（旧编辑器迁入扩展区）", () => {
     expect(confirmSpy).toHaveBeenCalledWith("拓扑有未保存的改动，确定离开吗？");
     expect(window.location.pathname).toBe("/extensions/network.operations/manage");
     // 切到同页别的 tab 也要确认
-    fireEvent.click(screen.getByRole("tab", { name: "设备" }));
+    fireEvent.click(screen.getByRole("tab", { name: /^设备/ }));
     expect(confirmSpy).toHaveBeenCalledTimes(2);
     expect(new URLSearchParams(window.location.search).get("tab")).toBe("topologies");
 

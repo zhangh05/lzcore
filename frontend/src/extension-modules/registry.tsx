@@ -32,7 +32,7 @@ export const EXTENSION_MODULES: Record<string, ExtensionModule> = {
   "network.operations": {
     extensionId: "network.operations",
     sessionBinding: drawingSessionBinding,
-    pages: { "/extensions/network.operations/manage": NetworkOperationsModule },
+    pages: { "/extensions/network.operations/manage": NetworkOperationsModule, "/extensions/network.operations/skills": NetworkOperationsModule },
     evidence: [{
       match: matchNetworkEvidence,
       render: (ws, _key, call) => <NetworkEvidence ws={ws} toolId={call.tool_id} result={call.result} />,

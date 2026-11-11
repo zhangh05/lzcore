@@ -80,7 +80,7 @@ EXTENSIONS = [
     {
         "extension_id": "network.operations", "name": "网络扩展（合成）", "version": "0.0.0-mock",
         "description": "合成的不可用扩展（仅 mock 数据，不加载任何真实扩展代码）。", "capabilities": [], "tools": [],
-        "frontend_routes": [{"path": "/extensions/network.operations/manage", "label": "网络 Skill 管理", "description": "合成", "icon": "probe", "order": 30}],
+        "frontend_routes": [{"path": "/extensions/network.operations/manage", "label": "网络 Skill 管理", "description": "合成", "icon": "probe", "order": 30}, {"path": "/extensions/network.operations/skills", "label": "网络 Skill", "description": "合成", "icon": "spark", "order": 31}],
         "workflow_templates": [], "permissions": [], "metadata": {"minimum_role": "viewer"}, "source": "bundled",
         "lifecycle": {"extension_id": "network.operations", "enabled": True, "status": "failed", "failure_count": 3, "last_error": "依赖未就绪（合成原因）"},
     },

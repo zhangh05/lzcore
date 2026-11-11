@@ -11,12 +11,13 @@
 | 文件、知识、记忆 | /library/files、/library/knowledge、/library/memory |
 | 工作流 | /workflows |
 | 扩展目录 | /extensions |
-| 网络扩展 | /extensions/network.operations/manage |
+| 网络设备（清单、拓扑、巡检、上下文） | /extensions/network.operations/manage |
+| 网络 Skill（Skill、巡检脚本） | /extensions/network.operations/skills |
 | 系统状态与设置 | /system、/system/settings |
 | 身份与工作区 | /system/users、/system/workspaces |
 | 备份、生态与 worker | /system/backups、/system/ecosystem、/system/workers |
 
-网络扩展 UI 通过 `frontend/src/extension-modules/registry.tsx` 挂载。设备、连接、Skill 与图纸仍由扩展后端管理，前端不能授予权限。网络扩展的当前产品 UI 在 frontend/src/extension-modules/network-operations；根 extensions/network_operations/frontend 仅保留旧版回退桥接。
+网络扩展 UI 通过 `frontend/src/extension-modules/registry.tsx` 挂载。设备、连接、Skill 与图纸仍由扩展后端管理，前端不能授予权限。网络扩展的当前产品 UI 在 frontend/src/extension-modules/network-operations；根 extensions/network_operations/frontend 仅保留旧版回退桥接。两个入口来自扩展清单的两条 `frontend_routes`，挂同一模块，按挂载路径分派到设备工作区或 Skill 工作区；旧深链 `/manage?tab=skills|scripts` 自动跳到 `/skills`。改清单后需重启后端（扩展清单有缓存）。
 
 ## 视觉系统
 
@@ -29,6 +30,9 @@
 - 页头：标题 + 一句面向用户的说明，页面级主操作放在页头右侧；单独一个主按钮的操作行靠右。
 - 系统等多子页入口用 `app/SystemLayout.tsx`：主导航只占一项，子页导航在页内左栏（非管理员看不到管理页），窄屏变为横向滚动条。
 - 画布型扩展页（网络扩展「拓扑」）：页头只留给读屏，位置由面包屑表达，页签贴顶，画布铺满主区且主区不滚动；画布外围工具栏收紧。
+- 网络设备：顶部「设备概览」四格（设备数、连接健康条、需关注、最近巡检），下方主从布局——左侧设备清单带搜索与健康筛选（全部 / 需关注 / 未测试），右侧设备详情；连接以卡片挂在所属设备下，测试、指纹确认、删除都在卡片里完成，选中设备存在 `?device=`。
+- 网络 Skill：顶部三步流程（设备与连接 → 编排 Skill → 发布到工作台）带实时计数，Skill 与巡检脚本以卡片网格呈现，卡片给出发布状态、范围计数、审批标记、工具与命令预览。
+- 模型服务（`pages/system/ModelSettings.tsx`）：顶部「当前模型」卡显示状态、端点与一键连通测试（含耗时）；下方分「已接入」（有密钥、当前、本机地址或自定义的服务）与「添加模型服务」画廊。点画廊或「配置」打开侧边抽屉：协议、名称、API Key（可显隐）、模型（带建议），高级项收起地址、温度与 max_tokens；「测试连接」用抽屉里的草稿参数直接探测，不落盘；可「保存」或「保存并设为当前」。非平台管理员不能改已有服务的地址。
 - 强调色为 Arc `blue`（`index.html` 的 `data-accent`）：主按钮、当前导航、页签指示、链接与焦点用强调色，结构保持中性。拓扑画布的选中色随之取同一值，测试按 `data-accent` 解析校验。
 
 ## 框架合同
