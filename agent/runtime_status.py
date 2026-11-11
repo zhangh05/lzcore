@@ -1,12 +1,12 @@
 # agent/runtime_status.py
 """Agent runtime status."""
 
-def get_runtime_status() -> dict:
+def get_runtime_status(*, probe_llm: bool = True) -> dict:
     """Report agent runtime status."""
     from agent.capabilities.catalog import list_enabled
 
     from agent.llm.runtime import get_llm_status
-    llm_status = get_llm_status()
+    llm_status = get_llm_status() if probe_llm else get_llm_status(probe_provider=False)
 
     # Supported intents.
     supported_intents = [

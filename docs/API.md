@@ -31,6 +31,8 @@ HTTP `/api/agent/message` 和 WebSocket `message` 均接受 `metadata.resume_tas
 
 Provider 的有界空响应重试及候选回退耗尽后，返回 `llm_empty_response`，用户目标记为失败；QueryLoop 不再无限重发。输出截断走原有续接，未完成的工具参数不执行，不能把截断或空响应记为成功。
 
+个人模式（未启用 token/login/identity）的 `/api/auth/status` 仅在请求来源为回环地址时投影 `platform_admin=true`。显式开放 LAN 无认证访问不授予管理员能力；有效 API token 仍投影管理员能力，identity 会话沿用其已有 owner 权限规则。此投影不代替特权写入的服务端校验。
+
 ### WebSocket 与持久回合
 
 /ws/agent 接受 ping、message、resume。message 发起一次请求，resume 带 workspace_id/session_id/client_request_id/stream_seq，只读取 seq 大于游标的日志帧，不重新提交消息或执行工具。done/error 也占正文序号，心跳不入日志。
@@ -55,6 +57,7 @@ topology_updated 仅带 workspace_id/topology_id/version；job_updated 合并最
 | --- | --- | --- |
 | `GET` | `/api/runtime/summary`, `/api/runtime/health`, `/api/runtime/selfcheck` | Runtime catalog and health/self-check. |
 | `GET` | `/api/runtime/tasks`, `/api/runtime/tasks/<task_id>` | Durable runtime task list/detail. |
+| `GET` | `/api/runtime/session-tasks` | Aggregate session TaskState summaries; requires workspace_id, optional status and limit. |
 | `GET` | `/api/runtime/sessions/<session_id>/task-state`, `/api/runtime/sessions/<session_id>/coding-projects` | Principal/workspace-scoped generic task and project/phase facts; requires workspace_id. |
 | `GET` | `/api/runtime/tasks/<task_id>/events`, `/api/runtime/tasks/<task_id>/checkpoints` | Task event and checkpoint history. |
 | `POST` | `/api/runtime/tasks/<task_id>/cancel`, `/api/runtime/tasks/<task_id>/resume`, `/api/runtime/tasks/<task_id>/checkpoint` | Task lifecycle control. |
@@ -63,6 +66,33 @@ topology_updated 仅带 workspace_id/topology_id/version；job_updated 合并最
 | `GET` | `/api/runtime/trajectories`, `/api/runtime/trajectories/<traj_id>` | Runtime trajectory projections. |
 | `POST` | `/api/context/build`, `/api/context/resolve`, `/api/prompts/render` | Governed context/prompt operations. |
 | `GET` | `/api/context/status`, `/api/prompts`, `/api/prompts/<prompt_id>`, `/api/harness/status` | Context, prompt and harness projections. |
+
+`GET /api/runtime/session-tasks?workspace_id=<ws>&status=active&limit=50` 按当前认证主体和工作区读取会话，按会话 `updated_at` 降序排列。`status` 默认为 `active`，也支持 `archived`、`deleted`；它筛选会话状态，不筛选任务状态。`limit` 必须为 1..200 的整数，默认 50；非法参数返回 400。复用单会话 `task-state` 的 `load_task_state`，不重新推断任务或 unknowns，已 reconciled 的 unknown 不计入。
+
+```json
+{
+  "ok": true,
+  "workspace_id": "example-ws",
+  "items": [{
+    "session_id": "example-session",
+    "title": "核对任务",
+    "updated_at": "2026-11-10T00:00:00+00:00",
+    "task": {
+      "task_id": "example-task",
+      "objective": "核对外部写入结果",
+      "status": "partial",
+      "unknowns": [{"kind": "external_write", "reason": "read_back_required"}]
+    }
+  }],
+  "sessions_scanned": 1,
+  "truncated": false,
+  "errors": []
+}
+```
+
+`sessions_scanned` 包括无任务和读取失败的会话，无任务不加入 `items`。扫描会话数达到 limit 时 `truncated=true`，表示可能不完整（即使恰好等于总数）。单个 TaskState 读取失败只加入 `errors: [{"session_id": "...", "reason": "task_state_read_failed"}]`，其余会话正常返回；不返回含本地路径或凭据的原始异常。
+
+`/api/runtime/health` 保持 `components` / `summary` 结构。其 agent 和 llm 组件读取运行时及当前 LLM 配置，不发送 Provider HEAD、models 或 chat completion 探测；llm 的 `ok` 表示配置摘要可读取，不证明模型连通或可用。需要实际 Provider 连通证据时使用现有 LLM status/test 接口。生产依赖组件仍执行各自 readiness 检查。
 
 ### 任务结果与恢复
 

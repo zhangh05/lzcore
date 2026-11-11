@@ -163,8 +163,7 @@ def deny_remote_admin_write() -> flask.Response | None:
     """
     if _request_has_valid_api_token() or is_current_session_authenticated():
         return None
-    remote = str(flask.request.remote_addr or "").strip().strip("[]").lower()
-    if remote == "localhost" or remote == "::1" or remote.startswith("127."):
+    if _is_loopback_host(flask.request.remote_addr or ""):
         return None
     return flask.jsonify({
         "ok": False,
@@ -240,11 +239,13 @@ def handle_auth_status():
     api_token_authenticated = _request_has_valid_api_token()
     session_authenticated = is_current_session_authenticated()
     authenticated = session_authenticated or api_token_authenticated
-    # Project the personal-mode authority already enforced by before_request.
+    # Project the loopback personal-mode authority used by privileged writes.
     # Token/login/identity deployments must never inherit this UI capability.
     personal_mode = not (_is_auth_enabled() or _is_login_enabled() or _is_identity_enabled())
-    platform_admin = api_token_authenticated or personal_mode
-    if session_authenticated and _is_identity_enabled():
+    platform_admin = api_token_authenticated or (
+        personal_mode and _is_loopback_host(flask.request.remote_addr or "")
+    )
+    if session_authenticated and _is_identity_enabled() and not api_token_authenticated:
         try:
             from backend.core.identity import get_user
             current = get_user(str(flask.session.get("lzcore_user") or ""))

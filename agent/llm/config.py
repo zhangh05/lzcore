@@ -114,7 +114,7 @@ def resolve_provider_config(llm_config: dict = None) -> dict:
     return result
 
 
-def get_llm_status() -> dict:
+def get_llm_status(*, probe_provider: bool = True) -> dict:
     """Get full LLM status for /api/agent/llm/status."""
     cfg = load_llm_config()
     provider = resolve_provider_config(cfg)
@@ -122,7 +122,9 @@ def get_llm_status() -> dict:
     from agent.llm.schemas import ALLOWED_TASKS, BLOCKED_TASKS
 
     key_loaded = provider.get("key_loaded", False) or is_key_loaded()
-    health = _provider_health(provider)
+    # Runtime health only projects configuration; connectivity belongs to the
+    # explicit LLM status/test APIs. A skipped probe is never proof of connection.
+    health = _provider_health(provider) if probe_provider else {}
     connected = _is_connected(provider, key_loaded, health)
 
     return {
