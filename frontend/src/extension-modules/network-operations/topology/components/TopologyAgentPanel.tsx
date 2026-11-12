@@ -51,7 +51,8 @@ export function TopologyAgentPanel({
   workspaceId: string;
   topology: Topology;
   selection: CanvasSelection;
-  onCompleted: () => void;
+  /** 回合终态后让画布回读服务端图纸；返回 false 表示回读失败。 */
+  onCompleted: () => void | Promise<boolean | void>;
   prepareDrawing?: () => Promise<Topology>;
   activities?: DrawingActivity[];
   onLocate?: (ids: string[]) => void;
@@ -66,7 +67,7 @@ export function TopologyAgentPanel({
   const [allowEdit, setAllowEdit] = useState(true);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
-  const [versionNote, setVersionNote] = useState<{ before: number; awaiting: boolean } | null>(null);
+  const [versionNote, setVersionNote] = useState<{ before: number; readback: "reading" | "done" | "failed" } | null>(null);
   const submittingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const transportRef = useRef<TurnTransport | null>(null);
@@ -87,7 +88,12 @@ export function TopologyAgentPanel({
     return () => { off = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, topology.topology_id]);
-  useEffect(() => { if (sessionId) void loadMessages(sessionId); }, [sessionId, loadMessages]);
+  // 首次发送时由 submit 新建会话：此时服务端还没有这轮消息，回读会把刚发出的用户消息冲掉；终态后 settle 会再回读。
+  const createdBySubmitRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionId || createdBySubmitRef.current === sessionId) return;
+    void loadMessages(sessionId);
+  }, [sessionId, loadMessages]);
 
   useEffect(() => {
     const t = new TurnTransport({
@@ -103,16 +109,23 @@ export function TopologyAgentPanel({
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, live?.text]);
 
-  // 画布回读到的版本号在 topology.version 上更新；回合结束后等它变化（或确认未变）。
-  useEffect(() => { if (versionNote?.awaiting && topology.version !== versionNote.before) setVersionNote({ ...versionNote, awaiting: false }); }, [topology.version, versionNote]);
+  // 画布回读（或实时推送）到的新版本落在 topology.version 上；变了就不必再等回读结果。
+  useEffect(() => { if (versionNote?.readback === "reading" && topology.version !== versionNote.before) setVersionNote({ ...versionNote, readback: "done" }); }, [topology.version, versionNote]);
+
+  // 画布按服务端版本回读（reconcileServerTopology），不在这里拼本地结果；读完才能下「有没有新版本」的结论。
+  const readbackDrawing = useCallback(async (before: number) => {
+    setVersionNote({ before, readback: "reading" });
+    let ok = false;
+    try { ok = (await onCompleted()) !== false; } catch { ok = false; }
+    setVersionNote((v) => v && v.before === before ? { before, readback: ok ? "done" : "failed" } : v);
+  }, [onCompleted]);
 
   const settle = useCallback(async (sid: string, before: number, note?: string) => {
     await loadMessages(sid);
     setLive(null);
     if (note) setError(note);
-    setVersionNote({ before, awaiting: true });
-    onCompleted(); // 画布按服务端版本回读（reconcileServerTopology），不在这里拼本地结果
-  }, [loadMessages, onCompleted]);
+    await readbackDrawing(before);
+  }, [loadMessages, readbackDrawing]);
 
   const running = !!live;
   const submit = async (request = input) => {
@@ -127,6 +140,7 @@ export function TopologyAgentPanel({
       if (!id) {
         id = await resolveTopologySession(workspaceId, topology, true);
         if (!id) { setError("无法创建本图的专属会话，指令尚未发送。"); return; }
+        createdBySubmitRef.current = id;
         setSessionId(id);
       }
       await ensureLocalBrowserToken();
@@ -224,9 +238,16 @@ export function TopologyAgentPanel({
         {live ? <div className="agent-msg is-assistant is-live" role="status">{live.text ? <div className="agent-msg-text">{live.text}</div> : null}<small className="agent-msg-meta">{live.status}</small></div> : null}
         {versionNote ? (
           <p className="agent-version-note" role="status" data-testid="agent-version-readback">
-            {versionNote.awaiting && topology.version === versionNote.before
-              ? `回合已结束；画布已按服务端回读，图纸仍为 v${topology.version}（发送时 v${versionNote.before}，本轮未产生新版本）。`
-              : `回合已结束；画布已回读服务端图纸 v${topology.version}（发送时 v${versionNote.before}）。`}
+            {topology.version !== versionNote.before
+              ? `回合已结束；画布已回读服务端图纸 v${topology.version}（发送时 v${versionNote.before}）。`
+              : versionNote.readback === "reading"
+                ? "回合已结束；正在回读服务端图纸…"
+                : versionNote.readback === "failed"
+                  ? `回合已结束，但服务端图纸回读失败，画布可能不是最新（仍显示 v${topology.version}）。`
+                  : `回合已结束；画布已按服务端回读，图纸仍为 v${topology.version}（发送时 v${versionNote.before}，本轮未产生新版本）。`}
+            {versionNote.readback === "failed" && topology.version === versionNote.before
+              ? <button type="button" className="btn ghost sm" onClick={() => void readbackDrawing(versionNote.before)}>重新回读图纸</button>
+              : null}
           </p>
         ) : null}
       </div>

@@ -116,10 +116,10 @@ export function useTopologyRevisions({
    * Merge over the confirmed baseline; preserve the local overlay and report
    * overlapping changes instead of replacing the drawing with an old snapshot.
    */
-  const reconcileRequestsRef = useRef(new Map<string, Promise<void>>());
+  const reconcileRequestsRef = useRef(new Map<string, Promise<boolean>>());
   const pendingReconcilesRef = useRef(new Set<string>());
   const reconcileServerTopology = useCallback(
-    (topologyId: string): Promise<void> => {
+    (topologyId: string): Promise<boolean> => {
       const requestedWorkspaceId = workspaceId;
       const key = JSON.stringify([requestedWorkspaceId, topologyId]);
       const inFlight = reconcileRequestsRef.current.get(key);
@@ -127,7 +127,8 @@ export function useTopologyRevisions({
         pendingReconcilesRef.current.add(key);
         return inFlight;
       }
-      const work = async () => {
+      // true：已回读（或已切走、无需再读）；false：读取失败，画布可能不是最新。
+      const work = async (): Promise<boolean> => {
         do {
           pendingReconcilesRef.current.delete(key);
           try {
@@ -140,9 +141,9 @@ export function useTopologyRevisions({
               requestedWorkspaceId !== workspaceIdRef.current ||
               activeTopologyRef.current?.topology_id !== topologyId
             )
-              return;
+              return true;
             if (!res.topology || res.topology.topology_id !== topologyId)
-              return;
+              return false;
             if (saveStatusRef.current === "saving") {
               await saveChainRef.current;
               pendingReconcilesRef.current.add(key);
@@ -151,13 +152,14 @@ export function useTopologyRevisions({
             }
           } catch {
             // Preserve the current drawing; a later broadcast/resume retries reads.
-            return;
+            return false;
           }
         } while (
           pendingReconcilesRef.current.has(key) &&
           requestedWorkspaceId === workspaceIdRef.current &&
           activeTopologyRef.current?.topology_id === topologyId
         );
+        return true;
       };
       const request = work().finally(() => {
         reconcileRequestsRef.current.delete(key);
@@ -171,8 +173,8 @@ export function useTopologyRevisions({
 
   const handleAgentCompleted = useCallback(async () => {
     const topologyId = activeTopologyRef.current?.topology_id;
-    if (!topologyId) return;
-    await reconcileServerTopology(topologyId);
+    if (!topologyId) return false;
+    return reconcileServerTopology(topologyId);
   }, [reconcileServerTopology]);
 
   useEffect(() => {
