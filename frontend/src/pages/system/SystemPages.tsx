@@ -412,17 +412,27 @@ export function BackupsPage() {
 export function EcosystemPage() {
   const { workspaceId: ws } = useShell();
   const [providers] = useApi(ws ? "/api/ecosystem/providers" : null, { workspace_id: ws ?? "" });
-  const [source, setSource] = useState("");
+  const [text, setText] = useState("");
   if (!ws) return null;
+  // 后端只接受结构化对象：{ providers: [{ name, ... }], memories: [{ content, ... }] }；不解析路径，也不导入 Skill。
+  const payload = (): { body?: Record<string, unknown>; error?: string } => {
+    try {
+      const v = JSON.parse(text || "{}");
+      return v && typeof v === "object" && !Array.isArray(v) ? { body: v } : { error: "需要一个 JSON 对象" };
+    } catch (e) { return { error: `JSON 格式不正确：${(e as Error).message}` }; }
+  };
+  const local = (error: string): HttpOutcome => ({ kind: "http", status: 400, body: { ok: false, error } });
   return (
     <AdminGate title={NAMES.ecosystem}>
       <div className="page" data-testid="ecosystem-page">
-        <PageHeader title={NAMES.ecosystem} subtitle="从外部导入 Skill 与工具配置，先预览、确认后再应用。" />
+        <PageHeader title={NAMES.ecosystem} subtitle="导入模型配置（providers）与记忆（memories），先预览、确认后再应用。" />
         <LoadState value={providers}>{(d) => <><ObjectView value={d} /><RawData value={d} path="/api/ecosystem/providers" /></>}</LoadState>
-        <label className="field"><span>导入源（provider / 路径）</span><input value={source} onChange={(e) => setSource(e.target.value)} /></label>
+        <label className="field"><span>导入内容（JSON）</span>
+          <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder='{"providers": [{"name": "..."}], "memories": [{"content": "..."}]}' data-testid="ecosystem-json" /></label>
+        <p className="muted">暂不支持按路径导入或导入 Skill。</p>
         <PreviewApply label="导入" testId="ecosystem-import"
-          preview={() => api.post("/api/ecosystem/import/preview", { source }, { workspace_id: ws })}
-          apply={() => api.post("/api/ecosystem/import/apply", { source, confirm: true }, { workspace_id: ws })}
+          preview={() => { const p = payload(); return p.body ? api.post("/api/ecosystem/import/preview", p.body, { workspace_id: ws }) : Promise.resolve(local(p.error!)); }}
+          apply={() => { const p = payload(); return p.body ? api.post("/api/ecosystem/import/apply", { ...p.body, confirm: true }, { workspace_id: ws }) : Promise.resolve(local(p.error!)); }}
           renderPreview={(b) => <><ObjectView value={b} /><RawData value={b} label="原始数据（预览响应）" /></>} />
       </div>
     </AdminGate>
