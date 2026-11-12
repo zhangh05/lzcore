@@ -227,7 +227,8 @@ def test_ws_worker_injects_cooperative_cancel_check(monkeypatch):
     assert check() is True
 
 
-def test_ws_live_tool_summary_preserves_complete_output(monkeypatch):
+@pytest.mark.parametrize("duration", [0, 12.5, -1, True, "12", None, float("inf"), float("nan")])
+def test_ws_live_tool_summary_preserves_complete_output(monkeypatch, duration):
     from backend.ws import agent_ws
     import agent.app.service as service
     from agent.runtime.stream_emitter import StreamEmitter
@@ -246,11 +247,13 @@ def test_ws_live_tool_summary_preserves_complete_output(monkeypatch):
 
     class FakeApp:
         def submit_user_message(self, **_kwargs):
-            StreamEmitter().emit("tool_result", {
-                "tool_id": "knowledge.manage",
-                "ok": True,
-                "summary": long_summary,
-            })
+            for event_type in ("tool_call", "tool_result"):
+                StreamEmitter().emit(event_type, {
+                    "tool_id": "knowledge.manage",
+                    "ok": True,
+                    "summary": long_summary,
+                    "duration_ms": duration,
+                })
             return FakeResult()
 
     monkeypatch.setattr(service, "get_default_agent_app", lambda: FakeApp())
@@ -262,9 +265,15 @@ def test_ws_live_tool_summary_preserves_complete_output(monkeypatch):
     messages = []
     while not event_queue.empty():
         messages.append(event_queue.get())
-    live = next(item for item in messages if item.get("type") == "event")
+    live_events = [item for item in messages if isinstance(item, dict) and item.get("name") in ("tool_call", "tool_result")]
     done = next(item for item in messages if item.get("type") == "done")
-    assert live["data"]["summary"] == long_summary
+    assert len(live_events) == 2
+    for live in live_events:
+        assert live["data"]["summary"] == long_summary
+        if type(duration) in (int, float) and 0 <= duration < float("inf"):
+            assert live["data"]["duration_ms"] == duration
+        else:
+            assert "duration_ms" not in live["data"]
     assert done["final_response"] == long_summary
 
 

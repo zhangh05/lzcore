@@ -109,7 +109,11 @@ def register_runtime_routes(app):
           ok=false, error="unknown_tool_id",
           message="Only canonical tool_id is supported."
         """
-        ws_id, err = _validated_ws_id(request.args.get("workspace_id", ""))
+        from backend.core.auth import request_workspace_id
+        try:
+            ws_id, err = _validated_ws_id(request_workspace_id())
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
         if err:
             return err
 

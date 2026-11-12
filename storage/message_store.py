@@ -243,6 +243,10 @@ class SessionMessageStore:
                                               "llm_metadata", "attachments", "tool_context",
                                               "history_state", "client_request_id", "provisional",
                                               "workbench_skill", "stage_outputs",
+                                              "execution_outcome", "unknown_outcome",
+                                              "tool_execution_outcome", "tool_calls",
+                                              "tool_calls_truncated", "task_id", "operation_id",
+                                              "cancelled", "output_artifacts",
                                               "redacted")
                         if k in meta
                     }

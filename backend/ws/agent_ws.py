@@ -945,6 +945,10 @@ def _run_agent_thread(
                         "summary": summary,
                         "call_id": event.get("call_id", ""),
                     }
+                    duration = event.get("duration_ms")
+                    if (isinstance(duration, (int, float)) and not isinstance(duration, bool)
+                            and 0 <= duration < float("inf")):
+                        data["duration_ms"] = duration
                 if isinstance(data, dict):
                     data = {
                         **data,

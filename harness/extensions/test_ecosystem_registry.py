@@ -2,6 +2,7 @@
 """Phase 11: MCP / Skill / Plugin ecosystem interface tests."""
 
 import uuid
+import pytest
 from core.tools.ecosystem import (
     ExternalToolManifest, ExternalProvider, EcoRegistry,
     validate_external_manifest, validate_skill_manifest,
@@ -142,3 +143,43 @@ class TestImport:
         )
         assert result["memories_imported"] == 0
         assert result["errors"]
+        assert result["ok"] is False and result["error"] == "import_failed"
+
+    @pytest.mark.parametrize("data,error", [
+        ({}, "nothing_to_import"),
+        ({"workspace_id": "ws_import", "confirm": True}, "nothing_to_import"),
+        ({"source": "https://example.invalid/import"}, "unsupported_field"),
+        ({"providers": [], "memories": [], "skills": []}, "nothing_to_import"),
+        ({"skills": [{"name": "not-implemented"}]}, "unsupported_field"),
+        ({"providers": [{"name": "must-not-import"}], "skills": [{"name": "unsupported"}]}, "unsupported_field"),
+        ({"providers": "bad-shape"}, "invalid_import_payload"),
+        ({"memories": [None]}, "invalid_import_payload"),
+        (["unsupported"], "invalid_import_payload"),
+        ({"providers": [{}]}, "invalid_import_payload"),
+        ({"providers": [{"unknown_field": "no name"}]}, "invalid_import_payload"),
+        ({"memories": [{"content": "   "}]}, "invalid_import_payload"),
+    ])
+    def test_unimportable_requests_fail_before_writes(self, data, error):
+        from flask import Flask
+        from backend.api.state_routes import register_state_routes
+
+        ws = "ws_import"
+        assert preview_import(data)["error"] == error
+        assert apply_import(data, ws, confirm=True)["error"] == error
+        app = Flask(__name__)
+        register_state_routes(app)
+        for action in ("preview", "apply"):
+            response = app.test_client().post(
+                f"/api/ecosystem/import/{action}?workspace_id={ws}&confirm=true", json=data,
+            )
+            assert response.status_code == 400
+            assert response.get_json()["ok"] is False
+            assert response.get_json()["error"] == error
+        assert EcoRegistry().list_providers(ws) == []
+
+    def test_preview_counts_supported_items_not_transport_keys(self):
+        data = {"providers": [{"name": "p1"}, {"name": "p2"}],
+                "memories": [{"content": "fact"}], "skills": [], "confirm": True, "workspace_id": "ws_count"}
+        preview = preview_import(data)
+        assert preview["ok"] is True
+        assert preview["item_count"] == 3

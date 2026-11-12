@@ -166,6 +166,62 @@ def _validated_limit(default=100, max_value=500):
         return None, _invalid_limit()
 
 
+def _create_report(ws_id: str, run_id: str, data: dict, *, use_run: bool):
+    """Adapt report HTTP requests to the current governed report tool."""
+    from core.tools.context import ToolRuntimeContext
+    from core.tools.integration import get_default_tool_runtime_client
+    from storage.redaction import redact_text
+    from storage.run_record_store import get_run
+
+    if data.get("format", "markdown") != "markdown":
+        return jsonify({"ok": False, "error": "unsupported_report_format"}), 400
+    if data.get("sensitivity", "internal") != "internal":
+        return jsonify({"ok": False, "error": "unsupported_field", "field": "sensitivity"}), 400
+    try:
+        run = get_run(run_id, ws_id) if run_id else None
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_run_id"}), 400
+    if run_id and not run:
+        return jsonify({"ok": False, "error": "run_not_found"}), 404
+    title = str(data.get("title") or ("Run report" if use_run else "Report"))
+    context = ToolRuntimeContext(
+        workspace_id=ws_id, run_id=run_id or None,
+        session_id=str((run or {}).get("session_id") or "") or None,
+        module="reports", requested_by="rest_api",
+    )
+    client = get_default_tool_runtime_client()
+
+    def failed(result):
+        return jsonify({"ok": False, "error": "report_generation_failed",
+                        "errors": result.errors, "status": result.status}), (403 if result.status == "blocked" else 500)
+
+    if use_run:
+        if not run:
+            return jsonify({"ok": False, "error": "run_id_required"}), 400
+        # The stored summary is the real run read-model. Never accept client
+        # supplied agent_result, tool output or goal verdicts as execution facts.
+        summary = str(run.get("final_response_summary") or "").strip()
+        if not summary:
+            return jsonify({"ok": False, "error": "run_report_content_unavailable"}), 409
+        facts = "\n".join(f"{key}: {run[key]}" for key in
+                          ("execution_outcome", "tool_execution_outcome") if run.get(key))
+        rendered = client.invoke("report.manage", {
+            "action": "document", "title": redact_text(title),
+            "summary": redact_text(f"{summary}\n\n{facts}"),
+        }, context=context)
+        if rendered.status != "succeeded":
+            return failed(rendered)
+        content = rendered.output.get("document", "")
+    else:
+        content = redact_text(str(data.get("content") or ""))
+    saved = client.invoke("report.manage", {
+        "action": "save", "title": redact_text(title), "content": content,
+    }, context=context)
+    if saved.status != "succeeded":
+        return failed(saved)
+    return jsonify({"ok": True, **saved.output, "format": "markdown", "run_id": run_id})
+
+
 def register_workspace_routes(app):
     """Register workspace, run, report, and trace API routes."""
 
@@ -451,40 +507,15 @@ def register_workspace_routes(app):
         workspace_id, err = _validated_ws_id(data.get("workspace_id", ""))
         if err:
             return err
-        from core.reports.schemas import ReportRequest
-        from core.reports.service import create_report as svc_create_report
-        req = ReportRequest(
-            workspace_id=workspace_id,
-            run_id=data.get("run_id", ""),
-            report_type=data.get("report_type", "generic"),
-            title=data.get("title", ""),
-            format=data.get("format", "markdown"),
-            sensitivity=data.get("sensitivity", "internal"),
-            content=data.get("content", ""),
-        )
-        result = svc_create_report(req)
-        return jsonify(result.as_dict())
+        return _create_report(workspace_id, str(data.get("run_id") or ""), data,
+                              use_run=not bool(data.get("content")))
 
     @app.route("/api/workspaces/<ws_id>/runs/<run_id>/report", methods=["POST"])
     def api_workspace_run_report(ws_id, run_id):
         ws_id, err = _validated_ws_id(ws_id)
         if err:
             return err
-        data = request.get_json(silent=True) or {}
-        from core.reports.schemas import ReportRequest
-        from core.reports.service import create_report
-        result = create_report(
-            ReportRequest(
-                workspace_id=ws_id,
-                run_id=run_id,
-                report_type=data.get("report_type", "generic"),
-                title=data.get("title", "Run report"),
-                format=data.get("format", "markdown"),
-                content=data.get("content", ""),
-            ),
-            data.get("agent_result", {}),
-        )
-        return jsonify(result.as_dict())
+        return _create_report(ws_id, run_id, request.get_json(silent=True) or {}, use_run=True)
 
     @app.route("/api/workspaces/<ws_id>/reports")
     def api_workspace_reports(ws_id):
