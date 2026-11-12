@@ -31,7 +31,13 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
   const [picker, setPicker] = useState<"files" | "resources" | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [skills] = useApi("/api/workbench/skills", { workspace_id: ws });
-  const skillList = listOf<Skill>(skills, "skills").filter((s) => s.extension_id && s.skill_id && Array.isArray(s.resources));
+  const catalog = listOf<Skill>(skills, "skills").filter((s) => s.extension_id && s.skill_id && Array.isArray(s.resources));
+  // 扩展绑定的会话（如拓扑绘图 drawing:<id>）刻意不进公共目录；绑定本身就是这条会话可用的 Skill，服务端发送时再校验。
+  const skillList: Skill[] = binding && !catalog.some((s) => s.extension_id === binding.extension_id && s.skill_id === binding.skill_id)
+    ? [{ extension_id: binding.extension_id, skill_id: binding.skill_id, name: binding.skill_name || binding.skill_id,
+        resources: binding.resource_ids.map((id) => ({ resource_id: id, name: id })), default_resource_ids: binding.resource_ids,
+        selection_mode: "single" as const }, ...catalog]
+    : catalog;
   const skill = skillList.find((s) => skillKey(s) === skillId);
   const validScope = skill?.resources.filter((r) => scope.includes(r.resource_id)).map((r) => r.resource_id) ?? [];
   const needsResources = !!skill && validScope.length === 0;

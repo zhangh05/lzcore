@@ -42,6 +42,8 @@ interface LiveTurn {
 }
 
 export const READBACK_INTERVAL_MS = 2500;
+/** 服务端按工作区广播、不带 client_request_id 的事件名。 */
+export const BROADCAST_EVENTS = new Set(["topology_updated"]);
 const OPEN = 1;
 
 export interface TransportOptions {
@@ -49,6 +51,8 @@ export interface TransportOptions {
   wsFactory?: WsFactory;
   /** 回读：返回 true 表示服务端已有该回合终态。 */
   readback: (sessionId: string, clientRequestId: string) => Promise<boolean>;
+  /** 工作区广播（如 topology_updated）：不属于任何回合，不能混进回合事件。 */
+  onBroadcast?: (name: string, data: Record<string, unknown>) => void;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
 }
@@ -59,6 +63,8 @@ export class TurnTransport {
   private reconnectHandle: unknown = null;
   private readbackHandle: unknown = null;
   private closedByUser = false;
+  /** 订阅了工作区广播（服务端要求连接先发 ping 注册，重连后要重新注册）。 */
+  private broadcastWorkspace: string | null = null;
   private retryDelay = 250;
   readonly sent: Frame[] = [];
 
@@ -80,6 +86,7 @@ export class TurnTransport {
     ws.onopen = () => {
       this.retryDelay = 250;
       this.stopReadback();
+      this.registerBroadcasts();
       // 只续传，不重放：对每个未终结的回合发 resume。
       for (const t of this.turns.values()) {
         if (t.terminal) continue;
@@ -115,6 +122,10 @@ export class TurnTransport {
     if (frame.type === "pong" || (frame.type === "event" && frame.name === "heartbeat")) return;
     const data = (frame.data && typeof frame.data === "object" ? frame.data : {}) as Record<string, unknown>;
     const id = String(frame.client_request_id || data.client_request_id || "");
+    if (frame.type === "event" && !id && BROADCAST_EVENTS.has(String(frame.name ?? ""))) {
+      this.opts.onBroadcast?.(String(frame.name), data);
+      return;
+    }
     let turn = id ? this.turns.get(id) : undefined;
     if (!turn && !id) {
       const open = [...this.turns.values()].filter((t) => !t.terminal);
@@ -173,6 +184,7 @@ export class TurnTransport {
       // 首次连接：在 open 时发送 message（这是首发，不是重放）。
       ws.onopen = (ev) => {
         ws.onopen = prevOpen;
+        this.registerBroadcasts();
         this.raw(frame);
         this.retryDelay = 250;
         for (const t of this.turns.values()) if (!t.terminal && t.clientRequestId !== turn.clientRequestId) {
@@ -182,6 +194,31 @@ export class TurnTransport {
       };
     }
     return turn.clientRequestId;
+  }
+
+  private registerBroadcasts() {
+    if (this.broadcastWorkspace) this.raw({ type: "ping", workspace_id: this.broadcastWorkspace });
+  }
+
+  /** 接收该工作区的广播（交给 onBroadcast）。会立即建立连接，断线后自动重连并重新注册。 */
+  subscribeBroadcasts(workspaceId: string): void {
+    this.broadcastWorkspace = workspaceId;
+    this.closedByUser = false;
+    const ws = this.ensureSocket();
+    if (ws.readyState === OPEN) this.registerBroadcasts();
+  }
+
+  /**
+   * 接上一个已在服务端执行的回合（例如页面重新挂载后）：只发 resume 从头续传，绝不重发 message。
+   */
+  resumeTurn(args: { workspaceId: string; sessionId: string; clientRequestId: string; handlers: TurnHandlers }): void {
+    if (this.turns.has(args.clientRequestId)) return;
+    this.closedByUser = false;
+    const turn: LiveTurn = { clientRequestId: args.clientRequestId, sessionId: args.sessionId, workspaceId: args.workspaceId, cursor: 0, terminal: false, handlers: args.handlers };
+    this.turns.set(turn.clientRequestId, turn);
+    const ws = this.ensureSocket();
+    // 未连上时由 onopen 统一对未终结回合发 resume。
+    if (ws.readyState === OPEN) this.raw({ type: "resume", workspace_id: turn.workspaceId, session_id: turn.sessionId, client_request_id: turn.clientRequestId, stream_seq: 0 });
   }
 
   hasOpenTurn(sessionId: string): boolean {

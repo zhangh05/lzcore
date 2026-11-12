@@ -10,7 +10,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, bodyOf, describeFailure, enc, stableId } from "../../../../api/client";
 import { ensureLocalBrowserToken } from "../../../../api/localAuth";
-import { TurnTransport, wsUrl, type Frame } from "../../../../realtime/turnTransport";
+import { TurnTransport, wsUrl, type Frame, type TurnHandlers } from "../../../../realtime/turnTransport";
+import { emitTopologyUpdated } from "../platform/realtime/turnTransport";
 import { renderMarkdown } from "../../../../utils/markdown";
 import { useNavigate } from "../platform/router";
 import { IconSparkle, IconClose, IconSend, IconStop } from "../platform/components/Icon";
@@ -102,10 +103,20 @@ export function TopologyAgentPanel({
         const o = await api.get(`/api/sessions/${enc(sid)}/messages`, { workspace_id: workspaceId });
         return (bodyOf<{ messages?: PanelMessage[] }>(o)?.messages ?? []).some((m) => m.role === "assistant" && m.metadata?.client_request_id === crid);
       },
+      // 助手每次写入图纸，服务端都会广播 topology_updated；转给画布，回合进行中就能看到图在长。
+      onBroadcast: (name, data) => { if (name === "topology_updated") emitTopologyUpdated(data); },
     });
     transportRef.current = t;
     return () => { t.close(); transportRef.current = null; };
   }, [workspaceId]);
+  // 有本图会话才可能有助手在写这张图（面板里或工作台里发起）：此时订阅工作区广播，画布随写入实时更新。
+  // 服务端在 ping / resume 上同样校验本机浏览器令牌，先确保拿到再连。
+  useEffect(() => {
+    if (!sessionId) return;
+    let off = false;
+    void ensureLocalBrowserToken().then(() => { if (!off) transportRef.current?.subscribeBroadcasts(workspaceId); }).catch(() => undefined);
+    return () => { off = true; };
+  }, [sessionId, workspaceId]);
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, live?.text]);
 
@@ -126,6 +137,40 @@ export function TopologyAgentPanel({
     if (note) setError(note);
     await readbackDrawing(before);
   }, [loadMessages, readbackDrawing]);
+
+  const turnHandlers = useCallback((sid: string, baseVersion: number): TurnHandlers => ({
+    onToken: (t) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
+    onEvent: (name, data) => setLive((l) => l && { ...l, jobId: String(data.job_id ?? l.jobId ?? "") || undefined, status: name === "tool_call" ? `调用工具 ${String(data.tool_id ?? "")}` : name === "model_started" ? "模型处理中" : l.status }),
+    onDone: () => void settle(sid, baseVersion),
+    onError: (f: Frame) => void settle(sid, baseVersion, `本轮报错：${String(f.message ?? f.error ?? "未知错误")}`),
+    onTransport: (s) => {
+      if (s === "interrupted") setLive((l) => l && { ...l, status: "连接中断 · 回合可能仍在执行，正在续传 / 回读（不会自动重发）" });
+      if (s === "resumed") setLive((l) => l && { ...l, status: "已重新连接 · 续传中" });
+      if (s === "readback_terminal") void settle(sid, baseVersion);
+    },
+  }), [settle]);
+
+  // 面板重新挂载（切到工作台再回来、刷新页面）时，上一轮可能仍在服务端执行：找到它并只续传，不重发。
+  const attachedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionId || live || createdBySubmitRef.current === sessionId || attachedRef.current === sessionId) return;
+    attachedRef.current = sessionId;
+    let off = false;
+    void (async () => {
+      const o = await api.get("/api/jobs", { workspace_id: workspaceId, status: "running", job_type: "agent_run", limit: 50 });
+      const jobs = bodyOf<{ jobs?: Array<{ job_id?: string; metadata?: { active_turn?: { session_id?: string; client_request_id?: string; status?: string } } }> }>(o)?.jobs ?? [];
+      const job = jobs.find((j) => j.metadata?.active_turn?.session_id === sessionId && j.metadata.active_turn.status === "running" && j.metadata.active_turn.client_request_id);
+      const crid = job?.metadata?.active_turn?.client_request_id;
+      if (off || !crid) return;
+      await ensureLocalBrowserToken();
+      if (off || !transportRef.current) return;
+      const baseVersion = topology.version;
+      setLive({ clientRequestId: crid, sessionId, text: "", status: "上一轮仍在执行 · 正在接上进度", jobId: job?.job_id, baseVersion });
+      transportRef.current.resumeTurn({ workspaceId, sessionId, clientRequestId: crid, handlers: turnHandlers(sessionId, baseVersion) });
+    })().catch(() => undefined);
+    return () => { off = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, workspaceId]);
 
   const running = !!live;
   const submit = async (request = input) => {
@@ -152,17 +197,7 @@ export function TopologyAgentPanel({
       transportRef.current.sendMessage({
         workspaceId, sessionId: sid, text, clientRequestId,
         metadata: { workbench_selection: buildTopologySelection(baseline, captured, allowEdit) },
-        handlers: {
-          onToken: (t) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
-          onEvent: (name, data) => setLive((l) => l && { ...l, jobId: String(data.job_id ?? l.jobId ?? "") || undefined, status: name === "tool_call" ? `调用工具 ${String(data.tool_id ?? "")}` : name === "model_started" ? "模型处理中" : l.status }),
-          onDone: () => void settle(sid, baseline.version),
-          onError: (f: Frame) => void settle(sid, baseline.version, `本轮报错：${String(f.message ?? f.error ?? "未知错误")}`),
-          onTransport: (s) => {
-            if (s === "interrupted") setLive((l) => l && { ...l, status: "连接中断 · 回合可能仍在执行，正在续传 / 回读（不会自动重发）" });
-            if (s === "resumed") setLive((l) => l && { ...l, status: "已重新连接 · 续传中" });
-            if (s === "readback_terminal") void settle(sid, baseline.version);
-          },
-        },
+        handlers: turnHandlers(sid, baseline.version),
       });
     } catch (err) {
       setError(err instanceof Error ? `${err.message}（指令尚未发送）` : "准备图纸失败，指令尚未发送。");

@@ -119,6 +119,20 @@ describe("工作台（阶段 2）", () => {
     expect(screen.getByTestId("skill-select")).toBeDisabled();
   });
 
+  it("绑定图纸的会话：绘图 Skill 不在公共目录也可用，能直接发送", async () => {
+    const { Fake } = renderAt("/workbench?ws=ws-demo-1&session=s-drawing");
+    await screen.findByTestId("scope-locked");
+    await waitFor(() => expect(screen.getByTestId("skill-select")).toHaveDisplayValue("绑定图纸"));
+    expect(screen.queryByText(/当前 Skill 不在可用目录中/)).toBeNull();
+    fireEvent.change(screen.getByTestId("composer-input"), { target: { value: "加一台防火墙" } });
+    expect(screen.getByTestId("send-btn")).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId("send-btn"));
+    await waitFor(() => expect(Fake.instances[0]?.sent.length).toBe(1));
+    expect(Fake.instances[0].sent[0].metadata).toMatchObject({ workbench_selection: {
+      extension_id: "network.operations", skill_id: "drawing:t1", resource_ids: ["t1"], allow_edit: false,
+    } });
+  });
+
   it("附件：超过限制给出原因", async () => {
     renderAt("/workbench?ws=ws-demo-1&session=s-partial");
     const composer = await screen.findByTestId("composer");
