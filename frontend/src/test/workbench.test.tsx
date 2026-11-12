@@ -158,16 +158,13 @@ describe("工作台（阶段 2）", () => {
     expect((write.body as { memory_id: string }).memory_id).toMatch(/^mem-[a-f0-9]{12}$/); // 后端合同；上一轮的 mem_+24 位会被 400 invalid_memory_id 拒绝
   });
 
-  it("会话：归档 → 已归档 tab 永久删除需要确认串", async () => {
+  it("会话：已归档 tab 永久删除直接执行，不再要求输入确认串", async () => {
     const { log } = renderAt("/workbench?ws=ws-demo-1&session=s-partial");
     await screen.findByTestId("session-column");
     fireEvent.click(screen.getByTestId("sessions-archived-tab"));
     fireEvent.click(await screen.findByRole("button", { name: /管理会话/ }));
     fireEvent.click(await screen.findByTestId("session-delete"));
-    const dialog = await screen.findByTestId("confirm-dialog");
-    expect(within(dialog).getByTestId("confirm-submit")).toBeDisabled();
-    fireEvent.change(within(dialog).getByTestId("confirm-text"), { target: { value: "DELETE s-archived" } });
-    fireEvent.click(within(dialog).getByTestId("confirm-submit"));
+    expect(screen.queryByTestId("confirm-dialog")).toBeNull();
     await waitFor(() => expect(log.some((l) => l.method === "DELETE" && l.path.startsWith("/api/sessions/s-archived"))).toBe(true));
   });
 

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { NAMES } from "../../contracts/naming";
-import { ConfirmDialog, FailureNote, MenuButton, TabGroup, TabIndicator } from "../../kit/ui";
+import { FailureNote, MenuButton, TabGroup, TabIndicator } from "../../kit/ui";
 import type { HttpOutcome } from "../../contracts/auth";
-import { filterSessions, groupSessionsByDay, type SessionSummary } from "./model";
+import { filterSessions, groupSessionsByDay } from "./model";
 import { sessionOps, useSessions } from "./useSessions";
 
 /**
@@ -19,7 +19,6 @@ export function SessionColumn({ ws, currentId, onOpen, onNew, collapsed, onToggl
   const [q, setQ] = useState("");
   const { list, error, reload } = useSessions(ws, status, currentId);
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
-  const [deleting, setDeleting] = useState<SessionSummary | null>(null);
   const [opError, setOpError] = useState<HttpOutcome | null>(null);
   useEffect(() => { if (refreshKey) reload(); }, [refreshKey, reload]);
   const run = async (p: Promise<HttpOutcome>, id: string, op: "rename" | "archive" | "restore" | "remove") => {
@@ -70,7 +69,7 @@ export function SessionColumn({ ws, currentId, onOpen, onNew, collapsed, onToggl
                         { key: "archive", label: "归档", onSelect: () => void run(sessionOps.archive(ws, s.session_id), s.session_id, "archive"), testId: "session-archive" },
                       ] : [
                         { key: "restore", label: "恢复", onSelect: () => void run(sessionOps.restore(ws, s.session_id), s.session_id, "restore"), testId: "session-restore" },
-                        { key: "delete", label: "永久删除…", danger: true, onSelect: () => setDeleting(s), testId: "session-delete" },
+                        { key: "delete", label: "永久删除", danger: true, onSelect: () => void run(sessionOps.remove(ws, s.session_id), s.session_id, "remove"), testId: "session-delete" },
                       ]}>⋯</MenuButton>
                   </>
                 )}
@@ -79,11 +78,6 @@ export function SessionColumn({ ws, currentId, onOpen, onNew, collapsed, onToggl
           </ul>
         </section>
       ))}
-      {deleting ? (
-        <ConfirmDialog title="永久删除会话？" confirmText={`DELETE ${deleting.session_id}`} confirmLabel="永久删除"
-          details={<p>将永久删除「{deleting.title || deleting.session_id}」及其消息，无法恢复。</p>}
-          onCancel={() => setDeleting(null)} onConfirm={async () => { const s = deleting; setDeleting(null); await run(sessionOps.remove(ws, s.session_id), s.session_id, "remove"); }} />
-      ) : null}
     </aside>
   );
 }

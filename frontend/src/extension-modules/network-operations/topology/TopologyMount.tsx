@@ -12,6 +12,7 @@ import { useSessionStore } from "./platform/stores/session";
 import { isAnyDirty, onDirtyChange } from "./platform/desktop/bridge";
 import { ConfirmHost } from "./platform/components/ConfirmDialog";
 import { FormDialogHost } from "./platform/components/FormDialog";
+import "./platform/overlays.css";
 import { normalizeTopologyHref, readTopologyParam } from "./topologyParams";
 
 export const TOPOLOGY_UNSAVED_MESSAGE = "拓扑有未保存的改动，确定离开吗？";
