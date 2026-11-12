@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEve
 import { Button } from "../../components/Button";
 import { IconAttachment, IconFolder, IconSend } from "../../components/Icon";
 import { useApi, listOf } from "../../kit/useApi";
+import { LoadMore, usePaged } from "../../kit/usePaged";
 import { Drawer, FailureNote, fmtTime } from "../../kit/ui";
 import { admitAttachments, attachmentKind, scopeLocked, stopLabel, type PendingAttachment, type SessionSummary, type StopState } from "./model";
 
@@ -144,8 +145,9 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
 }
 
 function ManagedFilePicker({ ws, selected, onClose, onPick }: { ws: string; selected: string[]; onClose: () => void; onPick: (f: ManagedFile[]) => void }) {
-  const [files] = useApi("/api/storage/files", { workspace_id: ws });
-  const list = listOf<ManagedFile>(files, "files");
+  const page = usePaged<ManagedFile>("/api/storage/files", { workspace_id: ws }, { listKey: "files", param: "cursor", next: "next_cursor" });
+  const files = page.first;
+  const list = page.items;
   const [sel, setSel] = useState<Set<string>>(new Set(selected));
   return (
     <Drawer title="托管文件" onClose={onClose} testId="managed-picker">
@@ -157,6 +159,7 @@ function ManagedFilePicker({ ws, selected, onClose, onPick }: { ws: string; sele
         ))}
       </ul>
       {files.state === "ok" && !list.length ? <p role="status" className="muted">这个工作区还没有托管文件。</p> : null}
+      <LoadMore paged={page} testId="picker-load-more" />
       <div className="row-actions">
         <Button onClick={() => onPick(list.filter((f) => sel.has(f.file_id)))}>作为附件</Button>
       </div>

@@ -154,10 +154,19 @@ def register_routes(app):
                     raise ValueError
             except ValueError:
                 return jsonify({"ok": False, "error": "inspection_limit_must_be_1_to_200"}), 400
-            tasks = service.list_inspections(ws, limit=limit + 1)
+            try:
+                offset = int(request.args.get("offset", "0"))
+                if offset < 0:
+                    raise ValueError
+            except ValueError:
+                return jsonify({"ok": False, "error": "inspection_offset_must_be_nonnegative"}), 400
+            tasks = service.list_inspections(ws, limit=None)
+            total = len(tasks)
+            next_offset = offset + limit if offset + limit < total else None
             return jsonify({"ok": True, "inspections": [
                 {**_inspection_view(task), "presentation": _inspection_result(task)["presentation"]}
-                for task in tasks[:limit]], "has_more": len(tasks) > limit})
+                for task in tasks[offset:offset + limit]], "has_more": next_offset is not None,
+                "next_offset": next_offset, "total": total})
         data = _payload()
         try:
             task = service.enqueue_connection_inspection(
@@ -438,8 +447,15 @@ def register_routes(app):
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         try:
             payload = _payload() if request.is_json and request.data else {}
+            if "expected_version" in payload and type(payload["expected_version"]) is not int:
+                return jsonify({"ok": False, "error": "expected_version_must_be_integer"}), 400
             restore_layout = bool(payload.get("restore_layout", True))
-            return jsonify({"ok": True, "topology": drawings.restore_topology_revision(ws, topology_id, revision_id, restore_layout=restore_layout)})
+            return jsonify({"ok": True, "topology": drawings.restore_topology_revision(
+                ws, topology_id, revision_id, restore_layout=restore_layout,
+                expected_version=payload.get("expected_version"),
+            )})
+        except drawings.TopologyVersionConflict as exc:
+            return jsonify({"ok": False, "error": "version_conflict", "current_version": exc.current_version}), 409
         except ValueError as exc:
             status = 409 if str(exc) == "topology_version_conflict" else 404
             return jsonify({"ok": False, "error": str(exc)}), status

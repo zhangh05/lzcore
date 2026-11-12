@@ -639,7 +639,11 @@ def _unknowns_from_metadata(metadata: dict[str, Any]) -> list[dict[str, str]]:
     if isinstance(unknown, dict) and str(unknown.get("status") or "") == "reconciled":
         return []
     if isinstance(unknown, dict) and unknown:
-        return [{"kind": _bounded_text(unknown.get("kind") or "unknown_outcome", 80), "reason": _bounded_text(unknown.get("reason") or unknown.get("message") or "", 240)}]
+        item = {"kind": _bounded_text(unknown.get("kind") or "unknown_outcome", 80), "reason": _bounded_text(unknown.get("reason") or unknown.get("message") or "", 240)}
+        for key in ("operation_id", "call_id", "tool_id", "error_code"):
+            if unknown.get(key) is not None:
+                item[key] = _bounded_text(unknown[key], 160)
+        return [item]
     cognitive = metadata.get("cognitive")
     if isinstance(cognitive, dict) and int(cognitive.get("unknown_count") or 0) > 0:
         return [{"kind": "reported_unknown", "reason": "runtime_reported_unknown"}]

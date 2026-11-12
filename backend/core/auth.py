@@ -271,6 +271,8 @@ def handle_auth_status():
     return flask.jsonify({
         "ok": True,
         "login_enabled": _is_login_enabled() or _is_identity_enabled(),
+        "api_token_required": _is_auth_enabled() and not authenticated,
+        "browser_login_available": _is_login_enabled() or _is_identity_enabled(),
         "authenticated": authenticated,
         "username": "api-token" if api_token_authenticated else (
             flask.session.get("lzcore_user") if session_authenticated else ""

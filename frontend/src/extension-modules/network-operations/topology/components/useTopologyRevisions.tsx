@@ -220,7 +220,8 @@ export function useTopologyRevisions({
           method: "POST",
           url: `${base}/topologies/${activeTopology.topology_id}/revisions/${revisionId}/restore`,
           params: { workspace_id: workspaceId },
-          data: { restore_layout: restoreLayout },
+          // 带上用户看到的版本：确认到提交之间别处改了图，服务端返回 409，不覆盖那次修改。
+          data: { restore_layout: restoreLayout, expected_version: activeTopology.version },
         });
         if (res.topology) {
           // Keep the pre-restore drawing on the undo stack, but treat the
@@ -246,10 +247,13 @@ export function useTopologyRevisions({
         setShowRevisions(false);
         setRevisionDiff(null);
       } catch (err: unknown) {
-        setNotice(
-          (err as { message?: string })?.message || "恢复失败，请稍后重试",
-          false,
-        );
+        const e = err as { message?: string; status?: number; details?: { error?: string; current_version?: number } };
+        if (e?.status === 409 && e.details?.error === "version_conflict") {
+          setNotice(`没有恢复：图纸已被更新到 v${e.details.current_version ?? "?"}（你看到的是 v${activeTopology.version}）。已重新读取最新图纸，请确认后再恢复。`, false);
+          void reconcileServerTopology(activeTopology.topology_id);
+        } else {
+          setNotice(e?.message || "恢复失败，请稍后重试", false);
+        }
       } finally {
         setRestoringId("");
       }
@@ -261,6 +265,7 @@ export function useTopologyRevisions({
       adoptServerTopology,
       setNotice,
       revisions,
+      reconcileServerTopology,
     ],
   );
   return {

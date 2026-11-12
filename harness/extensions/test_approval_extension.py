@@ -256,3 +256,52 @@ def test_continuation_waits_for_every_operation_and_preserves_full_checkpoint(mo
     claimed = approval.claim_ready_continuation("default", second["operation_id"])
     assert claimed and claimed["status"] == "resuming"
     assert approval.claim_ready_continuation("default", second["operation_id"]) is None
+
+
+def test_decision_returns_the_actual_continuation_request_identity(monkeypatch, tmp_path):
+    from flask import Flask
+    from extensions.approval import backend
+    from agent.runtime.result import AgentResult
+
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    operation = approval.prepare_network_operation(_request("default", skill, connection))
+    checkpoint = approval.attach_continuation_checkpoint(
+        "default", session_id="session_approval", run_id="old-run", request_id="old-request",
+        user_input="continue the original task", messages=[], tool_calls=[], prior_results=[],
+        round_results=[], interruption_ids=[operation["operation_id"]], workbench_context={},
+    )
+    queued = []
+    submitted = []
+    class DeferredExecutor:
+        def submit(self, fn, *args):
+            queued.append((fn, args))
+    class App:
+        def submit_user_message(self, **kwargs):
+            submitted.append(kwargs)
+            return AgentResult(ok=True, final_response="settled")
+    monkeypatch.setattr(backend, "_CONTINUATION_EXECUTOR", DeferredExecutor())
+    monkeypatch.setattr("agent.app.service.get_default_agent_app", lambda: App())
+    app = Flask(__name__)
+    backend.register_routes(app)
+    url = f"/api/extensions/approval/operations/{operation['operation_id']}/decision?workspace_id=default"
+    response = app.test_client().post(url, json={"decision": "reject"})
+    assert response.status_code == 200
+    continuation = response.json["continuation"]
+    assert continuation["status"] == "resuming"
+    assert continuation["session_id"] == "session_approval"
+    assert continuation["client_request_id"] and continuation["client_request_id"] != "old-request"
+    assert "job_id" not in continuation  # direct AgentApp execution has no Job
+    stored = approval.get_continuation("default", checkpoint["checkpoint_id"])
+    assert stored["client_request_id"] == continuation["client_request_id"]
+    assert len(queued) == 1 and submitted == []
+    fn, args = queued.pop()
+    fn(*args)
+    assert len(submitted) == 1
+    assert submitted[0]["session_id"] == continuation["session_id"]
+    assert submitted[0]["metadata"]["client_request_id"] == continuation["client_request_id"]
+    settled = approval.get_continuation("default", checkpoint["checkpoint_id"])
+    assert settled["status"] == "resumed" and settled["resume_result"]["ok"] is True
+    # Another decision cannot enqueue another continuation for this checkpoint.
+    again = app.test_client().post(url, json={"decision": "reject"})
+    assert again.json["continuation"] is None and queued == []

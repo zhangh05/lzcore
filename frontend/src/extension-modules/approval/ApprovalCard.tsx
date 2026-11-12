@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, bodyOf, describeFailure, enc } from "../../api/client";
 import { Button } from "../../components/Button";
 import { ConfirmDialog, ConflictPanel } from "../../kit/ui";
+import { announceSessionContinuation, type SessionContinuation } from "../../contracts/workbench";
 
 export interface ApprovalOperation {
   operation_id: string;
@@ -62,7 +63,7 @@ export function ApprovalCard({ ws, operationId }: { ws: string; operationId: str
       await load();
       return;
     }
-    const b = bodyOf<{ operation?: ApprovalOperation; error?: string }>(o);
+    const b = bodyOf<{ operation?: ApprovalOperation; error?: string; continuation?: SessionContinuation & { status?: string } }>(o);
     if (o.status === 409) {
       if (b?.operation) setOp(b.operation);
       setPhase({ kind: "invalidated", reason: b?.operation?.invalidated_reason || b?.error || "审批已失效（operation_invalidated）" });
@@ -70,6 +71,12 @@ export function ApprovalCard({ ws, operationId }: { ws: string; operationId: str
     }
     if (b?.operation) setOp(b.operation);
     if (o.status >= 400) setNote(describeFailure(o));
+    else if (b?.continuation?.status === "resuming") {
+      // 服务端在后台接着执行原任务：通知工作台去接上那一轮（只续传），而不是让用户以为已经结束。
+      setNote("已批准。助手正在接着执行原任务，进度会出现在对话里。");
+      const { session_id, client_request_id, job_id } = b.continuation;
+      announceSessionContinuation({ session_id, client_request_id, job_id });
+    }
     setPhase({ kind: "ready" });
   };
 

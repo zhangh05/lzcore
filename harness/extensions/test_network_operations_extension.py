@@ -1192,6 +1192,23 @@ def test_extension_routes_cover_device_connection_and_skill_flow(monkeypatch, tm
         service._store("default").save("inspections", task_id, {"task_id": task_id, "status": "failed"})
     history = client.get("/api/extensions/network.operations/inspections?workspace_id=default").get_json()
     assert len(history["inspections"]) == 200 and history["has_more"] is True
+    assert history["total"] == 201 and history["next_offset"] == 200
+    remaining = client.get("/api/extensions/network.operations/inspections?workspace_id=default&offset=200").get_json()
+    assert len(remaining["inspections"]) == 1
+    assert remaining["has_more"] is False and remaining["next_offset"] is None
+    assert remaining["total"] == 201
+    expected = [task["task_id"] for task in service.list_inspections("default", limit=None)]
+    actual = [task["task_id"] for task in history["inspections"] + remaining["inspections"]]
+    assert actual == expected
+    for offset in (201, 999):
+        empty = client.get(f"/api/extensions/network.operations/inspections?workspace_id=default&offset={offset}").get_json()
+        assert empty["inspections"] == [] and empty["total"] == 201
+        assert empty["has_more"] is False and empty["next_offset"] is None
+    small = client.get("/api/extensions/network.operations/inspections?workspace_id=default&offset=1&limit=2").get_json()
+    assert [task["task_id"] for task in small["inspections"]] == expected[1:3]
+    assert small["next_offset"] == 3 and small["total"] == 201
+    for offset in ("-1", "1.5", "abc", ""):
+        assert client.get(f"/api/extensions/network.operations/inspections?workspace_id=default&offset={offset}").status_code == 400
     service._store("default").delete("inspections", "inspection_history_200")
     assert client.get("/api/extensions/network.operations/inspections?workspace_id=default").get_json()["has_more"] is False
 

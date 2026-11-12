@@ -40,6 +40,10 @@ interface LiveTurn {
   terminal: boolean;
   /** 续传暂不可用（resume_pending 等控制错误）：回合仍未结束，靠有界重试 resume + 回读等待终态。 */
   held?: boolean;
+  /** 收到过属于本回合的帧（服务端已受理）。 */
+  acked?: boolean;
+  /** 本回合由 sendMessage 发起（首发 message），而不是 resumeTurn 接上。 */
+  sentMessage?: boolean;
   resumeRetries?: number;
   handlers: TurnHandlers;
 }
@@ -60,6 +64,8 @@ export interface TransportOptions {
   readback: (sessionId: string, clientRequestId: string) => Promise<boolean>;
   /** 工作区广播（如 topology_updated）：不属于任何回合，不能混进回合事件。 */
   onBroadcast?: (name: string, data: Record<string, unknown>) => void;
+  /** 连接鉴权被拒（local_token_required / unauthorized）：刷新凭据。随后的重连会自动续传。 */
+  onAuthRejected?: () => Promise<unknown> | void;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
 }
@@ -137,6 +143,10 @@ export class TurnTransport {
       else this.opts.onBroadcast?.(String(frame.name), data);
       return;
     }
+    if (frame.type === "error" && !id && (frame.message === "local_token_required" || frame.message === "unauthorized")) {
+      this.authRejected(String(frame.message));
+      return;
+    }
     let turn = id ? this.turns.get(id) : undefined;
     if (!turn && !id) {
       const open = [...this.turns.values()].filter((t) => !t.terminal);
@@ -148,6 +158,7 @@ export class TurnTransport {
       if (seq <= turn.cursor) return; // 重复帧
       turn.cursor = seq;
     }
+    turn.acked = true;
     if (frame.type === "token" || frame.type === "event") turn.held = false;
     switch (frame.type) {
       case "token": turn.handlers.onToken(String(frame.content ?? "")); break;
@@ -181,6 +192,20 @@ export class TurnTransport {
     turn.cursor = 0;
     this.raw({ type: "resume", workspace_id: turn.workspaceId, session_id: turn.sessionId, client_request_id: turn.clientRequestId, stream_seq: 0 });
     return true;
+  }
+
+  /**
+   * 首帧鉴权失败，服务端随即关闭连接。没被受理过的新消息确定没有执行：如实告诉界面「未发送」，
+   * 不自动重发；已受理的回合等重连后续传。
+   */
+  private authRejected(code: string) {
+    for (const t of [...this.turns.values()]) {
+      if (t.terminal || t.acked || !t.sentMessage) continue;
+      t.terminal = true;
+      this.turns.delete(t.clientRequestId);
+      t.handlers.onError({ type: "error", message: code, error_code: "not_accepted", client_request_id: t.clientRequestId, not_accepted: true });
+    }
+    void this.opts.onAuthRejected?.();
   }
 
   private holdTurn(turn: LiveTurn, code: string) {
@@ -223,7 +248,7 @@ export class TurnTransport {
   /** 发送一条新消息（新回合）。返回 client_request_id。 */
   sendMessage(args: { workspaceId: string; sessionId: string; text: string; clientRequestId: string; metadata?: Record<string, unknown>; handlers: TurnHandlers }): string {
     this.closedByUser = false;
-    const turn: LiveTurn = { clientRequestId: args.clientRequestId, sessionId: args.sessionId, workspaceId: args.workspaceId, cursor: 0, terminal: false, handlers: args.handlers };
+    const turn: LiveTurn = { clientRequestId: args.clientRequestId, sessionId: args.sessionId, workspaceId: args.workspaceId, cursor: 0, terminal: false, sentMessage: true, handlers: args.handlers };
     this.turns.set(turn.clientRequestId, turn);
     const frame: Frame = {
       type: "message", user_input: args.text, session_id: args.sessionId, workspace_id: args.workspaceId,
@@ -285,6 +310,12 @@ export class TurnTransport {
     this.socket = null;
     this.turns.clear();
   }
+}
+
+/** 回合报错的界面文案：鉴权被拒且消息未被受理时说清楚「没有执行，需要重发」。 */
+export function turnErrorText(f: Frame): string {
+  if (f.not_accepted) return "本地凭据已失效，这条消息没有被服务端受理（没有执行）。凭据已刷新，请重新发送。";
+  return `本轮报错：${String(f.message ?? f.error ?? "未知错误")}`;
 }
 
 export function wsUrl(path = "/ws/agent"): string {

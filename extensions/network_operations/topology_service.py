@@ -1136,6 +1136,12 @@ def compare_topology_revision(workspace_id: str, topology_id: str, revision_id: 
     }
 
 
+class TopologyVersionConflict(ValueError):
+    def __init__(self, current_version: int):
+        super().__init__("version_conflict")
+        self.current_version = current_version
+
+
 @_drawing_transaction
 def restore_topology_revision(
     workspace_id: str,
@@ -1143,12 +1149,23 @@ def restore_topology_revision(
     revision_id: str,
     *,
     restore_layout: bool = True,
+    expected_version: int | None = None,
 ) -> dict[str, Any]:
     """Roll the canvas back to a revision.
 
     Restoring is a forward edit, not a rewrite of history: it writes the old
     structure as a new version, so the undo trail itself stays intact.
     """
+    if expected_version is not None:
+        if type(expected_version) is not int:
+            raise ValueError("expected_version_must_be_integer")
+        # Check the raw current version before read adapters can migrate data.
+        existing = _store(workspace_id).get("topologies", topology_id)
+        if not existing:
+            raise ValueError("topology_not_found")
+        current_version = int(existing.get("version") or 1)
+        if expected_version != current_version:
+            raise TopologyVersionConflict(current_version)
     record = get_topology_revision(workspace_id, topology_id, revision_id)
     if not record:
         raise ValueError("topology_revision_not_found")

@@ -3,6 +3,37 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.mark.parametrize("unknown,expected", [
+    ({"kind": "write_unknown", "reason": "read_back_required", "operation_id": "op-1",
+      "call_id": "call-1", "tool_id": "network.operations.device.manage", "error_code": "EXECUTION_UNKNOWN"},
+     {"kind": "write_unknown", "reason": "read_back_required", "operation_id": "op-1",
+      "call_id": "call-1", "tool_id": "network.operations.device.manage", "error_code": "EXECUTION_UNKNOWN"}),
+    ({"kind": "k" * 100, "reason": "r" * 300, "operation_id": "o" * 200,
+      "call_id": 123, "tool_id": "t" * 200, "error_code": "e" * 200},
+     {"kind": "k" * 80, "reason": "r" * 240, "operation_id": "o" * 160,
+      "call_id": "123", "tool_id": "t" * 160, "error_code": "e" * 160}),
+    ({"reason": "missing_refs"}, {"kind": "unknown_outcome", "reason": "missing_refs"}),
+    ({"status": "reconciled", "operation_id": "op-1"}, None),
+])
+def test_unknown_ledger_references_survive_task_state_http_readback(monkeypatch, tmp_path, unknown, expected):
+    from flask import Flask
+    from backend.api.state_routes import register_state_routes
+    from agent.runtime.task_state import commit_task_state
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    snapshot = commit_task_state(
+        workspace_id="ws-unknown", session_id="session-unknown", run_id="run-unknown",
+        user_input="configure", final_response="verify outcome", run_ok=True,
+        runtime_metadata={"unknown_outcome": unknown}, tool_calls=[],
+    )
+    assert snapshot["task"]["unknowns"] == ([] if expected is None else [expected])
+    app = Flask(__name__)
+    register_state_routes(app)
+    response = app.test_client().get("/api/runtime/sessions/session-unknown/task-state?workspace_id=ws-unknown")
+    assert response.status_code == 200
+    assert response.json == {"ok": True, "task_state": snapshot}
+
+
 def test_product_resume_uses_scoped_identity_without_language_or_exchange_guess(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
     from agent.runtime.task_state import commit_task_state, resolve_task_state, begin_task_state

@@ -131,7 +131,7 @@ class ContextStore:
         tags: Optional[list[str]] = None,
         source_id: Optional[str] = None,
         include_deleted: bool = False,
-        limit: int = 100,
+        limit: Optional[int] = 100,
     ) -> list[dict]:
         """List items with optional filters."""
         seen: dict[str, dict] = {}  # last-write-wins before filtering

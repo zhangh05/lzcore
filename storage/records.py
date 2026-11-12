@@ -246,7 +246,7 @@ def list_json_records(
     workspace_id: str,
     parts: Iterable[str],
     *,
-    limit: int = 100,
+    limit: int | None = 100,
     sort_key: Callable[[dict[str, Any]], str] | None = None,
 ) -> list[dict[str, Any]]:
     directory = workspace_record_dir(workspace_id, *tuple(parts), create=False)
@@ -263,7 +263,7 @@ def list_json_records(
             records.append(data)
     key = sort_key or (lambda item: str(item.get("updated_at") or item.get("created_at") or ""))
     records.sort(key=key, reverse=True)
-    return records[: max(1, min(int(limit or 100), 5000))]
+    return records if limit is None else records[: max(1, min(int(limit or 100), 5000))]
 
 
 def delete_json_record(workspace_id: str, parts: Iterable[str]) -> bool:

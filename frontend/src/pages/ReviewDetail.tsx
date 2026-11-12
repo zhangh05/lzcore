@@ -30,6 +30,7 @@ async function readBack(target: UnknownTarget, sessionId: string | null): Promis
   const ws = target.workspaceId;
   if (target.kind === "ledger") {
     const o = await api.get("/api/admin/operation-ledger", { workspace_id: ws, limit: 500 });
+    if (o.kind === "http" && o.status === 403) return { error: "写操作账本只有管理员能读取和标记。请让管理员打开这个核对链接完成标记，之后你再回读。" };
     const ops = bodyOf<{ operations?: LedgerOperation[] }>(o)?.operations;
     if (o.kind !== "http" || o.status !== 200 || !ops) return { error: describeFailure(o) };
     const op = ops.find((x) => x.operation_id === target.operationId);
@@ -46,8 +47,10 @@ async function readBack(target: UnknownTarget, sessionId: string | null): Promis
   }
   if (!sessionId) return { error: "深链缺少会话参数，无法读取该任务的 task-state。" };
   const o = await api.get(`/api/runtime/sessions/${enc(sessionId)}/task-state`, { workspace_id: ws });
-  const task = bodyOf<{ task_state?: { task?: { unknowns?: unknown[] } } }>(o)?.task_state?.task;
+  const task = bodyOf<{ task_state?: { task?: { task_id?: string; unknowns?: unknown[] } } }>(o)?.task_state?.task;
   if (o.kind !== "http" || o.status !== 200) return { error: describeFailure(o) };
+  // 会话当前任务已换成别的任务：不能拿它的状态当作深链里那个任务的核对结果。
+  if (task?.task_id && task.task_id !== target.taskId) return { error: `这个会话当前的任务是 ${task.task_id}，不是要核对的 ${target.taskId}（可能已开始新任务）。` };
   return { result: (task?.unknowns?.length ?? 0) > 0 ? "still_unknown" : "reconciled", record: task ?? null };
 }
 
@@ -105,7 +108,7 @@ export function ReviewDetail({ target, sessionId }: { target: UnknownTarget; ses
       {record ? <details open><summary>服务端记录</summary><JsonBlock value={record} /></details> : null}
       {flow.step === "verified_still_unknown" ? (
         target.kind === "task"
-          ? <p className="muted">任务级未知项需逐条核对对应的写操作。</p>
+          ? <TaskUnknowns record={record} ws={target.workspaceId} taskId={target.taskId} sessionId={sessionId} />
           : <Button variant="primary" onClick={() => step({ type: "begin_mark" })} data-testid="begin-mark">人工标记结果</Button>
       ) : null}
       {flow.step === "marking" ? (
@@ -130,5 +133,26 @@ export function ReviewDetail({ target, sessionId }: { target: UnknownTarget; ses
         </div>
       ) : null}
     </section>
+  );
+}
+
+interface TaskUnknownFact { kind?: string; reason?: string; operation_id?: string; call_id?: string; tool_id?: string; error_code?: string }
+
+/** 任务级未知项：逐条给出能定位的写操作（账本 operation_id）；定位不到的如实说明。 */
+export function TaskUnknowns({ record, ws, taskId, sessionId }: { record: unknown; ws: string; taskId: string; sessionId: string | null }) {
+  const unknowns = ((record as { unknowns?: TaskUnknownFact[] } | null)?.unknowns ?? []).filter((u) => u && typeof u === "object");
+  if (!unknowns.length) return <p className="muted">任务级未知项需逐条核对对应的写操作。</p>;
+  return (
+    <div data-testid="task-unknowns">
+      <p className="muted">这个任务有 {unknowns.length} 项结果未知，需逐条核对对应的写操作；全部标记后回到这里回读。</p>
+      <ul className="nav-list">{unknowns.map((u, i) => (
+        <li key={u.operation_id ?? u.call_id ?? i}>
+          <span>{u.tool_id ? <code>{u.tool_id}</code> : null} {u.reason ?? u.error_code ?? u.kind ?? "结果未知"}</span>{" "}
+          {u.operation_id
+            ? <Link className="btn ghost sm" to={withWorkspace(`/review?source=ledger&id=${enc(u.operation_id)}&task=${enc(taskId)}${sessionId ? `&session=${enc(sessionId)}` : ""}`, ws)} data-testid="task-unknown-verify">核对写操作 {u.operation_id}</Link>
+            : <span className="muted" data-testid="task-unknown-unlocatable">没有可定位的写操作编号{u.call_id ? `（调用 ${u.call_id}）` : ""}，请在写操作账本中按时间和工具查找。</span>}
+        </li>
+      ))}</ul>
+    </div>
   );
 }

@@ -16,6 +16,10 @@ export interface AuthStatus {
   oidc_enabled?: boolean;
   platform_admin?: boolean;
   auth_type?: "api_token" | "session" | "none" | string;
+  /** 服务端要求 API token / bearer，而当前请求没有凭 cookie 或本地令牌通过。 */
+  api_token_required?: boolean;
+  /** 是否有浏览器能完成的登录方式（login / identity）。 */
+  browser_login_available?: boolean;
 }
 
 /** 一次 HTTP 调用的原始结局；由 api 层产出，判定在这里做。 */
@@ -29,7 +33,9 @@ export type AuthGate =
   | { kind: "server_error"; status: number; detail: string }
   | { kind: "login_required"; oidcEnabled: boolean }
   | { kind: "signed_in"; status: AuthStatus }
-  | { kind: "open"; status: AuthStatus };
+  | { kind: "open"; status: AuthStatus }
+  /** 部署只接受 API token，浏览器没有可完成的登录方式：不能当开放模式进入（否则全是 401）。 */
+  | { kind: "token_required" };
 
 function isAuthStatus(body: unknown): body is AuthStatus {
   const b = body as AuthStatus;
@@ -46,6 +52,7 @@ export function classifyAuthStatus(outcome: HttpOutcome): AuthGate {
     return { kind: "server_error", status, detail: `登录状态接口返回无法识别的结果（HTTP ${status}）。` };
   }
   if (body.authenticated) return { kind: "signed_in", status: body };
+  if (body.api_token_required && !body.browser_login_available && !body.login_enabled) return { kind: "token_required" };
   if (!body.login_enabled) return { kind: "open", status: body };
   return { kind: "login_required", oidcEnabled: !!body.oidc_enabled };
 }

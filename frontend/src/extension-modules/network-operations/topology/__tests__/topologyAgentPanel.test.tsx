@@ -22,9 +22,10 @@ vi.mock("../../../../api/client", () => ({
   enc: (s: string) => s,
   stableId: (p: string) => `${p}_1`,
 }));
-vi.mock("../../../../api/localAuth", () => ({ ensureLocalBrowserToken: vi.fn(async () => { h.order.push("token"); }) }));
+vi.mock("../../../../api/localAuth", () => ({ clearLocalAuth: vi.fn(), ensureLocalBrowserToken: vi.fn(async () => { h.order.push("token"); }) }));
 vi.mock("../../../../realtime/turnTransport", () => ({
   wsUrl: () => "ws://test",
+  turnErrorText: (f: Record<string, unknown>) => `本轮报错：${String(f.message ?? "")}`,
   TurnTransport: class {
     constructor(o: { onBroadcast?: (name: string, data: Record<string, unknown>) => void }) { h.onBroadcast = o.onBroadcast ?? null; }
     subscribeBroadcasts() {}
