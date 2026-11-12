@@ -12,7 +12,8 @@
  * 对 `extensions/**` 的引用，核心不再识别任何扩展证据格式）。
  */
 
-export type ExecutionOutcome = "complete" | "partial" | "unknown" | "failed";
+/** `waiting_external_input`：服务端挂起等用户/外部决定（core/runtime_engine/query_loop.py），不是终态。 */
+export type ExecutionOutcome = "complete" | "partial" | "unknown" | "failed" | "waiting_external_input";
 
 /** 服务端 `unknown_outcome` 触发事实（回合 metadata 或 job.metadata.active_turn）。 */
 export interface UnknownOutcomeFact {
@@ -63,9 +64,9 @@ export interface JobFacts {
 }
 
 /** 第 1 层呈现状态。`not_reported` = 服务端没有给出结论，前端不替它补。 */
-export type GoalState = "pending" | "unknown" | "complete" | "partial" | "failed" | "not_reported";
+export type GoalState = "pending" | "unknown" | "complete" | "partial" | "failed" | "waiting_external_input" | "not_reported";
 
-const OUTCOMES: ReadonlySet<string> = new Set(["complete", "partial", "unknown", "failed"]);
+const OUTCOMES: ReadonlySet<string> = new Set(["complete", "partial", "unknown", "failed", "waiting_external_input"]);
 
 function asOutcome(value: unknown): ExecutionOutcome | undefined {
   return typeof value === "string" && OUTCOMES.has(value) ? (value as ExecutionOutcome) : undefined;
@@ -123,6 +124,7 @@ export const GOAL_LABEL: Readonly<Record<GoalState, string>> = {
   complete: "已完成",
   partial: "部分达成 · 有目标待处理",
   failed: "失败",
+  waiting_external_input: "等待你的决定",
   not_reported: "结论未上报",
 };
 
@@ -134,6 +136,7 @@ export const GOAL_TONE: Readonly<Record<GoalState, Tone>> = {
   complete: "ok",
   partial: "warn",
   failed: "danger",
+  waiting_external_input: "warn",
   not_reported: "neutral",
 };
 

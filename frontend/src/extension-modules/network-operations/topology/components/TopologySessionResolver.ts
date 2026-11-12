@@ -2,6 +2,16 @@ import { sessionsApi } from "../platform/api";
 import { scopedLocalStorageKey } from "../platform/utils/userScope";
 import { useSessionStore } from "../platform/stores/session";
 
+/** 会话 metadata 明确绑定的图纸 ID；没有明确绑定返回空串。标题不是身份。 */
+export function boundTopologyId(metadata: unknown): string {
+  const meta = (metadata || {}) as Record<string, unknown>;
+  if (typeof meta.topology_id === "string" && meta.topology_id) return meta.topology_id;
+  const sel = meta.workbench_selection as { skill_id?: string; resource_ids?: string[] } | undefined;
+  const m = typeof sel?.skill_id === "string" ? /^drawing:([^:]+)/.exec(sel.skill_id) : null;
+  if (m) return m[1];
+  return "";
+}
+
 export interface TopologyIdentity {
   topology_id: string;
   name: string;
@@ -24,7 +34,8 @@ export async function resolveTopologySession(
     const cachedId = localStorage.getItem(storageKey);
     if (cachedId) {
       const res = await sessionsApi.get(cachedId, workspaceId);
-      if (res?.session && res.session.status === "active") {
+      const bound = boundTopologyId(res?.session?.metadata);
+      if (res?.session && res.session.status === "active" && (!bound || bound === topoId)) {
         syncLocalStorageSkill(cachedId, topoId);
         await syncManagedTitle(cachedId, workspaceId, res.session.title, topology.name);
         return cachedId;
@@ -39,15 +50,9 @@ export async function resolveTopologySession(
     const res = await sessionsApi.list(workspaceId);
     const sessions = res.sessions || [];
 
-    const matched = sessions.find((s) => {
-      const meta = (s.metadata || {}) as Record<string, unknown>;
-      if (meta.topology_id === topoId) return true;
-      const sel = meta.workbench_selection as { skill_id?: string; resource_ids?: string[] } | undefined;
-      if (sel?.resource_ids?.includes(topoId)) return true;
-      if (sel?.skill_id === `drawing:${topoId}` || sel?.skill_id === `drawing:${topoId}:ro`) return true;
-      if (s.title === `拓扑 · ${topology.name}` || s.title === `拓扑 · ${topoId}`) return true;
-      return false;
-    });
+    // 先按明确绑定找；只有完全没有绑定的历史会话才按标题兜底，绑定了别的图纸的会话绝不复用。
+    const matched = sessions.find((s) => boundTopologyId(s.metadata) === topoId)
+      ?? sessions.find((s) => !boundTopologyId(s.metadata) && (s.title === `拓扑 · ${topology.name}` || s.title === `拓扑 · ${topoId}`));
 
     if (matched) {
       const existingId = matched.session_id;

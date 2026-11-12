@@ -38,12 +38,19 @@ interface LiveTurn {
   workspaceId: string;
   cursor: number;
   terminal: boolean;
+  /** 续传暂不可用（resume_pending 等控制错误）：回合仍未结束，靠有界重试 resume + 回读等待终态。 */
+  held?: boolean;
+  resumeRetries?: number;
   handlers: TurnHandlers;
 }
 
 export const READBACK_INTERVAL_MS = 2500;
 /** 服务端按工作区广播、不带 client_request_id 的事件名。 */
-export const BROADCAST_EVENTS = new Set(["topology_updated"]);
+export const BROADCAST_EVENTS = new Set(["topology_updated", "job_updated"]);
+/** resume 的控制错误：说明续传暂时接不上，不是回合的执行终态（backend/ws/agent_ws.py _attach_turn_replay）。 */
+export const RESUME_CONTROL_ERRORS = new Set(["resume_pending", "replay_interrupted", "resume_not_found", "resume_limit_exceeded"]);
+export const RESUME_RETRY_MS = 1500;
+export const RESUME_MAX_RETRIES = 40;
 const OPEN = 1;
 
 export interface TransportOptions {
@@ -123,7 +130,11 @@ export class TurnTransport {
     const data = (frame.data && typeof frame.data === "object" ? frame.data : {}) as Record<string, unknown>;
     const id = String(frame.client_request_id || data.client_request_id || "");
     if (frame.type === "event" && !id && BROADCAST_EVENTS.has(String(frame.name ?? ""))) {
-      this.opts.onBroadcast?.(String(frame.name), data);
+      // job_updated 是工作区广播：只有 active_turn 的请求 ID 与本地回合一致时才算该回合的事件，绝不按「唯一活动回合」兜底。
+      const owner = frame.name === "job_updated" ? String((data.active_turn as Record<string, unknown> | undefined)?.client_request_id ?? "") : "";
+      const mine = owner ? this.turns.get(owner) : undefined;
+      if (mine && !mine.terminal) mine.handlers.onEvent("job_updated", data);
+      else this.opts.onBroadcast?.(String(frame.name), data);
       return;
     }
     let turn = id ? this.turns.get(id) : undefined;
@@ -137,21 +148,62 @@ export class TurnTransport {
       if (seq <= turn.cursor) return; // 重复帧
       turn.cursor = seq;
     }
+    if (frame.type === "token" || frame.type === "event") turn.held = false;
     switch (frame.type) {
       case "token": turn.handlers.onToken(String(frame.content ?? "")); break;
       case "event": turn.handlers.onEvent(String(frame.name ?? ""), data); break;
-      case "done": turn.terminal = true; turn.handlers.onDone(frame); this.turns.delete(turn.clientRequestId); break;
-      case "error": turn.terminal = true; turn.handlers.onError(frame); this.turns.delete(turn.clientRequestId); break;
+      case "done": if (!this.followRedirect(turn, frame)) { turn.terminal = true; turn.handlers.onDone(frame); this.turns.delete(turn.clientRequestId); } break;
+      case "error": {
+        const code = String(frame.error_code || frame.message || "");
+        if (RESUME_CONTROL_ERRORS.has(code)) { this.holdTurn(turn, code); break; }
+        turn.terminal = true; turn.handlers.onError(frame); this.turns.delete(turn.clientRequestId); break;
+      }
       default: break;
     }
+  }
+
+  /**
+   * 幂等回执：同一请求已在执行（running / conflict）时，服务端回的 done 只是「已受理过」，
+   * 不是执行终态。改为跟踪它指向的实际回合，只续传日志，绝不重发 message。
+   */
+  private followRedirect(turn: LiveTurn, frame: Frame): boolean {
+    const meta = (frame.metadata && typeof frame.metadata === "object" ? frame.metadata : {}) as Record<string, unknown>;
+    const redirect = meta.idempotent_redirect as { job_id?: string; status?: string; client_request_id?: string } | undefined;
+    if (!redirect || (redirect.status !== "running" && redirect.status !== "conflict")) return false;
+    const target = String(redirect.client_request_id || turn.clientRequestId);
+    if (redirect.job_id) turn.handlers.onEvent("idempotent_redirect", { job_id: redirect.job_id, client_request_id: target });
+    if (target !== turn.clientRequestId) {
+      if (this.turns.has(target)) { turn.terminal = true; this.turns.delete(turn.clientRequestId); return true; }
+      this.turns.delete(turn.clientRequestId);
+      turn.clientRequestId = target;
+      this.turns.set(target, turn);
+    }
+    turn.cursor = 0;
+    this.raw({ type: "resume", workspace_id: turn.workspaceId, session_id: turn.sessionId, client_request_id: turn.clientRequestId, stream_seq: 0 });
+    return true;
+  }
+
+  private holdTurn(turn: LiveTurn, code: string) {
+    turn.held = true;
+    turn.handlers.onTransport("interrupted");
+    this.startReadback();
+    // 服务端已受理但还没产生首帧：有界地重试续传；其余情况只靠回读等终态。
+    if (code !== "resume_pending") return;
+    const n = (turn.resumeRetries ?? 0) + 1;
+    turn.resumeRetries = n;
+    if (n > RESUME_MAX_RETRIES) return;
+    this.setTimer(() => {
+      if (turn.terminal || !turn.held || this.turns.get(turn.clientRequestId) !== turn || !this.connected()) return;
+      this.raw({ type: "resume", workspace_id: turn.workspaceId, session_id: turn.sessionId, client_request_id: turn.clientRequestId, stream_seq: turn.cursor });
+    }, RESUME_RETRY_MS);
   }
 
   private startReadback() {
     if (this.readbackHandle) return;
     const tick = async () => {
       this.readbackHandle = null;
-      const open = [...this.turns.values()].filter((t) => !t.terminal);
-      if (!open.length || this.connected()) return;
+      const open = [...this.turns.values()].filter((t) => !t.terminal && (t.held || !this.connected()));
+      if (!open.length) return;
       for (const t of open) {
         try {
           if (await this.opts.readback(t.sessionId, t.clientRequestId)) {
@@ -161,7 +213,7 @@ export class TurnTransport {
           }
         } catch { /* 下次再读 */ }
       }
-      if ([...this.turns.values()].some((t) => !t.terminal) && !this.connected()) this.readbackHandle = this.setTimer(() => void tick(), READBACK_INTERVAL_MS);
+      if ([...this.turns.values()].some((t) => !t.terminal && (t.held || !this.connected()))) this.readbackHandle = this.setTimer(() => void tick(), READBACK_INTERVAL_MS);
     };
     this.readbackHandle = this.setTimer(() => void tick(), READBACK_INTERVAL_MS);
   }

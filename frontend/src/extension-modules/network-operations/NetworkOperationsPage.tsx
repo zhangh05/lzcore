@@ -203,7 +203,7 @@ function InspectionDetail({ ws, taskId, onClose, onOpenOther }: { ws: string; ta
           {t.status === "unknown" ? <p className="inline-alert tone-unknown" role="alert" data-testid="inspection-unknown">结果未知 · 需核对</p> : null}
           <div className="row-actions">
             {t.status === "running" || t.status === "queued" ? <Button onClick={async () => { setR({ label: "取消请求", o: await net.post(`/inspections/${enc(taskId)}/cancel`, ws) }); reload(); }}>请求取消</Button> : null}
-            <Button onClick={() => setConfirm(true)} disabled={!gate?.allowed} title={gate?.reason} data-testid="inspection-retry">重试未成功目标</Button>
+            <Button onClick={() => setConfirm(true)} disabled={!gate?.allowed} title={gate?.reason} data-testid="inspection-retry">{gate?.scope === "evidence_recollection" ? "重新采集证据" : "重试未成功目标"}</Button>
             {gate && !gate.allowed && gate.reason ? <span className="muted" data-testid="inspection-retry-gate">{gate.reason}</span> : null}
           </div>
           <Result r={r} />
@@ -218,8 +218,8 @@ function InspectionDetail({ ws, taskId, onClose, onOpenOther }: { ws: string; ta
           <details><summary>原始证据</summary><LoadState value={evidence}>{(d) => <JsonBlock value={d} />}</LoadState></details>
         </>
       ) : <p className="muted">巡检不存在。</p>}</LoadState>
-      {confirm && gate?.allowed ? <ConfirmDialog title="重试未成功目标" danger={false} confirmLabel="重试" testId="inspection-retry-dialog"
-        details={<><p>只会对以下未成功的目标再执行一次（已成功的不会重放）：</p><ul>{gate.targets.map((x) => <li key={x}><code>{x}</code></li>)}</ul></>}
+      {confirm && gate?.allowed ? <ConfirmDialog title={gate.scope === "evidence_recollection" ? "重新采集证据" : "重试未成功目标"} danger={false} confirmLabel="重试" testId="inspection-retry-dialog"
+        details={<><p>{gate.scope === "evidence_recollection" ? "上次命令已执行但证据没能保存，将对以下全部目标重新只读采集：" : "只会对以下未成功的目标再执行一次（已成功的不会重放）："}</p><ul>{gate.targets.map((x) => <li key={x}><code>{x}</code></li>)}</ul></>}
         onCancel={() => setConfirm(false)} onConfirm={async () => {
           setConfirm(false);
           const o = await net.post(`/inspections/${enc(taskId)}/retry`, ws);

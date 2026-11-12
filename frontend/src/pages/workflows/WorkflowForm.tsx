@@ -14,12 +14,14 @@ import { Dialog, FailureNote } from "../../kit/ui";
 
 export interface WfNode { node_id: string; name?: string; tool_id: string; arguments?: Record<string, unknown>; depends_on?: string[]; when?: unknown }
 export interface WorkflowDef { workflow_id: string; name?: string; description?: string; status?: string; version?: number; nodes?: WfNode[]; execution_layers?: string[][]; updated_at?: string; template_id?: string }
-type NodeDraft = { node_id: string; name: string; tool_id: string; args: string; depends_on: string[] };
-type Draft = { name: string; description: string; status: string; nodes: NodeDraft[] };
+// when / version / template_id 表单不编辑，但必须原样带回：后端 PUT 是整份替换，缺 when 会变成 true（原本跳过的节点开始执行），缺 version 回到 1。
+type NodeDraft = { node_id: string; name: string; tool_id: string; args: string; depends_on: string[]; when?: unknown };
+type Draft = { name: string; description: string; status: string; nodes: NodeDraft[]; version?: number; template_id?: string };
 
 const toDraft = (w?: WorkflowDef | null): Draft => ({
   name: w?.name ?? "", description: w?.description ?? "", status: w?.status ?? "active",
-  nodes: (w?.nodes ?? []).map((n) => ({ node_id: n.node_id, name: n.name ?? "", tool_id: n.tool_id, args: JSON.stringify(n.arguments ?? {}, null, 2), depends_on: n.depends_on ?? [] })),
+  nodes: (w?.nodes ?? []).map((n) => ({ node_id: n.node_id, name: n.name ?? "", tool_id: n.tool_id, args: JSON.stringify(n.arguments ?? {}, null, 2), depends_on: n.depends_on ?? [], ...(n.when !== undefined ? { when: n.when } : {}) })),
+  ...(w?.version !== undefined ? { version: w.version } : {}), ...(w?.template_id ? { template_id: w.template_id } : {}),
 });
 const ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
 
@@ -52,9 +54,11 @@ export function validateWorkflow(d: Draft, tools: Set<string>): { errors: FieldE
   return { errors, nodeErrors };
 }
 
+export { toDraft };
 export const workflowBody = (d: Draft, workflowId?: string): Record<string, unknown> => ({
   ...(workflowId ? { workflow_id: workflowId } : {}), name: d.name.trim(), description: d.description.trim(), status: d.status,
-  nodes: d.nodes.map((n) => ({ node_id: n.node_id, name: n.name || n.node_id, tool_id: n.tool_id, arguments: (() => { try { return JSON.parse(n.args || "{}"); } catch { return n.args; } })(), depends_on: n.depends_on })),
+  ...(d.version !== undefined ? { version: d.version } : {}), ...(d.template_id ? { template_id: d.template_id } : {}),
+  nodes: d.nodes.map((n) => ({ node_id: n.node_id, name: n.name || n.node_id, tool_id: n.tool_id, arguments: (() => { try { return JSON.parse(n.args || "{}"); } catch { return n.args; } })(), depends_on: n.depends_on, ...(n.when !== undefined ? { when: n.when } : {}) })),
 });
 
 const SERVER_ERRORS: [RegExp, string, string][] = [

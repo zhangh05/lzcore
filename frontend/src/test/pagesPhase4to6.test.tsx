@@ -247,7 +247,7 @@ describe("扩展（阶段 6）", () => {
   it("巡检重试门控：未知态禁用；只重试未成功目标", () => {
     expect(inspectionRetryGate({ task_id: "a", status: "unknown" }, []).allowed).toBe(false);
     const g = inspectionRetryGate({ task_id: "a", status: "partial" }, [{ connection_id: "c1", status: "succeeded" }, { connection_id: "c2", status: "failed" }]);
-    expect(g).toEqual({ allowed: true, targets: ["c2"] });
+    expect(g).toEqual({ allowed: true, targets: ["c2"], scope: "failed_targets" });
     expect(inspectionRetryGate({ task_id: "a", status: "succeeded" }, []).allowed).toBe(false);
   });
 
