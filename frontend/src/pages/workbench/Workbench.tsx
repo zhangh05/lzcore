@@ -36,6 +36,8 @@ export interface LiveTurn { clientRequestId: string; text: string; events: strin
 
 /** 把实时事件投影进本轮的步骤与子任务观察；只是展示，终态仍以服务端 done/回读为准。 */
 export function applyLiveEvent(l: LiveTurn, name: string, data: Record<string, unknown>): LiveTurn {
+  // 作业状态广播与幂等重定向只更新作业编号（停止按钮用），不进事件列表。
+  if (name === "job_updated" || name === "idempotent_redirect") return { ...l, jobId: String(data.job_id ?? l.jobId ?? "") || undefined };
   const callId = String(data.call_id ?? data.node_id ?? "");
   const toolId = String(data.tool_id ?? "");
   let steps = l.steps ?? [];
@@ -169,6 +171,18 @@ export function Workbench() {
     if (note) setStopError(note);
   }, [loadMessages, loadTask, loadSession]);
 
+  const turnHandlers = useMemo(() => ({
+    onToken: (t: string) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
+    onEvent: (name: string, data: Record<string, unknown>) => setLive((l) => l && applyLiveEvent(l, name, data)),
+    onDone: () => void settle(),
+    onError: (f: Frame) => void settle(`本轮报错：${String(f.message ?? f.error ?? "未知错误")}`),
+    onTransport: (s: "interrupted" | "resumed" | "readback_terminal") => {
+      if (s === "interrupted") setLive((l) => l && { ...l, status: "连接中断 · 回合可能仍在执行，正在续传 / 回读（不会自动重发）" });
+      if (s === "resumed") setLive((l) => l && { ...l, status: "已重新连接 · 续传中" });
+      if (s === "readback_terminal") void settle();
+    },
+  }), [settle]);
+
   const send = useCallback(async (text: string, opts: SendOptions) => {
     if (!ws || !sessionId || !transport.current) return false;
     await ensureLocalBrowserToken();
@@ -190,22 +204,29 @@ export function Workbench() {
     if (opts.workbenchSelection) metadata.workbench_selection = opts.workbenchSelection;
     if (uploaded.length) metadata.attachments = uploaded;
     if (opts.resumeTaskId) metadata.resume_task_id = opts.resumeTaskId;
-    transport.current.sendMessage({
-      workspaceId: ws, sessionId, text, clientRequestId, metadata,
-      handlers: {
-        onToken: (t) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
-        onEvent: (name, data) => setLive((l) => l && applyLiveEvent(l, name, data)),
-        onDone: () => void settle(),
-        onError: (f: Frame) => void settle(`本轮报错：${String(f.message ?? f.error ?? "未知错误")}`),
-        onTransport: (s) => {
-          if (s === "interrupted") setLive((l) => l && { ...l, status: "连接中断 · 回合可能仍在执行，正在续传 / 回读（不会自动重发）" });
-          if (s === "resumed") setLive((l) => l && { ...l, status: "已重新连接 · 续传中" });
-          if (s === "readback_terminal") void settle();
-        },
-      },
-    });
+    transport.current.sendMessage({ workspaceId: ws, sessionId, text, clientRequestId, metadata, handlers: turnHandlers });
     return true;
-  }, [ws, sessionId, transport, settle]);
+  }, [ws, sessionId, transport, turnHandlers]);
+
+  // 重新进入会话（刷新、从别处跳回）时，上一轮可能仍在服务端执行：找到它并只续传日志，绝不重发 message。
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  useEffect(() => {
+    if (!ws || !sessionId) return;
+    let off = false;
+    void (async () => {
+      const o = await api.get("/api/jobs", { workspace_id: ws, status: "running", job_type: "agent_run", limit: 50 });
+      const jobs = bodyOf<{ jobs?: Array<{ job_id?: string; metadata?: { active_turn?: { session_id?: string; client_request_id?: string; status?: string } } }> }>(o)?.jobs ?? [];
+      const job = jobs.find((j) => j.metadata?.active_turn?.session_id === sessionId && j.metadata.active_turn.status === "running" && j.metadata.active_turn.client_request_id);
+      const crid = job?.metadata?.active_turn?.client_request_id;
+      if (off || !crid || liveRef.current) return;
+      await ensureLocalBrowserToken();
+      if (off || liveRef.current || !transport.current) return;
+      setLive({ clientRequestId: crid, text: "", events: [], status: "上一轮仍在执行 · 正在接上进度", jobId: job?.job_id });
+      transport.current.resumeTurn({ workspaceId: ws, sessionId, clientRequestId: crid, handlers: turnHandlers });
+    })().catch(() => undefined);
+    return () => { off = true; };
+  }, [ws, sessionId, transport, turnHandlers]);
 
   const stop = useCallback(async () => {
     if (!ws || !live) return;

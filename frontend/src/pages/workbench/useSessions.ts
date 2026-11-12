@@ -32,5 +32,6 @@ export const sessionOps = {
   rename: (ws: string, id: string, title: string) => api.put(`/api/sessions/${enc(id)}`, { title }, { workspace_id: ws }),
   archive: (ws: string, id: string) => api.post(`/api/sessions/${enc(id)}/archive`, {}, { workspace_id: ws }),
   restore: (ws: string, id: string) => api.post(`/api/sessions/${enc(id)}/restore`, {}, { workspace_id: ws }),
-  remove: (ws: string, id: string) => api.del(`/api/sessions/${enc(id)}`, { workspace_id: ws }, { workspace_id: ws }),
+  // 后端只认 query 里的 confirm=true（界面确认框之后才调用）。
+  remove: (ws: string, id: string) => api.del(`/api/sessions/${enc(id)}`, { workspace_id: ws }, { workspace_id: ws, confirm: true }),
 };

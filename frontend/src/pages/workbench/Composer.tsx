@@ -115,7 +115,7 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
           </div>
           <div className="composer-actions">
             <input ref={fileInput} type="file" multiple hidden onChange={(e) => { if (e.target.files) fromFiles(e.target.files, "upload"); e.target.value = ""; }} />
-            <Button variant="ghost" className="sm" icon={<IconAttachment size={15} aria-hidden="true" />} title="最多 8 个；图片 ≤5MB，文件 ≤100MB" onClick={() => fileInput.current?.click()}>添加附件</Button>
+            <Button variant="ghost" className="sm" icon={<IconAttachment size={15} aria-hidden="true" />} title="最多 8 个，其中图片最多 4 张；图片 ≤5MB，文件 ≤100MB" onClick={() => fileInput.current?.click()}>添加附件</Button>
             <Button variant="ghost" className="sm" icon={<IconFolder size={15} aria-hidden="true" />} onClick={() => setPicker("files")}>从托管文件选</Button>
             {running ? (
               <Button variant="danger" onClick={onStop} disabled={stopState === "requesting" || stopState === "requested"} data-testid="stop-btn" data-stop={stopState}>{stopLabel(stopState)}</Button>

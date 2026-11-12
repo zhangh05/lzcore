@@ -135,3 +135,32 @@ it("keeps a valid cached session when title reconciliation is temporarily unavai
   expect(resolved).toBe("valid-session");
   expect(sessionsApi.create).not.toHaveBeenCalled();
 });
+
+describe("TopologySessionResolver · 资源身份优先于标题", () => {
+  const topology = { topology_id: "topo_B", name: "同名图纸" };
+  beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); });
+
+  it("同名标题但明确绑定了另一张图的会话不复用", async () => {
+    vi.mocked(sessionsApi.list).mockResolvedValueOnce({ sessions: [
+      { session_id: "sess_for_A", status: "active", title: "拓扑 · 同名图纸", metadata: { topology_id: "topo_A" } },
+    ] } as never);
+    vi.mocked(sessionsApi.create).mockResolvedValueOnce({ session: { session_id: "sess_new" } } as never);
+    expect(await resolveTopologySession("default", topology)).not.toBe("sess_for_A");
+  });
+
+  it("没有绑定的历史会话仍按标题兜底", async () => {
+    vi.mocked(sessionsApi.list).mockResolvedValueOnce({ sessions: [
+      { session_id: "sess_legacy", status: "active", title: "拓扑 · 同名图纸", metadata: {} },
+    ] } as never);
+    expect(await resolveTopologySession("default", topology)).toBe("sess_legacy");
+  });
+
+  it("缓存的会话若绑定了另一张图则作废，改用明确绑定本图的会话", async () => {
+    localStorage.setItem(scopedLocalStorageKey("drawing_session_v2:default:topo_B"), "sess_other");
+    vi.mocked(sessionsApi.get).mockResolvedValueOnce({ session: { session_id: "sess_other", status: "active", metadata: { topology_id: "topo_A" } } } as never);
+    vi.mocked(sessionsApi.list).mockResolvedValueOnce({ sessions: [
+      { session_id: "sess_mine", status: "active", title: "随便", metadata: { workbench_selection: { skill_id: "drawing:topo_B" } } },
+    ] } as never);
+    expect(await resolveTopologySession("default", topology)).toBe("sess_mine");
+  });
+});

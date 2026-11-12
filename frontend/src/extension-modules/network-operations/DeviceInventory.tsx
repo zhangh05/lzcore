@@ -12,7 +12,7 @@ import { enc, net } from "./api";
 import { ConnectionFormDialog, DeviceFormDialog, type Connection, type Device, type Region } from "./forms";
 import {
   CONN_STATUS, HEALTH_LABEL, ROLE_ZH, Result, SavedNote, VENDOR_ZH, connHealth, connReadbackText, deviceHealth,
-  type ActionResult, type Health,
+  type ActionResult, type Health, accepted,
 } from "./shared";
 
 type Filter = "all" | "warn" | "untested";
@@ -206,7 +206,7 @@ function DeviceDetail({ ws, device, connections, regionName, health, onEdit, onA
         details={<><p>高风险：接受后，此连接会信任以下指纹。指纹被替换可能意味着中间人攻击。</p><KeyValues items={[["连接", accept.id], ["指纹", <code key="f">{accept.fingerprint}</code>]]} /></>}
         onCancel={() => setAccept(null)} onConfirm={async () => { const a = accept; setAccept(null); await runTest(a.id, { accept_host_key: true, accepted_fingerprint: a.fingerprint }); }} /> : null}
       {del ? <ConfirmDialog title="永久删除设备？" details={<p>将硬删除「{device.name}」及其 {connections.length} 条连接；失去全部设备或连接的 Skill 会一并删除。</p>} confirmText={device.name ?? device.device_id} confirmLabel="永久删除" onCancel={() => setDel(false)}
-        onConfirm={async () => { setDel(false); const o = await net.del(`/devices/${enc(device.device_id)}`, ws); setR({ label: "删除", o }); if (o.kind === "http" && o.status < 300) onDeleted(); }} /> : null}
+        onConfirm={async () => { setDel(false); const o = await net.del(`/devices/${enc(device.device_id)}`, ws); setR({ label: "删除", o }); if (accepted(o)) onDeleted(); }} /> : null}
     </section>
   );
 }

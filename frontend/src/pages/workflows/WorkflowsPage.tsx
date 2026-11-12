@@ -84,7 +84,7 @@ function WorkflowList({ ws }: { ws: string; onRun: (id: string) => void }) {
         <label className="field"><span>输入（JSON）</span><textarea rows={6} value={inputs} onChange={(e) => setInputs(e.target.value)} /></label>
         {jsonError ? <p className="form-error" role="alert">{jsonError}</p> : null}
       </Dialog> : null}
-      {del ? <ConfirmDialog title="删除工作流？" details={<p>将删除「{del.name ?? del.workflow_id}」。已有运行记录保留。</p>} confirmText={del.workflow_id} confirmLabel="删除"
+      {del ? <ConfirmDialog title="删除工作流？" details={<p>将删除「{del.name ?? del.workflow_id}」以及它的全部运行记录和节点执行历史，不可恢复。平台作业列表里的记录保留。</p>} confirmText={del.workflow_id} confirmLabel="删除"
         onCancel={() => setDel(null)} onConfirm={async () => { const w = del; setDel(null); setR({ label: "删除", o: await api.del(`/api/workflows/${enc(w.workflow_id)}`, { workspace_id: ws, confirm: "delete" }, { workspace_id: ws }) }); reload(); }} /> : null}
     </>
   );

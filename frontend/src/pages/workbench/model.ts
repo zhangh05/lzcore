@@ -82,8 +82,8 @@ export function filterSessions(list: SessionSummary[], q: string): SessionSummar
   return t ? list.filter((s) => (s.title ?? "").toLowerCase().includes(t) || s.session_id.toLowerCase().includes(t)) : list;
 }
 
-// ── 附件约束（迁自旧工作台：8 个上限、图片 5MB、文件 100MB） ──
-export const ATTACHMENT_LIMITS = { maxCount: 8, maxImageBytes: 5 * 1024 * 1024, maxFileBytes: 100 * 1024 * 1024 } as const;
+// ── 附件约束：与 backend/core/chat_attachments.py 一致（共 8 个、其中图片最多 4 张；图片 5MB、文件 100MB） ──
+export const ATTACHMENT_LIMITS = { maxCount: 8, maxImages: 4, maxImageBytes: 5 * 1024 * 1024, maxFileBytes: 100 * 1024 * 1024 } as const;
 
 export interface PendingAttachment { id: string; name: string; size: number; kind: "image" | "file"; source: "upload" | "paste" | "drop" | "managed"; file_id?: string; file?: File }
 
@@ -94,6 +94,7 @@ export function admitAttachments(current: PendingAttachment[], incoming: Pending
   const rejected: { name: string; reason: string }[] = [];
   for (const a of incoming) {
     if (accepted.length >= ATTACHMENT_LIMITS.maxCount) { rejected.push({ name: a.name, reason: `最多 ${ATTACHMENT_LIMITS.maxCount} 个附件` }); continue; }
+    if (a.kind === "image" && accepted.filter((x) => x.kind === "image").length >= ATTACHMENT_LIMITS.maxImages) { rejected.push({ name: a.name, reason: `图片最多 ${ATTACHMENT_LIMITS.maxImages} 张` }); continue; }
     if (a.kind === "image" && a.size > ATTACHMENT_LIMITS.maxImageBytes) { rejected.push({ name: a.name, reason: "图片不能超过 5MB" }); continue; }
     if (a.kind === "file" && a.size > ATTACHMENT_LIMITS.maxFileBytes) { rejected.push({ name: a.name, reason: "文件不能超过 100MB" }); continue; }
     if (a.file_id && accepted.some((x) => x.file_id === a.file_id)) { rejected.push({ name: a.name, reason: "已添加" }); continue; }

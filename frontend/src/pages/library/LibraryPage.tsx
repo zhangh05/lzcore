@@ -52,7 +52,7 @@ const fileName = (f: FileRec) => f.original_name ?? f.name ?? f.filename ?? f.fi
 export const fileFolder = (f: FileRec) => f.metadata?.folder ?? f.folder ?? "";
 
 function FilesView({ ws }: { ws: string }) {
-  const [lifecycle, setLifecycle] = useState<"active" | "trash">("active");
+  const [lifecycle, setLifecycle] = useState<"active" | "soft_deleted">("active");
   const [q, setQ] = useState("");
   const [files, reload] = useApi("/api/storage/files", { workspace_id: ws, lifecycle, q });
   const [open, setOpen] = useState<FileRec | null>(null);
@@ -66,10 +66,10 @@ function FilesView({ ws }: { ws: string }) {
         <>
           <div className="row-actions">
             <input className="input" placeholder="按名称筛选" value={q} onChange={(e) => setQ(e.target.value)} aria-label="按名称筛选" />
-            <select value={lifecycle} onChange={(e) => setLifecycle(e.target.value as "active" | "trash")} aria-label="生命周期"><option value="active">在用</option><option value="trash">回收站</option></select>
+            <select value={lifecycle} onChange={(e) => setLifecycle(e.target.value as "active" | "soft_deleted")} aria-label="生命周期"><option value="active">在用</option><option value="soft_deleted">回收站</option></select>
           </div>
           <LoadState value={files} onReload={reload}>{() => (
-            <Table testId="files-table" rows={listOf<FileRec>(files, "files")} rowKey={(f) => f.file_id} onRowOpen={setOpen} empty={<p className="muted">{lifecycle === "trash" ? "回收站为空。" : "还没有文件。"}</p>}
+            <Table testId="files-table" rows={listOf<FileRec>(files, "files")} rowKey={(f) => f.file_id} onRowOpen={setOpen} empty={<p className="muted">{lifecycle === "soft_deleted" ? "回收站为空。" : "还没有文件。"}</p>}
               columns={[
                 { key: "name", label: "名称", render: fileName, sortValue: fileName },
                 { key: "folder", label: "文件夹", render: (f) => fileFolder(f) || "—", sortValue: fileFolder },
@@ -82,7 +82,7 @@ function FilesView({ ws }: { ws: string }) {
       ) : null}
       {view === "sources" ? <SourcesBrowser ws={ws} /> : null}
       {view === "governance" ? <FileGovernance ws={ws} /> : null}
-      {open ? <FileDetail ws={ws} file={open} trash={lifecycle === "trash"} onClose={() => { setOpen(null); reload(); }} /> : null}
+      {open ? <FileDetail ws={ws} file={open} trash={lifecycle === "soft_deleted"} onClose={() => { setOpen(null); reload(); }} /> : null}
     </>
   );
 }
@@ -117,7 +117,7 @@ function FileDetail({ ws, file, trash, onClose }: { ws: string; file: FileRec; t
       <LoadState value={meta} onReload={reloadMeta}>{() => <KeyValues items={[
         ["名称", <span key="n" data-testid="file-detail-name">{fileName(current)}</span>],
         ["文件夹", <span key="f" data-testid="file-detail-folder">{fileFolder(current) || "（根目录）"}</span>],
-        ["状态", current.lifecycle === "trash" ? "回收站" : current.lifecycle === "active" ? "在用" : current.lifecycle ?? "未上报"],
+        ["状态", current.lifecycle === "soft_deleted" ? "回收站" : current.lifecycle === "active" ? "在用" : current.lifecycle ?? "未上报"],
         ["类型", fileType(current) ?? "未上报"],
         ["大小", typeof current.size_bytes === "number" ? `${Math.ceil(current.size_bytes / 1024)} KB` : "未上报"],
         ["更新", fmtTime(current.updated_at ?? current.created_at)],
@@ -150,6 +150,9 @@ function FileDetail({ ws, file, trash, onClose }: { ws: string; file: FileRec; t
   );
 }
 
+/** 后端 storage/source_workspace.py 的条目形状。 */
+interface SourceEntry { name: string; filepath: string; type: "directory" | "file" | "symlink"; accessible?: boolean; size_bytes?: number }
+
 function SourcesBrowser({ ws }: { ws: string }) {
   const [path, setPath] = useState("files/data");
   const [entries, reload] = useApi("/api/storage/sources", { workspace_id: ws, filepath: path });
@@ -159,8 +162,9 @@ function SourcesBrowser({ ws }: { ws: string }) {
     <section data-testid="sources-browser">
       <p className="muted">路径：<code>{path}</code> {path !== "files/data" ? <Button variant="ghost" onClick={() => setPath(path.split("/").slice(0, -1).join("/") || "files/data")}>上一级</Button> : null}</p>
       <LoadState value={entries} onReload={reload}>{() => (
-        <ul className="nav-list">{listOf<{ name: string; path: string; is_dir?: boolean; kind?: string }>(entries, "entries").map((e) => (
-          <li key={e.path}><button type="button" className="btn ghost" onClick={() => (e.is_dir || e.kind === "dir" ? setPath(e.path) : setOpen(e.path))}>{e.is_dir || e.kind === "dir" ? "📁" : "📄"} {e.name}</button></li>
+        <ul className="nav-list">{listOf<SourceEntry>(entries, "entries").map((e) => (
+          <li key={e.filepath}><button type="button" className="btn ghost" disabled={e.accessible === false} title={e.accessible === false ? "链接不跟随，不可打开" : undefined}
+            onClick={() => (e.type === "directory" ? setPath(e.filepath) : setOpen(e.filepath))}>{e.type === "directory" ? "📁" : e.type === "symlink" ? "🔗" : "📄"} {e.name}</button></li>
         ))}</ul>
       )}</LoadState>
       {open ? <Drawer title={open} onClose={() => setOpen(null)}><LoadState value={content}>{(d) => <pre className="json-block">{String((d as { content?: string }).content ?? "")}</pre>}</LoadState></Drawer> : null}

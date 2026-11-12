@@ -82,7 +82,7 @@ export function CatalogDrawer({ ws, onClose }: { ws: string; onClose: () => void
                       </dl>
                       <RawData value={t} label="合同原文" />
                     </details>
-                    <Button className="sm" onClick={async () => setDry({ tool: t.tool_id, o: await api.post("/api/tools/dry-run", { workspace_id: ws, tool_id: t.tool_id, arguments: {} }) })} data-testid={`dry-run-${t.tool_id}`}>演示调用（不执行）</Button>
+                    <Button className="sm" onClick={async () => setDry({ tool: t.tool_id, o: await api.post("/api/tools/dry-run", { workspace_id: ws, tool_id: t.tool_id, arguments: {} }, { workspace_id: ws }) })} data-testid={`dry-run-${t.tool_id}`}>演示调用（不执行）</Button>
                     {dry?.tool === t.tool_id ? (dry.o.kind === "http" && dry.o.status < 300 ? <div data-testid="dry-run-result"><p className="muted">仅演示结果（未执行）。</p><RawData value={dry.o.body} label="演示响应原文" /></div> : <FailureNote outcome={dry.o} />) : null}
                   </li>
                 ))}

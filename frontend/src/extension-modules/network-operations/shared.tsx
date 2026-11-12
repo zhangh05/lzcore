@@ -12,9 +12,21 @@ export { listOf };
 
 export type ActionResult = { label: string; o: HttpOutcome } | null;
 
+/** 2xx 且 body 没有明确 ok:false 才算受理（部分扩展接口曾用 200 + ok:false 表示未受理）。 */
+export function accepted(o: HttpOutcome): boolean {
+  if (o.kind !== "http" || o.status >= 300) return false;
+  const b = o.body as { ok?: unknown } | null | undefined;
+  return !(b && typeof b === "object" && b.ok === false);
+}
+
 export function Result({ r }: { r: ActionResult }) {
   if (!r) return null;
-  return r.o.kind === "http" && r.o.status < 300 ? <ReceiptNote text={`${r.label}已提交`} /> : <FailureNote outcome={r.o} />;
+  if (accepted(r.o)) return <ReceiptNote text={`${r.label}已提交`} />;
+  if (r.o.kind === "http" && r.o.status < 300) {
+    const b = r.o.body as { error?: unknown; message?: unknown } | null;
+    return <p className="inline-alert tone-warn" role="alert">{r.label}未受理{b?.error || b?.message ? `：${String(b?.error ?? b?.message)}` : "（对象可能已不存在或状态已变化，请刷新）"}</p>;
+  }
+  return <FailureNote outcome={r.o} />;
 }
 
 /** 保存后的回读说明：显示服务端回读的关键字段，回读失败如实说「未能回读」。 */
