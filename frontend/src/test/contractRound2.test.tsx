@@ -111,3 +111,15 @@ describe("F15 / F16 / T02", () => {
     expect(got).toEqual({ session_id: "s1", client_request_id: "cr" });
   });
 });
+
+import { canReenable, extensionAvailability } from "../contracts/extensions";
+
+describe("扩展被自动隔离后可重新启用", () => {
+  it("quarantined：说明原因并允许重新启用", () => {
+    const ext = { extension_id: "network.operations", name: "网络运维", lifecycle: { enabled: false, status: "quarantined", last_error: "boom" } };
+    expect(canReenable(ext as never)).toBe(true);
+    expect(extensionAvailability(ext as never).reason).toContain("自动停用");
+    expect(extensionAvailability(ext as never).reason).toContain("boom");
+    expect(canReenable({ extension_id: "a", name: "a", lifecycle: { enabled: true, status: "ready" } } as never)).toBe(false);
+  });
+});
