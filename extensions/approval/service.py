@@ -355,6 +355,7 @@ def claim_ready_continuation(workspace_id: str, operation_id: str) -> dict[str, 
         if any(str(item.get("status") or "") not in terminal for item in operations):
             return None
         checkpoint["status"] = "resuming"
+        checkpoint["client_request_id"] = f"approval_resume_{uuid.uuid4().hex}"
         checkpoint["updated_at"] = _now()
         checkpoint["operations"] = operations
         _store(workspace_id).save("continuations", checkpoint_id, checkpoint)

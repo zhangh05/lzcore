@@ -24,7 +24,7 @@ def _resume_checkpoint(workspace_id: str, checkpoint: dict) -> None:
             user_input=str(checkpoint.get("user_input") or ""),
             workspace_id=workspace_id,
             session_id=str(checkpoint.get("session_id") or ""),
-            metadata={},
+            metadata={"client_request_id": checkpoint["client_request_id"]},
             runtime_control=ApprovalContinuationRuntimeControl(
                 checkpoint=checkpoint,
                 workbench_context=dict(checkpoint.get("workbench_context") or {}),
@@ -44,7 +44,12 @@ def _start_ready_continuation(workspace_id: str, operation_id: str) -> dict | No
     if checkpoint is None:
         return None
     _CONTINUATION_EXECUTOR.submit(_resume_checkpoint, workspace_id, checkpoint)
-    return {"checkpoint_id": checkpoint.get("checkpoint_id"), "status": "resuming"}
+    continuation = {"checkpoint_id": checkpoint.get("checkpoint_id"), "status": "resuming"}
+    for key in ("session_id", "client_request_id"):
+        if checkpoint.get(key):
+            continuation[key] = checkpoint[key]
+    # This path submits directly to AgentApp, without creating a Job.
+    return continuation
 
 
 def register_routes(app):

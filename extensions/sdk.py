@@ -46,7 +46,7 @@ class ExtensionDataStore:
             ("extensions", self.namespace, _segment(collection), f"{_segment(record_id)}.json"),
         )
 
-    def list(self, collection: str, *, limit: int = 200) -> list[dict[str, Any]]:
+    def list(self, collection: str, *, limit: int | None = 200) -> list[dict[str, Any]]:
         return list_json_records(
             self.workspace_id,
             ("extensions", self.namespace, _segment(collection)),

@@ -264,6 +264,18 @@ def register_knowledge_routes(app):
         ws_id, err = _validated_ws_id(ws_id)
         if err:
             return err
+        try:
+            chunk_offset = int(request.args.get("chunk_offset", "0"))
+            if chunk_offset < 0:
+                raise ValueError
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid_chunk_offset"}), 400
+        try:
+            chunk_limit = int(request.args.get("chunk_limit", "50"))
+            if not 1 <= chunk_limit <= 200:
+                raise ValueError
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid_chunk_limit"}), 400
         from agent.modules.knowledge.service import list_chunks, list_sources
         result = list_sources(ws_id, include_disabled=True, include_deleted=True)
         for s in result.get("sources", []):
@@ -271,9 +283,12 @@ def register_knowledge_routes(app):
             if sid == source_id:
                 sd = dict(s)
                 from agent.modules.knowledge.index import child_counts_by_source
-                chunk_result = list_chunks(ws_id, source_id=source_id, limit=50)
+                chunk_result = list_chunks(ws_id, source_id=source_id, limit=chunk_limit, offset=chunk_offset)
                 chunks = chunk_result.get("chunks", []) if chunk_result.get("ok") else []
                 sd["chunks"] = [_chunk_dict(c) for c in chunks]
+                sd["chunks_total"] = chunk_result.get("total", 0)
+                end = chunk_offset + len(chunks)
+                sd["next_chunk_offset"] = end if end < sd["chunks_total"] else None
                 sd["chunk_count"] = child_counts_by_source(ws_id).get(source_id, 0)
                 return jsonify({"ok": True, "source": sd})
         return jsonify({"ok": False, "error": "source_not_found"}), 404

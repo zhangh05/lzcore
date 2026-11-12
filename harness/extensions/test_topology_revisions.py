@@ -163,6 +163,49 @@ def test_revision_history_is_removed_with_the_topology(workspace):
     assert drawings.list_topology_revisions(workspace, topo["topology_id"]) == []
 
 
+@pytest.mark.parametrize("restore_layout", [True, False])
+def test_restore_http_checks_expected_version_before_any_drawing_write(workspace, monkeypatch, restore_layout):
+    from flask import Flask
+    from extensions.network_operations.backend import register_routes
+
+    original = _two_node_topology(workspace)
+    revision = drawings.list_topology_revisions(workspace, original["topology_id"])[0]
+    current = drawings.save_topology(workspace, {
+        **original, "name": "Concurrent edit",
+        "nodes": [{**original["nodes"][0], "x": 900}, original["nodes"][1]],
+    })
+    root = drawings._store(workspace).root()
+    before = {path: path.read_bytes() for path in root.rglob("*.json")}
+    app = Flask(__name__)
+    register_routes(app)
+    client = app.test_client()
+    url = (f"/api/extensions/network.operations/topologies/{original['topology_id']}"
+           f"/revisions/{revision['revision_id']}/restore?workspace_id={workspace}")
+    # A stale version must never reach any mutation, notification, or migration.
+    def unexpected_write(*args, **kwargs):
+        raise AssertionError("conflicting restore attempted a write")
+    with monkeypatch.context() as scoped:
+        scoped.setattr(drawings, "get_topology_revision", unexpected_write)
+        scoped.setattr(drawings, "save_topology", unexpected_write)
+        scoped.setattr(drawings, "_record_topology_revision", unexpected_write)
+        response = client.post(url, json={"expected_version": original["version"], "restore_layout": restore_layout})
+    assert response.status_code == 409
+    assert response.json == {"ok": False, "error": "version_conflict", "current_version": current["version"]}
+    assert {path: path.read_bytes() for path in root.rglob("*.json")} == before
+    for invalid in (None, True, "2", 2.5):
+        invalid_response = client.post(url, json={"expected_version": invalid})
+        assert invalid_response.status_code == 400
+        assert invalid_response.json["error"] == "expected_version_must_be_integer"
+    response = client.post(url, json={"expected_version": current["version"], "restore_layout": restore_layout})
+    assert response.status_code == 200
+    restored = response.json["topology"]
+    assert restored["name"] == original["name"]
+    assert restored["version"] == current["version"] + 1
+    assert restored["nodes"][0]["x"] == (100 if restore_layout else 900)
+    # Omitting the guard preserves the existing restore behavior.
+    assert client.post(url, json={"restore_layout": restore_layout}).status_code == 200
+
+
 def test_history_gets_a_baseline_for_drawings_that_predate_it(workspace):
     topo = _two_node_topology(workspace)
     store = ExtensionDataStore("network.operations", workspace_id=workspace)

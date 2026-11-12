@@ -83,7 +83,7 @@ def list_chunks(
     items = store.list_items(
         item_type="knowledge_chunk",
         source_id=source_id if source_id else None,
-        limit=limit + offset,
+        limit=None,
     )
 
     if enabled:

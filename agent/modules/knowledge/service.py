@@ -207,16 +207,17 @@ def import_file(
 
 
 def list_chunks(workspace_id: str, source_id: str = "",
-                 chunk_type: str = "", limit: int = 200) -> dict:
+                 chunk_type: str = "", limit: int = 200, offset: int = 0) -> dict:
     from agent.modules.knowledge.index import list_chunks as _impl
     result = _impl(workspace_id=workspace_id, source_id=source_id,
-                 chunk_type=chunk_type, limit=limit)
+                 chunk_type=chunk_type, limit=limit, offset=offset)
     chunks = result.get("chunks", []) if isinstance(result, dict) else []
     return {
         "ok": True,
         "summary": f"Listed {len(chunks)} chunk(s)",
         "chunks": chunks,
         "count": len(chunks),
+        "total": result.get("total", len(chunks)),
         "errors": [], "warnings": [],
     }
 

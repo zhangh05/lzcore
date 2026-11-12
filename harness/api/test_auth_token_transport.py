@@ -38,6 +38,7 @@ def test_api_token_auth_status_is_a_browser_usable_owner_session(monkeypatch):
     assert status["role"] == "owner"
     assert status["platform_admin"] is True
     assert status["auth_type"] == "api_token"
+    assert status["api_token_required"] is False
     with app.test_request_context(
         "/api/agent/sse",
         headers={"X-API-Key": "secret-token"},
@@ -72,6 +73,44 @@ def test_anonymous_auth_status_projects_only_actual_personal_mode_authority(
     assert status["authenticated"] is False
     assert status["username"] == ""
     assert status["role"] == ""
+    assert status["api_token_required"] is auth_enabled
+    assert status["browser_login_available"] is (login_enabled or identity_enabled)
+
+
+@pytest.mark.parametrize("credential,login,identity,required", [
+    (None, False, False, True),
+    ("invalid", False, False, True),
+    ("valid", False, False, False),
+    ("cookie", True, False, False),
+    ("cookie", False, True, False),
+    (None, True, False, True),
+    (None, False, True, True),
+])
+def test_auth_status_reports_token_gate_without_changing_existing_authentication(
+    monkeypatch, credential, login, identity, required,
+):
+    import backend.core.auth as auth
+    monkeypatch.setenv("LZCORE_AUTH_ENABLED", "true")
+    monkeypatch.setenv("LZCORE_API_TOKEN", "valid")
+    monkeypatch.setenv("LZCORE_LOGIN_ENABLED", "true" if login else "false")
+    monkeypatch.setenv("LZCORE_LOGIN_USERNAME", "browser-user")
+    monkeypatch.setattr(auth, "_is_identity_enabled", lambda: identity)
+    monkeypatch.setattr("backend.core.identity.get_user", lambda _: {"enabled": True, "role": "viewer"})
+    app = Flask(__name__)
+    app.secret_key = "test-secret"
+    auth.register_auth_middleware(app)
+    app.add_url_rule("/api/auth/status", view_func=auth.handle_auth_status)
+    client = app.test_client()
+    if credential == "cookie":
+        with client.session_transaction() as cookie:
+            cookie["lzcore_user"] = "browser-user"
+    headers = {"Authorization": f"Bearer {credential}"} if credential in {"valid", "invalid"} else {}
+    response = client.get("/api/auth/status", headers=headers)
+    assert response.status_code == 200
+    assert response.json["api_token_required"] is required
+    assert response.json["browser_login_available"] is (login or identity)
+    assert response.json["authenticated"] is (credential in {"valid", "cookie"})
+    assert response.json["login_enabled"] is (login or identity)
 
 
 @pytest.mark.parametrize("remote,forwarded,local", [
