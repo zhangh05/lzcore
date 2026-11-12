@@ -599,7 +599,7 @@ def device_manage(invocation):
     # Preserve the server-determined execution class in the tool evidence so a
     # later synthesis cannot present a read-back as a configuration attempt.
     from storage.time_utils import now_iso
-    from .diagnostics import device_presentation
+    from extensions.network_operations.diagnostics import device_presentation
 
     target = result.get("target") or target
     result = {**result, "requested_action": action, "executed_action": effective_action,
@@ -805,7 +805,7 @@ def topology_tool(invocation):
                                if query in str(item.get(caption) or "").casefold() or query in item[id_key].casefold()]
                     args[field] = list(dict.fromkeys([*supplied, *matches]))
             if any(key in args for key in ("node_ids", "link_ids", "canvas_item_ids")):
-                from .drawing_context import drawing_subset
+                from extensions.network_operations.drawing_context import drawing_subset
                 subset, unavailable = drawing_subset(topology, args, args.get("include_neighbors", True))
                 return {"ok": True, "action": "read", "topology": subset, "topology_id": topology_id,
                         "version": topology["version"], "snapshot_complete": False, "unavailable_ids": unavailable,
