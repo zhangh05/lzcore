@@ -63,7 +63,10 @@ const ROLE_RANK: Record<string, number> = { viewer: 0, operator: 1, developer: 2
 /** 扩展可用性。只读 lifecycle 与 minimum_role，不猜。 */
 export function extensionAvailability(ext: ExtensionCatalogItem, role?: string): { available: boolean; reason?: string } {
   const lc = ext.lifecycle ?? {};
-  if (lc.enabled === false) return { available: false, reason: "该扩展已停用，请在系统中启用后再使用。" };
+  if (lc.enabled === false && String(lc.status ?? "") === "quarantined") {
+    return { available: false, reason: `连续出错后已被自动停用${lc.last_error ? `（最近一次错误：${lc.last_error}）` : ""}。可在「扩展」里重新启用，重启应用后生效。` };
+  }
+  if (lc.enabled === false) return { available: false, reason: "该扩展已停用。可在「扩展」里重新启用，重启应用后生效。" };
   const status = String(lc.status ?? "ready");
   if (status !== "ready") {
     const detail = lc.last_error ? `：${lc.last_error}` : "";
@@ -128,4 +131,10 @@ export function resolveExtensionRoute(pathname: string, state: ExtensionRegistry
 /** 扩展区导航项：只来自注册表。注册表失败时返回空，由壳显示原因。 */
 export function extensionNavItems(state: ExtensionRegistryState): ExtensionMount[] {
   return state.kind === "ready" ? state.mounts : [];
+}
+
+/** 停用或被自动隔离的扩展可以由用户重新启用（服务端再做权限校验）。 */
+export function canReenable(ext: ExtensionCatalogItem): boolean {
+  const lc = ext.lifecycle ?? {};
+  return lc.enabled === false || String(lc.status ?? "ready") === "quarantined";
 }

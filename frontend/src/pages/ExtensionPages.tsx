@@ -1,9 +1,11 @@
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
+import { api, describeFailure, enc } from "../api/client";
+import { Button } from "../components/Button";
 import { EmptyState, PageHeader } from "../components/EmptyState";
 import { moduleFor } from "../extension-modules/registry";
 import { IconArrowUpRight, IconPuzzle, IconWarningCircle } from "../components/Icon";
 import { NavIcon } from "../components/NavIcon";
-import { extensionAvailability, resolveExtensionRoute } from "../contracts/extensions";
+import { canReenable, extensionAvailability, resolveExtensionRoute, type ExtensionCatalogItem } from "../contracts/extensions";
 import { extensionRouteTitle, NAMES } from "../contracts/naming";
 import { Link } from "../router";
 import { useShell } from "../app/shellContext";
@@ -24,7 +26,8 @@ export function ExtensionRoutePage({ pathname }: { pathname: string }) {
         <EmptyState icon={<IconPuzzle size={24} />} title="扩展未安装" reason={r.reason} action={back} /></div>;
     case "unavailable":
       return <div className="page" data-testid="ext-unavailable"><PageHeader title={extensionRouteTitle(r.mount.extensionName, r.mount.label)} />
-        <EmptyState icon={<IconWarningCircle size={24} />} title="扩展暂不可用" reason={r.reason} action={back} /></div>;
+        <EmptyState icon={<IconWarningCircle size={24} />} title="扩展暂不可用" reason={r.reason} action={back} />
+        {(() => { const ext = extensions.kind === "ready" ? extensions.extensions.find((e) => e.extension_id === r.mount.extensionId) : undefined; return ext && canReenable(ext) ? <ReenableExtension ext={ext} /> : null; })()}</div>;
     case "mounted": {
       const Module = moduleFor(r.mount.extensionId, r.mount.path);
       return <div className="page page-ext" data-testid="ext-mounted"><PageHeader title={extensionRouteTitle(r.mount.extensionName, r.mount.label)} subtitle={r.mount.description} />
@@ -68,6 +71,7 @@ export function ExtensionsOverview() {
                 </div>
                 {ext.description ? <p className="ext-card-desc">{ext.description}</p> : null}
                 {!a.available ? <p className="ext-card-reason">{a.reason}</p> : null}
+                {canReenable(ext) ? <ReenableExtension ext={ext} /> : null}
                 <div className="ext-card-links">
                   {pages.length ? pages.map((m) => (
                     <Link key={m.path} to={hrefFor(m.path)} className="btn sm">{m.label}<IconArrowUpRight size={14} aria-hidden="true" /></Link>
@@ -78,6 +82,23 @@ export function ExtensionsOverview() {
           })}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+/** 重新启用已停用 / 被自动隔离的扩展。路由在启动时注册，所以服务端要求重启后才生效，这里如实说明。 */
+function ReenableExtension({ ext }: { ext: ExtensionCatalogItem }) {
+  const [state, setState] = useState<{ kind: "idle" | "busy" } | { kind: "done"; restart: boolean } | { kind: "failed"; reason: string }>({ kind: "idle" });
+  return (
+    <div className="row-actions" data-testid="ext-reenable">
+      <Button className="sm" disabled={state.kind === "busy" || state.kind === "done"} onClick={async () => {
+        setState({ kind: "busy" });
+        const o = await api.post(`/api/extensions/${enc(ext.extension_id)}/enable`, {});
+        if (o.kind === "http" && o.status < 300) setState({ kind: "done", restart: (o.body as { restart_required?: boolean } | null)?.restart_required !== false });
+        else setState({ kind: "failed", reason: describeFailure(o) });
+      }}>{state.kind === "busy" ? "启用中…" : "重新启用"}</Button>
+      {state.kind === "done" ? <span role="status">已重新启用。{state.restart ? "请重启应用（或后端服务）后生效。" : ""}</span> : null}
+      {state.kind === "failed" ? <span role="alert" className="inline-alert tone-warn">没有启用：{state.reason}</span> : null}
     </div>
   );
 }
