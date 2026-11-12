@@ -67,7 +67,7 @@ import {
   type LayoutAlgorithm,
 } from "./topologyLayout";
 import { resolveTopologySession } from "./TopologySessionResolver";
-import { readTopologyParam } from "../topologyParams";
+import { useRequestedTopologySelection } from "./useRequestedTopologySelection";
 import "./TopologyStudio.css";
 
 import type { Topology } from "./topologyDocument";
@@ -91,36 +91,8 @@ export default function TopologyWorkspace({
   setNotice,
   busy,
 }: TopologyWorkspaceProps) {
-  const requestedTopologyId =
-    typeof window === "undefined"
-      ? ""
-      : readTopologyParam();
-  const [selectedTopologyId, setSelectedTopologyId] = useState<string>(() => {
-    if (
-      requestedTopologyId &&
-      topologies.some((item) => item.topology_id === requestedTopologyId)
-    )
-      return requestedTopologyId;
-    return topologies[0]?.topology_id || "";
-  });
-
-  useEffect(() => {
-    if (
-      requestedTopologyId &&
-      topologies.some((item) => item.topology_id === requestedTopologyId)
-    ) {
-      setSelectedTopologyId(requestedTopologyId);
-      return;
-    }
-    if (!selectedTopologyId && topologies.length > 0) {
-      setSelectedTopologyId(topologies[0].topology_id);
-    } else if (
-      selectedTopologyId &&
-      !topologies.some((t) => t.topology_id === selectedTopologyId)
-    ) {
-      setSelectedTopologyId(topologies[0]?.topology_id || "");
-    }
-  }, [requestedTopologyId, topologies, selectedTopologyId]);
+  const [selectedTopologyId, setSelectedTopologyId] =
+    useRequestedTopologySelection(topologies);
 
   const currentTopology = useMemo(() => {
     return topologies.find((t) => t.topology_id === selectedTopologyId) || null;
@@ -1124,9 +1096,7 @@ export default function TopologyWorkspace({
             }}
             onUndoChange={undoDrawingChange}
             onClose={() => setShowAgent(false)}
-            onCompleted={() => {
-              void handleAgentCompleted();
-            }}
+            onCompleted={handleAgentCompleted}
           />
         </aside>
       )}
