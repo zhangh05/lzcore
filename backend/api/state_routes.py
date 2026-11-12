@@ -303,7 +303,7 @@ def register_state_routes(app):
             from core.tools.ecosystem import preview_import
             data = request.get_json(silent=True) or {}
             result = preview_import(data)
-            return jsonify(result)
+            return jsonify(result), (200 if result.get("ok") else 400)
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)[:200]}), 500
 
@@ -316,6 +316,8 @@ def register_state_routes(app):
         try:
             from core.tools.ecosystem import apply_import
             data = request.get_json(silent=True) or {}
+            if not isinstance(data, dict):
+                return jsonify({"ok": False, "error": "invalid_import_payload"}), 400
             confirm = str(request.args.get("confirm", data.get("confirm", "false"))).lower() == "true"
             result = apply_import(data, ws_id, confirm=confirm)
             code = 200 if result.get("ok") else 400

@@ -1,6 +1,7 @@
 """Turn persistence — write run records, messages, and trace events to disk."""
 
 from agent.runtime.message_identity import user_message_storage_run_id
+from agent.runtime.message_projection import message_display_metadata
 import logging
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -137,6 +138,7 @@ def persist_run_record(session, turn, result, context) -> bool:
             if assistant_text:
                 history_tools = _history_tool_context(result)
                 message_metadata = {
+                    **message_display_metadata(result, artifact_refs),
                     "client_request_id": client_request_id,
                     "created_at": now_iso(),
                     "intent": state.intent,

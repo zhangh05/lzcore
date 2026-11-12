@@ -137,8 +137,33 @@ def validate_skill_manifest(skill_data: dict) -> tuple[bool, str, dict]:
 
 # ── Import safety ──
 
+def _import_error(data: dict) -> dict | None:
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "invalid_import_payload"}
+    # Source resolution and standalone Skill installation are not implemented.
+    # Reject the whole request before any write instead of silently skipping it.
+    for key in ("source", "skills"):
+        if data.get(key):
+            return {"ok": False, "error": "unsupported_field", "field": key}
+    count = 0
+    for key in ("providers", "memories"):
+        items = data.get(key, [])
+        if not isinstance(items, list) or any(not isinstance(item, dict) or not item for item in items):
+            return {"ok": False, "error": "invalid_import_payload", "field": key}
+        required = "name" if key == "providers" else "content"
+        if any(not isinstance(item.get(required), str) or not item[required].strip() for item in items):
+            return {"ok": False, "error": "invalid_import_payload", "field": key}
+        count += len(items)
+    if not count:
+        return {"ok": False, "error": "nothing_to_import"}
+    return None
+
+
 def preview_import(data: dict) -> dict:
     """Preview import without persisting."""
+    error = _import_error(data)
+    if error:
+        return error
     risks = []
     if "providers" in data:
         for p in data["providers"]:
@@ -148,20 +173,20 @@ def preview_import(data: dict) -> dict:
         for m in data.get("memories", []):
             if m.get("status") == "active":
                 risks.append(f"memory {m.get('memory_id','?')} will be set to pending")
-    if "skills" in data:
-        for s in data.get("skills",[]):
-            perms = s.get("permissions",[])
-            if len(perms) > 5:
-                risks.append(f"skill {s.get('name','?')} has broad permissions ({len(perms)})")
-    return {"ok": True, "risks": risks, "item_count": len(data)}
+    return {"ok": True, "risks": risks,
+            "item_count": sum(len(data.get(key, [])) for key in ("providers", "memories"))}
 
 
 def apply_import(data: dict, ws_id: str, confirm: bool = False) -> dict:
-    if not confirm: return {"ok": False, "error": "confirm=true required"}
     try:
         ws_id = validate_workspace_id(ws_id)
     except ValueError:
         return {"ok": False, "error": "invalid_workspace_id"}
+    error = _import_error(data)
+    if error:
+        return error
+    if not confirm:
+        return {"ok": False, "error": "confirm=true required"}
     results = {
         "providers_imported": 0,
         "memories_imported": 0,
@@ -208,6 +233,8 @@ def apply_import(data: dict, ws_id: str, confirm: bool = False) -> dict:
             except Exception as exc:
                 _LOG.warning("ecosystem provider import failed", exc_info=True)
                 results["errors"].append({"kind": "provider", "error": type(exc).__name__})
+    if not (results["providers_imported"] or results["memories_imported"]):
+        return {"ok": False, "error": "import_failed", **results}
     return {"ok": True, **results}
 
 

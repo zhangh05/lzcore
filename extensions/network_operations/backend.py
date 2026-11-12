@@ -68,7 +68,9 @@ def register_routes(app):
             return jsonify({"ok": True, "device": device}) if device else (jsonify({"ok": False, "error": "device_not_found"}), 404)
         try:
             if request.method == "DELETE":
-                return jsonify({"ok": service.delete_device(ws, device_id)})
+                if not service.delete_device(ws, device_id):
+                    return jsonify({"ok": False, "error": "device_not_found"}), 404
+                return jsonify({"ok": True})
             return jsonify({"ok": True, "device": service.save_device(ws, {**_payload(), "device_id": device_id})})
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
@@ -154,7 +156,7 @@ def register_routes(app):
                 return jsonify({"ok": False, "error": "inspection_limit_must_be_1_to_200"}), 400
             tasks = service.list_inspections(ws, limit=limit + 1)
             return jsonify({"ok": True, "inspections": [
-                {**task, "presentation": _inspection_result(task)["presentation"]}
+                {**_inspection_view(task), "presentation": _inspection_result(task)["presentation"]}
                 for task in tasks[:limit]], "has_more": len(tasks) > limit})
         data = _payload()
         try:
@@ -175,14 +177,20 @@ def register_routes(app):
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         task = service.get_inspection(ws, task_id) if ws else None
-        return jsonify({"ok": True, "task": task}) if task else (jsonify({"ok": False, "error": "inspection_not_found"}), 404)
+        return jsonify({"ok": True, "task": _inspection_view(task)}) if task else (jsonify({"ok": False, "error": "inspection_not_found"}), 404)
 
     @app.route("/api/extensions/network.operations/inspections/<task_id>/cancel", methods=["POST"])
     def network_inspection_cancel(task_id):
         ws = _workspace()
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
-        return jsonify({"ok": service.cancel_inspection(ws, task_id)})
+        if service.cancel_inspection(ws, task_id):
+            return jsonify({"ok": True})
+        # Read after rejection so a task that ended during cancellation is a
+        # conflict, while an absent task remains a 404.
+        if not service.get_inspection(ws, task_id):
+            return jsonify({"ok": False, "error": "inspection_not_found"}), 404
+        return jsonify({"ok": False, "error": "inspection_cancel_conflict"}), 409
 
     @app.route("/api/extensions/network.operations/inspections/<task_id>/retry", methods=["POST"])
     def network_inspection_retry(task_id):
@@ -190,7 +198,7 @@ def register_routes(app):
         if not ws:
             return jsonify({"ok": False, "error": "workspace_id is required"}), 400
         try:
-            return jsonify({"ok": True, "task": service.retry_inspection(ws, task_id)}), 202
+            return jsonify({"ok": True, "task": _inspection_view(service.retry_inspection(ws, task_id))}), 202
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -820,6 +828,19 @@ def topology_tool(invocation):
             "current_version": current_v,
             "hint": f"图纸操作提示: {exc}。当前图纸最新版本为 v{current_v}。",
         }
+
+
+def _inspection_view(task: dict[str, Any]) -> dict[str, Any]:
+    """Describe the next retry from current facts without changing storage."""
+    item = dict(task)
+    if task.get("status") in {"failed", "partial", "cancelled"}:
+        item["retry_scope"] = (
+            "evidence_recollection" if task.get("error") == "inspection_evidence_persist_failed"
+            else "failed_targets"
+        )
+    elif item.get("retry_scope") == "unsuccessful_targets":
+        item["retry_scope"] = "failed_targets"
+    return item
 
 
 def _inspection_result(task: dict[str, Any]) -> dict[str, Any]:

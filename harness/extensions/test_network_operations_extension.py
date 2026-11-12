@@ -1169,6 +1169,12 @@ def test_extension_routes_cover_device_connection_and_skill_flow(monkeypatch, tm
     assert skills.status_code == 200
     assert skills.get_json()["skills"] == []
     assert client.get("/api/extensions/network.operations/devices/device_missing").status_code == 400
+    device_id = created.get_json()["device"]["device_id"]
+    deleted_device = client.delete(f"/api/extensions/network.operations/devices/{device_id}?workspace_id=default")
+    assert deleted_device.status_code == 200 and deleted_device.get_json() == {"ok": True}
+    absent_device = client.delete(f"/api/extensions/network.operations/devices/{device_id}?workspace_id=default")
+    assert absent_device.status_code == 404
+    assert absent_device.get_json() == {"ok": False, "error": "device_not_found"}
 
     observation = service.record_inspection_observation("default", {
         "task_id": "inspection_http_delete", "status": "succeeded", "finished_at": "2026-09-06T00:00:00Z",
@@ -1384,6 +1390,64 @@ def test_inline_inspection_retry_preserves_immutable_command_plan(monkeypatch, t
     recollected = service.retry_inspection("default", evidence_fault["task_id"])
     assert set(recollected["connection_ids"]) == set(failed["connection_ids"])
     assert recollected["retry_scope"] == "evidence_recollection"
+
+
+@pytest.mark.parametrize("status,code", [
+    (None, 404), ("queued", 200), ("running", 200),
+    ("succeeded", 409), ("failed", 409), ("cancelled", 409), ("partial", 409),
+])
+def test_inspection_cancel_http_distinguishes_absence_conflict_and_acceptance(monkeypatch, tmp_path, status, code):
+    from flask import Flask
+    from extensions.network_operations.backend import register_routes
+
+    _setup(monkeypatch, tmp_path)
+    app = Flask(__name__)
+    register_routes(app)
+    task_id = "inspection_cancel_http"
+    if status:
+        service._store("default").save("inspections", task_id, {"task_id": task_id, "status": status})
+    response = app.test_client().post(
+        f"/api/extensions/network.operations/inspections/{task_id}/cancel", json={"workspace_id": "default"},
+    )
+    assert response.status_code == code
+    assert response.get_json()["ok"] is (code == 200)
+    if code != 200:
+        assert response.get_json()["error"] == ("inspection_not_found" if code == 404 else "inspection_cancel_conflict")
+    else:
+        assert service.get_inspection("default", task_id)["status"] == "cancelled"
+
+
+def test_inspection_list_and_detail_describe_next_retry_scope(monkeypatch, tmp_path):
+    from flask import Flask
+    from extensions.network_operations.backend import register_routes
+
+    _setup(monkeypatch, tmp_path)
+    app = Flask(__name__)
+    register_routes(app)
+    client = app.test_client()
+    root = "/api/extensions/network.operations/inspections"
+    expected = {
+        "inspection_evidence": "evidence_recollection",
+        "inspection_failed": "failed_targets",
+        "inspection_partial": "failed_targets",
+        "inspection_cancelled": "failed_targets",
+        "inspection_running": None,
+        "inspection_succeeded": None,
+    }
+    for task_id in expected:
+        status = "failed" if task_id == "inspection_evidence" else task_id.removeprefix("inspection_")
+        task = {"task_id": task_id, "status": status}
+        if task_id == "inspection_evidence":
+            task.update(error="inspection_evidence_persist_failed", results={"conn-1": {"status": "succeeded"}})
+        service._store("default").save("inspections", task_id, task)
+    response = client.get(f"{root}?workspace_id=default")
+    assert response.status_code == 200
+    listed = {task["task_id"]: task for task in response.get_json()["inspections"]}
+    for task_id, scope in expected.items():
+        detail = client.get(f"{root}/{task_id}?workspace_id=default")
+        assert detail.status_code == 200
+        assert detail.get_json()["task"].get("retry_scope") == listed[task_id].get("retry_scope") == scope
+        assert "retry_scope" not in service.get_inspection("default", task_id)
 
 
 def test_script_inspection_retry_uses_original_snapshot_after_script_edit(monkeypatch, tmp_path):

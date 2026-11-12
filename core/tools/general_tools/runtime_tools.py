@@ -373,7 +373,8 @@ def handle_report_save_artifact(inv: ToolInvocation) -> dict:
         validate_workspace_id(ws)
         from artifacts.store import save_artifact
         rec = save_artifact(workspace_id=ws, content=content, title=title,
-                            artifact_type="report", sensitivity="internal")
+                            artifact_type="report", sensitivity="internal",
+                            run_id=inv.run_id or "", session_id=inv.session_id or "")
         if not rec:
             return _error_inv(inv, "report artifact save blocked or failed")
         return _ok(inv, "", {

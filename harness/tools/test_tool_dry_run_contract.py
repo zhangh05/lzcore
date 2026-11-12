@@ -1,5 +1,7 @@
 """Invocation-level dry-run must be opt-in and side-effect free."""
 
+import pytest
+
 from core.tools.executor import ToolExecutor
 from core.tools.registry import ToolRegistry
 from core.tools.schemas import ToolInvocation, ToolSpec
@@ -47,15 +49,17 @@ def test_canonical_tools_fail_closed_for_invocation_dry_run():
     assert all(spec.dry_run_supported is False for spec in specs if not spec.tool_id.startswith("network."))
 
 
-def test_rest_dry_run_previews_policy_without_requesting_handler_dry_run(monkeypatch, tmp_path):
+@pytest.mark.parametrize("placement", ["query", "body"])
+def test_rest_dry_run_previews_policy_without_requesting_handler_dry_run(monkeypatch, tmp_path, placement):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     monkeypatch.setenv("LZCORE_AUTH_ENABLED", "false")
     from backend.main import create_app
 
     from backend.core.local_token import local_browser_token
     response = create_app().test_client().post(
-        "/api/tools/dry-run?workspace_id=default",
-        json={"tool_id": "workspace.file", "arguments": {"action": "read", "filepath": "files/data/a.txt"}},
+        "/api/tools/dry-run" + ("?workspace_id=default" if placement == "query" else ""),
+        json={"tool_id": "workspace.file", "arguments": {"action": "read", "filepath": "files/data/a.txt"},
+              **({"workspace_id": "default"} if placement == "body" else {})},
         headers={"Origin": "http://localhost:8011", "X-LZCore-Local-Token": local_browser_token()},
     )
 
@@ -65,6 +69,21 @@ def test_rest_dry_run_previews_policy_without_requesting_handler_dry_run(monkeyp
     assert body["dry_run"] is True
     assert body["handler_will_execute"] is False
     assert body["policy_decision"]["allowed"] is True
+    assert body["workspace_id"] == "default"
+    assert not (tmp_path / "workspaces" / "default" / "files" / "data" / "a.txt").exists()
+
+
+def test_rest_dry_run_rejects_conflicting_workspace_sources():
+    from flask import Flask
+    from backend.api.runtime_routes import register_runtime_routes
+
+    app = Flask(__name__)
+    register_runtime_routes(app)
+    response = app.test_client().post("/api/tools/dry-run?workspace_id=workspace_a", json={
+        "workspace_id": "workspace_b", "tool_id": "workspace.file", "arguments": {"action": "read"},
+    })
+    assert response.status_code == 400
+    assert response.get_json() == {"ok": False, "error": "workspace_id_conflict"}
 
 
 def test_executor_explicitly_blocks_dry_run_even_if_policy_allowed():
