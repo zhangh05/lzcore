@@ -10,6 +10,7 @@ import { NAMES } from "../../contracts/naming";
 import { MemoryWriteView } from "../../kit/MemoryWriteView";
 import { reviewMemory, stableMemoryId, writeMemory, type MemoryWriteState } from "../../kit/memoryWrite";
 import { listOf, useApi } from "../../kit/useApi";
+import { LoadMore, usePaged } from "../../kit/usePaged";
 import { Chip, ConfirmDialog, Drawer, FailureNote, KeyValues, LoadState, PreviewApply, RawData, ReceiptNote, Table, Tabs, fmtTime } from "../../kit/ui";
 import { useLocation } from "../../router";
 
@@ -54,7 +55,8 @@ export const fileFolder = (f: FileRec) => f.metadata?.folder ?? f.folder ?? "";
 function FilesView({ ws }: { ws: string }) {
   const [lifecycle, setLifecycle] = useState<"active" | "soft_deleted">("active");
   const [q, setQ] = useState("");
-  const [files, reload] = useApi("/api/storage/files", { workspace_id: ws, lifecycle, q });
+  const filesPage = usePaged<FileRec>("/api/storage/files", { workspace_id: ws, lifecycle, q }, { listKey: "files", param: "cursor", next: "next_cursor" });
+  const { first: files, reload } = filesPage;
   const [open, setOpen] = useState<FileRec | null>(null);
   const [view, setView] = useState<"list" | "sources" | "governance">("list");
   return (
@@ -69,14 +71,14 @@ function FilesView({ ws }: { ws: string }) {
             <select value={lifecycle} onChange={(e) => setLifecycle(e.target.value as "active" | "soft_deleted")} aria-label="生命周期"><option value="active">在用</option><option value="soft_deleted">回收站</option></select>
           </div>
           <LoadState value={files} onReload={reload}>{() => (
-            <Table testId="files-table" rows={listOf<FileRec>(files, "files")} rowKey={(f) => f.file_id} onRowOpen={setOpen} empty={<p className="muted">{lifecycle === "soft_deleted" ? "回收站为空。" : "还没有文件。"}</p>}
+            <><Table testId="files-table" rows={filesPage.items} rowKey={(f) => f.file_id} onRowOpen={setOpen} empty={<p className="muted">{lifecycle === "soft_deleted" ? "回收站为空。" : "还没有文件。"}</p>}
               columns={[
                 { key: "name", label: "名称", render: fileName, sortValue: fileName },
                 { key: "folder", label: "文件夹", render: (f) => fileFolder(f) || "—", sortValue: fileFolder },
                 { key: "type", label: "类型", render: (f) => fileType(f) ?? "—" },
                 { key: "size", label: "大小", render: (f) => (typeof f.size_bytes === "number" ? `${Math.ceil(f.size_bytes / 1024)} KB` : "—"), sortValue: (f) => f.size_bytes ?? 0 },
                 { key: "time", label: "创建", render: (f) => fmtTime(f.created_at), sortValue: (f) => f.created_at ?? "" },
-              ]} />
+              ]} /><LoadMore paged={filesPage} testId="files-load-more" /></>
           )}</LoadState>
         </>
       ) : null}
@@ -155,17 +157,18 @@ interface SourceEntry { name: string; filepath: string; type: "directory" | "fil
 
 function SourcesBrowser({ ws }: { ws: string }) {
   const [path, setPath] = useState("files/data");
-  const [entries, reload] = useApi("/api/storage/sources", { workspace_id: ws, filepath: path });
+  const entriesPage = usePaged<SourceEntry>("/api/storage/sources", { workspace_id: ws, filepath: path }, { listKey: "entries", param: "offset", next: "next_offset" });
+  const { first: entries, reload } = entriesPage;
   const [open, setOpen] = useState<string | null>(null);
   const [content] = useApi(open ? "/api/storage/sources/content" : null, { workspace_id: ws, filepath: open ?? "" });
   return (
     <section data-testid="sources-browser">
       <p className="muted">路径：<code>{path}</code> {path !== "files/data" ? <Button variant="ghost" onClick={() => setPath(path.split("/").slice(0, -1).join("/") || "files/data")}>上一级</Button> : null}</p>
       <LoadState value={entries} onReload={reload}>{() => (
-        <ul className="nav-list">{listOf<SourceEntry>(entries, "entries").map((e) => (
+        <><ul className="nav-list">{entriesPage.items.map((e) => (
           <li key={e.filepath}><button type="button" className="btn ghost" disabled={e.accessible === false} title={e.accessible === false ? "链接不跟随，不可打开" : undefined}
             onClick={() => (e.type === "directory" ? setPath(e.filepath) : setOpen(e.filepath))}>{e.type === "directory" ? "📁" : e.type === "symlink" ? "🔗" : "📄"} {e.name}</button></li>
-        ))}</ul>
+        ))}</ul><LoadMore paged={entriesPage} testId="sources-load-more" /></>
       )}</LoadState>
       {open ? <Drawer title={open} onClose={() => setOpen(null)}><LoadState value={content}>{(d) => <pre className="json-block">{String((d as { content?: string }).content ?? "")}</pre>}</LoadState></Drawer> : null}
     </section>
@@ -296,13 +299,26 @@ function KnowledgeHits({ q, hits, onRead }: { q: string; hits: KHit[]; onRead: (
 
 interface KChunk { chunk_id?: string; content?: string; text?: string; safe_excerpt?: string; summary?: string; chunk_type?: string; chapter?: string; section?: string; parent_chunk_id?: string }
 const CHUNK_TYPE_ZH: Record<string, string> = { child: "检索片段", parent: "上下文段（父级）" };
+type KSourceDetail = KSource & { chunks?: KChunk[]; artifact_name?: string; created_at?: string; chunks_total?: number; next_chunk_offset?: number | null };
 function KnowledgeReader({ ws, sourceId, chunkId, title, listStatus, onClose }: { ws: string; sourceId: string; chunkId?: string; title?: string; listStatus?: string; onClose: () => void }) {
   const [src, reload] = useApi(`/api/knowledge/sources/${enc(sourceId)}`, { workspace_id: ws });
+  // 详情一次只给一段 chunk（后端 chunk_offset / chunk_limit）；按服务端 next_chunk_offset 追加，不假装已全部加载。
+  const [more, setMore] = useState<{ chunks: KChunk[]; next: number | null; loading: boolean; error: HttpOutcome | null } | null>(null);
+  const loadMoreChunks = async (from: number) => {
+    setMore((m) => ({ chunks: m?.chunks ?? [], next: from, loading: true, error: null }));
+    const o = await api.get(`/api/knowledge/sources/${enc(sourceId)}`, { workspace_id: ws, chunk_offset: from });
+    const b = bodyOf<{ source?: { chunks?: KChunk[]; next_chunk_offset?: number | null } }>(o);
+    if (o.kind !== "http" || o.status >= 300 || !Array.isArray(b?.source?.chunks)) { setMore((m) => ({ chunks: m?.chunks ?? [], next: from, loading: false, error: o })); return; }
+    setMore((m) => ({ chunks: [...(m?.chunks ?? []), ...b!.source!.chunks!], next: typeof b?.source?.next_chunk_offset === "number" ? b.source.next_chunk_offset : null, loading: false, error: null }));
+  };
   return (
     <Drawer title={title || sourceId} onClose={onClose} testId="knowledge-reader">
       <LoadState value={src} onReload={reload}>{(d) => {
-        const s = ((d as { source?: KSource & { chunks?: KChunk[]; artifact_name?: string; created_at?: string } }).source ?? {}) as KSource & { chunks?: KChunk[]; artifact_name?: string; created_at?: string };
-        const chunks = s.chunks ?? [];
+        const s = ((d as { source?: KSourceDetail }).source ?? {}) as KSourceDetail;
+        const firstNext = typeof s.next_chunk_offset === "number" ? s.next_chunk_offset : null;
+        const chunks = [...(s.chunks ?? []), ...(more?.chunks ?? [])];
+        const nextChunk = more ? more.next : firstNext;
+        const chunkTotal = typeof s.chunks_total === "number" ? s.chunks_total : s.chunk_count;
         return (
           <>
             <KeyValues items={[["来源", s.title ?? s.name ?? s.artifact_name ?? sourceId], ["索引状态", s.status ? (KNOWLEDGE_STATUS_LABEL[s.status] ?? s.status) : listStatus ? `${KNOWLEDGE_STATUS_LABEL[listStatus] ?? listStatus}（来源列表；详情未返回）` : "未上报"], ["片段", String(s.chunk_count ?? chunks.length)], ["更新", fmtTime(s.updated_at ?? s.created_at)], ["source_id", <code key="s">{sourceId}</code>]]} />
@@ -316,6 +332,13 @@ function KnowledgeReader({ ws, sourceId, chunkId, title, listStatus, onClose }: 
                 ))}
               </ol>
             ) : <p className="muted">该来源没有可读片段（可能尚未索引完成）。</p>}
+            {nextChunk !== null || (typeof chunkTotal === "number" && chunkTotal > chunks.length) ? (
+              <div className="row-actions" data-testid="knowledge-chunks-more">
+                <span className="muted">已显示 {chunks.length}{typeof chunkTotal === "number" ? ` / 共 ${chunkTotal}` : ""} 个片段</span>
+                {nextChunk !== null ? <Button variant="ghost" className="sm" disabled={!!more?.loading} onClick={() => void loadMoreChunks(nextChunk)}>{more?.loading ? "加载中…" : "加载更多片段"}</Button> : null}
+                {more?.error ? <FailureNote outcome={more.error} /> : null}
+              </div>
+            ) : null}
             <RawData value={s} label="来源记录原文" />
           </>
         );
@@ -328,7 +351,8 @@ interface MemRec { memory_id: string; summary?: string; content?: string; status
 const MEMORY_STATUS_LABEL: Record<string, string> = { active: "生效中", pending: "待确认", conflict: "与已有记忆冲突", rejected: "已拒绝", expired: "已过期" };
 
 function MemoryView({ ws }: { ws: string }) {
-  const [list, reload] = useApi("/api/memory/list", { workspace_id: ws });
+  const memPage = usePaged<MemRec>("/api/memory/list", { workspace_id: ws }, { listKey: "records", param: "offset", next: "next_offset" });
+  const { first: list, reload } = memPage;
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [batch, setBatch] = useState(false);
   const [draft, setDraft] = useState({ title: "", content: "" });
@@ -337,7 +361,7 @@ function MemoryView({ ws }: { ws: string }) {
   const [confirming, setConfirming] = useState<MemRec | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
   const [pendingReview, setPendingReview] = useState(false);
-  const records = listOf<MemRec>(list, "records");
+  const records = memPage.items;
   const draftKey = `${ws}:library:${draft.title}`;
   const blocked = writeState.kind === "unknown" || writeState.kind === "writing";
   return (
@@ -358,14 +382,14 @@ function MemoryView({ ws }: { ws: string }) {
       {notice ? (notice.o.kind === "http" && notice.o.status < 300 ? <ReceiptNote text={`${notice.label}已提交`} /> : <FailureNote outcome={notice.o} />) : null}
       {sel.size ? <Button variant="danger" onClick={() => setBatch(true)} data-testid="memory-batch-delete">删除所选（{sel.size}）</Button> : null}
       <LoadState value={list} onReload={reload}>{() => (
-        <Table testId="memory-table" rows={records} rowKey={(m) => m.memory_id} onRowOpen={(m) => setOpened(m.memory_id)} selectable selected={sel} onSelect={setSel} empty={<p className="muted">还没有记忆。</p>}
+        <><Table testId="memory-table" rows={records} rowKey={(m) => m.memory_id} onRowOpen={(m) => setOpened(m.memory_id)} selectable selected={sel} onSelect={setSel} empty={<p className="muted">还没有记忆。</p>}
           columns={[
             { key: "summary", label: "记忆", render: (m) => <button type="button" className="link-button" onClick={(e) => { e.stopPropagation(); setOpened(m.memory_id); }} data-testid="memory-open">{m.summary || m.content?.slice(0, 60) || m.memory_id}</button> },
             { key: "status", label: "状态", render: (m) => <Chip tone={m.status === "conflict" ? "warn" : m.status === "active" ? "ok" : "info"}>{MEMORY_STATUS_LABEL[m.status ?? ""] ?? m.status ?? "未上报"}</Chip> },
             { key: "conflict", label: "冲突", render: (m) => m.status === "conflict" ? <span data-testid="memory-conflict-hint">与 {(m.metadata?.conflict_memory_ids ?? []).join("、") || "已有记忆"} 冲突 <Button onClick={() => setConfirming(m)}>采用这条</Button></span> : "—" },
             { key: "id", label: "memory_id", render: (m) => <code>{m.memory_id}</code> },
             { key: "time", label: "更新", render: (m) => fmtTime(m.updated_at), sortValue: (m) => m.updated_at ?? "" },
-          ]} />
+          ]} /><LoadMore paged={memPage} testId="memory-load-more" /></>
       )}</LoadState>
       {confirming ? <ConfirmDialog title="采用这条记忆？" danger={false} confirmLabel="确认采用" onCancel={() => setConfirming(null)}
         details={<><p>确认后这条将生效，冲突的记忆：{(confirming.metadata?.conflict_memory_ids ?? []).map((i) => <code key={i}>{i} </code>)}。</p><p className="memory-full">{confirming.content}</p><RawData value={confirming} label="记录原文" /></>}

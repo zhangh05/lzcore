@@ -9,8 +9,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, bodyOf, describeFailure, enc, stableId } from "../../../../api/client";
-import { ensureLocalBrowserToken } from "../../../../api/localAuth";
-import { TurnTransport, wsUrl, type Frame, type TurnHandlers } from "../../../../realtime/turnTransport";
+import { clearLocalAuth, ensureLocalBrowserToken } from "../../../../api/localAuth";
+import { TurnTransport, turnErrorText, wsUrl, type Frame, type TurnHandlers } from "../../../../realtime/turnTransport";
 import { emitTopologyUpdated } from "../platform/realtime/turnTransport";
 import { renderMarkdown } from "../../../../utils/markdown";
 import { useNavigate } from "../platform/router";
@@ -105,6 +105,7 @@ export function TopologyAgentPanel({
       },
       // 助手每次写入图纸，服务端都会广播 topology_updated；转给画布，回合进行中就能看到图在长。
       onBroadcast: (name, data) => { if (name === "topology_updated") emitTopologyUpdated(data); },
+      onAuthRejected: () => { clearLocalAuth(); return ensureLocalBrowserToken(); },
     });
     transportRef.current = t;
     return () => { t.close(); transportRef.current = null; };
@@ -142,7 +143,7 @@ export function TopologyAgentPanel({
     onToken: (t) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
     onEvent: (name, data) => setLive((l) => l && { ...l, jobId: String(data.job_id ?? l.jobId ?? "") || undefined, status: name === "tool_call" ? `调用工具 ${String(data.tool_id ?? "")}` : name === "model_started" ? "模型处理中" : l.status }),
     onDone: () => void settle(sid, baseVersion),
-    onError: (f: Frame) => void settle(sid, baseVersion, `本轮报错：${String(f.message ?? f.error ?? "未知错误")}`),
+    onError: (f: Frame) => void settle(sid, baseVersion, turnErrorText(f)),
     onTransport: (s) => {
       if (s === "interrupted") setLive((l) => l && { ...l, status: "连接中断 · 回合可能仍在执行，正在续传 / 回读（不会自动重发）" });
       if (s === "resumed") setLive((l) => l && { ...l, status: "已重新连接 · 续传中" });

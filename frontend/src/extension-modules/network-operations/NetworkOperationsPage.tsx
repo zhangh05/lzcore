@@ -3,6 +3,7 @@ import { bodyOf } from "../../api/client";
 import { Button } from "../../components/Button";
 import type { HttpOutcome } from "../../contracts/auth";
 import type { Loadable } from "../../kit/useApi";
+import { LoadMore, usePaged } from "../../kit/usePaged";
 import { api } from "../../api/client";
 import { Chip, ConfirmDialog, Dialog, Drawer, JsonBlock, KeyValues, LoadState, Table, Tabs, fmtTime } from "../../kit/ui";
 import { Navigate, useSearchParams } from "../../router";
@@ -143,7 +144,8 @@ function SkillsPage({ ws }: { ws: string }) {
 const INSPECTION_STATUS: Record<string, string> = { queued: "已入队", running: "执行中", succeeded: "全部目标已采集", partial: "部分目标未采集", failed: "执行报错", cancelled: "已取消", cancel_requested: "已请求取消 · 等待终态", unknown: "结果未知 · 需核对" };
 
 function Inspections({ ws, openId, onOpen }: { ws: string; openId: string | null; onOpen: (id: string | null) => void }) {
-  const [list, reload] = useNet("/inspections", ws);
+  const page = usePaged<Inspection>(`${NET_BASE}/inspections`, { workspace_id: ws }, { listKey: "inspections", param: "offset", next: "next_offset" });
+  const { first: list, reload } = page;
   const [create, setCreate] = useState(false);
   const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
   return (
@@ -151,9 +153,9 @@ function Inspections({ ws, openId, onOpen }: { ws: string; openId: string | null
       <div className="studio-toolbar"><p className="muted">巡检只下发只读命令，逐台记录证据；部分失败可只重试未成功的目标。</p><Button variant="primary" onClick={() => setCreate(true)}>新建巡检</Button></div>
       <Result r={r} />
       <LoadState value={list} onReload={reload}>{() => (
-        <Table testId="inspections-table" rows={listOf<Inspection>(list, "inspections")} rowKey={(t) => t.task_id} onRowOpen={(t) => onOpen(t.task_id)} empty={<p className="muted">还没有巡检。</p>}
+        <><Table testId="inspections-table" rows={page.items} rowKey={(t) => t.task_id} onRowOpen={(t) => onOpen(t.task_id)} empty={<p className="muted">还没有巡检。</p>}
           columns={[{ key: "id", label: "巡检", render: (t) => <code>{t.task_id}</code> }, { key: "s", label: "状态", render: (t) => <Chip tone={t.status === "partial" ? "warn" : t.status === "unknown" ? "unknown" : "neutral"}>{INSPECTION_STATUS[t.status ?? ""] ?? t.status ?? "未上报"}</Chip> },
-            { key: "n", label: "目标数", render: (t) => String(t.connection_ids?.length ?? "—") }, { key: "t", label: "时间", render: (t) => fmtTime(t.created_at) }]} />
+            { key: "n", label: "目标数", render: (t) => String(t.connection_ids?.length ?? "—") }, { key: "t", label: "时间", render: (t) => fmtTime(t.created_at) }]} /><LoadMore paged={page} testId="inspections-load-more" /></>
       )}</LoadState>
       {create ? <CreateInspection ws={ws} onClose={() => setCreate(false)} onDone={(o) => { setR({ label: "巡检入队", o }); setCreate(false); reload(); }} /> : null}
       {openId ? <InspectionDetail ws={ws} taskId={openId} onClose={() => onOpen(null)} onOpenOther={onOpen} /> : null}

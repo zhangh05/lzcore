@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ensureLocalBrowserToken } from "../../api/localAuth";
+import { clearLocalAuth, ensureLocalBrowserToken } from "../../api/localAuth";
 import { api, bodyOf, describeFailure, enc, stableId, uploadMultipart } from "../../api/client";
 import { useShell, withWorkspace } from "../../app/shellContext";
 import { Button } from "../../components/Button";
 import { NAMES } from "../../contracts/naming";
+import { SESSION_CONTINUATION_EVENT, type SessionContinuation } from "../../contracts/workbench";
 import { useMediaQuery } from "../../kit/useMediaQuery";
 import { useApi } from "../../kit/useApi";
 import { Drawer, FailureNote, KeyValues, MenuButton, Popover, RawData, fmtTime } from "../../kit/ui";
-import { TurnTransport, wsUrl, type Frame } from "../../realtime/turnTransport";
+import { TurnTransport, turnErrorText, wsUrl, type Frame } from "../../realtime/turnTransport";
 import { useNavigate, useSearchParams } from "../../router";
 import { CatalogDrawer } from "./CatalogDrawer";
 import { Composer, type SendOptions } from "./Composer";
@@ -67,7 +68,7 @@ function useTransport(ws: string | null, readback: (sid: string, crid: string) =
   rb.current = readback;
   useEffect(() => {
     if (!ws) return;
-    const t = new TurnTransport({ url: wsUrl(), readback: (s, c) => rb.current(s, c) });
+    const t = new TurnTransport({ url: wsUrl(), readback: (s, c) => rb.current(s, c), onAuthRejected: () => { clearLocalAuth(); return ensureLocalBrowserToken(); } });
     ref.current = t;
     return () => { t.close(); ref.current = null; };
   }, [ws]);
@@ -175,7 +176,7 @@ export function Workbench() {
     onToken: (t: string) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
     onEvent: (name: string, data: Record<string, unknown>) => setLive((l) => l && applyLiveEvent(l, name, data)),
     onDone: () => void settle(),
-    onError: (f: Frame) => void settle(`本轮报错：${String(f.message ?? f.error ?? "未知错误")}`),
+    onError: (f: Frame) => void settle(turnErrorText(f)),
     onTransport: (s: "interrupted" | "resumed" | "readback_terminal") => {
       if (s === "interrupted") setLive((l) => l && { ...l, status: "连接中断 · 回合可能仍在执行，正在续传 / 回读（不会自动重发）" });
       if (s === "resumed") setLive((l) => l && { ...l, status: "已重新连接 · 续传中" });
@@ -208,25 +209,47 @@ export function Workbench() {
     return true;
   }, [ws, sessionId, transport, turnHandlers]);
 
-  // 重新进入会话（刷新、从别处跳回）时，上一轮可能仍在服务端执行：找到它并只续传日志，绝不重发 message。
+  // 重新进入会话（刷新、从别处跳回），或扩展通知「会话将继续执行」（如审批通过后自动续接）时：
+  // 找到这个会话正在服务端执行的回合，只续传日志，绝不重发 message。
   const liveRef = useRef(live);
   liveRef.current = live;
-  useEffect(() => {
-    if (!ws || !sessionId) return;
-    let off = false;
-    void (async () => {
-      const o = await api.get("/api/jobs", { workspace_id: ws, status: "running", job_type: "agent_run", limit: 50 });
-      const jobs = bodyOf<{ jobs?: Array<{ job_id?: string; metadata?: { active_turn?: { session_id?: string; client_request_id?: string; status?: string } } }> }>(o)?.jobs ?? [];
-      const job = jobs.find((j) => j.metadata?.active_turn?.session_id === sessionId && j.metadata.active_turn.status === "running" && j.metadata.active_turn.client_request_id);
-      const crid = job?.metadata?.active_turn?.client_request_id;
-      if (off || !crid || liveRef.current) return;
-      await ensureLocalBrowserToken();
-      if (off || liveRef.current || !transport.current) return;
-      setLive({ clientRequestId: crid, text: "", events: [], status: "上一轮仍在执行 · 正在接上进度", jobId: job?.job_id });
-      transport.current.resumeTurn({ workspaceId: ws, sessionId, clientRequestId: crid, handlers: turnHandlers });
-    })().catch(() => undefined);
-    return () => { off = true; };
+  const attachRunning = useCallback(async (isOff: () => boolean, preferred?: SessionContinuation) => {
+    if (!ws || !sessionId) return false;
+    const o = await api.get("/api/jobs", { workspace_id: ws, status: "running", job_type: "agent_run", limit: 50 });
+    const jobs = bodyOf<{ jobs?: Array<{ job_id?: string; metadata?: { active_turn?: { session_id?: string; client_request_id?: string; status?: string } } }> }>(o)?.jobs ?? [];
+    const mine = jobs.filter((j) => j.metadata?.active_turn?.session_id === sessionId && j.metadata.active_turn.status === "running" && j.metadata.active_turn.client_request_id);
+    const job = mine.find((j) => preferred?.client_request_id && j.metadata?.active_turn?.client_request_id === preferred.client_request_id)
+      ?? mine.find((j) => preferred?.job_id && j.job_id === preferred.job_id) ?? mine[0];
+    const crid = job?.metadata?.active_turn?.client_request_id;
+    if (isOff() || !crid || liveRef.current) return false;
+    await ensureLocalBrowserToken();
+    if (isOff() || liveRef.current || !transport.current) return false;
+    setLive({ clientRequestId: crid, text: "", events: [], status: "上一轮仍在执行 · 正在接上进度", jobId: job?.job_id });
+    transport.current.resumeTurn({ workspaceId: ws, sessionId, clientRequestId: crid, handlers: turnHandlers });
+    return true;
   }, [ws, sessionId, transport, turnHandlers]);
+  useEffect(() => {
+    let off = false;
+    void attachRunning(() => off).catch(() => undefined);
+    return () => { off = true; };
+  }, [attachRunning]);
+  useEffect(() => {
+    let off = false;
+    const onContinue = (ev: Event) => {
+      const detail = (ev as CustomEvent<SessionContinuation>).detail ?? {};
+      if (detail.session_id && detail.session_id !== sessionId) return;
+      // 续接回合由服务端后台启动，可能稍晚才出现在作业列表里：有界地找几次；找不到就回读消息。
+      void (async () => {
+        for (let i = 0; i < 8 && !off; i++) {
+          if (liveRef.current || await attachRunning(() => off, detail).catch(() => false)) return;
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+        if (!off) { await loadMessages(); await loadTask(); }
+      })();
+    };
+    window.addEventListener(SESSION_CONTINUATION_EVENT, onContinue);
+    return () => { off = true; window.removeEventListener(SESSION_CONTINUATION_EVENT, onContinue); };
+  }, [attachRunning, sessionId, loadMessages, loadTask]);
 
   const stop = useCallback(async () => {
     if (!ws || !live) return;
