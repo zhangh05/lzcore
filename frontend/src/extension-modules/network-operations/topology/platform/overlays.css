@@ -1,0 +1,120 @@
+/* 拓扑画布的模态框 / 确认框 / 表单框样式（PortalModal、ConfirmHost、FormDialogHost）。
+   从旧前端 styles/overlays.css 迁入：新壳没有这些类，缺了它们确认框会渲染到页面最底部看不见。 */
+
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: overlay-in var(--dur-2) var(--ease-out) both;
+}
+
+.modal {
+  width: min(600px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px);
+  padding: var(--space-6);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-dialog);
+  box-shadow: var(--shadow-float);
+  animation: dialog-in var(--dur-3) var(--ease-out) both;
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-weight: var(--weight-heading);
+  line-height: var(--lh-heading);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.modal.confirm-modal { width: min(440px, calc(100vw - 32px)); padding: 20px 20px 16px; }
+.confirm-dialog {
+  min-width: 260px;
+}
+.confirm-dialog-main { display: flex; align-items: flex-start; gap: 14px; }
+.confirm-dialog-text { flex: 1 1 auto; min-width: 0; padding-top: 6px; }
+.confirm-dialog-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: var(--info);
+  background: var(--info-soft);
+  border-radius: 50%;
+}
+.confirm-dialog.is-destructive .confirm-dialog-icon { color: var(--danger); background: var(--danger-soft); }
+
+.confirm-dialog-title {
+  margin: 0 0 8px;
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--weight-heading);
+  color: var(--text);
+}
+
+.confirm-dialog-body {
+  margin-bottom: 20px;
+  font-size: var(--fs-14);
+  color: var(--text-2);
+  line-height: var(--lh-14);
+  white-space: pre-line;
+}
+
+.confirm-dialog-actions {
+  justify-content: flex-end;
+}
+
+/* Form dialog: the in-app replacement for window.prompt (components/FormDialog.tsx). */
+.modal.form-dialog-modal { width: min(480px, calc(100vw - 32px)); }
+.form-dialog .confirm-dialog-body { margin-bottom: 16px; }
+.form-dialog-field { display: grid; gap: 6px; margin: 0 0 20px; }
+.form-dialog-label { font-size: var(--fs-13); font-weight: var(--weight-label); color: var(--text); }
+.form-dialog-control {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-control);
+  resize: vertical;
+}
+textarea.form-dialog-control { min-height: 96px; }
+.form-dialog-control::placeholder { color: var(--text-4); }
+.form-dialog-control:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; border-color: var(--accent); }
+.form-dialog-control.is-invalid { border-color: var(--danger); }
+.form-dialog-hint,
+.form-dialog-error { margin: 0; font-size: var(--fs-12); line-height: var(--lh-12); }
+.form-dialog-hint { color: var(--text-3); }
+.form-dialog-error { color: var(--danger); font-weight: var(--weight-label); }
+
+/* 新壳没有 .row-flex-sm 和 .btn.danger-confirm：确认框按钮靠右，危险确认用实心红。 */
+.confirm-dialog-actions { display: flex; align-items: center; gap: 8px; }
+.btn.danger-confirm { color: var(--danger-text, #fff); background: var(--danger); border-color: var(--danger); box-shadow: var(--shadow-xs); }
+.btn.danger-confirm:hover:not(:disabled) { color: var(--danger-text, #fff); background: color-mix(in srgb, var(--danger) 86%, var(--text)); border-color: transparent; }
+.btn.danger-confirm:disabled { color: var(--text-4); background: var(--surface-3); border-color: transparent; box-shadow: none; cursor: not-allowed; }
