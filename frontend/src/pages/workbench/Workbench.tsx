@@ -240,6 +240,14 @@ export function Workbench() {
       if (detail.session_id && detail.session_id !== sessionId) return;
       // 续接回合由服务端后台启动，可能稍晚才出现在作业列表里：有界地找几次；找不到就回读消息。
       void (async () => {
+        // 有请求 ID（审批续接直接跑在服务端，不一定有作业记录）：直接按它续传；续传不到时传输层会转为回读消息等终态。
+        if (detail.client_request_id && sessionId && ws && transport.current && !liveRef.current) {
+          await ensureLocalBrowserToken();
+          if (off || liveRef.current || !transport.current) return;
+          setLive({ clientRequestId: detail.client_request_id, text: "", events: [], status: "审批已通过 · 正在接着执行", jobId: detail.job_id });
+          transport.current.resumeTurn({ workspaceId: ws, sessionId, clientRequestId: detail.client_request_id, handlers: turnHandlers });
+          return;
+        }
         for (let i = 0; i < 8 && !off; i++) {
           if (liveRef.current || await attachRunning(() => off, detail).catch(() => false)) return;
           await new Promise((r) => setTimeout(r, 1500));
@@ -249,7 +257,7 @@ export function Workbench() {
     };
     window.addEventListener(SESSION_CONTINUATION_EVENT, onContinue);
     return () => { off = true; window.removeEventListener(SESSION_CONTINUATION_EVENT, onContinue); };
-  }, [attachRunning, sessionId, loadMessages, loadTask]);
+  }, [attachRunning, sessionId, loadMessages, loadTask, ws, transport, turnHandlers]);
 
   const stop = useCallback(async () => {
     if (!ws || !live) return;
