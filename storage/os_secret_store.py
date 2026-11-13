@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from ctypes import wintypes
 
 logger = logging.getLogger(__name__)
@@ -91,70 +92,70 @@ def _account(secret_id: str) -> str:
 
 
 def _keychain_set(secret_id: str, value: str) -> bool:
-    account = _account(secret_id)
-    _keychain_delete(secret_id)
     try:
+        account = _account(secret_id)
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", account):
+            raise ValueError("Invalid keychain account")
+        # Keep the security tool's existing Keychain ACL identity. Hex input
+        # avoids interactive-command injection and keeps secrets out of argv.
         result = subprocess.run(
-            ["security", "add-generic-password", "-U", "-s", SERVICE, "-a", account, "-w", value],
-            capture_output=True,
-            text=True,
-            timeout=8,
+            ["security", "-i"],
+            input=f"add-generic-password -U -s {SERVICE} -a {account} -X {value.encode('utf-8').hex()}\n",
+            capture_output=True, text=True, timeout=8,
         )
-        return result.returncode == 0
+        if result.returncode != 0:
+            logger.warning("Keychain set failed (returncode=%d)", result.returncode)
+            return False
+        # Interactive mode can exit successfully even when its command failed.
+        # Verify this account directly; a legacy fallback must not mask failure.
+        verified = subprocess.run(
+            ["security", "find-generic-password", "-s", SERVICE, "-a", account, "-w"],
+            capture_output=True, text=True, timeout=8,
+        )
+        if verified.returncode != 0:
+            logger.warning("Keychain verification failed (returncode=%d)", verified.returncode)
+            return False
+        if verified.stdout.strip() != value:
+            logger.warning("Keychain verification mismatch (returncode=%d)", verified.returncode)
+            return False
+        return True
     except Exception as exc:
-        logger.warning("Keychain set error for %s: %s", secret_id, exc)
+        logger.warning("Keychain set error (%s)", type(exc).__name__)
         return False
 
 
 def _keychain_get(secret_id: str) -> str:
-    account = _account(secret_id)
     try:
-        result = subprocess.run(
-            ["security", "find-generic-password", "-s", SERVICE, "-a", account, "-w"],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-        # Fallback to check legacy account format if exists
         legacy = str(secret_id or "").replace("/", "|")[:240]
-        if legacy != account:
-            result_legacy = subprocess.run(
-                ["security", "find-generic-password", "-s", SERVICE, "-a", legacy, "-w"],
-                capture_output=True,
-                text=True,
-                timeout=8,
+        for account in dict.fromkeys((_account(secret_id), legacy)):
+            result = subprocess.run(
+                ["security", "find-generic-password", "-s", SERVICE, "-a", account, "-w"],
+                capture_output=True, text=True, timeout=8,
             )
-            if result_legacy.returncode == 0:
-                return result_legacy.stdout.strip()
+            if result.returncode == 0:
+                return result.stdout.strip()
+            if result.returncode != 44:  # Item not found is expected.
+                logger.warning("Keychain get failed (returncode=%d)", result.returncode)
         return ""
     except Exception as exc:
-        logger.warning("Keychain get error for %s: %s", secret_id, exc)
+        logger.warning("Keychain get error (%s)", type(exc).__name__)
         return ""
 
 
 def _keychain_delete(secret_id: str) -> bool:
-    account = _account(secret_id)
     success = False
     try:
-        result = subprocess.run(
-            ["security", "delete-generic-password", "-s", SERVICE, "-a", account],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        success = (result.returncode == 0)
         legacy = str(secret_id or "").replace("/", "|")[:240]
-        if legacy != account:
-            subprocess.run(
-                ["security", "delete-generic-password", "-s", SERVICE, "-a", legacy],
-                capture_output=True,
-                text=True,
-                timeout=8,
+        for account in dict.fromkeys((_account(secret_id), legacy)):
+            result = subprocess.run(
+                ["security", "delete-generic-password", "-s", SERVICE, "-a", account],
+                capture_output=True, text=True, timeout=8,
             )
+            success = success or result.returncode == 0
+            if result.returncode not in {0, 44}:
+                logger.warning("Keychain delete failed (returncode=%d)", result.returncode)
     except Exception as exc:
-        logger.warning("Keychain delete error for %s: %s", secret_id, exc)
+        logger.warning("Keychain delete error (%s)", type(exc).__name__)
     return success
 
 
@@ -169,10 +170,23 @@ def _dpapi_set(secret_id: str, value: str) -> bool:
         if blob is None:
             return False
         path = _dpapi_path(secret_id)
-        path.write_bytes(blob)
+        # mkstemp creates a private, separate file. Keep the old blob intact
+        # through write/flush/fsync failures and Windows sharing conflicts.
+        fd, temporary = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(blob)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
         return True
     except Exception as exc:
-        logger.warning("DPAPI set error for %s: %s", secret_id, exc)
+        logger.warning("DPAPI set error (%s)", type(exc).__name__)
         return False
 
 
@@ -194,7 +208,7 @@ def _dpapi_get(secret_id: str) -> str:
         raw = _dpapi_unprotect(path.read_bytes())
         return raw.decode("utf-8") if raw else ""
     except Exception as exc:
-        logger.warning("DPAPI get error for %s: %s", secret_id, exc)
+        logger.warning("DPAPI get error (%s)", type(exc).__name__)
         return ""
 
 
@@ -206,7 +220,7 @@ def _dpapi_delete(secret_id: str) -> bool:
         path.unlink(missing_ok=True)
         return True
     except Exception as exc:
-        logger.warning("DPAPI delete error for %s: %s", secret_id, exc)
+        logger.warning("DPAPI delete error (%s)", type(exc).__name__)
         return False
 
 
@@ -268,7 +282,7 @@ def _dpapi_protect(data: bytes) -> bytes | None:
             if output.pbData:
                 kernel32.LocalFree(output.pbData)
     except Exception as exc:
-        logger.warning("DPAPI protect error: %s", exc)
+        logger.warning("DPAPI protect error (%s)", type(exc).__name__)
         return None
 
 
@@ -288,5 +302,5 @@ def _dpapi_unprotect(data: bytes) -> bytes | None:
             if output.pbData:
                 kernel32.LocalFree(output.pbData)
     except Exception as exc:
-        logger.warning("DPAPI unprotect error: %s", exc)
+        logger.warning("DPAPI unprotect error (%s)", type(exc).__name__)
         return None

@@ -11,6 +11,7 @@ import uuid
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from core.tools.redaction import redact_string, redact_tool_output
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ def git_status_check(ws_id: str) -> dict:
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True, text=True, timeout=10, cwd=repo_dir,
         )
-        result["branch"] = r2.stdout.strip()
+        result["branch"] = redact_string(r2.stdout.strip())
 
         # Get porcelain status
         r3 = subprocess.run(
@@ -181,8 +182,8 @@ def git_status_check(ws_id: str) -> dict:
         )
         lines = [l for l in r3.stdout.split("\n") if l.strip()]
         result["dirty"] = len(lines) > 0
-        result["changed_files"] = [l[3:] for l in lines if l[:2].strip()]
-        result["untracked"] = [l[3:] for l in lines if l.startswith("??")]
+        result["changed_files"] = [redact_string(l[3:]) for l in lines if l[:2].strip()]
+        result["untracked"] = [redact_string(l[3:]) for l in lines if l.startswith("??")]
 
         from storage.events import publish
         publish(ws_id, "git", "status_checked", result["branch"])
@@ -190,7 +191,7 @@ def git_status_check(ws_id: str) -> dict:
         result["status"] = "git_not_available"
     except Exception as e:
         result["status"] = "error"
-        result["error"] = str(e)[:200]
+        result["error"] = redact_string(str(e))[:200]
     return result
 
 
@@ -212,15 +213,15 @@ def git_commit(ws_id: str, message: str = "", confirm: bool = False) -> dict:
             capture_output=True, text=True, timeout=30, cwd=repo_dir,
         )
         if r2.returncode != 0:
-            return {"ok": False, "error": r2.stderr.strip()[:500] or "commit failed"}
+            return {"ok": False, "error": redact_string(r2.stderr.strip())[:500] or "commit failed"}
         from storage.events import publish
-        publish(ws_id, "git", "committed", message[:80])
-        return {"ok": True, "message": "committed", "commit_message": message[:200],
-                "output": r2.stdout.strip()[:500]}
+        publish(ws_id, "git", "committed", redact_string(message)[:80])
+        return {"ok": True, "message": "committed", "commit_message": redact_string(message)[:200],
+                "output": redact_string(r2.stdout.strip())[:500]}
     except FileNotFoundError:
         return {"ok": False, "error": "git not available"}
     except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+        return {"ok": False, "error": redact_string(str(e))[:200]}
 
 
 def git_push(ws_id: str, remote: str = "origin", confirm: bool = False) -> dict:
@@ -242,12 +243,12 @@ def git_push(ws_id: str, remote: str = "origin", confirm: bool = False) -> dict:
             capture_output=True, text=True, timeout=60, cwd=repo_dir,
         )
         if r2.returncode != 0:
-            return {"ok": False, "error": r2.stderr.strip()[:500] or "push failed"}
+            return {"ok": False, "error": redact_string(r2.stderr.strip())[:500] or "push failed"}
         from storage.events import publish
-        publish(ws_id, "git", "pushed", f"{remote}/{branch}")
-        return {"ok": True, "remote": remote, "branch": branch,
-                "message": "pushed", "output": r2.stdout.strip()[:500]}
+        publish(ws_id, "git", "pushed", redact_string(f"{remote}/{branch}"))
+        return redact_tool_output({"ok": True, "remote": remote, "branch": branch,
+                "message": "pushed", "output": redact_string(r2.stdout.strip())[:500]})
     except FileNotFoundError:
         return {"ok": False, "error": "git not available"}
     except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+        return {"ok": False, "error": redact_string(str(e))[:200]}

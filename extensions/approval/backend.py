@@ -92,7 +92,7 @@ def register_routes(app):
             claimed = service.claim_execution(workspace_id, operation_id)
             if claimed.get("status") != "executing":
                 continuation = _start_ready_continuation(workspace_id, operation_id)
-                return jsonify({"ok": False, "operation": claimed, "error": "operation_invalidated", "continuation": continuation}), 409
+                return jsonify({"ok": False, "operation": service.public_record(claimed), "error": "operation_invalidated", "continuation": continuation}), 409
             from core.tools.context import ToolRuntimeContext
             from core.tools.integration import get_default_tool_runtime_client
             target = claimed.get("target") if isinstance(claimed.get("target"), dict) else {}

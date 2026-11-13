@@ -44,6 +44,19 @@ def _strip_config_keys(value):
     return value
 
 
+def _instance_auth_file(relative: PurePosixPath) -> bool:
+    return relative.parts[-2:] == ("_runtime", "local_browser_token")
+
+
+def _excluded_backup_file(relative: PurePosixPath) -> bool:
+    return (
+        "secrets" in relative.parts
+        or relative.suffix == ".lock"
+        or relative.name in {"credentials.yaml", "secrets.yaml", ".env"}
+        or _instance_auth_file(relative)
+    )
+
+
 def _files(data: Path):
     for root in ("workspaces", "config"):
         source = data / root
@@ -57,7 +70,7 @@ def _files(data: Path):
             if not path.is_file():
                 continue
             rel = path.relative_to(data).as_posix()
-            if "secrets" in path.relative_to(data).parts or path.suffix == ".lock" or path.name in {"credentials.yaml", "secrets.yaml", ".env"}:
+            if _excluded_backup_file(PurePosixPath(rel)):
                 continue
             _safe_member(rel)
             yield rel, path
@@ -180,6 +193,9 @@ def read_backup(source: Path, password=""):
         if item.filename in {"manifest.json", "credentials.json"}:
             continue
         member = _safe_member(item.filename)
+        if _instance_auth_file(member):
+            files.pop(item.filename)
+            continue
         if "secrets" in member.parts:
             raise ValueError("凭据必须通过加密备份单独恢复")
         if stat.S_ISLNK(item.external_attr >> 16):
@@ -287,6 +303,14 @@ def apply_pending_restore(data: Path):
             # Preserve local credentials absent from a normal backup. Imported
             # encrypted credentials take precedence on explicit restore.
             if name == "workspaces" and old.is_dir():
+                # Instance tokens belong to this installation, even when an
+                # older backup contains a token that read_backup skipped.
+                for item in old.rglob("local_browser_token"):
+                    rel = item.relative_to(old)
+                    if _instance_auth_file(PurePosixPath(rel.as_posix())) and item.is_file() and not item.is_symlink():
+                        dst = replacement / rel
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(item, dst)
                 for folder in old.rglob("secrets"):
                     if folder.is_symlink():
                         continue

@@ -10,6 +10,30 @@ from dataclasses import dataclass
 from typing import Any
 
 
+_SAFE_ENV = frozenset({
+    "PATH", "HOME", "USER", "LANG", "TMPDIR", "TEMP", "TMP", "TZ",
+    "SYSTEMROOT", "WINDIR", "APPDATA", "LOCALAPPDATA", "USERPROFILE",
+    "COMSPEC", "PATHEXT", "SHELL", "LOGNAME",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+    "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS",
+})
+
+
+def _subprocess_env(configured: dict[str, str] | None) -> dict[str, str]:
+    env = {}
+    for name, value in os.environ.items():
+        upper = name.upper()
+        if upper.startswith("LZCORE_") or any(
+            part in upper for part in ("KEY", "TOKEN", "SECRET", "PASSWORD")
+        ):
+            continue
+        if upper in _SAFE_ENV or upper.startswith("LC_"):
+            env[name] = value
+    env.update(configured or {})
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
 class McpProtocolError(RuntimeError):
     pass
 
@@ -39,7 +63,7 @@ class StdioMcpClient:
         self._process = subprocess.Popen(
             list(self.config.command), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, bufsize=1, cwd=self.config.cwd,
-            env={**os.environ, **(self.config.env or {}), "PYTHONIOENCODING": "utf-8"},
+            env=_subprocess_env(self.config.env),
             encoding="utf-8",
             errors="replace",
         )
