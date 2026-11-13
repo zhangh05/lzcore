@@ -569,7 +569,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
         )
 
         if resp.status_code != 200:
-            error_body = resp.text[:500]
+            error_body = _redact_error_detail(resp.text, cfg.get("api_key", ""))[:500]
             return LLMResponse(
                 error=f"provider_http_{resp.status_code}: {error_body}",
                 metadata={
@@ -700,15 +700,16 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     except Exception as e:
         text = "".join(content_parts)
         error_type = ERROR_TYPE_PROVIDER_UNKNOWN
+        detail = _redact_error_detail(str(e), cfg.get("api_key", ""))[:200]
         return LLMResponse(
             content=text,
-            error=None if text else f"{error_type}: {str(e)[:200]}",
+            error=None if text else f"{error_type}: {detail}",
             provider=cfg.get("provider", ""),
             model=provider_model,
             finish_reason=finish_reason,
-            metadata={"stream_error": str(e)[:200]},
+            metadata={"stream_error": detail},
         ) if text else LLMResponse(
-            error=f"{error_type}: {str(e)[:200]}",
+            error=f"{error_type}: {detail}",
             metadata={"error_type": error_type},
         )
 
@@ -815,7 +816,7 @@ def _read_error_body(http_error: urllib.error.HTTPError) -> str:
         return str(http_error)
 
 
-def _redact_error_detail(msg: str) -> str:
+def _redact_error_detail(msg: str, api_key: str = "") -> str:
     """Redact sensitive data (tokens, Authorization) from error messages.
 
     Preserves non-sensitive error details (HTTP status, error type, etc.)
@@ -823,6 +824,10 @@ def _redact_error_detail(msg: str) -> str:
     """
     if not msg:
         return msg
+    from core.tools.redaction import redact_string
+    if api_key:
+        msg = msg.replace(api_key, "[REDACTED]")
+    msg = redact_string(msg)
     import re
     # Mask "Bearer <token>" → Bearer [REDACTED]
     msg = re.sub(r'Bearer\s+\S+', 'Bearer [REDACTED]', msg)
@@ -887,7 +892,7 @@ def _anthropic_messages_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
                 url, json=active_body, headers=headers, timeout=_llm_timeout_tuple(cfg)
             )
             if response.status_code != 200:
-                detail = response.text[:500]
+                detail = _redact_error_detail(response.text, cfg.get("api_key", ""))[:500]
                 return LLMResponse(
                     error=f"provider_http_{response.status_code}: {detail[:300]}",
                     metadata={
@@ -919,7 +924,7 @@ def _anthropic_messages_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
             result.metadata["request_structure"] = anthropic_request_structure(body)
         return result
     except Exception as exc:
-        return LLMResponse(error=f"provider_anthropic_error: {str(exc)[:300]}")
+        return LLMResponse(error=f"provider_anthropic_error: {_redact_error_detail(str(exc), cfg.get('api_key', ''))[:300]}")
 
 
 def _anthropic_messages_url(cfg: dict) -> str:
@@ -1126,7 +1131,7 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
     try:
         response = _post_llm(url, json=body, headers=headers, timeout=_llm_timeout_tuple(cfg), stream=True)
         if response.status_code != 200:
-            detail = response.text[:500]
+            detail = _redact_error_detail(response.text, cfg.get("api_key", ""))[:500]
             return LLMResponse(
                 error=f"provider_http_{response.status_code}: {detail[:300]}",
                 metadata={
@@ -1179,7 +1184,7 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
                 if isinstance(delta_usage, dict):
                     usage = {**(usage or {}), **delta_usage}
     except Exception as exc:
-        return LLMResponse(error=f"provider_anthropic_error: {str(exc)[:300]}")
+        return LLMResponse(error=f"provider_anthropic_error: {_redact_error_detail(str(exc), cfg.get('api_key', ''))[:300]}")
     calls = []
     for block in blocks.values():
         if block.get("type") == "tool_use":

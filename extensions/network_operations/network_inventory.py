@@ -6,6 +6,7 @@ from dataclasses import replace
 import hashlib
 import ipaddress
 import json
+import logging
 import time
 import uuid
 from typing import Any
@@ -35,6 +36,31 @@ from .network_records import (
 )
 from .network_scripts import _resolve_script
 from .diagnostics import execution_diagnostic
+
+
+_LOG = logging.getLogger(__name__)
+_CONNECTION_SECRET_KEYS = ("password_ref", "private_key_ref", "passphrase_ref")
+
+
+def _cleanup_connection_secrets(workspace_id: str, references: set[str]) -> None:
+    """Reclaim only unreferenced secrets, including after an uncertain save."""
+    if not references:
+        return
+    try:
+        retained = {
+            str(item[key])
+            for item in _store(workspace_id).list("connections", limit=None)
+            for key in _CONNECTION_SECRET_KEYS
+            if item.get(key)
+        }
+    except Exception as exc:
+        _LOG.warning("Connection secret cleanup deferred (%s)", type(exc).__name__)
+        return
+    for reference in references - retained:
+        try:
+            ExtensionSecretStore.delete(reference)
+        except Exception as exc:
+            _LOG.warning("Connection secret cleanup failed (%s)", type(exc).__name__)
 
 
 def list_regions(workspace_id: str) -> list[dict[str, Any]]:
@@ -651,31 +677,11 @@ def _save_connection_unlocked(
         private_key_ref or payload.get("private_key")
     ):
         raise ValueError("private key is required for private-key authentication")
-    if payload.get("password"):
-        password_ref = secrets.set(
-            f"connection_{connection_id}_password", str(payload["password"])
-        )
-    if payload.get("private_key"):
-        private_key_ref = secrets.set(
-            f"connection_{connection_id}_key", str(payload["private_key"])
-        )
-    if payload.get("passphrase"):
-        passphrase_ref = secrets.set(
-            f"connection_{connection_id}_passphrase", str(payload["passphrase"])
-        )
     if auth_method == "none":
-        for reference in (password_ref, private_key_ref, passphrase_ref):
-            if reference:
-                ExtensionSecretStore.delete(reference)
         password_ref = private_key_ref = passphrase_ref = ""
     elif auth_method == "password":
-        for reference in (private_key_ref, passphrase_ref):
-            if reference:
-                ExtensionSecretStore.delete(reference)
         private_key_ref = passphrase_ref = ""
     else:
-        if password_ref:
-            ExtensionSecretStore.delete(password_ref)
         password_ref = ""
     record = {
         "connection_id": connection_id,
@@ -711,7 +717,29 @@ def _save_connection_unlocked(
         "created_at": str(existing.get("created_at") or now_iso()),
         "updated_at": now_iso(),
     }
-    _store(workspace_id).save("connections", connection_id, record)
+    created_refs: set[str] = set()
+    fields = (
+        ("password",) if auth_method == "password"
+        else ("private_key", "passphrase") if auth_method == "private_key"
+        else ()
+    )
+    try:
+        for field in fields:
+            if payload.get(field):
+                reference = secrets.set(
+                    f"connection_{connection_id}_{record['revision']}_{field}",
+                    str(payload[field]),
+                )
+                created_refs.add(reference)
+                record[f"{field}_ref"] = reference
+        _store(workspace_id).save("connections", connection_id, record)
+    except Exception:
+        # Read back before reclaiming: an error after the metadata commit must
+        # not delete secrets already referenced by the committed revision.
+        _cleanup_connection_secrets(workspace_id, created_refs)
+        raise
+    old_refs = {str(existing[key]) for key in _CONNECTION_SECRET_KEYS if existing.get(key)}
+    _cleanup_connection_secrets(workspace_id, old_refs)
     return _public_connection(record)
 
 
@@ -742,18 +770,11 @@ def _delete_connection_record(workspace_id: str, connection_id: str) -> bool:
     record = get_connection(workspace_id, connection_id, include_secret=True)
     if not record:
         return False
-    secret_keys = ("password_ref", "private_key_ref", "passphrase_ref")
-    retained_refs = {
-        str(item[key])
-        for item in _raw_connections(workspace_id)
-        if item.get("connection_id") != connection_id
-        for key in secret_keys
-        if item.get(key)
-    }
-    for key in secret_keys:
-        if record.get(key) and str(record[key]) not in retained_refs:
-            ExtensionSecretStore.delete(str(record[key]))
-    return _store(workspace_id).delete("connections", connection_id)
+    removed = _store(workspace_id).delete("connections", connection_id)
+    if removed:
+        references = {str(record[key]) for key in _CONNECTION_SECRET_KEYS if record.get(key)}
+        _cleanup_connection_secrets(workspace_id, references)
+    return removed
 
 
 def _save_or_delete_depleted_skill(workspace_id: str, skill: dict[str, Any]) -> None:

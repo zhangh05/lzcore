@@ -16,6 +16,16 @@ _ABSOLUTE_PATH_PATTERN = re.compile(
 
 # ── Secret patterns ──
 _SECRET_PATTERNS = [
+    # Recognize complete structured tokens before assignment rules can split them.
+    (re.compile(r'\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b'),
+     '[JWT_REDACTED]'),
+    (re.compile(r'\beyJ[A-Za-z0-9+/=_-]{20,}\b'),
+     '[JWT_REDACTED]'),
+    # URL userinfo (including percent-encoded credentials) and common PATs.
+    (re.compile(r'([a-z][a-z0-9+.-]*://)[^\s/<>"\']+@', re.IGNORECASE),
+     r'\1[REDACTED]@'),
+    (re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|glpat-[A-Za-z0-9_-]+|xox[baprs]-[A-Za-z0-9-]+)\b'),
+     '[TOKEN_REDACTED]'),
     # Key-like (sk- prefix — OpenAI, Anthropic, etc.)
     (re.compile(r'(?<![A-Za-z0-9_])(sk-[a-zA-Z0-9_-]{4})[a-zA-Z0-9_-]+'), r'\1****[REDACTED]'),
     # MiniMax API key (group_xxx_xxx... or minimax_xxx)
@@ -27,11 +37,6 @@ _SECRET_PATTERNS = [
      lambda m: m.group(0).split(m.group(1))[0] + '[REDACTED]'),
     # Bearer tokens
     (re.compile(r'Bearer\s+[^\s"\'<>]+', re.IGNORECASE), 'Bearer [REDACTED]'),
-    # Password/secret assignments and command-style values.
-    (re.compile(
-        r'(?<![-\w])((?:password|passwd|secret|community)\b\s*(?::|=|\s)\s*)[^\s"\']+',
-        re.IGNORECASE,
-    ), lambda m: m.group(1) + '[REDACTED]'),
     # API key patterns
     (re.compile(r'(?:api_key|apikey|api-key)\s*[:=]\s*[^\s,}"\']+', re.IGNORECASE),
      lambda m: re.split(r'[:=]', m.group(0), 1)[0] + '=[REDACTED]'),
@@ -44,11 +49,22 @@ _SECRET_PATTERNS = [
     # Standalone private key headers (unclosed or truncated)
     (re.compile(r'-----BEGIN\s+(?:[A-Z0-9_-]+\s+)?PRIVATE KEY[^\r\n]*', re.MULTILINE),
      '[PRIVATE_KEY_REDACTED]'),
-    # JWT tokens (structured 3-segment and long base64 prefixes)
-    (re.compile(r'\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b'),
-     '[JWT_REDACTED]'),
-    (re.compile(r'\beyJ[A-Za-z0-9+/=_-]{20,}\b'),
-     '[JWT_REDACTED]'),
+    # Match parameters on one line, after structured secrets are masked.
+    # Bare key/token words are common prose and code: require an assignment
+    # separator or a CLI option. Device password/secret/community syntax still
+    # accepts whitespace-separated values and encryption type prefixes.
+    (re.compile(
+        r'(?<![\w])('
+        r'(?:--?)?(?:password|passwd|secret|community)\b["\']?[ \t]*(?::|=|[ \t])[ \t]*'
+        r'|(?:--?)?(?:token|(?:api[-_ ]?)?key)\b["\']?[ \t]*[:=][ \t]*'
+        r'|--?(?:token|(?:api[-_ ]?)?key)\b[ \t]+'
+        r')'
+        r'(?:(?:[05789]|cipher|simple)[ \t]+)?("[^"\r\n]*"|\'[^\'\r\n]*\'|[^\s,;"\'<>]+)',
+        re.IGNORECASE,
+    ), lambda m: m.group(1) + (m.group(2) if m.group(2) in {
+        '[REDACTED]', '[JWT_REDACTED]', '[PRIVATE_KEY_REDACTED]', '[TOKEN_REDACTED]',
+        '[MINIMAX_KEY_REDACTED]', '[DEEPSEEK_KEY_REDACTED]',
+    } else '[REDACTED]')),
     # Absolute paths (Unix style)
     (_ABSOLUTE_PATH_PATTERN,
      lambda m: m.group(1) + '[PATH_REDACTED]'),
@@ -109,16 +125,24 @@ def redact_dict(data: dict, *, container_paths: bool = False) -> dict:
     """Deep-redact a dict: mask sensitive keys, then regex-redact all string values."""
     result = {}
     for key, value in data.items():
-        if _is_sensitive_key(key):
-            result[key] = '[REDACTED]'
+        safe_key = redact_string(key, container_paths=container_paths) if isinstance(key, str) else key
+        # Different commands may redact to the same label. Keep every result,
+        # including when an input label already has a generated suffix.
+        base_key = safe_key
+        suffix = 2
+        while safe_key in result or (safe_key != key and safe_key in data):
+            safe_key = f'{base_key} [#{suffix}]'
+            suffix += 1
+        if _is_sensitive_key(str(key)):
+            result[safe_key] = '[REDACTED]'
         elif isinstance(value, dict):
-            result[key] = redact_dict(value, container_paths=container_paths)
+            result[safe_key] = redact_dict(value, container_paths=container_paths)
         elif isinstance(value, list):
-            result[key] = redact_list(value, container_paths=container_paths)
+            result[safe_key] = redact_list(value, container_paths=container_paths)
         elif isinstance(value, str):
-            result[key] = redact_string(value, container_paths=container_paths)
+            result[safe_key] = redact_string(value, container_paths=container_paths)
         else:
-            result[key] = value
+            result[safe_key] = value
     return result
 
 
@@ -156,7 +180,7 @@ def contains_secret(data: any) -> bool:
     """Check if data contains any secret patterns."""
     if isinstance(data, dict):
         for key, value in data.items():
-            if _is_sensitive_key(str(key)) or contains_secret(value):
+            if _is_sensitive_key(str(key)) or contains_secret(str(key)) or contains_secret(value):
                 return True
         return False
     if isinstance(data, (list, tuple)):

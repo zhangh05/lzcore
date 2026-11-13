@@ -249,12 +249,14 @@ def test_continuation_waits_for_every_operation_and_preserves_full_checkpoint(mo
         round_results=[], interruption_ids=[first["operation_id"], second["operation_id"]],
         workbench_context={"skill_id": skill["skill_id"], "connection_ids": [connection["connection_id"]]},
     )
-    assert approval.get_continuation("default", checkpoint["checkpoint_id"])["user_input"] == "原始请求，不得截断" * 200
+    assert "user_input" not in approval.get_continuation("default", checkpoint["checkpoint_id"])
     approval.decide_operation("default", first["operation_id"], "reject")
     assert approval.claim_ready_continuation("default", first["operation_id"]) is None
     approval.decide_operation("default", second["operation_id"], "cancel")
     claimed = approval.claim_ready_continuation("default", second["operation_id"])
     assert claimed and claimed["status"] == "resuming"
+    assert claimed["user_input"] == "原始请求，不得截断" * 200
+    assert claimed["messages"][0]["content"] == "完整上下文" * 1000
     assert approval.claim_ready_continuation("default", second["operation_id"]) is None
 
 
@@ -305,3 +307,277 @@ def test_decision_returns_the_actual_continuation_request_identity(monkeypatch, 
     # Another decision cannot enqueue another continuation for this checkpoint.
     again = app.test_client().post(url, json={"decision": "reject"})
     assert again.json["continuation"] is None and queued == []
+
+
+_DEVICE_COMMAND_CASES = [
+    ('username demo password 0 "synthetic approval password"', ("synthetic approval password",)),
+    ("key synthetic-key-value", ("synthetic-key-value",)),
+    ("tacacs-server key synthetic-tacacs", ("synthetic-tacacs",)),
+    ("radius-server key 7 synthetic-radius", ("synthetic-radius",)),
+    ('key-string "synthetic key string"', ("synthetic key string",)),
+    ("pre-shared-key synthetic-psk", ("synthetic-psk",)),
+    ("authentication-key synthetic-authentication", ("synthetic-authentication",)),
+    ("ip ospf message-digest-key 1 md5 synthetic-ospf", ("synthetic-ospf",)),
+    ("snmp-server user u g v3 auth sha synthetic-auth priv aes 128 synthetic-priv",
+     ("synthetic-auth", "synthetic-priv")),
+    ("snmp-server user u g v3 auth md5 synthetic-md5 priv des synthetic-des",
+     ("synthetic-md5", "synthetic-des")),
+    ("username a secret 5 synthetic-hash", ("synthetic-hash",)),
+    ("snmp-server community synthetic-community", ("synthetic-community",)),
+]
+_QUERY_COMMANDS = [
+    "show running-config | include key",
+    "show key chain",
+    "display current-configuration | include community",
+    "display key chain",
+    "  SHOW key chain",
+    "ping key.example.invalid",
+    "traceroute key.example.invalid",
+    "tracert key.example.invalid",
+]
+
+
+@pytest.mark.parametrize("command,secrets", _DEVICE_COMMAND_CASES)
+def test_approval_device_command_projection_masks_credentials(command, secrets):
+    from extensions.approval.private_records import public_record
+
+    raw = {"commands": [command], "digest": "synthetic-digest"}
+    safe = public_record(raw)
+    for secret in secrets:
+        assert secret not in str(safe)
+    assert safe["commands"][0].count("[REDACTED]") == len(secrets)
+    assert safe["digest"] == raw["digest"]
+    assert raw["commands"] == [command]
+    assert public_record(safe) == safe
+
+
+@pytest.mark.parametrize("keyword", [
+    "key", "key-string", "pre-shared-key", "authentication-key", "password", "secret", "community",
+    "ip ospf message-digest-key 1 md5", "auth sha", "priv aes 256",
+])
+@pytest.mark.parametrize("encryption_type", ["", "0 ", "5 ", "7 ", "8 ", "9 "])
+def test_approval_device_credentials_accept_encryption_types(keyword, encryption_type):
+    from extensions.approval.private_records import public_record
+
+    command = f"{keyword} {encryption_type}'synthetic quoted credential'"
+    safe = public_record({"commands": [command]})["commands"][0]
+    assert "synthetic quoted credential" not in safe
+    assert safe.startswith(keyword + " ")
+    assert safe.count("[REDACTED]") == 1
+
+
+@pytest.mark.parametrize("command", _QUERY_COMMANDS)
+def test_approval_query_command_projection_preserves_filter_words(command):
+    from extensions.approval.private_records import public_record
+
+    assert public_record({"commands": [command]}) == {"commands": [command]}
+
+
+def test_approval_query_commands_still_receive_general_secret_redaction():
+    from extensions.approval.private_records import public_record
+
+    command = "show key chain | include token=synthetic-filter-credential"
+    assert public_record({"commands": [command]}) == {
+        "commands": ["show key chain | include token=[REDACTED]"],
+    }
+
+
+def test_approval_device_command_projection_covers_nested_echoes_and_mapping_keys():
+    from extensions.approval.private_records import public_record
+
+    raw = {"execution": {"result": {
+        "output": "show key chain\r\nkey synthetic-multiline\nshow key chain",
+        "key synthetic-first": "first result",
+        "key synthetic-second": "second result",
+        "key [REDACTED]": "existing result",
+    }}}
+    safe = public_record(raw)
+    assert "synthetic-" not in str(safe)
+    result = safe["execution"]["result"]
+    assert result["output"] == "show key chain\r\nkey [REDACTED]\nshow key chain"
+    assert set(result.values()) == {
+        result["output"], "first result", "second result", "existing result",
+    }
+    assert len(result) == 4
+    assert public_record(safe) == safe
+    assert "synthetic-first" in str(raw)
+
+
+def _credential_operation(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    request = _request("default", skill, connection)
+    request["arguments"]["commands"] = [command for command, _ in _DEVICE_COMMAND_CASES] + _QUERY_COMMANDS + [
+        'copy https://demo:' + 'synthetic-url-password' + '@example.invalid/config',
+    ]
+    record = approval.prepare_network_operation(request)
+    checkpoint = approval.attach_continuation_checkpoint(
+        "default", session_id="session_approval", run_id="run", request_id="request",
+        user_input="unlabelled synthetic approval password",
+        messages=[{"role": "assistant", "content": "synthetic approval password"}],
+        tool_calls=[request], prior_results=[], round_results=[],
+        interruption_ids=[record["operation_id"]], workbench_context={},
+    )
+    return request, record, checkpoint
+
+
+def test_approval_credentials_are_encrypted_and_api_projections_are_safe(monkeypatch, tmp_path):
+    from flask import Flask
+    from extensions.approval import backend
+    from storage import secret_store
+
+    # Exercise the real Fernet fallback, confined to tmp_path, not the keychain.
+    monkeypatch.setenv("LZCORE_OS_SECRET_STORE", "off")
+    monkeypatch.setenv("LZCORE_MASTER_KEY_FILE", "")
+    monkeypatch.setattr(secret_store, "_path", lambda: tmp_path / "encrypted.json")
+    request, record, checkpoint = _credential_operation(monkeypatch, tmp_path)
+    secrets = [secret for _, values in _DEVICE_COMMAND_CASES for secret in values]
+    assert all(secret not in str(record) for secret in secrets)
+    assert record["commands"][-len(_QUERY_COMMANDS) - 1:-1] == _QUERY_COMMANDS
+    assert record["digest"] == approval._digest({
+        **approval._frozen_projection(record), "commands": request["arguments"]["commands"],
+    })
+    app = Flask(__name__)
+    backend.register_routes(app)
+    monkeypatch.setattr(backend, "_start_ready_continuation", lambda *_: None)
+    client = app.test_client()
+    for url in (
+        "/api/extensions/approval/operations?workspace_id=default",
+        f"/api/extensions/approval/operations/{record['operation_id']}?workspace_id=default",
+    ):
+        response = client.get(url)
+        assert response.status_code == 200
+        assert all(secret not in response.get_data(as_text=True) for secret in secrets)
+        assert "_payload_ref" not in response.get_data(as_text=True)
+    persisted = "".join(path.read_text() for path in tmp_path.rglob("*.json"))
+    for secret in secrets + ["synthetic-url-password"]:
+        assert secret not in persisted
+    assert approval.get_operation("default", record["operation_id"])["digest"] == record["digest"]
+    assert "messages" not in approval.get_continuation("default", checkpoint["checkpoint_id"])
+
+    invoked = []
+    def invoke(tool_id, arguments, **kwargs):
+        invoked.append(arguments)
+        return SimpleNamespace(output={"commands": arguments["commands"]}, status="succeeded", errors=[])
+    monkeypatch.setattr("core.tools.integration.get_default_tool_runtime_client", lambda: SimpleNamespace(invoke=invoke))
+    response = client.post(
+        f"/api/extensions/approval/operations/{record['operation_id']}/decision?workspace_id=default",
+        json={"decision": "approve", "note": "password synthetic-note-secret"},
+    )
+    assert response.status_code == 200
+    assert invoked[0]["commands"] == request["arguments"]["commands"]
+    assert all(secret not in response.get_data(as_text=True) for secret in secrets)
+    assert "synthetic-note-secret" not in response.get_data(as_text=True)
+    persisted = "".join(path.read_text() for path in tmp_path.rglob("*.json"))
+    assert all(secret not in persisted for secret in secrets)
+    assert "_payload_ref" not in approval._store("default").get("operations", record["operation_id"])
+    resumed = approval.claim_ready_continuation("default", record["operation_id"])
+    assert resumed["tool_calls"][0]["arguments"]["commands"] == request["arguments"]["commands"]
+    assert resumed["messages"][0]["content"] == "synthetic approval password"
+    approval.settle_continuation("default", checkpoint["checkpoint_id"], result={"ok": True})
+    assert "_payload_ref" not in approval._store("default").get("continuations", checkpoint["checkpoint_id"])
+    assert not __import__("json").loads((tmp_path / "encrypted.json").read_text())
+
+
+@pytest.mark.parametrize("decision", ["reject", "cancel"])
+def test_approval_terminal_decisions_retire_command_secret(monkeypatch, tmp_path, decision):
+    from storage.secret_store import get_secret
+    _, record, _ = _credential_operation(monkeypatch, tmp_path)
+    stored = approval._store("default").get("operations", record["operation_id"])
+    reference = stored["_payload_ref"]
+    assert get_secret(reference)
+    approval.decide_operation("default", record["operation_id"], decision)
+    assert get_secret(reference) == ""
+    assert "_payload_ref" not in approval._store("default").get("operations", record["operation_id"])
+
+
+@pytest.mark.parametrize("tamper", ["secret", "digest", "display", "missing", "missing_reference"])
+def test_approval_never_claims_a_changed_or_missing_frozen_payload(monkeypatch, tmp_path, tamper):
+    import json
+    from storage import secret_store
+    _, record, _ = _credential_operation(monkeypatch, tmp_path)
+    approval.decide_operation("default", record["operation_id"], "approve")
+    store = approval._store("default")
+    stored = store.get("operations", record["operation_id"])
+    if tamper == "secret":
+        envelope = json.loads(secret_store.get_secret(stored["_payload_ref"]))
+        envelope["payload"]["commands"][0] = 'username demo password 0 "different synthetic password"'
+        stored["_payload_ref"] = secret_store.set_secret("synthetic-altered-approval", json.dumps(envelope))
+    elif tamper == "digest":
+        stored["digest"] = "altered"
+    elif tamper == "display":
+        stored["commands"] = ["different public command"]
+    elif tamper == "missing_reference":
+        stored.pop("_payload_ref")
+    else:
+        secret_store.delete_secret(stored["_payload_ref"])
+    store.save("operations", record["operation_id"], stored)
+    if tamper in {"display", "missing", "missing_reference"}:
+        with pytest.raises(ValueError, match="approval_payload_unavailable_or_invalid"):
+            approval.claim_execution("default", record["operation_id"])
+    else:
+        claimed = approval.claim_execution("default", record["operation_id"])
+        assert claimed["status"] == "invalidated"
+        assert claimed["invalidated_reason"] == "prepared_operation_digest_mismatch"
+
+
+def test_approval_failed_record_save_keeps_previous_secret(monkeypatch, tmp_path):
+    from extensions.approval.private_records import load_record, save_record
+    from storage.secret_store import get_secret
+    _, record, _ = _credential_operation(monkeypatch, tmp_path)
+    store = approval._store("default")
+    original = store.get("operations", record["operation_id"])
+    raw = load_record(store, "operations", record["operation_id"])
+    def failed_save(*_args):
+        raise OSError("synthetic disk failure")
+    monkeypatch.setattr(store, "save", failed_save)
+    with pytest.raises(OSError, match="synthetic disk failure"):
+        save_record(store, "operations", record["operation_id"], raw)
+    assert store.get("operations", record["operation_id"]) == original
+    assert get_secret(original["_payload_ref"])
+
+
+def test_approval_redacted_target_does_not_change_exact_digest(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    device, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    network.save_device("default", {**device, "name": "router password synthetic-label-secret"})
+    record = approval.prepare_network_operation(_request("default", skill, connection))
+    assert "synthetic-label-secret" not in str(record)
+    approval.attach_continuation_checkpoint(
+        "default", session_id="session", run_id="run", request_id="request",
+        user_input="test", messages=[], tool_calls=[], prior_results=[], round_results=[],
+        interruption_ids=[record["operation_id"]], workbench_context={},
+    )
+    approval.decide_operation("default", record["operation_id"], "approve")
+    claimed = approval.claim_execution("default", record["operation_id"])
+    assert claimed["status"] == "executing"
+    assert claimed["digest"] == record["digest"] == approval._digest(approval._frozen_projection(claimed))
+
+
+def test_legacy_approval_reads_are_redacted_without_rewriting_data(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    commands = [command for command, _ in _DEVICE_COMMAND_CASES] + _QUERY_COMMANDS
+    legacy = {"operation_id": "legacy", "commands": commands, "status": "pending"}
+    store = approval._store("default")
+    store.save("operations", "legacy", legacy)
+    for _, secrets in _DEVICE_COMMAND_CASES:
+        for secret in secrets:
+            assert secret not in str(approval.get_operation("default", "legacy"))
+            assert secret not in str(approval.list_operations("default"))
+    assert store.get("operations", "legacy") == legacy
+    store.save("continuations", "legacy-checkpoint", {
+        "checkpoint_id": "legacy-checkpoint", "messages": [{"content": "opaque synthetic credential"}],
+    })
+    assert "messages" not in approval.get_continuation("default", "legacy-checkpoint")
+
+
+def test_approval_without_secure_storage_never_writes_plaintext(monkeypatch, tmp_path):
+    from storage import secret_store
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    def unavailable(*_args):
+        raise RuntimeError("No secure secret backend available")
+    monkeypatch.setattr(secret_store, "set_secret", unavailable)
+    with pytest.raises(RuntimeError, match="No secure secret backend available"):
+        approval.prepare_network_operation(_request("default", skill, connection))
+    assert approval.list_operations("default") == []

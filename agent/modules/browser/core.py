@@ -408,10 +408,12 @@ def browser_snapshot(selector: str = "body", compact: bool = True, max_elements:
                   else if (type === 'radio') role = 'radio';
                   else if (['button','submit','reset'].includes(type)) role = 'button';
                 }
+                const sensitiveValue = (element.getAttribute('type') || '').toLowerCase() === 'password'
+                  || /(?:password|one-time-code|cc-number|cc-csc)/i.test(element.getAttribute('autocomplete') || '');
                 const name = (
                   element.getAttribute('aria-label') || element.getAttribute('alt') ||
                   element.getAttribute('title') || element.getAttribute('placeholder') ||
-                  element.innerText || element.textContent || ''
+                  (sensitiveValue ? '' : element.innerText || element.textContent) || ''
                 ).replace(/\s+/g, ' ').trim().slice(0, 120);
                 const actionable = Boolean(role) || semanticTags.has(element.tagName) || element.tabIndex >= 0;
                 if (options.compact ? !actionable : (!actionable && !name)) continue;
@@ -420,7 +422,8 @@ def browser_snapshot(selector: str = "body", compact: bool = True, max_elements:
                   row.disabled = element.matches(':disabled') || Boolean(element.closest('[aria-disabled="true"]'));
                   row.readonly = Boolean(element.readOnly) || element.getAttribute('aria-readonly') === 'true';
                 }
-                if ('value' in element && element.value) row.value = String(element.value).slice(0, 100);
+                // Do not access a protected field's value, even to test presence.
+                if (!sensitiveValue && 'value' in element && element.value) row.value = String(element.value).slice(0, 100);
                 if (role === 'checkbox' || role === 'radio') row.checked = Boolean(element.checked);
                 rows.push(row);
               }

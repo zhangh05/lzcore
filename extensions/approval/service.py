@@ -14,6 +14,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from extensions.sdk import ExtensionDataStore
+from extensions.approval.private_records import (
+    CONTINUATION_PRIVATE_FIELDS, FROZEN_OPERATION_FIELDS, load_record, public_record, save_record,
+)
 from storage.locking import FileLock
 
 EXTENSION_ID = "approval"
@@ -40,11 +43,7 @@ def _frozen_projection(record: dict[str, Any]) -> dict[str, Any]:
     """Return precisely the fields covered by an operation digest."""
     return {
         key: record.get(key)
-        for key in (
-            "schema", "tool_id", "action", "workspace_id", "session_id", "run_id",
-            "request_id", "call_id", "skill", "target", "commands", "timeout",
-            "execution_model",
-        )
+        for key in FROZEN_OPERATION_FIELDS
     }
 
 
@@ -140,12 +139,12 @@ def prepare_network_operation(request: dict[str, Any]) -> dict[str, Any] | None:
         "decision": {},
         "execution": {},
     }
-    _store(workspace_id).save("operations", operation_id, record)
-    return record
+    save_record(_store(workspace_id), "operations", operation_id, record)
+    return public_record(record)
 
 
 def get_operation(workspace_id: str, operation_id: str) -> dict[str, Any] | None:
-    return _store(workspace_id).get("operations", operation_id)
+    return public_record(_store(workspace_id).get("operations", operation_id))
 
 
 def list_operations(workspace_id: str, *, session_id: str = "", status: str = "") -> list[dict[str, Any]]:
@@ -154,7 +153,7 @@ def list_operations(workspace_id: str, *, session_id: str = "", status: str = ""
         values = [item for item in values if str(item.get("session_id") or "") == session_id]
     if status:
         values = [item for item in values if str(item.get("status") or "") == status]
-    return sorted(values, key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    return [public_record(item) for item in sorted(values, key=lambda item: str(item.get("created_at") or ""), reverse=True)]
 
 
 def _record_lock(workspace_id: str, operation_id: str) -> FileLock:
@@ -166,12 +165,12 @@ def decide_operation(workspace_id: str, operation_id: str, decision: str, *, dec
     if normalized not in {"approve", "reject", "cancel"}:
         raise ValueError("invalid_decision")
     with _record_lock(workspace_id, operation_id):
-        record = get_operation(workspace_id, operation_id)
+        record = load_record(_store(workspace_id), "operations", operation_id)
         if not record:
             raise KeyError("operation_not_found")
         status = str(record.get("status") or "")
         if status != "pending":
-            return record
+            return public_record(record)
         record["status"] = {"approve": "approved", "reject": "rejected", "cancel": "cancelled"}[normalized]
         record["decision"] = {
             "value": normalized,
@@ -180,8 +179,8 @@ def decide_operation(workspace_id: str, operation_id: str, decision: str, *, dec
             "decided_at": _now(),
         }
         record["updated_at"] = _now()
-        _store(workspace_id).save("operations", operation_id, record)
-        return record
+        save_record(_store(workspace_id), "operations", operation_id, record)
+        return public_record(record)
 
 
 def invalidate_uncheckpointed_operations(workspace_id: str, operation_ids: list[str]) -> None:
@@ -191,19 +190,19 @@ def invalidate_uncheckpointed_operations(workspace_id: str, operation_ids: list[
         if not value:
             continue
         with _record_lock(workspace_id, value):
-            record = get_operation(workspace_id, value)
+            record = load_record(_store(workspace_id), "operations", value)
             if not record or record.get("status") != "pending":
                 continue
             record["status"] = "invalidated"
             record["invalidated_reason"] = "approval_checkpoint_persist_failed"
             record["updated_at"] = _now()
-            _store(workspace_id).save("operations", value, record)
+            save_record(_store(workspace_id), "operations", value, record)
 
 
 def claim_execution(workspace_id: str, operation_id: str) -> dict[str, Any]:
     """Atomically claim an approved record after server-owned scope recheck."""
     with _record_lock(workspace_id, operation_id):
-        record = get_operation(workspace_id, operation_id)
+        record = load_record(_store(workspace_id), "operations", operation_id)
         if not record:
             raise KeyError("operation_not_found")
         if record.get("status") != "approved":
@@ -212,7 +211,7 @@ def claim_execution(workspace_id: str, operation_id: str) -> dict[str, Any]:
             record["status"] = "invalidated"
             record["updated_at"] = _now()
             record["invalidated_reason"] = "prepared_operation_digest_mismatch"
-            _store(workspace_id).save("operations", operation_id, record)
+            save_record(_store(workspace_id), "operations", operation_id, record)
             return record
         from extensions.network_operations import service as network
         target = record.get("target") if isinstance(record.get("target"), dict) else {}
@@ -236,29 +235,29 @@ def claim_execution(workspace_id: str, operation_id: str) -> dict[str, Any]:
             record["status"] = "invalidated"
             record["updated_at"] = _now()
             record["invalidated_reason"] = "server_scope_or_connection_changed"
-            _store(workspace_id).save("operations", operation_id, record)
+            save_record(_store(workspace_id), "operations", operation_id, record)
             return record
         continuation = record.get("continuation") if isinstance(record.get("continuation"), dict) else {}
         if not str(continuation.get("checkpoint_id") or "").strip():
             record["status"] = "invalidated"
             record["invalidated_reason"] = "approval_checkpoint_missing"
             record["updated_at"] = _now()
-            _store(workspace_id).save("operations", operation_id, record)
+            save_record(_store(workspace_id), "operations", operation_id, record)
             return record
         record["status"] = "executing"
         record["execution"] = {"started_at": _now(), "execution_nonce": uuid.uuid4().hex}
         record["updated_at"] = _now()
-        _store(workspace_id).save("operations", operation_id, record)
+        save_record(_store(workspace_id), "operations", operation_id, record)
         return record
 
 
 def settle_execution(workspace_id: str, operation_id: str, result: dict[str, Any]) -> dict[str, Any]:
     with _record_lock(workspace_id, operation_id):
-        record = get_operation(workspace_id, operation_id)
+        record = load_record(_store(workspace_id), "operations", operation_id)
         if not record:
             raise KeyError("operation_not_found")
         if record.get("status") != "executing":
-            return record
+            return public_record(record)
         record["status"] = "unknown" if result.get("execution_may_continue") else "executed"
         record["execution"] = {
             **dict(record.get("execution") or {}),
@@ -266,8 +265,8 @@ def settle_execution(workspace_id: str, operation_id: str, result: dict[str, Any
             "result": dict(result or {}),
         }
         record["updated_at"] = _now()
-        _store(workspace_id).save("operations", operation_id, record)
-        return record
+        save_record(_store(workspace_id), "operations", operation_id, record)
+        return public_record(record)
 
 
 def attach_continuation_checkpoint(
@@ -312,19 +311,20 @@ def attach_continuation_checkpoint(
         "created_at": _now(),
         "updated_at": _now(),
     }
-    _store(workspace_id).save("continuations", checkpoint_id, record)
+    save_record(_store(workspace_id), "continuations", checkpoint_id, record)
     for operation_id in record["operation_ids"]:
         with _record_lock(workspace_id, operation_id):
-            operation = get_operation(workspace_id, operation_id)
+            operation = load_record(_store(workspace_id), "operations", operation_id)
             if operation:
                 operation["continuation"] = {"checkpoint_id": checkpoint_id}
                 operation["updated_at"] = _now()
-                _store(workspace_id).save("operations", operation_id, operation)
-    return record
+                save_record(_store(workspace_id), "operations", operation_id, operation)
+    return get_continuation(workspace_id, checkpoint_id)
 
 
 def get_continuation(workspace_id: str, checkpoint_id: str) -> dict[str, Any] | None:
-    return _store(workspace_id).get("continuations", checkpoint_id)
+    record = _store(workspace_id).get("continuations", checkpoint_id)
+    return public_record({k: v for k, v in record.items() if k not in CONTINUATION_PRIVATE_FIELDS}) if record else None
 
 
 def _continuation_lock(workspace_id: str, checkpoint_id: str) -> FileLock:
@@ -345,7 +345,7 @@ def claim_ready_continuation(workspace_id: str, operation_id: str) -> dict[str, 
     if not checkpoint_id:
         return None
     with _continuation_lock(workspace_id, checkpoint_id):
-        checkpoint = get_continuation(workspace_id, checkpoint_id)
+        checkpoint = load_record(_store(workspace_id), "continuations", checkpoint_id)
         if not checkpoint or checkpoint.get("status") != "waiting_decisions":
             return None
         operations = [get_operation(workspace_id, item) for item in checkpoint.get("operation_ids") or []]
@@ -358,20 +358,20 @@ def claim_ready_continuation(workspace_id: str, operation_id: str) -> dict[str, 
         checkpoint["client_request_id"] = f"approval_resume_{uuid.uuid4().hex}"
         checkpoint["updated_at"] = _now()
         checkpoint["operations"] = operations
-        _store(workspace_id).save("continuations", checkpoint_id, checkpoint)
+        save_record(_store(workspace_id), "continuations", checkpoint_id, checkpoint)
         return checkpoint
 
 
 def settle_continuation(workspace_id: str, checkpoint_id: str, *, result: dict[str, Any]) -> None:
     with _continuation_lock(workspace_id, checkpoint_id):
-        checkpoint = get_continuation(workspace_id, checkpoint_id)
+        checkpoint = load_record(_store(workspace_id), "continuations", checkpoint_id)
         if not checkpoint:
             return
         checkpoint["status"] = "resumed"
         checkpoint["resumed_at"] = _now()
         checkpoint["resume_result"] = dict(result or {})
         checkpoint["updated_at"] = _now()
-        _store(workspace_id).save("continuations", checkpoint_id, checkpoint)
+        save_record(_store(workspace_id), "continuations", checkpoint_id, checkpoint)
 
 
 def execution_interceptor(request: dict[str, Any]) -> dict[str, Any] | None:
