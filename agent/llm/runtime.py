@@ -32,7 +32,10 @@ def resolve_invocation_candidates(task: str, config_override: dict | None = None
     override = dict(config_override or {})
     candidates = [active_cfg]
     try:
-        if not (_PROVIDER_OVERRIDE_KEYS & set(override)):
+        from agent.llm.turn_model import current_turn_model_config
+        # Task routing may pick a cheaper model per task; a model the user chose
+        # for this turn is not a hint to be routed around.
+        if not (_PROVIDER_OVERRIDE_KEYS & set(override)) and current_turn_model_config() is None:
             from agent.llm.router import resolve_model_candidates
             candidates = resolve_model_candidates(task, active_cfg)
     except Exception:

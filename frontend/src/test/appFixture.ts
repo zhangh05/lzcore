@@ -111,6 +111,10 @@ export function appHandler(opts: AppFixtureOptions, log: Logged[]): FakeHandler 
     const seg = p.split("/");
     if (p === "/api/agent/status") return { status: 200, body: { ok: true, status: "ready" } };
     if (p === "/api/agent/llm/status") return { status: 200, body: { enabled: true, connected: true, key_configured: true } };
+    if (p === "/api/workbench/models") return { status: 200, body: { models: [
+      { provider: "minimax", label: "MiniMax", model: "MiniMax-M3", is_active: true, supports_thinking: true, requires_thinking: false },
+      { provider: "deepseek", label: "DeepSeek", model: "deepseek-chat", is_active: false, supports_thinking: false, requires_thinking: false },
+    ] } };
     if (p === "/api/workbench/skills") return { status: 200, body: { skills: [{ extension_id: "demo.notes", skill_id: "sk1", name: "汇总", resources: [{ resource_id: "board-1", name: "演示看板" }], selection_mode: "single" }] } };
     if (p === "/api/tools/catalog") {
       const tools = [

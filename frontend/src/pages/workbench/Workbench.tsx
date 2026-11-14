@@ -12,6 +12,7 @@ import { TurnTransport, turnErrorText, wsUrl, type Frame } from "../../realtime/
 import { useNavigate, useSearchParams } from "../../router";
 import { CatalogDrawer } from "./CatalogDrawer";
 import { Composer, type SendOptions } from "./Composer";
+import { IconMore, IconPlus } from "../../components/Icon";
 import type { ChatMessage, SessionSummary, StopState } from "./model";
 import { ProgressPanel, hasProgressContent } from "./ProgressPanel";
 import { SessionColumn } from "./SessionColumn";
@@ -205,6 +206,7 @@ export function Workbench() {
     if (opts.workbenchSelection) metadata.workbench_selection = opts.workbenchSelection;
     if (uploaded.length) metadata.attachments = uploaded;
     if (opts.resumeTaskId) metadata.resume_task_id = opts.resumeTaskId;
+    if (opts.modelSelection) metadata.model_selection = opts.modelSelection;
     transport.current.sendMessage({ workspaceId: ws, sessionId, text, clientRequestId, metadata, handlers: turnHandlers });
     return true;
   }, [ws, sessionId, transport, turnHandlers]);
@@ -325,11 +327,11 @@ export function Workbench() {
           </Popover>
           <span className="grow" />
           {!progressRail || collapsed.progress ? <Button onClick={() => setPanel("progress")} data-testid="open-progress">进度与证据</Button> : null}
-          <Button onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
+          <Button variant="ghost" icon={<IconPlus size={16} aria-hidden="true" />} onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
           <MenuButton label="更多操作" className="btn ghost" testId="wb-more" menuTestId="wb-more-menu" items={[
             { key: "catalog", label: "能力目录", onSelect: () => setDrawer("catalog"), testId: "open-catalog" },
             ...(sessionId ? [{ key: "info", label: "会话信息", onSelect: () => setDrawer("info"), testId: "open-session-info" }] : []),
-          ]}>更多 ▾</MenuButton>
+          ]}><IconMore size={16} aria-hidden="true" /></MenuButton>
         </header>
         {params.get("notice") === "create_failed" && !createError ? <p className="inline-alert tone-warn" role="alert" data-testid="create-failed">新建会话失败（服务端未创建会话），可以再点「新建会话」重试。</p> : null}
         {createError ? <p className="inline-alert tone-warn" role="alert">新建会话失败：{createError}</p> : null}

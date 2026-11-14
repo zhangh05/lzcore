@@ -215,6 +215,7 @@ return conflict; cancel and wait for a terminal state first.
 | `GET` | `/api/tools/catalog`, `/api/tools/permissions` | Canonical tool catalog/permission projection. |
 | `POST` | `/api/tools/dry-run` | Side-effect-free policy and invocation metadata preview; it does not call the handler. |
 | `GET` | `/api/capabilities`, `/api/workbench/skills` | Capability catalog and server-projected workbench Skills. |
+| `GET` | `/api/workbench/models` | Models a workbench turn may run on: enabled providers with a model and a key (no URLs or keys). A message may carry `metadata.model_selection` `{provider, thinking}`; it applies to that turn only and never switches the active provider. `thinking` (`provider_default` / `adaptive` / `disabled`) is accepted only for models that support it. |
 | `GET` | `/api/extensions`, `/api/extensions/repository` | Installed extension and repository catalog. |
 | `POST` | `/api/extensions/<extension_id>/enable`, `/api/extensions/<extension_id>/disable`, `/api/extensions/<extension_id>/migrate`, `/api/extensions/<extension_id>/uninstall` | Extension lifecycle. Mutating calls require loopback or an authenticated caller (`remote_admin_write_denied` otherwise). |
 | `GET` | `/api/extensions/<extension_id>/quota` | Extension quota projection. |

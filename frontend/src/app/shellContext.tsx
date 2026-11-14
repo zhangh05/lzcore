@@ -27,6 +27,11 @@ interface ShellValue {
 
 const ShellContext = createContext<ShellValue | null>(null);
 
+/** 可选读取：组件在没有外壳的地方（独立渲染、测试）也能退回默认值。 */
+export function useOptionalShell(): ShellValue | null {
+  return useContext(ShellContext);
+}
+
 export function useShell(): ShellValue {
   const v = useContext(ShellContext);
   if (!v) throw new Error("ShellProvider is required");

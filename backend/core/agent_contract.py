@@ -51,7 +51,7 @@ _STREAM_CONTRACTS = {
 # deliberately small: runtime-only fields such as runtime_guidance,
 # subagent_profile, history/retrieval blocks, cancellation callbacks and
 # iteration budgets must only be created by server-side code.
-_EXTERNAL_METADATA_KEYS = frozenset({"attachments", "client_request_id", "workbench_selection", "resume_task_id"})
+_EXTERNAL_METADATA_KEYS = frozenset({"attachments", "client_request_id", "workbench_selection", "resume_task_id", "model_selection"})
 
 
 def normalize_metadata(metadata: dict | None, *, transport: str, stream_mode: str) -> dict:
@@ -69,6 +69,16 @@ def normalize_metadata(metadata: dict | None, *, transport: str, stream_mode: st
     selection = normalized.get("workbench_selection")
     if selection is not None and not isinstance(selection, dict):
         normalized.pop("workbench_selection", None)
+    # The client may only name a provider and a thinking mode; anything else
+    # (URLs, keys, token budgets) is dropped here and the rest is checked
+    # against configured providers when the turn starts.
+    model_selection = normalized.get("model_selection")
+    if isinstance(model_selection, dict):
+        normalized["model_selection"] = {
+            key: model_selection[key] for key in ("provider", "thinking") if key in model_selection
+        }
+    elif "model_selection" in normalized:
+        normalized.pop("model_selection", None)
     normalized["transport"] = transport
     normalized["stream_mode"] = stream_mode
     contract = _STREAM_CONTRACTS.get((transport, stream_mode))

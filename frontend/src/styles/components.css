@@ -5,13 +5,13 @@
 @layer components {
   /* Buttons — Fluent 2: standard (outlined neutral), primary (brand fill), subtle
      (ghost). State changes are fill changes on a 100ms ease; nothing scales. */
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--h-control); padding: 0 var(--space-3); border: 1px solid var(--line-3); border-radius: var(--r-control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-sm); font-weight: var(--weight-heading); line-height: 1; white-space: nowrap; cursor: pointer; text-decoration: none; transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); -webkit-tap-highlight-color: transparent; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--h-control); padding: 0 var(--space-3); border: 1px solid var(--control-stroke); border-bottom-color: var(--control-stroke-bottom); border-radius: var(--r-control); background: var(--control-fill-rest); color: var(--text); font: inherit; font-size: var(--fs-sm); font-weight: 400; line-height: 1; white-space: nowrap; cursor: pointer; text-decoration: none; transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); -webkit-tap-highlight-color: transparent; }
   .btn svg { flex: none; }
-  .btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--neutral-6); }
-  .btn:active:not(:disabled) { background: var(--surface-pressed); }
-  .btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-text); }
-  .btn.primary:hover:not(:disabled) { background: var(--accent-2); }
-  .btn.primary:active:not(:disabled) { background: color-mix(in srgb, var(--accent-2) 70%, #000); }
+  .btn:hover:not(:disabled) { background: var(--control-fill-hover); }
+  .btn:active:not(:disabled) { background: var(--control-fill-pressed); border-bottom-color: var(--control-stroke); color: var(--text-2); }
+  .btn.primary { background: var(--accent); border-color: var(--accent-stroke); border-bottom-color: var(--accent-stroke-bottom); color: var(--accent-text); font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 90%, var(--surface)); }
+  .btn.primary:active:not(:disabled) { background: color-mix(in srgb, var(--accent) 80%, var(--surface)); border-bottom-color: var(--accent-stroke); }
   .btn.danger { color: var(--danger); }
   .btn.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: color-mix(in oklab, var(--danger) 45%, var(--line)); }
   .btn.ghost { border-color: transparent; background: transparent; color: var(--text); font-weight: 400; }

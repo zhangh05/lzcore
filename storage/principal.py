@@ -109,10 +109,16 @@ def known_storage_principals() -> list[str]:
 def bind_storage_principal(func):
     """Capture the current principal for a new thread or executor task."""
     username = current_storage_principal()
+    # Context variables (e.g. the model chosen for this turn) belong to the
+    # work being handed off, so the new thread starts from a copy of them.
+    # Each call gets its own copy: a Context cannot be entered twice at once.
+    context = contextvars.copy_context()
 
     @wraps(func)
     def bound(*args, **kwargs):
-        with storage_principal(username):
-            return func(*args, **kwargs)
+        def run():
+            with storage_principal(username):
+                return func(*args, **kwargs)
+        return context.copy().run(run)
 
     return bound

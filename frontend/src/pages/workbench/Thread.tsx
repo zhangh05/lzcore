@@ -13,6 +13,9 @@ import type { HttpOutcome } from "../../contracts/auth";
 import { terminalKind, turnFacts, unknownTargetHref, type ChatMessage } from "./model";
 import type { LiveTurn, SessionTask } from "./Workbench";
 import { SubagentCard } from "./SubagentCard";
+import { BrandGlyph } from "../../components/BrandGlyph";
+import { IconBook, IconBrain } from "../../components/Icon";
+import { useOptionalShell } from "../../app/shellContext";
 import { partitionSubagentCalls } from "./subagents";
 
 function ToolCards({ m, ws, available }: { m: ChatMessage; ws: string; available: Set<string> }) {
@@ -76,7 +79,7 @@ function MemoryAction({ ws, sessionId, m }: { ws: string; sessionId: string; m: 
   return (
     <span className="memory-action">
       {!blocked ? (
-        <Button onClick={async () => {
+        <Button variant="ghost" className="sm" icon={<IconBrain size={14} aria-hidden="true" />} onClick={async () => {
           setState({ kind: "writing" });
           setState(await writeMemory(ws, { memory_id: stableMemoryId(scope), title: m.content.slice(0, 40) || "本次结论", content: m.content, session_id: sessionId, task_id: m.metadata?.task_id }));
         }} data-testid="remember-btn">记住本次结论</Button>
@@ -89,13 +92,23 @@ function MemoryAction({ ws, sessionId, m }: { ws: string; sessionId: string; m: 
 function KnowledgeAction({ ws, m }: { ws: string; m: ChatMessage }) {
   const artifactId = (m.metadata?.report_artifacts as string[] | undefined)?.[0] ?? (m.metadata?.output_artifacts as string[] | undefined)?.[0];
   const [o, setO] = useState<HttpOutcome | null>(null);
-  if (!artifactId) return <span className="muted" title="存为知识需要本轮产出文件">（无产出文件，不能存为知识）</span>;
+  if (!artifactId) return <span className="message-note" title="存为知识需要本轮产出文件">无产出文件，不能存为知识</span>;
   return (
     <span>
-      <Button onClick={async () => setO(await api.post("/api/knowledge/sources/from-artifact", { workspace_id: ws, artifact_id: artifactId }))} disabled={!!o && o.kind === "http" && o.status < 300}>存为知识</Button>
+      <Button variant="ghost" className="sm" icon={<IconBook size={14} aria-hidden="true" />} onClick={async () => setO(await api.post("/api/knowledge/sources/from-artifact", { workspace_id: ws, artifact_id: artifactId }))} disabled={!!o && o.kind === "http" && o.status < 300}>存为知识</Button>
       {o ? (o.kind === "http" && o.status < 300 ? <ReceiptNote text={`已提交入库（来源状态：${String(bodyOf<{ source?: { status?: string } }>(o)?.source?.status ?? "未上报")}）`} /> : <FailureNote outcome={o} />) : null}
     </span>
   );
+}
+
+/** 对话双方的头像：助手用产品标识，用户用账户名首字（与顶栏账户按钮一致）。 */
+function MessageAvatar({ role, live = false }: { role: string; live?: boolean }) {
+  const shell = useOptionalShell();
+  if (role === "assistant") {
+    return <span className={`message-avatar is-assistant ${live ? "is-live" : ""}`} aria-hidden="true"><BrandGlyph size={16} /></span>;
+  }
+  const label = shell?.auth.username || "我";
+  return <span className="message-avatar is-user" aria-hidden="true">{label.slice(0, 1).toUpperCase()}</span>;
 }
 
 export function Thread({ ws, sessionId, messages, live, task, availableExtensions, onResume }: {
@@ -113,6 +126,8 @@ export function Thread({ ws, sessionId, messages, live, task, availableExtension
           const verify = unknownTargetHref(ws, sessionId, m.metadata?.task_id ?? (taskUnknown ? task?.task_id : undefined), m.metadata?.operation_id);
           return (
             <li key={m.message_id ?? i} className={`message role-${m.role}`} data-role={m.role}>
+              <MessageAvatar role={m.role} />
+              <div className="message-main">
               {m.role === "assistant" ? <div className="message-body markdown-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }} /> : <div className="message-body">{m.content}</div>}
               {m.role === "assistant" ? (
                 <>
@@ -121,21 +136,25 @@ export function Thread({ ws, sessionId, messages, live, task, availableExtension
                   <ToolCards m={m} ws={ws} available={availableExtensions} />
                   <OutcomeBar facts={turnFacts(m)} toolCalls={m.metadata?.tool_calls ?? []} verifyHref={verify} resumeHref={verify} />
                   {m === lastAssistant ? (
-                    <div className="row-actions">
+                    <div className="row-actions message-actions">
                       <MemoryAction ws={ws} sessionId={sessionId} m={m} />
                       <KnowledgeAction ws={ws} m={m} />
                     </div>
                   ) : null}
                 </>
               ) : null}
+              </div>
             </li>
           );
         })}
         {live ? (
           <li className="message role-assistant is-live" aria-live="polite" data-testid="live-turn">
-            {live.text ? <div className="message-body">{live.text}<span className="stream-caret" aria-hidden="true" /></div> : null}
-            <LiveProgress live={live} />
-            <p className="live-status"><span className="live-dot" aria-hidden="true" /><span className="shimmer-text">{live.status || "思考中…"}</span></p>
+            <MessageAvatar role="assistant" live />
+            <div className="message-main">
+              {live.text ? <div className="message-body">{live.text}<span className="stream-caret" aria-hidden="true" /></div> : null}
+              <LiveProgress live={live} />
+              <p className="live-status"><span className="live-dot" aria-hidden="true" /><span className="shimmer-text">{live.status || "思考中…"}</span></p>
+            </div>
           </li>
         ) : null}
       </ol>

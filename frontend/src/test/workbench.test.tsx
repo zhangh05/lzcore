@@ -119,6 +119,31 @@ describe("工作台（阶段 2）", () => {
     expect(screen.getByTestId("skill-select")).toBeDisabled();
   });
 
+  it("从绑定图纸的会话切到普通会话：Skill 清空，不报「不在可用目录」", async () => {
+    renderAt("/workbench?ws=ws-demo-1&session=s-drawing");
+    await waitFor(() => expect(screen.getByTestId("skill-select")).toHaveDisplayValue("绑定图纸"));
+    fireEvent.click(document.querySelector('[data-session="s-partial"] a, [data-session="s-partial"] button')!);
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("session")).toBe("s-partial"));
+    await waitFor(() => expect(screen.getByTestId("skill-select")).toHaveDisplayValue("Skill：不指定"));
+    expect(screen.queryByText(/当前 Skill 不在可用目录中/)).toBeNull();
+    expect(screen.queryByText(/当前不可用/)).toBeNull();
+  });
+
+  it("模型与思考强度：选非默认模型随消息发送 model_selection；不支持思考的模型不显示思考档位", async () => {
+    localStorage.clear();
+    const { Fake } = renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    const model = await screen.findByTestId("model-select");
+    expect(screen.getByTestId("thinking-select")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("thinking-select"), { target: { value: "adaptive" } });
+    fireEvent.change(screen.getByTestId("composer-input"), { target: { value: "你好" } });
+    fireEvent.click(screen.getByTestId("send-btn"));
+    await waitFor(() => expect(Fake.instances[0]?.sent.length).toBe(1));
+    expect(Fake.instances[0].sent[0].metadata).toMatchObject({ model_selection: { provider: "minimax", thinking: "adaptive" } });
+    fireEvent.change(model, { target: { value: "deepseek" } });
+    expect(screen.queryByTestId("thinking-select")).toBeNull();
+    localStorage.clear();
+  });
+
   it("绑定图纸的会话：绘图 Skill 不在公共目录也可用，能直接发送", async () => {
     const { Fake } = renderAt("/workbench?ws=ws-demo-1&session=s-drawing");
     await screen.findByTestId("scope-locked");

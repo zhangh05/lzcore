@@ -26,6 +26,7 @@ from backend.api.llm_api import (
     handle_llm_config_get, handle_llm_config_post, handle_llm_config_delete,
     handle_providers_list, handle_provider_get, handle_provider_save,
     handle_provider_delete, handle_llm_activate, handle_provider_create,
+    handle_workbench_models,
 )
 from backend.api.capability_routes import handle_capabilities
 from backend.api.memory import handle_memory_get, handle_memory_status, handle_memory_write, handle_memory_search, handle_memory_confirm, handle_memory_delete, handle_memory_list, handle_memory_batch_delete
@@ -298,6 +299,10 @@ def create_app():
     @app.route("/api/agent/llm/models", methods=["POST"])
     def api_agent_llm_models():
         return handle_llm_models()
+
+    @app.route("/api/workbench/models")
+    def api_workbench_models():
+        return handle_workbench_models()
 
     @app.route("/api/agent/llm/config")
     def api_agent_llm_config_get():
