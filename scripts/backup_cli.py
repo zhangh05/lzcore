@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.runtime.backup import backup_path, create_backup, list_backups, prune_backups, restore_backup, verify_backup
+from core.runtime.backup import (
+    backup_path, create_backup, list_backups, prune_backups, restore_backup, service_instance_lock_path, verify_backup,
+)
 
 
 def restore_offline(archive: Path, *, confirmation: str):
@@ -33,9 +35,11 @@ def restore_offline(archive: Path, *, confirmation: str):
         # Create/acquire even when no prior desktop has created the lock. Hold
         # it across extraction and replacement so a desktop cannot start midway.
         with FileLock(data / ".runtime" / "desktop-instance.lock", timeout=0):
-            return restore_backup(archive, confirmation=confirmation)
+            (data / ".runtime").mkdir(parents=True, exist_ok=True)
+            with FileLock(service_instance_lock_path(), timeout=0):
+                return restore_backup(archive, confirmation=confirmation)
     except TimeoutError:
-        raise BackupError("data is in use; stop the desktop before restoring") from None
+        raise BackupError("data is in use; stop the desktop and backend before restoring") from None
 
 
 def main() -> int:

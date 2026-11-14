@@ -341,11 +341,12 @@ export function WorkspacesAdminPage() {
         <LoadState value={list} onReload={reload}>{() => (
           <Table testId="workspaces-table" rows={listOf<{ workspace_id: string; name?: string }>(list, "workspaces")} rowKey={(w) => w.workspace_id} selectable selected={sel} onSelect={setSel} onRowOpen={(w) => setOpen(w.workspace_id)}
             columns={[{ key: "id", label: "工作区", render: (w) => w.name ?? w.workspace_id }, { key: "raw", label: "id", render: (w) => <code>{w.workspace_id}</code> },
-              { key: "a", label: "", render: (w) => <span className="row-actions"><Button onClick={() => setRename({ from: w.workspace_id, to: w.workspace_id })}>改名</Button><Button variant="ghost" onClick={() => setDel([w.workspace_id])}>删除</Button></span> }]} />
+              { key: "a", label: "", render: (w) => <span className="row-actions"><Button onClick={() => setRename({ from: w.workspace_id, to: w.name ?? w.workspace_id })}>改名</Button><Button variant="ghost" onClick={() => setDel([w.workspace_id])}>删除</Button></span> }]} />
         )}</LoadState>
         {open ? <WorkspaceDetail ws={open} onClose={() => setOpen(null)} /> : null}
-        {rename ? <Dialog title={`改名 ${rename.from}`} onClose={() => setRename(null)} footer={<><Button onClick={() => setRename(null)}>取消</Button><Button variant="primary" onClick={async () => { const x = rename; setRename(null); setR({ label: "改名", o: await api.post(`/api/workspaces/${enc(x.from)}/rename`, { new_workspace_id: x.to }) }); reload(); }}>保存</Button></>}>
-          <label className="field"><span>新 id</span><input value={rename.to} onChange={(e) => setRename({ ...rename, to: e.target.value })} /></label>
+        {rename ? <Dialog title={`修改显示名 ${rename.from}`} onClose={() => setRename(null)} footer={<><Button onClick={() => setRename(null)}>取消</Button><Button variant="primary" onClick={async () => { const x = rename; setRename(null); setR({ label: "改名", o: await api.post(`/api/workspaces/${enc(x.from)}/rename`, { name: x.to.trim() }) }); reload(); }}>保存</Button></>}>
+          <label className="field"><span>显示名</span><input value={rename.to} maxLength={64} onChange={(e) => setRename({ ...rename, to: e.target.value })} /></label>
+          <p className="muted">只改显示名；工作区 id <code>{rename.from}</code> 不变，已有任务和引用不受影响。</p>
         </Dialog> : null}
         {del ? <ConfirmDialog title={del.length > 1 ? `删除 ${del.length} 个工作区？` : "删除工作区？"} details={<p>将删除：{del.map((d) => <code key={d}>{d} </code>)}。其中的会话、文件、记忆都会被删除。</p>}
           confirmText={del.length > 1 ? `DELETE ${del.length}` : del[0]} confirmLabel="删除" testId="ws-delete-dialog" onCancel={() => setDel(null)}
@@ -399,8 +400,8 @@ export function BackupsPage() {
         )}</LoadState>
         <Read title="生产就绪检查" path="/api/admin/production" />
         {restore ? <ConfirmDialog title="从备份恢复？" testId="restore-dialog" confirmText="RESTORE" confirmLabel="恢复" onCancel={() => setRestore(null)}
-          details={<p>将用备份 <code>{restore}</code> 覆盖当前全部数据（后端会先保留回滚副本）。这一步影响所有工作区。</p>}
-          onConfirm={async ({ confirmation }) => { const id = restore; setRestore(null); setR({ label: "恢复", o: await api.post(`/api/admin/backups/${enc(id)}/restore`, { confirmation }) }); reload(); }} /> : null}
+          details={<p>将用备份 <code>{restore}</code> 覆盖当前全部数据。现在只校验并暂存，<strong>重启后端后才生效</strong>（替换前保留回滚副本）。这一步影响所有工作区。</p>}
+          onConfirm={async ({ confirmation }) => { const id = restore; setRestore(null); setR({ label: "恢复暂存（重启后端后生效）", o: await api.post(`/api/admin/backups/${enc(id)}/restore`, { confirmation }) }); reload(); }} /> : null}
         {prune ? <ConfirmDialog title="清理旧备份？" details={<p>只保留最近 {keep} 份，其余删除。</p>} confirmLabel="清理" onCancel={() => setPrune(false)}
           onConfirm={async () => { setPrune(false); setR({ label: "清理", o: await api.post("/api/admin/backups/prune", { keep }) }); reload(); }} /> : null}
       </div>

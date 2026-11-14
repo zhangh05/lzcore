@@ -341,9 +341,18 @@ def register_workspace_routes(app):
         if err:
             return err
         data = request.get_json(silent=True) or {}
+        if "name" in data and not data.get("new_workspace_id"):
+            # Display-name rename: IDs embedded in jobs and references are untouched.
+            from backend.core.auth import authorize_workspace_control
+            denied = authorize_workspace_control([ws_id])
+            if denied:
+                return denied
+            from storage.workspace_store import set_workspace_display_name
+            result = set_workspace_display_name(ws_id, str(data.get("name") or ""))
+            return jsonify(result), (200 if result["ok"] else 400)
         new_id = data.get("new_workspace_id", "")
         if not new_id:
-            return jsonify({"ok": False, "error": "new_workspace_id required"}), 400
+            return jsonify({"ok": False, "error": "new_workspace_id or name required"}), 400
         from storage.workspace_store import rename_workspace
         new_id_validated, err2 = _validated_ws_id(new_id)
         if err2:

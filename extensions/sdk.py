@@ -128,3 +128,90 @@ def run_migrations(
             atomic_write_json(marker, {"version": version})
             current = version
         return current
+
+
+_LEGACY_SECRET_REF = re.compile(r"^(?:secret://)?extension/([A-Za-z0-9_-]+)/([^/]+)/([^/]+)$")
+
+
+def _legacy_refs(value, path=()):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield from _legacy_refs(item, (*path, key))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _legacy_refs(item, (*path, index))
+    elif isinstance(value, str) and _LEGACY_SECRET_REF.match(value):
+        yield path, value
+
+
+def _replace_at(value, path, new):
+    for step in path[:-1]:
+        value = value[step]
+    value[path[-1]] = new
+
+
+def migrate_legacy_extension_secrets() -> dict[str, int]:
+    """Re-key pre-isolation ``extension/<ns>/<ws>/<name>`` secret references.
+
+    Old secret IDs carried no owner, so two principals using the same workspace
+    ID, extension and secret name shared (and overwrote) one stored value.
+    A reference is re-keyed into the owner-bound ``extension-v2`` namespace
+    only when records of exactly one principal reference it and the ID's
+    workspace matches the record's workspace. Shared or foreign references are
+    left untouched; reads keep refusing them and the user must re-enter them.
+    """
+    from extensions.registry import ExtensionRegistry
+    from storage import secret_store
+    from storage.principal import known_storage_principals, storage_principal
+    from storage.workspace_store import list_workspace_ids
+
+    _, manifests = ExtensionRegistry().validate_all()
+    by_namespace = {extension_storage_key(m.extension_id): m.extension_id for m in manifests}
+    workspace_ids = list_workspace_ids(include_system=False) or ["default"]
+    found: dict[str, list[tuple[str, str, str, str, str, tuple]]] = {}
+    for principal in known_storage_principals() or [""]:
+        with storage_principal(principal):
+            for workspace_id in workspace_ids:
+                for namespace, extension_id in by_namespace.items():
+                    root = ExtensionDataStore(extension_id, workspace_id).root()
+                    if not root.is_dir():
+                        continue
+                    for record_path in root.glob("*/*.json"):
+                        try:
+                            record = json.loads(record_path.read_text(encoding="utf-8"))
+                        except (OSError, json.JSONDecodeError):
+                            continue
+                        for path, reference in _legacy_refs(record):
+                            ref_ns, ref_ws, _ = _LEGACY_SECRET_REF.match(reference).groups()
+                            if ref_ns != namespace or ref_ws != workspace_id:
+                                continue
+                            found.setdefault(reference.removeprefix("secret://"), []).append(
+                                (principal, workspace_id, extension_id, record_path.parent.name, record_path.stem, path))
+    result = {"migrated": 0, "ambiguous": 0, "failed": 0}
+    for legacy_id, uses in found.items():
+        if len({use[0] for use in uses}) != 1:
+            result["ambiguous"] += 1
+            continue
+        principal = uses[0][0]
+        name = legacy_id.split("/", 3)[3]
+        try:
+            with storage_principal(principal):
+                value = secret_store._read_secret(legacy_id)
+                if not value:
+                    result["failed"] += 1
+                    continue
+                _, workspace_id, extension_id, _, _, _ = uses[0]
+                new_ref = secret_store.set_secret(
+                    secret_store.extension_secret_id(workspace_id, extension_id, name), value)
+                for _, ws, ext, collection, record_id, path in uses:
+                    store = ExtensionDataStore(ext, ws)
+                    record = store.get(collection, record_id)
+                    if record is None:
+                        continue
+                    _replace_at(record, path, new_ref)
+                    store.save(collection, record_id, record)
+                secret_store._delete_secret(legacy_id)
+            result["migrated"] += 1
+        except Exception:
+            result["failed"] += 1
+    return result

@@ -369,7 +369,25 @@ def _count_context_items(ws_id: str, item_type: str) -> int:
     return count
 
 
+def set_workspace_display_name(ws_id: str, name: str) -> dict:
+    """Change only the display name; the workspace ID and its references stay put."""
+    ws_id = validate_workspace_id(ws_id)
+    value = str(name or "").strip()
+    if not value or len(value) > 64 or any(ord(char) < 32 or char == "\x7f" for char in value):
+        return {"ok": False, "error": "invalid workspace name"}
+    if not workspace_catalog_root(ws_id).is_dir():
+        return {"ok": False, "error": "workspace not found"}
+    _update_workspace_catalog(ws_id, {"display_name": value})
+    return {"ok": True, "workspace_id": ws_id, "name": value}
+
+
 def _workspace_display_name(ws_id: str) -> str:
+    try:
+        state = json.loads((workspace_catalog_root(ws_id) / "sys" / "state.json").read_text(encoding="utf-8"))
+        if isinstance(state.get("display_name"), str) and state["display_name"].strip():
+            return state["display_name"].strip()
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
     yaml_path = workspace_catalog_root(ws_id) / "sys" / "workspace.yaml"
     if yaml_path.is_file():
         try:
@@ -432,7 +450,7 @@ def _now_iso() -> str:
 def _update_workspace_catalog(ws_id: str, patch: dict) -> None:
     """Keep shared workspace metadata out of any one user's data directory."""
     shared = {key: value for key, value in (patch or {}).items()
-              if key in {"organization_id", "owner_username", "owner_user_id", "name"}}
+              if key in {"organization_id", "owner_username", "owner_user_id", "name", "display_name"}}
     if not shared:
         return
     path = workspace_catalog_root(ws_id) / "sys" / "state.json"

@@ -36,6 +36,27 @@ def _bootstrap_storage_id(username: str) -> str:
     return "usr_" + hashlib.sha256(str(username or "").strip().casefold().encode("utf-8")).hexdigest()[:32]
 
 
+def api_token_storage_id() -> str:
+    """Storage ID of the API-token service principal.
+
+    Releases before the service identity split stored API-token data under
+    ``_bootstrap_storage_id("api-token")``. That root is kept (no directory
+    move, no secret re-keying: file manifests and secret names embed the ID)
+    while it exists and the new root does not, unless a configured login
+    administrator is literally named ``api-token`` and therefore owns it.
+    """
+    from storage.paths import get_workspace_root
+
+    current = _bootstrap_storage_id("service/api-token")
+    legacy = _bootstrap_storage_id("api-token")
+    if os.environ.get("LZCORE_LOGIN_USERNAME", "").strip().casefold() == "api-token":
+        return current
+    users = get_workspace_root() / "users"
+    if (users / legacy).is_dir() and not (users / current).exists():
+        return legacy
+    return current
+
+
 def resolve_user_storage_id(username: str) -> str:
     """Resolve a durable user ID without exposing identity internals to storage."""
     value = str(username or "").strip()
