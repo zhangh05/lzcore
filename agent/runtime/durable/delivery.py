@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import uuid
 import os
+import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from core.tools.redaction import redact_string, redact_tool_output
@@ -17,11 +18,22 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_repo_dir(ws_id: str) -> str:
-    """Resolve the git repo directory for a workspace. Falls back to CWD."""
-    workspaces_dir = Path("workspaces") / (ws_id if ws_id else "_invalid")
-    if workspaces_dir.is_dir():
-        return str(workspaces_dir.resolve())
-    return os.getcwd()
+    """Resolve a principal-scoped workspace that is itself a Git repo root."""
+    import subprocess
+    from storage.paths import workspace_root
+
+    repo_dir = workspace_root(ws_id).resolve()
+    if not repo_dir.is_dir():
+        raise ValueError("workspace directory does not exist")
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, timeout=10, cwd=str(repo_dir),
+    )
+    top_level = Path(result.stdout.strip())
+    if (result.returncode != 0 or not top_level.is_absolute()
+            or top_level.resolve() != repo_dir):
+        raise ValueError("workspace directory is not a Git repository top-level")
+    return str(repo_dir)
 from typing import Optional, Literal
 from storage.delivery_store import read_rollback_plan, save_rollback_plan as persist_rollback_plan
 from agent.runtime.utils import now_iso
@@ -151,28 +163,20 @@ def export_audit_report_markdown(task_id: str, ws_id: str) -> str:
 def git_status_check(ws_id: str) -> dict:
     """Check real git status for the workspace directory.
 
-    v3.10: Uses subprocess to run `git status --porcelain` for actual repo state.
-    Falls back to unknown if git is not available or directory is not a repo.
+    Fail closed if the workspace is missing or is not a Git repository root.
     """
     result = {"ok": True, "workspace": ws_id, "dirty": False, "branch": "unknown",
               "changed_files": [], "untracked": []}
     try:
         import subprocess
         repo_dir = _resolve_repo_dir(ws_id)
-        # Check if it's a git repo
-        r = subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            capture_output=True, text=True, timeout=10, cwd=repo_dir,
-        )
-        if r.returncode != 0:
-            result["status"] = "not_a_repo"
-            return result
-
         # Get branch
         r2 = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True, text=True, timeout=10, cwd=repo_dir,
         )
+        if r2.returncode != 0:
+            return {"ok": False, "error": redact_string(r2.stderr.strip())[:500] or "branch lookup failed"}
         result["branch"] = redact_string(r2.stdout.strip())
 
         # Get porcelain status
@@ -180,6 +184,8 @@ def git_status_check(ws_id: str) -> dict:
             ["git", "status", "--porcelain"],
             capture_output=True, text=True, timeout=10, cwd=repo_dir,
         )
+        if r3.returncode != 0:
+            return {"ok": False, "error": redact_string(r3.stderr.strip())[:500] or "status failed"}
         lines = [l for l in r3.stdout.split("\n") if l.strip()]
         result["dirty"] = len(lines) > 0
         result["changed_files"] = [redact_string(l[3:]) for l in lines if l[:2].strip()]
@@ -188,8 +194,11 @@ def git_status_check(ws_id: str) -> dict:
         from storage.events import publish
         publish(ws_id, "git", "status_checked", result["branch"])
     except FileNotFoundError:
+        result["ok"] = False
         result["status"] = "git_not_available"
+        result["error"] = "git not available"
     except Exception as e:
+        result["ok"] = False
         result["status"] = "error"
         result["error"] = redact_string(str(e))[:200]
     return result
@@ -204,12 +213,14 @@ def git_commit(ws_id: str, message: str = "", confirm: bool = False) -> dict:
     try:
         import subprocess
         repo_dir = _resolve_repo_dir(ws_id)
-        subprocess.run(
-            ["git", "add", "-A"],
+        r = subprocess.run(
+            ["git", "add", "-A", "--"],
             capture_output=True, text=True, timeout=30, cwd=repo_dir,
         )
+        if r.returncode != 0:
+            return {"ok": False, "error": redact_string(r.stderr.strip())[:500] or "git add failed"}
         r2 = subprocess.run(
-            ["git", "commit", "-m", message],
+            ["git", "commit", "-m", message, "--"],
             capture_output=True, text=True, timeout=30, cwd=repo_dir,
         )
         if r2.returncode != 0:
@@ -228,19 +239,34 @@ def git_push(ws_id: str, remote: str = "origin", confirm: bool = False) -> dict:
     """Real git push (subprocess). Requires confirm=true and will NOT force-push."""
     if not confirm:
         return {"ok": False, "error": "confirm=true required to push"}
+    if not isinstance(remote, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", remote):
+        return {"ok": False, "error": "invalid remote name"}
     try:
         import subprocess
         repo_dir = _resolve_repo_dir(ws_id)
+        remotes = subprocess.run(
+            ["git", "remote"],
+            capture_output=True, text=True, timeout=10, cwd=repo_dir,
+        )
+        if remotes.returncode != 0:
+            return {"ok": False, "error": redact_string(remotes.stderr.strip())[:500] or "remote lookup failed"}
+        if remote not in remotes.stdout.splitlines():
+            return {"ok": False, "error": "remote is not configured"}
         # Get current branch
         r = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True, text=True, timeout=10, cwd=repo_dir,
         )
+        if r.returncode != 0:
+            return {"ok": False, "error": redact_string(r.stderr.strip())[:500] or "branch lookup failed"}
         branch = r.stdout.strip()
+        if not branch or branch == "HEAD" or branch.startswith("-"):
+            return {"ok": False, "error": "a named branch is required to push"}
         # Push (no force)
         r2 = subprocess.run(
-            ["git", "push", remote, branch],
+            ["git", "push", "--", remote, f"refs/heads/{branch}:refs/heads/{branch}"],
             capture_output=True, text=True, timeout=60, cwd=repo_dir,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         )
         if r2.returncode != 0:
             return {"ok": False, "error": redact_string(r2.stderr.strip())[:500] or "push failed"}
