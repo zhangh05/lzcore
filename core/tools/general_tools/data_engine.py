@@ -21,7 +21,7 @@ MAX_OUTPUT_ROWS = 200
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _normalize_rows(data: Any) -> tuple[list[dict], str | None]:
+def _normalize_rows(data: Any, metadata: dict | None = None) -> tuple[list[dict], str | None]:
     """Normalize input to list-of-dicts."""
     if isinstance(data, list):
         if not data:
@@ -39,11 +39,11 @@ def _normalize_rows(data: Any) -> tuple[list[dict], str | None]:
             return [dict(zip(headers, row)) for row in data], None
         return [], "unsupported row type"
     if isinstance(data, str):
-        return _parse_text(data)
+        return _parse_text(data, metadata)
     return [], "unsupported data type"
 
 
-def _parse_rows(text: str) -> list[dict]:
+def _parse_rows(text: str, metadata: dict | None = None) -> list[dict]:
     text = text.strip()
     if not text:
         return []
@@ -57,15 +57,15 @@ def _parse_rows(text: str) -> list[dict]:
         except json.JSONDecodeError as exc:
             raise ValueError(f"invalid JSON data: {exc.msg}") from exc
         raise ValueError("JSON data must be an object or an array of objects")
-    md_rows = _parse_markdown_table(text)
+    md_rows = _parse_markdown_table(text, metadata)
     if md_rows:
         return md_rows
-    return _parse_csv(text)
+    return _parse_csv(text, metadata)
 
 
-def _parse_text(text: str) -> tuple[list[dict], str | None]:
+def _parse_text(text: str, metadata: dict | None = None) -> tuple[list[dict], str | None]:
     try:
-        rows = _parse_rows(text)
+        rows = _parse_rows(text, metadata)
         if not rows:
             return [], "no parsable data found"
         return _normalize_rows(rows)
@@ -73,24 +73,56 @@ def _parse_text(text: str) -> tuple[list[dict], str | None]:
         return [], str(e)[:200]
 
 
-def _parse_csv(text: str) -> list[dict]:
+def _unique_headers(headers: list[str], metadata: dict | None = None) -> list[str]:
+    """Reserve original names before assigning suffixes to duplicate columns."""
+    reserved = set(headers)
+    seen = set()
+    renamed = defaultdict(list)
+    unique = []
+    next_suffix = {}
+    for header in headers:
+        output = header
+        if header in seen:
+            suffix = next_suffix.get(header, 2)
+            while f"{header}_{suffix}" in reserved:
+                suffix += 1
+            output = f"{header}_{suffix}"
+            next_suffix[header] = suffix + 1
+            reserved.add(output)
+            renamed[header].append(output)
+        seen.add(header)
+        unique.append(output)
+    if renamed and metadata is not None:
+        metadata["header_renames"] = dict(renamed)
+        metadata["warnings"] = [
+            "Duplicate headers were renamed to unique column names; all column data "
+            "was preserved. See the header rename mapping (original name -> renamed duplicates); "
+            "the first occurrence keeps its original name."
+        ]
+    return unique
+
+
+def _parse_csv(text: str, metadata: dict | None = None) -> list[dict]:
     try:
         dialect = csv.Sniffer().sniff(text[:4000], delimiters=",;\t|")
     except csv.Error:
         dialect = csv.excel
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    if reader.fieldnames:
+        reader.fieldnames = _unique_headers(reader.fieldnames, metadata)
     rows = list(islice(reader, MAX_INPUT_ROWS + 1))
     if any(None in row or any(value is None for value in row.values()) for row in rows):
         raise ValueError("CSV row does not match the header column count")
     return rows
 
 
-def _parse_markdown_table(text: str) -> list[dict]:
+def _parse_markdown_table(text: str, metadata: dict | None = None) -> list[dict]:
     lines = text.splitlines()
     table = [l for l in lines if l.strip().startswith("|") and l.strip().endswith("|")]
     if len(table) < 2:
         return []
     headers = [c.strip() for c in table[0].strip("|").split("|")]
+    headers = _unique_headers(headers, metadata)
     data = [l for l in table[1:] if not re.match(r'^[\|\s\-:]+$', l.strip())]
     if not data:
         return []
@@ -153,10 +185,11 @@ def _md_table(rows: list[dict], max_rows: int = 50, columns: list[str] | None = 
 
 
 def data_parse(text: str = "", rows: list | None = None) -> dict:
+    parse_metadata = {}
     if rows is not None:
-        parsed, err = _normalize_rows(rows)
+        parsed, err = _normalize_rows(rows, parse_metadata)
     else:
-        parsed, err = _parse_text(text)
+        parsed, err = _parse_text(text, parse_metadata)
     if err:
         return {"ok": False, "error": err, "_actions": ["检查输入数据格式，确保是CSV/JSON/Markdown表格"]}
 
@@ -167,6 +200,7 @@ def data_parse(text: str = "", rows: list | None = None) -> dict:
 
     return {
         "ok": True,
+        **parse_metadata,
         # Preserve a bounded structured payload so parse can genuinely feed
         # stats/filter/sort/aggregate/Python in a dependent tool step.
         "rows": parsed[:MAX_OUTPUT_ROWS],
@@ -192,10 +226,11 @@ def data_parse(text: str = "", rows: list | None = None) -> dict:
 
 def data_stats(text: str = "", rows: list | None = None) -> dict:
     """Describe numerical columns: count/mean/std/min/25%/50%/75%/max."""
+    parse_metadata = {}
     if rows is not None:
-        parsed, err = _normalize_rows(rows)
+        parsed, err = _normalize_rows(rows, parse_metadata)
     else:
-        parsed, err = _parse_text(text)
+        parsed, err = _parse_text(text, parse_metadata)
     if err:
         return {"ok": False, "error": err}
 
@@ -204,7 +239,9 @@ def data_stats(text: str = "", rows: list | None = None) -> dict:
 
     if not num_cols:
         return {
-            "ok": True, "stats": {}, "numeric_columns": [], "markdown": "无数值列",
+            "ok": True,
+            **parse_metadata,
+            "stats": {}, "numeric_columns": [], "markdown": "无数值列",
             "_hint": "数据中没有数值列，试试 distinct 了解分布",
         }
 
@@ -238,6 +275,7 @@ def data_stats(text: str = "", rows: list | None = None) -> dict:
 
     return {
         "ok": True,
+        **parse_metadata,
         "stats": stats_result,
         "markdown": md,
         "numeric_columns": num_cols,
@@ -260,10 +298,11 @@ def _std_dev(vals: list[float]) -> float:
 
 def data_distinct(text: str = "", rows: list | None = None, column: str = "") -> dict:
     """Unique values + frequency count for a column."""
+    parse_metadata = {}
     if rows is not None:
-        parsed, err = _normalize_rows(rows)
+        parsed, err = _normalize_rows(rows, parse_metadata)
     else:
-        parsed, err = _parse_text(text)
+        parsed, err = _parse_text(text, parse_metadata)
     if err:
         return {"ok": False, "error": err}
 
@@ -289,6 +328,7 @@ def data_distinct(text: str = "", rows: list | None = None, column: str = "") ->
 
     return {
         "ok": True,
+        **parse_metadata,
         "column": column,
         "unique_count": len(counter),
         "total_rows": total,
@@ -308,10 +348,11 @@ def data_aggregate(
     group_by: str | list[str] | None = None,
     metrics: list[dict] | None = None,
 ) -> dict:
+    parse_metadata = {}
     if rows is not None:
-        parsed, err = _normalize_rows(rows)
+        parsed, err = _normalize_rows(rows, parse_metadata)
     else:
-        parsed, err = _parse_text(text)
+        parsed, err = _parse_text(text, parse_metadata)
     if err:
         return {"ok": False, "error": err}
     if not parsed:
@@ -364,6 +405,7 @@ def data_aggregate(
     cols = list(result_rows[0].keys()) if result_rows else []
     return {
         "ok": True,
+        **parse_metadata,
         "aggregated": result_rows[:MAX_OUTPUT_ROWS],
         "returned": min(len(result_rows), MAX_OUTPUT_ROWS),
         "truncated": len(result_rows) > MAX_OUTPUT_ROWS,
@@ -402,10 +444,11 @@ def data_filter(
     conditions: list[dict] | None = None,
     max_rows: int = 50,
 ) -> dict:
+    parse_metadata = {}
     if rows is not None:
-        parsed, err = _normalize_rows(rows)
+        parsed, err = _normalize_rows(rows, parse_metadata)
     else:
-        parsed, err = _parse_text(text)
+        parsed, err = _parse_text(text, parse_metadata)
     if err:
         return {"ok": False, "error": err}
 
@@ -431,6 +474,7 @@ def data_filter(
 
     return {
         "ok": True,
+        **parse_metadata,
         "rows": display,
         "markdown": _md_table(display, max_rows, cols),
         "total": total,
@@ -484,10 +528,11 @@ def data_sort(
     order: str = "asc",
     max_rows: int = 50,
 ) -> dict:
+    parse_metadata = {}
     if rows is not None:
-        parsed, err = _normalize_rows(rows)
+        parsed, err = _normalize_rows(rows, parse_metadata)
     else:
-        parsed, err = _parse_text(text)
+        parsed, err = _parse_text(text, parse_metadata)
     if err:
         return {"ok": False, "error": err}
 
@@ -522,6 +567,7 @@ def data_sort(
 
     return {
         "ok": True,
+        **parse_metadata,
         "rows": display,
         "markdown": _md_table(display, max_rows, cols),
         "sorted_by": sort_cols,
@@ -538,15 +584,17 @@ def data_render(
     output: str = "markdown",
     max_rows: int = 50,
 ) -> dict:
+    parse_metadata = {}
     if rows is not None:
-        parsed, err = _normalize_rows(rows)
+        parsed, err = _normalize_rows(rows, parse_metadata)
     else:
-        parsed, err = _parse_text(text)
+        parsed, err = _parse_text(text, parse_metadata)
     if err:
         return {"ok": False, "error": err}
     if not parsed:
         result = {
             "ok": True,
+            **parse_metadata,
             "columns": [],
             "returned": 0,
             "total": 0,
@@ -566,6 +614,7 @@ def data_render(
 
     result = {
         "ok": True,
+        **parse_metadata,
         "columns": cols,
         "returned": len(display),
         "total": len(parsed),
@@ -590,10 +639,11 @@ def data_pivot(
     aggfunc: str = "count",
     max_rows: int = 50,
 ) -> dict:
+    parse_metadata = {}
     if rows is not None:
-        parsed, err = _normalize_rows(rows)
+        parsed, err = _normalize_rows(rows, parse_metadata)
     else:
-        parsed, err = _parse_text(text)
+        parsed, err = _parse_text(text, parse_metadata)
     if err:
         return {"ok": False, "error": err}
     if not index or not columns:
@@ -648,6 +698,7 @@ def data_pivot(
 
     return {
         "ok": True,
+        **parse_metadata,
         "pivot": pivot_result,
         "markdown": md,
         "row_keys": display_rows,
@@ -679,19 +730,30 @@ def data_join(
         on: Column to join on (must exist in both).
         how: inner (default) or left.
     """
+    parse_metadata = {}
+    left_metadata = {}
+    right_metadata = {}
     if rows is not None:
-        left, err = _normalize_rows(rows)
+        left, err = _normalize_rows(rows, left_metadata)
     else:
-        left, err = _parse_text(text)
+        left, err = _parse_text(text, left_metadata)
     if err:
         return {"ok": False, "error": f"left data: {err}"}
 
     if right_rows is not None:
-        right, err2 = _normalize_rows(right_rows)
+        right, err2 = _normalize_rows(right_rows, right_metadata)
     else:
-        right, err2 = _parse_text(right_text)
+        right, err2 = _parse_text(right_text, right_metadata)
     if err2:
         return {"ok": False, "error": f"right data: {err2}"}
+
+    for side, metadata in (("left", left_metadata), ("right", right_metadata)):
+        if metadata:
+            parse_metadata[f"{side}_header_renames"] = metadata["header_renames"]
+            parse_metadata.setdefault("warnings", []).extend(
+                f"{side} data: {warning}"
+                for warning in metadata["warnings"]
+            )
 
     if not on:
         lc = _columns(left)
@@ -715,6 +777,25 @@ def data_join(
             "right_columns": sorted(right_columns),
         }
 
+    # Reserve the whole output schema, including sparse left-hand columns.
+    # Resolve collisions once so matched and unmatched rows use identical keys.
+    used_columns = set(left_columns)
+    right_fields = {}
+    field_renames = []
+    for column in right_column_order:
+        if column == on:
+            continue
+        base = f"right.{column}"
+        output = base
+        suffix = 2
+        while output in used_columns:
+            output = f"{base}_{suffix}"
+            suffix += 1
+        used_columns.add(output)
+        right_fields[column] = output
+        if output != base:
+            field_renames.append({"side": "right", "column": column, "output": output})
+
     # Build right-side index
     right_index: dict[str, list[dict]] = defaultdict(list)
     for r in right:
@@ -733,13 +814,13 @@ def data_join(
             merged_count += len(matches)
             for r in matches[:MAX_OUTPUT_ROWS - len(merged)]:
                 merged_row = dict(l)
-                merged_row.update({f"right.{k}" if k != on else k: v for k, v in r.items()})
+                merged_row.update({right_fields[k]: v for k, v in r.items() if k != on})
                 merged.append(merged_row)
         elif how == "left":
             merged_row = dict(l)
             for k in right_column_order:
                 if k != on:
-                    merged_row[f"right.{k}"] = ""
+                    merged_row[right_fields[k]] = ""
             merged_count += 1
             if len(merged) < MAX_OUTPUT_ROWS:
                 merged.append(merged_row)
@@ -748,6 +829,7 @@ def data_join(
     display = merged[:MAX_OUTPUT_ROWS]
     return {
         "ok": True,
+        **parse_metadata,
         "rows": display,
         "markdown": _md_table(display, 20, cols),
         "left_rows": len(left),
@@ -757,6 +839,7 @@ def data_join(
         "returned": len(display),
         "truncated": merged_count > len(display),
         "join_column": on,
+        "field_renames": field_renames,
         "how": how,
         "_hint": f"{how} join on '{on}'：{len(left)}×{len(right)}→{merged_count}行。返回行是预览；全量后续计算请继续使用原始输入。",
     }

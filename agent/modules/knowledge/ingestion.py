@@ -314,6 +314,7 @@ def import_file(
             "format": doc.format,
             "errors": ["unsupported_ocr"],
             "warnings": doc.warnings,
+            **{key: doc.metadata[key] for key in ("attempted_pages", "extracted_pages", "failed_pages", "page_errors") if key in doc.metadata},
         }
 
     if not doc.normalized_markdown.strip():
@@ -321,8 +322,9 @@ def import_file(
             "ok": False,
             "summary": f"document produced empty normalized_markdown",
             "format": doc.format,
-            "errors": ["empty_document"],
+            "errors": ["pdf_extract_failed" if "pdf_extract_failed" in doc.warnings else "empty_document"],
             "warnings": doc.warnings,
+            **{key: doc.metadata[key] for key in ("attempted_pages", "extracted_pages", "failed_pages", "page_errors") if key in doc.metadata},
         }
 
     # 3. Save to v1.0 source store
@@ -372,6 +374,11 @@ def import_file(
         "format": doc.format,
         "tags": list(tags or []),
     }
+    for key in ("partial", "attempted_pages", "extracted_pages", "failed_pages", "page_errors"):
+        if key in doc.metadata:
+            base_meta[key] = doc.metadata[key]
+    if doc.metadata.get("partial"):
+        base_meta["warnings"] = list(doc.warnings or [])
     if source_file_id:
         base_meta["source_file_id"] = source_file_id
     for key in ("hidden", "origin", "memory_id", "memory_type",
@@ -441,6 +448,8 @@ def import_file(
         "language": language,
         "parent_count": len(parents),
         "chunk_count": len(children),
+        "partial": bool(doc.metadata.get("partial")),
+        **{key: doc.metadata[key] for key in ("attempted_pages", "extracted_pages", "failed_pages", "page_errors") if key in doc.metadata},
         "warnings": list(doc.warnings or []),
         "errors": [],
     }
@@ -510,6 +519,9 @@ def reindex_source(workspace_id: str, source_id: str) -> dict:
         "format": doc.format,
         "tags": list(meta.get("tags") or []),
     }
+    for key in ("partial", "attempted_pages", "extracted_pages", "failed_pages", "page_errors", "warnings"):
+        if key in meta:
+            base_meta[key] = meta[key]
     for c in parents:
         c.metadata.update(base_meta)
     for c in children:
@@ -521,5 +533,7 @@ def reindex_source(workspace_id: str, source_id: str) -> dict:
         "source_id": source_id,
         "parent_count": len(parents),
         "chunk_count": len(children),
-        "errors": [], "warnings": [],
+        "partial": bool(meta.get("partial")),
+        **{key: meta[key] for key in ("attempted_pages", "extracted_pages", "failed_pages", "page_errors") if key in meta},
+        "errors": [], "warnings": list(doc.warnings or []),
     }

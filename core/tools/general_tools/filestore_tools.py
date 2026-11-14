@@ -80,6 +80,7 @@ def handle_file_extract_document(inv, *, file_id: str = "", limit: int = 50_000)
     try:
         raw = resolve_file_path(ws, file_id).read_bytes()
         embedded_image_count = 0
+        completeness = {"partial": False}
         if file_kind == "docx":
             # A DOCX can be an image-only runbook. Its visual evidence is as
             # important as its extracted text, so report the exact count from
@@ -106,6 +107,9 @@ def handle_file_extract_document(inv, *, file_id: str = "", limit: int = 50_000)
             content = document.normalized_markdown or ""
             warnings = list(document.warnings or [])
             title = document.title or rec.get("original_name")
+            completeness.update({key: document.metadata[key] for key in (
+                "partial", "attempted_pages", "extracted_pages", "failed_pages", "page_errors",
+            ) if key in document.metadata})
     except ValueError as exc:
         return _fail("workspace.file", str(exc), file_id=file_id)
     except UnsupportedFormatError as exc:
@@ -120,6 +124,7 @@ def handle_file_extract_document(inv, *, file_id: str = "", limit: int = 50_000)
             file_id=file_id,
             file_kind=file_kind,
             warnings=warnings,
+            **completeness,
         )
 
     return _ok(
@@ -132,6 +137,7 @@ def handle_file_extract_document(inv, *, file_id: str = "", limit: int = 50_000)
         truncated=False,
         embedded_image_count=embedded_image_count,
         warnings=warnings,
+        **completeness,
         summary="document extracted from managed attachment",
     )
 

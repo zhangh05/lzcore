@@ -66,6 +66,8 @@ def handle_pdf_extract_text(inv: ToolInvocation) -> dict:
             elif len(parts) == 2:
                 start_page = int(parts[0].strip()) - 1
                 end_page = int(parts[1].strip()) - 1
+            else:
+                raise ValueError("invalid range")
         except (ValueError, IndexError):
             return _error_inv(inv, f"invalid page_range format: {page_range}. Use e.g. '1-3' or '5'")
         # Validate range
@@ -94,6 +96,11 @@ def handle_pdf_extract_text(inv: ToolInvocation) -> dict:
     try:
         reader = PyPDF2.PdfReader(str(target))
         page_count = len(reader.pages)
+        if not page_count or (end_page is not None and end_page >= page_count):
+            return _result(inv, False, {
+                "error": "empty_pdf" if not page_count else "page_range_out_of_bounds",
+                "page_count": page_count,
+            })
 
         # Determine page range
         if start_page is not None:
@@ -102,20 +109,34 @@ def handle_pdf_extract_text(inv: ToolInvocation) -> dict:
             pages_to_read = range(page_count)
 
         text_parts = []
+        attempted_pages = [i + 1 for i in pages_to_read]
+        extracted_pages = []
+        failed_pages = []
+        page_errors = []
         for i in pages_to_read:
             try:
                 page_text = reader.pages[i].extract_text()
+                extracted_pages.append(i + 1)
                 if page_text:
                     text_parts.append(page_text)
-            except Exception:
-                text_parts.append(f"[page {i + 1} extraction failed]")
+            except Exception as exc:
+                failed_pages.append(i + 1)
+                page_errors.append({"page": i + 1, "error": "extract_failed", "exception": type(exc).__name__})
 
         full_text = "\n\n".join(text_parts)
 
-        return _result(inv, True, {
+        ok = bool(full_text.strip())
+        return _result(inv, ok, {
             "text": full_text,
             "page_count": page_count,
-            "pages_read": len(text_parts),
+            "pages_read": len(extracted_pages),
+            "attempted_pages": attempted_pages,
+            "extracted_pages": extracted_pages,
+            "failed_pages": failed_pages,
+            "page_errors": page_errors,
+            "partial": ok and bool(failed_pages),
+            "warnings": [f"pdf_page_extract_failed:{page}" for page in failed_pages],
+            **({"error": "pdf_extract_failed" if not extracted_pages else "document_has_no_extractable_text"} if not ok else {}),
             "file_size": file_size,
             "char_count": len(full_text),
             "method": _method,

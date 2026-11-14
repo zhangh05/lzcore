@@ -1,7 +1,10 @@
 """Focused behavior contracts for the data.manage tool engine."""
 
+import pytest
+
 from core.tools.general_tools.data_engine import (
     MAX_OUTPUT_ROWS,
+    data_aggregate,
     data_distinct,
     data_filter,
     data_join,
@@ -9,6 +12,7 @@ from core.tools.general_tools.data_engine import (
     data_pivot,
     data_render,
     data_sort,
+    data_stats,
 )
 
 
@@ -85,6 +89,93 @@ def test_join_validates_keys_and_counts_matched_left_rows():
     assert result["ok"] is True
     assert result["merged_rows"] == 3
     assert result["matched_rows"] == 1
+
+
+@pytest.mark.parametrize("format", ["csv", "markdown"])
+@pytest.mark.parametrize("headers, expected, renames", [
+    (["x", "x", "x"], ["x", "x_2", "x_3"], {"x": ["x_2", "x_3"]}),
+    (["x", "x", "x_2", "x", "x_3"],
+     ["x", "x_4", "x_2", "x_5", "x_3"], {"x": ["x_4", "x_5"]}),
+    (["x_2", "x", "x", "y", "y"],
+     ["x_2", "x", "x_3", "y", "y_2"], {"x": ["x_3"], "y": ["y_2"]}),
+    (["x", "x", "x_2", "x_2", "x_2_2"],
+     ["x", "x_3", "x_2", "x_2_3", "x_2_2"], {"x": ["x_3"], "x_2": ["x_2_3"]}),
+])
+def test_duplicate_headers_preserve_all_data_and_report_collision_safe_mapping(format, headers, expected, renames):
+    values = [[f"{row}-{col}" for col in range(len(headers))] for row in range(2)]
+    if format == "csv":
+        text = "\n".join(",".join(row) for row in [headers, *values])
+    else:
+        text = "\n".join("| " + " | ".join(row) + " |" for row in [headers, ["---"] * len(headers), *values])
+    result = data_parse(text=text)
+    assert result["ok"] is True and result["truncated"] is False
+    assert result["columns"] == expected
+    assert result["rows"] == [dict(zip(expected, row)) for row in values]
+    assert result["row_count"] == 2
+    assert result["header_renames"] == renames
+    assert result["warnings"] and "renamed" in result["warnings"][0]
+
+
+def test_unique_headers_need_no_warning_and_malformed_duplicate_rows_still_fail():
+    result = data_parse(text="x,y\n1,2\n")
+    assert result["rows"] == [{"x": "1", "y": "2"}]
+    assert not result.get("warnings") and not result.get("header_renames")
+    for text in ("x,x\n", "x,x\n1,2,3\n", "x,x\n1\n",
+                 "| x | x |\n|---|---|\n|1|2|3|", "| x | x |\n|---|---|\n|1|"):
+        result = data_parse(text=text)
+        assert result["ok"] is False and "rows" not in result
+
+
+@pytest.mark.parametrize("action, kwargs", [
+    (data_stats, {}),
+    (data_stats, {"text": "x,x\na,b\n"}),
+    (data_distinct, {"column": "x_2"}),
+    (data_aggregate, {"metrics": [{"column": "x_2", "func": "sum"}]}),
+    (data_filter, {"conditions": [{"column": "x_2", "op": "eq", "value": "2"}]}),
+    (data_sort, {"by": "x_2"}),
+    (data_render, {"output": "json"}),
+    (data_pivot, {"index": "x", "columns": "x_2", "aggfunc": "count"}),
+])
+def test_text_actions_expose_header_renames_and_warnings(action, kwargs):
+    result = action(**{"text": "x,x\n1,2\n", **kwargs})
+    assert result["ok"] is True
+    assert result["header_renames"] == {"x": ["x_2"]}
+    assert result["warnings"]
+
+
+def test_join_reports_duplicate_source_headers_separately_from_field_collisions():
+    result = data_join(
+        text="id,v,v,right.v\na,L1,L2,LEFT\n",
+        right_text="id,v,v\na,R1,R2\n", on="id",
+    )
+    assert result["ok"] is True
+    assert result["rows"] == [{
+        "id": "a", "v": "L1", "v_2": "L2", "right.v": "LEFT",
+        "right.v_2": "R1", "right.v_2_2": "R2",
+    }]
+    assert result["left_header_renames"] == result["right_header_renames"] == {"v": ["v_2"]}
+    assert len(result["warnings"]) == 2
+    assert result["field_renames"] == [
+        {"side": "right", "column": "v", "output": "right.v_2"},
+        {"side": "right", "column": "v_2", "output": "right.v_2_2"},
+    ]
+
+
+def test_join_collision_mapping_is_unique_and_stable_for_sparse_and_unmatched_rows():
+    left = [{"id": "a", "right.v": "LEFT", "right.v_2": "SECOND"}, {"id": "b"}]
+    right = [{"id": "a", "v": "RIGHT", "v_3": "THIRD"}]
+    result = data_join(rows=left, right_rows=right, on="id", how="left")
+    assert result["ok"] is True and result["truncated"] is False
+    assert result["rows"][0] == {
+        "id": "a", "right.v": "LEFT", "right.v_2": "SECOND",
+        "right.v_3": "RIGHT", "right.v_3_2": "THIRD",
+    }
+    assert result["rows"][1] == {"id": "b", "right.v_3": "", "right.v_3_2": ""}
+    assert result["field_renames"] == [
+        {"side": "right", "column": "v", "output": "right.v_3"},
+        {"side": "right", "column": "v_3", "output": "right.v_3_2"},
+    ]
+    assert left[0]["right.v"] == "LEFT" and right[0]["v"] == "RIGHT"
 
 
 def test_user_controlled_output_is_bounded():

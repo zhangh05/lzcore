@@ -14,6 +14,8 @@ from storage.locking import FileLock
 from storage.records import workspace_record_dir, workspace_record_file
 from storage.time_utils import now_iso
 
+_RUN_TERMINAL_STATUSES = frozenset({"succeeded", "completed", "failed", "cancelled"})
+
 
 class WorkflowError(ValueError):
     pass
@@ -287,8 +289,6 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
     from storage.redaction import redact_dict
     outputs: dict[str, Any] = {}
     dependency_outcomes: dict[str, bool] = {}
-    if requested_run_id and get_run(workspace_id, run_id) is not None:
-        raise WorkflowError("workflow run already exists")
     record = {
         "run_id": run_id,
         "workflow_id": workflow_id,
@@ -301,12 +301,28 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
         "started_at": now_iso(),
         "updated_at": now_iso(),
     }
-    _save_run(record)
+    path = _run_path(workspace_id, run_id)
+    with FileLock(path.with_suffix(".lock")):
+        existing = _read_run_for_update(path)
+        if existing is not None:
+            if existing.get("workspace_id") != workspace_id or existing.get("workflow_id") != workflow_id:
+                raise WorkflowError("workflow run identity conflict")
+            return existing
+        atomic_write_json(path, record)
     budget.begin_execution()
     nodes_by_id = {node["node_id"]: node for node in definition["nodes"]}
     failed = False
+    def cancelled_node(node_id: str) -> tuple[dict[str, Any], dict[str, Any], bool]:
+        return {
+            "node_id": node_id, "tool_id": nodes_by_id[node_id]["tool_id"],
+            "status": "cancelled", "summary": "工作流已取消，当前步骤未执行",
+            "started_at": now_iso(), "finished_at": now_iso(),
+        }, {}, False
+
     def execute_node(node_id: str) -> tuple[dict[str, Any], dict[str, Any], bool]:
         node = nodes_by_id[node_id]
+        if _cancel_requested(workspace_id, run_id, job_id):
+            return cancelled_node(node_id)
         try:
             scope = {"input": dict(inputs or {}), "nodes": {key: {"output": value} for key, value in outputs.items()}}
             if not bool(_resolve(node.get("when", True), scope)):
@@ -322,6 +338,8 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
             return entry, {}, False
         started_at = now_iso()
         from core.tools.context import ToolRuntimeContext
+        if _cancel_requested(workspace_id, run_id, job_id):
+            return cancelled_node(node_id)
         try:
             result = tool_client.invoke(
                 node["tool_id"],
@@ -430,6 +448,16 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
                     failed = True
             _save_run(record)
     budget.end_execution()
+    if _cancel_requested(workspace_id, run_id, job_id) or any(
+        node.get("status") == "cancelled" for node in record["nodes"]
+    ):
+        record["status"] = "cancelled"
+    if record["status"] == "cancelled":
+        finished_nodes = {node["node_id"] for node in record["nodes"]}
+        for layer in layers:
+            for node_id in layer:
+                if node_id not in finished_nodes:
+                    record["nodes"].append(cancelled_node(node_id)[0])
     if record["status"] == "running":
         record["status"] = "failed" if failed else "succeeded"
     record["finished_at"] = now_iso()
@@ -478,6 +506,17 @@ def _resolve(value: Any, scope: dict[str, Any]) -> Any:
     return _TEMPLATE.sub(lambda match: str(_lookup(scope, match.group(1))), value)
 
 
+def _read_run_for_update(path: Path) -> dict[str, Any] | None:
+    """Mutations must never treat an unreadable existing run as absent."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    if not isinstance(value, dict):
+        raise WorkflowError("invalid workflow run record")
+    return value
+
+
 def _save_run(record: dict[str, Any]) -> None:
     record["updated_at"] = now_iso()
     path = _run_path(record["workspace_id"], record["run_id"])
@@ -487,13 +526,15 @@ def _save_run(record: dict[str, Any]) -> None:
         # the durable flag while holding the same run lock before replacing
         # the record. Otherwise a normal progress save can resurrect a run
         # immediately after the user cancelled it.
-        if path.is_file():
-            try:
-                current = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                current = {}
-            if isinstance(current, dict) and current.get("cancel_requested"):
-                record["cancel_requested"] = True
+        current = _read_run_for_update(path)
+        if current and current.get("status") in _RUN_TERMINAL_STATUSES:
+            record.clear()
+            record.update(current)
+            return
+        if current and current.get("cancel_requested"):
+            record["cancel_requested"] = True
+            if record.get("status") in _RUN_TERMINAL_STATUSES:
+                record["status"] = "cancelled"
         atomic_write_json(path, record)
 
 
@@ -531,11 +572,15 @@ def _all_runs_for_workflow(workspace_id: str, workflow_id: str) -> list[dict[str
 
 
 def cancel_run(workspace_id: str, run_id: str) -> dict[str, Any]:
-    record = get_run(workspace_id, run_id)
-    if not record: raise WorkflowError("workflow run not found")
-    if record.get("status") in {"running", "queued"}:
-        record["cancel_requested"] = True
-        _save_run(record)
+    path = _run_path(workspace_id, run_id)
+    with FileLock(path.with_suffix(".lock")):
+        record = _read_run_for_update(path)
+        if not record:
+            raise WorkflowError("workflow run not found")
+        if record.get("status") in {"running", "queued"}:
+            record["cancel_requested"] = True
+            record["updated_at"] = now_iso()
+            atomic_write_json(path, record)
     try:
         from storage.review_store import record_workflow_failure_review
         record_workflow_failure_review(record)
@@ -546,7 +591,9 @@ def cancel_run(workspace_id: str, run_id: str) -> dict[str, Any]:
 
 
 def _cancel_requested(workspace_id: str, run_id: str, job_id: str) -> bool:
-    run = get_run(workspace_id, run_id)
+    run = _read_run_for_update(_run_path(workspace_id, run_id))
+    if run is None:
+        raise WorkflowError("workflow run not found")
     if run and run.get("cancel_requested"): return True
     if job_id:
         from jobs.store import get_job

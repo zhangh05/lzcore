@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from core.runtime.lifecycle_base import (
     workspace_dir, is_safe_path, get_active_refs, scan_directory, write_audit,
+    scan_transient_files, transient_file_guard, transient_block_reason,
 )
 
 
@@ -133,13 +134,9 @@ def preview_retention(workspace_id: str = "default",
     preview.candidate_counts["jobs"] = len([c for c in candidates if c["type"] == "job"])
 
     # ── Scan transient managed files only; durable files/data is never pruned here. ──
-    temp_result = scan_directory(
-        ws_dir,
-        "files/tmp",
-        max_age_days=policy.artifacts_temp_max_age_days,
-        active_refs=active_artifacts,
-        check_is_file=False,
-    )
+    temp_result = scan_transient_files(workspace_id, ws_dir,
+                                       policy.artifacts_temp_max_age_days, active_artifacts)
+    preview.warnings.extend(temp_result.get("warnings", []))
     for name in temp_result["candidates"]:
         candidates.append({"type": "artifact", "name": name})
     blocked.extend(temp_result["blocked"])
@@ -244,6 +241,32 @@ def apply_retention(workspace_id: str = "default",
                 path = ws_dir / "jobs" / name
             elif ctype == "artifact":
                 path = ws_dir / "files" / "tmp" / name
+                from storage.file_store import soft_delete_file, purge_file
+                with transient_file_guard(workspace_id) as (files, refs):
+                    reason = transient_block_reason(path, ws_dir, files, refs, get_active_refs(ws_dir))
+                    if reason:
+                        preview.blocked_items.append({"path": name, "reason": reason})
+                        continue
+                    if not path.exists() or not is_safe_path(path, ws_dir):
+                        preview.warnings.append(f"Skipping {name}: source missing or unsafe")
+                        continue
+                    managed = [rec for rec in files if (ws_dir / rec["path"]).resolve().is_relative_to(path.resolve())]
+                    # Make every indexed identity unavailable BEFORE removing
+                    # bytes. Even failed purge settlement cannot leave an active
+                    # record pointing at a missing payload.
+                    for rec in managed:
+                        if rec.get("lifecycle") != "purged" and not soft_delete_file(workspace_id, rec["file_id"]):
+                            raise RuntimeError("file_retention_tombstone_failed")
+                    for rec in managed:
+                        if not purge_file(workspace_id, rec["file_id"]):
+                            raise RuntimeError("file_retention_purge_requires_readback")
+                    if path.is_dir():
+                        import shutil
+                        shutil.rmtree(path)
+                    elif path.exists():
+                        path.unlink()
+                    deleted["artifacts"] += 1
+                continue
             elif ctype in ("session_expired", "session_deleted"):
                 # P1 fix (round 7): validate `sid` is a plain identifier
                 # before using it as a directory name. Previous code used

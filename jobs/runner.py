@@ -202,6 +202,8 @@ def _run_network_inspection(rec: JobRecord):
 
 def _run_workflow(rec: JobRecord):
     from workflows.service import execute_workflow
+    if _cancel_check(rec):
+        return
     payload = dict(rec.payload or {})
     result = execute_workflow(
         rec.workspace_id,
@@ -217,6 +219,8 @@ def _run_workflow(rec: JobRecord):
     if result["status"] == "cancelled":
         from jobs.manager import mark_cancelled
         mark_cancelled(rec.workspace_id, rec.job_id, "Workflow run cancelled")
+    elif _cancel_check(rec):
+        return
     elif result["status"] != "succeeded":
         raise RuntimeError("workflow_run_failed")
 

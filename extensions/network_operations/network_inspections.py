@@ -24,6 +24,32 @@ from .network_planning import (
 from .network_records import EXTENSION_ID, _connection_transaction, _store, get_inspection
 
 _INSPECTION_JOB_TERMINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
+_INSPECTION_TERMINAL_STATUSES = _INSPECTION_JOB_TERMINAL_STATUSES | {"partial", "completed"}
+
+
+@_connection_transaction
+def _save_inspection_task(workspace_id: str, task: dict[str, Any]) -> None:
+    """Serialize worker state with cancel, retry and internal Job cleanup."""
+    store = _store(workspace_id)
+    current = get_inspection(workspace_id, task["task_id"])
+    if not current:
+        raise ValueError("inspection_not_found")
+    if current.get("status") in _INSPECTION_TERMINAL_STATUSES:
+        task.clear()
+        task.update(current)
+        return
+    merged = {**current, **task}
+    for key in ("job_id", "cancel_requested", "retry_task_id"):
+        if key in current:
+            merged[key] = current[key]
+        else:
+            merged.pop(key, None)
+    if current.get("cancel_requested") and merged.get("status") in {"succeeded", "partial"}:
+        merged["status"] = "cancelled"
+    merged["updated_at"] = now_iso()
+    store.save("inspections", task["task_id"], merged)
+    task.clear()
+    task.update(merged)
 
 
 class _DurableCancellation:
@@ -150,16 +176,19 @@ def _execute_inspection(
     script: dict[str, Any] | None = None,
     facts: list[str] | None = None,
 ) -> None:
-    store = _store(workspace_id)
-    task = store.get("inspections", task_id) or {}
+    task = get_inspection(workspace_id, task_id)
+    if not task:
+        raise ValueError("inspection_not_found")
     if cancel.is_set():
         task.update(
             {"status": "cancelled", "finished_at": now_iso(), "updated_at": now_iso()}
         )
-        store.save("inspections", task_id, task)
+        _save_inspection_task(workspace_id, task)
         return
     task.update({"status": "running", "started_at": now_iso(), "updated_at": now_iso()})
-    store.save("inspections", task_id, task)
+    _save_inspection_task(workspace_id, task)
+    if task.get("status") != "running":
+        return
 
     def run_one(target: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         from core.tools.context import (
@@ -254,7 +283,9 @@ def _execute_inspection(
             )
             task["failed"] += int(result["status"] == "failed")
             task["updated_at"] = now_iso()
-            store.save("inspections", task_id, task)
+            _save_inspection_task(workspace_id, task)
+            if task.get("status") != "running":
+                return
     task["status"] = (
         "cancelled"
         if cancel.is_set()
@@ -275,7 +306,7 @@ def _execute_inspection(
         task["candidate_reference_id"] = str(
             observation.get("candidate_reference_id") or ""
         )
-        store.save("inspections", task_id, task)
+        _save_inspection_task(workspace_id, task)
     except Exception:
         task.update(
             {
@@ -285,7 +316,7 @@ def _execute_inspection(
                 "updated_at": now_iso(),
             }
         )
-        store.save("inspections", task_id, task)
+        _save_inspection_task(workspace_id, task)
         raise
 
 
