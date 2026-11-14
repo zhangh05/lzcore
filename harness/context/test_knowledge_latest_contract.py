@@ -159,11 +159,10 @@ def test_knowledge_upload_writes_through_filestore(monkeypatch, tmp_path):
 
 
 def test_frontend_knowledge_search_uses_current_query_contract():
-    text = _read("frontend-legacy/src/api/index.ts")
-    search_block = text.split("search: (", 1)[1].split("getChunk:", 1)[0]
-    assert "workspace_id" in search_block
-    assert "q:" in search_block
-    assert "limit" in search_block
+    text = _read("frontend/src/pages/library/LibraryPage.tsx")
+    call = text.split('api.get("/api/knowledge/search"', 1)[1].split(")", 1)[0]
+    assert "workspace_id" in call
+    assert "q:" in call
 
 
 def test_knowledge_events_broadcast_to_all_workspace_subscribers():

@@ -28,7 +28,3 @@ config/providers
 .backend.pid
 .frontend.pid
 
-frontend-legacy/node_modules
-frontend-legacy/dist
-frontend-legacy/test-results
-frontend-legacy/playwright-report

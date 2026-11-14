@@ -18,7 +18,7 @@
 | 身份与工作区 | /system/users、/system/workspaces |
 | 备份、生态与 worker | /system/backups、/system/ecosystem、/system/workers |
 
-网络扩展 UI 通过 `frontend/src/extension-modules/registry.tsx` 挂载。设备、连接、Skill 与图纸仍由扩展后端管理，前端不能授予权限。网络扩展的当前产品 UI 在 frontend/src/extension-modules/network-operations；根 extensions/network_operations/frontend 仅保留旧版回退桥接。三个入口来自扩展清单的三条 `frontend_routes`，互相独立，挂同一模块按挂载路径分派；旧深链 `/manage?tab=topologies` 跳到 `/topology`（保留 `topology`、`node`），`/manage?tab=skills|scripts` 跳到 `/skills`。改清单后需重启后端（扩展清单有缓存）。
+网络扩展 UI 通过 `frontend/src/extension-modules/registry.tsx` 挂载。设备、连接、Skill 与图纸仍由扩展后端管理，前端不能授予权限。网络扩展的当前产品 UI 在 frontend/src/extension-modules/network-operations；旧版扩展前端已删除，清单里的 `frontend_modules` 只作为路由标识。三个入口来自扩展清单的三条 `frontend_routes`，互相独立，挂同一模块按挂载路径分派；旧深链 `/manage?tab=topologies` 跳到 `/topology`（保留 `topology`、`node`），`/manage?tab=skills|scripts` 跳到 `/skills`。改清单后需重启后端（扩展清单有缓存）。
 
 ## 视觉系统
 
@@ -61,4 +61,4 @@ npm --prefix frontend run build
 npm --prefix frontend run e2e
 ```
 
-`frontend-legacy/` 保留切换前完整源码与原浏览器回归，默认不启动。旧回归的断言证明旧实现的兼容基线，新版浏览器检查单独运行；不能把旧版通过项算作新版能力验收。切换记录与未迁移能力见 [2026-11-09 切换记录](validation/frontend-cutover-20261109.md)。没有通过这次源码切换宣称 Windows 原生、真实模型或真实设备验收。
+切换前的 `frontend-legacy/` 及其浏览器回归已于 v4.1.0 后删除，可从 git 历史（v4.1.0 及以前的 tag）取回。切换记录见 [2026-11-09 切换记录](validation/frontend-cutover-20261109.md)。

@@ -27,4 +27,4 @@ workspaces/、logs/、config/providers/、本地环境文件、虚拟环境、�
 
 下一步见 [源码调用链](docs/architecture/README.md)、[工程约束](AGENTS.md)。
 
-产品前端 `frontend/` 使用新应用壳；`frontend-legacy/` 保留前一实现与旧浏览器回归，用于可回退维护。
+产品前端为 `frontend/`。切换前的旧前端 `frontend-legacy/` 已于 v4.1.0 后删除。
