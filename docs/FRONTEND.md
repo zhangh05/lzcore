@@ -22,7 +22,9 @@
 
 ## 视觉系统
 
-视觉语言基于 [Arc UI](https://uiarc.dev) 的免费 MIT 基础层：`frontend/src/components/arc/foundation.css`（中性 oklch 色阶、单一强调色、冷色调分类色、柔和分层阴影、焦点规则）与 `lib/motion-tokens.ts`（时长、缓动、弹簧）。基础层不进 CSS layer，同名变量（`--surface`、`--accent`、`--danger` 等）以它为准；`styles/arc-overrides.css` 把控件高度、圆角调到适合高密度控制台的尺寸，并补上中文字体回退；`styles/tokens.css` 的产品变量全部从基础层取值，深色主题随之切换。只有 `tokens.css` 与基础层持有字面颜色；拓扑画布无法读取 CSS 变量，`topologyPalette.ts` 保存换算后的十六进制，并由测试校验与 CSS 一致。字体为 Inter Variable（正文）与 Geist Variable（标题、数字），中文回落到各平台系统字体。界面控件优先用 Arc 组件（`components/arc/<name>/`，CSS Modules + Motion + Radix）：共享的 `Button`、`Chip`（Arc Badge）、`Tabs`（Arc Tabs）已经走 Arc，页面里直接用 MetricCard、SearchField、SegmentedControl、EmptyState、Drawer、Input、PasswordField、Combobox、Slider、Alert 等。需要更多组件时，从 `https://uiarc.dev/r/<name>.json` 取免费组件源码放入 `components/arc/`，保留 LICENSE；Arc 面向 React 19 类型，本仓库为 React 18 打的兼容补丁记在 `components/arc/README.md`。
+视觉语言采用微软 [Fluent 2](https://fluent2.microsoft.design)，按 Windows 11 原生应用的方式排版：导航和标题栏在 Mica 底色上，页面内容放在左上角圆角的内容层上，用细描边而不是阴影分层。数值全部取自 Fluent 2 web 主题（`@fluentui/tokens` 的 webLight/webDark）和 Windows 11 材质，写在 `styles/arc-overrides.css`：中性色阶、品牌蓝 `#0f6cbd`（深色 `#479ef5`）、状态色、阴影阶梯（卡片无阴影，浮层 shadow16，对话框 shadow64）、圆角（控件 4px，卡片/浮层/对话框 8px）、字重只用 400/600、字体 Segoe UI Variable（中文回落微软雅黑 UI / 苹方）、等宽 Cascadia Mono。动效用 Fluent 曲线：入场 decelerateMax `cubic-bezier(.1,.9,.2,1)`，状态变化 easyEase；页面切换上移 12px 淡入 300ms，浮层从锚点滑入 10px，对话框从 0.96 放大，导航选中指示条在项目之间滑动，输入框聚焦时底部品牌色下划线从中间展开；`prefers-reduced-motion` 时全部关闭。控件按 Fluent 规范：按钮有 standard / primary / subtle 三种外观，按下时只变底色不缩放；页签是文字加 3px 下划线；徽标 4px 圆角带同色细描边。
+
+`components/arc/` 仍是控件实现（CSS Modules + Motion + Radix，保留 LICENSE），样式已改为 Fluent；基础层 `foundation.css` 不进 CSS layer，`arc-overrides.css` 紧随其后覆盖它，`styles/tokens.css` 的产品变量从这两层取值，深色主题随之切换。只有 `tokens.css`、`arc-overrides.css` 与基础层持有字面颜色；拓扑画布无法读取 CSS 变量，`topologyPalette.ts` 保存同值的十六进制，并由测试校验与 CSS 一致。
 
 ## 版式
 
@@ -35,7 +37,7 @@
 - 网络拓扑：独占整页的画布，离开页面或换图前有未保存守卫。
 - 网络 Skill：顶部 MetricCard 一行（已发布、草稿、写入需审批、巡检脚本），Skill 与巡检脚本以卡片网格呈现；不再挂设备页的入口。
 - 模型服务（`pages/system/ModelSettings.tsx`）：顶部「当前模型」卡显示状态、端点与一键连通测试（含耗时）；下方分「已接入」（有密钥、当前、本机地址或自定义的服务）与「添加模型服务」画廊。点画廊或「配置」打开 Arc Drawer：协议、名称、接口地址、API Key（PasswordField）、模型；填好地址与密钥（本机地址可不填密钥）后自动调用 `POST /api/agent/llm/models` 获取模型列表，用 Combobox 搜索选择，也可切换手动输入，获取失败给出原因；高级项是温度（Slider）与 max_tokens。「测试连接」用抽屉里的草稿参数直接探测，不落盘；可「保存」或「保存并设为当前」。非平台管理员不能改已有服务的地址。
-- 强调色为 Arc `blue`（`index.html` 的 `data-accent`）：主按钮、当前导航、页签指示、链接与焦点用强调色，结构保持中性。拓扑画布的选中色随之取同一值，测试按 `data-accent` 解析校验。
+- 强调色是 Fluent 品牌蓝：主按钮、导航与页签的选中指示、链接与焦点用强调色，结构保持中性；悬停、按下、选中用 Windows 11 的半透明中性填充（`--subtle-hover` / `--subtle-pressed` / `--subtle-selected`），不用强调色染底。拓扑画布的选中色取同一值。
 
 ## 框架合同
 

@@ -1,11 +1,12 @@
 /* No row gap: grid tracks clamp a negative margin at zero, so a closed message row would still pay the gap. Each row carries its own space instead. */
 .field { display: grid; min-width: 0; }
-.label { margin-bottom: var(--space-2); color: var(--foreground); font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-body); }
+.label { margin-bottom: var(--space-1); color: var(--foreground); font-size: var(--text-sm); font-weight: 400; line-height: var(--leading-body); }
 /* Focus answers with the border colour alone (no rings or halos); the field itself never changes size. */
-.input { width: 100%; min-height: var(--control-height-md); padding: 0 var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-sm); line-height: var(--leading-body); letter-spacing: var(--tracking-body); outline: none; transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+.input { width: 100%; min-height: var(--control-height-md); padding: 0 var(--space-3); border: 1px solid var(--field-border, var(--border-strong)); border-bottom-color: var(--field-border-bottom, var(--border-strong)); border-radius: var(--radius-control); background: var(--surface); background-image: linear-gradient(var(--accent), var(--accent)); background-repeat: no-repeat; background-position: 50% 100%; background-size: 0 2px; color: var(--foreground); font: inherit; font-size: var(--text-sm); line-height: var(--leading-body); letter-spacing: var(--tracking-body); outline: none; transition: border-color var(--duration-fast) var(--ease-standard), background-size var(--duration-considered) var(--ease-enter); }
 .input::placeholder { color: var(--text-muted); }
-@media (hover: hover) and (pointer: fine) { .input:hover:not(:disabled, [aria-invalid="true"]) { border-color: var(--foreground); } }
-.input:focus-visible { border-color: var(--foreground); }
+@media (hover: hover) and (pointer: fine) { .input:hover:not(:disabled, [aria-invalid="true"]) { border-color: var(--neutral-6); border-bottom-color: var(--text-secondary); } }
+/* Fluent focus: a 2px brand underline grows out from the centre. */
+.input:focus-visible { background-size: 100% 2px; }
 .input[aria-invalid="true"] { border-color: var(--danger); }
 .input:disabled { cursor: not-allowed; opacity: .5; background: var(--surface-muted); }
 /* The row's space is padding inside the clipped slot, so the height animates from a true zero. */

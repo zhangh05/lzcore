@@ -14,9 +14,9 @@
   --badge-foreground: color-mix(in oklab, var(--badge-tone) var(--badge-ink), var(--foreground));
   --badge-color: color-mix(in oklab, var(--badge-tone) 88%, var(--foreground));
   --badge-border: transparent;
-  --badge-radius: 6px;
-  --badge-height: 24px;
-  --badge-pad: 10px;
+  --badge-radius: 4px;
+  --badge-height: 20px;
+  --badge-pad: 6px;
   --badge-gap: 5px;
   --badge-icon: 14px;
   --badge-dot: 6px;

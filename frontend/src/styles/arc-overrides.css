@@ -1,16 +1,109 @@
-/* App-level tuning of the Arc foundation (components/arc/foundation.css).
-   Unlayered like the foundation, imported right after it, so these win over Arc's
-   marketing-scale defaults: a denser console needs shorter controls and tighter radii,
-   and CJK text needs a platform face after the Latin variable fonts. */
+/* Fluent 2 on top of the Arc foundation (components/arc/foundation.css).
+   Unlayered like the foundation and imported right after it, so these values win.
+
+   Every value below is taken from the Fluent 2 web theme (@fluentui/tokens,
+   webLightTheme / webDarkTheme) or, for the app frame, from the Windows 11
+   Mica / layer materials, so the desktop build reads as native Windows software.
+   Radius: 4 control · 8 card, flyout and dialog. Weights: 400 and 600 only. */
 :root, :root[data-theme] {
-  --font-body: "Inter Variable", Inter, system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --font-display: "Geist Variable", "Inter Variable", system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --control-height-sm: 1.875rem;
-  --control-height-md: 2.125rem;
+  --font-body: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", Roboto, "Helvetica Neue", sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  --control-height-sm: 1.5rem;
+  --control-height-md: 2rem;
   --control-height-lg: 2.5rem;
-  --radius-control: .625rem;
-  --radius-panel: 1rem;
-  --radius-surface: 1.25rem;
-  /* Arc leaves the field halo transparent; product CSS still draws keyboard focus with it. */
-  --focus-ring: color-mix(in oklab, var(--accent-strong) 72%, transparent);
+  --radius-control: 4px;
+  --radius-panel: 8px;
+  --radius-surface: 8px;
+  --tracking-display: 0;
+  --tracking-body: 0;
+  --leading-body: 1.43;
+  /* Fluent motion: decelerate into place, ease on the way out. */
+  --ease-enter: cubic-bezier(.1, .9, .2, 1);
+  --ease-standard: cubic-bezier(.33, 0, .67, 1);
+  --ease-exit: cubic-bezier(.9, .1, 1, .2);
+  --duration-instant: 100ms;
+  --duration-fast: 150ms;
+  --duration-standard: 200ms;
+  --duration-considered: 300ms;
+}
+
+:root {
+  /* Fluent neutral ramp (light). */
+  --neutral-0: #ffffff;
+  --neutral-1: #fafafa;
+  --neutral-2: #f5f5f5;
+  --neutral-3: #f0f0f0;
+  --neutral-4: #e0e0e0;
+  --neutral-5: #d1d1d1;
+  --neutral-6: #bdbdbd;
+  --neutral-7: #707070;
+  --neutral-8: #616161;
+  --neutral-9: #424242;
+  --neutral-10: #2b2b2b;
+  --neutral-11: #242424;
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-muted: #f5f5f5;
+  --foreground: #242424;
+  --text-secondary: #616161;
+  --text-muted: #707070;
+  --border: #e0e0e0;
+  --border-subtle: #f0f0f0;
+  --border-strong: #d1d1d1;
+  /* Brand: Fluent communication blue. */
+  --accent: #0f6cbd;
+  --accent-strong: #115ea3;
+  --accent-subtle: #ebf3fc;
+  --accent-foreground: #ffffff;
+  --control-on: #0f6cbd;
+  --control-glyph: #ffffff;
+  --control-track: #ffffff;
+  --control-track-hover: #f5f5f5;
+  --success: #0e700e;
+  --warning: #bc4b09;
+  --danger: #b10e1c;
+  --info: #0f6cbd;
+  /* Fluent shadow ramp: an ambient key plus a directional key. */
+  --shadow-resting: none;
+  --shadow-raised: 0 0 2px rgb(0 0 0 / .12), 0 2px 4px rgb(0 0 0 / .14);
+  --shadow-floating: 0 0 2px rgb(0 0 0 / .12), 0 8px 16px rgb(0 0 0 / .14);
+  --shadow-dialog: 0 0 8px rgb(0 0 0 / .12), 0 32px 64px rgb(0 0 0 / .14);
+  --focus-outline: #000000;
+  --arc-gradient: var(--accent-subtle);
+  --arc-gradient-soft: var(--surface-muted);
+  --arc-gradient-line: var(--border);
+  --arc-gradient-ink: linear-gradient(var(--accent), var(--accent));
+}
+
+:root[data-theme="dark"] {
+  --background: #292929;
+  --surface: #292929;
+  --surface-raised: #2e2e2e;
+  --surface-muted: #333333;
+  --foreground: #ffffff;
+  --text-secondary: #adadad;
+  --text-muted: #999999;
+  --border: #3d3d3d;
+  --border-subtle: #333333;
+  --border-strong: #525252;
+  --accent: #479ef5;
+  --accent-strong: #62abf5;
+  --accent-subtle: #0e2f4c;
+  --accent-foreground: #0a0a0a;
+  --control-on: #479ef5;
+  --control-glyph: #0a0a0a;
+  --control-thumb-on: #0a0a0a;
+  --control-fill: #479ef5;
+  --control-track: #292929;
+  --control-track-hover: #333333;
+  --success: #54b054;
+  --warning: #faa06b;
+  --danger: #dc626d;
+  --info: #479ef5;
+  --shadow-resting: none;
+  --shadow-raised: 0 0 2px rgb(0 0 0 / .24), 0 2px 4px rgb(0 0 0 / .28);
+  --shadow-floating: 0 0 2px rgb(0 0 0 / .24), 0 8px 16px rgb(0 0 0 / .28);
+  --shadow-dialog: 0 0 8px rgb(0 0 0 / .24), 0 32px 64px rgb(0 0 0 / .28);
+  --focus-outline: #ffffff;
 }

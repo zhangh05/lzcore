@@ -6,8 +6,8 @@ import { NODE_STATUS_COLORS, NODE_STATUS_COLORS_DARK, CANVAS_ACCENT, CANVAS_GROU
 
 /**
  * Canvas colours must equal what the CSS tokens resolve to. Tokens alias the Arc
- * foundation (unlayered, so it wins name clashes), which defines oklch values;
- * the canvas needs sRGB hex, so the test resolves the var() chain and converts.
+ * foundation and the Fluent product palette (both unlayered, so they win name
+ * clashes); the canvas needs sRGB hex, so the test resolves the var() chain.
  */
 const read = (p: string) => fs.readFileSync(path.resolve(p), 'utf8');
 const foundation = read('src/components/arc/foundation.css');
@@ -29,13 +29,15 @@ const arcDark = decls(block(foundation, ':root[data-theme="dark"] {'));
 const darkStart = tokens.indexOf('[data-theme="dark"] {\n  color-scheme: dark;');
 const tokLight = decls(tokens.slice(0, darkStart) + tokens.slice(tokens.indexOf('\n}\n', darkStart)));
 const tokDark = decls(block(tokens, '[data-theme="dark"] {\n  color-scheme: dark;'));
-// The product accent is chosen on <html data-accent>; resolve it the same way the browser does.
-const accentName = read('index.html').match(/data-accent="([a-z]+)"/)?.[1] ?? 'neutral';
-const accentLight = decls(block(foundation, `:root[data-accent="${accentName}"] {`));
-const accentDark = decls(block(foundation, `:root[data-theme="dark"][data-accent="${accentName}"] {`));
+// Product palette (Fluent 2) on top of Arc: unlayered, imported after the foundation.
+const overrides = read('src/styles/arc-overrides.css');
+const overLight = decls(block(overrides, ':root {'));
+const overDark = decls(block(overrides, ':root[data-theme="dark"] {'));
+// tokens.css is layered, so any unlayered declaration (Arc, overrides) wins a name clash;
+// among unlayered rules the dark selectors outrank plain :root.
 const themes = {
-  light: { ...tokLight, ...arcLight, ...accentLight },
-  dark: { ...tokLight, ...arcLight, ...tokDark, ...arcDark, ...accentLight, ...accentDark },
+  light: { ...tokLight, ...arcLight, ...overLight },
+  dark: { ...tokLight, ...tokDark, ...arcLight, ...overLight, ...arcDark, ...overDark },
 };
 
 function resolve(defs: Record<string, string>, name: string, depth = 0): string {

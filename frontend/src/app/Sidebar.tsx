@@ -1,10 +1,60 @@
 import { CORE_NAV_AFTER_EXTENSIONS, CORE_NAV_BEFORE_EXTENSIONS, NAMES, type NavLeaf } from "../contracts/naming";
 import { extensionNavItems } from "../contracts/extensions";
 import { NavIcon } from "../components/NavIcon";
-import { IconNavCollapse, IconNavExpand, IconSparkle } from "../components/Icon";
+import { useLayoutEffect, useRef } from "react";
+import { IconNavCollapse, IconNavExpand } from "../components/Icon";
 import { Link, useLocation } from "../router";
 import { useShell } from "./shellContext";
 import { usePrefs } from "./prefs";
+
+/** 产品标识：一个中枢节点连着三个端点，对应「联智中枢」。 */
+function BrandGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 8 3.5 4M8 8l4.5-4M8 8v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="8" cy="8" r="2.3" fill="currentColor" />
+      <circle cx="3.5" cy="4" r="1.5" fill="currentColor" />
+      <circle cx="12.5" cy="4" r="1.5" fill="currentColor" />
+      <circle cx="8" cy="13" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * Windows 11 导航选中指示条：整栏只有一条，切换页面时从旧位置滑到新位置，
+ * 而不是每一项各画一条。没有选中项（例如扩展总览）时淡出。
+ */
+function useNavIndicator(deps: unknown[]) {
+  const navRef = useRef<HTMLElement>(null);
+  const barRef = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    const bar = barRef.current;
+    if (!nav || !bar) return;
+    const place = () => {
+      const active = nav.querySelector<HTMLElement>(".nav-item.is-active");
+      if (!active) { bar.style.opacity = "0"; return; }
+      const navBox = nav.getBoundingClientRect();
+      const box = active.getBoundingClientRect();
+      const first = !bar.dataset.placed;
+      if (first) bar.style.transition = "none";
+      bar.style.opacity = "1";
+      bar.style.transform = `translate(${box.left - navBox.left}px, ${box.top - navBox.top + nav.scrollTop + (box.height - 16) / 2}px)`;
+      if (first) {
+        // 首次定位直接落位，之后的切换才滑动。
+        void bar.offsetWidth;
+        bar.style.transition = "";
+        bar.dataset.placed = "1";
+      }
+    };
+    place();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(place) : null;
+    observer?.observe(nav);
+    return () => observer?.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return { navRef, barRef };
+}
 
 function isActive(pathname: string, path: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`);
@@ -42,10 +92,12 @@ export function Sidebar({ inDrawer = false }: { inDrawer?: boolean }) {
     CORE_NAV_BEFORE_EXTENSIONS.find((s) => s.key === "library"),
   ];
   const system = CORE_NAV_AFTER_EXTENSIONS;
+  const { navRef, barRef } = useNavIndicator([pathname, collapsed, mounts.length]);
   return (
-    <nav className={`app-sidebar ${collapsed ? "is-collapsed" : ""}`} aria-label="主导航">
+    <nav ref={navRef} className={`app-sidebar ${collapsed ? "is-collapsed" : ""}`} aria-label="主导航">
+      <span ref={barRef} className="nav-indicator" aria-hidden="true" />
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true"><IconSparkle size={15} strokeWidth={2.2} /></span>
+        <span className="brand-mark" aria-hidden="true"><BrandGlyph /></span>
         <span className="brand-name">{NAMES.product}</span>
         {!inDrawer ? (
           <button type="button" className="nav-collapse" onClick={() => setNavCollapsed(!navCollapsed)}

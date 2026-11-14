@@ -8,23 +8,22 @@ export type NodeRuntimeStatus = "ok" | "warning" | "error" | "unknown";
  * Cytoscape paints to a canvas and cannot resolve CSS custom properties, so the
  * product's semantic colours are mirrored here as literals. This is the only
  * place allowed to duplicate them — keep in sync with `styles/tokens.css`
- * and the Arc foundation it resolves through (`components/arc/foundation.css`);
- * the hex values are those oklch colours converted to sRGB. The values used to be a second palette
+ * and the Fluent 2 palette it resolves through (`styles/arc-overrides.css`). The values used to be a second palette
  * (Tailwind emerald/amber/red plus blue for selection), which is exactly the
  * "second brand colour" the design rules forbid.
  */
 export const NODE_STATUS_COLORS: Record<NodeRuntimeStatus, string> = {
-  ok: "#00774d",
-  warning: "#9f6202",
-  error: "#bb2c54",
-  unknown: "#943fa2",
+  ok: "#0e700e",
+  warning: "#bc4b09",
+  error: "#b10e1c",
+  unknown: "#7a49b3",
 };
 
 export const NODE_STATUS_COLORS_DARK: Record<NodeRuntimeStatus, string> = {
-  ok: "#55d69f",
-  warning: "#f2bd68",
-  error: "#f0738f",
-  unknown: "#dd8fe9",
+  ok: "#54b054",
+  warning: "#faa06b",
+  error: "#dc626d",
+  unknown: "#b696e4",
 };
 
 export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, string> {
@@ -32,11 +31,11 @@ export function nodeStatusColors(dark: boolean): Record<NodeRuntimeStatus, strin
 }
 
 /** Transient canvas feedback: selection, drag-to-connect, alignment guides. */
-export const CANVAS_ACCENT = { light: "#0562ef", dark: "#6ba3ff" };
+export const CANVAS_ACCENT = { light: "#0f6cbd", dark: "#479ef5" };
 /** Group containers are neutral structure; custom drawing colours remain intact. */
 export const CANVAS_GROUP = {
-  light: { fill: "#f8f8f8", border: "#e9e9e9", text: "#585858" },
-  dark: { fill: "#151515", border: "#2b2b2b", text: "#ababab" },
+  light: { fill: "#f5f5f5", border: "#e0e0e0", text: "#616161" },
+  dark: { fill: "#2e2e2e", border: "#3d3d3d", text: "#adadad" },
 };
 
 /** Compatibility export: drawing colours do not use operational state. */

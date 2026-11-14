@@ -10,7 +10,7 @@
 .network-admin .topology-studio details[data-toolbar-menu] strong { font-size: var(--fs-12); color: var(--text); margin-top: 4px; }
 .network-admin .topology-studio details[data-toolbar-menu] button { text-align: left; padding: 6px 8px; border-radius: var(--r-sm); }
 .network-admin .topology-studio details[data-toolbar-menu] button:not(.btn) { border: 1px solid transparent; background: transparent; color: var(--text-2); font-size: var(--fs-13); cursor: pointer; }
-.network-admin .topology-studio details[data-toolbar-menu] button:hover:not(:disabled) { background: var(--accent-soft); }
+.network-admin .topology-studio details[data-toolbar-menu] button:hover:not(:disabled) { background: var(--subtle-hover); }
 .network-admin .topology-studio details[data-toolbar-menu] button:disabled { opacity: .45; cursor: default; }
 .network-admin .topology-studio .studio-file-menu .btn.danger { margin-top: 8px; color: var(--danger); border-top: 1px solid var(--line); }
 .arrange-align > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }

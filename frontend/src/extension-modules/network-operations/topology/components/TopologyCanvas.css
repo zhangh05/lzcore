@@ -108,7 +108,7 @@
   padding: 3px;
   gap: 2px;
   border: 1px solid var(--line-2);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-card);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -120,7 +120,7 @@
   height: 28px;
   padding: 0 8px;
   border: 0;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--lz-color-text-secondary);
   font: var(--lz-font-label);
@@ -189,7 +189,7 @@
   padding: 2px 8px;
   height: 22px;
   border: 1px solid var(--accent);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-control);
   background: var(--accent-soft);
   color: var(--accent);
   font-size: 11px;
@@ -212,7 +212,7 @@
   align-items: center;
   gap: 5px;
   padding: 3px 9px;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-card);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -252,7 +252,7 @@
 }
 .canvas-legend { position: absolute; left: 16px; bottom: 16px; z-index: 7; min-width: 132px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); backdrop-filter: none; box-shadow: var(--shadow-menu); font-size: var(--fs-11); color: var(--text-2); }
 .canvas-legend.is-collapsed { padding: 3px 4px; }
-.canvas-selection-count { padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: var(--fs-11); font-weight: var(--weight-heading); white-space: nowrap; }
+.canvas-selection-count { padding: 1px 7px; border-radius: var(--r-control); background: var(--accent-soft); color: var(--accent); font-size: var(--fs-11); font-weight: var(--weight-heading); white-space: nowrap; }
 .topology-studio .topology-minimap-panel {
   position: absolute;
   right: 14px;
