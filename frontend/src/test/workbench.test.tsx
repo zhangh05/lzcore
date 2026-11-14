@@ -21,7 +21,7 @@ describe("工作台（阶段 2）", () => {
     renderAt("/workbench?ws=ws-demo-1&session=s-partial");
     const col = await screen.findByTestId("session-column");
     await waitFor(() => expect(col).toHaveTextContent("今天"));
-    const openProgress = screen.getByRole("button", { name: "进度与证据" });
+    const openProgress = screen.getByRole("button", { name: "本轮详情" });
     openProgress.focus();
     fireEvent.click(openProgress);
     expect(screen.getByTestId("progress-panel")).toBeInTheDocument();

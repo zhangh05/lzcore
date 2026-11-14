@@ -9,6 +9,7 @@ import { ASSIGNABLE_ROLES, NAMES, isAdmin, roleLabel } from "../../contracts/nam
 import { listOf, useApi } from "../../kit/useApi";
 import { Chip, ConfirmDialog, Dialog, Drawer, FailureNote, KeyValues, LoadState, ObjectView, PreviewApply, RawData, ReceiptNote, Table, Tabs, fmtTime, useUrlTab } from "../../kit/ui";
 import { ModelSettings } from "./ModelSettings";
+import { AdvancedJsonPanel, Field, ModeToggle, parseJsonObject } from "../../kit/form";
 import { ContextView, HealthView, ReadSection, SelfcheckView, UsageView, statusLabel } from "./statusViews";
 
 function Result({ r }: { r: { label: string; o: HttpOutcome } | null }) {
@@ -413,24 +414,59 @@ export function BackupsPage() {
 export function EcosystemPage() {
   const { workspaceId: ws } = useShell();
   const [providers] = useApi(ws ? "/api/ecosystem/providers" : null, { workspace_id: ws ?? "" });
+  const [file, setFile] = useState<{ name: string; data: Record<string, unknown> } | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
+  const [advanced, setAdvanced] = useState(false);
   const [text, setText] = useState("");
   if (!ws) return null;
+  const manual = notes.split("\n").map((x) => x.trim()).filter(Boolean).map((content) => ({ content }));
+  const fromFile = (k: "providers" | "memories") => (Array.isArray(file?.data[k]) ? (file!.data[k] as unknown[]) : []);
   // 后端只接受结构化对象：{ providers: [{ name, ... }], memories: [{ content, ... }] }；不解析路径，也不导入 Skill。
+  const formBody = (): Record<string, unknown> => {
+    const body: Record<string, unknown> = {};
+    if (fromFile("providers").length) body.providers = fromFile("providers");
+    const mems = [...fromFile("memories"), ...manual];
+    if (mems.length) body.memories = mems;
+    return body;
+  };
   const payload = (): { body?: Record<string, unknown>; error?: string } => {
-    try {
-      const v = JSON.parse(text || "{}");
-      return v && typeof v === "object" && !Array.isArray(v) ? { body: v } : { error: "需要一个 JSON 对象" };
-    } catch (e) { return { error: `JSON 格式不正确：${(e as Error).message}` }; }
+    if (!advanced) { const b = formBody(); return Object.keys(b).length ? { body: b } : { error: "还没有要导入的内容：选一个导入文件，或在下面写几条记忆。" }; }
+    const v = parseJsonObject(text || "{}");
+    return typeof v === "string" ? { error: v } : { body: v };
   };
   const local = (error: string): HttpOutcome => ({ kind: "http", status: 400, body: { ok: false, error } });
+  const readFile = async (f: File | undefined) => {
+    setFileError(null);
+    if (!f) { setFile(null); return; }
+    if (f.size > 5 * 1024 * 1024) { setFile(null); setFileError("文件超过 5 MB，无法导入。"); return; }
+    const v = parseJsonObject(await f.text());
+    if (typeof v === "string") { setFile(null); setFileError(`读不懂这个文件：${v}`); return; }
+    if (!Array.isArray(v.providers) && !Array.isArray(v.memories)) { setFile(null); setFileError("文件里没有可导入的模型配置（providers）或记忆（memories）。"); return; }
+    setFile({ name: f.name, data: v });
+  };
   return (
     <AdminGate title={NAMES.ecosystem}>
       <div className="page" data-testid="ecosystem-page">
-        <PageHeader title={NAMES.ecosystem} subtitle="导入模型配置（providers）与记忆（memories），先预览、确认后再应用。" />
+        <PageHeader title={NAMES.ecosystem} subtitle="从其他工具迁移过来的模型配置和记忆，可以在这里导入。先预览，确认后再写入。" />
         <LoadState value={providers}>{(d) => <><ObjectView value={d} /><RawData value={d} path="/api/ecosystem/providers" /></>}</LoadState>
-        <label className="field"><span>导入内容（JSON）</span>
-          <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder='{"providers": [{"name": "..."}], "memories": [{"content": "..."}]}' data-testid="ecosystem-json" /></label>
-        <p className="muted">暂不支持按路径导入或导入 Skill。</p>
+        <div className="form-head"><h2 className="section-title">导入内容</h2><ModeToggle mode={advanced ? "json" : "form"} onToggle={() => {
+          if (!advanced) { setText(JSON.stringify(formBody(), null, 2)); setAdvanced(true); } else setAdvanced(false);
+        }} /></div>
+        {advanced ? (
+          <AdvancedJsonPanel text={text} onChange={setText} error={null} note={'格式：{"providers": [{"name": "…"}], "memories": [{"content": "…"}]}'} />
+        ) : (
+          <div className="form-grid" data-testid="ecosystem-form">
+            <Field full label="导入文件（可选）" hint="其他工具导出的 .json 文件，里面有 providers 或 memories 列表。" error={fileError ?? undefined}>
+              {(a) => <input {...a} type="file" accept=".json,application/json" onChange={(e) => void readFile(e.target.files?.[0])} data-testid="ecosystem-file" />}
+            </Field>
+            {file ? <p className="readback-note is-full" role="status" data-testid="ecosystem-file-summary">已读取「{file.name}」：{fromFile("providers").length} 个模型配置，{fromFile("memories").length} 条记忆。</p> : null}
+            <Field full label="手动添加记忆（可选）" hint="每行一条。导入后进入待审核，确认后才会生效。">
+              {(a) => <textarea {...a} className="is-prose" rows={5} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={"例如：机房 A 的核心交换机型号是 S12700\n例如：周报每周五下午发给运维组"} data-testid="ecosystem-memories" />}
+            </Field>
+          </div>
+        )}
+        <p className="muted">暂不支持按路径导入或导入 Skill。导入的模型配置默认不受信任，需要手动启用。</p>
         <PreviewApply label="导入" testId="ecosystem-import"
           preview={() => { const p = payload(); return p.body ? api.post("/api/ecosystem/import/preview", p.body, { workspace_id: ws }) : Promise.resolve(local(p.error!)); }}
           apply={() => { const p = payload(); return p.body ? api.post("/api/ecosystem/import/apply", { ...p.body, confirm: true }, { workspace_id: ws }) : Promise.resolve(local(p.error!)); }}

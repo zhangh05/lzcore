@@ -8,7 +8,10 @@ import type { HttpOutcome } from "../../contracts/auth";
 import { listOf, useApi } from "../../kit/useApi";
 import { Chip, Drawer, FailureNote, KeyValues, LoadState, RawData, ReceiptNote, Table, Tabs, fmtTime, useUrlTab } from "../../kit/ui";
 import { FactSummary } from "../../kit/factSummary";
-import { outcomeZh, type RunAudit, type TraceEvent } from "../workbench/ProgressPanel";
+import { outcomePlain, outcomeZh, type RunAudit, type TraceEvent } from "../workbench/ProgressPanel";
+
+/** 去掉 Markdown 记号并截短，列表里只看一句话。 */
+const plainSummary = (v?: string) => (v ?? "").replace(/[#*`|>_~-]{1,}/g, " ").replace(/\s+/g, " ").trim().slice(0, 90);
 import { renderMarkdown } from "../../utils/markdown";
 import { Link, useSearchParams } from "../../router";
 import { JobsColumn } from "./JobsColumn";
@@ -28,7 +31,7 @@ export function TasksPage() {
   return (
     <div className="page" data-testid="tasks-page">
       <PageHeader title={NAMES.tasks} subtitle="跟踪任务进度、运行记录和报告。" />
-      <Tabs label="任务视图" current={tab} onChange={(t: Tab) => setTab(t)} tabs={[{ key: "tasks", label: "运行时任务" }, { key: "runs", label: "运行 / 追踪" }, { key: "reports", label: "报告" }, { key: "trajectories", label: "轨迹" }]} />
+      <Tabs label="任务视图" current={tab} onChange={(t: Tab) => setTab(t)} tabs={[{ key: "tasks", label: "任务" }, { key: "runs", label: "运行记录" }, { key: "reports", label: "报告" }, { key: "trajectories", label: "执行轨迹" }]} />
       <div className="tasks-layout">
         <div className="tasks-main">
           {tab === "tasks" ? <RuntimeTaskList ws={ws} onOpen={(id) => setParam("task", id)} /> : null}
@@ -48,10 +51,10 @@ function RuntimeTaskList({ ws, onOpen }: { ws: string; onOpen: (id: string) => v
   const [tasks, reload] = useApi("/api/runtime/tasks", { workspace_id: ws });
   return (
     <>
-      <p className="inline-alert tone-info" role="note" data-testid="outcome-missing-note">执行结束不代表目标完成。目标结论和待核对事项请打开任务详情查看。</p>
+      <p className="inline-alert tone-info" role="note" data-testid="outcome-missing-note">「执行结束」不等于任务做成了。点开任务可以看到结果和需要你确认的事项。</p>
       <LoadState value={tasks} onReload={reload}>{() => (
         <Table testId="runtime-tasks" rows={listOf<RuntimeTask>(tasks, "tasks")} rowKey={(t) => t.task_id} onRowOpen={(t) => onOpen(t.task_id)}
-          empty={<p className="muted">还没有运行时任务。</p>}
+          empty={<p className="muted">还没有任务。在工作台发起对话或运行工作流后，会出现在这里。</p>}
           columns={[
             { key: "goal", label: "目标", render: (t) => t.user_goal || <code>{t.task_id}</code> },
             { key: "status", label: "运行时状态", render: (t) => <Chip>{runtimeStatusLabel(t.status)}</Chip>, sortValue: (t) => t.status ?? "" },
@@ -180,9 +183,8 @@ function RunsView({ ws, onOpen }: { ws: string; onOpen: (id: string) => void }) 
       <LoadState value={runs} onReload={reload}>{() => (
         <Table testId="runs-table" rows={listOf<Record<string, string>>(runs, "runs")} rowKey={(r) => r.run_id} onRowOpen={(r) => onOpen(r.run_id)} empty={<p className="muted">没有运行记录。</p>}
           columns={[
-            { key: "id", label: "run", render: (r) => <code>{r.run_id}</code> },
-            { key: "status", label: "状态", render: (r) => <Chip>{r.execution_outcome ? outcomeZh(r.execution_outcome) : r.status ?? "未上报"}</Chip> },
-            { key: "title", label: "说明", render: (r) => r.title ?? r.goal ?? r.final_response_summary ?? r.intent ?? "—" },
+            { key: "title", label: "内容", render: (r) => <span className="run-title" title={`运行编号 ${r.run_id}`}>{plainSummary(r.title ?? r.goal ?? r.final_response_summary ?? r.intent) || "—"}</span> },
+            { key: "status", label: "结果", render: (r) => { const o = outcomePlain(r.execution_outcome); return <Chip tone={o?.tone ?? "neutral"}>{o?.label ?? r.status ?? "未上报"}</Chip>; } },
             { key: "time", label: "时间", render: (r) => fmtTime(r.created_at) },
           ]} />
       )}</LoadState>

@@ -47,6 +47,16 @@ function inFilter(j: JobRow, f: Filter): boolean {
 
 const ACTIVE = new Set(["queued", "running", "cancel_requested"]);
 
+const JOB_ERROR_ZH: Record<string, string> = {
+  backend_restart_during_job: "执行期间服务重启了，这次没有跑完",
+  cancelled_by_user: "已被手动取消",
+  timeout: "执行超时",
+  job_timeout: "执行超时",
+  worker_lost: "执行进程意外退出",
+};
+/** 常见错误码换成人话；其余原样显示（不吞掉真实错误）。 */
+export const jobErrorText = (e: string) => JOB_ERROR_ZH[e.trim()] ?? e;
+
 /** 作业队列附列：只是队列态。取消、失败重试（确认框列出将重放的内容；未知态禁用）、删除（确认串）。 */
 export function JobsColumn({ ws }: { ws: string }) {
   const [jobs, reload] = useApi("/api/jobs", { workspace_id: ws, limit: 50 });
@@ -67,7 +77,8 @@ export function JobsColumn({ ws }: { ws: string }) {
   }, [hasActive, reload]);
   return (
     <aside className="jobs-column card" aria-label="作业队列" data-testid="jobs-column">
-      <h2>作业队列 <span className="muted">（仅队列态，不代表任务结论）</span></h2>
+      <h2>后台队列</h2>
+      <p className="muted jobs-sub">排队和执行情况。任务是否真正做成，以左侧任务详情为准。</p>
       {result ? (result.o.kind === "http" && result.o.status < 300 ? <ReceiptNote text={`${result.label}已提交`} /> : <FailureNote outcome={result.o} />) : null}
       <div className="job-filters" role="group" aria-label="按状态筛选作业">
         {FILTERS.map((f) => (
@@ -84,7 +95,7 @@ export function JobsColumn({ ws }: { ws: string }) {
             const v = jobOutcomeView(j);
             const retryable = canOfferConfirmedJobRetry(j);
             return (
-              <li key={j.job_id} className="job-item" data-job={j.job_id} data-goal={v.goal}>
+              <li key={j.job_id} className="job-item" data-job={j.job_id} data-goal={v.goal} title={`作业编号 ${j.job_id}`}>
                 <div className="job-head">
                   <input type="checkbox" checked={sel.has(j.job_id)} disabled={ACTIVE.has(String(j.status))} aria-label={`选择 ${j.job_id}`}
                     onChange={(e) => { const n = new Set(sel); if (e.target.checked) n.add(j.job_id); else n.delete(j.job_id); setSel(n); }} />
@@ -93,11 +104,10 @@ export function JobsColumn({ ws }: { ws: string }) {
                 <div className="job-meta muted">
                   <span>{shortTime(j.created_at)}</span>
                   {j.started_at ? <span>{ACTIVE.has(String(j.status)) ? "已运行" : "用时"} {duration(j.started_at, j.finished_at)}</span> : null}
-                  <code>{j.job_id}</code>
                 </div>
                 <div className="row-actions">
                   <Chip>{v.queueLabel}</Chip>
-                  <Chip tone={v.tone} testId="job-goal">{v.goalLabel}</Chip>
+                  {v.goal !== "not_reported" ? <Chip tone={v.tone} testId="job-goal">{v.goalLabel}</Chip> : null}
                 </div>
                 {ACTIVE.has(String(j.status)) && (j.progress?.message || j.progress?.current_step || (j.progress?.percent ?? 0) > 0) ? (
                   <p className="job-progress muted">
@@ -105,7 +115,7 @@ export function JobsColumn({ ws }: { ws: string }) {
                     {j.progress?.message || j.progress?.current_step}
                   </p>
                 ) : null}
-                {j.error && v.goal !== "unknown" ? <p className="job-error" title={j.error}>{j.error}</p> : null}
+                {j.error && v.goal !== "unknown" ? <p className="job-error" title={j.error}>{jobErrorText(j.error)}</p> : null}
                 {v.goal === "unknown" ? <p className="inline-alert tone-unknown" role="alert" data-testid="job-unknown">作业报错但执行可能仍在继续（结果未知 · 需核对）；不能直接重试。</p> : null}
                 <div className="row-actions">
                   {ACTIVE.has(String(j.status)) && j.status !== "cancel_requested" ? <Button onClick={async () => done("取消请求")(await api.post(`/api/jobs/${enc(j.job_id)}/cancel`, { workspace_id: ws }))}>请求取消</Button> : null}

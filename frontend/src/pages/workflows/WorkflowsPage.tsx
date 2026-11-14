@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api, bodyOf, enc } from "../../api/client";
 import { useShell, withWorkspace } from "../../app/shellContext";
 import { Button } from "../../components/Button";
@@ -10,6 +10,8 @@ import { Chip, ConfirmDialog, Dialog, Drawer, FailureNote, KeyValues, LoadState,
 import { Link, useSearchParams } from "../../router";
 import { WorkflowFormDialog, type WorkflowDef } from "./WorkflowForm";
 import { FactSummary } from "../../kit/factSummary";
+import { AdvancedJsonPanel, Field, ModeToggle, parseJsonObject, useAdvancedJson } from "../../kit/form";
+import { paramLabel, workflowInputNames } from "../../kit/SchemaFields";
 
 type Workflow = WorkflowDef;
 interface WfNodeResult { node_id: string; tool_id?: string; status?: string; summary?: string; output?: unknown; errors?: string[]; duration_ms?: number }
@@ -49,9 +51,7 @@ function WorkflowList({ ws }: { ws: string; onRun: (id: string) => void }) {
   const [saved, setSaved] = useState<string | null>(null);
   const [del, setDel] = useState<Workflow | null>(null);
   const [run, setRun] = useState<Workflow | null>(null);
-  const [inputs, setInputs] = useState("{}");
   const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
-  const [jsonError, setJsonError] = useState<string | null>(null);
   return (
     <>
       <div className="row-actions"><Button variant="primary" onClick={() => setEdit("new")} data-testid="workflow-new">新建工作流</Button></div>
@@ -66,27 +66,57 @@ function WorkflowList({ ws }: { ws: string; onRun: (id: string) => void }) {
             { key: "st", label: "状态", render: (w) => <Chip tone={w.status === "active" ? "ok" : "neutral"}>{w.status === "active" ? "启用" : w.status === "draft" ? "草稿" : w.status ?? "未上报"}</Chip> },
             { key: "t", label: "更新", render: (w) => fmtTime(w.updated_at) },
             { key: "a", label: "", render: (w) => <span className="row-actions">
-              <Button onClick={() => { setRun(w); setInputs("{}"); }}>运行</Button>
+              <Button onClick={() => setRun(w)} data-testid="workflow-run">运行</Button>
               <Button onClick={async () => { const o = await api.get(`/api/workflows/${enc(w.workflow_id)}`, { workspace_id: ws }); setEdit(bodyOf<{ workflow?: WorkflowDef }>(o)?.workflow ?? w); }}>编辑</Button>
               <Button variant="ghost" onClick={() => setDel(w)}>删除</Button></span> },
           ]} />
       )}</LoadState>
       {edit ? <WorkflowFormDialog ws={ws} workflow={edit === "new" ? null : edit} onClose={() => setEdit(null)}
         onSaved={({ readback }) => { setEdit(null); setSaved(readback ? `已保存并回读：「${readback.name}」v${readback.version ?? 1} · ${readback.nodes?.length ?? 0} 个节点 · 执行层次 ${(readback.execution_layers ?? []).map((l) => l.join("+")).join(" → ") || "未上报"}` : "已保存；回读失败，请刷新列表核对。"); reload(); }} /> : null}
-      {run ? <Dialog title={`运行 ${run.name ?? run.workflow_id}`} onClose={() => setRun(null)} footer={<>
-        <Button onClick={() => setRun(null)}>取消</Button>
-        <Button variant="primary" onClick={async () => {
-          let parsed: unknown; try { parsed = JSON.parse(inputs); } catch { setJsonError("输入 JSON 格式不正确"); return; }
-          setJsonError(null); const w = run; setRun(null);
-          setR({ label: "运行入队", o: await api.post(`/api/workflows/${enc(w.workflow_id)}/runs`, { workspace_id: ws, inputs: parsed, enqueue: true }, { workspace_id: ws }) });
-        }}>入队运行</Button></>}>
-        <p className="muted">以作业方式入队（enqueue），不在请求里同步执行。</p>
-        <label className="field"><span>输入（JSON）</span><textarea rows={6} value={inputs} onChange={(e) => setInputs(e.target.value)} /></label>
-        {jsonError ? <p className="form-error" role="alert">{jsonError}</p> : null}
-      </Dialog> : null}
+      {run ? <RunWorkflowDialog workflow={run} onClose={() => setRun(null)} onSubmit={async (inputs) => {
+        const w = run; setRun(null);
+        setR({ label: "运行入队", o: await api.post(`/api/workflows/${enc(w.workflow_id)}/runs`, { workspace_id: ws, inputs, enqueue: true }, { workspace_id: ws }) });
+      }} /> : null}
       {del ? <ConfirmDialog title="删除工作流？" details={<p>将删除「{del.name ?? del.workflow_id}」以及它的全部运行记录和节点执行历史，不可恢复。平台作业列表里的记录保留。</p>} confirmText={del.workflow_id} confirmLabel="删除"
         onCancel={() => setDel(null)} onConfirm={async () => { const w = del; setDel(null); setR({ label: "删除", o: await api.del(`/api/workflows/${enc(w.workflow_id)}`, { workspace_id: ws, confirm: "delete" }, { workspace_id: ws }) }); reload(); }} /> : null}
     </>
+  );
+}
+
+/**
+ * 运行工作流：按节点参数里引用的 `${input.名字}` 生成输入框，用户填空即可；
+ * 不需要输入的工作流直接运行。「高级：JSON」保留给需要传结构化输入的人。
+ */
+function RunWorkflowDialog({ workflow, onClose, onSubmit }: { workflow: Workflow; onClose: () => void; onSubmit: (inputs: Record<string, unknown>) => void }) {
+  const names = useMemo(() => workflowInputNames(workflow.nodes), [workflow.nodes]);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [missing, setMissing] = useState<string | null>(null);
+  const adv = useAdvancedJson(() => ({ ...values }), (v) => { setValues(Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === "string" ? x : JSON.stringify(x)]))); return v; });
+  const submit = () => {
+    if (adv.mode === "json") {
+      const parsed = parseJsonObject(adv.text || "{}");
+      if (typeof parsed === "string") { adv.setError(parsed); return; }
+      onSubmit(parsed); return;
+    }
+    const empty = names.find((n) => !values[n]?.trim());
+    if (empty) { setMissing(empty); return; }
+    onSubmit(Object.fromEntries(names.map((n) => [n, values[n].trim()])));
+  };
+  return (
+    <Dialog title={`运行「${workflow.name ?? workflow.workflow_id}」`} onClose={onClose} testId="workflow-run-dialog" footer={<>
+      <Button onClick={onClose}>取消</Button>
+      <Button variant="primary" onClick={submit} data-testid="workflow-run-submit">开始运行</Button></>}>
+      <div className="form-head"><p className="form-hint">会在后台排队执行，进度和结果在「运行」里查看。</p><ModeToggle mode={adv.mode} onToggle={adv.toggle} /></div>
+      {adv.mode === "json" ? <AdvancedJsonPanel text={adv.text} onChange={adv.setText} error={adv.error} note="工作流输入对象，节点参数里用 ${input.名字} 引用。" /> : names.length ? (
+        <div className="form-grid" data-testid="workflow-run-inputs">
+          {names.map((n) => (
+            <Field key={n} full label={paramLabel(n)} required error={missing === n ? "请填写这一项" : undefined} hint={paramLabel(n) !== n ? `参数名 ${n}` : undefined}>
+              {(a) => <input {...a} value={values[n] ?? ""} onChange={(e) => { setValues({ ...values, [n]: e.target.value }); if (missing === n) setMissing(null); }} data-input={n} />}
+            </Field>
+          ))}
+        </div>
+      ) : <p className="muted" data-testid="workflow-run-noinput">这个工作流不需要填写任何内容，点「开始运行」即可。</p>}
+    </Dialog>
   );
 }
 

@@ -11,6 +11,7 @@ import type { HttpOutcome } from "../../contracts/auth";
 import { AdvancedJsonPanel, Field, FormError, ModeToggle, useAdvancedJson, type FieldErrors } from "../../kit/form";
 import { listOf, useApi } from "../../kit/useApi";
 import { Dialog, FailureNote } from "../../kit/ui";
+import { SchemaFields, schemaProblem, schemaUsable, type JsonSchema } from "../../kit/SchemaFields";
 
 export interface WfNode { node_id: string; name?: string; tool_id: string; arguments?: Record<string, unknown>; depends_on?: string[]; when?: unknown }
 export interface WorkflowDef { workflow_id: string; name?: string; description?: string; status?: string; version?: number; nodes?: WfNode[]; execution_layers?: string[][]; updated_at?: string; template_id?: string }
@@ -23,9 +24,18 @@ const toDraft = (w?: WorkflowDef | null): Draft => ({
   nodes: (w?.nodes ?? []).map((n) => ({ node_id: n.node_id, name: n.name ?? "", tool_id: n.tool_id, args: JSON.stringify(n.arguments ?? {}, null, 2), depends_on: n.depends_on ?? [], ...(n.when !== undefined ? { when: n.when } : {}) })),
   ...(w?.version !== undefined ? { version: w.version } : {}), ...(w?.template_id ? { template_id: w.template_id } : {}),
 });
+/** 换工具时只保留新工具认识的参数，免得旧工具的参数藏在表单之外被一起提交。 */
+function keepArgsFor(args: string, schema?: JsonSchema): string {
+  if (!schema?.properties) return args;
+  try {
+    const v = JSON.parse(args || "{}");
+    if (!v || typeof v !== "object" || Array.isArray(v)) return args;
+    return JSON.stringify(Object.fromEntries(Object.entries(v).filter(([k]) => k in schema.properties!)), null, 2);
+  } catch { return args; }
+}
 const ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
 
-export function validateWorkflow(d: Draft, tools: Set<string>): { errors: FieldErrors; nodeErrors: Record<number, Partial<Record<"node_id" | "tool_id" | "args" | "depends_on", string>>> } {
+export function validateWorkflow(d: Draft, tools: Set<string>, schemas: Map<string, JsonSchema> = new Map()): { errors: FieldErrors; nodeErrors: Record<number, Partial<Record<"node_id" | "tool_id" | "args" | "depends_on", string>>> } {
   const errors: FieldErrors = {};
   const nodeErrors: Record<number, Partial<Record<"node_id" | "tool_id" | "args" | "depends_on", string>>> = {};
   if (!d.name.trim()) errors.name = "请填写工作流名称";
@@ -38,7 +48,11 @@ export function validateWorkflow(d: Draft, tools: Set<string>): { errors: FieldE
     seen.add(n.node_id);
     if (!n.tool_id) e.tool_id = "请选择工具";
     else if (tools.size && !tools.has(n.tool_id)) e.tool_id = "该工具不存在或未启用";
-    try { const v = JSON.parse(n.args || "{}"); if (!v || typeof v !== "object" || Array.isArray(v)) e.args = "参数必须是 JSON 对象 {…}"; } catch { e.args = "参数不是合法 JSON"; }
+    try {
+      const v = JSON.parse(n.args || "{}");
+      if (!v || typeof v !== "object" || Array.isArray(v)) e.args = "参数必须是 JSON 对象 {…}";
+      else { const problem = schemaProblem(schemas.get(n.tool_id), v); if (problem) e.args = problem; }
+    } catch { e.args = "参数不是合法 JSON"; }
     if (n.depends_on.includes(n.node_id)) e.depends_on = "不能依赖自己";
     if (Object.keys(e).length) nodeErrors[i] = e;
   });
@@ -73,8 +87,10 @@ const SERVER_ERRORS: [RegExp, string, string][] = [
 
 export function WorkflowFormDialog({ ws, workflow, onClose, onSaved }: { ws: string; workflow?: WorkflowDef | null; onClose: () => void; onSaved: (r: { readback: WorkflowDef | null; outcome: HttpOutcome }) => void }) {
   const [catalog] = useApi("/api/tools/catalog", { workspace_id: ws });
-  const tools = useMemo(() => listOf<{ tool_id: string; display_name?: string; enabled?: boolean; category?: string }>(catalog, "tools").filter((t) => t.enabled !== false), [catalog]);
+  const tools = useMemo(() => listOf<{ tool_id: string; display_name?: string; enabled?: boolean; category?: string; input_schema?: JsonSchema }>(catalog, "tools").filter((t) => t.enabled !== false), [catalog]);
   const toolIds = useMemo(() => new Set(tools.map((t) => t.tool_id)), [tools]);
+  const schemas = useMemo(() => new Map(tools.filter((t) => schemaUsable(t.input_schema)).map((t) => [t.tool_id, t.input_schema as JsonSchema])), [tools]);
+  const [rawArgs, setRawArgs] = useState<Set<number>>(new Set());
   const [d, setD] = useState<Draft>(toDraft(workflow));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [nodeErrors, setNodeErrors] = useState<ReturnType<typeof validateWorkflow>["nodeErrors"]>({});
@@ -94,7 +110,7 @@ export function WorkflowFormDialog({ ws, workflow, onClose, onSaved }: { ws: str
       const r = fromJson(parsed); if (typeof r === "string") { adv.setError(r); return; }
       draft = r;
     }
-    const v = validateWorkflow(draft, toolIds);
+    const v = validateWorkflow(draft, toolIds, schemas);
     setErrors(v.errors); setNodeErrors(v.nodeErrors);
     if (Object.keys(v.errors).length || Object.keys(v.nodeErrors).length) return;
     setBusy(true); setFailure(null);
@@ -115,7 +131,7 @@ export function WorkflowFormDialog({ ws, workflow, onClose, onSaved }: { ws: str
   return (
     <Dialog wide title={workflow ? `编辑工作流 · ${workflow.name ?? workflow.workflow_id}` : "新建工作流"} onClose={onClose} testId="workflow-form"
       footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={busy} onClick={() => void save()} data-testid="workflow-save">{busy ? "保存中…" : "保存并回读"}</Button></>}>
-      <div className="form-head"><p className="form-hint">工作流是工具节点组成的有向无环图；失败节点不会中止独立分支。参数里可用 <code>{"${nodes.<上游节点>.…}"}</code> 引用上游结果。</p><ModeToggle mode={adv.mode} onToggle={adv.toggle} /></div>
+      <div className="form-head"><p className="form-hint">工作流由一个个步骤（节点）组成，每步用一个工具；可以指定先后顺序，某步失败不会拖垮不相关的步骤。参数里写 <code>{"${input.名字}"}</code> 会在运行时让你填写，写 <code>{"${nodes.上一步.output…}"}</code> 可以用上一步的结果。</p><ModeToggle mode={adv.mode} onToggle={adv.toggle} /></div>
       <FormError text={errors._form} />
       {adv.mode === "json" ? <AdvancedJsonPanel text={adv.text} onChange={adv.setText} error={adv.error} note="完整定义（POST/PUT /api/workflows）：name、description、status、nodes[]。" /> : (
         <div className="form-grid">
@@ -132,11 +148,30 @@ export function WorkflowFormDialog({ ws, workflow, onClose, onSaved }: { ws: str
                     <div className="form-grid">
                       <Field label="节点 id" required error={ne.node_id}>{(b) => <input {...b} value={n.node_id} onChange={(e) => setNode(i, { node_id: e.target.value })} data-testid="wf-node-id" />}</Field>
                       <Field label="显示名">{(b) => <input {...b} value={n.name} onChange={(e) => setNode(i, { name: e.target.value })} />}</Field>
-                      <Field full label="工具" required error={ne.tool_id}>{(b) => <select {...b} value={n.tool_id} onChange={(e) => setNode(i, { tool_id: e.target.value })} data-testid="wf-node-tool"><option value="">选择工具</option>{tools.map((t) => <option key={t.tool_id} value={t.tool_id}>{t.display_name ? `${t.display_name}（${t.tool_id}）` : t.tool_id}</option>)}</select>}</Field>
+                      <Field full label="工具" required error={ne.tool_id}>{(b) => <select {...b} value={n.tool_id} onChange={(e) => setNode(i, { tool_id: e.target.value, args: keepArgsFor(n.args, schemas.get(e.target.value)) })} data-testid="wf-node-tool"><option value="">选择工具</option>{tools.map((t) => <option key={t.tool_id} value={t.tool_id}>{t.display_name ? `${t.display_name}（${t.tool_id}）` : t.tool_id}</option>)}</select>}</Field>
                       <Field full label="依赖（先执行）" error={ne.depends_on}>{(b) => (
                         <div className="form-checks" id={b.id}>{d.nodes.filter((_, j) => j !== i).map((o) => o.node_id).filter(Boolean).map((id) => <label key={id}><input type="checkbox" checked={n.depends_on.includes(id)} onChange={(e) => setNode(i, { depends_on: e.target.checked ? [...n.depends_on, id] : n.depends_on.filter((x) => x !== id) })} /> {id}</label>)}{d.nodes.length < 2 ? <span className="muted">无其他节点</span> : null}</div>
                       )}</Field>
-                      <Field full label="参数（JSON 对象）" error={ne.args}>{(b) => <textarea {...b} rows={3} value={n.args} onChange={(e) => setNode(i, { args: e.target.value })} data-testid="wf-node-args" />}</Field>
+                      {(() => {
+                        const schema = schemas.get(n.tool_id);
+                        let obj: Record<string, unknown> | null = null;
+                        try { const v = JSON.parse(n.args || "{}"); obj = v && typeof v === "object" && !Array.isArray(v) ? v : null; } catch { obj = null; }
+                        const asForm = !!schema && !!obj && !rawArgs.has(i);
+                        const toggle = schema && obj ? (
+                          <button type="button" className="link-button" onClick={() => setRawArgs((r) => { const x = new Set(r); if (x.has(i)) x.delete(i); else x.add(i); return x; })} data-testid="wf-node-args-mode">
+                            {asForm ? "改用 JSON 编辑参数" : "改用表单填写参数"}
+                          </button>
+                        ) : null;
+                        return asForm ? (
+                          <div className="form-field is-full">
+                            <div className="wf-args-head"><span>参数</span>{toggle}</div>
+                            <SchemaFields schema={schema!} value={obj!} onChange={(v) => setNode(i, { args: JSON.stringify(v, null, 2) })} testId="wf-node-params" />
+                            {ne.args ? <p className="form-error" role="alert" data-testid="field-error">{ne.args}</p> : null}
+                          </div>
+                        ) : (
+                          <Field full label="参数（JSON 对象）" error={ne.args} hint={n.tool_id && !schema ? "这个工具没有提供参数说明，只能用 JSON 填写。" : toggle}>{(b) => <textarea {...b} className="code-input" rows={3} value={n.args} onChange={(e) => setNode(i, { args: e.target.value })} data-testid="wf-node-args" />}</Field>
+                        );
+                      })()}
                     </div>
                     <Button variant="ghost" className="sm" onClick={() => setD({ ...d, nodes: d.nodes.filter((_, j) => j !== i).map((x) => ({ ...x, depends_on: x.depends_on.filter((y) => y !== n.node_id) })) })}>删除节点</Button>
                   </fieldset>

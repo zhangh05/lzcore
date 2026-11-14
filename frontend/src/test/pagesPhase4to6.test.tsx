@@ -1,3 +1,4 @@
+import { workflowInputNames } from "../kit/SchemaFields";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AuthGateView } from "../app/AuthGate";
@@ -180,6 +181,49 @@ describe("真实表单（网络扩展 / 工作流）", () => {
     const post = log.find((l) => l.method === "POST" && l.path.startsWith("/api/workflows"))!;
     expect(post.body).toMatchObject({ name: "合成巡检流", nodes: [{ node_id: "node_1", tool_id: "knowledge.search", arguments: { query: "巡检" } }] });
     expect(post.body).not.toHaveProperty("steps");
+  });
+});
+
+describe("工作流：用表单填参数和输入，不用手写 JSON", () => {
+  it("工具有参数说明时按说明生成表单；必填项缺失给中文提示；提交的是对象", async () => {
+    const { log } = renderAt("/workflows?ws=ws-demo-1");
+    fireEvent.click(await screen.findByTestId("workflow-new"));
+    const form = await screen.findByTestId("workflow-form");
+    fireEvent.change(within(form).getByTestId("workflow-name"), { target: { value: "写日报" } });
+    fireEvent.click(within(form).getByTestId("workflow-add-node"));
+    await waitFor(() => expect(within(form).getByTestId("wf-node-tool").querySelectorAll("option").length).toBeGreaterThan(1));
+    fireEvent.change(within(form).getByTestId("wf-node-tool"), { target: { value: "workspace.file.write" } });
+    const params = within(form).getByTestId("wf-node-params");
+    expect(within(form).queryByTestId("wf-node-args")).toBeNull();
+    // 工作区 id 由系统注入，不让用户填
+    expect(params.querySelector('[data-param="workspace_id"]')).toBeNull();
+    fireEvent.click(screen.getByTestId("workflow-save"));
+    expect(await within(form).findByText("请填写「操作」")).toBeInTheDocument();
+    fireEvent.change(params.querySelector('[data-param="action"]')!, { target: { value: "write" } });
+    fireEvent.change(params.querySelector('[data-param="path"]')!, { target: { value: "日报.md" } });
+    fireEvent.change(params.querySelector('[data-param="tags"]')!, { target: { value: "日报\n周一" } });
+    fireEvent.change(params.querySelector('[data-param="overwrite"]')!, { target: { value: "true" } });
+    fireEvent.click(screen.getByTestId("workflow-save"));
+    await screen.findByTestId("workflow-readback");
+    const post = log.find((l) => l.method === "POST" && l.path === "/api/workflows")!;
+    expect(post.body).toMatchObject({ nodes: [{ tool_id: "workspace.file.write", arguments: { action: "write", path: "日报.md", tags: ["日报", "周一"], overwrite: true } }] });
+  });
+
+  it("运行工作流：按 ${input.…} 生成输入框，不再要求写 JSON", async () => {
+    const { log } = renderAt("/workflows?ws=ws-demo-1");
+    fireEvent.click(await screen.findByTestId("workflow-run"));
+    const dialog = await screen.findByTestId("workflow-run-dialog");
+    expect(dialog.querySelector("textarea")).toBeNull();
+    fireEvent.click(within(dialog).getByTestId("workflow-run-submit"));
+    expect(await within(dialog).findByText("请填写这一项")).toBeInTheDocument();
+    fireEvent.change(dialog.querySelector('[data-input="topic"]')!, { target: { value: "本周巡检" } });
+    fireEvent.click(within(dialog).getByTestId("workflow-run-submit"));
+    await waitFor(() => expect(log.find((l) => l.path.startsWith("/api/workflows/wf1/runs"))?.body).toMatchObject({ inputs: { topic: "本周巡检" }, enqueue: true }));
+  });
+
+  it("从节点参数里找出工作流输入名", () => {
+    expect(workflowInputNames([{ arguments: { a: "${input.topic}", b: ["x ${input.day} ${input.topic}"] }, when: "${input.flag}" }, {}])).toEqual(["topic", "day", "flag"]);
+    expect(workflowInputNames(undefined)).toEqual([]);
   });
 });
 

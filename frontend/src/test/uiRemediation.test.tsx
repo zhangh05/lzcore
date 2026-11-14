@@ -4,7 +4,7 @@ import { SkillFormDialog } from "../extension-modules/network-operations/SkillFo
 import { fakeBackend } from "./fakeBackend";
 import { AuthGateView } from "../app/AuthGate";
 import { stageViews } from "../pages/workbench/model";
-import { hasProgressContent } from "../pages/workbench/ProgressPanel";
+import { hasProgressContent, humanDuration, liveLabel } from "../pages/workbench/ProgressPanel";
 import { healthComponents } from "../pages/system/statusViews";
 import { BrowserRouter } from "../router";
 import { installApp } from "./appFixture";
@@ -108,18 +108,19 @@ describe("工作台：按真实公开字段投影，事实源分开", () => {
     expect(within(panel).getByTestId("stage-outputs")).toHaveTextContent("模型输出 1");
     expect(within(panel).getByTestId("stage-outputs")).toHaveTextContent("42");
     const msg = within(panel).getByTestId("progress-message-outcome");
-    expect(msg).toHaveTextContent("消息 execution_outcome：未上报");
-    // 同一 run 的运行审计有 execution_outcome=complete：两个事实源分开显示并标来源，不互相覆盖
+    expect(msg).toHaveTextContent("回复结论未上报");
+    // 同一 run 的运行审计有 execution_outcome=complete：结果卡用它并注明来自运行记录；技术细节里两个来源分开写
     const audit = await within(panel).findByTestId("progress-run-outcome");
-    expect(audit).toHaveTextContent("运行审计 execution_outcome：完成（complete）");
+    expect(audit).toHaveTextContent("运行记录完成（complete）");
     expect(audit).toHaveTextContent("/runs/run-42");
+    await waitFor(() => expect(within(panel).getByTestId("progress-result")).toHaveTextContent("已完成"));
+    expect(within(panel).getByTestId("progress-result")).toHaveTextContent("结果来自这一轮的运行记录");
     expect(msg).toHaveTextContent("run run-42");
-    await waitFor(() => expect(within(panel).getByTestId("progress-task-state")).toHaveTextContent("task-state：completed"));
-    expect(within(panel).getByTestId("progress-task-state")).toHaveTextContent("来源：会话 task-state");
+    await waitFor(() => expect(within(panel).getByTestId("progress-task-state")).toHaveTextContent("（completed）"));
     expect(msg).not.toHaveTextContent("completed");
     // 真实字段 last_run_id 与消息 run_id 对上：显示同一 run，不提示错位
     expect(within(panel).getByTestId("progress-task-state")).toHaveTextContent("run run-42");
-    expect(within(panel).getByTestId("progress-task-state")).not.toHaveTextContent("不是同一 run");
+    expect(within(panel).getByTestId("progress-task-state")).not.toHaveTextContent("不是同一轮");
   });
 
   it("没有进度内容时不占右栏：空阶段 / 无任务 / 无实时事件 → 不渲染进度栏", () => {
@@ -129,17 +130,24 @@ describe("工作台：按真实公开字段投影，事实源分开", () => {
     expect(hasProgressContent(undefined, { task_id: "t", status: "completed" } as never, [])).toBe(true);
   });
 
-  it("回合结束后时间线读持久化 trace / 运行审计，不再显示「本轮还没有实时事件」", async () => {
+  it("回合结束后处理过程读持久化 trace / 运行审计，用人话写步骤", async () => {
     renderAt("/workbench?ws=ws-demo-1&session=s-real42");
     fireEvent.click(await screen.findByTestId("open-progress"));
     const panel = await screen.findByTestId("progress-panel");
-    fireEvent.click(within(panel).getByTestId("timeline-tab"));
-    const persisted = await within(panel).findByTestId("timeline-persisted");
-    expect(persisted).toHaveTextContent("/runs/run-42/trace");
-    expect(within(persisted).getByTestId("timeline")).toHaveTextContent("回合开始");
-    expect(within(persisted).getByTestId("timeline")).toHaveTextContent("生成最终回复");
-    expect(within(persisted).getByTestId("timeline-run-summary")).toHaveTextContent("完成（complete）");
+    const steps = await within(panel).findByTestId("timeline");
+    expect(steps).toHaveTextContent("收到你的消息，开始处理");
+    expect(steps).toHaveTextContent("整理并发出回复");
+    expect(steps).not.toHaveTextContent(/turn_start|final/);
+    expect(within(panel).getByTestId("progress-tech")).toHaveTextContent("/runs/run-42/trace");
     expect(panel).not.toHaveTextContent("本轮还没有实时事件");
+  });
+
+  it("用时与实时事件转成人话", () => {
+    expect(humanDuration(45)).toBe("不到 1 秒");
+    expect(humanDuration(16013)).toBe("16 秒");
+    expect(humanDuration(65_000)).toBe("1 分 05 秒");
+    expect(liveLabel("tool_call · web.search · 查资料")).toEqual({ label: "使用工具", detail: "web.search · 查资料" });
+    expect(liveLabel("weird_event")).toEqual({ label: "weird_event", detail: undefined });
   });
 
   it("页头分开写「模型最近检测」与「本轮响应」", async () => {
