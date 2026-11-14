@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import threading
 import time
@@ -15,6 +16,8 @@ _EXPLICIT_ADMIN_SUFFIXES = ("省", "市", "区", "县", "盟", "旗", "特别行
 _RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 _OPEN_METEO_SLOTS = threading.BoundedSemaphore(3)
 _PHOTON_SLOTS = threading.BoundedSemaphore(3)
+_RETRY_DELAY_CAP = 2.0
+_WAIT_EVENT = threading.Event()
 
 
 class LocationProviderUnavailable(RuntimeError):
@@ -27,7 +30,29 @@ def _retry_delay(response: object | None, attempt: int) -> float:
         retry_after = float(headers.get("Retry-After") or 0)
     except (TypeError, ValueError):
         retry_after = 0
-    return max(retry_after, 0.4 * (2 ** attempt))
+    if not math.isfinite(retry_after):
+        retry_after = _RETRY_DELAY_CAP
+    return min(_RETRY_DELAY_CAP, max(retry_after, 0.4 * (2 ** min(attempt, 3))))
+
+
+def _remaining(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise LocationProviderUnavailable("resolution budget exhausted")
+    return remaining
+
+
+def _wait_budget(delay: float, deadline: float) -> None:
+    if delay >= _remaining(deadline):
+        raise LocationProviderUnavailable("resolution budget exhausted before wait")
+    _WAIT_EVENT.wait(delay)
+    _remaining(deadline)
+
+
+def _http_timeout(deadline: float) -> tuple[float, float]:
+    # Connect and read together fit inside the caller's remaining budget.
+    budget = _remaining(deadline) / 2
+    return min(2.5, budget), min(4.0, budget)
 
 
 def _provider_get(
@@ -36,13 +61,15 @@ def _provider_get(
     params: dict,
     slots: threading.BoundedSemaphore,
     provider_name: str,
+    deadline: float | None = None,
 ) -> object:
     """Bound and retry an idempotent geocoding-provider request."""
     import requests
 
     last_error: Exception | None = None
     last_response: object | None = None
-    acquired = slots.acquire(timeout=2.0)
+    deadline = deadline if deadline is not None else time.monotonic() + 6.0
+    acquired = slots.acquire(timeout=min(2.0, _remaining(deadline)))
     if not acquired:
         raise LocationProviderUnavailable(f"{provider_name} concurrency busy")
     try:
@@ -51,22 +78,23 @@ def _provider_get(
                 response = requests.get(
                     url,
                     params=params,
-                    timeout=(2.5, 4.0),
+                    timeout=_http_timeout(deadline),
                     headers={"User-Agent": _USER_AGENT},
                 )
+                _remaining(deadline)
                 last_response = response
             except requests.RequestException as exc:
                 last_error = exc
                 if attempt == 1:
                     break
-                time.sleep(_retry_delay(None, attempt))
+                _wait_budget(_retry_delay(None, attempt), deadline)
                 continue
             if response.status_code == 200:
                 return response
             if response.status_code not in _RETRYABLE_HTTP_STATUSES:
                 return response
             if attempt < 1:
-                time.sleep(_retry_delay(response, attempt))
+                _wait_budget(_retry_delay(response, attempt), deadline)
     finally:
         slots.release()
     detail = (
@@ -78,21 +106,21 @@ def _provider_get(
     )
 
 
-def _open_meteo_get(*, params: dict) -> object:
+def _open_meteo_get(*, params: dict, deadline: float | None = None) -> object:
     return _provider_get(
         "https://geocoding-api.open-meteo.com/v1/search",
         params=params,
         slots=_OPEN_METEO_SLOTS,
-        provider_name="open_meteo",
+        provider_name="open_meteo", deadline=deadline,
     )
 
 
-def _photon_get(*, params: dict) -> object:
+def _photon_get(*, params: dict, deadline: float | None = None) -> object:
     return _provider_get(
         "https://photon.komoot.io/api/",
         params=params,
         slots=_PHOTON_SLOTS,
-        provider_name="photon",
+        provider_name="photon", deadline=deadline,
     )
 
 
@@ -103,9 +131,10 @@ class LocationProvider(Protocol):
     def search(
         self, query: str, *, language: str, limit: int,
         country_code: str = "", admin_hint: str = "",
+        deadline: float | None = None,
     ) -> list[LocationCandidate]: ...
 
-    def reverse(self, latitude: float, longitude: float, *, language: str) -> list[LocationCandidate]: ...
+    def reverse(self, latitude: float, longitude: float, *, language: str, deadline: float | None = None) -> list[LocationCandidate]: ...
 
 
 def _query_variants(query: str) -> list[str]:
@@ -133,7 +162,9 @@ class OpenMeteoLocationProvider:
     def search(
         self, query: str, *, language: str, limit: int,
         country_code: str = "", admin_hint: str = "",
+        deadline: float | None = None,
     ) -> list[LocationCandidate]:
+        deadline = deadline if deadline is not None else time.monotonic() + 6.0
         found: list[LocationCandidate] = []
         query_languages = [language]
         if re.search(r"[A-Za-z]", f"{query} {admin_hint}") and not language.lower().startswith("en"):
@@ -151,7 +182,7 @@ class OpenMeteoLocationProvider:
                     "format": "json",
                 }
                 try:
-                    response = _open_meteo_get(params=params)
+                    response = _open_meteo_get(params=params, deadline=deadline)
                 except LocationProviderUnavailable:
                     if not found:
                         raise
@@ -191,7 +222,7 @@ class OpenMeteoLocationProvider:
                 break
         return found
 
-    def reverse(self, latitude: float, longitude: float, *, language: str) -> list[LocationCandidate]:
+    def reverse(self, latitude: float, longitude: float, *, language: str, deadline: float | None = None) -> list[LocationCandidate]:
         return []
 
 
@@ -204,6 +235,7 @@ class PhotonLocationProvider:
     def search(
         self, query: str, *, language: str, limit: int,
         country_code: str = "", admin_hint: str = "",
+        deadline: float | None = None,
     ) -> list[LocationCandidate]:
         params: dict[str, object] = {
             "q": ", ".join(item for item in (query, admin_hint) if item),
@@ -212,7 +244,7 @@ class PhotonLocationProvider:
         language_code = language.split("-", 1)[0].lower()
         if language_code in {"de", "en", "fr"}:
             params["lang"] = language_code
-        response = _photon_get(params=params)
+        response = _photon_get(params=params, deadline=deadline)
         if response.status_code != 200:
             return []
         found: list[LocationCandidate] = []
@@ -244,7 +276,7 @@ class PhotonLocationProvider:
             ))
         return found
 
-    def reverse(self, latitude: float, longitude: float, *, language: str) -> list[LocationCandidate]:
+    def reverse(self, latitude: float, longitude: float, *, language: str, deadline: float | None = None) -> list[LocationCandidate]:
         return []
 
 
@@ -256,12 +288,15 @@ class NominatimLocationProvider:
     _circuit_open_until = 0.0
 
     @classmethod
-    def _get(cls, url: str, *, params: dict) -> object:
+    def _get(cls, url: str, *, params: dict, deadline: float | None = None) -> object:
         import requests
 
         # The public endpoint requires a single request per second. Serialise
         # all fallback, reverse, and retry calls so a batch remains compliant.
-        with cls._lock:
+        deadline = deadline if deadline is not None else time.monotonic() + 6.0
+        if not cls._lock.acquire(timeout=_remaining(deadline)):
+            raise LocationProviderUnavailable("nominatim concurrency busy")
+        try:
             if cls._circuit_open_until > time.monotonic():
                 raise LocationProviderUnavailable("nominatim circuit is open")
             last_error: Exception | None = None
@@ -269,19 +304,20 @@ class NominatimLocationProvider:
             for attempt in range(2):
                 remaining = 1.05 - (time.monotonic() - cls._last_request)
                 if remaining > 0:
-                    time.sleep(remaining)
+                    _wait_budget(remaining, deadline)
                 try:
                     response = requests.get(
-                        url, params=params, timeout=(2, 4),
+                        url, params=params, timeout=_http_timeout(deadline),
                         headers={"User-Agent": _USER_AGENT},
                     )
+                    _remaining(deadline)
                     last_response = response
                 except requests.RequestException as exc:
                     last_error = exc
                     cls._last_request = time.monotonic()
                     if attempt == 1:
                         break
-                    time.sleep(_retry_delay(None, attempt))
+                    _wait_budget(_retry_delay(None, attempt), deadline)
                     continue
                 cls._last_request = time.monotonic()
                 if response.status_code == 200:
@@ -289,14 +325,16 @@ class NominatimLocationProvider:
                     return response
                 if response.status_code not in _RETRYABLE_HTTP_STATUSES:
                     return response
-                if attempt < 2:
-                    time.sleep(_retry_delay(response, attempt))
+                if attempt < 1:
+                    _wait_budget(_retry_delay(response, attempt), deadline)
             detail = (
                 type(last_error).__name__
                 if last_error else getattr(last_response, "status_code", "unknown")
             )
             cls._circuit_open_until = time.monotonic() + 60
             raise LocationProviderUnavailable(f"nominatim unavailable after retries: {detail}")
+        finally:
+            cls._lock.release()
 
     @staticmethod
     def _candidate(raw: dict) -> LocationCandidate | None:
@@ -331,12 +369,13 @@ class NominatimLocationProvider:
     def search(
         self, query: str, *, language: str, limit: int,
         country_code: str = "", admin_hint: str = "",
+        deadline: float | None = None,
     ) -> list[LocationCandidate]:
         qualified_query = ", ".join(
             item for item in (query, admin_hint, country_code.upper()) if str(item or "").strip()
         )
         response = self._get(
-            "https://nominatim.openstreetmap.org/search",
+            "https://nominatim.openstreetmap.org/search", deadline=deadline,
             params={
                 "q": qualified_query,
                 "format": "jsonv2",
@@ -352,9 +391,9 @@ class NominatimLocationProvider:
             if (candidate := self._candidate(raw)) is not None
         ]
 
-    def reverse(self, latitude: float, longitude: float, *, language: str) -> list[LocationCandidate]:
+    def reverse(self, latitude: float, longitude: float, *, language: str, deadline: float | None = None) -> list[LocationCandidate]:
         response = self._get(
-            "https://nominatim.openstreetmap.org/reverse",
+            "https://nominatim.openstreetmap.org/reverse", deadline=deadline,
             params={
                 "lat": latitude,
                 "lon": longitude,

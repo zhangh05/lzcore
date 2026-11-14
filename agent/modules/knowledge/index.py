@@ -130,6 +130,7 @@ def search_chunks(
     tags: list = None,
     chapter: str = "",
     min_score: float = 0.1,
+    session_id: str = "",
     **kwargs,
 ) -> dict:
     """Search chunks via UnifiedRetriever."""
@@ -148,6 +149,7 @@ def search_chunks(
             min_score=min_score,
             scope=scope or None,
             source_id=source_id or None,
+            session_id=session_id,
         )
 
     # Post-filter

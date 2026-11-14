@@ -99,6 +99,8 @@ def test_uncertain_publication_reconciles_without_replaying_writes(team, monkeyp
     original = coding_team.publish_changes
     def lost_ack(*args, **kwargs):
         observed = original(*args, **kwargs)
+        if kwargs.get('prepare_only'):
+            return observed
         assert observed['phase'] == 'integrated'
         return {**observed, 'ok': False, 'phase': 'unknown'}
     monkeypatch.setattr(coding_team, 'publish_changes', lost_ack)

@@ -107,6 +107,7 @@ class DockerProjectEnvironment:
         image: str | None = None,
         source_mode: str = "implementation",
         generated_paths: list[str] | None = None,
+        resource_owner: dict | None = None,
     ):
         self.workspace_id = workspace_id
         self.root = workspace_root(workspace_id).resolve()
@@ -150,6 +151,26 @@ class DockerProjectEnvironment:
         self.daemon_id = ""
         self.cleanup_confirmed = False
         self.cleanup_errors: list[str] = []
+        self.resource_owner = dict(resource_owner or {})
+        self._intent_persisted = False
+        self._allocation_authorized = False
+
+    def _record_resources(self, phase):
+        from storage.atomic_io import atomic_write_json
+        from storage.locking import FileLock
+
+        path = self.root / "sys/coding-execution.json"
+        with FileLock(path.with_suffix(".lock")):
+            if path.exists():
+                previous = json.loads(path.read_text(encoding="utf-8"))
+                if (previous.get("owner") != self.resource_owner
+                        or previous.get("resources", {}).get("runtime_resources") != self.descriptor()["runtime_resources"]):
+                    raise ValueError("coding_execution_intent_already_exists")
+            atomic_write_json(path, {
+                "schema": "coding.execution_intent.v1", "workspace_id": self.workspace_id,
+                "owner": self.resource_owner, "phase": phase, "resources": self.descriptor(),
+            })
+        self._intent_persisted = True
 
     def _docker(self, *arguments, timeout=90, check=True):
         result = subprocess.run(
@@ -180,6 +201,10 @@ class DockerProjectEnvironment:
             ).stdout.strip()
             if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.image_id):
                 raise ValueError("invalid_coding_image_digest")
+            # Exact random names, daemon and authenticated task identity must
+            # survive a crash before the first external allocation is sent.
+            self._record_resources("allocating")
+            self._allocation_authorized = True
             self._docker("network", "create", "--internal", self.network)
             shared = _security_arguments()
             self._docker(
@@ -213,6 +238,7 @@ class DockerProjectEnvironment:
             )
             self._launch_project(shared)
             self.started = True
+            self._record_resources("started")
             return self
         except Exception:
             self.close()
@@ -465,6 +491,9 @@ class DockerProjectEnvironment:
         if self.cleanup_confirmed:
             return True
         self.closed = True
+        if not self._allocation_authorized and not self.started:
+            self.cleanup_confirmed = True
+            return True
         errors = []
         for name in (self.name, self.broker):
             try:
@@ -484,6 +513,8 @@ class DockerProjectEnvironment:
             errors.append("project network cleanup unavailable")
         self.cleanup_errors = errors
         self.cleanup_confirmed = not errors
+        if self._intent_persisted:
+            self._record_resources("closed" if self.cleanup_confirmed else "unknown")
         return self.cleanup_confirmed
 
 
@@ -534,3 +565,12 @@ def reconcile_environment(descriptor):
             raise ValueError("coding_execution_resources_unresolved")
     return {"closed": True, "cleanup_confirmed": True, "observed_via": "docker_readback",
             "runtime_resources": names, "daemon_id": descriptor["daemon_id"]}
+
+
+def read_execution_intent(workspace_id: str, owner: dict) -> dict:
+    """Read an exact task's allocation intent; never discover by name prefix."""
+    record = json.loads((workspace_root(workspace_id) / "sys/coding-execution.json").read_text(encoding="utf-8"))
+    if (record.get("schema") != "coding.execution_intent.v1"
+            or record.get("workspace_id") != workspace_id or record.get("owner") != owner):
+        raise ValueError("coding_execution_intent_identity_mismatch")
+    return record

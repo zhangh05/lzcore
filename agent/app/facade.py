@@ -78,7 +78,7 @@ class AgentApp:
         """
         from storage.message_store import MessageHistoryUnavailable
         try:
-            sid, session, turn_lock = self.session_manager.get_or_create(session_id, workspace_id)
+            sid, session, turn_lock = self.session_manager.get_or_create(session_id, workspace_id, reserve_turn=True)
         except MessageHistoryUnavailable:
             return AgentResult(
                 ok=False, session_id=session_id or "",
@@ -90,12 +90,12 @@ class AgentApp:
         # This keeps session, run, and job projections aligned even if the
         # process stops immediately after the turn.
         from storage.session_store import ensure_session
-        ensure_session(sid, workspace_id)
 
         # The expensive turn execution happens outside the global session-map
         # lock, but inside this session's turn lock. Different sessions can run
         # concurrently; the same session cannot interleave turns.
         with turn_lock:
+            ensure_session(sid, workspace_id)
             from storage.session_store import get_session
             stored = get_session(sid, workspace_id)
             if stored and stored.get("status") == "archived" and (stored.get("metadata") or {}).get("reset_archived"):
