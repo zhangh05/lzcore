@@ -223,7 +223,7 @@ def test_bound_arguments_are_revalidated_before_handler_execution():
     assert results[1].output["error_code"] == "RESULT_BINDING_INVALID"
 
 
-def test_execution_budget_records_oversized_batch_without_rejecting_model_work():
+def test_execution_budget_rejects_explicitly_oversized_batch_before_execution():
     from core.runtime_engine.budget_controller import BudgetController
 
     seen = []
@@ -241,8 +241,8 @@ def test_execution_budget_records_oversized_batch_without_rejecting_model_work()
     results = asyncio.run(StreamingToolExecutor(Runtime(), config).execute(
         calls, ctx=_ctx(), budget=BudgetController(config),
     ))
-    assert seen == [{"action": "parse", "text": "a"}, {"action": "parse", "text": "b"}]
-    assert all(result.ok for result in results)
+    assert seen == []
+    assert all(not result.ok and result.output["reason"] == "MAX_NODES" for result in results)
 
 
 def test_queryloop_executes_large_model_round_without_a_runtime_batch_cap():
@@ -426,7 +426,7 @@ def test_execution_budget_rejects_graph_deeper_than_limit():
     results = asyncio.run(StreamingToolExecutor(Runtime(), config).execute(
         calls, ctx=_ctx(), budget=BudgetController(config),
     ))
-    assert all(result.ok for result in results)
+    assert all(not result.ok and result.output["reason"] == "MAX_DEPTH" for result in results)
 
 
 def test_execution_depth_is_enforced_across_incremental_rounds():
@@ -451,7 +451,8 @@ def test_execution_depth_is_enforced_across_incremental_rounds():
         step_id="b", depends_on=["a"],
     )]
     result = asyncio.run(executor.execute(second, ctx=ctx, budget=budget))[0]
-    assert result.ok is True
+    assert result.ok is False
+    assert result.output["reason"] == "MAX_DEPTH"
 
 
 def test_bounded_read_group_is_not_rejected_for_topological_width():

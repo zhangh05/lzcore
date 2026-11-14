@@ -90,6 +90,7 @@ class SSOTRuntimeEngine:
         args_schema: dict[str, Any] | None = None,
     ) -> None:
         self._tool_registry[tool_id] = {
+            **self._tool_registry.get(tool_id, {}),
             "description": description,
             "args_schema": args_schema or {},
         }
@@ -341,7 +342,8 @@ class SSOTRuntimeEngine:
             }:
                 first_loop_error = loop_result.errors[0] if loop_result.errors else loop_result.error
                 loop_error_code = self._resolve_loop_error_code(
-                        loop_result.error, first_loop_error, loop_result.hard_block
+                        loop_result.error, first_loop_error, loop_result.hard_block,
+                        budget_reason=str(loop_result.metrics.get("budget_exhausted") or ""),
                 )
                 errors.append(build_error(
                         loop_error_code,
@@ -508,7 +510,7 @@ class SSOTRuntimeEngine:
         return '{"nodes": []}'
 
     @staticmethod
-    def _resolve_loop_error_code(error_key: str, first_error: str, hard_block: bool) -> str:
+    def _resolve_loop_error_code(error_key: str, first_error: str, hard_block: bool, *, budget_reason: str = "") -> str:
         """Map QueryLoop error keys to canonical SSOTRuntimeErrorCode values."""
 
         # Semantic validation: code is embedded in the error text
@@ -518,8 +520,17 @@ class SSOTRuntimeEngine:
                 return parts[1]
 
         # Budget exhaustion
-        if error_key in ("budget_exceeded",):
-            return SSOTRuntimeErrorCode.BUDGET_LLM_EXCEEDED
+        if error_key in ("budget_exceeded", "budget_exhausted"):
+            return {
+                "MAX_NODES": SSOTRuntimeErrorCode.BUDGET_NODES_EXCEEDED,
+                "MAX_DEPTH": SSOTRuntimeErrorCode.BUDGET_DEPTH_EXCEEDED,
+                "MAX_PARALLEL_WIDTH": SSOTRuntimeErrorCode.BUDGET_WIDTH_EXCEEDED,
+                "MAX_TOTAL_SECONDS": SSOTRuntimeErrorCode.BUDGET_TIME_EXCEEDED,
+                "MAX_TOOL_SECONDS": SSOTRuntimeErrorCode.BUDGET_TIME_EXCEEDED,
+            }.get(budget_reason, SSOTRuntimeErrorCode.BUDGET_LLM_EXCEEDED)
+
+        if error_key == "loop_no_progress":
+            return SSOTRuntimeErrorCode.RESPONSE_TASK_INCOMPLETE
 
         # Max iterations / timeout
         if error_key in ("max_iterations",):

@@ -42,6 +42,7 @@ class BudgetController:
         self._nodes_used = 0
         self._tool_elapsed_ms = 0.0
         self._tool_stage_started_at: float | None = None
+        self.exceeded = ""
 
     @property
     def budget(self) -> ExecutionBudget:
@@ -56,10 +57,20 @@ class BudgetController:
         return BudgetStatus(ok=True, elapsed_total_ms=elapsed)
 
     def check_llm_call(self) -> BudgetStatus:
-        """Record an LLM call; counters are telemetry, never loop gates."""
-        elapsed = (time.monotonic() - self._start_time) * 1000
+        """Reserve one call; zero retains the unbounded telemetry contract."""
+        status = self.check_execution()
+        if not status.ok:
+            return status
+        if self._budget.max_llm_calls > 0 and self._llm_calls >= self._budget.max_llm_calls:
+            return self._exhausted("MAX_LLM_CALLS")
         self._llm_calls += 1
-        return BudgetStatus(ok=True, elapsed_total_ms=elapsed, llm_calls_used=self._llm_calls)
+        return BudgetStatus(ok=True, elapsed_total_ms=status.elapsed_total_ms, llm_calls_used=self._llm_calls)
+
+    def _exhausted(self, reason: str) -> BudgetStatus:
+        self.exceeded = self.exceeded or reason
+        return BudgetStatus(ok=False, exceeded=self.exceeded,
+                            elapsed_total_ms=self.elapsed_ms(),
+                            llm_calls_used=self._llm_calls, nodes_used=self._nodes_used)
 
     def check_execution(self) -> BudgetStatus:
         """Check budget mid-execution."""
@@ -68,6 +79,12 @@ class BudgetController:
         if self._tool_stage_started_at is not None:
             tool_elapsed += (time.monotonic() - self._tool_stage_started_at) * 1000
 
+        if self.exceeded:
+            return self._exhausted(self.exceeded)
+        if self._budget.max_total_seconds > 0 and elapsed >= self._budget.max_total_seconds * 1000:
+            return self._exhausted("MAX_TOTAL_SECONDS")
+        if self._budget.max_tool_seconds > 0 and tool_elapsed >= self._budget.max_tool_seconds * 1000:
+            return self._exhausted("MAX_TOOL_SECONDS")
         return BudgetStatus(ok=True, elapsed_total_ms=elapsed)
 
     def reserve_execution_batch(
@@ -85,6 +102,13 @@ class BudgetController:
         node_count = max(0, int(node_count))
         depth = max(0, int(depth))
         parallel_width = max(0, int(parallel_width))
+        for limit, used, reason in (
+            (self._budget.max_nodes, self._nodes_used + node_count, "MAX_NODES"),
+            (self._budget.max_depth, depth, "MAX_DEPTH"),
+            (self._budget.max_parallel_width, parallel_width, "MAX_PARALLEL_WIDTH"),
+        ):
+            if limit > 0 and used > limit:
+                return self._exhausted(reason)
         self._nodes_used += node_count
         return BudgetStatus(
             ok=True,
@@ -94,10 +118,19 @@ class BudgetController:
 
     def remaining_execution_seconds(self) -> float:
         """Return active aggregate time remaining, or infinity when unbounded."""
-        return float("inf")
+        if not self.check_execution().ok:
+            return 0.0
+        remaining = [float("inf")]
+        if self._budget.max_total_seconds > 0:
+            remaining.append(self._budget.max_total_seconds - self.elapsed_ms() / 1000)
+        if self._budget.max_tool_seconds > 0 and self._tool_stage_started_at is not None:
+            remaining.append(self._budget.max_tool_seconds - self.tool_elapsed_ms / 1000)
+        return max(0.0, min(remaining))
 
     def remaining_node_capacity(self) -> int:
         """Return how many execution nodes may still be reserved this turn."""
+        if self._budget.max_nodes > 0:
+            return max(0, self._budget.max_nodes - self._nodes_used)
         return 2_147_483_647
 
     def begin_execution(self) -> None:

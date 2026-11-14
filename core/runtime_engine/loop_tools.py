@@ -235,7 +235,7 @@ class StreamingToolExecutor(ReadRetryPolicy):
             for index, layer in enumerate(layers, start=1)
         }
         if budget is not None:
-            budget.reserve_execution_batch(
+            status = budget.reserve_execution_batch(
                 node_count=len(tool_calls),
                 depth=max(
                     (step_depths[step_id] for step_id in calls_by_step),
@@ -254,6 +254,13 @@ class StreamingToolExecutor(ReadRetryPolicy):
                 )
                 or min(1, len(tool_calls)),
             )
+            if not status.ok:
+                return [StreamingToolResult(
+                    tool_name=tc.name, call_id=tc.id, ok=False,
+                    error="budget_exhausted", error_code="BUDGET_EXHAUSTED",
+                    output={"ok": False, "executed": False, "retryable": False,
+                            "error_code": "BUDGET_EXHAUSTED", "reason": status.exceeded},
+                ) for tc in tool_calls]
 
         if self._emitter:
             self._emitter.emit(

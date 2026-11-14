@@ -359,8 +359,9 @@ def run_ssot_turn(
             requested_by=requested_by,
             emitter=emitter,
             prebuilt_registry=ssot_registry,
-            max_query_loop_iterations=metadata_in.get("max_steps"),
+            max_steps=metadata_in.get("max_steps"),
             max_tool_nodes=metadata_in.get("max_tool_nodes"),
+            max_total_seconds=(metadata_in.get("subagent_profile") or {}).get("max_runtime_seconds"),
             context_budget=runtime_context_budget,
             workbench_context=workbench_context
             if isinstance(workbench_context, dict)
@@ -775,6 +776,10 @@ def _build_engine(
     emitter: Any | None = None,
     prebuilt_registry: dict[str, dict[str, Any]] | None = None,
     max_query_loop_iterations: int | None = None,
+    max_steps: int | None = None,
+    max_llm_calls: int | None = None,
+    max_total_seconds: int | None = None,
+    max_tool_seconds: int | None = None,
     max_tool_nodes: int | None = None,
     context_budget=None,
     workbench_context: dict[str, Any] | None = None,
@@ -785,13 +790,11 @@ def _build_engine(
     config = SSOTRuntimeConfig(
         max_global_concurrency=8,
         max_layer_concurrency=5,
-        # Zero means unbounded. A loop ends on the model's final response,
-        # cancellation, or an external interruption—not a hidden counter.
-        max_llm_calls=0,
-        # A turn is goal-driven, not elapsed-time-driven. Per-provider and
-        # per-tool transport deadlines still protect unavailable endpoints.
-        max_total_seconds=0,
-        max_tool_seconds=0,
+        # Normal iterations and provider-failure compatibility are separate.
+        # Only explicit positive caller budgets restrict otherwise unbounded work.
+        max_llm_calls=max(0, int(max_llm_calls if max_llm_calls is not None else max_steps or 0)),
+        max_total_seconds=max(0, int(max_total_seconds or 0)),
+        max_tool_seconds=max(0, int(max_tool_seconds or 0)),
         parallel_layer_timeout_ms=300_000,
         tracking_max_seconds=0,
         # Tracking belongs to the same goal-driven loop.  Zero means it has

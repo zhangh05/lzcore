@@ -386,8 +386,9 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
         subagent_session_id = subtask_id
         sess = AgentSession(session_id=subagent_session_id, workspace_id=execution_ws)
         sess.mark_sub_agent()
-        effective_steps = max(0, int((task.budget or {}).get("max_steps") or profile.max_steps))
-        effective_tool_nodes = max(0, int((task.budget or {}).get("max_tool_nodes") or profile.max_tool_nodes))
+        effective_steps = max(0, int((task.budget or {}).get("max_steps", profile.max_steps)))
+        effective_tool_nodes = max(0, int((task.budget or {}).get("max_tool_nodes", profile.max_tool_nodes)))
+        effective_runtime_seconds = max(0, int((task.budget or {}).get("max_runtime_seconds", profile.max_runtime_seconds)))
         sess.metadata["max_steps"] = effective_steps
         sess.metadata["parent_session_id"] = task.session_id
         sess.metadata["subtask_id"] = subtask_id
@@ -424,6 +425,7 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
                     "role": profile.role,
                     "max_steps": effective_steps,
                     "max_tool_nodes": effective_tool_nodes,
+                    "max_runtime_seconds": effective_runtime_seconds,
                     "allowed_action_classes": list(profile.allowed_action_classes),
                     "output_contract": profile.output_contract,
                 },

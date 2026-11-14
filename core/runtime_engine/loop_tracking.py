@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from typing import Any
 
@@ -12,9 +13,46 @@ from .loop_messages import StreamingToolResult, _json_compact, _redact_tool_erro
 from .models import StatelessContext
 from .tracking import extract_tracking_payload, normalize_tracking_payload
 
+NO_PROGRESS_LIMIT = 3
+
 
 class LoopTracking:
     """Producer tracking, cancellation, checkpoint degradation and wait lifecycle. Shared context belongs to the QueryLoop driver."""
+
+    @staticmethod
+    def _progress_fingerprint(value):
+        """Ignore transport identity/timing, retaining public facts/revisions."""
+        volatile = {"_orchestration", "_runtime_readback", "_runtime_write",
+                    "operation_id", "operation_finished_at", "call_id",
+                    "latency_ms", "duration_ms", "elapsed_ms", "retry_count", "correction_attempt",
+                    "retry_total_latency_ms", "failure_attributions",
+                    "tracking_poll_count", "tracking_source_call_id", "tracking_wait_call_id"}
+
+        def stable(item):
+            if isinstance(item, dict):
+                return {key: stable(item[key]) for key in sorted(item, key=str) if key not in volatile}
+            if isinstance(item, (list, tuple)):
+                return [stable(val) for val in item]
+            return item
+
+        return hashlib.sha256(_json_compact(stable(value)).encode()).hexdigest()
+
+    def _observe_loop_progress(self, ctx, kind, value, *, evidence=False):
+        fingerprint = self._progress_fingerprint([kind, value])
+        state = self._loop_progress
+        novel = fingerprint not in state["seen"]
+        state["seen"].add(fingerprint)
+        if evidence and novel:
+            state["count"] = 0
+        elif not novel:
+            state["count"] += 1
+        else:
+            state["count"] = 1
+        if state["count"] < NO_PROGRESS_LIMIT:
+            return False
+        ctx.extras["loop_no_progress"] = {"reason": kind, "consecutive_rounds": state["count"],
+                                          "limit": NO_PROGRESS_LIMIT}
+        return True
 
     @staticmethod
     def _should_poll_tracking(user_input: str, tracking: dict) -> bool:
@@ -54,6 +92,8 @@ class LoopTracking:
             getattr(self._config, "tracking_no_progress_grace_seconds", 120.0)
         ))
         deadline = float("inf")
+        if budget is not None:
+            deadline = time.monotonic() + budget.remaining_execution_seconds()
         user_input = ctx.user_input or ""
         states: list[dict[str, Any]] = []
 
@@ -138,6 +178,8 @@ class LoopTracking:
         # producer may continue while progress arrives; sustained inactivity
         # pauses only this observer. Cancellation and failed reads stay prompt.
         while states and not self._is_cancelled(ctx):
+            if budget is not None and not budget.check_execution().ok:
+                break
             states = [state for state in states if not (
                 state["tracking"].get("done") or state.get("auto_polling_stopped")
             )]
@@ -149,6 +191,8 @@ class LoopTracking:
                 max(0.0, deadline - time.monotonic()),
             )
             if wait_s > 0 and await self._sleep_until_poll_or_cancel(ctx, wait_s):
+                break
+            if budget is not None and not budget.check_execution().ok:
                 break
 
             state["poll_index"] = int(state["poll_index"]) + 1
@@ -179,9 +223,7 @@ class LoopTracking:
                 arguments=poll_arguments,
             )
             try:
-                poll_result = await self._executor._execute_one(
-                    poll_call, ctx=ctx, budget=budget
-                )
+                poll_result = (await self._executor.execute([poll_call], ctx=ctx, budget=budget))[0]
                 poll_result.output["tracking_arguments"] = dict(poll_arguments)
                 tracked_results.append(poll_result)
 
@@ -267,6 +309,8 @@ class LoopTracking:
         ids_field, cursor_field = contract["ids_field"], contract["cursor_field"]
         results_field = contract["results_field"]
         while states and not self._is_cancelled(ctx):
+            if budget is not None and not budget.check_execution().ok:
+                break
             active = states[:int(contract.get("max_batch_size", len(states)))]
             now = time.monotonic()
             remaining = min(max(0.0, grace_seconds - (now - state["last_progress_at"])) for state in active)
@@ -281,7 +325,7 @@ class LoopTracking:
             call = LLMToolCall(id=f'{states[0]["result"].call_id}_wait_{states[0]["poll_index"]}',
                                name=states[0]["tool_name"], arguments=arguments)
             try:
-                batch = await self._executor._execute_one(call, ctx=ctx, budget=budget)
+                batch = (await self._executor.execute([call], ctx=ctx, budget=budget))[0]
                 observations = {item["task_id"]: item["result"] for item in batch.output.get(results_field, [])}
             except Exception as exc:
                 batch = StreamingToolResult(tool_name=call.name, call_id=call.id, ok=False,
@@ -380,6 +424,9 @@ class LoopTracking:
     ) -> bool:
         """Wait between provider retries without imposing a retry ceiling."""
         delay = min(5.0, 0.25 * (2 ** min(max(0, failure_count - 1), 5)))
+        budget = getattr(self, "_budget", None)
+        if budget is not None:
+            delay = min(delay, budget.remaining_execution_seconds())
         return not await self._sleep_until_poll_or_cancel(ctx, delay)
 
     @staticmethod
