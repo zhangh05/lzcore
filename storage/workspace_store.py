@@ -412,32 +412,6 @@ def _workspace_created_at(ws_id: str) -> str:
     return ""
 
 
-def _rewrite_workspace_identity(path: Path, ws_id: str) -> None:
-    yaml_path = path / "sys" / "workspace.yaml"
-    if yaml_path.is_file():
-        try:
-            updated = []
-            for line in yaml_path.read_text(encoding="utf-8").splitlines():
-                if line.startswith("id: "):
-                    updated.append(f"id: {ws_id}")
-                elif line.startswith("name: "):
-                    updated.append(f"name: {ws_id}")
-                else:
-                    updated.append(line)
-            atomic_write_text(yaml_path, "\n".join(updated) + "\n")
-        except Exception:
-            pass
-    state_path = path / "sys" / "state.json"
-    if state_path.is_file():
-        try:
-            state = json.loads(state_path.read_text(encoding="utf-8"))
-            state["workspace_id"] = ws_id
-            state["name"] = ws_id
-            atomic_write_json(state_path, state)
-        except Exception:
-            pass
-
-
 def _is_test_workspace(ws_id: str) -> int:
     test_markers = ("test", "e2e", "api_contract", "closure_", "ws_")
     return 1 if any(marker in ws_id for marker in test_markers) else 0

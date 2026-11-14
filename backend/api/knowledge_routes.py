@@ -22,24 +22,6 @@ def _validated_ws_id(raw="default"):
         return None, _invalid_ws()
 
 
-def _knowledge_file_kind(extension: str) -> str:
-    return {
-        "txt": "text",
-        "md": "markdown",
-        "markdown": "markdown",
-        "htm": "html",
-        "html": "html",
-        "yaml": "yaml",
-        "yml": "yaml",
-        "json": "json",
-        "xml": "xml",
-        "csv": "csv",
-        "log": "log",
-        "pdf": "pdf",
-        "docx": "docx",
-    }.get(extension, "text")
-
-
 def register_knowledge_routes(app):
     """Register all knowledge API routes on the Flask app."""
 

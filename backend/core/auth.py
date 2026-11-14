@@ -543,29 +543,6 @@ def _unauthenticated_host_allowed(hostname: str) -> bool:
     return False
 
 
-def _is_local_or_private_host(hostname: str) -> bool:
-    value = (hostname or "").strip().lower()
-    if value in {"localhost", "127.0.0.1", "::1"}:
-        return True
-    allowed_hosts = {
-        h.strip().lower()
-        for h in os.environ.get("LZCORE_ALLOWED_HOSTS", "").split(",")
-        if h.strip()
-    }
-    if value in allowed_hosts:
-        return True
-    try:
-        ip = ipaddress.ip_address(value)
-    except ValueError:
-        allow_lan = os.environ.get("LZCORE_ALLOW_LAN", "false").strip().lower() in ("true", "1", "yes", "on")
-        allow_mdns = os.environ.get("LZCORE_ALLOW_MDNS", "false").strip().lower() in ("true", "1", "yes", "on")
-        if allow_lan or allow_mdns:
-            return value.endswith(".local")
-        return False
-    shared_cgnat = ipaddress.ip_network("100.64.0.0/10")
-    return bool(ip.is_loopback or ip.is_private or ip.is_link_local or ip in shared_cgnat)
-
-
 def is_allowed_browser_origin(origin: str | None, request_host: str) -> bool:
     """Return True when a browser write comes from this API host or the local workbench."""
     if not origin:

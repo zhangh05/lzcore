@@ -3,19 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Protocol
-
-
-class RecordBackend(Protocol):
-    def read(self, key: str) -> dict[str, Any] | None: ...
-    def write(self, key: str, value: dict[str, Any]) -> None: ...
-    def delete(self, key: str) -> bool: ...
-
-
-class ObjectBackend(Protocol):
-    def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> str: ...
-    def get(self, key: str) -> bytes | None: ...
-    def delete(self, key: str) -> bool: ...
+from typing import Any
 
 
 class PostgresRecordBackend:

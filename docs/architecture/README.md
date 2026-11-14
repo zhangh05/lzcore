@@ -14,4 +14,4 @@
 
 设计原则见 [DESIGN](../../DESIGN.md)，循环语义见 [Loop](../LOOP_ENGINEERING.md)，资源和端点见 [API](../API.md)。历史审计不作为现行接口依据。
 
-长任务、工程隔离及团队整合见 [Coding Runtime](CODING_RUNTIME.md)，验证结果见 [2026-10-05 压力记录](../CODING_BENCHMARK_RESULTS_2026-10-05.md)。
+长任务、工程隔离及团队整合见 [Coding Runtime](CODING_RUNTIME.md)。

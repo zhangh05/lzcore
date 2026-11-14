@@ -1,7 +1,7 @@
 import type { FakeHandler, FakeReply } from "./fakeBackend";
 import { installFixture, type FixtureOptions } from "./backendFixture";
 
-/** 组件测试用的阶段 2–6 内存后端（与 mock/mock_phase2.py 同形的合成数据子集）。 */
+/** 组件测试用的阶段 2–6 内存后端。 */
 export interface AppFixtureOptions extends FixtureOptions {
   conflict?: "none" | "annotations" | "topology" | "approval" | "approval_network" | "memory";
   jobs?: "data" | "mapping1";
