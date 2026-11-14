@@ -26,7 +26,7 @@ import logging
 import re
 import threading
 import time
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 
@@ -40,6 +40,7 @@ CACHE_TTL_SECONDS = 900         # 15 minutes
 FETCH_TIMEOUT = 15
 FETCH_USER_AGENT = "LZCore/1.0 (+https://github.com/zhangh05/lzcore)"
 _MAX_FETCH_BYTES = 5 * 1024 * 1024
+_MAX_FETCH_REDIRECTS = 5
 
 # ── Cache ─────────────────────────────────────────────────────────────
 
@@ -98,7 +99,13 @@ def _is_private_ip(ip: str) -> bool:
         # Everything that is not globally routable is out of bounds for a
         # public-web tool: loopback, RFC1918, CGNAT, link-local, multicast,
         # documentation ranges, IPv6 ULA and unspecified addresses.
-        return not ipaddress.ip_address(str(ip)).is_global
+        address = ipaddress.ip_address(str(ip))
+        return (
+            not address.is_global
+            or address.is_multicast
+            or address.is_reserved
+            or getattr(address, "ipv4_mapped", None) is not None
+        )
     except ValueError:
         return False
 
@@ -112,6 +119,29 @@ def _resolved_addresses(host: str) -> set[str]:
         for item in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
         if item and item[4]
     }
+
+
+def _validate_fetch_url(url: str) -> None:
+    """Validate syntax without echoing potentially embedded credentials."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("blocked: a fully-qualified HTTP(S) URL is required")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("blocked: URL credentials are not allowed")
+    if "\\" in url or any(ord(char) <= 32 or ord(char) == 127 for char in url):
+        raise ValueError("blocked: invalid URL characters")
+    # Accessing port also rejects invalid or out-of-range port values.
+    _ = parsed.port
+
+
+def _validate_fetch_target(url: str) -> None:
+    _validate_fetch_url(url)
+    host = urlparse(url).hostname
+    if _is_private_url(url):
+        raise ValueError("blocked: private/local network URLs not allowed")
+    addresses = _resolved_addresses(host)
+    if not addresses or any(_is_private_ip(address) for address in addresses):
+        raise ValueError("blocked: target does not resolve exclusively to public IPs")
 
 
 def _check_cross_domain_redirect(final_url: str, original_url: str) -> dict | None:
@@ -407,10 +437,10 @@ def fetch_and_extract(
     # Validate URL
     if not url or not isinstance(url, str):
         return {"ok": False, "url": url, "error": "url is required"}
-    if not url.startswith(("http://", "https://")):
-        return {"ok": False, "url": url, "error": "url must start with http:// or https://"}
-    if _is_private_url(url):
-        return {"ok": False, "url": url, "error": "blocked: private/local network URLs not allowed"}
+    try:
+        _validate_fetch_url(url)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
 
     extract_mode = extract_mode if extract_mode in _EXTRACTORS else "full"
 
@@ -420,35 +450,37 @@ def fetch_and_extract(
     if cached:
         return cached
 
-    # Fetch
+    # Fetch. Keep every response closed, including failed/oversized streams.
+    resp = None
     try:
+        current_url = url
+        for hop in range(_MAX_FETCH_REDIRECTS + 1):
+            # requests must never follow a Location before this check runs.
+            _validate_fetch_target(current_url)
+            resp = requests.get(
+                current_url,
+                timeout=timeout,
+                headers={"User-Agent": FETCH_USER_AGENT},
+                allow_redirects=False,
+                stream=True,
+            )
 
-        # DNS safety check
-        parsed = urlparse(url)
-        if parsed.hostname:
-            resolved_ips = _resolved_addresses(parsed.hostname)
-            private_ip = next((ip for ip in resolved_ips if _is_private_ip(ip)), "")
-            if private_ip:
-                return {"ok": False, "url": url, "error": f"blocked: resolved IP {private_ip} is not public"}
+            # Defense in depth only: requests still resolves independently of
+            # the preflight check; this cannot prevent DNS rebinding itself.
+            if resp.raw and hasattr(resp.raw, "_connection"):
+                conn = resp.raw._connection
+                if hasattr(conn, "sock") and hasattr(conn.sock, "getpeername"):
+                    if _is_private_ip(conn.sock.getpeername()[0]):
+                        raise ValueError("blocked after connect: peer IP is not public")
 
-        # HTTP request with stream to cap response size (anti-DoS)
-        resp = requests.get(
-            url,
-            timeout=timeout,
-            headers={"User-Agent": FETCH_USER_AGENT},
-            allow_redirects=True,
-            stream=True,
-        )
-
-        # Post-connection DNS rebinding check: validate resolved IP on the
-        # actual connection, not just pre-request DNS lookup.
-        if resp.raw and hasattr(resp.raw, "_connection"):
-            conn = resp.raw._connection
-            if hasattr(conn, "sock") and hasattr(conn.sock, "getpeername"):
-                actual_ip = conn.sock.getpeername()[0]
-                if _is_private_ip(actual_ip):
-                    resp.close()
-                    return {"ok": False, "url": url, "error": f"blocked after connect: {actual_ip} is private"}
+            if resp.status_code not in {301, 302, 303, 307, 308} or not resp.headers.get("Location"):
+                break
+            if hop == _MAX_FETCH_REDIRECTS:
+                raise ValueError("blocked: too many redirects")
+            next_url = urljoin(current_url, resp.headers["Location"])
+            resp.close()
+            resp = None
+            current_url = next_url
 
         # Stream body with size cap
         chunks: list[bytes] = []
@@ -463,20 +495,7 @@ def fetch_and_extract(
         resp._content = b"".join(chunks)
 
         # Redirect safety
-        redirect_info = _check_cross_domain_redirect(resp.url, url)
-        if resp.history:
-            final_url = resp.url
-            if _is_private_url(final_url):
-                return {"ok": False, "url": url, "error": "blocked: redirect target is private URL"}
-            try:
-                final_host = urlparse(final_url).hostname
-                if final_host:
-                    final_ips = _resolved_addresses(final_host)
-                    private_ip = next((ip for ip in final_ips if _is_private_ip(ip)), "")
-                    if private_ip:
-                        return {"ok": False, "url": url, "error": f"blocked: redirect to non-public IP {private_ip}"}
-            except Exception:
-                pass
+        redirect_info = _check_cross_domain_redirect(current_url, url)
 
         if resp.status_code != 200:
             return {
@@ -535,6 +554,9 @@ def fetch_and_extract(
     except Exception as e:
         _log.warning("fetch_and_extract error for %s: %s", url, e)
         return {"ok": False, "url": url, "error": str(e)[:200]}
+    finally:
+        if resp is not None:
+            resp.close()
 
 
 # ── Quality-Aware Fetch (for deep_search) ──────────────────────────────

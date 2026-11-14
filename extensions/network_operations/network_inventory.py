@@ -36,6 +36,7 @@ from .network_records import (
 )
 from .network_scripts import _resolve_script
 from .diagnostics import execution_diagnostic
+from .approval_binding import ApprovalBindingError, current_approval_binding
 
 
 _LOG = logging.getLogger(__name__)
@@ -345,6 +346,38 @@ def get_connection(
     return record if include_secret else _public_connection(record)
 
 
+def _approval_connection(workspace_id: str, connection: dict[str, Any] | None) -> dict[str, Any]:
+    """Freeze identity and versioned credential references without resolving secrets."""
+    if not connection:
+        return {}
+    device = get_device(workspace_id, str(connection.get("device_id") or "")) or {}
+    identity = {
+        key: connection.get(key)
+        for key in (
+            "connection_id", "device_id", "revision", "protocol", "port", "username",
+            "auth_method", "password_ref", "private_key_ref", "passphrase_ref",
+            "source_address", "host_key_fingerprint",
+        )
+    }
+    identity["device"] = {key: device.get(key) for key in ("host", "vendor", "updated_at")}
+    return {
+        **{key: connection.get(key) for key in (
+            "connection_id", "device_id", "name", "protocol", "port", "revision", "auth_method",
+        )},
+        "identity_digest": hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+
+def get_connection_for_approval(workspace_id: str, connection_id: str) -> dict[str, Any]:
+    """Server-only snapshot. Public connection responses retain their existing shape."""
+    with _connection_lock(workspace_id):
+        return _approval_connection(
+            workspace_id, get_connection(workspace_id, connection_id, include_secret=True),
+        )
+
+
 def _connection_target(workspace_id: str, connection: dict[str, Any]) -> DeviceTarget:
     device = get_device(workspace_id, str(connection.get("device_id") or ""))
     if not device:
@@ -392,8 +425,17 @@ def test_connection(
     session_scope: str = "",
 ) -> dict[str, Any]:
     execution_started = time.monotonic()
+    approval_binding = current_approval_binding()
     with _connection_lock(workspace_id):
         record = get_connection(workspace_id, connection_id, include_secret=True)
+        if approval_binding is not None:
+            try:
+                approval_binding.check(
+                    workspace_id, _approval_connection(workspace_id, record), commands,
+                    read=read, configure=configure,
+                )
+            except ApprovalBindingError as exc:
+                return {"ok": False, "error": str(exc), "approval_invalidated": True}
         if not record:
             return {"ok": False, "error": "connection_not_found"}
         # ``get_connection`` may have resolved an unambiguous visible suffix.
@@ -404,7 +446,18 @@ def test_connection(
         _store(workspace_id).save("connections", connection_id, record)
     target: DeviceTarget | None = None
     try:
-        target = _connection_target(workspace_id, record)
+        if approval_binding is not None:
+            # Resolve credentials and endpoint under the same lock as identity
+            # validation. No inventory reads may replace this target in IO.
+            with _connection_lock(workspace_id):
+                latest = get_connection(workspace_id, connection_id, include_secret=True)
+                approval_binding.check(
+                    workspace_id, _approval_connection(workspace_id, latest), commands,
+                    read=read, configure=configure,
+                )
+                target = _connection_target(workspace_id, latest)
+        else:
+            target = _connection_target(workspace_id, record)
         if accept_host_key and target.protocol == "ssh":
             accepted = str(accepted_fingerprint or record.get("observed_fingerprint") or "").strip()
             if not accepted:
@@ -444,9 +497,16 @@ def test_connection(
                 json.dumps(identity).encode()
             ).hexdigest()
         with FileLock(root / ".cli-locks" / (endpoint + ".lock"), timeout=timeout):
-            latest = get_connection(workspace_id, connection_id, include_secret=True)
-            if not latest or latest.get("revision") != record.get("revision"):
-                raise ValueError("connection_changed_before_execution")
+            with _connection_lock(workspace_id):
+                latest = get_connection(workspace_id, connection_id, include_secret=True)
+                if approval_binding is not None:
+                    approval_binding.check(
+                        workspace_id, _approval_connection(workspace_id, latest), commands,
+                        read=read, configure=configure,
+                    )
+                    approval_binding.consumed = True
+                if not latest or latest.get("revision") != record.get("revision"):
+                    raise ValueError("connection_changed_before_execution")
             if configure:
                 # Resource authorization is resolved once by device_manage at
                 # the tool boundary. This transport layer receives only the
@@ -471,6 +531,8 @@ def test_connection(
             "status": "failed",
             "error": str(exc)[:300] or "connection_setup_failed",
         }
+        if isinstance(exc, ApprovalBindingError):
+            result["approval_invalidated"] = True
     if target is not None:
         # Execution evidence belongs to the resolved endpoint, even when its
         # inventory record is edited or removed while network IO is in flight.

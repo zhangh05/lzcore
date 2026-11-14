@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Iterable
 
-from .manifest import ExtensionManifest, ExtensionValidationError
+from .manifest import ExtensionManifest, ExtensionValidationError, extension_storage_key
 
 
 class ExtensionRegistry:
@@ -17,12 +17,9 @@ class ExtensionRegistry:
         self.roots = tuple(Path(root) for root in roots)
 
     def discover(self) -> list[ExtensionManifest]:
-        manifests: list[ExtensionManifest] = []
-        for root in self.roots:
-            if not root.is_dir():
-                continue
-            for path in sorted(root.glob("*/extension.json")):
-                manifests.append(self.load(path))
+        errors, manifests = self.validate_all()
+        if errors:
+            raise ExtensionValidationError("; ".join(errors))
         return manifests
 
     @staticmethod
@@ -48,4 +45,13 @@ class ExtensionRegistry:
         ids = [item.extension_id for item in valid]
         if len(ids) != len(set(ids)):
             errors.append("duplicate extension_id")
+        owners: dict[str, set[str]] = {}
+        for item in valid:
+            owners.setdefault(extension_storage_key(item.extension_id), set()).add(item.extension_id)
+        collisions = {key: values for key, values in owners.items() if len(values) > 1}
+        for key, values in sorted(collisions.items()):
+            errors.append(f"extension storage namespace collision: {key}: {', '.join(sorted(values))}")
+        # Neither participant may escape validation through callers that inspect
+        # the returned manifests even when errors are present.
+        valid = [item for item in valid if extension_storage_key(item.extension_id) not in collisions]
         return errors, valid

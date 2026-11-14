@@ -601,6 +601,28 @@ def _sync_runtime_contracts(specs) -> None:
         ))
 
 
+def _guard_extension_route(extension_id: str, view: Callable) -> Callable:
+    """Flask cannot safely remove live URL rules; deny stale handlers instead."""
+    from functools import wraps
+
+    @wraps(view)
+    def guarded(*args, **kwargs):
+        from flask import jsonify
+        from extensions.state import get_extension_state
+
+        try:
+            manifest = next((item for item in ExtensionRegistry().discover() if item.extension_id == extension_id), None)
+        except Exception:
+            manifest = None
+        if manifest is None:
+            return jsonify({"ok": False, "error": "extension_not_found"}), 404
+        if not get_extension_state(extension_id, default_enabled=manifest.enabled)["enabled"]:
+            return jsonify({"ok": False, "error": "extension_disabled"}), 409
+        return view(*args, **kwargs)
+
+    return guarded
+
+
 def register_extension_routes(app: Any) -> None:
     for extension in load_extensions():
         if extension.register_routes:
@@ -617,6 +639,10 @@ def register_extension_routes(app: Any) -> None:
             if undeclared:
                 raise ExtensionValidationError(
                     f"extension {extension.manifest.extension_id} registered undeclared routes: {undeclared}"
+                )
+            for endpoint in {rule.endpoint for rule in added}:
+                app.view_functions[endpoint] = _guard_extension_route(
+                    extension.manifest.extension_id, app.view_functions[endpoint],
                 )
 
 

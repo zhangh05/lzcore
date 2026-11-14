@@ -48,6 +48,194 @@ def _request(workspace_id: str, skill: dict, connection: dict):
     }
 
 
+def _boundary_operation(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setenv("LZCORE_OS_SECRET_STORE", "memory")
+    from extensions.network_operations import device_tools
+    monkeypatch.setattr(device_tools, "resolve_source_address", lambda *_: "")
+    device, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    connection = network.save_connection("default", {
+        **connection, "auth_method": "password", "username": "test-operator",
+        "password": "synthetic-boundary-password-v1",
+    }, auto_test=False)
+    request = _request("default", skill, connection)
+    record = approval.prepare_network_operation(request)
+    approval.attach_continuation_checkpoint(
+        "default", session_id="session", run_id="run", request_id="request",
+        user_input="test", messages=[], tool_calls=[request], prior_results=[], round_results=[],
+        interruption_ids=[record["operation_id"]], workbench_context=request["workbench_context"],
+    )
+    return device, connection, request, record
+
+
+@pytest.mark.parametrize("mutation", ["host", "password", "port", "username"])
+@pytest.mark.parametrize("stage", ["before_claim", "after_claim", "after_target"])
+def test_approved_connection_is_bound_through_the_real_tool_pipeline(monkeypatch, tmp_path, mutation, stage):
+    from flask import Flask
+    from extensions.approval import backend
+    from extensions.network_operations import device_tools, network_inventory
+
+    device, connection, request, record = _boundary_operation(monkeypatch, tmp_path)
+    frozen = record["target"]["connection"]
+    assert frozen["revision"] and frozen["identity_digest"]
+    assert "synthetic-boundary-password-v1" not in str(record)
+    assert not any(key.endswith("_ref") for key in frozen)
+    assert "revision" not in network.get_connection("default", connection["connection_id"])
+
+    def change():
+        if mutation == "host":
+            network.save_device("default", {**device, "host": "127.0.0.2"})
+        else:
+            value = {"password": "synthetic-boundary-password-v2", "port": 30002,
+                     "username": "different-operator"}[mutation]
+            network.save_connection("default", {**connection, mutation: value}, auto_test=False)
+
+    if stage == "before_claim":
+        approval.decide_operation("default", record["operation_id"], "approve")
+        change()
+    elif stage == "after_claim":
+        original_claim = approval.claim_execution
+        def claim_then_change(*args):
+            claimed = original_claim(*args)
+            assert claimed["status"] == "executing"
+            change()
+            return claimed
+        monkeypatch.setattr(approval, "claim_execution", claim_then_change)
+    else:
+        original_normalize = network_inventory.normalize_configuration_commands
+        def normalize_then_change(*args):
+            result = original_normalize(*args)
+            change()
+            return result
+        monkeypatch.setattr(network_inventory, "normalize_configuration_commands", normalize_then_change)
+    seen = []
+    monkeypatch.setattr(device_tools, "probe_target", lambda *_a, **_kw: seen.append(True))
+    monkeypatch.setattr(backend, "_start_ready_continuation", lambda *_: None)
+    app = Flask(__name__)
+    backend.register_routes(app)
+    response = app.test_client().post(
+        f"/api/extensions/approval/operations/{record['operation_id']}/decision?workspace_id=default",
+        json={"decision": "approve"},
+    )
+    assert response.status_code == 409, response.get_json()
+    assert seen == []
+    settled = response.get_json()["operation"]
+    assert settled["status"] == "invalidated", settled
+    assert settled["invalidated_reason"] == "server_scope_or_connection_changed"
+    current = network.get_connection_for_approval("default", connection["connection_id"])
+    assert current["revision"] != frozen["revision"]
+    assert current["identity_digest"] != frozen["identity_digest"]
+    from extensions.network_operations.approval_binding import current_approval_binding
+    assert current_approval_binding() is None
+
+
+def test_unchanged_approved_connection_executes_once_with_frozen_credentials(monkeypatch, tmp_path):
+    from flask import Flask
+    from extensions.approval import backend
+    from extensions.network_operations import device_tools
+    from extensions.network_operations.approval_binding import current_approval_binding
+
+    _, connection, request, record = _boundary_operation(monkeypatch, tmp_path)
+    seen = []
+    def probe(target, **kwargs):
+        seen.append((target.host, target.port, target.credential.password, kwargs["commands"]))
+        assert current_approval_binding().consumed
+        return {"ok": True, "configuration_ok": True}
+    monkeypatch.setattr(device_tools, "probe_target", probe)
+    monkeypatch.setattr(backend, "_start_ready_continuation", lambda *_: None)
+    app = Flask(__name__)
+    backend.register_routes(app)
+    url = f"/api/extensions/approval/operations/{record['operation_id']}/decision?workspace_id=default"
+    response = app.test_client().post(url, json={"decision": "approve"})
+    assert response.status_code == 200
+    assert response.get_json()["operation"]["status"] == "executed", response.get_json()
+    assert seen == [("127.0.0.1", connection["port"], "synthetic-boundary-password-v1", request["arguments"]["commands"])]
+    assert current_approval_binding() is None
+    app.test_client().post(url, json={"decision": "approve"})
+    assert len(seen) == 1
+
+
+def test_missing_connection_revision_fails_closed(monkeypatch, tmp_path):
+    from extensions.network_operations import network_inventory
+    _, connection, request, record = _boundary_operation(monkeypatch, tmp_path)
+    store = network_inventory._store("default")
+    raw = store.get("connections", connection["connection_id"])
+    raw.pop("revision")
+    store.save("connections", connection["connection_id"], raw)
+    with pytest.raises(ValueError, match="connection_revision_missing"):
+        approval.prepare_network_operation(request)
+    approval.decide_operation("default", record["operation_id"], "approve")
+    assert approval.claim_execution("default", record["operation_id"])["status"] == "invalidated"
+
+
+@pytest.mark.parametrize("field", ["host", "port", "password_ref", "private_key_ref", "passphrase_ref"])
+def test_identity_digest_covers_endpoints_and_credential_versions_without_exposing_references(monkeypatch, tmp_path, field):
+    from extensions.network_operations import network_inventory
+    device, connection, _, record = _boundary_operation(monkeypatch, tmp_path)
+    store = network_inventory._store("default")
+    collection, identifier = ("devices", device["device_id"]) if field == "host" else ("connections", connection["connection_id"])
+    raw = store.get(collection, identifier)
+    raw[field] = 30002 if field == "port" else "127.0.0.2" if field == "host" else "fake-replaced-credential-version"
+    store.save(collection, identifier, raw)
+    current = network.get_connection_for_approval("default", connection["connection_id"])
+    frozen = record["target"]["connection"]
+    assert current["revision"] == frozen["revision"]
+    assert current["identity_digest"] != frozen["identity_digest"]
+    assert "fake-replaced-credential-version" not in str(current)
+    approval.decide_operation("default", record["operation_id"], "approve")
+    assert approval.claim_execution("default", record["operation_id"])["status"] == "invalidated"
+
+
+@pytest.mark.parametrize("field", ["revision", "identity_digest"])
+def test_legacy_approvals_without_frozen_identity_fail_closed(monkeypatch, tmp_path, field):
+    from extensions.approval.private_records import load_record, save_record
+    _, _, _, record = _boundary_operation(monkeypatch, tmp_path)
+    store = approval._store("default")
+    legacy = load_record(store, "operations", record["operation_id"])
+    legacy["target"]["connection"].pop(field)
+    legacy["digest"] = approval._digest(approval._frozen_projection(legacy))
+    save_record(store, "operations", record["operation_id"], legacy)
+    approval.decide_operation("default", record["operation_id"], "approve")
+    assert approval.claim_execution("default", record["operation_id"])["status"] == "invalidated"
+
+
+@pytest.mark.parametrize("substitute", ["commands", "workspace", "reuse"])
+def test_execution_binding_rejects_substitution_and_second_transport_call(monkeypatch, tmp_path, substitute):
+    from extensions.network_operations import device_tools
+    from extensions.network_operations.approval_binding import bind_approved_execution, current_approval_binding
+    _, connection, request, record = _boundary_operation(monkeypatch, tmp_path)
+    approval.decide_operation("default", record["operation_id"], "approve")
+    claimed = approval.claim_execution("default", record["operation_id"])
+    seen = []
+    def probe(*_args, **_kwargs):
+        seen.append(True)
+        return {"ok": True}
+    monkeypatch.setattr(device_tools, "probe_target", probe)
+    kwargs = {"commands": request["arguments"]["commands"], "configure": True}
+    with bind_approved_execution(claimed):
+        if substitute == "reuse":
+            assert network.test_connection("default", connection["connection_id"], **kwargs)["ok"]
+        if substitute == "commands":
+            kwargs["commands"] = ["reboot"]
+        result = network.test_connection(
+            "other-test-workspace" if substitute == "workspace" else "default",
+            connection["connection_id"], **kwargs,
+        )
+    assert not result["ok"] and result["approval_invalidated"]
+    assert len(seen) == (1 if substitute == "reuse" else 0)
+    assert current_approval_binding() is None
+
+
+@pytest.mark.parametrize("command", ["ping 1.1.1.1 | touch x", "display x | save", "show x | include key | write"])
+def test_unknown_pipeline_cannot_skip_enabled_approval(monkeypatch, tmp_path, command):
+    _setup(monkeypatch, tmp_path)
+    _, connection, skill = _connection_and_skill("default", approval_enabled=True)
+    request = _request("default", skill, connection)
+    request["arguments"].update(action="read", commands=[command])
+    record = approval.prepare_network_operation(request)
+    assert record and record["status"] == "pending" and record["action"] == "configure"
+
+
 def test_approval_is_absent_when_the_skill_has_not_enabled_it(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     _, connection, skill = _connection_and_skill("default", approval_enabled=False)

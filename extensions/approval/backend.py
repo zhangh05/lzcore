@@ -6,6 +6,7 @@ from flask import jsonify, request
 from storage.principal import ContextThreadPoolExecutor, current_storage_principal
 
 from extensions.approval import service
+from extensions.network_operations.approval_binding import bind_approved_execution
 
 _CONTINUATION_EXECUTOR = ContextThreadPoolExecutor(max_workers=2, thread_name_prefix="approval-resume")
 
@@ -99,26 +100,25 @@ def register_routes(app):
             connection = target.get("connection") if isinstance(target.get("connection"), dict) else {}
             skill = claimed.get("skill") if isinstance(claimed.get("skill"), dict) else {}
             try:
-                result = get_default_tool_runtime_client().invoke(
-                    claimed["tool_id"],
-                    {
-                        "action": claimed["action"],
-                        "connection_id": str(connection.get("connection_id") or ""),
-                        "commands": list(claimed.get("commands") or []),
-                        "timeout": int(claimed.get("timeout") or 15),
-                    },
-                    context=ToolRuntimeContext(
-                        workspace_id=workspace_id,
-                        session_id=str(claimed.get("session_id") or ""),
-                        run_id=str(claimed.get("run_id") or ""),
-                        # The decision endpoint is an authenticated HTTP boundary;
-                        # it still invokes through ToolRuntimeClient rather than
-                        # calling an extension handler directly.
-                        requested_by="rest_api",
-                        skill=str(skill.get("skill_id") or ""),
-                        skill_connection_ids=(str(connection.get("connection_id") or ""),),
-                    ),
-                )
+                with bind_approved_execution(claimed):
+                    result = get_default_tool_runtime_client().invoke(
+                        claimed["tool_id"],
+                        {
+                            "action": claimed["action"],
+                            "connection_id": str(connection.get("connection_id") or ""),
+                            "commands": list(claimed.get("commands") or []),
+                            "timeout": int(claimed.get("timeout") or 15),
+                        },
+                        context=ToolRuntimeContext(
+                            workspace_id=workspace_id,
+                            session_id=str(claimed.get("session_id") or ""),
+                            run_id=str(claimed.get("run_id") or ""),
+                            # Keep schema, caller, scope, policy and audit checks.
+                            requested_by="rest_api",
+                            skill=str(skill.get("skill_id") or ""),
+                            skill_connection_ids=(str(connection.get("connection_id") or ""),),
+                        ),
+                    )
             except Exception as exc:
                 settled = service.settle_execution(workspace_id, operation_id, {
                     "ok": False,
@@ -134,6 +134,8 @@ def register_routes(app):
                 "error": "; ".join(result.errors or []),
             })
             continuation = _start_ready_continuation(workspace_id, operation_id)
+            if settled.get("status") == "invalidated":
+                return jsonify({"ok": False, "operation": settled, "error": "operation_invalidated", "continuation": continuation}), 409
             return jsonify({"ok": True, "operation": settled, "continuation": continuation})
         except KeyError:
             return jsonify({"ok": False, "error": "operation_not_found"}), 404

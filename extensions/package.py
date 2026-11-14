@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 
 from storage.time_utils import now_iso
 
-from .manifest import ExtensionManifest, ExtensionValidationError
+from .manifest import ExtensionManifest, ExtensionValidationError, extension_storage_key
 from .registry import ExtensionRegistry
 
 
@@ -224,6 +224,17 @@ def install_package(package: str | Path, *, key: str | bytes | None = None, plug
     root = _plugin_root(plugins_root)
     root.mkdir(parents=True, exist_ok=True)
     extension_id = str(metadata["extension_id"])
+    # Include builtins and plugins, even when a custom plugin destination is
+    # supplied. Compare storage keys before touching an existing install.
+    registry = ExtensionRegistry()
+    roots = tuple(dict.fromkeys((*registry.roots, root)))
+    try:
+        installed = ExtensionRegistry(roots).discover()
+    except ExtensionValidationError as exc:
+        raise ExtensionPackageError(str(exc)) from exc
+    namespace = extension_storage_key(extension_id)
+    if any(item.extension_id != extension_id and extension_storage_key(item.extension_id) == namespace for item in installed):
+        raise ExtensionPackageError("extension storage namespace collision")
     target = root / extension_id.replace(".", "_")
     if target.exists() and not upgrade:
         raise ExtensionPackageError("extension is already installed; use upgrade")
@@ -273,4 +284,6 @@ def uninstall_extension(extension_id: str, *, plugins_root: str | Path | None = 
     trash_root.mkdir(exist_ok=True)
     destination = trash_root / f"{target.name}-{manifest.version}-{now_iso().replace(':', '').replace('+', '_')}"
     os.replace(target, destination)
+    from extensions.runtime import reset_extension_cache_for_tests
+    reset_extension_cache_for_tests()
     return {"ok": True, "extension_id": extension_id, "version": manifest.version, "recoverable_path": str(destination)}
