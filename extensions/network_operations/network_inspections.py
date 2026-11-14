@@ -12,7 +12,7 @@ from storage.principal import ContextThreadPoolExecutor
 from storage.time_utils import now_iso
 
 from .network_execution import collect_connection, commands_for
-from .network_findings import _derive_findings
+from .network_findings import InspectionRuleAnalysisTimeout, _derive_findings
 from .network_observations import record_inspection_observation
 from .network_planning import (
     _inspection_assets,
@@ -64,6 +64,19 @@ class _DurableCancellation:
 
         job = get_job(self.workspace_id, self.job_id)
         return bool(job and job.cancel_requested)
+
+
+class _InspectionCancellation:
+    def __init__(self, cancel):
+        self.cancel = cancel
+
+    def is_set(self) -> bool:
+        return self.cancel.is_set() or not _extension_enabled()
+
+
+def _extension_enabled() -> bool:
+    from extensions.state import get_extension_state
+    return get_extension_state(EXTENSION_ID)["enabled"]
 
 
 def _enqueue_prepared_inspection(
@@ -125,23 +138,35 @@ def execute_queued_inspection(
     task = get_inspection(workspace_id, task_id)
     if not task:
         raise ValueError("inspection_not_found")
-    assets = (
-        _inspection_connections(workspace_id, list(task.get("connection_ids") or []))
-        if task.get("connection_ids")
-        else _inspection_assets(workspace_id, list(task.get("asset_ids") or []))
-    )
-    commands, script, facts = _restore_command_plan(task)
-    cancel = _DurableCancellation(workspace_id, job_id)
-    _execute_inspection(
-        workspace_id,
-        task_id,
-        assets,
-        commands,
-        collect_connection,
-        cancel,
-        script,
-        facts,
-    )
+    cancel = _InspectionCancellation(_DurableCancellation(workspace_id, job_id))
+    try:
+        if cancel.is_set():
+            task.update(status="cancelled", finished_at=now_iso())
+            if not _extension_enabled():
+                task["error"] = "network_extension_disabled"
+            _save_inspection_task(workspace_id, task)
+            return task
+        connection_task = bool(task.get("connection_ids"))
+        key = "connection_id" if connection_task else "asset_id"
+        resolver = _inspection_connections if connection_task else _inspection_assets
+        assets = []
+        for target_id in task.get("connection_ids" if connection_task else "asset_ids") or []:
+            try:
+                assets.extend(resolver(workspace_id, [target_id]))
+            except ValueError:
+                snapshot = (task.get("target_snapshots") or task.get("asset_snapshots") or {}).get(target_id) or {}
+                assets.append({**snapshot, key: target_id, "name": snapshot.get("name", target_id),
+                               "host": snapshot.get("host", ""), "_resolution_error": "inspection_target_unavailable"})
+        if not assets:
+            raise ValueError("inspection_targets_required")
+        commands, script, facts = _restore_command_plan(task)
+        _execute_inspection(workspace_id, task_id, assets, commands, collect_connection, cancel, script, facts)
+    except Exception:
+        current = get_inspection(workspace_id, task_id)
+        if current and current.get("status") not in _INSPECTION_TERMINAL_STATUSES:
+            current.update(status="failed", error="inspection_worker_failed", finished_at=now_iso())
+            _save_inspection_task(workspace_id, current)
+        raise
     return get_inspection(workspace_id, task_id) or task
 
 
@@ -159,6 +184,10 @@ def finalize_inspection_job(workspace_id: str, task_id: str, job_id: str) -> boo
         return False
     task = get_inspection(workspace_id, task_id) if task_id else None
     if task and str(task.get("job_id") or "") == job_id:
+        if task.get("status") not in _INSPECTION_TERMINAL_STATUSES:
+            task.update(status="cancelled" if job.status == "cancelled" else "failed",
+                        error="" if job.status == "cancelled" else "inspection_worker_failed",
+                        finished_at=now_iso())
         task.pop("job_id", None)
         task.pop("cancel_requested", None)
         task["updated_at"] = now_iso()
@@ -179,10 +208,13 @@ def _execute_inspection(
     task = get_inspection(workspace_id, task_id)
     if not task:
         raise ValueError("inspection_not_found")
+    cancel = _InspectionCancellation(cancel)
     if cancel.is_set():
         task.update(
             {"status": "cancelled", "finished_at": now_iso(), "updated_at": now_iso()}
         )
+        if not _extension_enabled():
+            task["error"] = "network_extension_disabled"
         _save_inspection_task(workspace_id, task)
         return
     task.update({"status": "running", "started_at": now_iso(), "updated_at": now_iso()})
@@ -202,7 +234,11 @@ def _execute_inspection(
         started = time.monotonic()
         cancel_token = bind_runtime_cancel_check(cancel.is_set)
         try:
+            if target.get("_resolution_error"):
+                raise ValueError(target["_resolution_error"])
             selected = None if facts else commands_for(target, commands, script)
+            if cancel.is_set():
+                return target_id, {"status": "cancelled", "name": target["name"]}
             live = collector(target, selected, facts=facts, session_scope=task_id)
             raw = {
                 str(key): str(value)
@@ -297,9 +333,11 @@ def _execute_inspection(
     )
     task["finished_at"] = now_iso()
     task["updated_at"] = now_iso()
+    if not _extension_enabled():
+        task["error"] = "network_extension_disabled"
     try:
         task["artifact_id"] = _save_evidence_artifact(workspace_id, task, raw_outputs)
-        task["findings"] = _derive_findings(workspace_id, task, raw_outputs)
+        task["findings"] = _derive_findings(workspace_id, task, raw_outputs, cancel_check=cancel.is_set)
         task["finding_count"] = len(task["findings"])
         observation = record_inspection_observation(workspace_id, task)
         task["observation_id"] = observation["observation_id"]
@@ -307,11 +345,11 @@ def _execute_inspection(
             observation.get("candidate_reference_id") or ""
         )
         _save_inspection_task(workspace_id, task)
-    except Exception:
+    except Exception as exc:
         task.update(
             {
-                "status": "failed",
-                "error": "inspection_evidence_persist_failed",
+                "status": "cancelled" if isinstance(exc, InspectionRuleAnalysisTimeout) and cancel.is_set() else "failed",
+                "error": "inspection_rule_analysis_failed" if isinstance(exc, InspectionRuleAnalysisTimeout) else "inspection_evidence_persist_failed",
                 "finished_at": now_iso(),
                 "updated_at": now_iso(),
             }

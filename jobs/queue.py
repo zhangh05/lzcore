@@ -13,6 +13,7 @@ class QueueReceipt:
     lease_id: str
     attempt: int
     principal: str = ""
+    delivery_id: str = ""
 
 
 class JobQueue(Protocol):
@@ -80,25 +81,54 @@ class RedisJobQueue:
     QUEUED = "lzcore:jobs:queued"
     PROCESSING = "lzcore:jobs:processing"
     LEASES = "lzcore:jobs:leases"
+    DISPATCHED = "lzcore:jobs:dispatched"
 
     def __init__(self, url: str):
         import redis
         self.client = redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
 
     @staticmethod
-    def _payload(workspace_id: str, job_id: str, attempt: int = 1, principal: str = "") -> str:
+    def _payload(workspace_id: str, job_id: str, attempt: int = 1, principal: str = "", delivery_id: str = "") -> str:
         import json
-        return json.dumps({"workspace_id": workspace_id, "job_id": job_id, "attempt": attempt, "principal": principal}, separators=(",", ":"))
+        return json.dumps({"workspace_id": workspace_id, "job_id": job_id, "attempt": attempt, "principal": principal, "delivery_id": delivery_id}, separators=(",", ":"))
 
     def enqueue(self, workspace_id: str, job_id: str) -> QueueReceipt:
+        import json
         from storage.principal import current_storage_principal
-        payload = self._payload(workspace_id, job_id, principal=current_storage_principal())
-        self.client.lpush(self.QUEUED, payload)
-        return QueueReceipt(workspace_id, job_id, payload, 1)
+        from jobs.store import get_job
+        principal = current_storage_principal()
+        record = get_job(workspace_id, job_id)
+        if record is None:
+            raise ValueError("cannot dispatch a missing or unreadable job")
+        generation = record.retry_count
+        dispatch_id = json.dumps([principal, workspace_id, job_id, generation], separators=(",", ":"))
+        payload = self._payload(workspace_id, job_id, principal=principal, delivery_id=dispatch_id)
+        # queued + retry_count is the durable outbox identity. If the reply is
+        # lost, repeating this script observes the same dispatch marker.
+        self.client.eval(
+            """
+            if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 1 then return 0 end
+            redis.call('LPUSH', KEYS[1], ARGV[2])
+            redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
+            return 1
+            """, 2, self.QUEUED, self.DISPATCHED, dispatch_id, payload,
+        )
+        return QueueReceipt(workspace_id, job_id, payload, 1, principal, dispatch_id)
+
+    def dispatch_pending(self) -> None:
+        """Reconcile durable queued jobs, including interrupted first dispatches."""
+        from jobs.store import queued_jobs_for_dispatch
+        from storage.principal import current_storage_principal, known_storage_principals, storage_principal
+        principals = [current_storage_principal(), "", *known_storage_principals()]
+        for principal in dict.fromkeys(principals):
+            with storage_principal(principal):
+                for job in queued_jobs_for_dispatch():
+                    self.enqueue(job.workspace_id, job.job_id)
 
     def claim(self, worker_id: str) -> QueueReceipt | None:
         import json
         import time
+        self.dispatch_pending()
         payload = self.client.eval(
             """
             local payload = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
@@ -117,15 +147,24 @@ class RedisJobQueue:
         if not payload:
             return None
         data = json.loads(payload)
-        return QueueReceipt(data["workspace_id"], data["job_id"], payload, int(data.get("attempt", 1)), str(data.get("principal") or ""))
+        return QueueReceipt(data["workspace_id"], data["job_id"], payload, int(data.get("attempt", 1)), str(data.get("principal") or ""), str(data.get("delivery_id") or ""))
 
     def ack(self, receipt: QueueReceipt) -> None:
         self.client.lrem(self.PROCESSING, 1, receipt.lease_id)
         self.client.hdel(self.LEASES, receipt.lease_id)
 
     def retry(self, receipt: QueueReceipt, reason: str = "") -> None:
-        self.ack(receipt)
-        self.client.lpush(self.QUEUED, self._payload(receipt.workspace_id, receipt.job_id, receipt.attempt + 1, receipt.principal))
+        self.client.eval(
+            """
+            if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return 0 end
+            redis.call('LPUSH', KEYS[3], ARGV[2])
+            redis.call('LREM', KEYS[2], 1, ARGV[1])
+            redis.call('HDEL', KEYS[1], ARGV[1])
+            return 1
+            """, 3, self.LEASES, self.PROCESSING, self.QUEUED,
+            receipt.lease_id,
+            self._payload(receipt.workspace_id, receipt.job_id, receipt.attempt + 1, receipt.principal, receipt.delivery_id),
+        )
 
     def heartbeat(self, receipt: QueueReceipt, worker_id: str) -> bool:
         import json
@@ -170,7 +209,7 @@ class RedisJobQueue:
                 self.QUEUED,
                 payload,
                 raw,
-                self._payload(data["workspace_id"], data["job_id"], int(data.get("attempt", 1)) + 1, str(data.get("principal") or "")),
+                self._payload(data["workspace_id"], data["job_id"], int(data.get("attempt", 1)) + 1, str(data.get("principal") or ""), str(data.get("delivery_id") or "")),
             )
             if int(moved or 0):
                 reclaimed += 1

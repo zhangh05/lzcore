@@ -92,6 +92,10 @@ def collect_connection(
     session_scope: str = "",
 ) -> dict[str, Any]:
     """Return the complete execution envelope, not just a lossy text mapping."""
+    from extensions.state import get_extension_state
+    from extensions.network_operations.network_records import EXTENSION_ID
+    if not get_extension_state(EXTENSION_ID)["enabled"]:
+        raise ValueError("network_extension_disabled")
     if asset.get("connection_id"):
         result = test_connection(
             str(asset.get("workspace_id") or ""),

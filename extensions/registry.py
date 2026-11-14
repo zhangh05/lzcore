@@ -53,5 +53,7 @@ class ExtensionRegistry:
             errors.append(f"extension storage namespace collision: {key}: {', '.join(sorted(values))}")
         # Neither participant may escape validation through callers that inspect
         # the returned manifests even when errors are present.
-        valid = [item for item in valid if extension_storage_key(item.extension_id) not in collisions]
+        duplicates = {extension_id for extension_id in ids if ids.count(extension_id) > 1}
+        valid = [item for item in valid if extension_storage_key(item.extension_id) not in collisions
+                 and item.extension_id not in duplicates]
         return errors, valid

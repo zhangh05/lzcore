@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
+import json
 
-from storage.atomic_io import atomic_write_json, safe_read_json
+from storage.atomic_io import atomic_write_json
 from storage.locking import FileLock
 from storage.records import runtime_record_file
 from storage.time_utils import now_iso
@@ -15,8 +16,13 @@ def _path():
 
 
 def _read() -> dict[str, Any]:
-    value = safe_read_json(_path(), {})
-    return value if isinstance(value, dict) else {}
+    try:
+        value = json.loads(_path().read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("invalid extension lifecycle state")
+    return value
 
 
 def get_extension_state(extension_id: str, *, default_enabled: bool = True) -> dict[str, Any]:
@@ -32,16 +38,20 @@ def get_extension_state(extension_id: str, *, default_enabled: bool = True) -> d
     }
 
 
-def update_extension_state(extension_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+def _mutate_extension_state(extension_id: str, mutate: Callable) -> dict[str, Any]:
     path = _path()
     with FileLock(path.with_name("state.lock")):
         data = _read()
         current = dict(data.get(extension_id) or {})
-        current.update(patch)
+        mutate(current)
         current["updated_at"] = now_iso()
         data[extension_id] = current
         atomic_write_json(path, data)
     return get_extension_state(extension_id)
+
+
+def update_extension_state(extension_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    return _mutate_extension_state(extension_id, lambda current: current.update(patch))
 
 
 def set_extension_enabled(extension_id: str, enabled: bool) -> dict[str, Any]:
@@ -54,24 +64,26 @@ def set_extension_enabled(extension_id: str, enabled: bool) -> dict[str, Any]:
 
 
 def record_extension_success(extension_id: str) -> None:
-    update_extension_state(extension_id, {"status": "ready", "failure_count": 0, "last_error": ""})
+    def reset(current):
+        if current.get("enabled", True) and current.get("status") not in {"disabled", "quarantined"}:
+            current.update({"status": "ready", "failure_count": 0, "last_error": ""})
+    _mutate_extension_state(extension_id, reset)
 
 
 def record_extension_failure(extension_id: str, error: str, *, threshold: int = 5) -> dict[str, Any]:
-    state = get_extension_state(extension_id)
-    failures = state["failure_count"] + 1
-    patch: dict[str, Any] = {
-        "failure_count": failures,
-        "last_error": str(error)[:500],
-        "status": "degraded" if failures < threshold else "quarantined",
-    }
-    if failures >= threshold:
-        patch["enabled"] = False
-    return update_extension_state(extension_id, patch)
+    def increment(current):
+        failures = int(current.get("failure_count") or 0) + 1
+        current.update({"failure_count": failures, "last_error": str(error)[:500]})
+        if failures >= threshold or current.get("status") == "quarantined":
+            current.update({"enabled": False, "status": "quarantined"})
+        elif current.get("enabled", True):
+            current["status"] = "degraded"
+    return _mutate_extension_state(extension_id, increment)
 
 
 def set_workspace_schema_version(extension_id: str, workspace_id: str, version: int) -> dict[str, Any]:
-    state = get_extension_state(extension_id)
-    versions = dict(state["schema_versions"])
-    versions[workspace_id] = max(0, int(version))
-    return update_extension_state(extension_id, {"schema_versions": versions})
+    def set_version(current):
+        versions = dict(current.get("schema_versions") or {})
+        versions[workspace_id] = max(0, int(version))
+        current["schema_versions"] = versions
+    return _mutate_extension_state(extension_id, set_version)

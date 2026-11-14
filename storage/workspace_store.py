@@ -188,24 +188,10 @@ def rename_workspace(old_id: str, new_id: str) -> dict:
         return {"ok": False, "error": "workspace not found"}
     if new_path.exists():
         return {"ok": False, "error": "target workspace already exists"}
-    try:
-        user_roots = _user_workspace_paths(old_id)
-        if any(path.with_name(new_id).exists() for path in user_roots):
-            return {"ok": False, "error": "target workspace already exists"}
-        old_path.rename(new_path)
-        _rewrite_workspace_identity(new_path, new_id)
-        for user_path in user_roots:
-            new_user_path = user_path.with_name(new_id)
-            user_path.rename(new_user_path)
-            _rewrite_workspace_identity(new_user_path, new_id)
-        try:
-            from backend.core.identity import replace_workspace
-            replace_workspace(old_id, new_id)
-        except Exception:
-            _LOG.warning("workspace identity mapping rename failed", exc_info=True)
-        return {"ok": True, "workspace_id": new_id}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+    # IDs are embedded in jobs, workflow evidence, queue receipts and domain
+    # references. Moving directories without a quiesced migration corrupts
+    # those identities. Display names can still be changed via state updates.
+    return {"ok": False, "error": "workspace_id_rename_requires_offline_migration"}
 
 
 def delete_workspace(ws_id: str) -> dict:

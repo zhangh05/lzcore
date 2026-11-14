@@ -354,7 +354,10 @@ def claim_ready_continuation(workspace_id: str, operation_id: str) -> dict[str, 
         return None
     with _continuation_lock(workspace_id, checkpoint_id):
         checkpoint = load_record(_store(workspace_id), "continuations", checkpoint_id)
-        if not checkpoint or checkpoint.get("status") != "waiting_decisions":
+        if not checkpoint or not (
+            checkpoint.get("status") == "waiting_decisions"
+            or (checkpoint.get("status") == "resume_failed" and checkpoint.get("resume_retry_safe") is True)
+        ):
             return None
         operations = [get_operation(workspace_id, item) for item in checkpoint.get("operation_ids") or []]
         if not operations or any(not item for item in operations):
@@ -363,20 +366,25 @@ def claim_ready_continuation(workspace_id: str, operation_id: str) -> dict[str, 
         if any(str(item.get("status") or "") not in terminal for item in operations):
             return None
         checkpoint["status"] = "resuming"
-        checkpoint["client_request_id"] = f"approval_resume_{uuid.uuid4().hex}"
+        checkpoint.setdefault("client_request_id", f"approval_resume_{uuid.uuid4().hex}")
+        checkpoint["resume_retry_safe"] = False
         checkpoint["updated_at"] = _now()
         checkpoint["operations"] = operations
         save_record(_store(workspace_id), "continuations", checkpoint_id, checkpoint)
         return checkpoint
 
 
-def settle_continuation(workspace_id: str, checkpoint_id: str, *, result: dict[str, Any]) -> None:
+def settle_continuation(workspace_id: str, checkpoint_id: str, *, result: dict[str, Any],
+                        retry_safe: bool = False, outcome_unknown: bool = False) -> None:
     with _continuation_lock(workspace_id, checkpoint_id):
         checkpoint = load_record(_store(workspace_id), "continuations", checkpoint_id)
-        if not checkpoint:
+        if not checkpoint or checkpoint.get("status") != "resuming":
             return
-        checkpoint["status"] = "resumed"
-        checkpoint["resumed_at"] = _now()
+        checkpoint["status"] = ("resuming_unknown" if outcome_unknown else
+                                "resumed" if result.get("ok") else "resume_failed")
+        checkpoint["resume_retry_safe"] = bool(retry_safe and not outcome_unknown and not result.get("ok"))
+        if checkpoint["status"] == "resumed":
+            checkpoint["resumed_at"] = _now()
         checkpoint["resume_result"] = dict(result or {})
         checkpoint["updated_at"] = _now()
         save_record(_store(workspace_id), "continuations", checkpoint_id, checkpoint)

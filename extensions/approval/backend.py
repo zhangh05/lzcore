@@ -18,33 +18,43 @@ def _workspace() -> str:
 def _resume_checkpoint(workspace_id: str, checkpoint: dict) -> None:
     """Continue a settled logical turn outside the approval HTTP request."""
     checkpoint_id = str(checkpoint.get("checkpoint_id") or "")
+    submitted = False
     try:
         from agent.app.service import get_default_agent_app
         from core.runtime_engine.models import ApprovalContinuationRuntimeControl
-        result = get_default_agent_app().submit_user_message(
+        agent_app = get_default_agent_app()
+        runtime_control = ApprovalContinuationRuntimeControl(
+            checkpoint=checkpoint,
+            workbench_context=dict(checkpoint.get("workbench_context") or {}),
+        )
+        submitted = True
+        result = agent_app.submit_user_message(
             user_input=str(checkpoint.get("user_input") or ""),
             workspace_id=workspace_id,
             session_id=str(checkpoint.get("session_id") or ""),
             metadata={"client_request_id": checkpoint["client_request_id"]},
-            runtime_control=ApprovalContinuationRuntimeControl(
-                checkpoint=checkpoint,
-                workbench_context=dict(checkpoint.get("workbench_context") or {}),
-            ),
+            runtime_control=runtime_control,
         )
-        service.settle_continuation(workspace_id, checkpoint_id, result=result.to_dict() if result else {})
-    except Exception as exc:
-        # Keep the durable checkpoint claimed but diagnosable; an operator can
-        # retry a recovery endpoint later without ever replaying the device call.
+        service.settle_continuation(workspace_id, checkpoint_id, result=result.to_dict() if result else {},
+                                    outcome_unknown=result is None)
+    except Exception:
+        # Once submission starts its outcome is unknown; never replay it.
         service.settle_continuation(workspace_id, checkpoint_id, result={
-            "ok": False, "error": f"approval_resume_exception:{exc}",
-        })
+            "ok": False, "error": "approval_resume_exception",
+        }, retry_safe=not submitted, outcome_unknown=submitted)
 
 
 def _start_ready_continuation(workspace_id: str, operation_id: str) -> dict | None:
     checkpoint = service.claim_ready_continuation(workspace_id, operation_id)
     if checkpoint is None:
         return None
-    _CONTINUATION_EXECUTOR.submit(_resume_checkpoint, workspace_id, checkpoint)
+    try:
+        _CONTINUATION_EXECUTOR.submit(_resume_checkpoint, workspace_id, checkpoint)
+    except Exception:
+        service.settle_continuation(workspace_id, str(checkpoint["checkpoint_id"]),
+                                    result={"ok": False, "error": "approval_resume_enqueue_failed"},
+                                    retry_safe=True)
+        raise
     continuation = {"checkpoint_id": checkpoint.get("checkpoint_id"), "status": "resuming"}
     for key in ("session_id", "client_request_id"):
         if checkpoint.get(key):

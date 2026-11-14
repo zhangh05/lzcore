@@ -46,16 +46,17 @@ def test_workspace_rename_and_delete_cover_every_user_data_root(monkeypatch, tmp
             ensure_workspace("team")
             (workspace_root("team") / "marker.txt").write_text(username, encoding="utf-8")
 
-    assert rename_workspace("team", "team_new")["ok"] is True
+    result = rename_workspace("team", "team_new")
+    assert result == {"ok": False, "error": "workspace_id_rename_requires_offline_migration"}
     for username in ("Admin", "network"):
         key = principal_storage_key(username)
-        assert (tmp_path / "users" / key / "workspaces" / "team_new" / "marker.txt").is_file()
+        assert (tmp_path / "users" / key / "workspaces" / "team" / "marker.txt").is_file()
 
-    assert delete_workspace("team_new")["ok"] is True
-    assert not (tmp_path / "catalog" / "team_new").exists()
+    assert delete_workspace("team")["ok"] is True
+    assert not (tmp_path / "catalog" / "team").exists()
     for username in ("Admin", "network"):
         key = principal_storage_key(username)
-        assert not (tmp_path / "users" / key / "workspaces" / "team_new").exists()
+        assert not (tmp_path / "users" / key / "workspaces" / "team").exists()
 
 
 def test_user_creation_eagerly_provisions_immutable_root_and_delete_removes_it(monkeypatch, tmp_path):

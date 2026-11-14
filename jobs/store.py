@@ -4,7 +4,7 @@
 import json, shutil
 import logging
 from typing import Optional
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 
 from jobs.schemas import JobRecord, JobEvent
 from jobs.redaction import (
@@ -21,8 +21,8 @@ from storage.ids import validate_job_id, validate_workspace_id
 _LOG = logging.getLogger("jobs.store")
 
 def _get_ws_root():
-    from storage.paths import get_workspace_root
-    return get_workspace_root()
+    from storage.paths import workspace_root
+    return workspace_root("default").parent
 
 def _workspace_path(ws_id):
     from storage.paths import workspace_root
@@ -49,7 +49,23 @@ def _job_lock_path(ws_id, job_id):
     return _workspace_path(ws_id) / "jobs" / ".locks" / f"{job_id}.lock"
 
 
+@contextmanager
+def _session_write_guard(ws_id, record):
+    from storage.session_store import session_is_deleted, session_record_lock
+    session_id = str((record.payload or {}).get("session_id") or "") if record else ""
+    scope = session_record_lock(session_id, ws_id) if session_id else nullcontext()
+    with scope:
+        if session_id and session_is_deleted(session_id, ws_id):
+            raise ValueError("session permanently deleted")
+        yield
+
+
 def create_job(rec: JobRecord) -> JobRecord:
+    with _session_write_guard(rec.workspace_id, rec):
+        return _create_job(rec)
+
+
+def _create_job(rec: JobRecord) -> JobRecord:
     from storage.workspace_store import ensure_workspace
     ensure_workspace(rec.workspace_id)
     d = _ensure(rec.workspace_id, rec.job_id)
@@ -166,6 +182,9 @@ def fence_reclaimed_running_job(ws_id, job_id, *, lease_id: str, attempt: int) -
                 setattr(rec, key, value)
     _update_index(ws_id, rec)
     _update_workspace_stats(ws_id)
+    if rec.job_type == "workflow_run":
+        from workflows.service import reconcile_interrupted_runs
+        reconcile_interrupted_runs(ws_id, now, now, job_id=job_id)
     append_event(ws_id, job_id, JobEvent(
         job_id=job_id, workspace_id=ws_id, event_type="job_failed",
         message="Job lease expired; outcome requires reconciliation",
@@ -285,9 +304,11 @@ def delete_job(ws_id, job_id, soft=True) -> bool:
 
 
 def append_event(ws_id, job_id, event: JobEvent) -> JobEvent:
-    _ensure(ws_id, job_id)
-    append_jsonl(ws_id, ("jobs", job_id, f"{job_id}.events.jsonl"),
-                 sanitize_job_event_for_storage(event.as_dict()))
+    with _session_write_guard(ws_id, get_job(ws_id, job_id)), FileLock(_job_lock_path(ws_id, job_id)):
+        if get_job(ws_id, job_id) is None:
+            raise ValueError("job not found")
+        append_jsonl(ws_id, ("jobs", job_id, f"{job_id}.events.jsonl"),
+                     sanitize_job_event_for_storage(event.as_dict()))
     return event
 
 
@@ -296,12 +317,38 @@ def list_events(ws_id, job_id, limit=200) -> list:
 
 
 def append_log(ws_id, job_id, message, level="info", meta=None):
-    _ensure(ws_id, job_id)
     entry = {"ts": now_iso(), "level": level,
              "msg": message[:1000], "meta": meta or {}}
     # Sanitize before writing
     safe = sanitize_job_log_for_storage(entry)
-    append_jsonl(ws_id, ("jobs", job_id, f"{job_id}.log.jsonl"), safe)
+    with _session_write_guard(ws_id, get_job(ws_id, job_id)), FileLock(_job_lock_path(ws_id, job_id)):
+        if get_job(ws_id, job_id) is None:
+            raise ValueError("job not found")
+        append_jsonl(ws_id, ("jobs", job_id, f"{job_id}.log.jsonl"), safe)
+
+
+def complete_session_jobs(ws_id: str, session_id: str, *, hard_delete: bool = False) -> int:
+    """Clean every matching job in the current principal's repository."""
+    from jobs.manager import cancel_job, mark_succeeded
+    count = 0
+    for path in (_workspace_path(ws_id) / "jobs").glob("*/*.json"):
+        if path.name != f"{path.parent.name}.json":
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("job_type") != "agent_run" or (data.get("payload") or {}).get("session_id") != session_id:
+            continue
+        job_id = validate_job_id(path.parent.name)
+        if hard_delete:
+            if not delete_job(ws_id, job_id, soft=False):
+                raise OSError("session job deletion incomplete")
+        else:
+            active = (data.get("metadata") or {}).get("active_turn") or {}
+            if data.get("status") == "running" and active.get("status") != "running":
+                mark_succeeded(ws_id, job_id)
+            elif data.get("status") in {"running", "queued"}:
+                cancel_job(ws_id, job_id)
+        count += 1
+    return count
 
 
 def list_logs(ws_id, job_id, limit=200) -> list:
@@ -322,6 +369,24 @@ def get_next_queued_job() -> Optional[JobRecord]:
     return None
 
 
+def queued_jobs_for_dispatch():
+    """Read the durable outbox without UI session filtering or pagination."""
+    from storage.workspace_store import list_workspace_ids
+    for ws_id in list_workspace_ids():
+        for path in (_workspace_path(ws_id) / "jobs").glob("*/*.json"):
+            if path.name != f"{path.parent.name}.json":
+                continue
+            with FileLock(_job_lock_path(ws_id, path.parent.name)):
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except FileNotFoundError:
+                    continue
+                if data.get("status") == "queued":
+                    if data.get("workspace_id") != ws_id:
+                        raise ValueError("job workspace identity mismatch")
+                    yield JobRecord(**{k: v for k, v in data.items() if k in JobRecord.__dataclass_fields__})
+
+
 def reconcile_running_jobs(finished_at: str, started_before: str) -> int:
     """Mark pre-start running jobs failed across legacy and user-scoped storage."""
     from storage.principal import known_storage_principals, storage_principal
@@ -330,9 +395,11 @@ def reconcile_running_jobs(finished_at: str, started_before: str) -> int:
     reconciled = 0
     principals = ["", *known_storage_principals()]
     for username in principals:
-        context = storage_principal(username) if username else nullcontext()
+        context = storage_principal(username)
         with context:
             for ws_id in list_workspace_ids():
+                from workflows.service import reconcile_interrupted_runs
+                reconcile_interrupted_runs(ws_id, finished_at, started_before)
                 jobs_dir = _workspace_path(ws_id) / "jobs"
                 if not jobs_dir.is_dir():
                     continue
