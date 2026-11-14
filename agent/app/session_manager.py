@@ -55,9 +55,9 @@ class SessionManager:
             key = self._key(sid, workspace_id)
             if key not in self._sessions:
                 session = AgentSession(session_id=sid, workspace_id=workspace_id)
-                self._sessions[key] = session
-                self._session_turn_locks[key] = threading.RLock()
                 self._restore(session, sid, workspace_id)
+                self._sessions[key] = session
+                self._session_turn_locks.setdefault(key, threading.RLock())
             else:
                 session = self._sessions[key]
                 self._session_turn_locks.setdefault(key, threading.RLock())
@@ -84,10 +84,24 @@ class SessionManager:
     def _restore(self, session: AgentSession, sid: str, workspace_id: str) -> None:
         if not self.restore_callback:
             return
-        try:
-            self.restore_callback(session, sid, workspace_id)
-        except Exception as exc:
-            logger.warning("Failed to restore session %s: %s", sid, exc)
+        self.restore_callback(session, sid, workspace_id)
+
+    def archive_for_reset(self, session_id: str, workspace_id: str) -> None:
+        from storage.ids import validate_session_id, validate_workspace_id
+        from storage.session_store import update_session
+
+        validate_session_id(session_id)
+        validate_workspace_id(workspace_id)
+        key = self._key(session_id, workspace_id)
+        # A slash tool runs in a worker while its parent owns the turn lock.
+        # Taking that lock here would deadlock. Publish the durable barrier
+        # first; queued submissions check it under their existing turn lock.
+        archived = update_session(session_id, workspace_id, status="archived", metadata={"reset_archived": True})
+        if not archived or archived.get("status") != "archived":
+            raise RuntimeError("session_reset_failed")
+        with self._sessions_lock:
+            self._sessions.pop(key, None)
+            # Keep the lock: already queued submissions may still own it.
 
     def _evict_expired_locked(self) -> None:
         now = time.time()

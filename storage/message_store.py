@@ -37,6 +37,10 @@ USER_MSG_ID = "{run_id}:user"
 ASSISTANT_MSG_ID = "{run_id}:assistant"
 
 
+class MessageHistoryUnavailable(OSError):
+    """The durable history cannot be proven complete; do not infer an empty chat."""
+
+
 # NOTE: raises ValueError vs _safe_rid silently strips — P2-12
 def _safe_run_id(run_id: str) -> str:
     """Return a run_id with only path-safe chars; raises if empty."""
@@ -110,7 +114,10 @@ class SessionMessageStore:
             if not content or not content.strip():
                 return None
 
-        rid = _safe_rid(run_id)
+        # Rewind receives the execution run_id from the read model. Retain
+        # the original storage key carried by that model for stable IDs.
+        storage_run_id = (metadata or {}).get("storage_run_id")
+        rid = _safe_run_id(storage_run_id) if storage_run_id else _safe_rid(run_id)
         safe_content = redact_text(str(content))
 
         msg_dir = self._messages_dir()
@@ -118,6 +125,7 @@ class SessionMessageStore:
 
         meta = redact_value(dict(metadata or {}))
         meta.setdefault("run_id", rid)
+        meta["storage_run_id"] = rid
         meta.setdefault("session_id", self.session_id)
         meta.setdefault("workspace_id", self.ws_id)
         meta.setdefault("redacted", True)
@@ -212,16 +220,22 @@ class SessionMessageStore:
         Returns empty list if no full-message files exist.
         """
         msg_dir = self._messages_dir()
-        if not msg_dir.is_dir():
+        try:
+            # pathlib.glob may suppress directory-read errors. Only a missing
+            # directory proves that no full-message files have been written.
+            files = sorted(path for path in msg_dir.iterdir() if path.suffix == ".json")
+        except FileNotFoundError:
             return []
+        except OSError:
+            raise MessageHistoryUnavailable("session_history_unavailable") from None
 
         msgs: List[Dict[str, Any]] = []
-        for f in sorted(msg_dir.glob("*.json")):
+        for f in files:
             try:
                 record = json.loads(f.read_text(encoding="utf-8"))
                 role = record.get("role", "")
                 if role not in ("user", "assistant"):
-                    continue
+                    raise ValueError("invalid message role")
 
                 record_run_id = str(record.get("run_id", ""))
                 msg_id = f"{record_run_id}:{role}"
@@ -232,7 +246,9 @@ class SessionMessageStore:
                     "role": role,
                     "content": _message_content(role, record.get("content", "")),
                     "created_at": record.get("metadata", {}).get("created_at", ""),
-                    "run_id": record_run_id,
+                    # File/message identity stays request-stable. Execution
+                    # identity is independently recorded by runtime writers.
+                    "run_id": str(record.get("metadata", {}).get("run_id") or record_run_id),
                 }
 
                 # Carry artifact_ref if present (large content)
@@ -255,7 +271,7 @@ class SessionMessageStore:
                 meta = record.get("metadata", {})
                 if meta:
                     m["metadata"] = {
-                        k: meta[k] for k in ("run_id", "intent", "status",
+                        k: meta[k] for k in ("run_id", "storage_run_id", "intent", "status",
                                               "capability", "quality_summary",
                                               "manual_review_count", "trace_id",
                                               "llm_metadata", "attachments", "tool_context",
@@ -271,9 +287,7 @@ class SessionMessageStore:
 
                 msgs.append(m)
             except Exception:
-                import logging
-                logging.getLogger(__name__).warning("Cannot read message record %s", f, exc_info=True)
-                continue
+                raise MessageHistoryUnavailable("session_history_unavailable") from None
 
         msgs.sort(key=_message_sort_key)
         return msgs
@@ -418,19 +432,16 @@ def _message_content(role: str, content: str) -> str:
 def _sanitize_assistant_content(content: str) -> str:
     """Strip provider reasoning from assistant text before display/context use.
 
-    Fail-closed: if the sanitizer cannot be loaded or raises, return an
-    empty string rather than the unsanitized content. Reasoning blocks
+    Fail-closed: if the sanitizer cannot be loaded or raises, propagate the
+    failure rather than publish unsanitized or silently empty content. Reasoning blocks
     may contain tool-call JSON or provider-internal data that must never
     leak to the user or back into the LLM context window.
     """
     if not content:
         return ""
-    text = str(content)
-    text = re.sub(r"<think\b[^>]*>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"<reasoning\b[^>]*>.*?</reasoning>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"(?ism)^\s*(reasoning|思考过程)\s*[:：].*?(?=\n\s*(answer|回答|结论)\s*[:：]|\Z)", "", text)
-    text = re.sub(r"(?i)</?(think|reasoning)\b[^>]*>", "", text)
-    return text.strip()
+    from agent.llm.prompt_guard import sanitize_provider_output
+
+    return sanitize_provider_output(str(content))[0]
 
 
 def _atomic_write(path: Path, data: dict) -> None:

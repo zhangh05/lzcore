@@ -223,14 +223,16 @@ def _mark_output_truncation(resp: LLMResponse) -> None:
 
 def _generate_with_retry(req: LLMRequest, cfg: dict, max_retries: int = 3) -> LLMResponse:
     from agent.llm.provider import generate, ERROR_TYPE_PROVIDER_TIMEOUT, ERROR_TYPE_PROVIDER_UNKNOWN
-    import time
     for attempt in range(max_retries + 1):
+        if _retry_cancelled(req):
+            return _retry_cancelled_response()
         try:
             resp = generate(req, cfg)
         except (OSError, TimeoutError, ConnectionError) as exc:
             error_msg = _redact(str(exc))
             if attempt < max_retries:
-                time.sleep(min(2 ** attempt * 0.5, 8))
+                if not _retry_wait(req, min(2 ** attempt * 0.5, 8)):
+                    return _retry_cancelled_response()
                 continue
             return LLMResponse(error=error_msg, metadata={"error_type": ERROR_TYPE_PROVIDER_TIMEOUT, "error_detail": error_msg[:200], "http_status": None, "retryable": True, "retries_exhausted": True})
         if not resp.error:
@@ -244,7 +246,8 @@ def _generate_with_retry(req: LLMRequest, cfg: dict, max_retries: int = 3) -> LL
             # responses are usually deterministic and must not stall the UI.
             if not str(resp.content or "").strip() and not list(resp.tool_calls or []):
                 if attempt < min(1, max_retries):
-                    time.sleep(0.2)
+                    if not _retry_wait(req, 0.2):
+                        return _retry_cancelled_response()
                     continue
                 return LLMResponse(
                     error="provider_empty_response",
@@ -262,20 +265,88 @@ def _generate_with_retry(req: LLMRequest, cfg: dict, max_retries: int = 3) -> LL
                     },
                 )
             return resp
-        error_lower = resp.error.lower()
-        from agent.llm.errors import is_balance_insufficient
-        balance_insufficient = is_balance_insufficient(resp.error, (resp.metadata or {}).get("http_status"))
-        declared_retryable = (resp.metadata or {}).get("retryable")
-        retryable = not balance_insufficient and (
-            declared_retryable if isinstance(declared_retryable, bool) else
-            any(key in error_lower for key in ("rate_limit", "rate limit", "overload", "429", "503", "timeout", "timed out"))
-        )
+        retryable = _response_retryable(resp)
         if attempt < max_retries and retryable:
-            time.sleep(2.0 ** attempt)
+            if not _retry_wait(req, _retry_delay(resp, attempt)):
+                return _retry_cancelled_response()
             continue
         error_type = resp.metadata.get("error_type", ERROR_TYPE_PROVIDER_UNKNOWN) if resp.metadata else ERROR_TYPE_PROVIDER_UNKNOWN
         return LLMResponse(error=resp.error, provider=resp.provider, model=resp.model, metadata={**(resp.metadata or {}), "error_type": error_type, "error_detail": (resp.metadata or {}).get("error_detail", resp.error[:200]), "http_status": (resp.metadata or {}).get("http_status"), "retryable": retryable, **({"retries_exhausted": True} if attempt >= max_retries else {})})
     return LLMResponse(error="provider_unknown_error", metadata={"error_type": ERROR_TYPE_PROVIDER_UNKNOWN})
+
+
+def _response_retryable(resp: LLMResponse) -> bool:
+    import re
+    from agent.llm.errors import is_balance_insufficient
+
+    metadata = resp.metadata or {}
+    status = metadata.get("http_status")
+    if not isinstance(status, int) or isinstance(status, bool):
+        match = re.fullmatch(r"provider_http_(\d{3})", str(metadata.get("error_type") or ""))
+        if match is None:
+            match = re.match(r"provider_http_(\d{3})(?::|$)", resp.error or "")
+        status = int(match[1]) if match else None
+    if is_balance_insufficient(resp.error, status):
+        return False
+    transient = {408, 425, 429, 500, 502, 503, 504}
+    if status is not None and status not in transient:
+        return False
+    declared = metadata.get("retryable")
+    if isinstance(declared, bool):
+        return declared
+    if status in transient:
+        return True
+    if metadata.get("error_type") in {"provider_timeout", "provider_network_error"}:
+        return True
+    return any(key in (resp.error or "").lower() for key in (
+        "rate_limit", "rate limit", "overload", "timeout", "timed out",
+    ))
+
+
+def _retry_delay(resp: LLMResponse, attempt: int) -> float:
+    import math
+    from datetime import datetime, timezone
+    from email.utils import parsedate_to_datetime
+
+    value = (resp.metadata or {}).get("retry_after")
+    delay = 2.0 ** attempt
+    if value is not None:
+        try:
+            seconds = float(value)
+        except (ValueError, TypeError):
+            try:
+                seconds = (parsedate_to_datetime(str(value)) - datetime.now(timezone.utc)).total_seconds()
+            except (ValueError, TypeError, OverflowError):
+                seconds = -1
+        if math.isfinite(seconds) and seconds >= 0:
+            delay = min(seconds, 60.0)
+    return delay
+
+
+def _retry_cancelled(req: LLMRequest) -> bool:
+    return bool(req.cancel_check and req.cancel_check())
+
+
+def _retry_cancelled_response() -> LLMResponse:
+    return LLMResponse(finish_reason="cancelled", metadata={"stream_cancelled": True, "retryable": False})
+
+
+def _retry_wait(req: LLMRequest, delay: float) -> bool:
+    import time
+
+    if _retry_cancelled(req):
+        return False
+    if not req.cancel_check:
+        time.sleep(delay)
+        return True
+    remaining = delay
+    while remaining > 0:
+        step = min(remaining, 0.25)
+        time.sleep(step)
+        if _retry_cancelled(req):
+            return False
+        remaining -= step
+    return True
 
 
 def safe_generate(

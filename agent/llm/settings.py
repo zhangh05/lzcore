@@ -169,6 +169,7 @@ def _provider_runtime_config(provider_id: str, cfg: dict, api_key: str) -> dict:
         "prompt_cache_enabled": cfg.get("prompt_cache_enabled", True),
         "base_url": cfg.get("base_url", ""),
         "model": cfg.get("model", ""),
+        **({"vision_enabled": cfg["vision_enabled"]} if "vision_enabled" in cfg else {}),
         "temperature": cfg.get("temperature", 0.2),
         "top_p": cfg.get("top_p"),
         "thinking": cfg.get("thinking", "provider_default"),
@@ -237,7 +238,7 @@ def validate_llm_settings(data: dict, *, new_provider: bool = False) -> list:
         _ = parsed.port
     except (TypeError, ValueError, AttributeError):
         errors.append("invalid base_url")
-    for flag in ("enabled", "safe_mode", "clear_api_key"):
+    for flag in ("enabled", "safe_mode", "clear_api_key", "vision_enabled"):
         if flag in data and not isinstance(data[flag], bool):
             errors.append(f"{flag} must be boolean")
     if "api_key" in data and data["api_key"] is not None and not isinstance(data["api_key"], str):

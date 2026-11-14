@@ -316,9 +316,9 @@ def evidence_summary(extras: dict[str, Any]) -> dict[str, Any]:
 def evidence_manifest(
     extras: dict[str, Any],
     *,
-    max_items: int = 64,
+    max_items: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Return the bounded, model-safe evidence view for final synthesis."""
+    """Return all model-safe evidence unless a caller explicitly requests a limit."""
     manifest: list[dict[str, Any]] = []
     for item in extras.get("evidence_ledger") or []:
         if not isinstance(item, dict):
@@ -338,7 +338,7 @@ def evidence_manifest(
             "completeness": str(item.get("completeness") or "unknown"),
             "source_ids": list(item.get("source_ids") or []),
         })
-        if len(manifest) >= max_items:
+        if max_items is not None and len(manifest) >= max_items:
             break
     return manifest
 

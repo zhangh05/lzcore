@@ -90,6 +90,8 @@ def resolve_provider_config(llm_config: dict = None) -> dict:
     result["provider_type"] = provider_cfg.get("type", "disabled")
     result["base_url"] = provider_cfg.get("base_url", "")
     result["model"] = provider_cfg.get("model", "")
+    if "vision_enabled" in provider_cfg:
+        result["vision_enabled"] = provider_cfg["vision_enabled"]
 
     result["temperature"] = provider_cfg.get("temperature", 0.2)
     result["max_tokens"] = provider_cfg.get("max_tokens", 4096)

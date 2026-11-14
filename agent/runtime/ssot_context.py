@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from storage.message_store import MessageHistoryUnavailable
 
 _LOG = logging.getLogger(__name__)
 
@@ -124,8 +125,7 @@ def _build_history_block(
             f"  [{message['role']}] {message['content']}" for message in messages
         )
     except Exception:
-        _LOG.debug("conversation history block build failed", exc_info=True)
-        return ""
+        raise MessageHistoryUnavailable("session_history_unavailable") from None
 
 
 def _attachment_reference_terms(text: str) -> set[str]:
@@ -257,6 +257,8 @@ def _load_context_messages(
             for m in SessionMessageStore(
                 session_id=session_id, ws_id=ws_id
             ).get_messages():
+                if m.get("artifact_unavailable"):
+                    raise MessageHistoryUnavailable("session_history_unavailable")
                 metadata = (
                     m.get("metadata") if isinstance(m.get("metadata"), dict) else {}
                 )
@@ -268,11 +270,7 @@ def _load_context_messages(
                     continue
                 _append_context_message(persisted, persisted_seen, m)
         except Exception:
-            _LOG.debug(
-                "SessionMessageStore history read failed for %s",
-                session_id,
-                exc_info=True,
-            )
+            raise MessageHistoryUnavailable("session_history_unavailable") from None
 
     memory: list[dict[str, str]] = []
     memory_seen: set[str] = set()

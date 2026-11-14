@@ -8,7 +8,6 @@ share one observable policy path.
 
 from __future__ import annotations
 
-import re
 from typing import Any, Iterable
 
 from agent.llm.schemas import LLMRequest, LLMResponse
@@ -97,14 +96,8 @@ def inspect_response(
 
 def sanitize_provider_output(content: str) -> tuple[str, bool]:
     """Remove provider-only reasoning markup from user-visible content."""
-    text = content or ""
-    original = text
-    text = re.sub(r"<think\b[^>]*>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"<reasoning\b[^>]*>.*?</reasoning>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(
-        r"(?ism)^\s*(reasoning|思考过程)\s*[:：].*?(?=\n\s*(answer|回答|结论)\s*[:：]|\Z)",
-        "",
-        text,
-    )
-    text = re.sub(r"(?i)</?(think|reasoning)\b[^>]*>", "", text)
-    return text.strip(), text != original
+    from agent.llm.reasoning_filter import ReasoningFilter
+
+    projection = ReasoningFilter()
+    text = projection.feed(content or "", final=True)
+    return text.strip(), projection.stripped

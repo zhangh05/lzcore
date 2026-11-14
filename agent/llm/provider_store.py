@@ -32,7 +32,7 @@ PROVIDERS_DIR = Path(os.environ.get("LZCORE_CONFIG_DIR") or ROOT / "config").res
 ACTIVE_FILE = PROVIDERS_DIR / "_active"
 
 PROVIDER_EDIT_FIELDS = ("enabled", "base_url", "model", "temperature", "max_tokens",
-                        "safe_mode", "prompt_cache_enabled", "label", "top_p", "thinking", "provider_type")
+                        "safe_mode", "prompt_cache_enabled", "vision_enabled", "label", "top_p", "thinking", "provider_type")
 
 # ── Built-in provider presets ──
 

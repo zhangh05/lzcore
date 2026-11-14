@@ -61,6 +61,10 @@ def execute_command(name: str, args: str = "", session_id: Optional[str] = None,
     try:
         return handler(args, session_id, context)
     except Exception as e:
+        if clean_name in {"reset", "export"}:
+            # The slash tool converts exceptions to a failed ToolResult.
+            # Returning an error-shaped string would make its envelope succeed.
+            raise
         return f"Command /{clean_name} failed: {str(e)[:200]}"
 
 
@@ -292,9 +296,9 @@ def _cmd_agent(args: str, session_id: Optional[str], context: Optional[dict]) ->
 
 
 def _cmd_reset(args: str, session_id: Optional[str], context: Optional[dict]) -> str:
-    """Reset session: archive current history or create new session."""
+    """Archive the old session; subsequent work must use a new conversation."""
     try:
-        from storage.session_store import archive_session
+        from agent.app.service import get_default_agent_app
         sid = ""
         wid = ""
         if isinstance(session_id, str):
@@ -304,35 +308,20 @@ def _cmd_reset(args: str, session_id: Optional[str], context: Optional[dict]) ->
             wid = getattr(session_id, 'workspace_id', '') or ''
         if context:
             wid = context.get("workspace_id", wid) or ""
-        archive_session(sid, wid)
-
-        # Archive messages too
-        try:
-            from storage.message_store import get_message_store
-            ms = get_message_store()
-            if hasattr(ms, 'archive_all'):
-                ms.archive_all(sid)
-            elif hasattr(ms, 'clear_session'):
-                ms.clear_session(sid)
-        except Exception:
-            logger.debug("_cmd_reset: <pass>", exc_info=True)
+        get_default_agent_app().reset_session(sid, wid)
 
         return _format_command_result({
             "ok": True, "status": "ok", "command": "reset",
-            "result": f"Session {sid} reset. History archived.",
+            "result": f"Session {sid} archived. Create a new session to continue; history is retained for audit.",
             "errors": [], "warnings": [],
-            "metadata": {"session_id": sid},
+            "metadata": {"session_id": sid, "new_session_required": True},
         })
-    except Exception as e:
-        return _format_command_result({
-            "ok": False, "status": "error", "command": "reset",
-            "result": "", "errors": [str(e)[:200]],
-            "warnings": [], "metadata": {},
-        })
+    except Exception:
+        raise RuntimeError("session_reset_failed") from None
 
 
 def _cmd_export(args, session_id: Optional[str], context: Optional[dict]) -> str:
-    """Export session from REAL message store with fallback."""
+    """Export complete messages from the canonical, explicitly scoped store."""
     fmt = args.get('format', 'md') if isinstance(args, dict) else 'md'
     if isinstance(args, str) and args.strip():
         if args.strip().lower() in ('json', 'md', 'markdown'):
@@ -351,37 +340,21 @@ def _cmd_export(args, session_id: Optional[str], context: Optional[dict]) -> str
     if context:
         wid = context.get("workspace_id", wid) or ""
 
-    source = "empty"
-    messages = []
-    truncated = False
-
-    # Try message_store first
+    source = "message_store"
     try:
         from storage.message_store import get_message_store
-        ms = get_message_store()
-        raw = ms.get_recent(sid, limit=limit)
-        if raw:
-            messages = raw
-            source = "message_store"
-            if len(raw) >= limit:
-                truncated = True
+        from storage.ids import validate_workspace_id, validate_session_id
+        validate_workspace_id(wid)
+        validate_session_id(sid)
+        raw = get_message_store(session_id=sid, ws_id=wid).get_messages()
+        if any(message.get("artifact_unavailable") for message in raw):
+            raise OSError("session_history_unavailable")
     except Exception:
-        logger.debug("_cmd_export: <pass>", exc_info=True)
-
-    # Fallback to session_store
-    if not messages:
-        try:
-            from storage.session_store import get_session
-            sess = get_session(sid, wid)
-            if sess:
-                sess_messages = sess.get("messages") if isinstance(sess, dict) else None
-                if sess_messages:
-                    messages = sess_messages[:limit]
-                    source = "session_store"
-                    if len(sess_messages) > limit:
-                        truncated = True
-        except Exception:
-            logger.debug("_cmd_export: <pass>", exc_info=True)
+        raise RuntimeError("session_export_failed") from None
+    # A non-positive explicit limit means all messages; positive limits retain
+    # chronological order and report actual omission, not equality to the cap.
+    messages = raw[:limit] if limit > 0 else raw
+    truncated = len(messages) < len(raw)
 
     if not messages:
         return _format_command_result({

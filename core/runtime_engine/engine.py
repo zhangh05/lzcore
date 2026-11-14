@@ -70,6 +70,7 @@ class SSOTRuntimeEngine:
         self._emitter = emitter
         self._heartbeat_interval_s = max(0.5, float(heartbeat_interval_s))
         self._heartbeat_task: asyncio.Task | None = None
+        self._run_active = False
 
         self._audit = AuditLogger()
         self._trace = TraceCollector()
@@ -190,6 +191,9 @@ class SSOTRuntimeEngine:
                 Product authorization is resolved by the owning execution
                 service and cannot be widened by caller metadata.
         """
+        if self._run_active:
+            raise RuntimeError("engine_already_running")
+        self._run_active = True
         t_total = time.monotonic()
         metrics = MetricsCollector()
         budget = BudgetController(self._config)
@@ -223,9 +227,12 @@ class SSOTRuntimeEngine:
                 extras={},
             )
             return self._build_result(
-                fallback_ctx, {}, "运行时异常，当前请求未完成。请查看系统诊断或稍后重试。", errors, metrics, budget, t_total,
+                fallback_ctx, node_results, "运行时异常，当前请求未完成。请查看系统诊断或稍后重试。", errors, metrics, budget, t_total,
                 "critical",
             )
+        finally:
+            await self._stop_heartbeat()
+            self._run_active = False
 
     async def _run_internal(
         self,

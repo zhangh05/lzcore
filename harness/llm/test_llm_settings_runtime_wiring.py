@@ -175,18 +175,107 @@ class TestLLMProviderSettings:
         assert load_provider_config("minimax")["api_key"] == "sk-replacement-key"
 
 
-def test_macos_keychain_roundtrip_when_available():
-    import sys
-    if sys.platform != "darwin":
-        return
+def test_keychain_roundtrip_with_subprocess_stub(monkeypatch):
+    from types import SimpleNamespace
+    import storage.os_secret_store as secrets
+    values = {}
+
+    def run(argv, **kwargs):
+        if argv == ["security", "-i"]:
+            parts = kwargs["input"].split()
+            values[parts[parts.index("-a") + 1]] = bytes.fromhex(parts[-1]).decode()
+            return SimpleNamespace(returncode=0, stdout="")
+        account = argv[argv.index("-a") + 1]
+        if argv[1] == "find-generic-password":
+            return SimpleNamespace(returncode=0 if account in values else 44, stdout=values.get(account, ""))
+        values.pop(account, None)
+        return SimpleNamespace(returncode=0, stdout="")
+
+    monkeypatch.setattr(secrets.subprocess, "run", run)
     from storage.os_secret_store import _keychain_delete, _keychain_get, _keychain_set
     secret_id = "lzcore-test/keychain-roundtrip"
-    if not _keychain_set(secret_id, "sk-keychain-roundtrip"):
-        return
+    assert _keychain_set(secret_id, "sk-keychain-roundtrip")
     try:
         assert _keychain_get(secret_id) == "sk-keychain-roundtrip"
     finally:
         _keychain_delete(secret_id)
+    assert values == {}
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_explicit_custom_vision_survives_save_load_runtime_and_routing(monkeypatch, tmp_path, enabled):
+    from agent.llm import provider_store as store
+    from agent.llm.capabilities import supports_vision
+    from agent.llm.settings import resolve_effective_llm_config, resolve_provider_llm_config
+    from agent.llm.runtime import invoke_llm
+    from agent.llm.schemas import LLMMessage, LLMResponse
+
+    _isolate_provider_store(monkeypatch, tmp_path)
+    monkeypatch.setenv("LZCORE_LLM_ENABLED", "true")
+    cfg = store.create_provider_config({
+        "label": "Synthetic vision", "provider_type": "openai_compatible",
+        "base_url": "https://invalid.example/v1", "model": "opaque-vl-001",
+        "vision_enabled": enabled,
+    })
+    pid = cfg["provider"]
+    store.set_active_provider(pid)
+    store.save_provider_config(pid, {"vision_enabled": not enabled})
+    store.save_provider_config(pid, {"vision_enabled": enabled})
+    assert store.load_provider_config(pid)["vision_enabled"] is enabled
+    assert resolve_effective_llm_config()["vision_enabled"] is enabled
+    assert resolve_provider_llm_config(pid)["vision_enabled"] is enabled
+    assert supports_vision(resolve_effective_llm_config()) is enabled
+    assert not supports_vision({"model": "opaque-vl-001"})
+    calls = []
+    monkeypatch.setattr("agent.llm.provider.generate", lambda req, cfg: calls.append(cfg) or LLMResponse(content="image accepted"))
+    result = invoke_llm("assistant_chat", messages=[LLMMessage(role="user", content=[
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}},
+    ])])
+    assert bool(calls) is enabled
+    assert bool(result.error) is (not enabled)
+
+
+@pytest.mark.parametrize("value", ["true", 1, None, []])
+def test_non_boolean_vision_setting_is_rejected(monkeypatch, tmp_path, value):
+    from agent.llm import provider_store as store
+    _isolate_provider_store(monkeypatch, tmp_path)
+    with pytest.raises(ValueError, match="vision_enabled must be boolean"):
+        store.create_provider_config({
+            "label": "Synthetic", "provider_type": "openai_compatible",
+            "base_url": "https://invalid.example/v1", "model": "opaque-vl-001",
+            "vision_enabled": value,
+        })
+
+
+@pytest.mark.parametrize("first_is_vision", [True, False])
+def test_ssot_images_follow_compatible_candidates_through_fallback(monkeypatch, first_is_vision):
+    from agent.llm.schemas import LLMResponse
+    from agent.runtime.ssot_provider import _invoke_llm_for_ssot_runtime
+    candidates = [
+        {"provider": "first", "model": "opaque-1", "enabled": True, "vision_enabled": first_is_vision},
+        {"provider": "fallback", "model": "opaque-2", "enabled": True, "vision_enabled": True},
+        {"provider": "text-only", "model": "opaque-3", "enabled": True, "vision_enabled": False},
+    ]
+    monkeypatch.setattr("agent.llm.runtime.resolve_invocation_candidates", lambda *a: candidates)
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}
+    monkeypatch.setattr("agent.runtime.vision_inputs.build_vision_content", lambda *a: ([image], []))
+    monkeypatch.setattr("agent.runtime.token_tracker.record_llm_call", lambda *a, **kw: None)
+    attempted = []
+    def generate(req, cfg):
+        attempted.append(cfg["provider"])
+        assert req.messages[-1].content[-1] == image
+        assert req.model == cfg["model"] and cfg["vision_enabled"]
+        return (LLMResponse(error="synthetic permanent failure", metadata={"retryable": False})
+                if cfg["provider"] == "first" else LLMResponse(content="accepted"))
+    monkeypatch.setattr("agent.llm.provider.generate", generate)
+    result = _invoke_llm_for_ssot_runtime(system="test", user="inspect", workspace_id="vision-ws", extra={
+        "stream_scope": "planner", "evidence_parts": [
+            {"kind": "image", "evidence_id": "ev1", "reference": {"kind": "managed_file", "file_id": "file_fake"}},
+        ],
+    })
+    assert result.content == "accepted"
+    assert attempted == (["first", "fallback"] if first_is_vision else ["fallback"])
+    assert result.metadata["delivered_evidence_ids"] == ["ev1"]
 
 
 def test_provider_key_is_stored_in_the_system_secret_backend(monkeypatch, tmp_path):
