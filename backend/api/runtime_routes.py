@@ -255,7 +255,10 @@ def register_runtime_routes(app):
         if err:
             return err
         from core.runtime.retention import get_audit
-        audit = get_audit(ws_id, audit_id)
+        try:
+            audit = get_audit(ws_id, audit_id)
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid_audit_id"}), 400
         if not audit:
             return jsonify({"ok": False, "error": "audit not found"}), 404
         return jsonify(audit)
@@ -297,7 +300,10 @@ def register_runtime_routes(app):
         if err:
             return err
         from core.runtime.archive import get_archive_audit
-        audit = get_archive_audit(ws_id, audit_id)
+        try:
+            audit = get_archive_audit(ws_id, audit_id)
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid_audit_id"}), 400
         if not audit:
             return jsonify({"ok": False, "error": "audit not found"}), 404
         return jsonify(audit)
@@ -354,13 +360,20 @@ def register_runtime_routes(app):
         except Exception:
             return jsonify({"ok": False, "error": "session_lookup_failed"}), 500
 
+        from backend.core.auth import capture_stream_authority, stream_authority_allowed
+        authority = capture_stream_authority()
+
         def generate():
+            if not stream_authority_allowed(authority, ws_id):
+                return
             connected = {"session_id": sid, "workspace_id": ws_id}
             yield f"event: connected\ndata: {_json.dumps(connected, ensure_ascii=False)}\n\n"
             import time as _time
             deadline = _time.time() + 3600  # 1 hour max
             while _time.time() < deadline:
                 frame = subscribe(sid, timeout=30, workspace_id=ws_id)
+                if not stream_authority_allowed(authority, ws_id):
+                    return
                 if frame:
                     yield frame
                 else:

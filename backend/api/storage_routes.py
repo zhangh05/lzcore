@@ -318,16 +318,24 @@ def register_storage_routes(app) -> None:
         except ValueError:
             return jsonify({"ok": False, "error": "invalid_workspace_id"}), 400
 
+        from backend.core.auth import capture_stream_authority, stream_authority_allowed
+        authority = capture_stream_authority()
+
         def generate():
             import queue
             from storage.events import subscribe
             with subscribe(workspace_id) as subscriber:
+                if not stream_authority_allowed(authority, workspace_id):
+                    return
                 yield "event: connected\ndata: {}\n\n"
                 while True:
                     try:
-                        yield f"event: storage_changed\ndata: {subscriber.get(timeout=25)}\n\n"
+                        frame = f"event: storage_changed\ndata: {subscriber.get(timeout=25)}\n\n"
                     except queue.Empty:
-                        yield ": keepalive\n\n"
+                        frame = ": keepalive\n\n"
+                    if not stream_authority_allowed(authority, workspace_id):
+                        return
+                    yield frame
 
         return Response(
             stream_with_context(generate()),

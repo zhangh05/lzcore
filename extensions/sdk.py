@@ -62,26 +62,42 @@ class ExtensionDataStore:
         )
 
 
+class _ScopedSecretOperation:
+    """Keep the existing class API while instances also enforce their scope."""
+
+    def __init__(self, operation):
+        self.operation = operation
+
+    def __get__(self, instance, owner):
+        def execute(reference: str):
+            if not reference:
+                return "" if self.operation == "get" else False
+            from storage import secret_store
+            secret_store.check_extension_secret_reference(
+                reference,
+                workspace_id=instance.workspace_id if instance is not None else None,
+                extension_id=instance.extension_id if instance is not None else None,
+            )
+            return getattr(secret_store, self.operation + "_secret")(reference)
+        return execute
+
+
 class ExtensionSecretStore:
     """Encrypted secret references; plaintext never enters extension records."""
 
     def __init__(self, extension_id: str, workspace_id: str):
-        self.extension_id = extension_storage_key(extension_id)
-        self.workspace_id = _segment(workspace_id)
+        from storage.ids import validate_workspace_id
+        if not isinstance(extension_id, str) or not extension_id:
+            raise ValueError("invalid extension_id")
+        self.extension_id = extension_id
+        self.workspace_id = validate_workspace_id(workspace_id)
 
     def set(self, name: str, value: str) -> str:
-        from storage.secret_store import set_secret
-        return set_secret(f"extension/{self.extension_id}/{self.workspace_id}/{_segment(name)}", value)
+        from storage.secret_store import extension_secret_id, set_secret
+        return set_secret(extension_secret_id(self.workspace_id, self.extension_id, name), value)
 
-    @staticmethod
-    def get(reference: str) -> str:
-        from storage.secret_store import get_secret
-        return get_secret(reference)
-
-    @staticmethod
-    def delete(reference: str) -> bool:
-        from storage.secret_store import delete_secret
-        return delete_secret(reference)
+    get = _ScopedSecretOperation("get")
+    delete = _ScopedSecretOperation("delete")
 
 
 def run_migrations(

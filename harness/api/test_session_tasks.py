@@ -49,12 +49,14 @@ def test_aggregate_preserves_workspace_and_principal_scope(client):
 
 
 def test_aggregate_identity_rejects_foreign_workspace(client, monkeypatch):
-    from backend.core.identity import upsert_user
+    from backend.core.identity import upsert_user, get_user
 
     monkeypatch.setenv("LZCORE_IDENTITY_ENABLED", "true")
     upsert_user("scoped-user", "test-only-passphrase", "viewer", "tasks-ws", ["tasks-ws"])
     with client.session_transaction() as session:
-        session["lzcore_user"] = "scoped-user"
+        user = get_user("scoped-user")
+        session.update(lzcore_user="scoped-user", lzcore_user_id=user["user_id"],
+                       lzcore_auth_version=user["auth_version"], lzcore_identity_type="managed")
     assert client.get("/api/runtime/session-tasks?workspace_id=other-ws").status_code == 403
     assert client.get("/api/runtime/session-tasks?workspace_id=tasks-ws").status_code == 200
 

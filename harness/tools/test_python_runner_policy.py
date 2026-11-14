@@ -18,9 +18,10 @@ def _without_docker(monkeypatch):
     )
 
 
-def test_non_loopback_mode_requires_strong_runner(monkeypatch):
+def test_authenticated_mode_requires_strong_runner(monkeypatch):
     _without_docker(monkeypatch)
     monkeypatch.setenv("LZCORE_RUNTIME_BIND_HOST", "0.0.0.0")
+    monkeypatch.setenv("LZCORE_AUTH_ENABLED", "true")
     monkeypatch.delenv("LZCORE_TRUSTED_LOCAL_PYTHON_EXECUTION", raising=False)
     runner = select_python_runner()
     assert isinstance(runner, UnavailableStrongIsolationRunner)

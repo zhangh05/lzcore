@@ -21,6 +21,14 @@ from storage.records import runtime_record_file
 from storage.locking import FileLock
 
 _ROLES = {"owner", "admin", "developer", "operator", "viewer"}
+_RESERVED_USERNAMES = {"api-token", "anonymous", "system", "service", "platform", "local"}
+
+
+def validate_username(username: str) -> str:
+    value = str(username or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", value) or value.casefold() in _RESERVED_USERNAMES:
+        raise ValueError("invalid or reserved username")
+    return value
 
 
 def _bootstrap_storage_id(username: str) -> str:
@@ -109,7 +117,7 @@ def _verify_password(password: str, encoded: str) -> bool:
 
 
 def upsert_user(username: str, password: str, role: str = "viewer", organization_id: str = "default", workspace_ids: list[str] | None = None, *, home_workspace_id: str = "") -> dict[str, Any]:
-    username = username.strip()
+    username = validate_username(username)
     if not username or not password or role not in _ROLES:
         raise ValueError("username, password and a valid role are required")
     if workspace_ids is not None and not isinstance(workspace_ids, list):
@@ -129,6 +137,7 @@ def upsert_user(username: str, password: str, role: str = "viewer", organization
         users = [item for item in data["users"] if item.get("username") != username]
         record = {"user_id": str(previous.get("user_id") or "") if re.fullmatch(r"usr_[0-9a-f]{32}", str(previous.get("user_id") or "")) else f"usr_{uuid.uuid4().hex}", "username": username, "password_hash": _hash_password(password), "role": role, "organization_id": organization_id, "workspace_ids": allowed, "home_workspace_id": home_workspace_id or previous.get("home_workspace_id", ""), "enabled": previous.get("enabled", True) is not False}
         users.append(record)
+        record["auth_version"] = uuid.uuid4().hex
         data["users"] = users
         if existing_organization is None:
             data["organizations"].append({"organization_id": organization_id, "name": organization_id, "workspace_ids": list(allowed)})
@@ -142,6 +151,10 @@ def upsert_user(username: str, password: str, role: str = "viewer", organization
 
 
 def verify_user(username: str, password: str) -> dict[str, Any] | None:
+    try:
+        validate_username(username)
+    except ValueError:
+        return None
     data = _read()
     for user in data.get("users", []):
         if user.get("username") == username and user.get("enabled", True) is not False and _verify_password(password, str(user.get("password_hash", ""))):
@@ -209,6 +222,8 @@ def _project_user(data: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
     if has_role(role, "admin"):
         workspace_ids.update(organization.get("workspace_ids") or [])
     return {
+        "user_id": str(user.get("user_id") or ""),
+        "auth_version": str(user.get("auth_version") or "legacy"),
         "username": str(user.get("username") or ""),
         "role": role,
         "organization_id": organization_id,
@@ -242,7 +257,7 @@ def ensure_organization(organization_id: str, name: str, workspace_ids: list[str
 
 def update_user_access(username: str, role: str, organization_id: str, workspace_ids: list[str] | None, *, enabled: bool = True, password: str = "") -> dict[str, Any]:
     """Update permissions without forcing an unrelated password reset."""
-    username = str(username or "").strip()
+    username = validate_username(username)
     organization_id = _organization_id(organization_id)
     if not username or role not in _ROLES:
         raise ValueError("username and a valid role are required")
@@ -264,6 +279,7 @@ def update_user_access(username: str, role: str, organization_id: str, workspace
         if not set(allowed).issubset(set(organization.get("workspace_ids") or [])):
             raise ValueError("workspace is not assigned to the organization")
         user.update({"role": role, "organization_id": organization_id, "workspace_ids": allowed, "enabled": bool(enabled)})
+        user["auth_version"] = uuid.uuid4().hex
         if password:
             user["password_hash"] = _hash_password(password)
         memberships = [item for item in data["memberships"] if item.get("username") != username]
@@ -322,6 +338,7 @@ def upsert_membership(organization_id: str, username: str, role: str, workspace_
         data["memberships"] = memberships
         for user in data["users"]:
             if user.get("username") == username:
+                user["auth_version"] = uuid.uuid4().hex
                 user["organization_id"] = organization_id
                 user["role"] = role
                 user["workspace_ids"] = allowed

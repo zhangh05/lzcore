@@ -1,7 +1,5 @@
 """Organization, membership, and user administration endpoints."""
 
-import re
-
 from flask import jsonify, request
 
 from backend.core.identity import (
@@ -55,8 +53,11 @@ def _validated_user_fields(
     *,
     require_password: bool = True,
 ) -> tuple[list[str] | None, str | None]:
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", username):
-        return None, "invalid username"
+    from backend.core.identity import validate_username
+    try:
+        validate_username(username)
+    except ValueError as exc:
+        return None, str(exc)
     if require_password and not password:
         return None, "password is required"
     if not isinstance(workspace_ids, list):

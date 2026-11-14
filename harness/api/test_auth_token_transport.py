@@ -95,7 +95,7 @@ def test_auth_status_reports_token_gate_without_changing_existing_authentication
     monkeypatch.setenv("LZCORE_LOGIN_ENABLED", "true" if login else "false")
     monkeypatch.setenv("LZCORE_LOGIN_USERNAME", "browser-user")
     monkeypatch.setattr(auth, "_is_identity_enabled", lambda: identity)
-    monkeypatch.setattr("backend.core.identity.get_user", lambda _: {"enabled": True, "role": "viewer"})
+    monkeypatch.setattr("backend.core.identity.get_user", lambda _: {"user_id": "usr_" + "1" * 32, "enabled": True, "role": "viewer"})
     app = Flask(__name__)
     app.secret_key = "test-secret"
     auth.register_auth_middleware(app)
@@ -103,7 +103,8 @@ def test_auth_status_reports_token_gate_without_changing_existing_authentication
     client = app.test_client()
     if credential == "cookie":
         with client.session_transaction() as cookie:
-            cookie["lzcore_user"] = "browser-user"
+            cookie.update(lzcore_user="browser-user", lzcore_user_id="usr_" + "1" * 32,
+                          lzcore_auth_version="legacy", lzcore_identity_type="managed" if identity else "bootstrap")
     headers = {"Authorization": f"Bearer {credential}"} if credential in {"valid", "invalid"} else {}
     response = client.get("/api/auth/status", headers=headers)
     assert response.status_code == 200
