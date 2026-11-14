@@ -11,6 +11,7 @@ This module provides the common building blocks.
 """
 
 import json
+import re
 import time
 import uuid
 from contextlib import contextmanager
@@ -24,6 +25,18 @@ from storage.paths import workspace_root
 
 def workspace_dir(workspace_id: str) -> Path:
     return workspace_root(workspace_id)
+
+
+def audit_record_path(workspace_id: str, audit_id: str) -> Path:
+    """Validate the same single-segment audit identity on Windows and POSIX."""
+    if not isinstance(audit_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", audit_id):
+        raise ValueError("invalid_audit_id")
+    root = workspace_dir(workspace_id).resolve()
+    directory = root / "sys" / "audits"
+    path = directory / f"{audit_id}.json"
+    if not is_safe_path(directory, root) or not is_safe_path(path, directory):
+        raise ValueError("invalid_audit_path")
+    return path
 
 
 def is_safe_path(path: Path, ws_dir: Path) -> bool:

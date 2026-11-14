@@ -103,12 +103,12 @@ def test_identity_viewer_handler_ignores_all_draft_overrides(catalog, monkeypatc
     import backend.core.identity as identity
 
     monkeypatch.setenv("LZCORE_IDENTITY_ENABLED", "true")
-    monkeypatch.setattr(identity, "get_user", lambda _: {"enabled": True, "role": "viewer"})
+    monkeypatch.setattr(identity, "get_user", lambda _: {"user_id": "usr_" + "1" * 32, "enabled": True, "role": "viewer"})
     with catalog.app.test_request_context("/api/agent/llm/models", method="POST", json={
         "provider": "ollama", "provider_type": "anthropic_messages",
         "base_url": "https://untrusted.example", "api_key": "test-untrusted-key",
     }):
-        session.update(lzcore_user="test-viewer", lzcore_role="viewer")
+        session.update(lzcore_user="test-viewer", lzcore_role="viewer", lzcore_user_id="usr_" + "1" * 32, lzcore_auth_version="legacy", lzcore_identity_type="managed")
         assert handle_llm_models().json["ok"] is True
     req, _ = catalog.calls[0]
     assert req.full_url == "http://localhost:11434/v1/models"
@@ -120,9 +120,10 @@ def test_models_route_keeps_existing_identity_admin_rule(catalog, monkeypatch, r
     import backend.core.identity as identity
 
     monkeypatch.setenv("LZCORE_IDENTITY_ENABLED", "true")
-    monkeypatch.setattr(identity, "get_user", lambda _: {"enabled": True, "role": role})
+    monkeypatch.setattr(identity, "get_user", lambda _: {"user_id": "usr_" + "1" * 32, "enabled": True, "role": role})
     with catalog.client.session_transaction() as current:
-        current["lzcore_user"] = "test-user"
+        current.update(lzcore_user="test-user", lzcore_user_id="usr_" + "1" * 32,
+                       lzcore_auth_version="legacy", lzcore_identity_type="managed")
     response = catalog.client.post("/api/agent/llm/models", json={})
     assert response.status_code == expected_status
     if expected_status == 403:

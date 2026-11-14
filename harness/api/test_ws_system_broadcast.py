@@ -4,7 +4,16 @@ import json
 import threading
 import time
 
+import pytest
+
 from backend.ws import agent_ws
+
+
+@pytest.fixture(autouse=True)
+def synthetic_recipient(monkeypatch):
+    monkeypatch.setattr("backend.core.identity.get_user", lambda name: {
+        "username": name, "enabled": True, "role": "operator", "workspace_ids": ["ws-1"],
+    })
 
 
 class _SlowSocket:

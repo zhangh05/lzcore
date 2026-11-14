@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
+import re
 import shutil
 import tarfile
 import tempfile
@@ -24,6 +25,14 @@ class BackupError(RuntimeError):
 
 MAX_BACKUP_FILES = 100_000
 MAX_BACKUP_BYTES = 10 * 1024 * 1024 * 1024
+
+
+def _require_local_data_plane() -> None:
+    from storage.backend import backend_mode
+    from storage.object_store import object_store_mode
+
+    if backend_mode() not in {"filesystem", "file", "json"} or object_store_mode() != "local":
+        raise BackupError("filesystem backup cannot cover PostgreSQL/S3 data; use a data-plane backup tool")
 
 
 def backup_root() -> Path:
@@ -54,6 +63,7 @@ def _files(root: Path) -> list[Path]:
 
 
 def create_backup(*, retries: int = 3) -> dict[str, Any]:
+    _require_local_data_plane()
     root = _data_root()
     destination_root = backup_root()
     backup_id = f"backup-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{uuid.uuid4().hex[:8]}"
@@ -76,6 +86,10 @@ def _create_stable_snapshot(root: Path, destination: Path, backup_id: str) -> di
         if len(source_files) > MAX_BACKUP_FILES:
             raise BackupError("workspace contains too many files for one backup")
         source_names = [path.relative_to(root).as_posix() for path in source_files]
+        for name in source_names:
+            _safe_member(name)
+        if len({name.casefold() for name in source_names}) != len(source_names):
+            raise BackupError("backup paths collide on Windows")
         entries: list[dict[str, Any]] = []
         total_bytes = 0
         for source, name in zip(source_files, source_names):
@@ -101,6 +115,7 @@ def _create_stable_snapshot(root: Path, destination: Path, backup_id: str) -> di
         from agent import __version__
         manifest = {
             "format": 1,
+            "data_sources": {"records": "filesystem", "objects": "local"},
             "backup_id": backup_id,
             "created_at": now_iso(),
             "platform_version": __version__,
@@ -125,15 +140,23 @@ def _create_stable_snapshot(root: Path, destination: Path, backup_id: str) -> di
 
 
 def _safe_member(name: str) -> PurePosixPath:
-    if "\\" in name:
-        raise BackupError("backup paths must use forward slashes")
+    if not isinstance(name, str) or not name or "\\" in name:
+        raise BackupError("unsafe backup path: paths must use forward slashes")
     path = PurePosixPath(name)
-    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+    windows = PureWindowsPath(name)
+    if (path.is_absolute() or windows.drive or windows.root
+            or any(part in {"", ".", ".."} for part in name.split("/"))):
         raise BackupError(f"unsafe backup path: {name}")
+    for part in path.parts:
+        if (part.endswith((".", " ")) or any(ord(char) < 32 or char in '<>:"|?*' for char in part)
+                or PureWindowsPath(part).is_reserved()
+                or re.fullmatch(r"(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?", part, re.IGNORECASE)):
+            raise BackupError(f"unsafe backup path: {name}")
     return path
 
 
 def verify_backup(archive_path: str | Path) -> dict[str, Any]:
+    _require_local_data_plane()
     try:
         archive = tarfile.open(archive_path, "r:gz")
     except (OSError, tarfile.TarError) as exc:
@@ -143,12 +166,14 @@ def verify_backup(archive_path: str | Path) -> dict[str, Any]:
         if len(members) > MAX_BACKUP_FILES * 2 + 2 or sum(member.size for member in members if member.isfile()) > MAX_BACKUP_BYTES:
             raise BackupError("backup archive exceeds safety limits")
         names: set[str] = set()
+        windows_names: set[str] = set()
         for member in members:
             _safe_member(member.name)
-            if member.name in names:
+            if member.name.casefold() in windows_names:
                 raise BackupError(f"duplicate backup path: {member.name}")
             names.add(member.name)
-            if member.issym() or member.islnk() or member.isdev():
+            windows_names.add(member.name.casefold())
+            if not (member.isfile() or member.isdir()):
                 raise BackupError("backup links and device files are not allowed")
         try:
             manifest_stream = archive.extractfile("manifest.json")
@@ -157,6 +182,11 @@ def verify_backup(archive_path: str | Path) -> dict[str, Any]:
             raise BackupError("invalid backup manifest") from exc
         if not isinstance(manifest, dict) or manifest.get("format") != 1 or not isinstance(manifest.get("files"), list):
             raise BackupError("unsupported backup format")
+        if manifest.get("data_sources", {"records": "filesystem", "objects": "local"}) != {"records": "filesystem", "objects": "local"}:
+            raise BackupError("backup does not cover a supported local data plane")
+        backup_id = manifest.get("backup_id")
+        if not isinstance(backup_id, str) or not re.fullmatch(r"backup-[A-Za-z0-9_-]+", backup_id):
+            raise BackupError("invalid backup id")
         declared = {str(item.get("path")): item for item in manifest["files"] if isinstance(item, dict)}
         if len(declared) != len(manifest["files"]):
             raise BackupError("backup manifest contains duplicate or invalid file entries")
@@ -183,6 +213,7 @@ def verify_backup(archive_path: str | Path) -> dict[str, Any]:
 
 
 def restore_backup(archive_path: str | Path, *, confirmation: str) -> dict[str, Any]:
+    _require_local_data_plane()
     if confirmation != "RESTORE":
         raise BackupError("restore confirmation is required")
     archive_hash = _file_hash(Path(archive_path))
@@ -197,7 +228,9 @@ def restore_backup(archive_path: str | Path, *, confirmation: str) -> dict[str, 
         with tarfile.open(archive_path, "r:gz") as archive:
             for entry in manifest["files"]:
                 name = str(entry["path"])
-                target = data.joinpath(*PurePosixPath(name).parts)
+                target = data.joinpath(*_safe_member(name).parts)
+                if target.resolve() == data.resolve() or not target.resolve().is_relative_to(data.resolve()):
+                    raise BackupError("restore target escapes staging directory")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 stream = archive.extractfile(f"data/{name}")
                 with target.open("wb") as output_stream:

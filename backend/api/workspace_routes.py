@@ -255,12 +255,20 @@ def register_workspace_routes(app):
             ws_id = validate_workspace_id(ws_id)
         except ValueError:
             return jsonify({"ok": False, "error": "invalid_workspace_id"}), 400
+        from storage.paths import workspace_catalog_root
+        is_new = not workspace_catalog_root(ws_id).exists()
         ensure_workspace(ws_id)
         from flask import session
         from backend.core.identity import identity_enabled
         organization_id = str(session.get("lzcore_org") or data.get("organization_id") or "default")
         from storage.workspace_store import update_workspace_state
-        state = update_workspace_state(ws_id, {"organization_id": organization_id})
+        patch = {"organization_id": organization_id}
+        if is_new and identity_enabled():
+            from backend.core.auth import authenticated_request_context
+            context = authenticated_request_context()
+            if context:
+                patch.update(owner_user_id=context["user_id"], owner_username=context["username"])
+        state = update_workspace_state(ws_id, patch)
         if identity_enabled():
             from backend.core.identity import assign_workspace
             try:
@@ -305,6 +313,10 @@ def register_workspace_routes(app):
             return err
         if not _confirmed():
             return jsonify({"ok": False, "error": "confirm_required"}), 400
+        from backend.core.auth import authorize_workspace_control
+        denied = authorize_workspace_control([ws_id])
+        if denied:
+            return denied
         from storage.workspace_store import delete_workspace
         return jsonify(delete_workspace(ws_id))
 
@@ -316,6 +328,10 @@ def register_workspace_routes(app):
             return jsonify({"ok": False, "error": "workspace_ids must be a non-empty list"}), 400
         if not _confirmed():
             return jsonify({"ok": False, "error": "confirm_required"}), 400
+        from backend.core.auth import authorize_workspace_control
+        denied = authorize_workspace_control(ws_ids)
+        if denied:
+            return denied
         from storage.workspace_store import batch_delete_workspaces
         return jsonify(batch_delete_workspaces(ws_ids))
 
@@ -332,6 +348,10 @@ def register_workspace_routes(app):
         new_id_validated, err2 = _validated_ws_id(new_id)
         if err2:
             return err2
+        from backend.core.auth import authorize_workspace_control
+        denied = authorize_workspace_control([ws_id])
+        if denied:
+            return denied
         return jsonify(rename_workspace(ws_id, new_id_validated))
 
     # ── Runs ──

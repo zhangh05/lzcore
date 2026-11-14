@@ -335,7 +335,8 @@ def get_audits(workspace_id: str = "default") -> list:
 
 def get_audit(workspace_id: str, audit_id: str) -> dict:
     """Get a specific retention audit record."""
-    audit_path = workspace_dir(workspace_id) / "sys" / "audits" / f"{audit_id}.json"
+    from core.runtime.lifecycle_base import audit_record_path
+    audit_path = audit_record_path(workspace_id, audit_id)
     if audit_path.is_file():
         try:
             return json.loads(audit_path.read_text(encoding="utf-8"))

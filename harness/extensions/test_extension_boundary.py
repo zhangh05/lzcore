@@ -64,7 +64,7 @@ def test_discovery_checks_collisions_across_roots(plugins, tmp_path):
         ExtensionRegistry((builtin, plugins)).discover()
 
 
-def test_legacy_storage_and_secret_keys_remain_unchanged(monkeypatch):
+def test_legacy_data_key_is_unchanged_and_secret_identity_is_lossless(monkeypatch):
     from extensions.sdk import ExtensionDataStore, ExtensionSecretStore
     from storage import secret_store
     captured = []
@@ -73,7 +73,8 @@ def test_legacy_storage_and_secret_keys_remain_unchanged(monkeypatch):
     assert ExtensionDataStore("network.operations", "test_ws").namespace == "network_operations"
     secrets = ExtensionSecretStore("network.operations", "test_ws")
     assert secrets.set("sample", "synthetic value") == "reference"
-    assert captured == [("extension/network_operations/test_ws/sample", "synthetic value")]
+    from storage.secret_store import extension_secret_id
+    assert captured == [(extension_secret_id("test_ws", "network.operations", "sample"), "synthetic value")]
 
 
 @pytest.mark.parametrize("upgrade", [False, True])

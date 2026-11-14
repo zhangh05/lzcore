@@ -432,7 +432,7 @@ def _now_iso() -> str:
 def _update_workspace_catalog(ws_id: str, patch: dict) -> None:
     """Keep shared workspace metadata out of any one user's data directory."""
     shared = {key: value for key, value in (patch or {}).items()
-              if key in {"organization_id", "owner_username", "name"}}
+              if key in {"organization_id", "owner_username", "owner_user_id", "name"}}
     if not shared:
         return
     path = workspace_catalog_root(ws_id) / "sys" / "state.json"

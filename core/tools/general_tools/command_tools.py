@@ -112,6 +112,16 @@ def handle_command_exec(inv: ToolInvocation) -> dict:
 
 
 def _managed_execution(inv: ToolInvocation, handler) -> dict:
+    from core.tools.python_runner import _requires_strong_isolation
+    from core.tools.project_execution import DockerProjectEnvironment, environment_for
+    ws = _caller_workspace(inv)
+    environment = environment_for(ws)
+    if _requires_strong_isolation() and (
+        handler is not _handle_python_exec or environment is not None
+    ):
+        if not (isinstance(environment, DockerProjectEnvironment)
+                and environment.started and environment.image_id and not environment.closed):
+            return _error_inv(inv, "execution_requires_strong_isolation: active Docker project binding required; host fallback is forbidden")
     from storage.project_changes import workspace_files_lock
     with workspace_files_lock(_caller_workspace(inv)):
         from storage.file_mutations import managed_file_mutation, FileSettlementError

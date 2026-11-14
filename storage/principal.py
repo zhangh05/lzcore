@@ -19,6 +19,17 @@ _principal: contextvars.ContextVar[str] = contextvars.ContextVar(
 )
 
 
+class VerifiedStoragePrincipal(str):
+    """Keep the storage ID verified at authentication across async contexts."""
+
+    def __new__(cls, username: str, storage_id: str):
+        import re
+        if not re.fullmatch(r"usr_[0-9a-f]{32}", storage_id):
+            raise ValueError("invalid user storage id")
+        value = super().__new__(cls, str(username).strip())
+        value.storage_id = storage_id
+        return value
+
 class ContextThreadPoolExecutor(ThreadPoolExecutor):
     """Propagate invocation context on every submit, including map's tasks.
 
@@ -32,10 +43,12 @@ class ContextThreadPoolExecutor(ThreadPoolExecutor):
 
 
 def current_storage_principal() -> str:
-    return _principal.get().strip()
+    return _principal.get()
 
 
 def set_storage_principal(username: str):
+    if isinstance(username, VerifiedStoragePrincipal):
+        return _principal.set(username)
     return _principal.set(str(username or "").strip())
 
 
@@ -66,7 +79,12 @@ def principal_storage_key(username: str) -> str:
     bootstrap administrator has a deterministic system ID until it is managed
     by that adapter.
     """
-    from backend.core.identity import resolve_user_storage_id
+    if isinstance(username, VerifiedStoragePrincipal):
+        return username.storage_id
+    from backend.core.identity import _bootstrap_storage_id, resolve_user_storage_id
+
+    if username == "api-token":
+        return _bootstrap_storage_id("service/api-token")
 
     return resolve_user_storage_id(username)
 

@@ -117,7 +117,7 @@ def test_context_explicitly_disables_downloads(monkeypatch):
         pass
     async def new_context(**kwargs):
         options.update(kwargs)
-        return SimpleNamespace(route=route)
+        return SimpleNamespace(route=route, route_web_socket=route)
     async def launch(**kwargs):
         return SimpleNamespace(new_context=new_context)
     async def new_page(idx):
@@ -144,6 +144,8 @@ def test_parallel_scopes_initialize_playwright_only_once(monkeypatch):
         async def new_page(self):
             return Page()
         async def route(self, *args):
+            pass
+        async def route_web_socket(self, *args):
             pass
     class Browser:
         async def new_context(self, **kwargs):

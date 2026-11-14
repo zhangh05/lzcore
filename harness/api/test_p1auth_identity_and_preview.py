@@ -40,7 +40,7 @@ def identity_app(monkeypatch):
     monkeypatch.setenv("LZCORE_SESSION_SECRET", "synthetic-secret")
     monkeypatch.setattr(routes, "ensure_organization", lambda *_: None)
     monkeypatch.setattr("storage.workspace_store.list_workspace_ids", lambda: ["default"])
-    user = {"username": "viewer", "user_id": "usr_synthetic", "role": "viewer", "enabled": True,
+    user = {"username": "viewer", "user_id": "usr_" + "1" * 32, "role": "viewer", "enabled": True,
             "organization_id": "default", "workspace_ids": ["default"]}
     monkeypatch.setattr(identity, "get_user", lambda name: user if name == "viewer" else None)
     monkeypatch.setattr(routes, "list_users", lambda: [user])
@@ -108,7 +108,8 @@ def test_viewer_provider_get_cannot_reconstruct_eight_character_secret(identity_
     identity_app.add_url_rule("/api/agent/llm/providers/<provider_id>", view_func=llm_api.handle_provider_get)
     client = identity_app.test_client()
     with client.session_transaction() as cookie:
-        cookie["lzcore_user"] = "viewer"
+        cookie.update(lzcore_user="viewer", lzcore_user_id="usr_" + "1" * 32,
+                      lzcore_auth_version="legacy", lzcore_identity_type="managed")
     response = client.get("/api/agent/llm/providers/synthetic")
     assert response.status_code == 200
     assert response.json["config"]["api_key"] is None

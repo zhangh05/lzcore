@@ -94,7 +94,7 @@ def test_extension_routes_enforce_role_and_lifecycle(monkeypatch, tmp_path):
 
     admin = app.test_client()
     admin.post("/api/auth/login", json={"username": "admin", "password": "password"}, headers=origin)
-    assert admin.get("/api/admin/backups", headers=origin).status_code == 200
+    assert admin.get("/api/admin/backups", headers=origin).status_code == 403
     ledger_status = admin.get("/api/admin/operation-ledger?workspace_id=default", headers=origin)
     assert ledger_status.status_code == 200
     assert ledger_status.get_json()["ok"] is True
@@ -104,11 +104,14 @@ def test_extension_routes_enforce_role_and_lifecycle(monkeypatch, tmp_path):
     ).status_code == 400
     assert admin.get("/api/extensions/repository", headers=origin).status_code == 403
     assert admin.post("/api/extensions/repository/publish", headers=origin).status_code == 403
-    assert admin.post("/api/extensions/network.operations/disable", headers=origin).status_code == 200
-    blocked = admin.get("/api/extensions/network.operations/devices?workspace_id=default", headers=origin)
-    assert blocked.status_code == 409
-    assert admin.post("/api/extensions/network.operations/enable", headers=origin).status_code == 200
+    assert admin.post("/api/extensions/network.operations/disable", headers=origin).status_code == 403
+    assert admin.post("/api/extensions/network.operations/enable", headers=origin).status_code == 403
 
     owner = app.test_client()
     owner.post("/api/auth/login", json={"username": "owner", "password": "password"}, headers=origin)
+    assert owner.get("/api/admin/backups", headers=origin).status_code == 200
+    assert owner.post("/api/extensions/network.operations/disable", headers=origin).status_code == 200
+    blocked = owner.get("/api/extensions/network.operations/devices?workspace_id=default", headers=origin)
+    assert blocked.status_code == 409
+    assert owner.post("/api/extensions/network.operations/enable", headers=origin).status_code == 200
     assert owner.get("/api/extensions/repository", headers=origin).status_code == 200
