@@ -1312,7 +1312,9 @@ def to_tool_specs() -> list[tuple[ToolSpec, Callable[[ToolInvocation], dict]]]:
     out: list[tuple[ToolSpec, Callable[[ToolInvocation], dict]]] = []
     for entry in CANONICAL_REGISTRY.values():
         from core.tools.tool_namespace import get_namespace_entry
+        from core.tools.manifest_registry import MANIFESTS
         ns_entry = get_namespace_entry(entry.canonical_tool_id)
+        manifest = MANIFESTS[entry.canonical_tool_id]
         spec = ToolSpec(
             tool_id=entry.canonical_tool_id,
             handler_id=entry.canonical_tool_id,
@@ -1324,6 +1326,9 @@ def to_tool_specs() -> list[tuple[ToolSpec, Callable[[ToolInvocation], dict]]]:
             enabled=entry.enabled,
             callable_by_llm=entry.callable_by_llm,
             permission_action=entry.permission_action,
+            timeout_seconds=manifest.timeout_seconds,
+            reads_artifact=manifest.reads_artifact,
+            writes_artifact=manifest.writes_artifact,
             metadata={**ns_entry.metadata(), **_execution_metadata(entry)},
         )
         out.append((spec, entry.handler))

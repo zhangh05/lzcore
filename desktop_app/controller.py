@@ -15,7 +15,7 @@ from pathlib import Path
 
 from desktop_app import backup
 from desktop_app.environment import DATA_SCHEMA
-from desktop_app.updates import DesktopUpdater
+from desktop_app.updates import DesktopUpdater, cleanup_verified_updates
 from desktop_app.window import DesktopState, NativeWindow, apply_theme, autostart_enabled, set_autostart, system_theme
 
 log = logging.getLogger("lzcore.desktop")
@@ -103,6 +103,16 @@ class DesktopController:
         window.events.resized += self.native.schedule_save
         window.events.moved += self.native.schedule_save
         window.events.closing += self.on_closing
+        window.events.loaded += self.on_loaded
+
+    def on_loaded(self):
+        # This event is reached after the local health gate and page load.
+        # An unexpected navigation must not confirm a successful update.
+        try:
+            if self.window.evaluate_js("window.location.origin") == self.origin:
+                cleanup_verified_updates(self.paths.runtime, self.version)
+        except Exception:
+            log.info("Update cleanup deferred until the next successful startup")
 
     def emit(self, action, **details):
         if not self.window:
