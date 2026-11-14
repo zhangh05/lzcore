@@ -20,6 +20,55 @@ REPOSITORY = "zhangh05/lzcore"
 MAX_PACKAGE_BYTES = 1024 * 1024 * 1024
 
 
+def cleanup_verified_updates(runtime: Path, version: str):
+    """Reclaim only transactions confirmed by an actual target-version start.
+
+    Keep one verified program snapshot. Unknown/active transactions are never
+    candidates; failed deletions remain retryable on the next startup.
+    """
+    if (runtime / "updates").is_symlink() or (runtime / "program-backups").is_symlink():
+        return
+    verified = []
+    for directory in (runtime / "updates").glob("*"):
+        try:
+            if directory.is_symlink() or not directory.is_dir():
+                continue
+            result_path = directory / "result.json"
+            outcome = json.loads(result_path.read_text(encoding="utf-8-sig"))
+            transaction = json.loads((directory / "transaction.json").read_text(encoding="utf-8-sig"))
+            if not isinstance(outcome, dict) or not isinstance(transaction, dict):
+                continue
+            if outcome.get("ok") is not True or transaction.get("phase") != "completed":
+                continue
+            if outcome.get("version") == version:
+                outcome["startup_verified"] = True
+                atomic_write_json(result_path, outcome)
+            if outcome.get("startup_verified") is not True:
+                continue
+            backup = Path(transaction["backup"])
+            if backup.is_symlink() or backup.parent.resolve() != (runtime / "program-backups").resolve() or not re.fullmatch(r"[0-9a-f]{32}", backup.name):
+                continue
+            verified.append((result_path.stat().st_mtime_ns, directory, backup))
+            # No plan-provided deletion paths: restrict temporary cleanup to
+            # the transaction's own directory and known package suffixes.
+            for item in directory.iterdir():
+                if item.is_symlink():
+                    continue
+                if item.name == "unpacked" and item.is_dir():
+                    shutil.rmtree(item)
+                elif item.is_file() and item.suffix.lower() in {".zip", ".exe"}:
+                    item.unlink()
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    for _, directory, backup in sorted(verified, reverse=True)[1:]:
+        try:
+            if backup.exists():
+                shutil.rmtree(backup)
+            shutil.rmtree(directory)
+        except OSError:
+            continue
+
+
 def version_tuple(value):
     match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", str(value))
     if not match:
@@ -166,7 +215,7 @@ class DesktopUpdater:
             with self.lock:
                 self.value = {"status": "error", "message": "更新包下载或校验失败，请重新检查更新。"}
             try:
-                target.unlink(missing_ok=True)
+                shutil.rmtree(directory)
             except OSError:
                 pass
 

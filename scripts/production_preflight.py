@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,13 +19,47 @@ def _truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def check_secret_backend() -> list[str]:
+    # Probe only a new, random entry, never an existing user's credential.
+    from storage.secret_store import _fernet
+    try:
+        cipher = _fernet()
+        probe = b"lzcore-preflight"
+        if cipher.decrypt(cipher.encrypt(probe)) != probe:
+            raise ValueError("credential roundtrip failed")
+        return []
+    except Exception:
+        pass
+    from storage import os_secret_store as store
+    probe_id = "preflight-" + uuid.uuid4().hex
+    probe_value = uuid.uuid4().hex
+    usable = False
+    cleaned = True
+    try:
+        if store.backend_name() not in {"keychain", "dpapi"}:
+            return ["production requires a usable persistent credential backend"]
+        cleaned = False
+        usable = bool(store.set_os_secret(probe_id, probe_value)) and store.get_os_secret(probe_id) == probe_value
+    except Exception:
+        usable = False
+    finally:
+        if not cleaned:
+            try:
+                cleaned = bool(store.delete_os_secret(probe_id))
+            except Exception:
+                cleaned = False
+    if not cleaned:
+        return ["credential backend probe cleanup failed"]
+    return [] if usable else ["production requires a usable persistent credential backend"]
+
+
 def check_configuration() -> list[str]:
     from backend.core.auth import _get_api_token, _get_login_password, _secret_value
     from jobs.queue import queue_mode
     from storage.backend import backend_mode, validate_backend_configuration
     from storage.object_store import object_store_mode
 
-    errors = list(validate_backend_configuration())
+    errors = list(validate_backend_configuration()) + check_secret_backend()
     if backend_mode() not in {"postgres", "postgresql"}:
         errors.append("production requires PostgreSQL record storage")
     if object_store_mode() != "s3":

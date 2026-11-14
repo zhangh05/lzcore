@@ -67,3 +67,56 @@ def test_portable_update_retains_data_and_rolls_back(tmp_path, failure):
     if not failure:
         assert json.loads((data / '.runtime/desktop.json').read_text(encoding='utf-8-sig'))['previous_version'] == '3.2.8'
         assert next((data / '.runtime/program-backups').glob('*/_internal/payload.txt')).read_text() == 'old'
+
+
+@pytest.mark.parametrize('interruption', ['runtime_removed', 'runtime_installed', 'exe_removed', 'exe_installed', 'completed'])
+def test_recovery_from_persisted_transaction_without_program_entry(tmp_path, interruption):
+    """A fresh helper recovers from disk, with no original updater process."""
+    app = tmp_path / 'program'; app.mkdir()
+    data = tmp_path / 'data'; data.mkdir()
+    updates = data / '.runtime/updates' / ('p1desk-' + interruption); updates.mkdir(parents=True)
+    backup = data / '.runtime/program-backups' / ('a' * 32); backup.mkdir(parents=True)
+    (backup / '_internal').mkdir()
+    (backup / '_internal/payload.txt').write_text('old-runtime')
+    (backup / 'build-info.json').write_text(json.dumps({'version': '1.0.0', 'data_schema': 1}))
+    shutil.copyfile(Path(os.environ['SystemRoot']) / 'System32/whoami.exe', backup / 'lzcore.exe')
+    shutil.copytree(backup, app, dirs_exist_ok=True)
+    if interruption in {'runtime_removed', 'exe_removed'}:
+        shutil.rmtree(app / '_internal')
+    else:
+        (app / '_internal/payload.txt').write_text('new-runtime')
+    if interruption == 'exe_removed':
+        (app / 'lzcore.exe').unlink()
+    elif interruption in {'exe_installed', 'completed'}:
+        with (app / 'lzcore.exe').open('ab') as handle:
+            handle.write(b'p1desk-new-version')
+    (data / 'history.json').write_text('keep-user-data')
+    plan = updates / 'plan.json'
+    plan.write_text(json.dumps({'app': str(app), 'data': str(data), 'package': str(updates / 'absent.zip'),
+        'mode': 'portable', 'data_schema': 1, 'parent_pid': 2147483647,
+        'version': '1.0.1', 'previous_version': '1.0.0'}), encoding='utf-8')
+    (updates / 'transaction.json').write_text(json.dumps({'app': str(app), 'backup': str(backup),
+        'phase': 'completed' if interruption == 'completed' else 'prepared', 'version': '1.0.1',
+        'names': ['_internal', 'lzcore.exe', 'build-info.json'],
+        'originals': ['_internal', 'lzcore.exe', 'build-info.json']}), encoding='utf-8')
+    helper = updates / 'apply.ps1'
+    shutil.copyfile(Path(__file__).parents[2] / 'scripts/windows_update.ps1', helper)
+    try:
+        for _ in range(2):  # recovery is repeatable after another helper restart
+            result = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                '-File', str(helper), '-Plan', str(plan), '-Recover'], capture_output=True, timeout=30)
+            assert result.returncode == 0, result.stderr.decode(errors='replace')
+        assert (data / 'history.json').read_text() == 'keep-user-data'
+        expected = 'new-runtime' if interruption == 'completed' else 'old-runtime'
+        assert (app / '_internal/payload.txt').read_text() == expected
+        expected_exe = (backup / 'lzcore.exe').read_bytes()
+        if interruption == 'completed':
+            expected_exe += b'p1desk-new-version'
+        assert (app / 'lzcore.exe').read_bytes() == expected_exe
+        phase = json.loads((updates / 'transaction.json').read_text(encoding='utf-8-sig'))['phase']
+        assert phase == ('completed' if interruption == 'completed' else 'rolled_back')
+    finally:
+        # Only the test's unique RunOnce value is removed.
+        name = '!LZCoreRecovery-p1desk-' + interruption
+        subprocess.run(['powershell.exe', '-NoProfile', '-Command',
+            "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce' -Name '" + name + "' -ErrorAction SilentlyContinue"], capture_output=True, timeout=15)

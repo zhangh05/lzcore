@@ -13,6 +13,8 @@ import urllib.request
 from typing import Any
 
 from storage.time_utils import now_iso
+from storage.atomic_io import atomic_write_json
+from storage.locking import FileLock
 
 
 class ReleaseError(RuntimeError):
@@ -35,7 +37,7 @@ def _version(value: str) -> str:
 
 
 def _ignore(_directory: str, names: list[str]) -> set[str]:
-    excluded = {".git", ".venv", "node_modules", "workspaces", "logs", "reports", "data", ".runtime", "__pycache__"}
+    excluded = {".git", ".venv", "node_modules", "workspaces", "logs", "reports", "data", ".runtime", "__pycache__", "config", "providers", "credentials.yaml", "secrets.yaml", "llm.yaml", "local_browser_token"}
     return {name for name in names if name in excluded or name.startswith(".") or name.endswith(".pyc") or Path(name).suffix.lower() in {".pem", ".key", ".p12", ".pfx"}}
 
 
@@ -79,6 +81,8 @@ def stage_release(source: str | Path, version: str, *, root: str | Path | None =
     payload = stage / version
     try:
         shutil.copytree(source_path, payload, ignore=_ignore)
+        if any(path.name in {"config", "providers", "credentials.yaml", "secrets.yaml", "llm.yaml", "local_browser_token"} for path in payload.rglob("*")):
+            raise ReleaseError("release payload contains runtime configuration")
         manifest = {"version": version, "created_at": now_iso(), "sha256": _hash_tree(payload)}
         (payload / "release.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         os.replace(payload, target)
@@ -98,35 +102,70 @@ def _replace_link(link: Path, target: str) -> None:
     os.replace(temporary, link)
 
 
-def activate_release(version: str, *, root: str | Path | None = None) -> dict[str, Any]:
+def _restore_links(base: Path, state: dict) -> None:
+    for name in ("current", "previous"):
+        target = state[name]
+        if target:
+            _replace_link(base / name, target)
+        else:
+            (base / name).unlink(missing_ok=True)
+
+
+def _recover_switch(base: Path) -> None:
+    journal = base / "switch.json"
+    if journal.exists():
+        state = json.loads(journal.read_text(encoding="utf-8"))
+        _restore_links(base, state)
+        journal.unlink()
+
+
+def _switch(base: Path, target: str, previous: str, health_url: str = "", timeout: float = 10) -> dict | None:
+    journal = base / "switch.json"
+    frozen = {name: _link_target(base / name) for name in ("current", "previous")}
+    atomic_write_json(journal, frozen)
+    health = None
+    try:
+        if previous:
+            _replace_link(base / "previous", previous)
+        _replace_link(base / "current", target)
+        if health_url:
+            health = verify_health(health_url, timeout)
+    except Exception:
+        _restore_links(base, frozen)
+        journal.unlink()
+        raise
+    journal.unlink()
+    return health
+
+
+def activate_release(version: str, *, root: str | Path | None = None, health_url: str = "", timeout: float = 10) -> dict[str, Any]:
     version = _version(version)
     base = release_root(root)
-    target = base / "releases" / version
-    if not (target / "release.json").is_file():
-        raise ReleaseError("release slot not found")
-    current = base / "current"
-    previous = base / "previous"
-    old_target = _link_target(current)
-    if old_target:
-        _replace_link(previous, old_target)
-    relative = os.path.relpath(target, base)
-    _replace_link(current, relative)
-    return {"ok": True, "version": version, "current": str(current), "previous": old_target, "activated_at": now_iso()}
+    with FileLock(base / "switch.lock"):
+        _recover_switch(base)
+        target = base / "releases" / version
+        if not (target / "release.json").is_file():
+            raise ReleaseError("release slot not found")
+        old_target = _link_target(base / "current")
+        relative = os.path.relpath(target, base)
+        health = None
+        if old_target != relative:
+            health = _switch(base, relative, old_target, health_url, timeout)
+        elif health_url:
+            health = verify_health(health_url, timeout)
+        return {"ok": True, "version": version, "current": str(base / "current"), "previous": _link_target(base / "previous"), "activated_at": now_iso(), **({"health": health} if health_url else {})}
 
 
 def rollback_release(*, root: str | Path | None = None) -> dict[str, Any]:
     base = release_root(root)
-    current = base / "current"
-    previous = base / "previous"
-    target = _link_target(previous)
-    if not target or not (base / target / "release.json").is_file():
-        raise ReleaseError("previous release slot not found")
-    old_current = _link_target(current)
-    _replace_link(current, target)
-    if old_current:
-        _replace_link(previous, old_current)
-    manifest = json.loads((base / target / "release.json").read_text(encoding="utf-8"))
-    return {"ok": True, "version": manifest["version"], "current": str(current), "rolled_back_at": now_iso()}
+    with FileLock(base / "switch.lock"):
+        _recover_switch(base)
+        target = _link_target(base / "previous")
+        if not target or not (base / target / "release.json").is_file():
+            raise ReleaseError("previous release slot not found")
+        manifest = json.loads((base / target / "release.json").read_text(encoding="utf-8"))
+        _switch(base, target, _link_target(base / "current"))
+        return {"ok": True, "version": manifest["version"], "current": str(base / "current"), "rolled_back_at": now_iso()}
 
 
 def verify_health(url: str, timeout: float = 10.0) -> dict[str, Any]:

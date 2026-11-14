@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from deployment.slots import ReleaseError, activate_release, rollback_release, stage_release, verify_health
+from deployment.slots import ReleaseError, activate_release, rollback_release, stage_release
 
 
 def main() -> int:
@@ -32,13 +32,7 @@ def main() -> int:
         if args.command == "stage":
             result = stage_release(args.source, args.version, root=args.release_root)
         elif args.command == "activate":
-            result = activate_release(args.version, root=args.release_root)
-            if args.health_url:
-                try:
-                    result["health"] = verify_health(args.health_url, args.timeout)
-                except ReleaseError:
-                    rollback_release(root=args.release_root)
-                    raise
+            result = activate_release(args.version, root=args.release_root, health_url=args.health_url or "", timeout=args.timeout)
         else:
             result = rollback_release(root=args.release_root)
     except ReleaseError as exc:
