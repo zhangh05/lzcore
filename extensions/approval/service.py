@@ -20,6 +20,47 @@ from extensions.approval.private_records import (
 from storage.locking import FileLock
 
 EXTENSION_ID = "approval"
+# Identifies this process; a "resuming" claim records it so a later process
+# can tell a crashed owner from one that is still running.
+_PROCESS_INSTANCE = uuid.uuid4().hex
+
+
+def _resume_owner() -> dict[str, Any]:
+    import os
+    import socket
+    return {"host": socket.gethostname(), "pid": os.getpid(), "instance": _PROCESS_INSTANCE}
+
+
+def _owner_lost(owner: Any) -> bool:
+    """True only when the owner is provably gone (same host, dead or reused pid)."""
+    import os
+    import socket
+    if not isinstance(owner, dict) or not owner.get("pid"):
+        return True  # claims from before ownership tracking have no live owner
+    if owner.get("host") != socket.gethostname():
+        return False  # cannot prove another host's worker is dead
+    if owner.get("instance") == _PROCESS_INSTANCE:
+        return False
+    try:
+        os.kill(int(owner["pid"]), 0)
+    except ProcessLookupError:
+        return True
+    except (PermissionError, OSError, ValueError, TypeError):
+        return False
+    # Same pid but a different process instance: the pid was reused, unless the
+    # recorded instance is still alive in that pid (multi-worker servers).
+    return int(owner["pid"]) == os.getpid()
+
+
+def _reconcile_orphan_resume(checkpoint: dict[str, Any]) -> bool:
+    """Move a crashed "resuming" claim to resuming_unknown; never replay it."""
+    if checkpoint.get("status") != "resuming" or not _owner_lost(checkpoint.get("resume_owner")):
+        return False
+    checkpoint["status"] = "resuming_unknown"
+    checkpoint["resume_retry_safe"] = False
+    checkpoint["resume_result"] = {"ok": False, "error": "resume_owner_lost"}
+    checkpoint["updated_at"] = _now()
+    return True
 NETWORK_TOOL_ID = "network.operations.device.manage"
 
 
@@ -331,12 +372,24 @@ def attach_continuation_checkpoint(
 
 
 def get_continuation(workspace_id: str, checkpoint_id: str) -> dict[str, Any] | None:
+    reconcile_continuation(workspace_id, checkpoint_id)
     record = _store(workspace_id).get("continuations", checkpoint_id)
     return public_record({k: v for k, v in record.items() if k not in CONTINUATION_PRIVATE_FIELDS}) if record else None
 
 
 def _continuation_lock(workspace_id: str, checkpoint_id: str) -> FileLock:
     return FileLock(_store(workspace_id).root() / "continuations" / f"{checkpoint_id}.lock")
+
+
+def reconcile_continuation(workspace_id: str, checkpoint_id: str) -> str:
+    """Settle a claim whose owning process crashed. Returns the current status."""
+    with _continuation_lock(workspace_id, checkpoint_id):
+        checkpoint = load_record(_store(workspace_id), "continuations", checkpoint_id)
+        if not checkpoint:
+            return ""
+        if _reconcile_orphan_resume(checkpoint):
+            save_record(_store(workspace_id), "continuations", checkpoint_id, checkpoint)
+        return str(checkpoint.get("status") or "")
 
 
 def claim_ready_continuation(workspace_id: str, operation_id: str) -> dict[str, Any] | None:
@@ -354,6 +407,8 @@ def claim_ready_continuation(workspace_id: str, operation_id: str) -> dict[str, 
         return None
     with _continuation_lock(workspace_id, checkpoint_id):
         checkpoint = load_record(_store(workspace_id), "continuations", checkpoint_id)
+        if checkpoint and _reconcile_orphan_resume(checkpoint):
+            save_record(_store(workspace_id), "continuations", checkpoint_id, checkpoint)
         if not checkpoint or not (
             checkpoint.get("status") == "waiting_decisions"
             or (checkpoint.get("status") == "resume_failed" and checkpoint.get("resume_retry_safe") is True)
@@ -366,6 +421,7 @@ def claim_ready_continuation(workspace_id: str, operation_id: str) -> dict[str, 
         if any(str(item.get("status") or "") not in terminal for item in operations):
             return None
         checkpoint["status"] = "resuming"
+        checkpoint["resume_owner"] = _resume_owner()
         checkpoint.setdefault("client_request_id", f"approval_resume_{uuid.uuid4().hex}")
         checkpoint["resume_retry_safe"] = False
         checkpoint["updated_at"] = _now()

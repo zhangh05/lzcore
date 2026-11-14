@@ -15,7 +15,7 @@ FROZEN_OPERATION_FIELDS = (
 )
 CONTINUATION_PRIVATE_FIELDS = {
     "user_input", "messages", "tool_calls", "prior_results", "round_results",
-    "workbench_context", "context_window_state", "operations",
+    "workbench_context", "context_window_state", "operations", "resume_owner",
 }
 _TERMINAL_OPERATIONS = {"rejected", "cancelled", "invalidated", "executed", "unknown"}
 _QUERY_COMMAND = re.compile(r"^[ \t]*(?:show|display|ping|traceroute|tracert)(?:[ \t]|$)", re.IGNORECASE)

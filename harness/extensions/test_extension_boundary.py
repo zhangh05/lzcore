@@ -160,6 +160,7 @@ def test_discovery_failure_denies_existing_route(monkeypatch, plugins, with_auth
         raise OSError("discovery unavailable")
 
     monkeypatch.setattr(ExtensionRegistry, "discover", fail)
+    monkeypatch.setattr(ExtensionRegistry, "validate_all", fail)
     assert client.get(endpoint, headers={"Test-Role": "admin"}).status_code == 404
     assert calls == []
 

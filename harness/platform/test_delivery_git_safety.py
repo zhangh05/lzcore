@@ -56,7 +56,7 @@ def invoke(operation, ws="synthetic"):
     if operation == "status":
         return delivery.git_status_check(ws)
     if operation == "commit":
-        return delivery.git_commit(ws, "synthetic change", confirm=True)
+        return delivery.git_commit(ws, "synthetic change", confirm=True, paths=["change.txt"])
     return delivery.git_push(ws, confirm=True)
 
 
@@ -114,7 +114,7 @@ def test_repo_resolution_uses_principal_isolation(monkeypatch, repo):
     monkeypatch.setattr("storage.principal.principal_storage_key", lambda _: "usr_" + "a" * 32)
     with storage_principal("synthetic-user"):
         # The unscoped repository must never be used for an authenticated user.
-        assert delivery.git_commit("synthetic", "change", confirm=True)["ok"] is False
+        assert delivery.git_commit("synthetic", "change", confirm=True, paths=["change.txt"])["ok"] is False
         scoped = init_repo(paths.workspace_root("synthetic"))
         assert delivery._resolve_repo_dir("synthetic") == str(scoped.resolve())
         assert scoped != repo
@@ -127,10 +127,10 @@ def test_add_failure_never_commits(monkeypatch, repo, isolated_git):
         calls.append(args)
         if args[1] == "rev-parse":
             return real_run(args, **kwargs)
-        assert args == ["git", "add", "-A", "--"]
+        assert args == ["git", "add", "-A", "--", "change.txt"]
         return SimpleNamespace(returncode=1, stdout="", stderr="synthetic add failure")
     monkeypatch.setattr(subprocess, "run", run)
-    result = delivery.git_commit("synthetic", "--amend", confirm=True)
+    result = delivery.git_commit("synthetic", "--amend", confirm=True, paths=["change.txt"])
     assert result["ok"] is False
     assert "synthetic add failure" in result["error"]
     assert [args[1] for args in calls] == ["rev-parse", "add"]
@@ -190,12 +190,12 @@ def test_push_lookup_failure_or_invalid_branch_never_pushes(monkeypatch, repo, s
 
 def test_local_bare_push_and_detached_head_rejection(monkeypatch, tmp_path, repo, isolated_git):
     (repo / "tracked.txt").write_text("initial", encoding="utf-8")
-    assert delivery.git_commit("synthetic", "--amend", confirm=True)["ok"] is True
+    assert delivery.git_commit("synthetic", "--amend", confirm=True, paths=["tracked.txt"])["ok"] is True
     assert git(repo, "log", "-1", "--format=%s") == "--amend"
-    # add -A continues to include modifications, deletions and untracked paths.
+    # Candidate paths still cover deletions and new untracked files.
     (repo / "tracked.txt").unlink()
     (repo / "new.txt").write_text("replacement", encoding="utf-8")
-    assert delivery.git_commit("synthetic", "replacement", confirm=True)["ok"] is True
+    assert delivery.git_commit("synthetic", "replacement", confirm=True, paths=["tracked.txt", "new.txt"])["ok"] is True
     assert git(repo, "ls-tree", "--name-only", "HEAD") == "new.txt"
     status = delivery.git_status_check("synthetic")
     assert status["ok"] is True and status["dirty"] is False
@@ -236,6 +236,27 @@ def test_commit_hook_does_not_inherit_application_secrets(monkeypatch, repo):
                     'echo filtered > .git/hook-result\n')
     hook.chmod(0o755)
     (repo / "source.txt").write_text("test\n")
-    result = delivery.git_commit("synthetic", "test hook environment", confirm=True)
+    result = delivery.git_commit("synthetic", "test hook environment", confirm=True, paths=["source.txt"])
     assert result["ok"], result
     assert (repo / ".git/hook-result").read_text().strip() == "filtered"
+
+
+def test_commit_includes_only_candidate_paths(repo):
+    (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    assert delivery.git_commit("synthetic", "base", confirm=True, paths=["base.txt"])["ok"] is True
+    (repo / "agent.txt").write_text("agent change\n", encoding="utf-8")
+    (repo / "user-draft.txt").write_text("user's own work\n", encoding="utf-8")
+    (repo / "user-staged.txt").write_text("user staged\n", encoding="utf-8")
+    git(repo, "add", "user-staged.txt")
+    result = delivery.git_commit("synthetic", "agent change", confirm=True, paths=["agent.txt"])
+    assert result["ok"] is True, result
+    assert git(repo, "show", "--name-only", "--format=", "HEAD") == "agent.txt"
+    status = git(repo, "status", "--porcelain")
+    assert "A  user-staged.txt" in status and "?? user-draft.txt" in status
+
+
+@pytest.mark.parametrize("paths", [None, [], ["/etc/passwd"], ["../outside"], ["-rf"], [".git/config"], ["C:/x"], [1]])
+def test_commit_requires_safe_candidate_paths(repo, paths):
+    (repo / "x.txt").write_text("x", encoding="utf-8")
+    assert delivery.git_commit("synthetic", "x", confirm=True, paths=paths)["ok"] is False
+    assert git(repo, "status", "--porcelain") == "?? x.txt"

@@ -52,6 +52,29 @@ def _assert_compatible(manifest: ExtensionManifest) -> None:
         )
 
 
+def preflight_extension(manifest: ExtensionManifest, root: Path) -> None:
+    """Static checks before enabling: no extension code is executed here.
+
+    Raises ExtensionValidationError with a stage prefix. Runtime import and
+    contribution validation still happen at load time with quarantine.
+    """
+    try:
+        _assert_compatible(manifest)
+    except ExtensionValidationError as exc:
+        raise ExtensionValidationError(f"compatibility: {exc}") from exc
+    if not manifest.entrypoint:
+        return
+    relative_file = manifest.entrypoint.split(":", 1)[0]
+    source = (root / relative_file).resolve()
+    if root.resolve() not in source.parents or not source.is_file():
+        raise ExtensionValidationError("entrypoint: entrypoint file not found inside extension")
+    from extensions.entrypoint import validate_entrypoint_source
+    try:
+        validate_entrypoint_source(source.read_bytes(), relative_file)
+    except (ExtensionValidationError, SyntaxError, OSError) as exc:
+        raise ExtensionValidationError(f"entrypoint: {exc}") from exc
+
+
 def _load_entrypoint(manifest: ExtensionManifest, root: Path) -> dict[str, Any]:
     if not manifest.entrypoint:
         return {}
@@ -635,16 +658,19 @@ def _guard_extension_route(extension_id: str, view: Callable) -> Callable:
 
     @wraps(view)
     def guarded(*args, **kwargs):
-        from flask import jsonify
-        from extensions.state import get_extension_state
+        from flask import jsonify, request
+        from extensions.state import get_extension_state, is_lifecycle_exempt_cancel
 
         try:
-            manifest = next((item for item in ExtensionRegistry().discover() if item.extension_id == extension_id), None)
+            _, manifests = ExtensionRegistry().validate_all()
+            manifest = next((item for item in manifests if item.extension_id == extension_id), None)
         except Exception:
             manifest = None
         if manifest is None:
             return jsonify({"ok": False, "error": "extension_not_found"}), 404
-        if not get_extension_state(extension_id, default_enabled=manifest.enabled)["enabled"]:
+        if not is_lifecycle_exempt_cancel(request.path, request.method) and not get_extension_state(
+            extension_id, default_enabled=manifest.enabled,
+        )["enabled"]:
             return jsonify({"ok": False, "error": "extension_disabled"}), 409
         return view(*args, **kwargs)
 

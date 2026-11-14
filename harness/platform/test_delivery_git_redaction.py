@@ -16,8 +16,8 @@ def test_git_outputs_and_events_redact_credentials(monkeypatch, tmp_path, stage,
     calls, events = [], []
     commands = {
         "resolve": ["git", "rev-parse", "--show-toplevel"],
-        "add": ["git", "add", "-A", "--"],
-        "commit": ["git", "commit", "-m", unsafe, "--"],
+        "add": ["git", "add", "-A", "--", "change.txt"],
+        "commit": ["git", "commit", "--only", "-m", unsafe, "--", "change.txt"],
         "remote": ["git", "remote"],
         "branch": ["git", "rev-parse", "--abbrev-ref", "HEAD"],
         "push": ["git", "push", "--", "origin", "refs/heads/main:refs/heads/main"],
@@ -41,7 +41,7 @@ def test_git_outputs_and_events_redact_credentials(monkeypatch, tmp_path, stage,
     monkeypatch.setattr("subprocess.run", run)
     monkeypatch.setattr("storage.events.publish", lambda *args: events.append(args))
     if stage in {"add", "commit"}:
-        result = delivery.git_commit("synthetic", unsafe, confirm=True)
+        result = delivery.git_commit("synthetic", unsafe, confirm=True, paths=["change.txt"])
     elif stage in {"remote", "branch", "push"}:
         result = delivery.git_push("synthetic", remote="origin", confirm=True)
     else:
