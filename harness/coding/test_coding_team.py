@@ -20,6 +20,7 @@ from agent.runtime.durable.coding_state import candidate_id
 def team(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("LZCORE_CODING_DOCKER_COMMAND", '["docker"]')
+    monkeypatch.setattr(coding_team, "_free_preview_port", lambda: 5279)
 
     def start(environment):
         environment.started = True

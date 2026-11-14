@@ -9,6 +9,21 @@ from agent.runtime.durable.subagent import (
 )
 
 
+def _expired_dead_owner(ws, identity, monkeypatch):
+    import socket
+    from storage.records import atomic_save_json
+    from storage.subagent_store import read_subagent
+    record = read_subagent(ws, identity)
+    record['worker_lease'] = {'owner': {'host': socket.gethostname(), 'pid': 999999,
+                                      'process_id': 'old-process'},
+                              'token': 'old-worker', 'heartbeat_at': 1.0, 'expires_at': 2.0}
+    atomic_save_json(ws, ('subagents', identity + '.json'), record)
+    def absent(pid, signal):
+        assert pid == 999999 and signal == 0
+        raise ProcessLookupError()
+    monkeypatch.setattr('storage.subagent_store.os.kill', absent)
+
+
 class _FakeAgentResult:
     ok = True
     final_response = "review complete"
@@ -377,6 +392,7 @@ class TestProfileToolsFilter:
         task = _load_task(ws, cr["subtask_id"])
         task.status = "running"
         _save_task(task)
+        _expired_dead_owner(ws, cr["subtask_id"], monkeypatch)
         assert reconcile_subagent_tasks() == [cr["subtask_id"]]
         row = list_subagent_tasks(ws)[0]
         assert row["status"] == "failed"
@@ -407,6 +423,7 @@ class TestProfileToolsFilter:
             task = _load_task(ws, created["subtask_id"])
             task.status = "running"
             _save_task(task)
+            _expired_dead_owner(ws, created["subtask_id"], monkeypatch)
 
         assert reconcile_subagent_tasks() == [created["subtask_id"]]
         with storage_principal("Admin"):

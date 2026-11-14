@@ -17,7 +17,7 @@ class SlowMockProvider:
         self.error = error
         self.calls = 0
 
-    def search(self, query: str, *, language: str, limit: int, country_code: str = "", admin_hint: str = ""):
+    def search(self, query: str, *, language: str, limit: int, country_code: str = "", admin_hint: str = "", deadline=None):
         self.calls += 1
         time.sleep(self.delay)
         if self.error:
@@ -33,7 +33,7 @@ class SlowMockProvider:
             )
         ]
 
-    def reverse(self, latitude: float, longitude: float, *, language: str):
+    def reverse(self, latitude: float, longitude: float, *, language: str, deadline=None):
         self.calls += 1
         time.sleep(self.delay)
         return []

@@ -477,14 +477,16 @@ class MemoryWriteGate:
         try:
             self.store._path(candidate.workspace_id, candidate.memory_id)
         except ValueError:
-            return {'ok': False, 'error': 'invalid_memory_id', 'memory_id': candidate.memory_id}
+            return {'ok': False, 'status': 'rejected', 'rejected': True,
+                    'error': 'invalid_memory_id', 'memory_id': candidate.memory_id}
         existing = self.store.get(candidate.workspace_id, candidate.memory_id)
         if self.store.load_errors():
             return {'ok': False, 'error': 'memory_record_unavailable', 'memory_id': candidate.memory_id}
         if existing is not None:
             if existing.content == _redact(candidate.content) and _same_revision_domain(candidate, existing):
                 return {'ok': True, 'status': existing.status, 'memory_id': existing.memory_id, 'reconciled': True}
-            return {'ok': False, 'error': 'memory_identity_conflict', 'memory_id': candidate.memory_id}
+            return {'ok': False, 'status': 'rejected', 'rejected': True,
+                    'error': 'memory_identity_conflict', 'memory_id': candidate.memory_id}
 
         # 2. Secret rejection on original content before redaction; otherwise
         # redaction can hide the exact pattern from the detector.
@@ -567,7 +569,8 @@ class MemoryWriteGate:
         if target_id and (target is None or target.memory_id == candidate.memory_id or not _same_revision_domain(candidate, target)):
             return {"ok": False, "status": "rejected", "memory_id": candidate.memory_id, "error": "invalid_memory_revision_target", "rejected": True}
         if target and target.memory_id in self.store.superseded_records(self.store.list_all(candidate.workspace_id)):
-            return {'ok': False, 'error': 'memory_revision_stale', 'memory_id': candidate.memory_id}
+            return {'ok': False, 'status': 'rejected', 'rejected': True,
+                    'error': 'memory_revision_stale', 'memory_id': candidate.memory_id}
         # 8. Conflict detection
         conflicts = self.store.find_conflicts(candidate)
         if target is not None and target.status == 'active' and target not in conflicts:

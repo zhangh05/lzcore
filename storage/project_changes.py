@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import uuid
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
@@ -85,22 +84,39 @@ def source_manifest(
     result, total = {}, 0
     if not project.exists():
         return result
-    for path in sorted(project.rglob("*")):
-        relative = path.relative_to(project)
-        if any(part in IGNORED for part in relative.parts) or any(
-            relative.as_posix() == output
-            or relative.as_posix().startswith(output + "/")
+    def included(relative):
+        return not any(part in IGNORED for part in relative.parts) and not any(
+            relative.as_posix() == output or relative.as_posix().startswith(output + "/")
             for output in generated
-        ):
-            continue
-        if path.is_symlink():
-            raise ValueError("coding_source_symlink_forbidden")
-        if path.is_file():
-            size = path.stat().st_size
-            total += size
+        )
+
+    def walk_error(error):
+        raise error
+
+    for directory, directories, files in os.walk(project, followlinks=False, onerror=walk_error):
+        base = Path(directory)
+        kept = []
+        for name in directories:
+            path = base / name
+            if not included(path.relative_to(project)):
+                continue
+            if path.is_symlink():
+                raise ValueError("coding_source_symlink_forbidden")
+            kept.append(name)
+        directories[:] = sorted(kept)
+        for name in sorted(files):
+            path = base / name
+            relative = path.relative_to(project)
+            if not included(relative):
+                continue
+            if path.is_symlink():
+                raise ValueError("coding_source_symlink_forbidden")
+            if not path.is_file():
+                raise ValueError("coding_source_file_invalid")
+            total += path.stat().st_size
             if total > MAX_BYTES or len(result) >= 10000:
                 raise ValueError("coding_source_capacity_exceeded")
-            result[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+            result[relative.as_posix()] = _hash(path)
     return result
 
 
@@ -135,12 +151,7 @@ def in_responsibility(path: str, responsibilities: list[str]) -> bool:
 def copy_sources(source: Path, destination: Path, manifest: dict[str, str]) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     for relative, expected in manifest.items():
-        data = (source / relative).read_bytes()
-        if hashlib.sha256(data).hexdigest() != expected:
-            raise ValueError("coding_baseline_changed_during_snapshot")
-        target = destination / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
+        _copy_source(source / relative, destination / relative, expected)
 
 
 def changeset(
@@ -209,7 +220,32 @@ def quiescent_project(workspace_id: str):
 def _hash(path: Path) -> str | None:
     if path.is_symlink() or path.exists() and not path.is_file():
         raise ValueError("coding_publication_target_invalid")
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+    if not path.exists():
+        return None
+    return _source_identity(path.read_bytes(), path.stat().st_mode & 0o111)
+
+
+def _source_identity(data: bytes, executable: int) -> str:
+    # Retain byte identities for non-executables; executable bits are part of
+    # source semantics, without copying ownership, setuid or arbitrary ACLs.
+    digest = hashlib.sha256(data).hexdigest()
+    return f"{digest}:x{executable:03o}" if executable else digest
+
+
+def _copy_source(source: Path, target: Path, expected: str) -> None:
+    from storage.atomic_io import _fsync_parent_directory
+
+    data = source.read_bytes()
+    executable = source.stat().st_mode & 0o111
+    if _source_identity(data, executable) != expected:
+        raise ValueError("coding_baseline_changed_during_snapshot")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as stream:
+        stream.write(data)
+        os.chmod(target, 0o644 | executable)
+        stream.flush()
+        os.fsync(stream.fileno())
+    _fsync_parent_directory(target)
 
 
 def _replace(target: Path, source: Path | None) -> None:
@@ -219,7 +255,7 @@ def _replace(target: Path, source: Path | None) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".coding-" + uuid.uuid4().hex)
     try:
-        shutil.copyfile(source, temporary)
+        _copy_source(source, temporary, _hash(source))
         os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
@@ -260,6 +296,7 @@ def publish_changes(
     change: dict,
     *,
     generated_paths: list[str] | None = None,
+    prepare_only: bool = False,
 ) -> dict:
     generated = validate_generated_paths(generated_paths)
     project = project_path(workspace_id, project_relative)
@@ -271,13 +308,19 @@ def publish_changes(
             if (
                 record["digest"] != change["digest"]
                 or record["project"] != project_relative
+                or record["files"] != change["files"]
                 or record.get("generated_paths", []) != generated
             ):
                 raise ValueError("coding_transaction_identity_mismatch")
-            if record["phase"] in {"prepared", "applying", "unknown"}:
-                record = _recover(transaction, project, record)
-            if record["phase"] in {"integrated", "unknown"}:
-                return {"ok": record["phase"] == "integrated", **record}
+            if record["phase"] in {"applying", "unknown"}:
+                return reconcile_publication(workspace_id, project_relative, change_id, change,
+                                             generated_paths=generated)
+            if record["phase"] == "integrated":
+                return {"ok": True, **record}
+            if record["phase"] not in {"preparing", "prepared", "rolled_back"}:
+                raise ValueError("coding_transaction_phase_invalid")
+            if prepare_only and record["phase"] == "prepared":
+                return {"ok": True, **record}
         observed = source_manifest(project, generated)
         conflicts = [
             path
@@ -298,6 +341,17 @@ def publish_changes(
         ):
             raise ValueError("coding_validated_candidate_changed")
         transaction.mkdir(parents=True, exist_ok=True)
+        record = {
+            "schema": "coding.publication.v2",
+            "publication_order": _next_publication_order(workspace_id),
+            "project": project_relative,
+            "generated_paths": generated,
+            "digest": change["digest"],
+            "files": change["files"],
+            "phase": "preparing",
+        }
+        # This intent precedes staging and every possible parent-source write.
+        atomic_write_json(journal, record)
         for path, item in change["files"].items():
             for kind, source, expected in (
                 ("before", project, item["before"]),
@@ -306,19 +360,13 @@ def publish_changes(
                 if expected is not None:
                     target = transaction / kind / path
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes((source / path).read_bytes())
+                    _copy_source(source / path, target, expected)
                     if _hash(target) != expected:
                         raise ValueError("coding_transaction_snapshot_changed")
-        record = {
-            "schema": "coding.publication.v2",
-            "publication_order": _next_publication_order(workspace_id),
-            "project": project_relative,
-            "generated_paths": generated,
-            "digest": change["digest"],
-            "files": change["files"],
-            "phase": "prepared",
-        }
+        record["phase"] = "prepared"
         atomic_write_json(journal, record)
+        if prepare_only:
+            return {"ok": True, **record}
         try:
             record["phase"] = "applying"
             atomic_write_json(journal, record)
@@ -356,6 +404,11 @@ def reconcile_publication(workspace_id, project_relative, change_id, change, *, 
                 or record["files"] != change["files"]
                 or record.get("generated_paths", []) != validate_generated_paths(generated_paths)):
             raise ValueError("coding_transaction_identity_mismatch")
+        if record["phase"] in {"preparing", "prepared"}:
+            record["phase"] = "rolled_back"
+            atomic_write_json(journal, record)
+            return {"ok": False, **record, "automatic_retry_allowed": False,
+                    "reason": "publication_apply_not_started"}
         observed = {path: _hash(project / path) for path in record["files"]}
         if all(observed[path] == item["after"] for path, item in record["files"].items()):
             record["phase"] = "integrated"

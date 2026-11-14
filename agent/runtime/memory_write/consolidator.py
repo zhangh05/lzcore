@@ -24,13 +24,15 @@ def consolidate_experiences(
 
     with reflection_lock(workspace_id, session_id):
         total = 0
+        rejected = 0
         results = []
         while True:
             outcome = _consolidate_locked(workspace_id=workspace_id, session_id=session_id, task_id=task_id)
             total += outcome.get('processed', 0)
+            rejected += outcome.get('rejected', 0)
             results.extend(outcome.get('results', []))
             if outcome.get('status') != 'processed' or not pending_experiences(workspace_id, session_id):
-                return {**outcome, 'processed': total, 'results': results}
+                return {**outcome, 'processed': total, 'rejected': rejected, 'results': results}
 
 
 def _consolidate_locked(
@@ -94,7 +96,7 @@ def _consolidate_locked(
     for proposal in proposals:
         proposal_id = str(proposal["proposal_id"])
         previous = results_by_id.get(proposal_id)
-        if isinstance(previous, dict) and previous.get("ok"):
+        if isinstance(previous, dict) and _proposal_settled(previous):
             results.append(previous)
             continue
         memory_id = 'mem-' + proposal_id.removeprefix('proposal-')[:12]
@@ -118,12 +120,23 @@ def _consolidate_locked(
         _save_batches(cursor, batches, workspace_id, session_id)
         results.append(result)
 
-    if any(not result.get("ok") for result in results):
+    if any(not _proposal_settled(result) for result in results):
         return {"ok": False, "status": "retry_pending", "processed": 0, "results": results}
 
     from storage.memory_event_store import finish_batch
     finish_batch(workspace_id, session_id, event_ids, batch_id)
-    return {"ok": True, "status": "processed", "processed": len(events), "results": results}
+    return {"ok": True, "status": "processed", "processed": len(events),
+            "rejected": sum(_proposal_rejected(result) for result in results), "results": results}
+
+
+def _proposal_rejected(result: dict[str, Any]) -> bool:
+    return (not result.get("ok") and result.get("status") == "rejected"
+            and result.get("rejected") is True)
+
+
+def _proposal_settled(result: dict[str, Any]) -> bool:
+    # Unknown writes and unclassified failures must remain reconcilable.
+    return bool(result.get("ok")) or _proposal_rejected(result)
 
 
 def _batch_id(event_ids: list[str]) -> str:
@@ -153,6 +166,15 @@ def _save_batches(cursor: dict[str, Any], batches: dict[str, Any], workspace_id:
     from storage.memory_event_store import update_cursor
 
     def merge(latest):
+        # finish_batch removes in-flight proposals. Keep terminal decisions in
+        # the cursor so a rejected proposal remains inspectable afterwards.
+        rejections = dict(latest.get("consolidation_rejections") or {})
+        for batch_id, batch in batches.items():
+            for proposal_id, result in (batch.get("results") or {}).items():
+                if _proposal_rejected(result):
+                    rejections[proposal_id] = {**result, "batch_id": batch_id}
+        if rejections:
+            latest["consolidation_rejections"] = rejections
         latest.update(consolidation_batches=batches, session_id=session_id, updated_at=updated['updated_at'])
         return latest
     latest = update_cursor(workspace_id, session_id, merge)

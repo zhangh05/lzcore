@@ -47,13 +47,13 @@ class FakeProvider:
         self.error = error
         self.calls = 0
 
-    def search(self, query, *, language, limit, country_code="", admin_hint=""):
+    def search(self, query, *, language, limit, country_code="", admin_hint="", deadline=None):
         self.calls += 1
         if self.error:
             raise self.error
         return list(self.searches.get(query, []))[:limit]
 
-    def reverse(self, latitude, longitude, *, language):
+    def reverse(self, latitude, longitude, *, language, deadline=None):
         if self.error:
             raise self.error
         return list(self.reverse_result)
@@ -167,7 +167,7 @@ def test_transient_provider_failure_is_not_cached():
     candidate = _candidate("Retry", provider="flaky", latitude=5, longitude=6)
 
     class FlakyProvider(FakeProvider):
-        def search(self, query, *, language, limit, country_code="", admin_hint=""):
+        def search(self, query, *, language, limit, country_code="", admin_hint="", deadline=None):
             self.calls += 1
             if self.calls == 1:
                 raise TimeoutError("temporary")
@@ -256,7 +256,7 @@ def test_open_meteo_transport_retries_transient_http_status(monkeypatch):
     responses = iter([_Response(429), _Response(200, payload={"results": []})])
     calls = []
     monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: calls.append(1) or next(responses))
-    monkeypatch.setattr("core.resolution.location_providers.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("core.resolution.location_providers._WAIT_EVENT.wait", lambda _seconds: None)
 
     result = _open_meteo_get(params={"name": "Synthetic"})
 
@@ -281,7 +281,7 @@ def test_nominatim_transport_retries_connection_failure(monkeypatch):
         return value
 
     monkeypatch.setattr(requests, "get", fake_get)
-    monkeypatch.setattr("core.resolution.location_providers.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("core.resolution.location_providers._WAIT_EVENT.wait", lambda _seconds: None)
     monkeypatch.setattr(NominatimLocationProvider, "_last_request", 0.0)
     monkeypatch.setattr(NominatimLocationProvider, "_circuit_open_until", 0.0)
 
@@ -301,7 +301,7 @@ def test_nominatim_transport_opens_circuit_after_retry_budget(monkeypatch):
         raise requests.ConnectTimeout("unreachable")
 
     monkeypatch.setattr(requests, "get", unavailable)
-    monkeypatch.setattr("core.resolution.location_providers.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("core.resolution.location_providers._WAIT_EVENT.wait", lambda _seconds: None)
     monkeypatch.setattr(NominatimLocationProvider, "_last_request", 0.0)
     monkeypatch.setattr(NominatimLocationProvider, "_circuit_open_until", 0.0)
 

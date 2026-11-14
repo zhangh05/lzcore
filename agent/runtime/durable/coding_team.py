@@ -337,6 +337,7 @@ def coding_run(task):
     _save_task(task)
     port = _free_preview_port()
     with isolated_project(branch_ws, branch, port,
+                          resource_owner=execution_owner(task),
                           source_mode="review" if task.profile_id == "qa_agent" else "implementation",
                           generated_paths=assignment.get("generated_paths")) as environment:
         environment.configure_validation(assignment["validation_commands"])
@@ -422,6 +423,11 @@ def coding_run(task):
 def _project_facts(task):
     from .coding_project import project_id, snapshot
     return json.dumps(snapshot(task.workspace_id, project_id(task)), ensure_ascii=False)
+
+
+def execution_owner(task):
+    return {"workspace_id": task.workspace_id, "session_id": task.session_id,
+            "parent_task_id": task.parent_task_id, "subtask_id": task.subtask_id}
 
 
 def cancel_execution(task) -> dict:
@@ -513,12 +519,18 @@ def integrate(task) -> dict:
                                            record["change"], generated_paths=record["generated_paths"])
             event = {"integrated": "publication_reconciled", "rolled_back": "publication_not_applied"}.get(result["phase"])
         else:
+            # Keep the accepted candidate recoverable if staging fails. Before
+            # entering publishing, there must already be a durable journal.
+            prepared = publish_changes(task.workspace_id, record["project_dir"], task.subtask_id,
+                                       branch, record["change"], generated_paths=record["generated_paths"],
+                                       prepare_only=True)
             transition(task.workspace_id, record["id"], "publication_started",
                        evidence={"event_id": f'{record["id"]}:publish:{record["revision"]}',
                                  "record_id": task.subtask_id}, expected_revision=record["revision"])
             try:
-                result = publish_changes(task.workspace_id, record["project_dir"], task.subtask_id,
-                                         branch, record["change"], generated_paths=record["generated_paths"])
+                result = prepared if prepared["phase"] == "conflict" else publish_changes(
+                    task.workspace_id, record["project_dir"], task.subtask_id, branch,
+                    record["change"], generated_paths=record["generated_paths"])
             except Exception:
                 transition(task.workspace_id, record["id"], "publication_unknown",
                            evidence={"event_id": f'{record["id"]}:exception:{record["revision"]}',

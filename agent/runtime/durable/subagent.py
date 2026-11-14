@@ -306,7 +306,22 @@ def _refresh_task_workbench_context(task: SubagentTask) -> dict:
     }
 
 
-def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
+def run_subagent_task(subtask_id: str, ws_id: str, *, worker_token: str = "") -> dict:
+    try:
+        ws_id = _validated_workspace_id(ws_id)
+        subtask_id = _validated_subtask_id(subtask_id)
+    except ValueError:
+        return {"ok": False, "error": "invalid_subtask_identity"}
+    from storage.subagent_store import subagent_worker_lease
+    with subagent_worker_lease(ws_id, subtask_id, worker_token) as lease_lost:
+        if lease_lost is None:
+            task = _load_task(ws_id, subtask_id)
+            return {"ok": False, "error": "subagent_worker_ownership_unavailable",
+                    "status": task.status if task else "unknown"}
+        return _run_subagent_task(subtask_id, ws_id, lease_lost=lease_lost)
+
+
+def _run_subagent_task(subtask_id: str, ws_id: str, *, lease_lost=lambda: False) -> dict:
     """Run a delegated Agent through the same runtime surface as its parent."""
     try:
         ws_id = _validated_workspace_id(ws_id)
@@ -352,7 +367,8 @@ def run_subagent_task(subtask_id: str, ws_id: str) -> dict:
             return {"ok": task.status == "created", "subtask_id": subtask_id, "status": task.status, "coding": task.coding}
     cancel_event = _cancel_event(ws_id, subtask_id)
     from .subagent_control import cancellation_probe
-    cancel_check = cancellation_probe(ws_id, subtask_id, cancel_event)
+    parent_cancel_check = cancellation_probe(ws_id, subtask_id, cancel_event)
+    cancel_check = lambda: lease_lost() or parent_cancel_check()
     if task.status == "cancelled" or cancel_check():
         payload = _task_result_payload(task, ok=False)
         _release_worker(ws_id, subtask_id)
@@ -659,6 +675,10 @@ def start_subagent_task(subtask_id: str, ws_id: str) -> dict:
                 if task.status != "created":
                     _release_worker(ws_id, subtask_id)
                 return {"ok": task.status == "created", "subtask_id": subtask_id, "status": task.status, "coding": task.coding}
+        from storage.subagent_store import claim_subagent_worker
+        worker_token = claim_subagent_worker(ws_id, subtask_id)
+        if not worker_token:
+            return {"ok": False, "error": "subagent_worker_ownership_unavailable", "status": task.status}
         _cancel_event(ws_id, subtask_id).clear()
         task.status = "running"
         task.started_at = task.started_at or _now()
@@ -667,6 +687,7 @@ def start_subagent_task(subtask_id: str, ws_id: str) -> dict:
         worker = threading.Thread(
             target=bind_storage_principal(run_subagent_task),
             args=(subtask_id, ws_id),
+            kwargs={"worker_token": worker_token},
             name=f"subagent-{subtask_id}",
             daemon=True,
         )
@@ -809,14 +830,8 @@ def get_subagent_task(ws_id: str, subtask_id: str, *, inspect_source: bool = Tru
 
 
 def reconcile_subagent_tasks(*, started_before: str = "") -> list[str]:
-    """Mark only pre-start queued/running tasks interrupted after restart.
-
-    ``started_before`` is the backend start watermark. It prevents the
-    asynchronous startup reconciler from racing with a newly accepted task.
-    Missing or malformed legacy timestamps remain eligible for reconciliation
-    rather than being stranded indefinitely.
-    """
-    from storage.subagent_store import list_subagents
+    """Reconcile only expired, provably stopped owners; never infer death by age."""
+    from storage.subagent_store import list_subagents, read_subagent, task_control_lock, worker_lease_state
     from storage.workspace_store import list_workspace_ids
     from storage.principal import known_storage_principals, storage_principal
 
@@ -829,26 +844,37 @@ def reconcile_subagent_tasks(*, started_before: str = "") -> list[str]:
                 try:
                     if raw.get("workspace_id") != ws_id or raw.get("status") not in {"created", "running"}:
                         continue
-                    task = SubagentTask(**{
-                        key: value for key, value in raw.items()
-                        if key in SubagentTask.__dataclass_fields__
-                    })
-                    if started_before:
-                        try:
-                            from storage.time_utils import from_iso
-                            task_time = str(task.started_at or task.created_at or "")
-                            if task_time and from_iso(task_time) >= from_iso(started_before):
-                                continue
-                        except (TypeError, ValueError):
-                            # A legacy record without a valid timestamp is safer
-                            # to reconcile than to leave permanently running.
-                            pass
-                    task.status = "failed"
-                    task.finished_at = _now()
-                    task.summary = "Subagent interrupted by service restart"
-                    task.errors.append("service_restart_interrupted")
-                    _save_task(task)
-                    reconciled.append(task.subtask_id)
+                    with task_control_lock(ws_id, raw["subtask_id"]):
+                        raw = read_subagent(ws_id, raw["subtask_id"])
+                        if not raw or raw.get("status") not in {"created", "running"}:
+                            continue
+                        task = SubagentTask(**{
+                            key: value for key, value in raw.items()
+                            if key in SubagentTask.__dataclass_fields__
+                        })
+                        if started_before:
+                            try:
+                                from storage.time_utils import from_iso
+                                task_time = str(task.started_at or task.created_at or "")
+                                if task_time and from_iso(task_time) >= from_iso(started_before):
+                                    continue
+                            except (TypeError, ValueError):
+                                # Timestamps do not prove worker death; lease checks
+                                # below remain mandatory even for legacy records.
+                                pass
+                        lease_state = worker_lease_state(raw)
+                        if lease_state != "expired_dead":
+                            if lease_state == "pending_confirmation":
+                                task.observations["worker_reconciliation"] = {"status": "pending_confirmation",
+                                    "reason": "worker_death_unproven"}
+                                _save_task(task)
+                            continue
+                        task.status = "failed"
+                        task.finished_at = _now()
+                        task.summary = "Subagent interrupted by service restart"
+                        task.errors.append("service_restart_interrupted")
+                        _save_task(task)
+                        reconciled.append(task.subtask_id)
                 except (OSError, ValueError, TypeError):
                     continue
 

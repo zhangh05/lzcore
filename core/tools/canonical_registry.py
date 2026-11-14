@@ -331,6 +331,9 @@ def _handle_location(inv: ToolInvocation) -> dict:
 def _handle_data(inv: ToolInvocation) -> dict:
     from dataclasses import replace
     from hashlib import sha256
+    import os
+    import stat
+    from core.tools.general_tools.data_engine import MAX_INPUT_BYTES
     from core.tools.general_tools.shared import _caller_workspace, _workspace_path, _error_inv
 
     args = dict(inv.arguments or {})
@@ -342,7 +345,13 @@ def _handle_data(inv: ToolInvocation) -> dict:
         if args.get(prefix + "rows") is not None or args.get(prefix + "text"):
             return _error_inv(inv, "supply only one input source per dataset: text, rows, or source_filepath")
         try:
-            raw = _workspace_path(_caller_workspace(inv), path).read_bytes()
+            with _workspace_path(_caller_workspace(inv), path).open("rb") as source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_INPUT_BYTES:
+                    raise ValueError("data input byte limit exceeded")
+                raw = source.read(MAX_INPUT_BYTES + 1)
+                if len(raw) > MAX_INPUT_BYTES:
+                    raise ValueError("data input byte limit exceeded")
             args[prefix + "text"] = raw.decode("utf-8-sig")
         except (ValueError, OSError, UnicodeError) as exc:
             return _error_inv(inv, str(exc))

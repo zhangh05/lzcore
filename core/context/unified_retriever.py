@@ -307,6 +307,7 @@ class UnifiedRetriever:
         min_score: float = 0.01,
         expand: bool = True,
         result_filter: Optional[Callable[[dict], bool]] = None,
+        session_id: str = "",
     ) -> list[dict]:
         """Search for items matching *query*.
 
@@ -321,6 +322,7 @@ class UnifiedRetriever:
             min_score:  Minimum BM25 score threshold.
             expand:     Whether to apply query expansion.
             result_filter: Optional visibility predicate applied before dedup.
+            session_id: Current session; absent ownership fails closed for session knowledge.
 
         Returns:
             List of item dicts, each with an added ``_score`` field.
@@ -344,6 +346,7 @@ class UnifiedRetriever:
             types_filter.update(item_types)
 
         candidate_limit = max(top_k * 5, top_k + 20)
+        knowledge_sources: dict[str, dict] = {}
         for idx, score in raw_results:
             if score < min_score:
                 continue
@@ -365,16 +368,10 @@ class UnifiedRetriever:
             # filtering so a repaired reader also works for existing data.
             doc_scope = str(doc.get("scope") or "workspace")
             if doc.get("item_type") == "knowledge_chunk":
-                metadata_scope = str((doc.get("metadata") or {}).get("scope") or "")
-                if metadata_scope:
-                    doc_scope = metadata_scope
-                elif doc.get("source_id"):
-                    source = self._store.get(str(doc.get("source_id"))) or {}
-                    doc_scope = str(
-                        source.get("scope")
-                        or (source.get("metadata") or {}).get("scope")
-                        or doc_scope
-                    )
+                doc_scope, visible = self._knowledge_visibility(
+                    doc, session_id=session_id, sources=knowledge_sources)
+                if not visible:
+                    continue
             # Scope filter
             if scope and doc_scope != scope:
                 continue
@@ -457,11 +454,34 @@ class UnifiedRetriever:
             session_id=session_id,
             task_id=task_id,
         )
-        knowledge = self.search_knowledge(query, top_k=top_k_knowledge)
+        knowledge = self.search_knowledge(query, top_k=top_k_knowledge, session_id=session_id)
         return {
             "memory_hits": memory,
             "knowledge_hits": knowledge,
         }
+
+    def _knowledge_visibility(
+        self, doc: dict, *, session_id: str, sources: dict[str, dict]
+    ) -> tuple[str, bool]:
+        """Apply ownership before ranking limits/dedup on every search entry."""
+        metadata = doc.get("metadata") or {}
+        source_id = str(doc.get("source_id") or "")
+        if source_id and source_id not in sources:
+            sources[source_id] = self._store.get(source_id) or {}
+        source = sources.get(source_id, {})
+        source_metadata = source.get("metadata") or {}
+        if not isinstance(metadata, dict) or not isinstance(source_metadata, dict):
+            return "session", False
+        scopes = [record.get("scope") for record in (doc, metadata, source, source_metadata)]
+        # A stale workspace projection must not widen a session restriction.
+        scope = ("session" if "session" in scopes else
+                 str(metadata.get("scope") or source.get("scope")
+                     or source_metadata.get("scope") or doc.get("scope") or "workspace"))
+        if scope != "session":
+            return scope, scope in {"workspace", "global"}
+        owners = [record.get("session_id") for record in (doc, metadata, source, source_metadata)
+                  if record.get("session_id")]
+        return scope, bool(session_id and owners and all(owner == session_id for owner in owners))
 
     def _memory_scope_visible(
         self,

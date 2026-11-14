@@ -402,8 +402,12 @@ class LocationResolver:
             try:
                 candidates.extend(provider.search(
                     query, language=language, limit=limit,
-                    country_code=country_code, admin_hint=admin_hint,
+                    country_code=country_code, admin_hint=admin_hint, deadline=deadline,
                 ))
+                if time.monotonic() >= deadline:
+                    candidates.clear()
+                    warnings.append("resolution_budget_exhausted")
+                    break
             except Exception as exc:  # noqa: BLE001 - isolate an external provider boundary
                 warnings.append(f"{provider.name}_error:{type(exc).__name__}")
             ranked = _rank(
@@ -417,6 +421,12 @@ class LocationResolver:
             if confidence >= 0.86:
                 break
         ranked = _rank(query, candidates, country_code=country_code, admin_hint=admin_hint)
+        if time.monotonic() >= deadline:
+            return LocationResolution(
+                False, query, "location_resolution_timeout", candidates=tuple(ranked[:limit]),
+                provider_chain=tuple(provider_chain),
+                warnings=tuple(dict.fromkeys([*warnings, "resolution_budget_exhausted"])),
+            )
         confidence = _confidence(
             query, ranked, country_code=country_code, admin_hint=admin_hint,
         )
@@ -479,11 +489,14 @@ class LocationResolver:
             provider_chain.append(provider.name)
             try:
                 candidates = provider.reverse(
-                    float(latitude), float(longitude), language=language,
+                    float(latitude), float(longitude), language=language, deadline=deadline,
                 )
             except Exception as exc:  # noqa: BLE001 - isolate an external provider boundary
                 warnings.append(f"{provider.name}_error:{type(exc).__name__}")
                 continue
+            if time.monotonic() >= deadline:
+                warnings.append("resolution_budget_exhausted")
+                break
             if candidates:
                 return LocationResolution(
                     True, query, "resolved", resolved=candidates[0],
