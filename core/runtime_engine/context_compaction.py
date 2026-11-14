@@ -29,8 +29,27 @@ def build_history_state_record(role: str, content: str, *, tool_context: Iterabl
     return {"schema":"runtime.history_state.v1", "role":role if role in {"user","assistant"} else "assistant", "signals":list(history_state_signals(safe)), "entities":list(dict.fromkeys(entities)), "constraints":[line.strip() for line in re.split(r"[\r\n]+|(?<=[。！？.!?])", safe) if "constraint" in history_state_signals(line) or "correction" in history_state_signals(line)], "tool_facts":tools, "unresolved":[x for x in tools if not x["ok"]], "references":refs}
 def estimate_chars(messages: Iterable[LLMMessage]) -> int:
     return sum(len(json.dumps(x.content, ensure_ascii=False, default=str)) if isinstance(x.content,list) else len(str(x.content or "")) for x in messages)
+def _wire_message_tokens(x: LLMMessage) -> int:
+    """Estimate what one provider actually receives for a message.
+
+    A native protocol mirror already contains the text and, after projection,
+    the authoritative tool calls; only one mirror is sent. Counting content,
+    tool_calls and every mirror separately double-counts the same bytes.
+    """
+    from agent.llm.protocol_projection import anthropic_assistant_blocks, openai_assistant_state
+    protocol = getattr(x, "protocol", None) or {}
+    projected = []
+    if protocol.get("openai"):
+        # The adapter starts from the message content, then applies the state.
+        projected.append(estimate_json_tokens({"content": x.content, **openai_assistant_state(x, protocol)}))
+    if protocol.get("anthropic"):
+        projected.append(estimate_json_tokens(anthropic_assistant_blocks(x, protocol, lambda call: call)))
+    if projected:
+        return max(projected)
+    body = estimate_json_tokens(x.content) if isinstance(x.content, list) else estimate_text_tokens(x.content)
+    return body + estimate_json_tokens(x.tool_calls or [])
 def estimate_message_tokens(messages: Iterable[LLMMessage]) -> int:
-    return sum(4 + (estimate_json_tokens(x.content) if isinstance(x.content,list) else estimate_text_tokens(x.content)) + estimate_json_tokens(x.tool_calls or []) + estimate_json_tokens(getattr(x, "protocol", None) or {}) for x in messages)
+    return sum(4 + _wire_message_tokens(x) for x in messages)
 def assert_tool_protocol(messages: list[LLMMessage]) -> None:
     expected, seen = set(), set()
     for message in messages:

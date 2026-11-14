@@ -11,6 +11,7 @@ RUNTIME_BOUNDARIES = (
     "runtime_identity", "conversation_history", "governed_context",
     "current_user_request", "runtime_guidance", "tool_failure_evidence",
     "auto_tracking_results", "safe_read_recovery", "network_execution_evidence",
+    "saved_user_rules",
 )
 DATA_BOUNDARIES = (*RUNTIME_BOUNDARIES, "provided_context", "selected_skill_context",
                    "skill_authored_instructions", "evidence_manifest")

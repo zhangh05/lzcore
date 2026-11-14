@@ -32,7 +32,21 @@ INJECTION_PATTERNS = [
     (r'告诉我.*key|告诉我.*密码|告诉我.*token|show me.*key', "key_request"),
 ]
 
-FAKE_REF_PATTERN = re.compile(r'\b(?:art|job|run|report|trace)[a-zA-Z0-9_-]{8,64}\b')
+# Real runtime IDs are a prefix, a separator and a generated token that
+# contains digits (``job_1a2b3c4d``, ``run_1731567000``, ``art-9f8e7d6c``).
+# Plain words such as ``runtime_engine`` or ``reporting`` are not references.
+FAKE_REF_PATTERN = re.compile(
+    r'(?<![A-Za-z0-9_-])(?:art|job|run|report|trace)[_-](?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{4,64}(?![A-Za-z0-9_-])'
+)
+
+
+def known_references(*texts) -> set:
+    """IDs that already appear in model-visible input are evidence, not fakes."""
+    found = set()
+    for text in texts:
+        if text:
+            found.update(FAKE_REF_PATTERN.findall(str(text)))
+    return found
 
 
 @dataclass
@@ -108,7 +122,8 @@ def _is_negation_context(text: str, match_start: int) -> bool:
 is_negation_context = _is_negation_context
 
 
-def check_prompt_output(prompt_spec, llm_output: str, citations: list = None) -> PolicyResult:
+def check_prompt_output(prompt_spec, llm_output: str, citations: list = None,
+                        known_refs=None) -> PolicyResult:
     """Check LLM output for forbidden content and fake references."""
     result = PolicyResult()
     text = str(llm_output).lower()
@@ -124,7 +139,7 @@ def check_prompt_output(prompt_spec, llm_output: str, citations: list = None) ->
     # Fake reference detection
     cite_ids = {c.get("citation_id", "") for c in citations}
     fake_refs = FAKE_REF_PATTERN.findall(llm_output)
-    known = set()
+    known = set(known_refs or ())
     for c in citations:
         known.add(c.get("source_id", ""))
     for ref in fake_refs[:10]:
