@@ -44,6 +44,13 @@ def resolve_provider_config(llm_config: dict = None) -> dict:
     if _llm_disabled_by_env():
         return _disabled_provider_config()
 
+    # A turn that chose its own model resolves to that model everywhere
+    # inside the turn (routing, budgets, trace labels), and nowhere else.
+    from agent.llm.turn_model import current_turn_model_config
+    turn_cfg = current_turn_model_config()
+    if turn_cfg:
+        return turn_cfg
+
     # ═══ First: try UI settings (highest priority) ═══
     try:
         from agent.llm.settings import resolve_effective_llm_config as _resolve_ui

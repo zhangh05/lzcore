@@ -39,16 +39,30 @@
   .wb-status-btn .status-dot { width: 6px; height: 6px; }
   .wb-header .btn { flex: none; }
   .wb-thread { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--space-8) var(--space-8) var(--space-4); scroll-behavior: smooth; }
-  .wb-thread > .muted, .wb-thread > .resume-bar { max-width: var(--w-reading); margin-inline: auto; }
-  .messages { list-style: none; margin: 0 auto; padding: 0; width: 100%; max-width: min(var(--w-reading), 820px); display: flex; flex-direction: column; gap: var(--space-8); }
-  .message { min-width: 0; max-width: 100%; overflow-wrap: anywhere; animation: message-in var(--dur-4) var(--ease-out); }
-  /* Own messages: brand-tinted block, 4px corners (Fluent chat), right-aligned. */
-  .message.role-user { align-self: flex-end; max-width: min(78%, 640px); background: var(--message-user); border: 1px solid transparent; padding: var(--space-2) var(--space-4); border-radius: var(--r-control); font-size: var(--fs-14); line-height: 22px; }
-  /* Both sides of the conversation read at one size: Fluent body 14/22. */
-  .message.role-assistant { font-size: var(--fs-14); line-height: 22px; }
+  /* The conversation column: wide enough that a 1440px window is not two empty margins,
+     narrow enough that a line of prose stays readable (~45 CJK characters). */
+  .wb-thread > .muted, .wb-thread > .resume-bar { max-width: var(--w-chat); margin-inline: auto; }
+  .messages { --w-chat: 960px; list-style: none; margin: 0 auto; padding: 0; width: 100%; max-width: var(--w-chat); display: flex; flex-direction: column; gap: var(--space-6); }
+  /* Every turn is avatar + content. Both sides read at Fluent body 14/22. */
+  .message { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--space-3); align-items: start; min-width: 0; max-width: 100%; overflow-wrap: anywhere; font-size: var(--fs-14); line-height: 22px; animation: message-in var(--dur-4) var(--ease-out); }
+  .message-main { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); padding-top: 5px; }
+  .message-main > .message-body { max-width: 72ch; }
+  .message-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; font-size: var(--fs-12); font-weight: 600; line-height: 1; user-select: none; }
+  .message-avatar.is-assistant { border-radius: var(--r-card); background: var(--accent); color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent-stroke); }
+  .message-avatar.is-user { background: var(--surface-3); color: var(--text-2); }
+  .message-avatar.is-live { animation: avatar-breathe 1.6s var(--ease) infinite; }
+  @keyframes avatar-breathe { 50% { box-shadow: inset 0 0 0 1px var(--accent-stroke), 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); } }
+  /* Own messages mirror the layout: avatar on the right, a brand-tinted bubble beside it. */
+  .message.role-user { grid-template-columns: minmax(0, 1fr) 32px; }
+  .message.role-user > .message-avatar { grid-column: 2; grid-row: 1; }
+  .message.role-user > .message-main { grid-column: 1; grid-row: 1; align-items: flex-end; padding-top: 0; }
+  .message.role-user .message-body { max-width: min(80%, 680px); padding: 5px 14px; border-radius: 12px 4px 12px 12px; background: var(--message-user); }
   @keyframes message-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-  @media (prefers-reduced-motion: reduce) { .message, .session-item.is-active::before { animation: none; } .composer-card::after { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .message, .message-avatar, .session-item.is-active::before { animation: none; } }
   .message.role-assistant .row-actions { margin-bottom: 0; }
+  /* Per-message actions recede until wanted: subtle buttons, a quiet note. */
+  .message-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-2); margin-left: -8px; }
+  .message-note { color: var(--text-3); font-size: var(--fs-12); }
   .message-body { white-space: pre-wrap; }
   .tool-cards { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); }
   .tool-card { border: 1px solid var(--line); border-radius: var(--r-control); padding: 6px var(--space-3); font-size: var(--fs-sm); background: var(--surface); transition: background var(--dur-1) var(--ease); }
@@ -93,20 +107,47 @@
 
   /* Composer: a Fluent textarea card — hairline, darker bottom stroke, and a 2px
      brand underline on focus; scope and actions share its bottom toolbar row. */
-  .wb-composer { flex-shrink: 0; max-height: 55%; overflow-y: auto; padding: var(--space-2) var(--space-8) var(--space-6); background: linear-gradient(to bottom, transparent, var(--surface-layer) var(--space-4)); }
-  .wb-composer > * { max-width: min(var(--w-reading), 820px); margin-inline: auto; }
+  /* Composer: one card, one toolbar line. The input grows with its text up to a cap;
+     nothing else in the card changes height while a turn runs. */
+  .wb-composer { flex-shrink: 0; padding: var(--space-2) var(--space-8) var(--space-6); background: linear-gradient(to bottom, transparent, var(--surface-layer) var(--space-4)); }
+  .wb-composer > * { max-width: 960px; margin-inline: auto; }
   .wb-composer > .inline-alert, .wb-composer > .muted { margin-bottom: var(--space-2); }
-  .composer-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); border-bottom-color: var(--field-border-bottom); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-md); overflow: hidden; transition: border-color var(--dur-1) var(--ease); }
-  .composer-card::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent); transform: scaleX(0); transition: transform var(--dur-4) var(--ease-out); pointer-events: none; }
-  .composer-card:focus-within::after { transform: none; }
-  .composer-input, .wb-composer .composer-input { display: block; width: 100%; min-height: 72px; max-height: 40vh; resize: none; border: 0; border-radius: 0; box-shadow: none; background: transparent; font-size: var(--fs-base); line-height: var(--lh-14); padding: var(--space-3) var(--space-4) var(--space-1); }
+  .composer-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--control-stroke); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-composer); transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease); }
+  .composer-card:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent), var(--shadow-composer); }
+  .composer-input, .wb-composer .composer-input { display: block; width: 100%; min-height: 52px; max-height: 240px; resize: none; overflow-y: auto; border: 0; border-radius: 12px 12px 0 0; box-shadow: none; background: transparent; font-size: var(--fs-14); line-height: 22px; padding: 14px 16px 4px; }
   .wb-composer .composer-input:hover, .wb-composer .composer-input:focus { border: 0; box-shadow: none; outline: none; }
-  .composer-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2); padding: var(--space-1) var(--space-2) var(--space-2) var(--space-3); }
-  .composer-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); font-size: var(--fs-sm); color: var(--text-3); }
-  .composer-scope select { min-height: var(--h-control-compact); height: var(--h-control-compact); border-radius: var(--r-control); padding-left: var(--space-2); font-size: var(--fs-sm); box-shadow: none; background-color: transparent; border-color: transparent; }
-  .composer-scope select:hover { background-color: var(--subtle-hover); border-color: transparent; }
-  .composer-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-1); }
-  .composer-actions .btn.primary { padding-inline: var(--space-4); }
+  .composer-attachments { list-style: none; margin: 0; padding: 10px 12px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .composer-attachment { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 2px 0 10px; border-radius: 6px; background: var(--surface-3); color: var(--text-2); font-size: var(--fs-12); }
+  .composer-attachment span { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer-attachment button { width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); cursor: pointer; }
+  .composer-attachment button:hover { background: var(--subtle-hover); color: var(--text); }
+  .composer-toolbar { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 48px; padding: 6px 8px 8px 8px; }
+  .composer-scope, .composer-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-width: 0; }
+  .composer-actions { margin-left: auto; flex-shrink: 0; }
+  .composer-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+  .composer-icon:hover { background: var(--subtle-hover); color: var(--text); }
+  .composer-icon:active { background: var(--subtle-pressed); }
+  .composer-divider { width: 1px; height: 16px; margin: 0 4px; flex: none; background: var(--line); }
+  /* Chips: pill-shaped pickers that read as settings for this message, not as form fields. */
+  .composer-chip { position: relative; display: inline-flex; align-items: center; height: 28px; min-width: 0; flex: 0 1 auto; border: 1px solid var(--control-stroke); border-radius: 14px; background: transparent; color: var(--text-2); font-size: var(--fs-12); line-height: 1; white-space: nowrap; cursor: pointer; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+  button.composer-chip { padding: 0 12px; }
+  .composer-chip:hover { background: var(--subtle-hover); color: var(--text); }
+  .composer-chip:has(select:disabled), .composer-chip:disabled { opacity: .55; cursor: default; }
+  .composer-chip:has(select:disabled):hover, .composer-chip:disabled:hover { background: transparent; color: var(--text-2); }
+  .composer-chip select, .wb-composer .composer-chip select { appearance: none; -webkit-appearance: none; height: 26px; min-height: 26px; max-width: 220px; padding: 0 26px 0 12px; border: 0; border-radius: 14px; background: transparent; box-shadow: none; color: inherit; font: inherit; font-size: var(--fs-12); text-overflow: ellipsis; cursor: inherit; outline: none; }
+  .composer-chip:has(select)::after { content: ""; position: absolute; right: 11px; top: 50%; width: 5px; height: 5px; margin-top: -4px; border-right: 1.25px solid currentColor; border-bottom: 1.25px solid currentColor; transform: rotate(45deg); opacity: .7; pointer-events: none; }
+  .composer-chip:has(select:focus-visible) { outline: 2px solid var(--focus-outline, var(--accent)); outline-offset: 1px; }
+  .composer-chip.is-set { border-color: transparent; background: var(--accent-subtle); color: var(--accent); }
+  .composer-chip.is-warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); color: var(--warn); }
+  .composer-lock { display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none; color: var(--text-3); }
+  /* Send / stop share one slot, so a running turn swaps the glyph, not the layout. */
+  .composer-send { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 32px; height: 32px; flex: none; margin-left: 4px; border: 1px solid var(--accent-stroke); border-bottom-color: var(--accent-stroke-bottom); border-radius: 50%; background: var(--accent); color: var(--accent-text); cursor: pointer; transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease); }
+  .composer-send:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 90%, var(--surface)); }
+  .composer-send:active:not(:disabled) { transform: scale(.94); }
+  .composer-send:disabled { border-color: transparent; background: var(--surface-3); color: var(--text-4); cursor: default; }
+  .composer-send.is-stop { border-color: transparent; background: var(--text); color: var(--surface); }
+  .composer-send.is-stop:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 85%, var(--surface)); }
+  .composer-send.is-stop.has-label { width: auto; padding: 0 14px; border-radius: 16px; font-size: var(--fs-12); }
   .attachments { list-style: none; margin: 0 auto var(--space-1); padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
 
   .wb-progress { position: relative; flex: none; min-height: 0; max-width: 36%; padding: var(--space-3) var(--space-5); border-left: 1px solid var(--line); background: transparent; overflow-y: auto; overflow-wrap: anywhere; }
@@ -168,8 +209,11 @@
     .wb-header { gap: var(--space-1); flex-wrap: wrap; }
     .wb-header .page-title { order: -1; flex-basis: 100%; }
     .wb-composer { max-height: 55%; }
-    .composer-input { min-height: 72px; }
-    .message.role-user { max-width: 100%; }
+    .composer-input { min-height: 52px; }
+    .message { grid-template-columns: 28px minmax(0, 1fr); column-gap: var(--space-2); }
+    .message.role-user { grid-template-columns: minmax(0, 1fr) 28px; }
+    .message-avatar { width: 28px; height: 28px; }
+    .composer-chip select { max-width: 120px; }
   }
 
   /* ── 扩展页：画布类模块铺满可视区 ──

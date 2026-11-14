@@ -337,3 +337,36 @@ def handle_provider_delete(provider_id: str):
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 409
     return jsonify({"ok": True, "deleted": ok})
+
+
+def handle_workbench_models():
+    """GET /api/workbench/models — models a workbench turn may run on.
+
+    Only providers that are enabled and configured with a model and a key are
+    listed. No URLs or keys leave the server; a turn names the provider id.
+    """
+    from agent.llm.settings import resolve_provider_llm_config
+    from agent.llm.turn_model import supports_thinking_control
+
+    active = get_active_provider()
+    models = []
+    for item in list_providers():
+        provider_id = item.get("provider")
+        try:
+            cfg = resolve_provider_llm_config(provider_id)
+        except ValueError:
+            continue
+        if not (cfg.get("enabled", True) and cfg.get("model") and cfg.get("api_key")):
+            continue
+        model = str(cfg.get("model") or "")
+        models.append({
+            "provider": provider_id,
+            "label": item.get("label") or provider_id,
+            "model": model,
+            "is_active": provider_id == active,
+            "thinking": cfg.get("thinking", "provider_default"),
+            "supports_thinking": supports_thinking_control(model),
+            "requires_thinking": model.lower().startswith("minimax-m3.1"),
+        })
+    models.sort(key=lambda m: (not m["is_active"], m["label"]))
+    return jsonify({"ok": True, "models": models, "active": active})

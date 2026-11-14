@@ -110,6 +110,23 @@ class AgentApp:
                 metadata = {}
             metadata = dict(metadata)
             metadata.setdefault("turn_serialization", "per_session")
+            from agent.llm.turn_model import (
+                ModelSelectionError, normalize_model_selection, resolve_model_selection, turn_model,
+            )
+            try:
+                turn_model_cfg = resolve_model_selection(normalize_model_selection(metadata.pop("model_selection", None)))
+            except ModelSelectionError as exc:
+                return AgentResult(
+                    ok=False, session_id=sid, error_type="model_selection_unavailable",
+                    errors=["model_selection_unavailable"],
+                    final_response=f"本轮未执行：{exc}。请在输入框里换一个模型再发送。",
+                )
+            if turn_model_cfg:
+                metadata["model_selection"] = {
+                    "provider": turn_model_cfg.get("provider"),
+                    "model": turn_model_cfg.get("model"),
+                    "thinking": turn_model_cfg.get("thinking", "provider_default"),
+                }
             selection = metadata.pop("workbench_selection", None)
             if selection and "workbench_context" not in metadata:
                 from extensions.runtime import resolve_workbench_context
@@ -132,7 +149,8 @@ class AgentApp:
                 runtime_control=runtime_control,
             )
             thread = AgentThread(session=session)
-            return thread.submit(op)
+            with turn_model(turn_model_cfg):
+                return thread.submit(op)
 
     def reset_session(self, session_id: str, workspace_id: str) -> None:
         """Archive the old conversation and evict its live instance."""

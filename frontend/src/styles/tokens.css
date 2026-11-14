@@ -25,6 +25,12 @@
   --control-fill-rest: rgb(255 255 255 / .7);
   --control-fill-hover: rgb(249 249 249 / .5);
   --control-fill-pressed: rgb(249 249 249 / .3);
+  /* Windows 11 control elevation: a hairline that is darker at the bottom edge. */
+  --control-stroke: rgb(0 0 0 / .0578);
+  --control-stroke-bottom: rgb(0 0 0 / .1622);
+  --accent-stroke: rgb(255 255 255 / .08);
+  --accent-stroke-bottom: rgb(0 0 0 / .4);
+  --shadow-composer: 0 0 2px rgb(0 0 0 / .06), 0 4px 16px rgb(0 0 0 / .06);
 }
 :root {
   color-scheme: light;
@@ -277,6 +283,11 @@
   --control-fill-rest: rgb(255 255 255 / .06);
   --control-fill-hover: rgb(255 255 255 / .085);
   --control-fill-pressed: rgb(255 255 255 / .03);
+  --control-stroke: rgb(255 255 255 / .07);
+  --control-stroke-bottom: rgb(255 255 255 / .05);
+  --accent-stroke: rgb(255 255 255 / .08);
+  --accent-stroke-bottom: rgb(0 0 0 / .14);
+  --shadow-composer: 0 0 2px rgb(0 0 0 / .3), 0 4px 16px rgb(0 0 0 / .3);
   --bg: #202020;
   --surface-2: #2e2e2e;
   --surface-3: #383838;

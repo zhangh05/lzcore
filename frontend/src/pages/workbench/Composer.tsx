@@ -2,7 +2,7 @@ import { readWorkbenchSelection, type WorkbenchSelection } from "../../contracts
 import { boundSessionSelection } from "../../extension-modules/registry";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Button } from "../../components/Button";
-import { IconAttachment, IconFolder, IconSend } from "../../components/Icon";
+import { IconAttachment, IconFolder, IconLock, IconSend, IconStop } from "../../components/Icon";
 import { useApi, listOf } from "../../kit/useApi";
 import { LoadMore, usePaged } from "../../kit/usePaged";
 import { Drawer, FailureNote, fmtTime } from "../../kit/ui";
@@ -10,7 +10,26 @@ import { admitAttachments, attachmentKind, scopeLocked, stopLabel, type PendingA
 
 interface Skill { extension_id: string; skill_id: string; name: string; description?: string; resources: { resource_id: string; name: string; description?: string }[]; default_resource_ids?: string[]; selection_mode?: "single" | "multiple" }
 const skillKey = (skill: Skill) => JSON.stringify([skill.extension_id, skill.skill_id]);
-export interface SendOptions { attachments: PendingAttachment[]; workbenchSelection?: WorkbenchSelection; resumeTaskId?: string }
+export interface ModelSelection { provider: string; thinking: ThinkingMode }
+export interface SendOptions { attachments: PendingAttachment[]; workbenchSelection?: WorkbenchSelection; resumeTaskId?: string; modelSelection?: ModelSelection }
+
+type ThinkingMode = "provider_default" | "adaptive" | "disabled";
+interface TurnModel { provider: string; label: string; model: string; is_active: boolean; supports_thinking: boolean; requires_thinking: boolean }
+const THINKING_LABEL: Record<ThinkingMode, string> = { provider_default: "思考：默认", adaptive: "思考：自适应", disabled: "思考：关闭" };
+
+/** 上次在这个工作区选的模型；只是本机偏好，读写失败就当没选过。 */
+function rememberedModel(ws: string): ModelSelection | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(`lzcore.composer.model:${ws}`) || "null");
+    return raw && typeof raw.provider === "string" ? { provider: raw.provider, thinking: raw.thinking ?? "provider_default" } : null;
+  } catch { return null; }
+}
+function rememberModel(ws: string, value: ModelSelection | null) {
+  try {
+    if (value) localStorage.setItem(`lzcore.composer.model:${ws}`, JSON.stringify(value));
+    else localStorage.removeItem(`lzcore.composer.model:${ws}`);
+  } catch { /* 偏好写不进去不影响发送 */ }
+}
 
 interface ManagedFile { file_id: string; original_name?: string; name?: string; filename?: string; size_bytes?: number; mime_type?: string; created_at?: string; metadata?: { folder?: string } }
 
@@ -44,12 +63,41 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
   const needsResources = !!skill && validScope.length === 0;
   const lock = scopeLocked(running || submitting, !!binding);
 
+  // 会话的 Skill 只跟着这条会话走：切到没有绑定 Skill 的会话时清空，
+  // 不能沿用上一条会话（例如图纸会话）的选择，否则会被当成「不可用的 Skill」。
+  const appliedFor = useRef<string | null>(null);
+  const sessionKey = session?.session_id ?? null;
   useEffect(() => {
     if (saved) {
       setSkillId(JSON.stringify([saved.extension_id, saved.skill_id]));
       setScope(saved.resource_ids);
+      appliedFor.current = sessionKey;
+    } else if (appliedFor.current !== sessionKey) {
+      setSkillId("");
+      setScope([]);
+      appliedFor.current = sessionKey;
     }
-  }, [saved]);
+  }, [saved, sessionKey]);
+
+  // 模型：只列服务端确认可用（有模型、有密钥）的厂商；接口不可用时整组隐藏，按当前启用的模型发送。
+  const [modelsRes] = useApi("/api/workbench/models");
+  const models = modelsRes.state === "ok" ? listOf<TurnModel>(modelsRes, "models").filter((m) => m.provider && m.model) : [];
+  const [modelPick, setModelPick] = useState<ModelSelection | null>(() => rememberedModel(ws));
+  const chosen = modelPick ? models.find((m) => m.provider === modelPick.provider) : undefined;
+  const effective = chosen ?? models.find((m) => m.is_active);
+  const thinking: ThinkingMode = effective?.supports_thinking && modelPick?.thinking ? modelPick.thinking : "provider_default";
+  const pickModel = (next: ModelSelection | null) => { setModelPick(next); rememberModel(ws, next); };
+  const modelSelection: ModelSelection | undefined = (chosen && !chosen.is_active) || thinking !== "provider_default"
+    ? { provider: (chosen ?? effective)!.provider, thinking } : undefined;
+
+  const input = useRef<HTMLTextAreaElement>(null);
+  // 输入框随内容长高，到上限后内部滚动；工具栏始终一行，运行中不会把卡片撑高。
+  useEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [text]);
 
   const admit = (incoming: PendingAttachment[]) => {
     const r = admitAttachments(attachments, incoming);
@@ -70,7 +118,7 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
     if (!t || running || submitting || needsResources || (skillId && !skill)) return;
     setSubmitting(true);
     try {
-    const accepted = await onSend(t, { attachments, ...(skill ? { workbenchSelection: {
+    const accepted = await onSend(t, { attachments, ...(modelSelection ? { modelSelection } : {}), ...(skill ? { workbenchSelection: {
       extension_id: skill.extension_id, skill_id: skill.skill_id, skill_name: skill.name,
       resource_ids: validScope, allow_edit: binding?.allow_edit ?? true,
     } } : {}) });
@@ -82,46 +130,79 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
     } finally { setSubmitting(false); }
   };
 
+  const stopIdle = stopState === "idle";
   return (
     <div className="wb-composer" onDragOver={(e) => e.preventDefault()} onDrop={onDrop} data-testid="composer">
       {skills.state === "error" ? <FailureNote outcome={skills.outcome} /> : null}
-      {skillId && !skill ? <p className="inline-alert tone-warn" role="status">当前 Skill 不在可用目录中，请检查扩展状态和资源权限。</p> : null}
-      {needsResources ? <p className="muted" role="status">请选择此 Skill 的可用资源后发送。</p> : null}
-      {attachments.length ? (
-        <ul className="attachments">
-          {attachments.map((a) => <li key={a.id} className="status-chip">{a.name}<button type="button" className="btn ghost" aria-label={`移除 ${a.name}`} onClick={() => setAttachments(attachments.filter((x) => x.id !== a.id))}>×</button></li>)}
-        </ul>
-      ) : null}
+      {skillId && !skill && skills.state === "ok" ? <p className="inline-alert tone-warn" role="status">当前 Skill 不在可用目录中，请检查扩展状态和资源权限。</p> : null}
       {rejected.length ? <p className="inline-alert tone-warn" role="alert" data-testid="attachment-rejected">{rejected.map((r) => `${r.name}：${r.reason}`).join("；")}</p> : null}
-      <div className="composer-card">
-        <textarea className="composer-input" value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste} rows={3}
+      <div className={`composer-card ${running ? "is-running" : ""}`}>
+        {attachments.length ? (
+          <ul className="composer-attachments">
+            {attachments.map((a) => <li key={a.id} className="composer-attachment"><IconAttachment size={14} aria-hidden="true" /><span>{a.name}</span><button type="button" aria-label={`移除 ${a.name}`} onClick={() => setAttachments(attachments.filter((x) => x.id !== a.id))}>×</button></li>)}
+          </ul>
+        ) : null}
+        <textarea ref={input} className="composer-input" value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste} rows={1}
           aria-label="输入消息" placeholder={running ? "本轮运行中，可以先写下一句" : "输入消息，Enter 发送，Shift+Enter 换行"} data-testid="composer-input"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
         <div className="composer-toolbar">
           <div className="composer-scope">
-            <label className="field-inline">Skill
+            <input ref={fileInput} type="file" multiple hidden onChange={(e) => { if (e.target.files) fromFiles(e.target.files, "upload"); e.target.value = ""; }} />
+            <button type="button" className="composer-icon" aria-label="添加附件" title="添加附件：最多 8 个，其中图片最多 4 张；图片 ≤5MB，文件 ≤100MB" onClick={() => fileInput.current?.click()}><IconAttachment size={16} aria-hidden="true" /></button>
+            <button type="button" className="composer-icon" aria-label="从托管文件选" title="从托管文件选" onClick={() => setPicker("files")}><IconFolder size={16} aria-hidden="true" /></button>
+            <span className="composer-divider" aria-hidden="true" />
+            <label className={`composer-chip ${skill ? "is-set" : ""}`} title="Skill">
+              <span className="sr-only">Skill</span>
               <select value={skillId} onChange={(e) => {
                 setSkillId(e.target.value);
                 const next = skillList.find((s) => skillKey(s) === e.target.value);
                 const defaults = next?.default_resource_ids?.filter((id) => next.resources.some((r) => r.resource_id === id)) ?? [];
                 setScope(next?.selection_mode === "single" ? defaults.slice(0, 1) : defaults);
               }} disabled={lock.locked} aria-label="Skill" data-testid="skill-select">
-                <option value="">不指定</option>
+                <option value="">Skill：不指定</option>
                 {skillId && !skill ? <option value={skillId}>{saved?.skill_name ?? "已选 Skill"}（当前不可用）</option> : null}
                 {skillList.map((s) => <option key={skillKey(s)} value={skillKey(s)}>{s.name ?? s.skill_id}</option>)}
               </select>
             </label>
-            <Button variant="ghost" className="sm" onClick={() => setPicker("resources")} disabled={lock.locked || !skill} data-testid="scope-btn">资源范围（{validScope.length}）</Button>
-            {lock.locked ? <span className="muted" data-testid="scope-locked">{lock.reason}</span> : null}
+            {skill ? (
+              <button type="button" className={`composer-chip ${needsResources ? "is-warn" : ""}`} onClick={() => setPicker("resources")} disabled={lock.locked} data-testid="scope-btn"
+                title={needsResources ? "请选择此 Skill 的可用资源后发送" : "资源范围"}>资源范围（{validScope.length}）</button>
+            ) : null}
+            {lock.locked ? <span className="composer-lock" data-testid="scope-locked" title={lock.reason}><IconLock size={14} aria-hidden="true" /><span className="sr-only">{lock.reason}</span></span> : null}
           </div>
           <div className="composer-actions">
-            <input ref={fileInput} type="file" multiple hidden onChange={(e) => { if (e.target.files) fromFiles(e.target.files, "upload"); e.target.value = ""; }} />
-            <Button variant="ghost" className="sm" icon={<IconAttachment size={15} aria-hidden="true" />} title="最多 8 个，其中图片最多 4 张；图片 ≤5MB，文件 ≤100MB" onClick={() => fileInput.current?.click()}>添加附件</Button>
-            <Button variant="ghost" className="sm" icon={<IconFolder size={15} aria-hidden="true" />} onClick={() => setPicker("files")}>从托管文件选</Button>
-            {running ? (
-              <Button variant="danger" onClick={onStop} disabled={stopState === "requesting" || stopState === "requested"} data-testid="stop-btn" data-stop={stopState}>{stopLabel(stopState)}</Button>
+            {models.length ? (
+              <label className="composer-chip" title={effective ? `${effective.label} · ${effective.model}` : "模型"}>
+                <span className="sr-only">模型</span>
+                <select value={chosen?.provider ?? ""} aria-label="模型" data-testid="model-select" disabled={running || submitting}
+                  onChange={(e) => pickModel(e.target.value ? { provider: e.target.value, thinking: modelPick?.thinking ?? "provider_default" } : null)}>
+                  <option value="">{models.find((m) => m.is_active)?.model ?? "默认模型"}（默认）</option>
+                  {models.filter((m) => !m.is_active).map((m) => <option key={m.provider} value={m.provider}>{m.model} · {m.label}</option>)}
+                </select>
+              </label>
             ) : null}
-            <Button variant="primary" icon={<IconSend size={15} aria-hidden="true" />} onClick={() => void submit()} disabled={running || submitting || !text.trim() || needsResources || (!!skillId && !skill)} data-testid="send-btn">{running ? "运行中" : submitting ? "提交中" : "发送"}</Button>
+            {effective?.supports_thinking ? (
+              <label className="composer-chip" title="思考强度">
+                <span className="sr-only">思考强度</span>
+                <select value={thinking} aria-label="思考强度" data-testid="thinking-select" disabled={running || submitting}
+                  onChange={(e) => pickModel({ provider: (chosen ?? effective).provider, thinking: e.target.value as ThinkingMode })}>
+                  {(Object.keys(THINKING_LABEL) as ThinkingMode[]).map((k) => <option key={k} value={k} disabled={k === "disabled" && effective.requires_thinking}>{THINKING_LABEL[k]}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {running ? (
+              <button type="button" className={`composer-send is-stop ${stopIdle ? "" : "has-label"}`} onClick={onStop} disabled={stopState === "requesting" || stopState === "requested"}
+                data-testid="stop-btn" data-stop={stopState} title={stopLabel(stopState)}>
+                <IconStop size={14} aria-hidden="true" />
+                <span className={stopIdle ? "sr-only" : ""}>{stopLabel(stopState)}</span>
+              </button>
+            ) : (
+              <button type="button" className="composer-send" onClick={() => void submit()} disabled={submitting || !text.trim() || needsResources || (!!skillId && !skill)}
+                data-testid="send-btn" title="发送（Enter）">
+                <IconSend size={16} aria-hidden="true" />
+                <span className="sr-only">{submitting ? "提交中" : "发送"}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

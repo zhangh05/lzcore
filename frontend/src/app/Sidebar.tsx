@@ -1,24 +1,12 @@
 import { CORE_NAV_AFTER_EXTENSIONS, CORE_NAV_BEFORE_EXTENSIONS, NAMES, type NavLeaf } from "../contracts/naming";
 import { extensionNavItems } from "../contracts/extensions";
 import { NavIcon } from "../components/NavIcon";
+import { BrandGlyph } from "../components/BrandGlyph";
 import { useLayoutEffect, useRef } from "react";
 import { IconNavCollapse, IconNavExpand } from "../components/Icon";
 import { Link, useLocation } from "../router";
 import { useShell } from "./shellContext";
 import { usePrefs } from "./prefs";
-
-/** 产品标识：一个中枢节点连着三个端点，对应「联智中枢」。 */
-function BrandGlyph() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M8 8 3.5 4M8 8l4.5-4M8 8v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <circle cx="8" cy="8" r="2.3" fill="currentColor" />
-      <circle cx="3.5" cy="4" r="1.5" fill="currentColor" />
-      <circle cx="12.5" cy="4" r="1.5" fill="currentColor" />
-      <circle cx="8" cy="13" r="1.5" fill="currentColor" />
-    </svg>
-  );
-}
 
 /**
  * Windows 11 导航选中指示条：整栏只有一条，切换页面时从旧位置滑到新位置，
