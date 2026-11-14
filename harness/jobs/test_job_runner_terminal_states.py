@@ -3,6 +3,35 @@ from __future__ import annotations
 from jobs.schemas import JobRecord
 
 
+def test_workflow_runner_checks_cancel_before_start_and_after_result(monkeypatch, tmp_path):
+    import jobs.runner as runner
+    import workflows.service as workflow
+    from jobs.manager import create_job, enqueue_job, cancel_job, mark_running
+    from jobs.store import get_job
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    calls = []
+
+    def finish_with_late_cancel(ws, workflow_id, _inputs, *, job_id):
+        calls.append(job_id)
+        cancel_job(ws, job_id)
+        return {"workflow_id": workflow_id, "run_id": "wfrun_synthetic", "status": "succeeded"}
+
+    monkeypatch.setattr(workflow, "execute_workflow", finish_with_late_cancel)
+    for phase in ("before", "after"):
+        job = create_job("default", "workflow_run", "Synthetic workflow", {"workflow_id": "wf"}, enqueue=False)
+        enqueue_job("default", job.job_id)
+        mark_running("default", job.job_id)
+        if phase == "before":
+            cancel_job("default", job.job_id)
+        runner._run_workflow(get_job("default", job.job_id))
+        assert get_job("default", job.job_id).status == "cancelled"
+        if phase == "before":
+            assert calls == []
+        else:
+            assert calls == [job.job_id]
+
+
 def test_agent_job_failure_cannot_be_promoted_to_success(monkeypatch):
     import agent.app.service as app_service
     import jobs.runner as runner

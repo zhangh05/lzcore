@@ -70,17 +70,30 @@ def parse(
             pass
     pages_text = []
     pages_with_text = 0
-    for i, page in enumerate(pdf.pages, start=1):
-        try:
-            txt = page.extract_text() or ""
-        except Exception as e:
-            txt = ""
-            pages_text.append((i, f"[page {i}: extract_failed: {e!r}]"))
-            continue
-        if len(txt.strip()) >= SCANNED_MIN_TEXT_CHARS:
-            pages_with_text += 1
-        pages_text.append((i, txt))
-    pdf.close()
+    failed_pages = []
+    page_errors = []
+    try:
+        for i, page in enumerate(pdf.pages, start=1):
+            try:
+                txt = page.extract_text() or ""
+            except Exception as exc:
+                failed_pages.append(i)
+                page_errors.append({"page": i, "error": "extract_failed", "exception": type(exc).__name__})
+                continue
+            if len(txt.strip()) >= SCANNED_MIN_TEXT_CHARS:
+                pages_with_text += 1
+            pages_text.append((i, txt))
+    finally:
+        pdf.close()
+    warnings = [f"pdf_page_extract_failed:{page}" for page in failed_pages]
+    metadata = dict(metadata or {})
+    metadata.update({
+        "attempted_pages": list(range(1, n_pages + 1)),
+        "extracted_pages": [page for page, _ in pages_text],
+        "failed_pages": failed_pages,
+        "page_errors": page_errors,
+        "partial": bool(failed_pages),
+    })
     if n_pages == 0:
         return NormalizedDocument(
             title=title, author=author, source_type=source_type,
@@ -89,8 +102,14 @@ def parse(
             metadata=metadata or {},
             warnings=["empty_pdf"],
         )
-    ratio = pages_with_text / n_pages
-    metadata = dict(metadata or {})
+    if not pages_text:
+        return NormalizedDocument(
+            title=title, author=author, source_type=source_type,
+            scope=scope, language=language, format="pdf",
+            normalized_markdown="", metadata=metadata,
+            warnings=[*warnings, "pdf_extract_failed"],
+        )
+    ratio = pages_with_text / len(pages_text)
     metadata.setdefault("format_hint", "pdf")
     metadata.setdefault("page_count", n_pages)
     if ratio < SCANNED_PAGE_TEXT_RATIO:
@@ -101,7 +120,7 @@ def parse(
             scope=scope, language=language, format="pdf",
             normalized_markdown="",
             metadata=metadata,
-            warnings=["unsupported_ocr"],
+            warnings=[*warnings, "unsupported_ocr"],
         )
     out_lines = []
     for i, txt in pages_text:
@@ -126,5 +145,5 @@ def parse(
         format="pdf",
         normalized_markdown=md,
         metadata=metadata,
-        warnings=[],
+        warnings=warnings,
     )

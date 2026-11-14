@@ -13,6 +13,7 @@ This module provides the common building blocks.
 import json
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -105,6 +106,74 @@ def get_active_refs(ws_dir: Path) -> set:
                 pass
 
     return active
+
+
+@contextmanager
+def transient_file_guard(workspace_id: str):
+    """Hold the existing writer locks while verifying file identities and refs.
+
+    Lifecycle decisions must use strict reads: a damaged index is not evidence
+    that a payload is unowned. The reference lock also covers new owner links.
+    """
+    from storage import index, records
+    from storage.project_changes import workspace_files_lock
+
+    root = workspace_dir(workspace_id).resolve()
+    ref_path = root / "index" / "references.jsonl"
+    with workspace_files_lock(workspace_id), records._lock_for(ref_path), records._file_lock(ref_path), index.IndexLock(workspace_id):
+        files = index._records_from_lines(
+            index._read_lines(root / "index" / "files.jsonl"), strict=True,
+        )
+        refs = records._read_jsonl_unlocked(ref_path, strict=True)
+        for record in files:
+            if (record.get("workspace_id") != workspace_id or not record.get("file_id")
+                    or not record.get("path") or not is_safe_path(root / record["path"], root)):
+                raise ValueError("invalid_managed_file_identity")
+        if any(not ref.get("file_id") or ref.get("workspace_id") != workspace_id for ref in refs):
+            raise ValueError("invalid_file_reference_identity")
+        yield files, refs
+
+
+def transient_block_reason(path: Path, ws_dir: Path, files: list, refs: list,
+                           active_refs: set, *, archive: bool = False) -> str:
+    """Protect indexed descendants as well as the file_id__name layout."""
+    target = path.resolve()
+    referenced = {ref["file_id"] for ref in refs} | active_refs
+    matches = [rec for rec in files if (ws_dir / rec["path"]).resolve().is_relative_to(target)]
+    if any(rec["file_id"] in referenced for rec in matches):
+        return "active_file_ref"
+    paths = [path, *(path.rglob("*") if path.is_dir() else [])]
+    if any(item.name in active_refs or item.stem in active_refs
+           or item.name.split("__", 1)[0] in referenced for item in paths):
+        return "active_file_ref"
+    # Archive has no FileStore relocation API. Keep these identities resolvable
+    # instead of moving their payload behind the index's back.
+    if archive and matches:
+        return "managed_file_archive_unsupported"
+    return ""
+
+
+def scan_transient_files(workspace_id: str, ws_dir: Path, max_age_days: int,
+                         active_refs: set, *, archive: bool = False) -> dict:
+    result = scan_directory(ws_dir, "files/tmp", max_age_days=max_age_days,
+                            active_refs=active_refs, check_is_file=False)
+    candidates = []
+    try:
+        with transient_file_guard(workspace_id) as (files, refs):
+            for name in result["candidates"]:
+                reason = transient_block_reason(ws_dir / "files/tmp" / name, ws_dir,
+                                                files, refs, active_refs, archive=archive)
+                if reason:
+                    result["blocked"].append({"path": name, "reason": reason})
+                else:
+                    candidates.append(name)
+    except (OSError, ValueError, RuntimeError) as exc:
+        candidates = []
+        result["blocked"].extend({"path": name, "reason": "file_index_unavailable"}
+                                 for name in result["candidates"])
+        result["warnings"] = [f"transient_file_scan_blocked:{type(exc).__name__}"]
+    result["candidates"] = candidates
+    return result
 
 
 def scan_directory(ws_dir: Path, subdir: str, max_age_days: int = 0,

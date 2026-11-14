@@ -1,5 +1,9 @@
 """Safety contract for the LLM-visible artifact deletion action."""
 
+from pathlib import Path
+
+import pytest
+
 from core.tools.schemas import ToolInvocation
 
 
@@ -90,7 +94,7 @@ def test_soft_deleted_artifact_does_not_soft_delete_its_filestore_payload(monkey
     assert record.lifecycle == "deleted"
 
 
-def test_hard_delete_detaches_refs_before_payload_bytes(monkeypatch):
+def test_hard_delete_removes_payload_before_refs_and_metadata(monkeypatch):
     import artifacts.store as artifact_store
     from artifacts.schemas import ArtifactRecord
     from storage import file_store
@@ -116,7 +120,7 @@ def test_hard_delete_detaches_refs_before_payload_bytes(monkeypatch):
     monkeypatch.setattr(file_store, "delete_file_permanently", lambda *_args: order.append("payload") or True)
 
     assert artifact_store.delete_artifact("test_ws", "art_payload", hard=True) is True
-    assert order == ["refs", "metadata", "payload"]
+    assert order == ["payload", "refs", "metadata"]
 
 
 def test_hard_delete_preserves_payload_referenced_by_non_artifact_owner(monkeypatch):
@@ -150,6 +154,261 @@ def test_hard_delete_preserves_payload_referenced_by_non_artifact_owner(monkeypa
 
     assert artifact_store.delete_artifact("test_ws", "art_test", hard=True) is True
     assert removed_refs == ["ref_artifact"]
+
+
+@pytest.fixture
+def permanent_delete_case(tmp_path, monkeypatch):
+    import artifacts.store as artifact_store
+    from artifacts.schemas import ArtifactRecord
+    from storage.atomic_io import atomic_write_json
+    from storage.file_store import create_file_record
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    root = tmp_path / "test_ws"
+    path = root / "files/data/delete.txt"
+    path.parent.mkdir(parents=True)
+    path.write_text("synthetic payload", encoding="utf-8")
+    create_file_record("test_ws", "artifact_output", "text", "files/data/delete.txt", file_id="file_only")
+    record = ArtifactRecord(
+        artifact_id="art_payload", workspace_id="test_ws", file_id="file_only",
+        relative_path="files/data/delete.txt", lifecycle="active",
+    )
+    artifact_store._save_artifact_record(record, add_to_index=True)
+    run_path = root / "runs/run_delete.json"
+    atomic_write_json(run_path, {"status": "succeeded", "artifact_refs": [record.artifact_id]})
+    events, knowledge_cleanup = [], []
+    monkeypatch.setattr("storage.events.publish", lambda *args: events.append(args))
+    monkeypatch.setattr(artifact_store, "_remove_from_knowledge_index", lambda *args: knowledge_cleanup.append(args))
+    return record, path, run_path, events, knowledge_cleanup
+
+
+def _move_payload_to_trash(record, path):
+    from storage import index
+    from storage.file_store import soft_delete_file
+
+    trash = path.parents[2] / ".trash/delete.txt"
+    trash.parent.mkdir()
+    path.rename(trash)
+    assert soft_delete_file(record.workspace_id, record.file_id)
+    assert index.update_file_record(record.workspace_id, record.file_id, {"metadata": {"trash_path": ".trash/delete.txt"}})
+    return trash
+
+
+@pytest.mark.parametrize("payload_kind", ["managed", "trash", "legacy"])
+def test_payload_unlink_failure_preserves_metadata_refs_and_retry(permanent_delete_case, monkeypatch, payload_kind):
+    import artifacts.store as artifact_store
+    from storage.file_store import get_file_record
+    from storage.reference_index import list_references
+
+    record, path, run_path, events, knowledge_cleanup = permanent_delete_case
+    replacement = None
+    if payload_kind == "trash":
+        replacement = path
+        path = _move_payload_to_trash(record, path)
+        replacement.write_text("new unrelated payload", encoding="utf-8")
+    elif payload_kind == "legacy":
+        record.file_id = ""
+        artifact_store._save_artifact_record(record)
+    artifact_before = artifact_store.get_artifact("test_ws", record.artifact_id)
+    file_before = get_file_record("test_ws", "file_only")
+    refs_before = list_references("test_ws")
+    run_before = run_path.read_bytes()
+    unlink = Path.unlink
+
+    def fail_payload_unlink(target, *args, **kwargs):
+        if target == path:
+            raise PermissionError("synthetic payload busy")
+        return unlink(target, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", fail_payload_unlink)
+        assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is False
+    assert path.read_text(encoding="utf-8") == "synthetic payload"
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) == artifact_before
+    assert get_file_record("test_ws", "file_only") == file_before
+    assert list_references("test_ws") == refs_before
+    assert run_path.read_bytes() == run_before
+    assert knowledge_cleanup == []
+    assert events == []
+
+    assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is True
+    assert not path.exists()
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) is None
+    if payload_kind != "legacy":
+        assert get_file_record("test_ws", "file_only") is None
+    if replacement is not None:
+        assert replacement.read_text(encoding="utf-8") == "new unrelated payload"
+    assert list_references("test_ws") == []
+    assert events == [("test_ws", "artifact", "deleted", record.artifact_id)]
+
+
+@pytest.mark.parametrize("trashed", [False, True])
+@pytest.mark.parametrize("failure", ["false", "exception", "after_replace"])
+def test_filestore_metadata_failure_keeps_retryable_identity(permanent_delete_case, monkeypatch, trashed, failure):
+    import artifacts.store as artifact_store
+    from storage import index
+    from storage.file_store import get_file_record
+    from storage.reference_index import list_references
+
+    record, path, run_path, events, _ = permanent_delete_case
+    if trashed:
+        path = _move_payload_to_trash(record, path)
+    file_before = get_file_record("test_ws", record.file_id)
+    refs_before = list_references("test_ws")
+    run_before = run_path.read_bytes()
+    delete_metadata = index.delete_file_record
+
+    def fail_metadata(*args):
+        assert not path.exists()
+        if failure == "after_replace":
+            assert delete_metadata(*args) is True
+        if failure != "false":
+            raise OSError("synthetic index failure")
+        return False
+
+    with monkeypatch.context() as patch:
+        patch.setattr(index, "delete_file_record", fail_metadata)
+        assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is False
+    assert not path.exists()
+    assert get_file_record("test_ws", record.file_id) == (None if failure == "after_replace" else file_before)
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) == record
+    assert list_references("test_ws") == refs_before
+    assert run_path.read_bytes() == run_before
+    assert events == []
+    assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is True
+    assert get_file_record("test_ws", record.file_id) is None
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) is None
+    assert list_references("test_ws") == []
+
+
+@pytest.mark.parametrize("stage", ["run_refs", "missing_file_index", "owner_refs", "artifact_metadata", "artifact_index"])
+def test_artifact_cleanup_failure_retries_after_filestore_is_gone(permanent_delete_case, monkeypatch, stage):
+    import artifacts.store as artifact_store
+    from storage import reference_index
+    from storage.file_store import get_file_record
+
+    record, path, _, events, _ = permanent_delete_case
+    remove_metadata = artifact_store._remove_artifact_record_permanently
+
+    def fail_cleanup(*args):
+        if stage == "artifact_index":
+            remove_metadata(*args)
+        raise OSError("synthetic cleanup failure")
+
+    with monkeypatch.context() as patch:
+        if stage == "owner_refs":
+            patch.setattr(reference_index, "remove_reference", lambda *_: False)
+        else:
+            target = "_remove_artifact_from_run_indexes" if stage in {"run_refs", "missing_file_index"} else "_remove_artifact_record_permanently"
+            patch.setattr(artifact_store, target, fail_cleanup)
+        assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is False
+    assert not path.exists()
+    assert get_file_record("test_ws", record.file_id) is None
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) == record
+    assert events == []
+    if stage == "missing_file_index":
+        (path.parents[2] / "index/files.jsonl").unlink()
+    assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is True
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) is None
+    assert reference_index.list_references("test_ws") == []
+    assert events == [("test_ws", "artifact", "deleted", record.artifact_id)]
+
+
+@pytest.mark.parametrize("failure", [
+    "read_error", "invalid_utf8", "invalid_json", "non_object",
+    "invalid_file_id", "missing_path", "invalid_metadata", "invalid_trash_path", "wrong_workspace",
+])
+def test_filestore_index_failure_preserves_payload_and_artifact_state(permanent_delete_case, monkeypatch, failure):
+    import json
+
+    import artifacts.store as artifact_store
+    from storage import index
+    from storage.reference_index import list_references
+
+    record, path, run_path, events, knowledge_cleanup = permanent_delete_case
+    index_path = index._index_path("test_ws")
+    index_before = index_path.read_bytes()
+    refs_before = list_references("test_ws")
+    run_before = run_path.read_bytes()
+    read_text = Path.read_text
+
+    def fail_index_read(target, *args, **kwargs):
+        if target == index_path:
+            raise PermissionError("synthetic index unreadable")
+        return read_text(target, *args, **kwargs)
+
+    if failure == "invalid_utf8":
+        index_path.write_bytes(b"\xff\n")
+    elif failure == "invalid_json":
+        index_path.write_text('{"file_id":', encoding="utf-8")
+    elif failure == "non_object":
+        index_path.write_text('[]\n', encoding="utf-8")
+    elif failure != "read_error":
+        invalid = json.loads(index_before)
+        if failure == "invalid_file_id":
+            invalid["file_id"] = []
+        elif failure == "missing_path":
+            del invalid["path"]
+        elif failure == "invalid_metadata":
+            invalid["metadata"] = []
+        elif failure == "invalid_trash_path":
+            invalid["metadata"] = {"trash_path": 123}
+        else:
+            invalid["workspace_id"] = "other_ws"
+        # A valid matching row must not mask corruption later in the index.
+        index_path.write_bytes(index_before + (json.dumps(invalid) + "\n").encode())
+    failed_index = index_path.read_bytes()
+    with monkeypatch.context() as patch:
+        if failure == "read_error":
+            patch.setattr(Path, "read_text", fail_index_read)
+        assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is False
+    assert index_path.read_bytes() == failed_index
+    assert path.read_text(encoding="utf-8") == "synthetic payload"
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) == record
+    assert list_references("test_ws") == refs_before
+    assert run_path.read_bytes() == run_before
+    assert events == []
+    assert knowledge_cleanup == []
+    index_path.write_bytes(index_before)
+    assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is True
+    assert not path.exists()
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) is None
+
+
+def test_filestore_permanent_delete_uses_last_matching_record(permanent_delete_case):
+    import artifacts.store as artifact_store
+    from storage import index
+    from storage.file_store import get_file_record
+
+    record, old_path, _, _, _ = permanent_delete_case
+    current_path = old_path.with_name("current.txt")
+    current_path.write_text("current payload", encoding="utf-8")
+    current = get_file_record("test_ws", record.file_id)
+    current["path"] = "files/data/current.txt"
+    index.append_file_record("test_ws", current)
+    assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is True
+    assert not current_path.exists()
+    assert old_path.read_text(encoding="utf-8") == "synthetic payload"
+    assert get_file_record("test_ws", record.file_id) is None
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_hard_delete_preserves_payload_shared_with_another_artifact(permanent_delete_case, legacy):
+    import artifacts.store as artifact_store
+    from dataclasses import replace
+    from storage.file_store import get_file_record
+
+    record, path, _, _, _ = permanent_delete_case
+    if legacy:
+        record.file_id = ""
+        artifact_store._save_artifact_record(record)
+    other = replace(record, artifact_id="art_retained")
+    artifact_store._save_artifact_record(other, add_to_index=True)
+    assert artifact_store.delete_artifact("test_ws", record.artifact_id, hard=True) is True
+    assert artifact_store.get_artifact("test_ws", record.artifact_id) is None
+    assert artifact_store.get_artifact("test_ws", other.artifact_id) == other
+    assert path.read_text(encoding="utf-8") == "synthetic payload"
+    assert get_file_record("test_ws", "file_only") is not None
 
 
 def test_consumed_evidence_cleanup_removes_only_owned_finished_cache(monkeypatch, tmp_path):

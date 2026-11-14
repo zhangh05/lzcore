@@ -5,6 +5,190 @@ import pytest
 from workflows.service import WorkflowError, execute_workflow, save_workflow
 
 
+def _write_workflow(monkeypatch, tmp_path, invoke, *, nodes=None):
+    from types import SimpleNamespace
+    import workflows.service as service
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
+
+    class Client:
+        def list_tools(self):
+            return [{"tool_id": "synthetic.write", "enabled": True}]
+
+        def canonicalize_arguments(self, _tool_id, arguments):
+            return dict(arguments)
+
+        def invoke(self, _tool_id, arguments, context=None):
+            invoke(arguments, context)
+            return SimpleNamespace(status="succeeded", output={"receipt": arguments["node"]},
+                                   summary="saved", errors=[], duration_ms=1)
+
+    monkeypatch.setattr(service, "_tool_client", lambda: Client())
+    service.save_workflow("default", {
+        "workflow_id": "write_graph", "name": "write graph",
+        "nodes": nodes or [{"node_id": "a", "tool_id": "synthetic.write", "arguments": {"node": "a"}}],
+    })
+    return service
+
+
+@pytest.mark.parametrize("latest_status", ["running", "succeeded", "completed", "failed", "cancelled"])
+def test_cancel_workflow_reads_latest_evidence_inside_run_lock(monkeypatch, tmp_path, latest_status):
+    from copy import deepcopy
+    from storage.locking import FileLock
+    import workflows.service as service
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    initial = {"workspace_id": "default", "run_id": "cancel_race", "workflow_id": "wf",
+               "status": "running", "nodes": []}
+    service._save_run(initial)
+    latest = {**initial, "status": latest_status,
+              "nodes": [{"node_id": "a", "status": "succeeded", "output": {"receipt": "saved"}}]}
+    if latest_status != "running":
+        latest["finished_at"] = "2026-11-13T00:00:00Z"
+    injected = False
+
+    class InterleavedLock(FileLock):
+        def __enter__(self):
+            nonlocal injected
+            if not injected:
+                injected = True
+                committed = deepcopy(latest)
+                service._save_run(committed)
+                latest.update(committed)
+            return super().__enter__()
+
+    monkeypatch.setattr(service, "FileLock", InterleavedLock)
+    returned = service.cancel_run("default", "cancel_race")
+    saved = service.get_run("default", "cancel_race")
+    assert saved == returned
+    assert saved["nodes"] == latest["nodes"]
+    assert saved["status"] == latest_status
+    if latest_status == "running":
+        assert saved["cancel_requested"] is True
+    else:
+        assert saved == latest
+        service._save_run(deepcopy(initial))
+        assert service.get_run("default", "cancel_race") == latest
+
+
+def test_concurrent_workflow_run_creation_executes_write_once(monkeypatch, tmp_path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from storage.locking import FileLock
+
+    entered, release_create = threading.Event(), threading.Event()
+    second_attempt, release_tool = threading.Event(), threading.Event()
+    calls = []
+
+    def invoke(arguments, _context):
+        calls.append(arguments["node"])
+        assert release_tool.wait(5)
+
+    service = _write_workflow(monkeypatch, tmp_path, invoke)
+    original_write = service.atomic_write_json
+    first_create = True
+
+    def delayed_create(path, record):
+        nonlocal first_create
+        if path.stem == "same_run" and first_create:
+            first_create = False
+            entered.set()
+            assert release_create.wait(5)
+        return original_write(path, record)
+
+    class ObservedLock(FileLock):
+        def __enter__(self):
+            if threading.current_thread().name.startswith("duplicate"):
+                second_attempt.set()
+            return super().__enter__()
+
+    monkeypatch.setattr(service, "atomic_write_json", delayed_create)
+    monkeypatch.setattr(service, "FileLock", ObservedLock)
+    with ThreadPoolExecutor(max_workers=1) as owner_pool, ThreadPoolExecutor(max_workers=1, thread_name_prefix="duplicate") as duplicate_pool:
+        owner = owner_pool.submit(service.execute_workflow, "default", "write_graph", run_id="same_run")
+        try:
+            assert entered.wait(5)
+            duplicate = duplicate_pool.submit(service.execute_workflow, "default", "write_graph", run_id="same_run")
+            assert second_attempt.wait(5)
+            release_create.set()
+            existing = duplicate.result(timeout=5)
+            assert existing["status"] == "running"
+            assert existing["run_id"] == "same_run"
+        finally:
+            release_create.set()
+            release_tool.set()
+        result = owner.result(timeout=5)
+    assert calls == ["a"]
+    assert result["status"] == "succeeded"
+    assert service.execute_workflow("default", "write_graph", run_id="same_run") == result
+    assert calls == ["a"]
+
+
+@pytest.mark.parametrize("mode", ["serial", "parallel", "last_node", "job"])
+def test_workflow_cancellation_stops_pending_nodes_and_preserves_receipts(monkeypatch, tmp_path, mode):
+    from jobs.manager import cancel_job, create_job
+    from jobs.runner import run_job
+    from jobs.store import get_job
+
+    seen = []
+    def invoke(arguments, context):
+        seen.append(arguments["node"])
+        if mode == "job":
+            cancel_job("default", context.job_id)
+        else:
+            service.cancel_run("default", context.run_id)
+
+    nodes = [{"node_id": name, "tool_id": "synthetic.write", "arguments": {"node": name}}
+             for name in (["a"] if mode == "last_node" else ["a", "b", "c"])]
+    if mode != "last_node":
+        nodes[-1]["depends_on"] = ["b"]
+    service = _write_workflow(monkeypatch, tmp_path, invoke, nodes=nodes)
+    monkeypatch.setattr("core.runtime_engine.contracts.is_read_only_call", lambda *_args: mode == "parallel")
+    if mode == "parallel":
+        from storage.principal import ContextThreadPoolExecutor
+        monkeypatch.setattr(service, "ContextThreadPoolExecutor", lambda **kwargs: ContextThreadPoolExecutor(max_workers=1))
+    if mode == "job":
+        job = create_job("default", "workflow_run", "Cancel workflow", {"workflow_id": "write_graph"}, enqueue=True)
+        run_job("default", job.job_id)
+        finished_job = get_job("default", job.job_id)
+        assert finished_job.status == "cancelled"
+        run = service.get_run("default", finished_job.result_summary["workflow_run_id"])
+        assert finished_job.result_summary["status"] == "cancelled"
+    else:
+        run = service.execute_workflow("default", "write_graph")
+    assert seen == ["a"]
+    assert run["status"] == "cancelled"
+    assert run["nodes"][0]["output"] == {"receipt": "a"}
+    assert all(node["status"] == "cancelled" for node in run["nodes"][1:])
+    assert len(run["nodes"]) == len(nodes)
+    assert service.get_run("default", run["run_id"])["status"] == "cancelled"
+
+
+def test_workflow_run_creation_refuses_unreadable_existing_record(monkeypatch, tmp_path):
+    service = _write_workflow(monkeypatch, tmp_path, lambda *_args: pytest.fail("must not execute"))
+    path = service._run_path("default", "broken_run")
+    path.write_text("{broken", encoding="utf-8")
+    with pytest.raises(ValueError):
+        service.execute_workflow("default", "write_graph", run_id="broken_run")
+    assert path.read_text(encoding="utf-8") == "{broken"
+
+
+def test_workflow_final_commit_merges_cancel_after_last_probe(monkeypatch, tmp_path):
+    service = _write_workflow(monkeypatch, tmp_path, lambda *_args: None)
+    original_save = service._save_run
+
+    def cancel_before_commit(record):
+        if record["status"] == "succeeded":
+            service.cancel_run(record["workspace_id"], record["run_id"])
+        original_save(record)
+
+    monkeypatch.setattr(service, "_save_run", cancel_before_commit)
+    result = service.execute_workflow("default", "write_graph")
+    assert result["status"] == "cancelled"
+    assert result["nodes"][0]["output"] == {"receipt": "a"}
+    assert service.get_run("default", result["run_id"]) == result
+
+
 def _definition():
     return {
         "workflow_id": "network_asset_read",

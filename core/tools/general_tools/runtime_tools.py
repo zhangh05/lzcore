@@ -32,7 +32,7 @@ def handle_knowledge_reindex(inv: ToolInvocation) -> dict:
         result = reindex_source(ws, source_id)
         if not result.get("ok"):
             return _error_inv(inv, str(result.get("error") or "reindex_failed")[:200])
-        return _ok(inv, "", {"reindexed": True, "source_id": source_id})
+        return _result(inv, True, {**result, "reindexed": True, "source_id": source_id})
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
 
@@ -122,6 +122,9 @@ def handle_knowledge_get_source(inv: ToolInvocation) -> dict:
             return _error_inv(inv, "source not found")
         source = result.get("source", {})
         content = str(source.get("content") or source.get("normalized_markdown") or "")
+        warnings = list(dict.fromkeys([*(result.get("warnings") or []), *(source.get("warnings") or [])]))
+        content_complete = source.get("content_complete", True)
+        partial = bool(result.get("partial") or source.get("partial") or not content_complete)
         return _ok(inv, "", {
             "source_id": source.get("source_id", ""),
             "chunk_id": "",
@@ -135,6 +138,13 @@ def handle_knowledge_get_source(inv: ToolInvocation) -> dict:
             "scope": source.get("scope", "workspace"),
             "enabled": source.get("enabled", True),
             "chunk_count": source.get("chunk_count", 0),
+            "partial": partial,
+            "content_complete": content_complete and not partial,
+            "content_length": source.get("content_length", len(content)),
+            "returned_content_length": len(content),
+            "warnings": warnings,
+            **({"content_error": source["content_error"]} if source.get("content_error") else {}),
+            **{key: source["metadata"][key] for key in ("attempted_pages", "extracted_pages", "failed_pages", "page_errors") if key in (source.get("metadata") or {})},
         })
     except Exception as e:
         return _error_inv(inv, str(e)[:200])

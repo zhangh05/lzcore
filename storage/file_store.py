@@ -560,17 +560,44 @@ def restore_file(workspace_id: str, file_id: str) -> dict:
 
 
 def delete_file_permanently(workspace_id: str, file_id: str) -> bool:
-    """Delete the managed payload and remove its metadata from the file index."""
-    rec = get_file_record(workspace_id, file_id)
-    if not rec:
-        return False
+    """Delete payload before metadata; allow retry after either is already gone."""
+    import json
+
     try:
-        path = _resolve_workspace_relative_path(workspace_id, rec["path"])
-        if path.exists():
-            path.unlink()
-    except (OSError, ValueError):
+        with index.IndexLock(workspace_id):
+            # The public lookup is deliberately tolerant. A destructive caller
+            # must distinguish a genuinely absent identity from an unreadable
+            # or corrupt index, and validate every row before deleting bytes.
+            lines = index._read_lines(index._index_path(workspace_id), strict=True)
+            rec = None
+            for line in lines:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                if not isinstance(item, dict):
+                    return False
+                if any(not isinstance(item.get(key), str) or not item[key] for key in ("file_id", "path")):
+                    return False
+                if item.get("workspace_id") != workspace_id:
+                    return False
+                metadata = item.get("metadata", {})
+                if not isinstance(metadata, dict):
+                    return False
+                if metadata.get("trash_path") is not None and not isinstance(metadata["trash_path"], str):
+                    return False
+                if item["file_id"] == file_id:
+                    rec = item  # The last matching record owns the current path.
+            if rec is None:
+                # FileStore cleanup may have completed before artifact cleanup
+                # failed. Only a successful strict read permits this retry.
+                return True
+            path = _resolve_workspace_relative_path(
+                workspace_id, rec.get("metadata", {}).get("trash_path") or rec["path"],
+            )
+            path.unlink(missing_ok=True)
+            return index.delete_file_record(workspace_id, file_id)
+    except (OSError, ValueError, RuntimeError, TypeError):
         return False
-    return index.delete_file_record(workspace_id, file_id)
 
 
 # ── Internal helpers ─────────────────────────────────────────────────

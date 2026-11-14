@@ -241,15 +241,33 @@ def read_source(workspace_id: str, source_id: str) -> Optional[dict]:
     if not item or item.get("item_type") != "knowledge_source":
         return None
     out = _public_view(item, include_content=True)
-    normalized_file_id = str((item.get("metadata") or {}).get("normalized_file_id") or "")
+    meta = item.get("metadata") or {}
+    normalized_file_id = str(meta.get("normalized_file_id") or "")
+    warnings = list(meta.get("warnings") or [])
+    content_complete = True
     if normalized_file_id:
         try:
             from storage.file_store import read_file_content
             full_content = read_file_content(workspace_id, normalized_file_id)
             out["content"] = full_content
             out["normalized_markdown"] = full_content
-        except (FileNotFoundError, OSError, ValueError):
-            out.setdefault("warnings", []).append("normalized_content_unavailable")
+        except Exception as exc:
+            content_complete = False
+            warnings.append("normalized_content_unavailable")
+            # Do not expose filesystem paths or sensitive exception messages.
+            out["content_error"] = type(exc).__name__
+    content = str(out.get("content") or out.get("normalized_markdown") or "")
+    expected_length = int(meta.get("content_length") or len(content))
+    if len(content) < expected_length:
+        content_complete = False
+        warnings.append("normalized_content_incomplete")
+    out.update({
+        "content_length": expected_length,
+        "returned_content_length": len(content),
+        "content_complete": content_complete and not bool(meta.get("partial")),
+        "partial": not content_complete or bool(meta.get("partial")),
+        "warnings": list(dict.fromkeys(warnings)),
+    })
     chunks = store.list_items(
         item_type="knowledge_chunk", source_id=source_id,
         include_deleted=False, limit=999_999,

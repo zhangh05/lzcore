@@ -5,6 +5,10 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+import sys
+from types import SimpleNamespace
+
+import pytest
 
 
 def _reset_context_runtime(tmp_path, monkeypatch):
@@ -15,6 +19,90 @@ def _reset_context_runtime(tmp_path, monkeypatch):
 
     context_store._stores.clear()
     unified_retriever._retrievers.clear()
+
+
+@pytest.mark.parametrize("all_failed", [False, True])
+def test_pdf_failures_stay_outside_knowledge_and_attachment_content(tmp_path, monkeypatch, all_failed):
+    _reset_context_runtime(tmp_path, monkeypatch)
+    from agent.modules.knowledge.parsers.pdf import parse
+    from agent.modules.knowledge.ingestion import import_file
+    from agent.modules.knowledge.store import read_source
+    from storage.file_store import import_user_upload
+    from core.tools.general_tools.filestore_tools import handle_file_extract_document
+    from core.tools.general_tools.runtime_tools import handle_knowledge_get_source, handle_knowledge_reindex
+    from core.tools.schemas import ToolInvocation
+
+    def fail():
+        raise ValueError("synthetic page failure")
+
+    closed = []
+    def open_pdf(_):
+        pages = [SimpleNamespace(extract_text=fail)] if all_failed else [
+            SimpleNamespace(extract_text=lambda: "Readable first page with enough text for PDF detection."),
+            SimpleNamespace(extract_text=fail),
+        ]
+        return SimpleNamespace(pages=pages, metadata={}, close=lambda: closed.append(True))
+    monkeypatch.setitem(sys.modules, "pdfplumber", SimpleNamespace(open=open_pdf))
+    raw = b"%PDF-stub"
+    parsed = parse(raw)
+    assert "synthetic" not in parsed.normalized_markdown
+    assert "extract_failed" not in parsed.normalized_markdown
+    assert parsed.metadata["failed_pages"] == ([1] if all_failed else [2])
+    assert parsed.warnings and closed
+    imported = import_file("pdf_knowledge_ws", raw, title="Synthetic PDF")
+    assert imported["ok"] is not all_failed
+    assert imported["failed_pages"] == ([1] if all_failed else [2])
+    if not all_failed:
+        assert imported["partial"] is True and imported["warnings"]
+        source = read_source("pdf_knowledge_ws", imported["source_id"])
+        assert source["partial"] is True and source["content_complete"] is False
+        tool = handle_knowledge_get_source(ToolInvocation(tool_id="knowledge.manage", workspace_id="pdf_knowledge_ws",
+            arguments={"source_id": imported["source_id"]}))
+        assert tool["partial"] is True and tool["failed_pages"] == [2] and tool["warnings"]
+        assert "extract_failed" not in tool["content"]
+        reindexed = handle_knowledge_reindex(ToolInvocation(tool_id="knowledge.manage", workspace_id="pdf_knowledge_ws",
+            arguments={"source_id": imported["source_id"]}))
+        assert reindexed["ok"] is True and reindexed["partial"] is True
+        assert reindexed["failed_pages"] == [2] and reindexed["warnings"] == tool["warnings"]
+    else:
+        assert imported["errors"] == ["pdf_extract_failed"]
+    record = import_user_upload("pdf_knowledge_ws", io.BytesIO(raw), "synthetic.pdf", file_kind="pdf", binary=True)
+    extracted = handle_file_extract_document(ToolInvocation(tool_id="workspace.file", workspace_id="pdf_knowledge_ws",
+        arguments={"file_id": record.file_id}))
+    assert extracted["ok"] is not all_failed
+    assert extracted["failed_pages"] == ([1] if all_failed else [2])
+    if not all_failed:
+        assert extracted["partial"] is True and extracted["warnings"]
+        assert "extract_failed" not in extracted["content"]
+
+
+@pytest.mark.parametrize("failure", [FileNotFoundError, PermissionError, RuntimeError, "short_read"])
+def test_knowledge_read_marks_unavailable_full_text_as_partial(tmp_path, monkeypatch, failure):
+    _reset_context_runtime(tmp_path, monkeypatch)
+    from agent.modules.knowledge.store import import_document, read_source
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.context import ToolRuntimeContext
+    import storage.file_store as file_store
+
+    content = "Full normalized document line\n" * 100
+    imported = import_document("knowledge_partial_ws", "Full source", content)
+    assert imported["ok"] is True
+    def unavailable(*_):
+        if failure == "short_read":
+            return content[:25]
+        raise failure("synthetic full text read failure")
+    monkeypatch.setattr(file_store, "read_file_content", unavailable)
+    source = read_source("knowledge_partial_ws", imported["source_id"])
+    assert source["partial"] is True and source["content_complete"] is False
+    assert source["content_length"] == len(content) and source["warnings"]
+    client = get_default_tool_runtime_client()
+    result = client.invoke("knowledge.manage", {"action": "read", "source_id": imported["source_id"]},
+        context=ToolRuntimeContext(workspace_id="knowledge_partial_ws", requested_by="turn_runner"))
+    assert result.output["partial"] is True and result.output["content_complete"] is False
+    assert result.output["content_length"] == len(content)
+    assert result.output["returned_content_length"] == len(result.output["content"])
+    assert result.output["warnings"] == source["warnings"]
+    assert len(result.output["content"]) < result.output["content_length"]
 
 
 def test_child_chunking_never_breaks_a_fenced_block():
@@ -98,6 +186,8 @@ def test_tool_reads_full_source_and_carries_retrieval_provenance(tmp_path, monke
     assert source_result["safe_excerpt"] == content
     assert source_result["scope"] == "global"
     assert source_result["chunk_count"] > 0
+    assert source_result["partial"] is False and source_result["content_complete"] is True
+    assert source_result["warnings"] == [] and source_result["content_length"] == len(content)
 
     search_result = handle_knowledge_search(ToolInvocation(
         tool_id="knowledge.manage", workspace_id="knowledge_lossless_ws",

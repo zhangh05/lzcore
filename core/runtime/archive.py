@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from core.runtime.lifecycle_base import (
     workspace_dir, is_safe_path, get_active_refs, scan_directory, write_audit,
+    scan_transient_files, transient_file_guard, transient_block_reason,
 )
 
 
@@ -137,10 +138,9 @@ def preview_archive_candidates(workspace_id: str = "default",
                 candidates.append({"type": "job", "name": job_dir.name})
 
     # ═══ Temp (shared utility) ═══
-    temp_result = scan_directory(ws_dir, "files/tmp",
-                                 max_age_days=policy.temp_older_than_days,
-                                 active_refs=active_refs,
-                                 check_is_file=False)
+    temp_result = scan_transient_files(workspace_id, ws_dir, policy.temp_older_than_days,
+                                       active_refs, archive=True)
+    preview.warnings.extend(temp_result.get("warnings", []))
     for name in temp_result["candidates"]:
         candidates.append({"type": "temp", "name": name})
     blocked.extend(temp_result["blocked"])
@@ -210,6 +210,18 @@ def apply_archive(workspace_id: str = "default",
             dst = archive_root / "tmp" / name
         if src and src.exists() and is_safe_path(src, ws_dir):
             try:
+                if ctype == "temp":
+                    with transient_file_guard(workspace_id) as (files, refs):
+                        reason = transient_block_reason(src, ws_dir, files, refs, get_active_refs(ws_dir), archive=True)
+                        if reason:
+                            preview.blocked_items.append({"path": name, "reason": reason})
+                            continue
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        if dst.exists():
+                            raise ValueError("archive_destination_exists")
+                        shutil.move(str(src), str(dst))
+                        moved[ctype] = moved.get(ctype, 0) + 1
+                    continue
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(src), str(dst))
                 moved[ctype] = moved.get(ctype, 0) + 1

@@ -564,7 +564,6 @@ def delete_artifact(workspace_id: str, artifact_id: str, hard: bool = False) -> 
     rec = get_artifact(workspace_id, artifact_id)
     if not rec:
         return False
-    _remove_from_knowledge_index(workspace_id, artifact_id)
     if hard:
         records = _records_in_index_order(workspace_id)
         file_is_shared = False
@@ -581,33 +580,43 @@ def delete_artifact(workspace_id: str, artifact_id: str, hard: bool = False) -> 
                 for reference in list_references_for_file(workspace_id, rec.file_id)
             )
         from storage.reference_index import list_references_for_file, list_references_for_owner, remove_reference
-        _remove_artifact_from_run_indexes(workspace_id, artifact_id)
-        for reference in list_references_for_owner(workspace_id, "artifact", artifact_id):
-            remove_reference(workspace_id, reference.get("ref_id", ""))
-        _remove_artifact_record_permanently(workspace_id, artifact_id)
-        if rec.file_id and not file_is_shared:
-            from storage.file_store import delete_file_permanently
-            if not delete_file_permanently(workspace_id, rec.file_id):
-                _LOG.warning("artifact payload cleanup failed: %s", rec.file_id)
-            else:
-                for reference in list_references_for_file(workspace_id, rec.file_id):
-                    remove_reference(workspace_id, reference.get("ref_id", ""))
-        elif not rec.file_id:
-            relative_path = str(rec.relative_path or "")
-            if relative_path and not any(
-                item.artifact_id != artifact_id
-                and item.lifecycle != "deleted"
-                and item.relative_path == relative_path
-                for item in records
-            ):
-                scoped_root = _workspace_path(workspace_id).resolve()
-                candidate = (scoped_root / relative_path).resolve()
-                try:
+        try:
+            # Keep the artifact, run projections and ownership references intact
+            # until its exclusive payload has been removed successfully.
+            if rec.file_id and not file_is_shared:
+                from storage.file_store import delete_file_permanently
+                if not delete_file_permanently(workspace_id, rec.file_id):
+                    return False
+            elif not rec.file_id:
+                relative_path = str(rec.relative_path or "")
+                if relative_path and not any(
+                    item.artifact_id != artifact_id
+                    and item.lifecycle != "deleted"
+                    and item.relative_path == relative_path
+                    for item in records
+                ):
+                    scoped_root = _workspace_path(workspace_id).resolve()
+                    candidate = (scoped_root / relative_path).resolve()
                     candidate.relative_to(scoped_root)
                     candidate.unlink(missing_ok=True)
-                except (OSError, ValueError):
-                    _LOG.warning("artifact payload cleanup failed: %s", candidate, exc_info=True)
+            _remove_from_knowledge_index(workspace_id, artifact_id)
+            _remove_artifact_from_run_indexes(workspace_id, artifact_id)
+            for reference in list_references_for_owner(workspace_id, "artifact", artifact_id):
+                if not remove_reference(workspace_id, reference.get("ref_id", "")):
+                    return False
+            try:
+                _remove_artifact_record_permanently(workspace_id, artifact_id)
+            except (OSError, ValueError, RuntimeError):
+                # Metadata and its lightweight index are separate writes. Put
+                # the identity back if only the first write completed so the
+                # same artifact ID can finish cleanup on a subsequent call.
+                _save_artifact_record(rec, add_to_index=True)
+                raise
+        except (OSError, ValueError, RuntimeError):
+            _LOG.warning("artifact permanent deletion incomplete: %s", artifact_id, exc_info=True)
+            return False
     else:
+        _remove_from_knowledge_index(workspace_id, artifact_id)
         rec.lifecycle = "deleted"
         rec.updated_at = now_iso()
         _save_artifact_record(rec)

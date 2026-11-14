@@ -60,6 +60,7 @@ def retry_inspection(workspace_id: str, task_id: str) -> dict[str, Any]:
     return retried
 
 
+@_connection_transaction
 def cancel_inspection(workspace_id: str, task_id: str) -> bool:
     task = get_inspection(workspace_id, task_id)
     if not task or task.get("status") not in {"queued", "running"}:
@@ -71,6 +72,11 @@ def cancel_inspection(workspace_id: str, task_id: str) -> bool:
 
             job = cancel_job(workspace_id, job_id)
         except ValueError:
+            return False
+        # Job cancellation may race completion and cleanup. Never publish the
+        # snapshot read before that call over newer evidence or a terminal task.
+        task = get_inspection(workspace_id, task_id)
+        if not task or task.get("status") not in {"queued", "running"}:
             return False
         task["cancel_requested"] = True
         task["updated_at"] = now_iso()
