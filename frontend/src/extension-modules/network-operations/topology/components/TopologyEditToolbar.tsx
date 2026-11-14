@@ -215,9 +215,10 @@ export function TopologyEditToolbar({
         </div>
       ) : (
         <div className="studio-edit-tools">
-          <span className="canvas-mode-hint">
-            {workspaceMode === "view" ? "查看模式" : "编辑工具已收起"}
-          </span>
+          {/* View mode is already named by the switch above; say nothing twice. */}
+          {workspaceMode === "view" ? null : (
+            <span className="canvas-mode-hint">编辑工具已收起</span>
+          )}
         </div>
       )}
       <div className="toolbar-right">

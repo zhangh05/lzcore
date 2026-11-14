@@ -66,50 +66,43 @@ export type TopologyCanvasItem = {
   };
 };
 
+/**
+ * Region tones from the Fluent 2 shared color palette, kept low in saturation so
+ * a dozen regions on one sheet read as structure rather than decoration.
+ * Neutral comes first and is the default for new regions; colour is opt-in.
+ */
 export const ZONE_COLOR_PRESETS = [
-  {
-    key: "blue",
-    name: "商务蓝",
-    fill: "#eff6ff",
-    border: "#93c5fd",
-    color: "#1e40af",
-  },
-  {
-    key: "green",
-    name: "翡翠绿",
-    fill: "#f0fdf4",
-    border: "#86efac",
-    color: "#166534",
-  },
-  {
-    key: "amber",
-    name: "暖金橙",
-    fill: "#fffbeb",
-    border: "#fcd34d",
-    color: "#92400e",
-  },
-  {
-    key: "purple",
-    name: "科技紫",
-    fill: "#faf5ff",
-    border: "#d8b4fe",
-    color: "#6b21a8",
-  },
-  {
-    key: "teal",
-    name: "薄荷青",
-    fill: "#f0fdfa",
-    border: "#5eead4",
-    color: "#115e59",
-  },
-  {
-    key: "slate",
-    name: "典雅灰",
-    fill: "#f8fafc",
-    border: "#cbd5e1",
-    color: "#334155",
-  },
+  { key: "slate", name: "中性灰", fill: "#f5f5f5", border: "#c7c7c7", color: "#424242" },
+  { key: "blue", name: "品牌蓝", fill: "#ebf3fc", border: "#96c6fa", color: "#0f548c" },
+  { key: "teal", name: "青", fill: "#e9f6f7", border: "#9bd2d6", color: "#00666d" },
+  { key: "green", name: "绿", fill: "#f1faf1", border: "#9fd89f", color: "#0e700e" },
+  { key: "amber", name: "橙", fill: "#fdf6f3", border: "#f4bfab", color: "#8a3707" },
+  { key: "purple", name: "紫", fill: "#f7f4fb", border: "#c6b1de", color: "#5c2e91" },
 ] as const;
+
+/**
+ * Hex values the earlier presets wrote into saved drawings. Rendering maps them to
+ * today's tones so old sheets match new ones; the stored document is not rewritten.
+ */
+const LEGACY_ZONE_TONES: Record<string, (typeof ZONE_COLOR_PRESETS)[number]["key"]> = {
+  "#eff6ff": "blue", "#93c5fd": "blue", "#1e40af": "blue",
+  "#f0fdf4": "green", "#86efac": "green", "#166534": "green",
+  "#fffbeb": "amber", "#fcd34d": "amber", "#92400e": "amber",
+  "#faf5ff": "purple", "#d8b4fe": "purple", "#6b21a8": "purple",
+  "#f0fdfa": "teal", "#5eead4": "teal", "#115e59": "teal",
+  "#f8fafc": "slate", "#cbd5e1": "slate", "#334155": "slate",
+  "#dff5f0": "teal", "#58a99b": "teal", "#0f5149": "teal",
+};
+
+export function currentZoneTone(
+  value: string | undefined,
+  part: "fill" | "border" | "color",
+): string | undefined {
+  if (!value) return value;
+  const key = LEGACY_ZONE_TONES[value.toLowerCase()];
+  if (!key) return value;
+  return ZONE_COLOR_PRESETS.find((preset) => preset.key === key)?.[part] ?? value;
+}
 
 export type TopologyGroup = {
   group_id: string;

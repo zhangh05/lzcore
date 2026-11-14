@@ -69,6 +69,7 @@ import {
 import { resolveTopologySession } from "./TopologySessionResolver";
 import { useRequestedTopologySelection } from "./useRequestedTopologySelection";
 import "./TopologyStudio.css";
+import "./TopologyCommandBar.css";
 
 import type { Topology } from "./topologyDocument";
 export const calculateZoneBounds = regionBounds;
@@ -172,10 +173,6 @@ export default function TopologyWorkspace({
     isInspectorOpen,
     viewportRef,
     inspectorRef,
-    isDragged,
-    popoverPlacement,
-    isDragging,
-    popoverStyle,
     handleHeaderMouseDown,
   } = useTopologyInspector({ canvasApiRef });
   useEffect(() => {
@@ -1013,8 +1010,6 @@ export default function TopologyWorkspace({
         highlightedIds={highlightedIds}
         history={history}
         inspectorRef={inspectorRef}
-        isDragged={isDragged}
-        isDragging={isDragging}
         isFullscreen={isFullscreen}
         isInspectorOpen={isInspectorOpen}
         layoutBusy={layoutBusy}
@@ -1022,8 +1017,6 @@ export default function TopologyWorkspace({
         nodeOverlays={nodeOverlays}
         pinButton={pinButton}
         placeDrawingNode={placeDrawingNode}
-        popoverPlacement={popoverPlacement}
-        popoverStyle={popoverStyle}
         pushState={pushState}
         referenceLines={referenceLines}
         regionMoveMode={regionMoveMode}

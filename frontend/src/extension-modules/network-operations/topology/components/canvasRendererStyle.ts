@@ -13,10 +13,10 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
         "text-halign": "center",
         "text-margin-y": "8px",
         "font-family":
-          'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+          '"Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", sans-serif',
         "font-size": 12,
-        "font-weight": 600,
-        color: "#0f172a",
+        "font-weight": 400,
+        color: "#242424",
         "text-wrap": "wrap",
         "text-max-width": 128,
         "text-background-opacity": 0,
@@ -35,7 +35,7 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
       style: {
         width: 52,
         height: 42,
-        "font-size": 11,
+        "font-size": 12,
         "text-max-width": 96,
         "text-margin-y": "6px",
       },
@@ -64,8 +64,8 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
       style: {
         "text-wrap": "wrap",
         "text-max-width": 148,
-        "font-size": 11,
-        "font-weight": 500,
+        "font-size": 12,
+        "font-weight": 400,
       },
     },
     {
@@ -96,16 +96,16 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
         "arrow-scale": 0.65,
         label: "data(label)",
         "font-family":
-          'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace',
+          '"Cascadia Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace',
         "font-size": 10,
-        "font-weight": 600,
+        "font-weight": 400,
         "min-zoomed-font-size": 0,
-        color: "#0f172a",
+        color: "#242424",
         "text-background-shape": "roundrectangle",
         "text-background-color": "#ffffff",
         "text-background-opacity": 0.95,
         "text-border-width": 1,
-        "text-border-color": "#cbd5e1",
+        "text-border-color": "#d1d1d1",
         "text-border-opacity": 0.9,
         "text-background-padding": "2px 5px",
         "text-margin-y": "-14px",
@@ -182,7 +182,7 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
         "border-width": "data(borderWidth)",
         color: "data(textColor)",
         "font-family":
-          '-apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+          '"Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", sans-serif',
         "font-size": "data(fontSize)",
         "font-weight": 600,
         "text-wrap": "wrap",
@@ -207,18 +207,26 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
     // the label belongs inside; `text-justification` is the property that
     // left-aligns a wrapped multi-line note within its block.
     {
+      selector: ".canvas-item-container",
+      style: {
+        "text-valign": "top",
+        "text-halign": "center",
+        "text-margin-y": 26,
+      },
+    },
+    {
       selector: ".canvas-item-text",
       style: {
         "background-opacity": 0,
         "border-width": 1.5,
         "border-style": "dashed",
-        "border-color": "#94a3b8",
+        "border-color": "#9e9e9e",
         "border-opacity": 0.65,
         "text-valign": "center",
         "text-halign": "center",
         "text-justification": "left",
         "font-family":
-          '-apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+          '"Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", sans-serif',
         "font-size": 14,
         "font-weight": 600,
         "text-max-width": "data(textMaxWidth)",
@@ -275,7 +283,7 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
         "text-margin-y": 12,
         color: CANVAS_GROUP.light.text,
         "font-family":
-          'Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif',
+          '"Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", sans-serif',
         "font-size": 12,
         "font-weight": 600,
         width: "data(width)",
