@@ -1059,6 +1059,7 @@ class QueryLoop(
 
             return finish(
                 final_response=final_text,
+                **({"error": "empty_final_response"} if ctx.extras.get("response_outcome") == "failed" else {}),
                 tool_results=all_results,
                 iterations=iterations,
                 total_tool_calls=len(all_results),

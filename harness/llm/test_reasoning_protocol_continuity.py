@@ -58,6 +58,9 @@ def test_anthropic_stream_reassembles_thinking_signature_and_tool_input(monkeypa
         {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "public"}},
         {"type": "content_block_start", "index": 2, "content_block": {"type": "tool_use", "id": "c1", "name": "read", "input": {}}},
         {"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": '{"x":1}'}},
+        *[{"type": "content_block_stop", "index": index} for index in range(3)],
+        {"type": "message_delta", "delta": {"stop_reason": "tool_use"}},
+        {"type": "message_stop"},
     ]
     _install_requests(monkeypatch, _FakeStreamResponse(["data: " + json.dumps(e) for e in events]))
     displayed = []
@@ -84,6 +87,7 @@ def test_think_tags_are_hidden_but_returned_to_model():
 
 def test_minimax_stream_reasoning_snapshots_not_duplicated(monkeypatch):
     lines = ["data: " + json.dumps({"choices": [{"delta": {"reasoning_details": [{"text": value}]}}]}) for value in ["one", "one two"]]
+    lines.append("data: [DONE]")
     _install_requests(monkeypatch, _FakeStreamResponse(lines))
     response = provider._api_generate_stream("url", {}, {"api_key": "test", "provider": "minimax"}, LLMRequest(task="assistant_chat"))
     assert response.protocol["openai"]["reasoning_details"] == [{"text": "one two"}]

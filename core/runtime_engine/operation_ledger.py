@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -10,7 +11,10 @@ from typing import Any
 from storage.atomic_io import atomic_write_json
 from storage.locking import FileLock
 from storage.records import workspace_record_file
-from storage.redaction import redact_text
+from storage.redaction import redact_text, redact_value
+
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -33,6 +37,19 @@ def _digest(arguments: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _read_plan_json(path, *, error_code: str, missing_ok: bool = False):
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(record, dict):
+            raise ValueError("non_object_operation_record")
+        return record
+    except (OSError, ValueError) as exc:
+        if missing_ok and isinstance(exc, FileNotFoundError):
+            return None
+        logger.warning("%s", type(exc).__name__)
+        raise RuntimeError(error_code) from None
+
+
 def plan_operation(ctx, tool_id: str, call_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
     workspace_id = str(getattr(ctx, "workspace_id", ""))
     turn_id = str(getattr(ctx, "request_id", ""))
@@ -40,9 +57,42 @@ def plan_operation(ctx, tool_id: str, call_id: str, arguments: dict[str, Any]) -
     extras = getattr(ctx, "extras", {}) or {}
     op_id = operation_id(workspace_id, turn_id, call_id)
     path = _path(workspace_id, op_id)
-    with FileLock(path.with_suffix(".lock")):
-        if path.is_file():
-            return json.loads(path.read_text(encoding="utf-8"))
+    arguments_sha256 = _digest(arguments)
+    alias_key = json.dumps([workspace_id, turn_id, tool_id, arguments_sha256])
+    alias_id = hashlib.sha256(alias_key.encode()).hexdigest()
+    alias_path = path.parent / f"alias_{alias_id}.json"
+    # Serialize aliases within this turn as well as retries of one call id.
+    turn_lock = _path(workspace_id, operation_id(workspace_id, turn_id, "__turn__"))
+    with FileLock(turn_lock.with_suffix(".plan.lock")):
+        record = _read_plan_json(path, error_code="operation_record_unreadable", missing_ok=True)
+        if record is not None:
+            if record.get("canonical_tool") != tool_id or record.get("arguments_sha256") != arguments_sha256:
+                raise ValueError("operation_identity_conflict")
+            return record
+        alias = _read_plan_json(alias_path, error_code="operation_alias_unreadable", missing_ok=True)
+        if alias is not None:
+            try:
+                if set(alias) != {"operation_id"}:
+                    raise ValueError("invalid_operation_alias")
+                target_path = _path(workspace_id, alias["operation_id"])
+                record = _read_plan_json(target_path, error_code="operation_alias_target_unreadable")
+                if (
+                    record.get("operation_id") != alias["operation_id"]
+                    or record.get("workspace_id") != workspace_id
+                    or record.get("turn_id") != turn_id
+                    or record.get("canonical_tool") != tool_id
+                    or record.get("arguments_sha256") != arguments_sha256
+                    or record.get("status") not in {
+                        "planned", "running", "unknown", "indeterminate",
+                        "succeeded", "failed", "blocked", "reconciled",
+                    }
+                ):
+                    raise ValueError("invalid_operation_alias_target")
+            except (TypeError, ValueError) as exc:
+                logger.warning("%s", type(exc).__name__)
+                raise RuntimeError("operation_alias_invalid") from None
+            if record["status"] in {"planned", "running", "unknown", "indeterminate"}:
+                return record
         now = _now()
         record = {
             "schema": "lzcore.operation_ledger.v1",
@@ -52,7 +102,7 @@ def plan_operation(ctx, tool_id: str, call_id: str, arguments: dict[str, Any]) -
             "session_id": session_id,
             "canonical_tool": tool_id,
             "call_id": call_id,
-            "arguments_sha256": _digest(arguments),
+            "arguments_sha256": arguments_sha256,
             "read_only": False,
             "risk_level": str(extras.get("risk_level") or "unknown"),
             "idempotency": "unknown",
@@ -60,6 +110,9 @@ def plan_operation(ctx, tool_id: str, call_id: str, arguments: dict[str, Any]) -
             "planned_at": now,
             "updated_at": now,
         }
+        # Publish the fence first: an interrupted record write leaves a dangling
+        # alias that refuses replay rather than permitting an unindexed write.
+        atomic_write_json(alias_path, {"operation_id": op_id})
         atomic_write_json(path, record)
         return record
 
@@ -69,11 +122,11 @@ def start_operation(workspace_id: str, op_id: str) -> dict[str, Any]:
     with FileLock(path.with_suffix(".lock")):
         record = json.loads(path.read_text(encoding="utf-8"))
         if record.get("status") != "planned":
-            return record
+            return {**record, "execution_claimed": False}
         now = _now()
         record.update({"status": "running", "started_at": now, "updated_at": now})
         atomic_write_json(path, record)
-        return record
+        return {**record, "execution_claimed": True}
 
 
 def finish_operation(workspace_id: str, op_id: str, result) -> dict[str, Any]:
@@ -100,6 +153,14 @@ def finish_operation(workspace_id: str, op_id: str, result) -> dict[str, Any]:
             "error_code": str(getattr(result, "error_code", "") or "")[:120],
             "error": redact_text(str(getattr(result, "error", "") or ""))[:500],
             "result_summary": redact_text(str(output.get("summary") or ""))[:800],
+            "result": redact_value({
+                "ok": bool(getattr(result, "ok", False)),
+                "output": output,
+                "error": str(getattr(result, "error", "") or ""),
+                "error_code": str(getattr(result, "error_code", "") or ""),
+                "summary": str(getattr(result, "summary", "") or ""),
+                "execution_may_continue": may_continue,
+            }),
         })
         atomic_write_json(path, record)
         return record
@@ -356,7 +417,10 @@ def list_operations(
     """Return redacted durable write-operation summaries for diagnostics only."""
     from storage.records import list_json_records
 
-    records = list_json_records(workspace_id, ("operations",), limit=5000)
+    records = [
+        item for item in list_json_records(workspace_id, ("operations",), limit=5000)
+        if item.get("schema") == "lzcore.operation_ledger.v1"
+    ]
     if status:
         records = [item for item in records if str(item.get("status") or "") == status]
     return [_public_operation_record(item) for item in records[:max(1, min(limit, 5000))]]

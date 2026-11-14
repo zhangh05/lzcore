@@ -447,7 +447,9 @@ class SSOTRuntimeEngine:
             # A natural-language explanation cannot make the run successful
             # when every requested tool operation failed.
             success=(
-                execution_outcome != "unknown"
+                execution_outcome == "complete"
+                and str(base_meta.get("response_outcome") or "complete") not in {"failed", "partial", "cancelled"}
+                and bool(str(final_response or "").strip())
                 and len(errors) == 0
                 and not (bool(node_results) and not any(r.success for r in node_results.values()))
             ),

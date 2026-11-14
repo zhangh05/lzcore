@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from typing import Any
 
 from .context_compaction import estimate_chars as _estimate_chars
@@ -98,21 +99,50 @@ class LoopTurnProjection:
         }
         metric_overrides = dict(values.pop("metrics", {}) or {})
         projected_metrics.update(metric_overrides)
-        # Persist the observed external outcome for the model and UI. It
-        # is descriptive telemetry, never an execution restriction.
+        # Reconcile each uncertain operation against causally later evidence.
+        # One reconciled operation cannot mask another unknown write or error.
         unknown_outcome = ctx.extras.get(
             "unknown_outcome_reconciliation"
         ) or ctx.extras.get("unknown_outcome")
-        if (
-            isinstance(unknown_outcome, dict)
-            and unknown_outcome.get("status") == "unknown"
-        ):
-            if self._has_late_network_readback(all_results, unknown_outcome):
-                unknown_outcome = {
-                    **unknown_outcome,
-                    "status": "reconciled",
-                    "reconciled_by_call_id": "final_evidence_scan",
-                }
+        effective_results = []
+        for result in all_results:
+            output = result.output or {}
+            if not result.execution_may_continue or output.get("read_only"):
+                effective_results.append(result)
+                continue
+            pending = {
+                "tool_id": result.tool_name.replace("__", "."),
+                "call_id": result.call_id,
+                "operation_id": output.get("operation_id"),
+                "operation_finished_at": output.get("operation_finished_at"),
+                "connection_id": (output.get("_runtime_write") or {}).get("connection_id"),
+            }
+            if isinstance(unknown_outcome, dict) and (
+                unknown_outcome.get("call_id") == result.call_id
+                or (pending["operation_id"] and unknown_outcome.get("operation_id") == pending["operation_id"])
+            ):
+                pending = {**unknown_outcome, **{key: value for key, value in pending.items() if value}}
+            readback = self._late_network_readback(all_results, pending)
+            if readback is not None and pending.get("operation_id"):
+                from .operation_ledger import settle_operation
+
+                try:
+                    settled = settle_operation(
+                        ctx.workspace_id, pending["operation_id"], status="reconciled",
+                        resolved_by="network_readback",
+                        resolution_reason=f"same_connection_readback:{readback.call_id}",
+                    )
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    readback = None
+                else:
+                    if settled.get("status") != "reconciled":
+                        readback = None
+            if readback is None:
+                effective_results.append(result)
+                continue
+            effective_results.append(replace(result, execution_may_continue=False))
+            if isinstance(unknown_outcome, dict) and unknown_outcome.get("call_id") == pending["call_id"]:
+                unknown_outcome = {**pending, "status": "reconciled", "reconciled_by_call_id": readback.call_id}
                 ctx.extras["unknown_outcome_reconciliation"] = unknown_outcome
         if isinstance(unknown_outcome, dict) and unknown_outcome:
             projected_metrics["unknown_outcome"] = dict(unknown_outcome)
@@ -139,19 +169,15 @@ class LoopTurnProjection:
         projected_metrics["tool_execution_outcome"] = derive_tool_execution_outcome(
             all_results
         )
-        reconciliation = ctx.extras.get("unknown_outcome_reconciliation")
         projected_metrics["execution_outcome"] = (
             "unknown"
             if (ctx.extras.get("completion_observation") or {}).get("status") == "unknown"
-            else "complete"
-            if isinstance(reconciliation, dict)
-            and reconciliation.get("status") == "reconciled"
             else "unknown"
             if metric_overrides.get("execution_outcome") == "unknown"
             else "waiting_external_input"
             if metric_overrides.get("execution_outcome") == "waiting_external_input"
             else derive_execution_outcome(
-                all_results,
+                effective_results,
                 terminal_error=values.get("error"),
                 goal_assertions=assertion_result,
             )

@@ -30,7 +30,15 @@ def test_derive_execution_outcome_treats_recovered_attempt_as_complete():
     assert derive_execution_outcome([item(True), item(False)]) == "complete"
     assert derive_execution_outcome([item(True), item(False, may_continue=True)]) == "unknown"
     assert derive_execution_outcome([covered("failed"), item(True)]) == "complete"
-    assert derive_execution_outcome([covered("partial")]) == "complete"
+    assert derive_execution_outcome([covered("partial")]) == "partial"
+
+
+def test_execution_outcome_preserves_explicit_partial_with_unrelated_success():
+    from core.runtime_engine.turn_outcome import derive_execution_outcome
+    assert derive_execution_outcome([covered("partial"), item(True)]) == "partial"
+    assert derive_execution_outcome([
+        types.SimpleNamespace(ok=True, execution_may_continue=False, output={"partial": True}),
+    ]) == "partial"
 
 
 def test_derive_execution_outcome_keeps_real_terminal_blockers_partial():

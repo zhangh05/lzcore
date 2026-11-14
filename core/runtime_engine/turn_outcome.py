@@ -57,6 +57,12 @@ def derive_execution_outcome(
     successful = sum(1 for result in tool_results if bool(getattr(result, "ok", False)))
     if terminal_error:
         return "partial" if successful else "failed"
+    if any(
+        isinstance(getattr(result, "output", None), dict)
+        and (result.output.get("partial") or str(result.output.get("coverage_status") or "").lower() == "partial")
+        for result in tool_results
+    ):
+        return "partial"
     if tool_results and successful == 0:
         return "failed"
     return "complete"

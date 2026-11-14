@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any
+from datetime import datetime
 
 from agent.llm.schemas import LLMToolCall
 
@@ -67,24 +68,50 @@ class LoopFailureRecovery:
         results: list[StreamingToolResult], pending: dict[str, Any]
     ) -> bool:
         """Recognize a successful same-connection device read after a write uncertainty."""
+        return LoopFailureRecovery._late_network_readback(results, pending) is not None
+
+    @staticmethod
+    def _late_network_readback(
+        results: list[StreamingToolResult], pending: dict[str, Any]
+    ) -> StreamingToolResult | None:
+        """Require a write boundary, later observation and matching live evidence."""
+        from .loop_tools import StreamingToolExecutor
+
         connection_id = str(pending.get("connection_id") or "")
         tool_id = str(pending.get("tool_id") or "")
         if not connection_id or not tool_id:
-            return False
-        for result in results:
+            return None
+        boundary = next((index for index, result in enumerate(results) if
+            result.call_id == pending.get("call_id") or (
+                pending.get("operation_id") and
+                (result.output or {}).get("operation_id") == pending["operation_id"]
+            )), None)
+        if boundary is None:
+            return None
+        write_time = str(pending.get("operation_finished_at") or "")
+        for index, result in enumerate(results):
             output = result.output if isinstance(result.output, dict) else {}
             if not result.ok or result.tool_name.replace("__", ".") != tool_id:
                 continue
-            if str(output.get("connection_id") or "") != connection_id:
+            readback = output.get("_runtime_readback") or {}
+            if write_time and readback.get("started_at"):
+                try:
+                    if datetime.fromisoformat(readback["started_at"]) <= datetime.fromisoformat(write_time):
+                        continue
+                except (TypeError, ValueError):
+                    continue
+            elif index <= boundary:
                 continue
-            claims = output.get("evidence_claims") or []
-            if any(
-                isinstance(claim, dict)
-                and str(claim.get("status") or "").lower() == "collected"
-                for claim in claims
-            ):
-                return True
-        return False
+            arguments = {
+                "action": readback.get("action") or output.get("requested_action"),
+                "connection_id": readback.get("connection_id") or output.get("connection_id"),
+            }
+            if arguments["action"] not in {"read", "collect"}:
+                continue
+            call = LLMToolCall(id=result.call_id, name=tool_id, arguments=arguments)
+            if StreamingToolExecutor._is_reliable_network_readback(result, call, pending):
+                return result
+        return None
 
     def _record_task_state_execution_manifest(
         self,

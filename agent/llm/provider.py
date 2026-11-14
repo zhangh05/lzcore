@@ -537,6 +537,39 @@ def _cancelled_stream_response(
     )
 
 
+def _failed_stream_response(content_parts, cfg, *, model="", usage=None,
+                            finish_reason="", error_type=ERROR_TYPE_PROVIDER_NETWORK_ERROR,
+                            detail="stream ended before completion", retryable=True) -> LLMResponse:
+    """A failed batch may retain visible text, but never executable proposals."""
+    return LLMResponse(
+        content="".join(content_parts),
+        provider=cfg.get("provider", cfg.get("default_provider", "")),
+        model=model or cfg.get("model", ""),
+        usage=usage,
+        finish_reason=finish_reason,
+        error=f"{error_type}: {detail}",
+        metadata={"error_type": error_type, "error_detail": detail,
+                  "retryable": retryable, "stream_error": True},
+    )
+
+
+def _stream_event_error(error) -> tuple[str, bool]:
+    """Classify protocol errors without exposing the provider's raw message."""
+    if not isinstance(error, dict):
+        return ERROR_TYPE_PROVIDER_SCHEMA_REJECTED, False
+    kind = str(error.get("type") or error.get("code") or "")
+    status = {
+        "invalid_request_error": 400, "authentication_error": 401,
+        "invalid_api_key": 401, "permission_error": 403, "not_found_error": 404,
+        "rate_limit_error": 429, "rate_limit_exceeded": 429,
+        "insufficient_quota": 402, "billing_error": 402,
+        "api_error": 500, "server_error": 500, "overloaded_error": 503,
+    }.get(kind)
+    if status is None:
+        return ERROR_TYPE_PROVIDER_UNKNOWN, False
+    return f"provider_http_{status}", status in {429, 500, 503}
+
+
 def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest") -> "LLMResponse":
     """Streaming LLM API call — yields tokens via StreamEmitter callback.
 
@@ -558,6 +591,8 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     tool_calls_accum: list[dict] = [{}]
     tool_names = {str((tool.get("function") or {}).get("name") or "") for tool in (req.tools or [])}
     reasoning_fields: dict = {}
+    stream_done = False
+    resp = None
 
     try:
         resp = _post_llm(
@@ -603,12 +638,26 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
 
             data_str = line[5:].lstrip()  # Remove ``data:`` and optional space
             if data_str == "[DONE]":
+                stream_done = True
                 break
 
             try:
                 chunk = json.loads(data_str)
             except json.JSONDecodeError:
+                # Compatible gateways may send non-JSON keepalives/status lines.
+                # Completion is still required by the terminal check below.
                 continue
+
+            if not isinstance(chunk, dict):
+                continue
+
+            if chunk.get("error"):
+                error_type, retryable = _stream_event_error(chunk["error"])
+                return _failed_stream_response(
+                    content_parts, cfg, model=provider_model, usage=usage,
+                    error_type=error_type, detail="provider stream error event",
+                    retryable=retryable,
+                )
 
             # Keep only last 5 chunks for debug logging to prevent OOM on
             # very large responses (e.g. 100K+ token streaming).
@@ -642,7 +691,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
                         reasoning_fields[key] = value
                     else:
                         reasoning_fields.setdefault(key, []).extend(value)
-            finish_reason = choice.get("finish_reason", finish_reason)
+            finish_reason = choice.get("finish_reason") or finish_reason
 
             # Token content
             token = delta.get("content", "")
@@ -684,34 +733,31 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
                     if tc.get("function", {}).get("arguments"):
                         tc_acc["arguments"] = tc_acc.get("arguments", "") + tc["function"]["arguments"]
 
-    except _requests.exceptions.Timeout:
-        text = "".join(content_parts)
-        return LLMResponse(
-            content=text,
-            error=None if text else "timeout",
-            provider=cfg.get("provider", ""),
-            model=provider_model,
-            finish_reason=finish_reason or "stream_truncated",
-            metadata={"stream_truncated": True, "error_detail": "stream timeout"},
-        ) if text else LLMResponse(
-            error="provider_timeout: stream timed out",
-            metadata={"error_type": ERROR_TYPE_PROVIDER_TIMEOUT, "retryable": True},
+    except (_requests.exceptions.Timeout, TimeoutError):
+        return _failed_stream_response(
+            content_parts, cfg, model=provider_model, usage=usage,
+            finish_reason=finish_reason, error_type=ERROR_TYPE_PROVIDER_TIMEOUT,
+            detail="stream timed out",
         )
     except Exception as e:
-        text = "".join(content_parts)
-        error_type = ERROR_TYPE_PROVIDER_UNKNOWN
-        detail = _redact_error_detail(str(e), cfg.get("api_key", ""))[:200]
-        return LLMResponse(
-            content=text,
-            error=None if text else f"{error_type}: {detail}",
-            provider=cfg.get("provider", ""),
-            model=provider_model,
+        network_error = isinstance(e, OSError)
+        return _failed_stream_response(
+            content_parts, cfg, model=provider_model, usage=usage,
             finish_reason=finish_reason,
-            metadata={"stream_error": detail},
-        ) if text else LLMResponse(
-            error=f"{error_type}: {detail}",
-            metadata={"error_type": error_type},
+            error_type=ERROR_TYPE_PROVIDER_NETWORK_ERROR if network_error else ERROR_TYPE_PROVIDER_UNKNOWN,
+            detail="stream read failed", retryable=network_error,
         )
+    finally:
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
+
+    # Compatible gateways may supply either a finish reason or [DONE].
+    # Text or syntactically complete tool JSON is never a completion signal.
+    if not stream_done and not finish_reason:
+        return _failed_stream_response(content_parts, cfg, model=provider_model, usage=usage)
 
     # Build final response
     content = "".join(content_parts)
@@ -1128,6 +1174,9 @@ def _parse_anthropic_messages_response(data: dict, cfg: dict) -> LLMResponse:
 
 def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
     content_parts, blocks, usage, model, stop_reason = [], {}, None, cfg.get("model", ""), ""
+    message_stopped = False
+    open_blocks = set()
+    response = None
     try:
         response = _post_llm(url, json=body, headers=headers, timeout=_llm_timeout_tuple(cfg), stream=True)
         if response.status_code != 200:
@@ -1152,12 +1201,28 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
             try:
                 event = json.loads(raw[5:].strip())
             except json.JSONDecodeError:
+                # Ignore gateway keepalives; message/block completion is checked below.
+                continue
+            if not isinstance(event, dict):
                 continue
             kind = event.get("type")
-            if kind == "message_start":
+            if kind == "error":
+                error_type, retryable = _stream_event_error(event.get("error"))
+                return _failed_stream_response(
+                    content_parts, cfg, model=model, usage=usage,
+                    error_type=error_type, detail="provider stream error event",
+                    retryable=retryable,
+                )
+            elif kind == "message_stop":
+                message_stopped = True
+                break
+            elif kind == "message_start":
                 message = event.get("message") or {}; usage = message.get("usage"); model = message.get("model", model)
             elif kind == "content_block_start":
+                open_blocks.add(event.get("index", 0))
                 blocks[event.get("index", 0)] = event.get("content_block") or {}
+            elif kind == "content_block_stop":
+                open_blocks.discard(event.get("index", 0))
             elif kind == "content_block_delta":
                 delta = event.get("delta") or {}; block = blocks.setdefault(event.get("index", 0), {})
                 if delta.get("type") == "text_delta":
@@ -1183,8 +1248,28 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
                 delta_usage = event.get("usage")
                 if isinstance(delta_usage, dict):
                     usage = {**(usage or {}), **delta_usage}
+    except (requests.exceptions.Timeout, TimeoutError):
+        return _failed_stream_response(
+            content_parts, cfg, model=model, usage=usage, finish_reason=stop_reason,
+            error_type=ERROR_TYPE_PROVIDER_TIMEOUT, detail="stream timed out",
+        )
     except Exception as exc:
-        return LLMResponse(error=f"provider_anthropic_error: {_redact_error_detail(str(exc), cfg.get('api_key', ''))[:300]}")
+        network_error = isinstance(exc, OSError)
+        return _failed_stream_response(
+            content_parts, cfg, model=model, usage=usage, finish_reason=stop_reason,
+            error_type=ERROR_TYPE_PROVIDER_NETWORK_ERROR if network_error else ERROR_TYPE_PROVIDER_UNKNOWN,
+            detail="stream read failed", retryable=network_error,
+        )
+    finally:
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
+    if not message_stopped or not stop_reason or open_blocks:
+        return _failed_stream_response(
+            content_parts, cfg, model=model, usage=usage, finish_reason=stop_reason,
+        )
     calls = []
     for block in blocks.values():
         if block.get("type") == "tool_use":
