@@ -128,10 +128,18 @@ def create_backup(data: Path, target: Path, *, password="", include_credentials=
             content = path.read_bytes()
             if rel.startswith("config/") and path.suffix in {".json", ".yaml", ".yml"}:
                 if path.suffix == ".json":
-                    content = json.dumps(_strip_config_keys(json.loads(content)), ensure_ascii=False).encode()
+                    value = json.loads(content)
+                    stripped = _strip_config_keys(value)
+                    if include_credentials and stripped != value:
+                        raise ValueError("配置含不能安全迁移的明文凭据；备份已取消，请先迁入安全凭据后端")
+                    content = json.dumps(stripped, ensure_ascii=False).encode()
                 else:
                     import yaml
-                    content = yaml.safe_dump(_strip_config_keys(yaml.safe_load(content)), allow_unicode=True).encode()
+                    value = yaml.safe_load(content)
+                    stripped = _strip_config_keys(value)
+                    if include_credentials and stripped != value:
+                        raise ValueError("配置含不能安全迁移的明文凭据；备份已取消，请先迁入安全凭据后端")
+                    content = yaml.safe_dump(stripped, allow_unicode=True).encode()
             manifest["files"][rel] = {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content)}
             archive.writestr(rel, content)
         if include_credentials:

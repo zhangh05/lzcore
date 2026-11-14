@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -13,6 +14,28 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.runtime.backup import backup_path, create_backup, list_backups, prune_backups, restore_backup, verify_backup
+
+
+def restore_offline(archive: Path, *, confirmation: str):
+    from core.runtime.backup import BackupError
+    from storage.paths import get_workspace_root
+    from storage.locking import FileLock
+    from storage.backend import backend_mode
+    from jobs.queue import queue_mode
+
+    if backend_mode() not in {"filesystem", "file", "json"} or queue_mode() == "redis" or os.getenv("LZCORE_EVENT_BUS_MODE", "").lower() == "redis":
+        raise BackupError("CLI restore does not support multi-process service deployments")
+    data = get_workspace_root().resolve().parent
+    configured = os.getenv("LZCORE_DESKTOP_DATA_DIR", "")
+    if configured and Path(configured).expanduser().resolve() != data:
+        raise BackupError("desktop data directory does not match workspace root")
+    try:
+        # Create/acquire even when no prior desktop has created the lock. Hold
+        # it across extraction and replacement so a desktop cannot start midway.
+        with FileLock(data / ".runtime" / "desktop-instance.lock", timeout=0):
+            return restore_backup(archive, confirmation=confirmation)
+    except TimeoutError:
+        raise BackupError("data is in use; stop the desktop before restoring") from None
 
 
 def main() -> int:
@@ -37,7 +60,7 @@ def main() -> int:
     elif args.command == "prune":
         result = {"removed": prune_backups(args.keep)}
     else:
-        result = restore_backup(backup_path(args.backup_id), confirmation=args.confirm)
+        result = restore_offline(backup_path(args.backup_id), confirmation=args.confirm)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

@@ -5,6 +5,7 @@ import ctypes
 import json
 import math
 import os
+import subprocess
 import sys
 import threading
 from ctypes import wintypes
@@ -130,6 +131,10 @@ def wake_instance(record: Path):
         return False
 
 
+def _autostart_command(paths):
+    return subprocess.list2cmdline([str(paths.app / "lzcore.exe"), "--background", "--data-dir", str(paths.data)])
+
+
 def set_autostart(paths, enabled: bool):
     if paths.mode != "installed" or sys.platform != "win32":
         if enabled:
@@ -138,7 +143,7 @@ def set_autostart(paths, enabled: bool):
     import winreg
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as key:
         if enabled:
-            winreg.SetValueEx(key, "LZCore", 0, winreg.REG_SZ, f'"{paths.app / "lzcore.exe"}" --background')
+            winreg.SetValueEx(key, "LZCore", 0, winreg.REG_SZ, _autostart_command(paths))
         else:
             try:
                 winreg.DeleteValue(key, "LZCore")
@@ -153,7 +158,7 @@ def autostart_enabled(paths):
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as key:
             value = winreg.QueryValueEx(key, "LZCore")[0]
-            return value == f'"{paths.app / "lzcore.exe"}" --background'
+            return value == _autostart_command(paths)
     except OSError:
         return False
 
