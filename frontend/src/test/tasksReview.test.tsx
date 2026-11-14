@@ -16,7 +16,7 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
 describe("任务中心（阶段 3）", () => {
   it("主视图来自 runtime tasks；说明该接口不含 execution_outcome（数据源问题）", async () => {
     renderAt("/tasks?ws=ws-demo-1");
-    expect(await screen.findByTestId("outcome-missing-note")).toHaveTextContent("执行结束不代表目标完成");
+    expect(await screen.findByTestId("outcome-missing-note")).toHaveTextContent("「执行结束」不等于任务做成了");
     const table = await screen.findByTestId("runtime-tasks");
     expect(within(table).getAllByText("结论未上报（该接口不含 execution_outcome）").length).toBe(2);
     expect(table.textContent).not.toMatch(/完成|成功/);
@@ -39,7 +39,7 @@ describe("任务中心（阶段 3）", () => {
   it("映射一：job failed + active_turn.unknown_outcome → 需核对、重试禁用", async () => {
     renderAt("/tasks?ws=ws-demo-1", { jobs: "mapping1" });
     const col = await screen.findByTestId("jobs-column");
-    const item = await within(col).findByText("job-lease");
+    const item = await waitFor(() => { const el = col.querySelector('[data-job="job-lease"]'); if (!el) throw new Error("no job"); return el as HTMLElement; });
     const li = item.closest("li")!;
     expect(within(li).getByTestId("job-goal")).toHaveTextContent("结果未知 · 需核对");
     expect(within(li).getByTestId("job-retry")).toBeDisabled();
@@ -48,7 +48,7 @@ describe("任务中心（阶段 3）", () => {
 
   it("明确失败的作业：重试经确认框，列出将重放的内容", async () => {
     const { log } = renderAt("/tasks?ws=ws-demo-1");
-    const li = (await screen.findByText("job-plain")).closest("li")!;
+    const li = await waitFor(() => { const el = document.querySelector('[data-job="job-plain"]'); if (!el) throw new Error("no job"); return el as HTMLElement; });
     fireEvent.click(within(li).getByTestId("job-retry"));
     const dialog = await screen.findByTestId("job-retry-dialog");
     expect(dialog).toHaveTextContent("weekly");
@@ -58,7 +58,7 @@ describe("任务中心（阶段 3）", () => {
 
   it("删除作业：DELETE <job_id>；批量：DELETE JOBS a,b", async () => {
     const { log } = renderAt("/tasks?ws=ws-demo-1");
-    const li = (await screen.findByText("job-plain")).closest("li")!;
+    const li = await waitFor(() => { const el = document.querySelector('[data-job="job-plain"]'); if (!el) throw new Error("no job"); return el as HTMLElement; });
     fireEvent.click(within(li).getByTestId("job-delete"));
     let dialog = await screen.findByTestId("job-delete-dialog");
     expect(dialog).toHaveTextContent("DELETE job-plain");

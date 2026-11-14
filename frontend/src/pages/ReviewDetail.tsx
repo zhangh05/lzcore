@@ -45,7 +45,7 @@ async function readBack(target: UnknownTarget, sessionId: string | null): Promis
     if (!it) return { error: "找不到这条审阅项。" };
     return { result: (it.status ?? "pending") === "pending" ? "still_unknown" : "reconciled", record: it };
   }
-  if (!sessionId) return { error: "深链缺少会话参数，无法读取该任务的 task-state。" };
+  if (!sessionId) return { error: "链接里缺少会话信息，读不到这个任务的状态。" };
   const o = await api.get(`/api/runtime/sessions/${enc(sessionId)}/task-state`, { workspace_id: ws });
   const task = bodyOf<{ task_state?: { task?: { task_id?: string; unknowns?: unknown[] } } }>(o)?.task_state?.task;
   if (o.kind !== "http" || o.status !== 200) return { error: describeFailure(o) };

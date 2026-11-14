@@ -317,16 +317,16 @@ export function Workbench() {
           </div>
           <Popover anchor={statusBtn} open={statusOpen} onClose={closeStatus} label="运行状态细节" className="status-details" testId="status-details">
             <dl>
-              <div><dt>运行时（GET /api/agent/status）</dt><dd data-testid="agent-status">运行时：{runtimeText}</dd></div>
-              <div><dt>模型连接探测（GET /api/agent/llm/status · health）</dt>
-                <dd data-testid="llm-health" title={probeMismatch ? `顶层 connected=${String(modelSnapshot.connected)} 与探测 health.connected=${String(probe?.connected)} 不一致，以探测为准` : "连接检测，不代表本轮回复"}>模型最近检测：{probeText}{probeMismatch ? "（顶层字段与探测不一致，以探测为准）" : ""}</dd></div>
-              <div><dt>模型最近成功调用（last_success）</dt><dd data-testid="llm-last-success">最近成功：{lastSuccessText}</dd></div>
-              <div><dt>模型最近失败（recent_failure）</dt><dd data-testid="llm-recent-failure">最近失败：{recentFailureText}</dd></div>
-              <div><dt>本轮响应（本会话消息 / 实时回合）</dt><dd>{turnText}</dd></div>
+              <div><dt>服务</dt><dd data-testid="agent-status">运行时：{runtimeText}</dd></div>
+              <div><dt>模型连接</dt>
+                <dd data-testid="llm-health" title={probeMismatch ? `顶层 connected=${String(modelSnapshot.connected)} 与探测 health.connected=${String(probe?.connected)} 不一致，以探测为准` : "连接检测，不代表本轮回复"}>模型最近检测：{probeText}{probeMismatch ? "（两处检测结果不一致，以最新检测为准）" : ""}</dd></div>
+              <div><dt>最近一次成功</dt><dd data-testid="llm-last-success">最近成功：{lastSuccessText}</dd></div>
+              <div><dt>最近一次出错</dt><dd data-testid="llm-recent-failure">最近失败：{recentFailureText}</dd></div>
+              <div><dt>这一轮</dt><dd>{turnText}</dd></div>
             </dl>
           </Popover>
           <span className="grow" />
-          {!progressRail || collapsed.progress ? <Button onClick={() => setPanel("progress")} data-testid="open-progress">进度与证据</Button> : null}
+          {!progressRail || collapsed.progress ? <Button onClick={() => setPanel("progress")} data-testid="open-progress">本轮详情</Button> : null}
           <Button variant="ghost" icon={<IconPlus size={16} aria-hidden="true" />} onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
           <MenuButton label="更多操作" className="btn ghost" testId="wb-more" menuTestId="wb-more-menu" items={[
             { key: "catalog", label: "能力目录", onSelect: () => setDrawer("catalog"), testId: "open-catalog" },
@@ -358,7 +358,7 @@ export function Workbench() {
         )}
       </section>
       {progressRail ? <ProgressPanel ws={ws} last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={collapsed.progress} onToggle={() => setCollapsed((c) => ({ ...c, progress: !c.progress }))} /> : null}
-      {panel ? <Drawer title={panel === "sessions" ? "会话列表" : "进度与证据"} onClose={() => setPanel(null)}>
+      {panel ? <Drawer title={panel === "sessions" ? "会话列表" : "本轮详情"} onClose={() => setPanel(null)}>
         <div className="wb-panel-drawer">
           {panel === "sessions" ? <SessionColumn ws={ws} currentId={sessionId} onOpen={openSession} onNew={() => void newSession()} collapsed={false} onToggle={() => setPanel(null)} onChanged={onSessionChanged} refreshKey={sessionsVersion} />
             : <ProgressPanel ws={ws} last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={false} onToggle={() => setPanel(null)} />}
@@ -372,7 +372,7 @@ export function Workbench() {
             const blob = new Blob([JSON.stringify({ session, messages }, null, 2)], { type: "application/json" });
             const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `session-${sessionId}.json`; a.click();
           }} data-testid="export-session">导出 JSON</Button>
-          {task ? <><h3>任务状态（task-state）</h3><KeyValues items={[["状态", task.status ?? "未上报"], ["任务", task.task_id], ["目标", task.objective], ["下一步", task.next_action], ["未知项", String(task.unknowns?.length ?? 0)]]} /><RawData value={task} label="task-state 原始数据" /></> : null}
+          {task ? <><h3>任务状态</h3><KeyValues items={[["状态", task.status ?? "未上报"], ["任务", task.task_id], ["目标", task.objective], ["下一步", task.next_action], ["未知项", String(task.unknowns?.length ?? 0)]]} /><RawData value={task} label="任务状态原始数据" /></> : null}
           {llm.state === "error" ? <FailureNote outcome={llm.outcome} /> : null}
         </Drawer>
       ) : null}

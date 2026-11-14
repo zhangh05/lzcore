@@ -151,10 +151,58 @@
   .attachments { list-style: none; margin: 0 auto var(--space-1); padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
 
   .wb-progress { position: relative; flex: none; min-height: 0; max-width: 36%; padding: var(--space-3) var(--space-5); border-left: 1px solid var(--line); background: transparent; overflow-y: auto; overflow-wrap: anywhere; }
-  .wb-progress .row-actions { margin: 0 0 var(--space-2); flex-wrap: nowrap; border-bottom: 1px solid var(--line); }
-  .wb-progress .row-actions .tab { margin-bottom: -1px; }
-  .wb-progress h3 { margin: var(--space-4) 0 var(--space-1); font-size: var(--fs-sm); font-weight: var(--weight-heading); color: var(--text); }
+  .wb-progress h3 { margin: 0 0 var(--space-2); font-size: var(--fs-12); font-weight: var(--weight-heading); color: var(--text-secondary); letter-spacing: .02em; }
   .wb-progress p { margin: 0 0 var(--space-1); font-size: var(--fs-sm); }
+  /* 本轮详情：标题行 · 结果卡 · 分节（任务 / 处理过程 / 思路 / 中间结果）· 折叠的技术细节。 */
+  .pp-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 var(--space-3); min-height: 32px; }
+  .pp-head h2 { margin: 0; font-size: var(--fs-md, 16px); font-weight: var(--weight-heading); }
+  .pp-result { display: grid; grid-template-columns: 28px 1fr; gap: var(--space-2); padding: 14px 14px 12px; margin: 0 0 var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--surface); box-shadow: var(--shadow-raised); }
+  .pp-result-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; }
+  .pp-result.tone-ok .pp-result-icon { color: var(--ok); background: var(--ok-soft); }
+  .pp-result.tone-warn .pp-result-icon { color: var(--warn); background: var(--warn-soft); }
+  .pp-result.tone-danger .pp-result-icon { color: var(--danger); background: var(--danger-soft); }
+  .pp-result.tone-info .pp-result-icon { color: var(--accent); background: var(--accent-soft); }
+  .pp-result-body { min-width: 0; }
+  .pp-result-body strong { display: block; font-size: 15px; font-weight: var(--weight-heading); line-height: 28px; }
+  .pp-result-body p { color: var(--text-secondary); }
+  .pp-facts { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin: var(--space-2) 0 0; padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
+  .pp-facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .pp-facts dt { font-size: var(--fs-12); color: var(--text-muted); }
+  .pp-facts dd { margin: 0; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+  .pp-note { margin-top: var(--space-2) !important; font-size: var(--fs-12) !important; color: var(--text-muted) !important; }
+  .pp-section { margin: 0 0 var(--space-5); }
+  .pp-empty { color: var(--text-muted); }
+  .pp-objective { color: var(--text); }
+  .pp-goals, .pp-thoughts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sm); }
+  .pp-goals li { display: flex; align-items: baseline; gap: var(--space-2); }
+  .pp-goal-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong); transform: translateY(-2px); }
+  .pp-goals li:is([data-state="done"], [data-state="completed"]) .pp-goal-dot { background: var(--ok); }
+  .pp-goals li[data-state="running"] .pp-goal-dot { background: var(--accent); }
+  .pp-goals li:is([data-state="failed"], [data-state="blocked"]) .pp-goal-dot { background: var(--danger); }
+  .pp-goal-state { margin-left: auto; flex: none; font-size: var(--fs-12); color: var(--text-muted); }
+  .pp-thoughts li { position: relative; padding-left: 14px; color: var(--text-secondary); }
+  .pp-thoughts li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 4px; height: 4px; border-radius: 50%; background: var(--text-muted); }
+  /* 处理过程：竖线串起来的步骤，最后一步（实时）用强调色。 */
+  .pp-steps { list-style: none; margin: 0; padding: 0; position: relative; }
+  .pp-steps li { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 2px var(--space-2); padding: 0 0 14px 22px; font-size: var(--fs-sm); }
+  .pp-steps li:last-child { padding-bottom: 0; }
+  .pp-steps li::before { content: ""; position: absolute; left: 4px; top: 14px; bottom: -2px; width: 1px; background: var(--line); }
+  .pp-steps li:last-child::before { display: none; }
+  .pp-step-dot { position: absolute; left: 0; top: 5px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--ok); background: var(--surface); }
+  .pp-steps.is-live .pp-step-dot { border-color: var(--border-strong); }
+  .pp-steps.is-live li.is-current .pp-step-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pp-step-label { min-width: 0; color: var(--text); }
+  .pp-step-extra { color: var(--text-muted); }
+  .pp-step-meta { font-size: var(--fs-12); color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pp-stages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+  .pp-stages details { border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); }
+  .pp-stages summary { display: flex; align-items: center; gap: var(--space-2); padding: 6px 10px; font-size: var(--fs-sm); cursor: pointer; }
+  .pp-stages .markdown-body { padding: 0 10px 8px; font-size: var(--fs-sm); color: var(--text-secondary); }
+  .pp-tech { margin: var(--space-2) 0 var(--space-3); border-top: 1px solid var(--line); padding-top: var(--space-3); }
+  .pp-tech > summary { font-size: var(--fs-12); color: var(--text-muted); cursor: pointer; }
+  .pp-tech-list { margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .pp-tech-list dt { font-size: var(--fs-12); color: var(--text-muted); }
+  .pp-tech-list dd { margin: 0; font-size: var(--fs-12); color: var(--text-secondary); font-family: var(--font-mono, ui-monospace, monospace); word-break: break-all; }
   .wb-panel-drawer .wb-sessions, .wb-panel-drawer .wb-progress { width: 100% !important; max-width: 100%; padding: 0; border: 0; background: transparent; }
   .wb-panel-drawer .resize-handle { display: none; }
   .resize-handle { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; }

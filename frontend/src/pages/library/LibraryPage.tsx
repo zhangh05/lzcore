@@ -43,10 +43,10 @@ const FILE_TYPE_ZH: Record<string, string> = {
   knowledge_source: "知识来源", report: "报告", chat_attachment: "对话附件", user_upload: "用户上传",
   artifact_output: "运行产出", message_large_content: "长消息正文", tmp: "临时文件",
 };
-/** 中文类型名 + 原值；未知取值原样显示。 */
+/** 中文类型名；未知取值原样显示。 */
 function fileType(f: { logical_type?: string; mime_type?: string }) {
   const t = f.logical_type;
-  return t ? (FILE_TYPE_ZH[t] ? `${FILE_TYPE_ZH[t]}（${t}）` : t) : f.mime_type;
+  return t ? (FILE_TYPE_ZH[t] ?? t) : f.mime_type;
 }
 const fileName = (f: FileRec) => f.original_name ?? f.name ?? f.filename ?? f.file_id;
 /** 后端 PATCH 把文件夹写在 metadata.folder（storage/managed_files），顶层 folder 只作兼容。 */
@@ -376,7 +376,7 @@ function MemoryView({ ws }: { ws: string }) {
         <label className="field"><span>标题</span><input data-testid="memory-title" value={draft.title} onChange={(e) => { setDraft({ ...draft, title: e.target.value }); setWriteState({ kind: "idle" }); }} /></label>
         <label className="field"><span>内容</span><textarea data-testid="memory-content" value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={3} /></label>
         <label className="check"><input type="checkbox" checked={pendingReview} onChange={(e) => setPendingReview(e.target.checked)} data-testid="memory-pending-toggle" /> 先放入待确认（不立即生效，稍后在详情里确认或驳回）</label>
-        <Button type="submit" variant="primary" disabled={blocked || !draft.content.trim()} data-testid="memory-save">写入并回读</Button>
+        <Button type="submit" variant="primary" disabled={blocked || !draft.content.trim()} data-testid="memory-save">保存</Button>
         <MemoryWriteView ws={ws} state={writeState} onState={setWriteState} />
       </form>
       {notice ? (notice.o.kind === "http" && notice.o.status < 300 ? <ReceiptNote text={`${notice.label}已提交`} /> : <FailureNote outcome={notice.o} />) : null}
@@ -387,7 +387,6 @@ function MemoryView({ ws }: { ws: string }) {
             { key: "summary", label: "记忆", render: (m) => <button type="button" className="link-button" onClick={(e) => { e.stopPropagation(); setOpened(m.memory_id); }} data-testid="memory-open">{m.summary || m.content?.slice(0, 60) || m.memory_id}</button> },
             { key: "status", label: "状态", render: (m) => <Chip tone={m.status === "conflict" ? "warn" : m.status === "active" ? "ok" : "info"}>{MEMORY_STATUS_LABEL[m.status ?? ""] ?? m.status ?? "未上报"}</Chip> },
             { key: "conflict", label: "冲突", render: (m) => m.status === "conflict" ? <span data-testid="memory-conflict-hint">与 {(m.metadata?.conflict_memory_ids ?? []).join("、") || "已有记忆"} 冲突 <Button onClick={() => setConfirming(m)}>采用这条</Button></span> : "—" },
-            { key: "id", label: "memory_id", render: (m) => <code>{m.memory_id}</code> },
             { key: "time", label: "更新", render: (m) => fmtTime(m.updated_at), sortValue: (m) => m.updated_at ?? "" },
           ]} /><LoadMore paged={memPage} testId="memory-load-more" /></>
       )}</LoadState>

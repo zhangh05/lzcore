@@ -66,7 +66,7 @@ export function ApprovalCard({ ws, operationId }: { ws: string; operationId: str
     const b = bodyOf<{ operation?: ApprovalOperation; error?: string; continuation?: SessionContinuation & { status?: string } }>(o);
     if (o.status === 409) {
       if (b?.operation) setOp(b.operation);
-      setPhase({ kind: "invalidated", reason: b?.operation?.invalidated_reason || b?.error || "审批已失效（operation_invalidated）" });
+      setPhase({ kind: "invalidated", reason: b?.operation?.invalidated_reason || b?.error || "审批已失效，内容可能已被修改" });
       return;
     }
     if (b?.operation) setOp(b.operation);

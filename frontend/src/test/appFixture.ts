@@ -100,7 +100,7 @@ export function appHandler(opts: AppFixtureOptions, log: Logged[]): FakeHandler 
     { script_id: "starter_health", name: "基础健康巡检", vendors: ["h3c"], commands: ["display version"], checks: [], version: 1, source: "starter" },
   ];
   const workflows: { workflow_id: string; name: string; version?: number; status?: string; nodes?: unknown[]; execution_layers?: string[][]; updated_at?: string }[] = [
-    { workflow_id: "wf1", name: "周报", version: 1, status: "active", nodes: [{ node_id: "read", tool_id: "workspace.file.write", depends_on: [] }], execution_layers: [["read"]] },
+    { workflow_id: "wf1", name: "周报", version: 1, status: "active", nodes: [{ node_id: "read", tool_id: "workspace.file.write", arguments: { action: "write", path: "${input.topic}" }, depends_on: [] }], execution_layers: [["read"]] },
   ];
 
   return (method, rawPath, body): FakeReply | undefined => {
@@ -118,7 +118,8 @@ export function appHandler(opts: AppFixtureOptions, log: Logged[]): FakeHandler 
     if (p === "/api/workbench/skills") return { status: 200, body: { skills: [{ extension_id: "demo.notes", skill_id: "sk1", name: "汇总", resources: [{ resource_id: "board-1", name: "演示看板" }], selection_mode: "single" }] } };
     if (p === "/api/tools/catalog") {
       const tools = [
-        { tool_id: "workspace.file.write", display_name: "写入", category: "workspace", group: "file", risk_level: "medium", permission_action: "write", enabled: true, description: "Write a managed workspace file.", callable_by_llm: true },
+        { tool_id: "workspace.file.write", display_name: "写入", category: "workspace", group: "file", risk_level: "medium", permission_action: "write", enabled: true, description: "Write a managed workspace file.", callable_by_llm: true,
+          input_schema: { type: "object", required: ["action"], properties: { action: { type: "string", enum: ["write", "append"] }, path: { type: "string", description: "Managed file path." }, overwrite: { type: "boolean" }, max_bytes: { type: "integer", minimum: 1, maximum: 100 }, tags: { type: "array", items: { type: "string" } }, workspace_id: { type: "string" } } } },
         { tool_id: "knowledge.search", display_name: "知识检索", category: "knowledge", group: "kb", risk_level: "low", permission_action: "read", enabled: true, description: "Search indexed knowledge chunks.", callable_by_llm: true },
       ];
       return { status: 200, body: { tools, categories: [

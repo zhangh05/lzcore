@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { api, bodyOf, enc } from "../../api/client";
 import { Button } from "../../components/Button";
-import { outcomeView } from "../../contracts/outcomeState";
-import { RawData, TabGroup, TabIndicator, fmtTime } from "../../kit/ui";
-import { stageViews, turnFacts, type ChatMessage } from "./model";
+import { RawData, fmtTime } from "../../kit/ui";
+import { IconCheckCircle, IconChevronLeft, IconChevronRight, IconClock, IconInfo, IconWarningCircle, IconXCircle } from "../../components/Icon";
+import { stageViews, type ChatMessage } from "./model";
 import type { SessionTask } from "./Workbench";
 import { renderMarkdown } from "../../utils/markdown";
 
@@ -13,7 +13,6 @@ export function hasProgressContent(last: ChatMessage | undefined, task: SessionT
 }
 
 const OUTCOME_ZH: Record<string, string> = { complete: "完成", partial: "部分完成", failed: "失败", unknown: "结果未知", blocked: "受阻" };
-const SESSION_TASK_STATUS_ZH: Record<string, string> = { completed: "执行已结束", running: "执行中", pending: "等待执行", failed: "执行报错", cancelled: "已取消", interrupted: "已中断", blocked: "受阻" };
 export const outcomeZh = (v?: unknown) => (typeof v === "string" && v ? `${OUTCOME_ZH[v] ?? v}（${v}）` : "未上报");
 
 export interface RunAudit {
@@ -22,8 +21,6 @@ export interface RunAudit {
   metadata?: { cognitive_events?: { created_at?: string; type?: string; payload?: { visible_summary?: string } }[] };
 }
 export interface TraceEvent { name?: string; type?: string; timestamp?: number | string; duration_ms?: number }
-const TRACE_ZH: Record<string, string> = { turn_start: "回合开始", model: "模型调用", final: "生成最终回复", tool: "工具调用", tool_call: "工具调用", error: "错误" };
-const tsText = (t?: number | string) => t === undefined ? "时间未上报" : fmtTime(typeof t === "number" ? new Date(t * 1000).toISOString() : t);
 
 /** 回合结束后实时事件随 settle 清空；时间线改从已持久化的运行审计与 trace 回读（只读现有接口，不自造历史）。 */
 export function usePersistedRun(ws: string | undefined, runId: string | undefined) {
@@ -49,118 +46,191 @@ export function usePersistedRun(ws: string | undefined, runId: string | undefine
   return state;
 }
 
+const TONE_ICON = { ok: IconCheckCircle, danger: IconXCircle, warn: IconWarningCircle, info: IconInfo } as const;
+const OUTCOME_PLAIN: Record<string, { label: string; tone: keyof typeof TONE_ICON; hint: string }> = {
+  complete: { label: "已完成", tone: "ok", hint: "这一轮的任务做完了。" },
+  partial: { label: "部分完成", tone: "warn", hint: "完成了一部分，剩下的可以继续追问。" },
+  failed: { label: "没有完成", tone: "danger", hint: "这一轮出错了，可以换个说法重试。" },
+  blocked: { label: "被卡住了", tone: "warn", hint: "需要你确认或补充信息后才能继续。" },
+  unknown: { label: "结果待确认", tone: "warn", hint: "有操作的结果还不确定，建议核对一下。" },
+};
+/** 结果码 → 用户看得懂的标签和色调（任务页、详情栏共用）。 */
+export function outcomePlain(v?: string): { label: string; tone: "ok" | "warn" | "danger" | "info" } | null {
+  if (!v) return null;
+  const o = OUTCOME_PLAIN[v];
+  return o ? { label: o.label, tone: o.tone } : { label: v, tone: "info" };
+}
+const TASK_PLAIN: Record<string, string> = { completed: "已结束", running: "进行中", pending: "排队中", failed: "出错了", cancelled: "已取消", interrupted: "中途停止", blocked: "等你处理" };
+const GOAL_PLAIN: Record<string, string> = { done: "完成", completed: "完成", running: "进行中", pending: "待办", failed: "失败", blocked: "受阻" };
+const STEP_PLAIN: Record<string, string> = { turn_start: "收到你的消息，开始处理", model: "调用模型思考", final: "整理并发出回复", tool: "使用工具", tool_call: "使用工具", error: "遇到错误" };
+
+const LIVE_PLAIN: Record<string, string> = {
+  turn_started: "开始处理", run_started: "开始处理", model_started: "模型正在思考", tool_call: "使用工具", tool_call_started: "使用工具",
+  tool_result: "工具返回结果", tool_call_finished: "工具返回结果", subagent_observation: "子任务汇报进展", review_started: "检查结果",
+  validation_completed: "检查完成", publication_started: "整理回复", turn_finished: "处理结束", task_completed: "任务完成",
+};
+/** 实时事件 "名称 · 工具 · 标题" → 用户看得懂的一行；未知事件保留原名，不吞掉。 */
+export function liveLabel(raw: string): { label: string; detail?: string } {
+  const [name, ...rest] = raw.split(" · ");
+  return { label: LIVE_PLAIN[name] ?? name, detail: rest.join(" · ") || undefined };
+}
+
+/** 毫秒 → 人话：不到 1 秒 / 3.2 秒 / 1 分 05 秒。 */
+export function humanDuration(ms?: number): string | null {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return null;
+  if (ms < 1000) return "不到 1 秒";
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1)} 秒`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)} 秒`;
+  const m = Math.floor(ms / 60_000);
+  const sec = Math.round((ms % 60_000) / 1000);
+  return `${m} 分 ${String(sec).padStart(2, "0")} 秒`;
+}
+const clock = (v?: string | number) => {
+  if (v === undefined || v === "") return "";
+  const d = typeof v === "number" ? new Date(v * 1000) : new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("zh-CN", { hour12: false });
+};
+const elapsed = (a?: string, b?: string) => {
+  if (!a || !b) return null;
+  const ms = new Date(b).getTime() - new Date(a).getTime();
+  return Number.isFinite(ms) ? humanDuration(ms) : null;
+};
+
 /**
- * 进度与证据栏：只展示后端事实，不自造阶段，不合成结论。
- * 两个事实源分开标注，互不覆盖：
- *  - 本条回复的结论：最后一条助手消息 metadata.execution_outcome（缺失即「结论未上报」）；
- *  - 会话 task-state：GET /api/runtime/sessions/<id>/task-state 的 task.status（运行时任务状态，不是消息结论）。
+ * 本轮详情：先告诉用户「结果怎样、做了什么」，技术来源折叠在最后。
+ * 只展示后端事实，不自造阶段，不合成结论：结果卡优先用回复自带的结论，缺失时才用同一轮的运行记录，并注明来自运行记录；
+ * 回复结论、运行记录、会话任务三个来源在「技术细节」里分开写清。
  */
 export function ProgressPanel({ ws, last, task, liveEvents, collapsed, onToggle }: {
   ws?: string; last?: ChatMessage; task: SessionTask | null; liveEvents: string[]; collapsed: boolean; onToggle: () => void;
 }) {
-  const [width, setWidth] = useState(320);
+  const [width, setWidth] = useState(340);
   const drag = useRef<{ x: number; w: number } | null>(null);
-  const [view, setView] = useState<"progress" | "timeline">("progress");
   const lastRun = last?.run_id ?? (typeof last?.metadata?.run_id === "string" ? last.metadata.run_id : undefined);
-  const persisted = usePersistedRun(ws, liveEvents.length ? undefined : lastRun);
-  if (collapsed) return <aside className="wb-progress is-collapsed" aria-label="进度栏（已收起）"><Button variant="ghost" onClick={onToggle} aria-label="展开进度栏">«</Button></aside>;
+  const running = liveEvents.length > 0;
+  const persisted = usePersistedRun(ws, running ? undefined : lastRun);
+  if (collapsed) return <aside className="wb-progress is-collapsed" aria-label="本轮详情（已收起）"><Button variant="ghost" onClick={onToggle} aria-label="展开本轮详情" icon={<IconChevronLeft size={16} aria-hidden="true" />} /></aside>;
   const stages = stageViews(last?.metadata?.stage_outputs);
-  const msgOutcome = last ? outcomeView(turnFacts(last)) : null;
-  const msgRun = last?.run_id ?? (typeof last?.metadata?.run_id === "string" ? last.metadata.run_id : undefined);
+  const msgRun = lastRun;
+  const audit = msgRun && persisted.runId === msgRun ? persisted.audit : null;
+  const auditReady = !!msgRun && persisted.runId === msgRun;
+  const msgOutcome = typeof last?.metadata?.execution_outcome === "string" ? last.metadata.execution_outcome : undefined;
+  const outcomeKey = msgOutcome ?? audit?.execution_outcome;
+  const outcome = outcomeKey ? OUTCOME_PLAIN[outcomeKey] ?? { label: outcomeKey, tone: "info" as const, hint: "" } : null;
+  const fromAudit = !msgOutcome && !!audit?.execution_outcome;
   // 真实 runtime.task_state.v1 的 task 用 last_run_id / objective_run_id；兼容旧 run_id。
   const taskRun = task?.last_run_id ?? task?.run_id ?? task?.objective_run_id;
   const sameRun = !!msgRun && !!taskRun && msgRun === taskRun;
+  const goals = task?.recovery_goals ?? [];
+  const unknowns = task?.unknowns?.length ?? 0;
+  const thoughts = (audit?.metadata?.cognitive_events ?? []).filter((c) => c.payload?.visible_summary);
+  const model = audit?.llm_metadata?.model;
+  const took = elapsed(audit?.created_at, audit?.finished_at);
   const onDown = (e: PointerEvent<HTMLDivElement>) => { drag.current = { x: e.clientX, w: width }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId); };
-  const onMove = (e: PointerEvent<HTMLDivElement>) => { if (drag.current) setWidth(Math.max(240, Math.min(640, drag.current.w + (drag.current.x - e.clientX)))); };
+  const onMove = (e: PointerEvent<HTMLDivElement>) => { if (drag.current) setWidth(Math.max(260, Math.min(640, drag.current.w + (drag.current.x - e.clientX)))); };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "ArrowLeft") setWidth((w) => Math.min(640, w + 16));
-    if (e.key === "ArrowRight") setWidth((w) => Math.max(240, w - 16));
+    if (e.key === "ArrowRight") setWidth((w) => Math.max(260, w - 16));
   };
+  const ToneIcon = running ? IconClock : outcome ? TONE_ICON[outcome.tone] : IconInfo;
   return (
-    <aside className="wb-progress" style={{ width }} aria-label="进度与证据" data-testid="progress-panel">
-      <div className="resize-handle" role="separator" aria-orientation="vertical" aria-label="拖动调整进度栏宽度" aria-valuenow={width} aria-valuemin={240} aria-valuemax={640} tabIndex={0}
+    <aside className="wb-progress" style={{ width }} aria-label="本轮详情" data-testid="progress-panel">
+      <div className="resize-handle" role="separator" aria-orientation="vertical" aria-label="拖动调整详情栏宽度" aria-valuenow={width} aria-valuemin={260} aria-valuemax={640} tabIndex={0}
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => { drag.current = null; }} onKeyDown={onKey} />
-      <div className="row-actions">
-        <TabGroup>
-          <button type="button" className={`tab ${view === "progress" ? "is-active" : ""}`} onClick={() => setView("progress")}>进度{view === "progress" ? <TabIndicator /> : null}</button>
-          <button type="button" className={`tab ${view === "timeline" ? "is-active" : ""}`} onClick={() => setView("timeline")} data-testid="timeline-tab">时间线{view === "timeline" ? <TabIndicator /> : null}</button>
-        </TabGroup>
-        <span className="grow" />
-        <Button variant="ghost" onClick={onToggle} aria-label="收起进度栏">»</Button>
-      </div>
-      {view === "progress" ? (
-        <>
-          <h3>本条回复的结论</h3>
-          {msgOutcome ? (
-            <div data-testid="progress-message-outcome">
-              <p><span className={`status-chip tone-${msgOutcome.tone}`}>回复结论：{outcomeZh(last?.metadata?.execution_outcome)}</span></p>
-              <details><summary className="muted">回复记录来源</summary><p className="muted">消息 execution_outcome：{outcomeZh(last?.metadata?.execution_outcome)} · 来源：最后一条回复 metadata{msgRun ? ` · run ${msgRun}` : ""}{last?.created_at ? ` · ${fmtTime(last.created_at)}` : ""}</p></details>
-            </div>
-          ) : <p className="muted">本会话还没有回复。</p>}
-          {msgRun && persisted.runId === msgRun ? (
-            <div data-testid="progress-run-outcome">
-              <p><span className="status-chip">运行结论：{persisted.audit ? outcomeZh(persisted.audit.execution_outcome) : `不可读（${persisted.auditError}）`}</span></p>
-              <details><summary className="muted">运行记录来源</summary><p className="muted">运行审计 execution_outcome：{persisted.audit ? outcomeZh(persisted.audit.execution_outcome) : "未上报"} · 来源：GET /api/workspaces/{ws}/runs/{msgRun}（与消息字段是两个事实源，分别显示）</p></details>
-            </div>
+      <header className="pp-head">
+        <h2>本轮详情</h2>
+        <Button variant="ghost" onClick={onToggle} aria-label="收起本轮详情" icon={<IconChevronRight size={16} aria-hidden="true" />} />
+      </header>
+
+      <section className={`pp-result tone-${running ? "info" : outcome?.tone ?? "info"}`} data-testid="progress-result">
+        <span className="pp-result-icon" aria-hidden="true"><ToneIcon size={20} /></span>
+        <div className="pp-result-body">
+          <strong>{running ? "正在处理…" : outcome?.label ?? (last ? "结果未上报" : "还没有回复")}</strong>
+          <p>{running ? "可以在下面看到实时进展。" : outcome?.hint || (last ? "这条回复没有附带完成状态。" : "发一条消息后，这里会显示处理结果。")}</p>
+          {!running && (took || model || audit?.finished_at) ? (
+            <dl className="pp-facts">
+              {took ? <div><dt>用时</dt><dd>{took}</dd></div> : null}
+              {model ? <div><dt>模型</dt><dd>{model}</dd></div> : null}
+              {audit?.finished_at ? <div><dt>完成于</dt><dd>{clock(audit.finished_at)}</dd></div> : null}
+            </dl>
           ) : null}
-          <h3>阶段输出</h3>
-          {stages.length ? (
-            <ol className="stage-list" data-testid="stage-outputs">
-              {stages.map((s) => <li key={s.key}><strong>{s.title}</strong>{s.status ? <span className="status-chip">{s.status}</span> : null}{s.text ? <div className="markdown-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(s.text) }} /> : null}</li>)}
-            </ol>
-          ) : <p className="muted">尚无阶段输出。</p>}
-          <h3>会话任务状态</h3>
-          {task && (task.task_id || task.status) ? (
-            <div data-testid="progress-task-state">
-              <p><span className="status-chip">{SESSION_TASK_STATUS_ZH[task.status ?? ""] ?? task.status ?? "状态未上报"}</span> · 待核对 {task.unknowns?.length ?? 0} 项</p>
-              {msgRun && taskRun && !sameRun ? <p className="inline-alert tone-warn">此任务与最后一条回复属于不同运行。</p> : null}
-              <details><summary className="muted">会话任务来源</summary><p className="muted">task-state：{task.status ?? "未上报"} · 来源：会话 task-state（运行时任务状态，不等于回复结论）</p><p className="muted">任务 {task.task_id ?? "—"}{taskRun ? ` · run ${taskRun}` : ""}</p></details>
-              {(task.recovery_goals ?? []).length ? (
-                <ol className="stage-list">{task.recovery_goals!.map((g, i) => <li key={g.goal_id ?? i}>{g.description ?? g.goal_id} <span className="status-chip">{g.status}</span></li>)}</ol>
-              ) : <p className="muted">没有步骤 / 目标记录。</p>}
-            </div>
-          ) : <p className="muted">本会话还没有任务状态。</p>}
-        </>
-      ) : (
-        liveEvents.length ? (
-          <>
-            <p className="muted">来源：本轮实时事件（进行中）</p>
-            <ol className="timeline" data-testid="timeline">{liveEvents.map((e, i) => <li key={i}>{e}</li>)}</ol>
-          </>
+          {fromAudit ? <p className="pp-note">结果来自这一轮的运行记录。</p> : null}
+        </div>
+      </section>
+
+      {task && (task.objective || goals.length || unknowns) ? (
+        <section className="pp-section" data-testid="progress-task">
+          <h3>任务</h3>
+          {task.objective ? <p className="pp-objective">{task.objective}</p> : null}
+          {goals.length ? (
+            <ul className="pp-goals">{goals.map((g, i) => <li key={g.goal_id ?? i} data-state={g.status}><span className="pp-goal-dot" aria-hidden="true" />{g.description ?? "未命名步骤"}<span className="pp-goal-state">{GOAL_PLAIN[g.status ?? ""] ?? g.status ?? ""}</span></li>)}</ul>
+          ) : null}
+          {unknowns ? <p className="inline-alert tone-warn">有 {unknowns} 项操作结果还不确定，建议到「待核对」里确认。</p> : null}
+        </section>
+      ) : null}
+
+      <section className="pp-section">
+        <h3>处理过程</h3>
+        {running ? (
+          <ol className="pp-steps is-live" data-testid="timeline">{liveEvents.map((e, i) => <li key={i} className={i === liveEvents.length - 1 ? "is-current" : ""}><span className="pp-step-dot" aria-hidden="true" /><span className="pp-step-label">{liveLabel(e).label}{liveLabel(e).detail ? <span className="pp-step-extra"> · {liveLabel(e).detail}</span> : null}</span></li>)}</ol>
         ) : !lastRun ? (
-          <ol className="timeline" data-testid="timeline"><li className="muted">本会话还没有运行记录。</li></ol>
-        ) : persisted.runId !== lastRun ? (
-          <ol className="timeline" data-testid="timeline"><li className="muted">正在读取 run {lastRun} 的持久化记录…</li></ol>
-        ) : (
-          <div data-testid="timeline-persisted">
-            <p className="muted">已结束回合 · 来源：GET /api/workspaces/{ws}/runs/{lastRun}/trace 与运行审计（持久化记录，非实时）</p>
-            {persisted.audit ? (
-              <p data-testid="timeline-run-summary">
-                <span className="status-chip">{outcomeZh(persisted.audit.execution_outcome)}</span>{" "}
-                <span className="muted">{persisted.audit.created_at ? fmtTime(persisted.audit.created_at) : "开始时间未上报"} → {persisted.audit.finished_at ? fmtTime(persisted.audit.finished_at) : "结束时间未上报"}
-                  {persisted.audit.llm_metadata?.provider ? ` · 模型 ${persisted.audit.llm_metadata.provider}/${persisted.audit.llm_metadata.model ?? "?"}` : ""}</span>
-              </p>
-            ) : <p className="muted">运行审计不可读（{persisted.auditError}）。</p>}
-            {persisted.trace ? (
-              persisted.trace.length ? (
-                <ol className="timeline" data-testid="timeline">
-                  {persisted.trace.map((e, i) => <li key={i}><strong>{TRACE_ZH[e.type ?? ""] ?? e.name ?? e.type ?? "事件"}</strong> <span className="muted">{tsText(e.timestamp)}{typeof e.duration_ms === "number" ? ` · ${e.duration_ms} ms` : ""}{e.name && TRACE_ZH[e.type ?? ""] && e.name !== TRACE_ZH[e.type ?? ""] ? ` · ${e.name}` : ""}</span></li>)}
-                </ol>
-              ) : <ol className="timeline" data-testid="timeline"><li className="muted">该 run 的 trace 没有事件。</li></ol>
-            ) : <p className="muted">trace 不可读（{persisted.traceError}）。</p>}
-            {(persisted.audit?.metadata?.cognitive_events ?? []).length ? (
-              <>
-                <h3>推理过程摘要</h3>
-                <ol className="timeline" data-testid="timeline-cognitive">
-                  {persisted.audit!.metadata!.cognitive_events!.map((c, i) => <li key={i}>{c.payload?.visible_summary ?? c.type} <span className="muted">{c.created_at ? fmtTime(c.created_at) : ""}</span></li>)}
-                </ol>
-              </>
-            ) : null}
-            {persisted.audit?.final_response_summary ? <p className="muted">运行摘要：{persisted.audit.final_response_summary}</p> : null}
-            <RawData value={{ audit: persisted.audit, trace: persisted.trace }} label="运行审计 / trace 原始数据" />
-          </div>
-        )
-      )}
+          <p className="pp-empty">还没有处理记录。</p>
+        ) : !auditReady ? (
+          <p className="pp-empty">正在读取处理记录…</p>
+        ) : persisted.trace?.length ? (
+          <ol className="pp-steps" data-testid="timeline">
+            {persisted.trace.map((e, i) => {
+              const label = STEP_PLAIN[e.type ?? ""] ?? e.name ?? "处理步骤";
+              // 回合开始 / 模型调用 / 最终回复的 name 只是同义标签，不再重复；工具等步骤才补上具体名称。
+              const extra = e.name && STEP_PLAIN[e.type ?? ""] && !["turn_start", "model", "final"].includes(e.type ?? "") ? e.name : null;
+              return (
+                <li key={i}><span className="pp-step-dot" aria-hidden="true" />
+                  <span className="pp-step-label">{label}{extra ? <span className="pp-step-extra"> · {extra}</span> : null}</span>
+                  <span className="pp-step-meta">{[clock(e.timestamp), humanDuration(e.duration_ms)].filter(Boolean).join(" · ")}</span>
+                </li>
+              );
+            })}
+          </ol>
+        ) : <p className="pp-empty">{persisted.trace ? "这一轮没有记录到处理步骤。" : "处理记录暂时读不到。"}</p>}
+      </section>
+
+      {thoughts.length ? (
+        <section className="pp-section" data-testid="timeline-cognitive">
+          <h3>思路要点</h3>
+          <ul className="pp-thoughts">{thoughts.map((c, i) => <li key={i}>{c.payload!.visible_summary}</li>)}</ul>
+        </section>
+      ) : null}
+
+      {stages.length ? (
+        <section className="pp-section">
+          <h3>中间结果</h3>
+          <ol className="pp-stages" data-testid="stage-outputs">
+            {stages.map((s) => (
+              <li key={s.key}>
+                <details>
+                  <summary><span>{s.title}</span>{s.status ? <span className="pp-goal-state">{GOAL_PLAIN[s.status] ?? s.status}</span> : null}</summary>
+                  {s.text ? <div className="markdown-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(s.text) }} /> : null}
+                </details>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      <details className="pp-tech" data-testid="progress-tech">
+        <summary>技术细节</summary>
+        <dl className="pp-tech-list">
+          <div data-testid="progress-message-outcome"><dt>回复结论</dt><dd>{outcomeZh(msgOutcome)}{msgRun ? ` · run ${msgRun}` : ""}{last?.created_at ? ` · ${fmtTime(last.created_at)}` : ""}</dd></div>
+          {msgRun ? (
+            <div data-testid="progress-run-outcome"><dt>运行记录</dt><dd>{auditReady ? (audit ? outcomeZh(audit.execution_outcome) : `读取失败（${persisted.auditError}）`) : "读取中"} · GET /api/workspaces/{ws}/runs/{msgRun}</dd></div>
+          ) : null}
+          {task && (task.task_id || task.status) ? (
+            <div data-testid="progress-task-state"><dt>会话任务</dt><dd>{TASK_PLAIN[task.status ?? ""] ?? task.status ?? "未上报"}（{task.status ?? "未上报"}） · 任务 {task.task_id ?? "—"}{taskRun ? ` · run ${taskRun}` : ""}{msgRun && taskRun && !sameRun ? " · 与本条回复不是同一轮" : ""}</dd></div>
+          ) : null}
+          {auditReady && persisted.trace ? <div><dt>步骤来源</dt><dd>GET /api/workspaces/{ws}/runs/{msgRun}/trace</dd></div> : null}
+        </dl>
+        {auditReady ? <RawData value={{ audit: persisted.audit, trace: persisted.trace }} label="原始记录" /> : null}
+      </details>
     </aside>
   );
 }
