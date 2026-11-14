@@ -1,7 +1,0 @@
-/* Cascade precedence is stable. Foundations retain base when moving them would
-   outrank a component refinement; each page owns its base/console/pages rules.
-   tokens: themes and rhythm; global: element defaults and utilities;
-   patterns/primitives: shared components; shell: navigation; workbench: chat;
-   typography: content; pages/extension: refinements; responsive: window sizing.
-   Keep every stylesheet layered. Do not solve conflicts by import reordering. */
-@layer runtime, base, shell, console, workbench, typography, pages, extension, responsive;

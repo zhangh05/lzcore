@@ -15,7 +15,7 @@ bash stop.sh
 
 默认监听 loopback。非回环监听必须启用 API token、登录或 identity；具体环境配置见 [生产运行](docs/PRODUCTION.md)。Windows 用户可选 [便携版或安装版](docs/WINDOWS.md)，不需安装源码开发环境。
 
-产品前端为 `frontend/`；`frontend-legacy/` 保留切换前实现用于回退，默认不启动。参见 [前端合同](docs/FRONTEND.md)。
+产品前端为 `frontend/`。参见 [前端合同](docs/FRONTEND.md)。
 
 ## 工作方式
 

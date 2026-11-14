@@ -1,6 +1,6 @@
 # 联智中枢产品前端
 
-这是默认产品前端，保持正式工程 frontend/ 路径。回退实现位于 ../frontend-legacy/。
+这是产品前端，保持正式工程 frontend/ 路径。
 
 在仓库根运行 bash start.sh。单独开发：
 
