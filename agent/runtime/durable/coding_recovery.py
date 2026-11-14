@@ -81,7 +81,22 @@ def reconcile_execution(task):
 
     binding = review(task) if task.profile_id == "qa_agent" else candidate(task)
     if not binding:
-        raise ValueError("coding_execution_record_unavailable")
+        from .coding_team import execution_owner
+        from core.tools.project_execution import read_execution_intent
+        if task.status in {"created", "running"}:
+            raise ValueError("coding_execution_worker_not_stopped")
+        intent = read_execution_intent(task.coding["branch_workspace"], execution_owner(task))
+        # Allocation may have outlived the worker before a domain record was
+        # created. Inspect its exact intent, without launching or deleting it.
+        try:
+            observed = reconcile_environment(intent["resources"])
+        except ValueError:
+            observed = {"cleanup_confirmed": False, "outcome": "unknown"}
+        task.observations["execution_recovery"] = {"phase": intent["phase"], "resources": observed}
+        _save_task(task)
+        return {"ok": bool(observed.get("cleanup_confirmed")), "reconciled": bool(observed.get("cleanup_confirmed")),
+                "state": "interrupted" if observed.get("cleanup_confirmed") else "unknown",
+                "automatic_retry_allowed": False, "evidence": task.observations["execution_recovery"]}
     identity = binding["candidate_id"] if task.profile_id == "qa_agent" else binding["id"]
     with store.publication_lock(task.workspace_id, identity):
         record = store.read(task.workspace_id, "candidates", identity)

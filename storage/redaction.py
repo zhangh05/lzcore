@@ -9,6 +9,14 @@ from __future__ import annotations
 import posixpath
 import re
 
+# Consume an unterminated block through EOF: no private-key payload may be
+# released merely because the producer omitted (or truncated) its END marker.
+_PRIVATE_KEY_BLOCK = re.compile(
+    r"-----BEGIN (?P<label>(?:[A-Z0-9]+[ -])*PRIVATE KEY)-----"
+    r"[\s\S]*?(?:-----END (?P=label)-----|\Z)",
+    re.IGNORECASE,
+)
+
 _KEYWORD_PATTERNS = [
     r"(?<![-\w])(password)\b\s*(?:=|:|\s)\s*\S+",
     r"(?<![-\w])(secret)\b\s*(?:=|:|\s)\s*\S+",
@@ -60,6 +68,7 @@ def is_container_temporary_path(path: str) -> bool:
 def redact_text(text: str, *, container_paths: bool = False) -> str:
     if not text:
         return text
+    text = _PRIVATE_KEY_BLOCK.sub(MASK, text)
     for pattern in _ABSOLUTE_PATH_PATTERNS:
         text = pattern.sub(
             lambda match: match.group(0)
@@ -161,4 +170,7 @@ def _split_secret_hold(text: str) -> tuple[str, str]:
 def contains_secret(text: str) -> bool:
     if not text:
         return False
-    return any(re.search(pattern, text, re.IGNORECASE) for pattern in _KEYWORD_PATTERNS + _FULL_MASK_PATTERNS)
+    return bool(_PRIVATE_KEY_BLOCK.search(text)) or any(
+        re.search(pattern, text, re.IGNORECASE)
+        for pattern in _KEYWORD_PATTERNS + _FULL_MASK_PATTERNS
+    )

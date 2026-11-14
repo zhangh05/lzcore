@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 import threading
+import math
+import os
+import socket
+import uuid
+from contextlib import contextmanager
 import time
 import weakref
 
@@ -25,7 +30,100 @@ def _observation_condition(workspace_id: str):
             _CONDITIONS[key] = condition
         return condition
 _TERMINAL = {"succeeded", "failed", "cancelled"}
+_WORKER_PROCESS_ID = uuid.uuid4().hex
+_WORKER_LEASE_SECONDS = 60.0
+_WORKER_HEARTBEAT_SECONDS = 10.0
 
+
+def _worker_owner():
+    return {"host": socket.gethostname(), "pid": os.getpid(), "process_id": _WORKER_PROCESS_ID}
+
+
+def claim_subagent_worker(workspace_id: str, subtask_id: str, token: str = "") -> str:
+    """Reserve one worker identity durably before launching its thread."""
+    with task_control_lock(workspace_id, subtask_id):
+        record = read_subagent(workspace_id, subtask_id)
+        if not record or record.get("status") in _TERMINAL:
+            return ""
+        previous = record.get("worker_lease")
+        owner = _worker_owner()
+        if previous:
+            if not token or previous.get("owner") != owner or previous.get("token") != token:
+                return ""
+        elif record.get("status") != "created":
+            # An unowned legacy running record is not permission to replay it.
+            return ""
+        token = token or uuid.uuid4().hex
+        now = time.time()
+        record["worker_lease"] = {"owner": owner, "token": token,
+                                  "heartbeat_at": now, "expires_at": now + _WORKER_LEASE_SECONDS}
+        record["observation_revision"] = int(record.get("observation_revision", 0)) + 1
+        atomic_save_json(workspace_id, ("subagents", f"{subtask_id}.json"), record)
+        return token
+
+
+@contextmanager
+def subagent_worker_lease(workspace_id: str, subtask_id: str, token: str = ""):
+    """Renew while model/tool I/O blocks; a renewal failure stops execution."""
+    token = claim_subagent_worker(workspace_id, subtask_id, token)
+    if not token:
+        yield None
+        return
+    stopped, lost = threading.Event(), threading.Event()
+    from storage.principal import bind_storage_principal
+
+    def heartbeat():
+        while not stopped.wait(_WORKER_HEARTBEAT_SECONDS):
+            try:
+                if not claim_subagent_worker(workspace_id, subtask_id, token):
+                    lost.set()
+                    return
+            except (OSError, ValueError, TimeoutError):
+                lost.set()
+                return
+    worker = threading.Thread(target=bind_storage_principal(heartbeat), daemon=True,
+                              name=f"subagent-lease-{subtask_id}")
+    worker.start()
+    try:
+        yield lost.is_set
+    finally:
+        stopped.set()
+        worker.join(timeout=1.0)
+        with task_control_lock(workspace_id, subtask_id):
+            record = read_subagent(workspace_id, subtask_id)
+            if (record and record.get("status") == "created"
+                    and (record.get("worker_lease") or {}).get("token") == token):
+                del record["worker_lease"]
+                atomic_save_json(workspace_id, ("subagents", f"{subtask_id}.json"), record)
+
+
+def worker_lease_state(record: dict) -> str:
+    """Expiry plus local process absence proves interruption; doubt stays pending."""
+    lease = record.get("worker_lease") or {}
+    if not isinstance(lease, dict):
+        return "pending_confirmation"
+    owner = lease.get("owner") or {}
+    if not isinstance(owner, dict):
+        return "pending_confirmation"
+    try:
+        expiry, heartbeat = float(lease["expires_at"]), float(lease["heartbeat_at"])
+        if (not all(math.isfinite(value) for value in (expiry, heartbeat))
+                or expiry <= heartbeat or not lease.get("token")
+                or not owner.get("process_id") or type(owner.get("pid")) is not int or owner["pid"] <= 0):
+            return "pending_confirmation"
+    except (KeyError, TypeError, ValueError):
+        return "pending_confirmation"
+    if expiry > time.time():
+        return "active"
+    if owner.get("host") != socket.gethostname():
+        return "pending_confirmation"
+    try:
+        os.kill(owner["pid"], 0)
+    except ProcessLookupError:
+        return "expired_dead"
+    except (OSError, OverflowError):
+        return "pending_confirmation"
+    return "pending_confirmation"
 
 def task_control_lock(workspace_id: str, subtask_id: str) -> FileLock:
     """Serialize task claims and status transitions across worker processes."""
@@ -38,6 +136,8 @@ def save_subagent(workspace_id: str, subtask_id: str, record: dict[str, Any]) ->
         previous = read_subagent(workspace_id, subtask_id)
         payload = dict(record)
         if previous:
+            if "worker_lease" in previous:
+                payload["worker_lease"] = previous["worker_lease"]
             observations = {**previous.get("observations", {}), **payload.get("observations", {})}
             if "activity" in previous.get("observations", {}):
                 observations["activity"] = previous["observations"]["activity"]

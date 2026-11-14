@@ -225,12 +225,12 @@ def list_chunks(workspace_id: str, source_id: str = "",
 def search_chunks(workspace_id: str, query: str, top_k: int = 5,
                     scope: str = "", source_id: str = "",
                     source_type: str = "", tags: Optional[List[str]] = None,
-                    chapter: str = "") -> dict:
+                    chapter: str = "", session_id: str = "") -> dict:
     from agent.modules.knowledge.index import search_chunks as _impl
     return _impl(
         workspace_id=workspace_id, query=query, top_k=top_k,
         scope=scope, source_id=source_id, source_type=source_type,
-        tags=tags, chapter=chapter,
+        tags=tags, chapter=chapter, session_id=session_id,
     )
 
 

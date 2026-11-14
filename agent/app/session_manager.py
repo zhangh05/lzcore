@@ -14,6 +14,36 @@ from agent.core.session import AgentSession
 logger = logging.getLogger(__name__)
 
 
+class _TurnLease:
+    """Pin the session before waiting for its lock, through the whole turn."""
+
+    def __init__(self, manager, key, lock):
+        self.manager, self.key, self.lock = manager, key, lock
+
+    def __enter__(self):
+        try:
+            self.lock.acquire()
+        except BaseException:
+            self._release()
+            raise
+        return self
+
+    def _release(self):
+        with self.manager._sessions_lock:
+            self.manager._turn_leases[self.key] -= 1
+            if not self.manager._turn_leases[self.key]:
+                del self.manager._turn_leases[self.key]
+            session = self.manager._sessions.get(self.key)
+            if session is not None:
+                session._last_access = time.monotonic()
+
+    def __exit__(self, *exc):
+        try:
+            self.lock.release()
+        finally:
+            self._release()
+
+
 class SessionManager:
     def __init__(
         self,
@@ -32,6 +62,7 @@ class SessionManager:
         self._sessions: dict[tuple[str, str, str], AgentSession] = {}
         self._sessions_lock = threading.RLock()
         self._session_turn_locks: dict[tuple[str, str, str], threading.RLock] = {}
+        self._turn_leases: dict[tuple[str, str, str], int] = {}
 
     def new_session_id(self) -> str:
         return f"session_{uuid.uuid4().hex[:12]}"
@@ -48,12 +79,19 @@ class SessionManager:
     def _key(self, session_id: str, workspace_id: str) -> tuple[str, str, str]:
         return (self._principal_key(), str(workspace_id), str(session_id))
 
-    def get_or_create(self, session_id: str | None, workspace_id: str):
+    def get_or_create(self, session_id: str | None, workspace_id: str, *, reserve_turn=False):
         with self._sessions_lock:
             self._evict_expired_locked()
             sid = session_id or self.new_session_id()
             key = self._key(sid, workspace_id)
             if key not in self._sessions:
+                if len(self._sessions) >= self.max_sessions:
+                    idle = [key for key in self._sessions if not self._turn_leases.get(key)]
+                    if not idle:
+                        raise RuntimeError("session_capacity_busy")
+                    oldest = min(idle, key=lambda key: self._sessions[key]._last_access)
+                    self._sessions.pop(oldest)
+                    self._session_turn_locks.pop(oldest, None)
                 session = AgentSession(session_id=sid, workspace_id=workspace_id)
                 self._restore(session, sid, workspace_id)
                 self._sessions[key] = session
@@ -61,8 +99,12 @@ class SessionManager:
             else:
                 session = self._sessions[key]
                 self._session_turn_locks.setdefault(key, threading.RLock())
-            session._last_access = time.time()
-            return sid, session, self._session_turn_locks[key]
+            session._last_access = time.monotonic()
+            turn_lock = self._session_turn_locks[key]
+            if reserve_turn:
+                self._turn_leases[key] = self._turn_leases.get(key, 0) + 1
+                turn_lock = _TurnLease(self, key, turn_lock)
+            return sid, session, turn_lock
 
     def snapshot(self) -> dict[str, Any]:
         with self._sessions_lock:
@@ -104,10 +146,11 @@ class SessionManager:
             # Keep the lock: already queued submissions may still own it.
 
     def _evict_expired_locked(self) -> None:
-        now = time.time()
+        now = time.monotonic()
         expired = [
             sid for sid, s in self._sessions.items()
-            if now - getattr(s, "_last_access", 0) > self.ttl_seconds
+            if not self._turn_leases.get(sid)
+            and now - getattr(s, "_last_access", 0) > self.ttl_seconds
         ]
         for sid in expired:
             self._sessions.pop(sid, None)
@@ -117,7 +160,7 @@ class SessionManager:
             return
         overflow = len(self._sessions) - self.max_sessions
         oldest = sorted(
-            self._sessions.keys(),
+            (sid for sid in self._sessions if not self._turn_leases.get(sid)),
             key=lambda sid: getattr(self._sessions[sid], "_last_access", 0),
         )
         for sid in oldest[:overflow]:

@@ -8,6 +8,15 @@ import pytest
 from core.tools.project_validation import execute_validation
 
 
+@pytest.fixture(autouse=True)
+def preview_port_stub(monkeypatch):
+    @contextmanager
+    def listener():
+        yield SimpleNamespace(bind=lambda _: None, getsockname=lambda: ("127.0.0.1", 5279))
+    # Source snapshot tests exercise local files and a fake environment only.
+    monkeypatch.setattr("core.tools.project_validation.socket", SimpleNamespace(socket=listener))
+
+
 @pytest.mark.parametrize("absolute", [False, True])
 def test_dependency_snapshot_preserves_executable_links_and_rebases_absolute_targets(monkeypatch, tmp_path, absolute):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
