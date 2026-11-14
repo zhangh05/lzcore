@@ -508,3 +508,108 @@ def test_running_redirect_does_not_write_a_terminal_to_real_turn_log(monkeypatch
     append_frame("default", "sess-redirect", "req", {"type": "token", "content": "second"})
     assert [item["type"] for item in frames_after("default", "sess-redirect", "req", 0)] == ["token", "token"]
     assert events.get()["metadata"]["idempotent_redirect"]["status"] == "running"
+
+
+@pytest.mark.parametrize("persist_before_failure", [False, True])
+def test_ws_claim_registry_write_failure_never_submits_or_closes_request(monkeypatch, tmp_path, persist_before_failure):
+    """Include the uncertain case: the write committed before reporting failure."""
+    from backend.ws import agent_ws
+    import agent.app.service as service
+    import jobs.lifecycle as lifecycle
+    import jobs.store as store
+
+    path = tmp_path / "claim.json"
+    original_write = lifecycle._write_request_record
+    submits, finished, stamps = [], [], []
+    def fail_write(record_path, record):
+        if persist_before_failure:
+            original_write(record_path, record)
+        raise OSError("synthetic storage write failure")
+
+    monkeypatch.setattr(lifecycle, "_request_registry_path", lambda *a: path)
+    monkeypatch.setattr(lifecycle, "_prune_request_registry_unlocked", lambda *a: None)
+    monkeypatch.setattr(lifecycle, "_running_session_turn_unlocked", lambda *a: None)
+    monkeypatch.setattr(lifecycle, "_begin_session_turn_unlocked", lambda *a, **kw: "job-claim")
+    monkeypatch.setattr(lifecycle, "_write_request_record", fail_write)
+    monkeypatch.setattr(store, "get_job", lambda *a: None)
+    monkeypatch.setattr(lifecycle, "get_job", lambda *a: None)
+    monkeypatch.setattr(service, "get_default_agent_app", lambda: submits.append(True))
+    monkeypatch.setattr(lifecycle, "finish_claimed_session_turn", lambda *a, **kw: finished.append(kw))
+    monkeypatch.setattr(lifecycle, "finish_session_turn_snapshot", lambda *a, **kw: finished.append(kw))
+    monkeypatch.setattr(agent_ws, "_stamp_replay_frame", lambda *a: stamps.append(a))
+
+    responses = []
+    for _ in range(2):
+        events = queue.Queue()
+        agent_ws._run_agent_thread(
+            "same write request", "session-claim-failure", "default",
+            {"client_request_id": "request-claim-failure"}, events, {"error": None}, {},
+        )
+        responses.append([item for item in list(events.queue) if isinstance(item, dict)])
+
+    assert submits == [] and finished == [] and stamps == []
+    assert responses[0][0]["type"] == "error"
+    assert responses[0][0]["error_code"] == "session_turn_claim_failed"
+    assert responses[0][0]["retryable"] is True
+    assert responses[0][0]["client_request_id"] == "request-claim-failure"
+    if persist_before_failure:
+        assert responses[1][0]["metadata"]["idempotent_redirect"]["status"] == "running"
+        assert lifecycle._read_request_record(path)["status"] == "running"
+    else:
+        assert responses[1][0]["error_code"] == "session_turn_claim_failed"
+
+
+@pytest.mark.parametrize("status", ["running", "conflict", "succeeded", "failed", "cancelled"])
+def test_ws_already_claimed_request_returns_existing_status_or_result(monkeypatch, status):
+    from backend.ws import agent_ws
+    import agent.app.service as service
+    import jobs.lifecycle as lifecycle
+    import jobs.store as store
+    import storage.run_record_store as runs
+
+    submits = []
+    active_turn = object()
+    monkeypatch.setattr(agent_ws, "_active_turns", {("", "default", "job-existing"): active_turn})
+    monkeypatch.setattr(service, "get_default_agent_app", lambda: submits.append(True))
+    monkeypatch.setattr(lifecycle, "claim_session_turn", lambda *a, **kw: lifecycle.SessionTurnClaim(
+        job_id="job-existing", should_execute=False, status=status,
+        run_id="run-existing", trace_id="trace-existing",
+    ))
+    monkeypatch.setattr(store, "get_job", lambda *a: None)
+    monkeypatch.setattr(runs, "get_run", lambda *a: {"final_response_summary": "stored answer"})
+    events = queue.Queue()
+    agent_ws._run_agent_thread(
+        "retry", "session-existing", "default", {"client_request_id": "request-existing"},
+        events, {"error": None}, {},
+    )
+    frame = events.get()
+    assert submits == [] and frame["type"] == "done"
+    assert frame["metadata"]["idempotent_redirect"]["status"] == status
+    assert frame["final_response"] == ("stored answer" if status == "succeeded" else "")
+    assert agent_ws._active_turns[("", "default", "job-existing")] is active_turn
+
+
+def test_ws_duplicate_result_lookup_failure_never_falls_through_to_execution(monkeypatch):
+    from backend.ws import agent_ws
+    import agent.app.service as service
+    import jobs.lifecycle as lifecycle
+    import storage.run_record_store as runs
+
+    submits = []
+    active_turn = object()
+    monkeypatch.setattr(agent_ws, "_active_turns", {("", "default", "job-existing"): active_turn})
+    monkeypatch.setattr(service, "get_default_agent_app", lambda: submits.append(True))
+    monkeypatch.setattr(lifecycle, "claim_session_turn", lambda *a, **kw: lifecycle.SessionTurnClaim(
+        job_id="job-existing", should_execute=False, status="succeeded", run_id="run-existing",
+    ))
+    def fail_read(*a):
+        raise OSError("synthetic read failure")
+    monkeypatch.setattr(runs, "get_run", fail_read)
+    events = queue.Queue()
+    agent_ws._run_agent_thread(
+        "retry", "session-existing", "default", {"client_request_id": "request-existing"},
+        events, {"error": None}, {},
+    )
+    assert submits == []
+    assert events.get()["error_code"] == "session_turn_claim_failed"
+    assert agent_ws._active_turns[("", "default", "job-existing")] is active_turn

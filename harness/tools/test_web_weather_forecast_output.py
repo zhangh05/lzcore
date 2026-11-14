@@ -127,7 +127,7 @@ def test_web_manage_weather_batch_reports_exact_partial_coverage(monkeypatch):
     assert result["warnings"] == ["partial_location_coverage"]
 
 
-def test_partial_batch_is_partial_tool_outcome_without_forcing_task_failure():
+def test_partial_batch_preserves_partial_tool_and_task_outcome():
     from types import SimpleNamespace
 
     from core.runtime_engine.turn_outcome import (
@@ -142,7 +142,7 @@ def test_partial_batch_is_partial_tool_outcome_without_forcing_task_failure():
     )]
 
     assert derive_tool_execution_outcome(results) == "partial"
-    assert derive_execution_outcome(results) == "complete"
+    assert derive_execution_outcome(results) == "partial"
 
 
 def test_compiled_weather_batch_preserves_scalar_default_as_current(monkeypatch):

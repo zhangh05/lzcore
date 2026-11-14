@@ -156,7 +156,9 @@ def test_invalid_provider_arguments_cannot_turn_into_a_successful_drawing_read(m
                 "type": "tool_use", "id": "bad", "name": TOOL_NAME, "input": {},
             }},
             {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": arguments}},
+            {"type": "content_block_stop", "index": 0},
             {"type": "message_delta", "delta": {"stop_reason": "tool_use"}},
+            {"type": "message_stop"},
         ]
         response = SimpleNamespace(status_code=200, iter_lines=lambda **_kwargs: iter(
             ["data: " + json.dumps(event) for event in events],

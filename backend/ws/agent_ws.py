@@ -977,6 +977,7 @@ def _run_agent_thread(
 
     from storage.principal import storage_principal
     job_id = ""
+    active_turn_registered = False
     principal_scope = None
     client_request_id = str((metadata or {}).get("client_request_id") or uuid.uuid4().hex)
     metadata = {**(metadata or {}), "client_request_id": client_request_id}
@@ -1040,15 +1041,25 @@ def _run_agent_thread(
                 })
                 return
         except Exception:
-            # Runtime execution remains available if the observational job
-            # snapshot cannot be written; the failure is logged and never
-            # replaced with fabricated progress.
-            _log.exception("unable to start durable live turn session=%s", session_id)
-            job_id = ""
+            # The claim owns execution, not just progress reporting. Its result
+            # may already be durable: neither execute nor terminalize that
+            # request when the claim/duplicate lookup cannot be confirmed.
+            _log.exception("unable to claim durable live turn session=%s", session_id)
+            error_holder["error"] = "session_turn_claim_failed"
+            enqueue_live({
+                "type": "error",
+                "error_code": "session_turn_claim_failed",
+                "message": "无法确认请求领取状态，请使用同一请求 ID 重试。",
+                "retryable": True,
+                "session_id": session_id,
+                "client_request_id": client_request_id,
+            })
+            return
         stats["job_id"] = job_id
         if job_id and cancel_event is not None:
             with _active_turns_lock:
                 _active_turns[(username, workspace_id, job_id)] = cancel_event
+                active_turn_registered = True
             # The HTTP cancellation endpoint persists its intent before it
             # reaches this process-local map.  Replay that durable intent after
             # registration so a stop in the claim/register window is never
@@ -1216,7 +1227,7 @@ def _run_agent_thread(
             "error_code": "agent_runtime_error",
         })
     finally:
-        if job_id:
+        if active_turn_registered:
             with _active_turns_lock:
                 _active_turns.pop((username, workspace_id, job_id), None)
         try:

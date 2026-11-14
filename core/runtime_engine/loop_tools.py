@@ -6,6 +6,7 @@ import asyncio
 import logging
 import math
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from agent.llm.schemas import LLMToolCall
@@ -126,6 +127,7 @@ class StreamingToolExecutor(ReadRetryPolicy):
             # makes the runtime read-back and the durable ledger one state
             # machine instead of two unrelated warnings.
             "operation_id": str(output.get("operation_id") or ""),
+            "operation_finished_at": str(output.get("operation_finished_at") or ""),
         }
         if ctx is not None:
             current = ctx.extras.get("unknown_outcome")
@@ -154,6 +156,27 @@ class StreamingToolExecutor(ReadRetryPolicy):
         )
 
         prior = dict((ctx.extras.get("orchestration_evidence") or {}) if ctx else {})
+        cached: dict[str, StreamingToolResult] = {}
+        for call in tool_calls:
+            previous = prior.get(str(call.step_id or call.id))
+            if (
+                ctx is not None and previous is not None and previous.ok
+                and previous.call_id == call.id and not call.result_bindings
+                and not self._is_read_only_call(call)
+            ):
+                from .operation_ledger import plan_operation
+
+                operation = plan_operation(ctx, call.name.replace("__", "."), call.id, call.arguments)
+                # Return an existing write's result before DAG validation
+                # rejects the already-successful step. New step identities
+                # still follow the ordinary orchestration contract.
+                if operation.get("status") in {"succeeded", "failed", "blocked", "reconciled"}:
+                    cached[call.id] = self._recorded_operation_result(call, operation)
+        if cached:
+            remaining = [call for call in tool_calls if call.id not in cached]
+            results = await self.execute(remaining, ctx=ctx, budget=budget) if remaining else []
+            by_id = {result.call_id: result for result in results}
+            return [(cached[call.id] if call.id in cached else by_id[call.id]) for call in tool_calls]
         try:
             layers = validate_incremental_graph(
                 tool_calls,
@@ -525,6 +548,7 @@ class StreamingToolExecutor(ReadRetryPolicy):
         async def execute_read_group(group: list[LLMToolCall]) -> None:
             if not group:
                 return
+            read_started_at = datetime.now(timezone.utc).isoformat()
             concurrency_limit = min(
                 max(1, int(self._config.max_layer_concurrency or 1)),
                 max(1, int(self._config.max_global_concurrency or 1)),
@@ -581,6 +605,14 @@ class StreamingToolExecutor(ReadRetryPolicy):
                 else:
                     result_by_id[tc.id] = r
                 result = result_by_id[tc.id]
+                result.output = {
+                    **(result.output or {}),
+                    "_runtime_readback": {
+                        "action": str((tc.arguments or {}).get("action") or ""),
+                        "connection_id": str((tc.arguments or {}).get("connection_id") or ""),
+                        "started_at": read_started_at,
+                    },
+                }
                 if self._result_may_continue(result):
                     output = dict(result.output or {})
                     output["read_only"] = True
@@ -619,7 +651,6 @@ class StreamingToolExecutor(ReadRetryPolicy):
                         "status": "reconciled",
                         "reconciled_by_call_id": tc.id,
                     }
-                    ctx.extras["unknown_outcome_reconciliation"] = reconciliation
                     operation_id = str(pending.get("operation_id") or "")
                     if operation_id:
                         from .operation_ledger import settle_operation
@@ -633,6 +664,7 @@ class StreamingToolExecutor(ReadRetryPolicy):
                             resolution_reason=(f"same_connection_readback:{tc.id}"),
                             require_unresolved=True,
                         )
+                    ctx.extras["unknown_outcome_reconciliation"] = reconciliation
 
         read_group: list[LLMToolCall] = []
         for tc in tool_calls:
@@ -692,6 +724,15 @@ class StreamingToolExecutor(ReadRetryPolicy):
                 operation = plan_operation(
                     ctx, tc.name.replace("__", "."), tc.id, tc.arguments
                 )
+                from .operation_ledger import start_operation
+
+                operation = start_operation(ctx.workspace_id, operation["operation_id"])
+                if not operation.get("execution_claimed"):
+                    result = self._recorded_operation_result(tc, operation)
+                    result_by_id[tc.id] = result
+                    if self._result_may_continue(result):
+                        self._mark_unknown_write_outcome(ctx, tc, result)
+                    continue
             if budget is not None and budget.remaining_execution_seconds() <= 0:
                 result_by_id[tc.id] = self._execution_budget_timeout(
                     tc,
@@ -699,10 +740,6 @@ class StreamingToolExecutor(ReadRetryPolicy):
                 )
             else:
                 self.max_parallel_width = max(self.max_parallel_width, 1)
-                if operation is not None and ctx is not None:
-                    from .operation_ledger import start_operation
-
-                    start_operation(ctx.workspace_id, operation["operation_id"])
                 operation_token = None
                 execution_task: asyncio.Task | None = None
                 try:
@@ -758,6 +795,10 @@ class StreamingToolExecutor(ReadRetryPolicy):
                 )
                 output = dict(result.output or {})
                 output["operation_id"] = final_operation["operation_id"]
+                output["operation_finished_at"] = str(final_operation.get("finished_at") or "")
+                output["_runtime_write"] = {
+                    "connection_id": str((tc.arguments or {}).get("connection_id") or ""),
+                }
                 result.output = output
             if self._result_may_continue(result) and not self._is_read_only_call(tc):
                 self._mark_unknown_write_outcome(ctx, tc, result)
@@ -765,6 +806,36 @@ class StreamingToolExecutor(ReadRetryPolicy):
 
         # Return in original order
         return [result_by_id[tc.id] for tc in tool_calls]
+
+    @staticmethod
+    def _recorded_operation_result(tc: LLMToolCall, operation: dict) -> StreamingToolResult:
+        """Return durable truth without restarting an already claimed write."""
+        status = str(operation.get("status") or "")
+        unresolved = status in {"running", "unknown", "indeterminate", "in-flight"}
+        recorded = operation.get("result")
+        if not unresolved and isinstance(recorded, dict) and not recorded.get("execution_may_continue"):
+            result = StreamingToolResult(
+                tool_name=tc.name, call_id=tc.id,
+                output=dict(recorded.get("output") or {}),
+                ok=bool(recorded.get("ok")), error=recorded.get("error") or None,
+                error_code=str(recorded.get("error_code") or ""),
+                summary=str(recorded.get("summary") or ""),
+            )
+        else:
+            code = "OPERATION_OUTCOME_UNKNOWN" if unresolved else "OPERATION_RESULT_UNAVAILABLE"
+            error = "写操作结果未知，需只读核对；未重新执行。" if unresolved else "已记录的操作缺少可返回结果；未重新执行。"
+            result = StreamingToolResult(
+                tool_name=tc.name, call_id=tc.id, ok=False, error=error,
+                error_code=code, execution_may_continue=unresolved,
+                output={"ok": False, "error_code": code, "error": error,
+                        "retryable": False, "execution_may_continue": unresolved},
+            )
+        result.output.update({
+            "operation_id": operation["operation_id"],
+            "operation_finished_at": str(operation.get("finished_at") or operation.get("started_at") or ""),
+            "operation_reused": True,
+        })
+        return result
 
     @staticmethod
     def _execution_budget_timeout(

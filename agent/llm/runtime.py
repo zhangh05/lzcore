@@ -265,12 +265,16 @@ def _generate_with_retry(req: LLMRequest, cfg: dict, max_retries: int = 3) -> LL
         error_lower = resp.error.lower()
         from agent.llm.errors import is_balance_insufficient
         balance_insufficient = is_balance_insufficient(resp.error, (resp.metadata or {}).get("http_status"))
-        retryable = not balance_insufficient and any(key in error_lower for key in ("rate_limit", "rate limit", "overload", "429", "503", "timeout", "timed out"))
+        declared_retryable = (resp.metadata or {}).get("retryable")
+        retryable = not balance_insufficient and (
+            declared_retryable if isinstance(declared_retryable, bool) else
+            any(key in error_lower for key in ("rate_limit", "rate limit", "overload", "429", "503", "timeout", "timed out"))
+        )
         if attempt < max_retries and retryable:
             time.sleep(2.0 ** attempt)
             continue
         error_type = resp.metadata.get("error_type", ERROR_TYPE_PROVIDER_UNKNOWN) if resp.metadata else ERROR_TYPE_PROVIDER_UNKNOWN
-        return LLMResponse(error=resp.error, provider=resp.provider, model=resp.model, metadata={"error_type": error_type, "error_detail": (resp.metadata or {}).get("error_detail", resp.error[:200]), "http_status": (resp.metadata or {}).get("http_status"), "retryable": retryable, **({"retries_exhausted": True} if attempt >= max_retries else {})})
+        return LLMResponse(error=resp.error, provider=resp.provider, model=resp.model, metadata={**(resp.metadata or {}), "error_type": error_type, "error_detail": (resp.metadata or {}).get("error_detail", resp.error[:200]), "http_status": (resp.metadata or {}).get("http_status"), "retryable": retryable, **({"retries_exhausted": True} if attempt >= max_retries else {})})
     return LLMResponse(error="provider_unknown_error", metadata={"error_type": ERROR_TYPE_PROVIDER_UNKNOWN})
 
 
