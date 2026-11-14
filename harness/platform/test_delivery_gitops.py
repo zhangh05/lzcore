@@ -97,6 +97,8 @@ class TestGitOps:
         result = git_commit("ws_x", "", confirm=True)
         assert result["ok"] is False
 
-    def test_git_status(self):
+    def test_git_status_missing_workspace_rejected(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("storage.paths.workspace_root", lambda _: tmp_path / "missing")
         result = git_status_check("ws_x")
-        assert result["ok"] is True
+        assert result["ok"] is False
+        assert result["error"]
