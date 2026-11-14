@@ -48,15 +48,15 @@ export function useCanvasTheme({
     const dark = theme === "dark";
     const labelText = resolveToken(
       "--lz-color-text-primary",
-      dark ? "#f1f5f9" : "#0f172a",
+      dark ? "#ffffff" : "#242424",
     );
     const labelSurface = resolveToken(
       "--lz-color-bg-surface",
-      dark ? "#1e293b" : "#ffffff",
+      dark ? "#2e2e2e" : "#ffffff",
     );
     const labelBorder = resolveToken(
       "--lz-color-border-default",
-      dark ? "#334155" : "#cbd5e1",
+      dark ? "#525252" : "#d1d1d1",
     );
     cy.style()
       .selector("node:selected")
@@ -78,7 +78,7 @@ export function useCanvasTheme({
         "text-border-width": 0,
       })
       .selector("node[vendorTint]")
-      .style({ "background-color": dark ? "#1c242c" : "data(vendorTint)" })
+      .style({ "background-color": dark ? "#292929" : "data(vendorTint)" })
       .selector("edge")
       .style({
         color: labelText,

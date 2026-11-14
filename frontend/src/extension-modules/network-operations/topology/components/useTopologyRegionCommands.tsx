@@ -176,9 +176,8 @@ export function useTopologyRegionCommands({
             ? "接入区域"
             : "业务功能区";
     setZoneNameInput(defaultName);
-    setZoneColorIndex(
-      (activeTopology.canvas_items || []).length % ZONE_COLOR_PRESETS.length,
-    );
+    // New regions start neutral; colour is a deliberate choice in the dialog.
+    setZoneColorIndex(0);
     setShowCreateZoneModal(true);
   }, [activeTopology, canvasSelectedElementIds, setNotice]);
 

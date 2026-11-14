@@ -590,9 +590,16 @@ export function TopologyNodeInspector({
                   >
                     <span className={`link-kind-dot ${l.kind}`} />
                     <span>
-                      {isSrc ? l.source_interface : l.target_interface} ↔{" "}
-                      {otherName} (
-                      {isSrc ? l.target_interface : l.source_interface})
+                      {[
+                        isSrc ? l.source_interface : l.target_interface,
+                        "↔",
+                        otherName,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      {(isSrc ? l.target_interface : l.source_interface)
+                        ? ` (${isSrc ? l.target_interface : l.source_interface})`
+                        : ""}
                     </span>
                   </div>
                 );

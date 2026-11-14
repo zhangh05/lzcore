@@ -10,6 +10,7 @@ import {
   IconLayers,
   IconRefresh,
   IconSave,
+  IconSliders,
   IconSparkle,
   IconTrash,
 } from "../platform/components/Icon";
@@ -231,9 +232,10 @@ export function TopologyHeaderToolbar({
 
         <Button
           size="sm"
-          icon={<IconEye size={13} />}
+          icon={<IconSliders size={14} />}
           iconOnly
           aria-label={isInspectorOpen ? "收起详情" : "查看详情"}
+          title={isInspectorOpen ? "收起详情" : "查看详情"}
           onClick={() => {
             setIsInspectorOpen((open) => !open);
             setShowAgent(false);

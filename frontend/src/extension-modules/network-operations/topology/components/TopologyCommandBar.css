@@ -1,0 +1,257 @@
+/* Fluent command surfaces for the topology studio, loaded after every other topology sheet.
+   Three bands, each with one job:
+     document bar  — what sheet this is, whether it is saved, view or edit, side panes
+     command bar   — tools for the current mode, subtle buttons in divided groups
+     status bar    — counts, selection, the one hint that applies right now
+   The canvas itself carries no floating chrome except the zoom flyout. */
+@layer extension {
+.network-admin .topology-studio.topology-studio .topology-canvas-toolbar {
+  min-height: 48px; height: 48px; padding: 0 12px; gap: 12px; flex-wrap: nowrap;
+  background: var(--surface); border-bottom: 1px solid var(--layer-stroke, var(--line));
+}
+.network-admin .topology-studio.topology-studio .topology-canvas-toolbar > .toolbar-left { gap: 8px; }
+.network-admin .topology-studio.topology-studio .topology-canvas-toolbar > .toolbar-right { gap: 4px; }
+.network-admin .topology-studio.topology-studio .topology-canvas-title {
+  max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-14); line-height: 20px; font-weight: 600; color: var(--text);
+}
+
+/* Save state reads as a quiet status until there is something to save. */
+.network-admin .topology-studio.topology-studio .topology-save-btn.status-saved,
+.network-admin .topology-studio.topology-studio .topology-save-btn.status-saving {
+  border-color: transparent; background: transparent; color: var(--text-3); opacity: 1; cursor: default;
+  font-weight: 400; padding-inline: 6px;
+}
+.network-admin .topology-studio.topology-studio .topology-save-btn.status-saved svg { color: var(--ok); }
+
+/* View / edit: a Fluent segmented switch. */
+.network-admin .topology-studio.topology-studio .studio-workspace-mode-switch {
+  display: inline-flex; gap: 2px; padding: 2px; margin-left: 4px;
+  border-radius: var(--r-control); background: var(--surface-3);
+}
+.network-admin .topology-studio.topology-studio .studio-workspace-mode-switch .mode-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; min-height: 28px; padding: 0 10px;
+  border: 0; border-radius: 3px; background: transparent; color: var(--text-2);
+  font-size: var(--fs-14); font-weight: 400; box-shadow: none; cursor: pointer;
+}
+.network-admin .topology-studio.topology-studio .studio-workspace-mode-switch .mode-pill:hover { color: var(--text); }
+.network-admin .topology-studio.topology-studio .studio-workspace-mode-switch .mode-pill.is-active {
+  background: var(--surface); color: var(--text); font-weight: 600;
+  box-shadow: 0 0 2px rgb(0 0 0 / .12), 0 1px 2px rgb(0 0 0 / .14);
+}
+.network-admin .topology-studio.topology-studio .studio-workspace-mode-switch .mode-pill.is-active svg { color: var(--accent); }
+
+/* Command bar. */
+.network-admin .topology-studio.topology-studio .topology-editbar {
+  min-height: 44px; padding: 0 8px; gap: 4px; flex-wrap: nowrap;
+  background: var(--surface); border-bottom: 1px solid var(--layer-stroke, var(--line));
+}
+.network-admin .topology-studio.topology-studio .topology-editbar > *,
+.network-admin .topology-studio.topology-studio .topology-editbar .toolbar-right,
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-edit-tools,
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-secondary-tools { gap: 2px; }
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-secondary-tools {
+  padding-right: 6px; margin-right: 4px; border-right: 1px solid var(--layer-stroke, var(--line));
+}
+
+/* Every command is a subtle button: no stroke at rest, a fill on hover. */
+.network-admin .topology-studio.topology-studio .topology-editbar .btn,
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-mode-button,
+.network-admin .topology-studio.topology-studio .topology-canvas-toolbar .toolbar-right > .btn,
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > summary {
+  height: 32px; min-height: 32px; padding: 0 8px; gap: 6px;
+  border: 1px solid transparent; border-radius: var(--r-control);
+  background: transparent; color: var(--text); box-shadow: none;
+  font-size: var(--fs-14); font-weight: 400;
+}
+.network-admin .topology-studio.topology-studio .topology-editbar .btn:hover:not(:disabled),
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-mode-button:hover,
+.network-admin .topology-studio.topology-studio .topology-canvas-toolbar .toolbar-right > .btn:hover:not(:disabled),
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > summary:hover { background: var(--subtle-hover); }
+.network-admin .topology-studio.topology-studio .topology-editbar .btn:active:not(:disabled),
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-mode-button:active,
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > summary:active { background: var(--subtle-pressed); }
+.network-admin .topology-studio.topology-studio .topology-editbar .btn.icon-only,
+.network-admin .topology-studio.topology-studio .topology-canvas-toolbar .btn.icon-only { width: 32px; min-width: 32px; padding: 0; }
+
+/* Selected tool / pressed toggle: neutral selected fill with brand-coloured glyph. */
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-mode-button.is-active,
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-mode-button[aria-pressed="true"],
+.network-admin .topology-studio.topology-studio .topology-editbar .btn[aria-pressed="true"],
+.network-admin .topology-studio.topology-studio .topology-canvas-toolbar .btn[aria-pressed="true"],
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu][open] > summary {
+  background: var(--subtle-selected); border-color: transparent; color: var(--text);
+}
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-mode-button.is-active svg,
+.network-admin .topology-studio.topology-studio .topology-editbar .studio-mode-button[aria-pressed="true"] svg,
+.network-admin .topology-studio.topology-studio .topology-editbar .btn[aria-pressed="true"] svg,
+.network-admin .topology-studio.topology-studio .topology-canvas-toolbar .btn[aria-pressed="true"] svg { color: var(--accent); }
+
+/* Menus open downward, so the chevron points down and trails the label. */
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > summary::before { content: none; display: none; }
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > summary::after {
+  content: ""; flex: none; width: 5px; height: 5px; margin: -3px 2px 0 2px;
+  border-right: 1.25px solid var(--text-3); border-bottom: 1.25px solid var(--text-3);
+  transform: rotate(45deg); transition: transform var(--dur-2) var(--ease-out);
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu][open] > summary::after { transform: translateY(3px) rotate(225deg); }
+/* The chat options split button already draws its own chevron glyph. */
+.network-admin .topology-studio.topology-studio .topology-chat-actions details[data-toolbar-menu] > summary::after { content: none; }
+
+/* Menus: a Fluent flyout — 4px inset, 8px radius, text-only section headers. */
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div {
+  top: calc(100% + 4px); gap: 0; min-width: 240px; padding: 4px;
+  border: 1px solid var(--layer-stroke, var(--line)); border-radius: var(--r-card);
+  box-shadow: var(--shadow-floating, var(--shadow-menu));
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div > section { display: grid; gap: 0; }
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div > section + *,
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div > * + section {
+  margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--layer-stroke, var(--line));
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] section > strong {
+  display: flex; align-items: center; margin: 0; padding: 6px 8px 4px;
+  font-size: var(--fs-12); line-height: 16px; font-weight: 600; color: var(--text-3);
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] section > strong svg { display: none; }
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] button:not(.btn) {
+  color: var(--text); font-size: var(--fs-14);
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div > strong {
+  margin: 0; padding: 6px 8px 4px; font-size: var(--fs-12); line-height: 16px; font-weight: 600; color: var(--text-3);
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div > strong:not(:first-child) {
+  margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--layer-stroke, var(--line));
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] label {
+  min-height: 32px; padding: 0 8px; gap: 8px; border-radius: var(--r-control);
+  font-size: var(--fs-14); color: var(--text); cursor: pointer;
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] label:hover { background: var(--subtle-hover); }
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div small,
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div > p,
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] section > p {
+  margin: 0; padding: 2px 8px 6px; font-size: var(--fs-12); line-height: 16px; color: var(--text-3);
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div .btn {
+  justify-content: flex-start; width: 100%; height: 32px; padding: 0 8px; gap: 8px;
+  border: 0; background: transparent; box-shadow: none; color: var(--text); font-size: var(--fs-14); font-weight: 400;
+}
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div .btn:hover:not(:disabled) { background: var(--subtle-hover); }
+.network-admin .topology-studio.topology-studio details[data-toolbar-menu] > div .btn.danger { margin-top: 4px; border-top: 1px solid var(--layer-stroke, var(--line)); border-radius: 0 0 var(--r-control) var(--r-control); color: var(--danger); }
+.network-admin .topology-studio.topology-studio .arrange-align > div { gap: 0; }
+.network-admin .topology-studio.topology-studio .arrange-align button { text-align: center; }
+.network-admin .topology-studio.topology-studio .studio-layout-options > div { gap: 0; }
+.network-admin .topology-studio.topology-studio .studio-layout-options button {
+  display: grid; gap: 2px; padding: 6px 8px; text-align: left;
+}
+.network-admin .topology-studio.topology-studio .studio-layout-options button strong {
+  margin: 0; font-size: var(--fs-14); line-height: 20px; font-weight: 400; color: var(--text);
+}
+.network-admin .topology-studio.topology-studio .studio-layout-options button small {
+  font-size: var(--fs-12); line-height: 16px; color: var(--text-3);
+}
+
+/* Property pane: docked to the right edge of the canvas, full height, own scroll. */
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked {
+  inset: 0 0 0 auto; width: 320px; max-width: calc(100% - 48px); max-height: none; height: auto;
+  border: 0; border-left: 1px solid var(--layer-stroke, var(--line)); border-radius: 0;
+  background: var(--surface); box-shadow: -8px 0 16px -12px rgb(0 0 0 / .14); transform: none;
+}
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked.is-open { animation: topology-pane-in var(--dur-3, 200ms) var(--ease-out) both; }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked::before { display: none; }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-drag-grip { display: none; }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-header { cursor: default; }
+.network-admin .topology-studio.topology-studio .topology-canvas-viewport:has(.topology-inspector.is-docked.is-open) .netops-viewport-controls { right: 332px; }
+@keyframes topology-pane-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .network-admin .topology-studio.topology-studio .topology-inspector.is-docked.is-open { animation: none; }
+}
+
+/* Pane content: Fluent form rhythm — 16px sections, 12px between fields, 4px label gap. */
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-header {
+  min-height: 56px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--layer-stroke, var(--line)); background: var(--surface);
+}
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-body { padding: 0; gap: 0; }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-section {
+  display: grid; gap: 12px; padding: 16px; margin: 0; border: 0; border-bottom: 1px solid var(--layer-stroke, var(--line)); background: none;
+}
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-field-group,
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-dimension-grid { display: grid; gap: 12px; }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-dimension-grid { grid-template-columns: 1fr 1fr; }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked span.inspector-label {
+  font-size: var(--fs-14); line-height: 20px; font-weight: 600; color: var(--text); text-transform: none; letter-spacing: 0;
+}
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked p.inspector-label,
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-desc {
+  margin: 0; font-size: var(--fs-12); line-height: 16px; font-weight: 400; color: var(--text-3);
+}
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-field {
+  gap: 4px; font-size: var(--fs-12); line-height: 16px; font-weight: 400; color: var(--text-2);
+}
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-field :is(input, select, textarea) {
+  font-size: var(--fs-14);
+}
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-field :is(input, select) { height: 32px; min-height: 32px; }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .btn.sm { height: 28px; min-height: 28px; font-size: var(--fs-12); }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-link-item {
+  min-height: 32px; padding: 0 8px; border-radius: var(--r-control); font-size: var(--fs-12); color: var(--text); cursor: pointer;
+}
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-link-item:hover { background: var(--subtle-hover); }
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked > * > .inspector-actions,
+.network-admin .topology-studio.topology-studio .topology-inspector.is-docked .inspector-body > .inspector-actions { padding: 16px; }
+
+/* Library pane: a Fluent navigation-style pane — text headers, subtle list items. */
+.network-admin .topology-studio.topology-studio .topology-sidebar { background: var(--surface-layer, var(--surface)); border-right: 1px solid var(--layer-stroke, var(--line)); }
+.network-admin .topology-studio.topology-studio .topology-sidebar .section-title { font-size: var(--fs-14); line-height: 20px; font-weight: 600; color: var(--text); }
+.network-admin .topology-studio.topology-studio .topology-sidebar .section-subtitle { font-size: var(--fs-12); color: var(--text-3); }
+.network-admin .topology-studio.topology-studio .palette-type-grid { gap: 2px; }
+.network-admin .topology-studio.topology-studio .palette-type-item,
+.network-admin .topology-studio.topology-studio .palette-group-item {
+  min-height: 32px; border: 1px solid transparent; border-radius: var(--r-control); background: transparent; box-shadow: none;
+  font-size: var(--fs-12); color: var(--text);
+}
+.network-admin .topology-studio.topology-studio .palette-type-item:hover,
+.network-admin .topology-studio.topology-studio .palette-group-item:hover { background: var(--subtle-hover); border-color: transparent; }
+.network-admin .topology-studio.topology-studio .palette-type-item.is-armed,
+.network-admin .topology-studio.topology-studio .palette-group-item.active { background: var(--subtle-selected); border-color: transparent; color: var(--text); }
+
+/* Status bar. */
+.network-admin .topology-studio.topology-studio .studio-statusbar {
+  flex: 0 0 28px; height: 28px; gap: 12px; padding: 0 12px;
+  border-top: 1px solid var(--layer-stroke, var(--line)); background: var(--surface-layer, var(--surface));
+  color: var(--text-3); font-size: var(--fs-12); line-height: 16px; white-space: nowrap;
+}
+.network-admin .topology-studio.topology-studio .studio-statusbar .statusbar-counts { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.network-admin .topology-studio.topology-studio .studio-statusbar .canvas-mode-hint {
+  position: static; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  padding: 0; border: 0; background: none; box-shadow: none; color: var(--text-3); font-size: var(--fs-12);
+}
+.network-admin .topology-studio.topology-studio .studio-statusbar .statusbar-mode { margin-left: auto; color: var(--text-3); }
+.network-admin .topology-studio.topology-studio .studio-statusbar .canvas-selection-chip {
+  margin: 0; height: 20px; padding: 0 6px; border: 0; border-radius: var(--r-control);
+  background: var(--accent-subtle); color: var(--accent); font-size: var(--fs-12); font-weight: 600; cursor: pointer;
+}
+.network-admin .topology-studio.topology-studio .studio-statusbar .canvas-selection-chip:hover { background: var(--subtle-hover); }
+
+/* Zoom flyout. */
+.network-admin .topology-studio.topology-studio .netops-viewport-controls {
+  right: 12px; bottom: 12px; padding: 2px; gap: 0;
+  border: 1px solid var(--layer-stroke, var(--line)); border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--shadow-raised, 0 0 2px rgb(0 0 0 / .12), 0 2px 4px rgb(0 0 0 / .14));
+}
+.network-admin .topology-studio.topology-studio .netops-viewport-controls button {
+  height: 28px; min-width: 28px; padding: 0 8px; color: var(--text-2); font: inherit; font-size: var(--fs-12);
+}
+.network-admin .topology-studio.topology-studio .netops-viewport-controls button:hover { background: var(--subtle-hover); color: var(--text); }
+.network-admin .topology-studio.topology-studio .netops-viewport-controls .netops-zoom-readout {
+  min-width: 48px; color: var(--text-2); font-family: var(--font-body); font-variant-numeric: tabular-nums;
+}
+.network-admin .topology-studio.topology-studio .netops-viewport-controls button.is-active { background: var(--subtle-selected); color: var(--text); }
+
+/* Narrow windows: keep the bars on one line and let labels yield before commands do. */
+@media (max-width: 1100px) {
+  .network-admin .topology-studio.topology-studio .studio-statusbar .canvas-mode-hint { display: none; }
+  .network-admin .topology-studio.topology-studio .topology-canvas-title { max-width: 200px; }
+}
+}

@@ -11,9 +11,9 @@ export const canvasItemDefaults: Record<
   TopologyCanvasItem["kind"],
   Required<TopologyCanvasItem>["style"]
 > = {
-  rectangle: { fill: "#dff5f0", border: "#58a99b", color: "#0f5149" },
-  ellipse: { fill: "#e8f0fe", border: "#6b9be6", color: "#1d4f91" },
-  text: { fill: "#ffffff", border: "#ffffff", color: "#334155" },
+  rectangle: { fill: "#f5f5f5", border: "#c7c7c7", color: "#424242" },
+  ellipse: { fill: "#ebf3fc", border: "#96c6fa", color: "#0f548c" },
+  text: { fill: "#ffffff", border: "#ffffff", color: "#424242" },
 };
 
 export const SKIPPED_DATA_KEYS = new Set(["id", "source", "target"]);

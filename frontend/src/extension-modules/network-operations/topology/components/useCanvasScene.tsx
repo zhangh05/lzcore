@@ -2,6 +2,10 @@ import { useEffect } from "react";
 import { canvasLinkDescription, compactInterfaceLabel } from "./canvasLabels";
 import type { CanvasElementSpec, Cy, Props } from "./canvasRendererTypes";
 import { applyElements, canvasItemDefaults } from "./canvasSceneProjection";
+import { currentZoneTone } from "./topologyDocument";
+
+/** Below this zoom 12px labels fall under ~7px on screen and stop reading as text. */
+const MIN_LEGIBLE_OPEN_ZOOM = 0.6;
 import { netOpsIconForDeviceType } from "./netopsCanvasAssets";
 import type { Topology } from "./topologyDocument";
 import {
@@ -83,7 +87,7 @@ export function useCanvasScene({
           group: "nodes",
           classes: dimClass(
             `canvas-${item.item_id}`,
-            `canvas-item canvas-item-${item.kind}`,
+            `canvas-item canvas-item-${item.kind}${item.kind === "rectangle" && item.height >= 120 ? " canvas-item-container" : ""}`,
           ),
           data: {
             id: `canvas-${item.item_id}`,
@@ -91,22 +95,26 @@ export function useCanvasScene({
             shape: item.kind === "ellipse" ? "ellipse" : "roundrectangle",
             width: item.width,
             height: item.height,
-            fill: isText ? "transparent" : style.fill,
+            fill: isText ? "transparent" : currentZoneTone(style.fill, "fill"),
             border: isText
               ? theme === "dark"
-                ? "#64748b"
-                : "#94a3b8"
-              : style.border,
+                ? "#6b6b6b"
+                : "#9e9e9e"
+              : currentZoneTone(style.border, "border"),
             textColor: isText
               ? theme === "dark"
-                ? "#f1f5f9"
-                : "#0f172a"
-              : style.color,
-            fillOpacity: isText ? 0 : 0.28,
+                ? "#ffffff"
+                : "#242424"
+              : theme === "dark"
+                ? "#d6d6d6"
+                : currentZoneTone(style.color, "color"),
+            // Light tints read as paper in light mode; on a dark canvas they must
+            // stay a wash or they glare.
+            fillOpacity: isText ? 0 : theme === "dark" ? 0.14 : 0.72,
             borderWidth: isText
               ? 1.5
               : Math.max(2, (style as any).borderWidth || 2),
-            fontSize: isText ? 14 : 13,
+            fontSize: 14,
             labelOpacity: 1,
             textMaxWidth: Math.max(24, item.width - 16),
           },
@@ -183,6 +191,18 @@ export function useCanvasScene({
         if (cy.zoom() > 1.0) {
           cy.zoom(1.0);
           cy.center();
+        } else if (cy.zoom() < MIN_LEGIBLE_OPEN_ZOOM) {
+          // A large sheet fitted whole renders every label as a smudge. Open it
+          // at the smallest zoom where labels still read, anchored to the top
+          // of the drawing; 适配 still shows the whole sheet on demand.
+          // Right after fit() the visible extent is the drawing plus padding.
+          const fitted = cy.extent();
+          const viewWidth = cy.container?.()?.clientWidth ?? 0;
+          cy.zoom(MIN_LEGIBLE_OPEN_ZOOM);
+          cy.pan({
+            x: viewWidth / 2 - ((fitted.x1 + fitted.x2) / 2) * MIN_LEGIBLE_OPEN_ZOOM,
+            y: -fitted.y1 * MIN_LEGIBLE_OPEN_ZOOM,
+          });
         }
         setViewport({ ...cy.pan(), zoom: cy.zoom() });
       }, 0);

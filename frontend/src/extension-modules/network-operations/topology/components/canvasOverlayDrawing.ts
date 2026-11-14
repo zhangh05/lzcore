@@ -43,33 +43,21 @@ export function renderWorldGrid(
 
   const startX = ((panX % screenStep) + screenStep) % screenStep;
   const startY = ((panY % screenStep) + screenStep) % screenStep;
-  const lineColor = isDark
-    ? "rgba(255, 255, 255, 0.055)"
-    : "rgba(15, 23, 42, 0.055)";
-  const majorColor = isDark
-    ? "rgba(255, 255, 255, 0.13)"
-    : "rgba(15, 23, 42, 0.12)";
-
-  ctx.lineWidth = 1;
-  // Vertical grid lines
+  // A dot grid marks the snapping lattice without drawing a sheet of graph
+  // paper behind the diagram; every fifth dot is a touch stronger.
+  const dotColor = isDark ? "rgba(255, 255, 255, 0.16)" : "rgba(0, 0, 0, 0.16)";
+  const majorColor = isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)";
+  const radius = screenStep < 14 ? 0.6 : 0.9;
   for (let x = startX; x <= w; x += screenStep) {
-    const worldX = Math.round((x - panX) / zoom);
-    const isMajor = Math.abs(worldX) % (step * 5) < 0.5;
-    ctx.strokeStyle = isMajor ? majorColor : lineColor;
-    ctx.beginPath();
-    ctx.moveTo(Math.floor(x) + 0.5, 0);
-    ctx.lineTo(Math.floor(x) + 0.5, h);
-    ctx.stroke();
-  }
-  // Horizontal grid lines
-  for (let y = startY; y <= h; y += screenStep) {
-    const worldY = Math.round((y - panY) / zoom);
-    const isMajor = Math.abs(worldY) % (step * 5) < 0.5;
-    ctx.strokeStyle = isMajor ? majorColor : lineColor;
-    ctx.beginPath();
-    ctx.moveTo(0, Math.floor(y) + 0.5);
-    ctx.lineTo(w, Math.floor(y) + 0.5);
-    ctx.stroke();
+    const majorX = Math.abs(Math.round((x - panX) / zoom)) % (step * 5) < 0.5;
+    for (let y = startY; y <= h; y += screenStep) {
+      const majorY = Math.abs(Math.round((y - panY) / zoom)) % (step * 5) < 0.5;
+      const major = majorX && majorY;
+      ctx.fillStyle = major ? majorColor : dotColor;
+      ctx.beginPath();
+      ctx.arc(x, y, major ? radius + 0.4 : radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.restore();
 }

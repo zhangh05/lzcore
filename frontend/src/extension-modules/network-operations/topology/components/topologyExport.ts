@@ -3,6 +3,7 @@ import {
   linkDrawingAppearance,
 } from "./topologyDrawingAppearance";
 import type { Topology, TopologyNode } from "./topologyDocument";
+import { currentZoneTone } from "./topologyDocument";
 
 export interface WhiteboardStrokeExport {
   id: string;
@@ -207,7 +208,7 @@ export function exportTopologyToSvg(
   const svgParts: string[] = [];
   svgParts.push(`<?xml version="1.0" encoding="UTF-8"?>`);
   svgParts.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="${vw}" height="${vh}" style="background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="${vw}" height="${vh}" style="background-color: #ffffff; font-family: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Microsoft YaHei UI', 'PingFang SC', sans-serif;">`,
   );
 
   // Defs for arrowheads and markers
@@ -236,23 +237,23 @@ export function exportTopologyToSvg(
     const w = item.width;
     const h = item.height;
     const style = item.style || {};
-    const fill = isText ? "none" : sanitizeColor(style.fill, "#dff5f0");
-    const border = isText ? "#94a3b8" : sanitizeColor(style.border, "#58a99b");
+    const fill = isText ? "none" : sanitizeColor(currentZoneTone(style.fill, "fill"), "#f5f5f5");
+    const border = isText ? "#94a3b8" : sanitizeColor(currentZoneTone(style.border, "border"), "#c7c7c7");
     const strokeDash = isText ? 'stroke-dasharray="4,3"' : "";
     const borderWidth = isText
       ? 1.5
       : Math.max(1, Math.min(20, Number((style as any).borderWidth) || 2));
     const textColor = isText
       ? "#0f172a"
-      : sanitizeColor(style.color, "#0f5149");
+      : sanitizeColor(currentZoneTone(style.color, "color"), "#424242");
 
     if (item.kind === "ellipse") {
       svgParts.push(
-        `  <ellipse cx="${item.x}" cy="${item.y}" rx="${w / 2}" ry="${h / 2}" fill="${fill}" fill-opacity="0.35" stroke="${border}" stroke-width="${borderWidth}"/>`,
+        `  <ellipse cx="${item.x}" cy="${item.y}" rx="${w / 2}" ry="${h / 2}" fill="${fill}" fill-opacity="0.72" stroke="${border}" stroke-width="${borderWidth}"/>`,
       );
     } else {
       svgParts.push(
-        `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" fill-opacity="${isText ? 0 : 0.35}" stroke="${border}" stroke-width="${borderWidth}" ${strokeDash}/>`,
+        `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" fill-opacity="${isText ? 0 : 0.72}" stroke="${border}" stroke-width="${borderWidth}" ${strokeDash}/>`,
       );
     }
 

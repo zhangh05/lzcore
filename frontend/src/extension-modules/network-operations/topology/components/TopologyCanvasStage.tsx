@@ -94,8 +94,6 @@ export type TopologyCanvasStageProps = {
   highlightedIds: string[];
   history: import("./topologyCollaboration").DrawingEdit[];
   inspectorRef: import("react").RefObject<HTMLElement>;
-  isDragged: boolean;
-  isDragging: boolean;
   isFullscreen: boolean;
   isInspectorOpen: boolean;
   layoutBusy: boolean;
@@ -106,8 +104,6 @@ export type TopologyCanvasStageProps = {
     deviceType: string,
     position: { x: number; y: number },
   ) => void;
-  popoverPlacement: "left" | "right" | "corner";
-  popoverStyle: import("react").CSSProperties;
   pushState: (next: Topology) => void;
   referenceLines: ReferenceLine[];
   regionMoveMode: "region" | "frame";
@@ -273,8 +269,6 @@ export function TopologyCanvasStage({
   highlightedIds,
   history,
   inspectorRef,
-  isDragged,
-  isDragging,
   isFullscreen,
   isInspectorOpen,
   layoutBusy,
@@ -282,8 +276,6 @@ export function TopologyCanvasStage({
   nodeOverlays,
   pinButton,
   placeDrawingNode,
-  popoverPlacement,
-  popoverStyle,
   pushState,
   referenceLines,
   regionMoveMode,
@@ -429,39 +421,6 @@ export function TopologyCanvasStage({
         className={`topology-canvas-viewport mode-${workspaceMode} mode-${canvasMode}`}
         ref={viewportRef}
       >
-        <div className="studio-canvas-caption">
-          <strong>{activeTopology?.nodes.length || 0} 个节点</strong>
-          <span>·</span>
-          <span>{activeTopology?.links.length || 0} 条连接</span>
-          {workspaceMode === "view" ? (
-            <span className="canvas-mode-hint is-view-mode">
-              查看模式：拖拽任意位置平移画布 · 滚轮缩放 · 点击元素无响应
-            </span>
-          ) : (
-            <>
-              {canvasSelectedElementIds.length > 0 && (
-                <button
-                  type="button"
-                  className="canvas-selection-chip canvas-selection-count"
-                  onClick={() => {
-                    setShowAgent(false);
-                    setIsInspectorOpen(true);
-                  }}
-                  title="点击查看选中对象操作面板"
-                >
-                  已选 {canvasSelectedElementIds.length} 个对象 · 查看操作
-                </button>
-              )}
-              <span className="canvas-mode-hint">
-                {canvasMode === "connect"
-                  ? "连线模式：点击或拖拽连接两台设备 (自动配对接口，Esc 退出)"
-                  : armedNodeType
-                    ? "点击空白处连续放置设备 (Esc 或右键退出)"
-                    : "空白处左键拖拽框选 · 拖动设备移动 · 空格/中键平移 · C 连线"}
-              </span>
-            </>
-          )}
-        </div>
         {!activeTopology?.nodes?.length && !armedNodeType && (
           <div className="topology-canvas-onboarding">
             <div className="topology-canvas-onboarding-card">
@@ -630,8 +589,8 @@ export function TopologyCanvasStage({
         {/* 3. Right: Inspector */}
         <aside
           ref={inspectorRef}
-          className={`topology-inspector ${isInspectorOpen && !showAgent && workspaceMode === "edit" ? "is-open" : ""} ${isDragged ? "is-dragged" : popoverPlacement ? `placement-${popoverPlacement}` : ""} ${isDragging ? "is-dragging" : ""}`}
-          style={popoverStyle}
+          // Docked property pane: it never covers the selection it describes.
+          className={`topology-inspector is-docked ${isInspectorOpen && !showAgent && workspaceMode === "edit" ? "is-open" : ""}`}
           aria-label="拓扑详情"
           onMouseDown={(event) => event.stopPropagation()}
         >
@@ -796,13 +755,33 @@ export function TopologyCanvasStage({
           )}
         </aside>
       </div>
-      <footer className="studio-statusbar">
-        <span>{workspaceMode === "view" ? "查看漫游" : "独立图纸"}</span>
-        <span>
-          {workspaceMode === "view"
-            ? "查看模式 · 点击节点查看最近记录 · 第二行不表示当前正常 · 拖拽平移 · 滚轮缩放"
-            : "编辑模式 · 空白拖拽框选 · 空格/中键平移 · 连续点放 · C 极速连线 · ⌘D 克隆"}
+      <footer className="studio-statusbar" aria-label="图纸状态">
+        <span className="statusbar-counts">
+          {activeTopology?.nodes.length || 0} 个节点 · {activeTopology?.links.length || 0} 条连接
         </span>
+        {workspaceMode === "edit" && canvasSelectedElementIds.length > 0 ? (
+          <button
+            type="button"
+            className="canvas-selection-chip canvas-selection-count"
+            onClick={() => {
+              setShowAgent(false);
+              setIsInspectorOpen(true);
+            }}
+            title="点击查看选中对象操作面板"
+          >
+            已选 {canvasSelectedElementIds.length} 项
+          </button>
+        ) : null}
+        <span className={`canvas-mode-hint ${workspaceMode === "view" ? "is-view-mode" : ""}`}>
+          {workspaceMode === "view"
+            ? "拖拽平移 · 滚轮缩放 · 点击设备查看最近观测"
+            : canvasMode === "connect"
+              ? "连线：点击或拖拽连接两台设备，自动配对接口 · Esc 退出"
+              : armedNodeType
+                ? "点击空白处连续放置设备 · Esc 或右键退出"
+                : "拖拽空白框选 · 空格或中键平移 · C 连线 · ⌘D 克隆"}
+        </span>
+        <span className="statusbar-mode">{workspaceMode === "view" ? "查看" : "编辑"}</span>
       </footer>
     </main>
   );
