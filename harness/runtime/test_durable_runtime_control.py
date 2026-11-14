@@ -2,6 +2,7 @@
 """Phase 3: Runtime control — checkpoint, cancel, retry, resume."""
 
 import uuid
+import pytest
 from agent.runtime.durable.models import (
     TaskState, RuntimeStep,
 )
@@ -11,6 +12,33 @@ from agent.runtime.durable.control import (
 from agent.runtime.durable.store import (
     save_task, get_task, get_events, get_checkpoints,
 )
+
+
+@pytest.mark.parametrize('operation', ['cancel', 'resume', 'retry'])
+def test_control_api_reports_unsupported_and_preserves_the_record(operation):
+    from flask import Flask
+    from backend.api.state_routes import register_state_routes
+
+    app = Flask(__name__)
+    register_state_routes(app)
+    ws = f'ws_api_{uuid.uuid4().hex[:8]}'
+    task = TaskState.new(workspace_id=ws, session_id='s1')
+    task.add_step(RuntimeStep(step_id='step1', task_id=task.task_id,
+                              kind='model', status='failed'))
+    task.update_status('running' if operation == 'cancel' else 'failed')
+    save_task(task)
+    checkpoint_task(task.task_id, ws)
+    before = get_task(ws, task.task_id).to_dict()
+    events = get_events(ws, task.task_id)
+    checkpoints = get_checkpoints(ws, task.task_id)
+    suffix = 'steps/step1/retry' if operation == 'retry' else operation
+    response = app.test_client().post(f'/api/runtime/tasks/{task.task_id}/{suffix}?workspace_id={ws}')
+    assert response.status_code == 400
+    assert response.json['ok'] is False and response.json['status'] == 'unsupported'
+    assert response.json[f'{operation}_not_supported'] is True
+    assert get_task(ws, task.task_id).to_dict() == before
+    assert get_events(ws, task.task_id) == events
+    assert get_checkpoints(ws, task.task_id) == checkpoints
 
 
 class TestCheckpoint:
@@ -73,7 +101,7 @@ class TestCheckpoint:
 class TestCancel:
     """Cancel semantics."""
 
-    def test_cancel_running_task(self):
+    def test_cancel_running_task_is_unsupported_without_executor(self):
         ws = f"ws_can_{uuid.uuid4().hex[:8]}"
         task = TaskState.new(workspace_id=ws, session_id="s1")
         task.add_step(RuntimeStep(step_id="s1", task_id=task.task_id,
@@ -82,20 +110,21 @@ class TestCancel:
         task.update_status("running"); save_task(task)
 
         result = cancel_task(task.task_id, ws)
-        assert result["ok"] is True
-        assert result["status"] == "cancelled"
-
+        assert result["ok"] is False
+        assert result["status"] == "unsupported"
+        assert result["cancel_not_supported"] is True
         loaded = get_task(ws, task.task_id)
-        assert loaded.status == "cancelled"
+        assert loaded.to_dict() == task.to_dict()
+        assert not get_checkpoints(ws, task.task_id)
 
-    def test_cancel_writes_event(self):
+    def test_unsupported_cancel_does_not_claim_execution_was_stopped(self):
         ws = f"ws_cev_{uuid.uuid4().hex[:8]}"
         task = TaskState.new(workspace_id=ws, session_id="s1")
         task.update_status("running"); save_task(task)
 
         cancel_task(task.task_id, ws)
         events = get_events(ws, task.task_id)
-        assert any(e["type"] == "task_cancelled" for e in events)
+        assert not events
 
     def test_cancel_idempotent(self):
         ws = f"ws_cid_{uuid.uuid4().hex[:8]}"
@@ -121,7 +150,7 @@ class TestCancel:
 class TestRetry:
     """Retry step safety."""
 
-    def test_retry_readonly_step_allowed(self):
+    def test_retry_readonly_step_is_unsupported_without_executor(self):
         ws = f"ws_rr_{uuid.uuid4().hex[:8]}"
         task = TaskState.new(workspace_id=ws, session_id="s1")
         task.add_step(RuntimeStep(step_id="s-read", task_id=task.task_id,
@@ -130,8 +159,9 @@ class TestRetry:
         save_task(task)
 
         result = retry_step(task.task_id, "s-read", ws)
-        assert result["ok"] is True
-        assert "new_step_id" in result
+        assert result["ok"] is False
+        assert result["status"] == "unsupported"
+        assert result["retry_not_supported"] is True
 
     def test_retry_destructive_step_denied(self):
         ws = f"ws_rd_{uuid.uuid4().hex[:8]}"
@@ -162,7 +192,7 @@ class TestRetry:
         assert result["ok"] is False
         assert result.get("retry_not_supported") is True
 
-    def test_retry_creates_attempt_not_overwrite(self):
+    def test_unsupported_retry_preserves_attempts_status_and_events(self):
         ws = f"ws_ra_{uuid.uuid4().hex[:8]}"
         task = TaskState.new(workspace_id=ws, session_id="s1")
         task.add_step(RuntimeStep(step_id="s-model", task_id=task.task_id,
@@ -171,10 +201,9 @@ class TestRetry:
 
         result = retry_step(task.task_id, "s-model", ws)
         loaded = get_task(ws, task.task_id)
-        # original step still present
-        assert any(s.step_id == "s-model" for s in loaded.steps)
-        # new retry attempt present
-        assert any(s.step_id == result["new_step_id"] for s in loaded.steps)
+        assert result["ok"] is False and result["status"] == "unsupported"
+        assert loaded.to_dict() == task.to_dict()
+        assert not get_events(ws, task.task_id)
 
     def test_retry_can_only_retry_failed(self):
         ws = f"ws_rf_{uuid.uuid4().hex[:8]}"
@@ -212,22 +241,22 @@ class TestResume:
         assert cp is not None
 
         result = resume_task(task.task_id, ws)
-        assert result["ok"] is True
-        assert result["status"] == "running"
-        assert result["current_step_id"] == "s-3"
-
+        assert result["ok"] is False and result["status"] == "unsupported"
+        assert result["resume_not_supported"] is True
         loaded = get_task(ws, task.task_id)
-        assert loaded.status == "running"
+        assert loaded.to_dict() == task.to_dict()
+        assert get_checkpoints(ws, task.task_id)[-1]["checkpoint_id"] == cp.checkpoint_id
 
-    def test_resume_writes_event(self):
+    def test_unsupported_resume_does_not_claim_executor_was_resumed(self):
         ws = f"ws_rwe_{uuid.uuid4().hex[:8]}"
         task = TaskState.new(workspace_id=ws, session_id="s1")
         task.update_status("interrupted"); save_task(task)
         checkpoint_task(task.task_id, ws, reason="test")
 
-        resume_task(task.task_id, ws)
-        events = get_events(ws, task.task_id)
-        assert any(e["type"] == "task_resumed" for e in events)
+        before = get_events(ws, task.task_id)
+        result = resume_task(task.task_id, ws)
+        assert result["ok"] is False
+        assert get_events(ws, task.task_id) == before
 
     def test_cross_workspace_resume_rejected(self):
         ws_a = f"ws_ra_{uuid.uuid4().hex[:8]}"

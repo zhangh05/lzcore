@@ -1,6 +1,8 @@
 """Focused behavior contracts for the data.manage tool engine."""
 
 import pytest
+import csv
+import io
 
 from core.tools.general_tools.data_engine import (
     MAX_OUTPUT_ROWS,
@@ -14,6 +16,59 @@ from core.tools.general_tools.data_engine import (
     data_sort,
     data_stats,
 )
+
+
+def test_csv_render_roundtrips_quotes_newlines_and_unicode():
+    rows = [{"name": "联智,中枢", "note": 'first\n"second"'}]
+    result = data_render(rows=rows, output="csv")
+    assert result["ok"] and result["format"] == "csv"
+    assert list(csv.DictReader(io.StringIO(result["csv"]))) == rows
+    assert "markdown" not in result
+    assert data_render(rows=rows, output="bogus")["ok"] is False
+
+
+@pytest.mark.parametrize("text", ['[{"x":"' + 'a' * 65 + '"}]', "x\n" + "a" * 65, "|x|\n|---|\n|" + "a" * 65 + "|"])
+def test_parse_rejects_input_bytes_before_parsing(monkeypatch, text):
+    from core.tools.general_tools import data_engine as engine
+    monkeypatch.setattr(engine, "MAX_INPUT_BYTES", 64)
+    monkeypatch.setattr(engine.json, "loads", lambda *_: pytest.fail("oversized JSON was parsed"))
+    assert engine.data_parse(text=text)["ok"] is False
+
+
+def test_data_parse_bounds_shape_cells_and_json_depth(monkeypatch):
+    from core.tools.general_tools import data_engine as engine
+    monkeypatch.setattr(engine, "MAX_INPUT_COLUMNS", 2)
+    monkeypatch.setattr(engine, "MAX_CELL_CHARS", 4)
+    monkeypatch.setattr(engine, "MAX_JSON_DEPTH", 3)
+    assert not engine.data_parse(text="a,b,c\n1,2,3")["ok"]
+    assert not engine.data_parse(rows=[{"a": "12345"}])["ok"]
+    assert not engine.data_parse(text='[{"a":[[[1]]]}]')["ok"]
+
+
+def test_markdown_stops_at_row_budget(monkeypatch):
+    from core.tools.general_tools import data_engine as engine
+    monkeypatch.setattr(engine, "MAX_INPUT_ROWS", 2)
+    assert not engine.data_parse(text="|x|\n|---|\n|1|\n|2|\n|3|")["ok"]
+
+
+def test_json_array_stops_before_decoding_over_budget_row(monkeypatch):
+    from core.tools.general_tools import data_engine as engine
+    from types import SimpleNamespace
+    decoder = engine.json.JSONDecoder()
+    decoded = []
+    def decode(*args):
+        decoded.append(True)
+        assert len(decoded) <= 2
+        return decoder.raw_decode(*args)
+    monkeypatch.setattr(engine, "MAX_INPUT_ROWS", 2)
+    monkeypatch.setattr(engine.json, "JSONDecoder", lambda: SimpleNamespace(raw_decode=decode))
+    result = engine.data_parse(text='[{"x":1},{"x":2},{"x":3}]')
+    assert not result["ok"] and len(decoded) == 2
+
+
+@pytest.mark.parametrize("text", ['[{"x":1},]', '[{"x":1}] garbage', '[{"x":1} {"x":2}]', '[{"x":1}', '[1]'])
+def test_bounded_json_parser_rejects_malformed_or_non_object_rows(text):
+    assert not data_parse(text=text)["ok"]
 
 
 def test_parse_detects_common_delimiters_and_escapes_markdown():

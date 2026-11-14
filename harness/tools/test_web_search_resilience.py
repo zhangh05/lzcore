@@ -5,6 +5,37 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.mark.parametrize("source", ["news", "docs"])
+def test_search_adapters_keep_filters_and_partial_evidence(monkeypatch, source):
+    from core.tools.general_tools import web_tools
+    from core.tools.schemas import ToolInvocation
+    args = {"query": "example", "blocked_domains": ["example.org"], "max_results": 1,
+            "authority_profile": "general_web", "site": "allowed.test", "recency": "week"}
+    captured = []
+    output = {"ok": True, "status": "partial", "provider": "curated_official_fallback",
+              "authority": {"profile": "general_web"}, "answer_hint": "candidate only",
+              "results": [{"url": "https://allowed.test/"}], "filters": args.copy()}
+    def search(inv, arguments):
+        captured.append(arguments)
+        return dict(output)
+    monkeypatch.setattr(web_tools, "_invoke_internal_web_search", search)
+    inv = ToolInvocation(tool_id="web.manage", arguments=args, workspace_id="test_ws")
+    result = (web_tools.handle_news_search if source == "news" else web_tools.handle_web_official_doc_search)(inv)
+    assert all(captured[0][key] == value for key, value in args.items())
+    for key in ("status", "provider", "authority", "answer_hint", "filters"):
+        assert result[key] == output[key]
+
+
+def test_docs_does_not_inject_unfiltered_vendor_fallback(monkeypatch):
+    from core.tools.general_tools import web_tools
+    from core.tools.schemas import ToolInvocation
+    monkeypatch.setattr(web_tools, "_invoke_internal_web_search", lambda *a: {
+        "ok": False, "status": "failed", "results": [], "provider": "error"})
+    result = web_tools.handle_web_official_doc_search(ToolInvocation(tool_id="web.manage", workspace_id="test_ws",
+        arguments={"query": "docs", "vendor": "cisco", "blocked_domains": ["cisco.com"]}))
+    assert not result["ok"] and result["results"] == []
+
+
 def test_web_manage_search_degrades_to_official_candidate_when_search_providers_fail(monkeypatch):
     import sys
     import types

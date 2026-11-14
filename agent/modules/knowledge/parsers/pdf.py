@@ -52,6 +52,10 @@ def parse(
             warnings=[f"pdf_open_failed: {e!r}"],
         )
     n_pages = len(pdf.pages)
+    from .limits import MAX_PDF_PAGES
+    if n_pages > MAX_PDF_PAGES:
+        pdf.close()
+        raise ValueError("pdf_page_limit_exceeded")
     if not title:
         try:
             meta = pdf.metadata or {}

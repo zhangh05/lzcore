@@ -17,6 +17,20 @@ from core.tools.redaction import redact_string, redact_tool_output
 logger = logging.getLogger(__name__)
 
 
+def _git_subprocess_env() -> dict[str, str]:
+    """Use the MCP allowlist, plus Git identity/config and SSH agent access."""
+    from core.tools.mcp_client import _subprocess_env
+
+    env = _subprocess_env(None)
+    for name, value in os.environ.items():
+        upper = name.upper()
+        if (upper == "SSH_AUTH_SOCK" or upper.startswith("GIT_")) and not any(
+            part in upper for part in ("KEY", "TOKEN", "SECRET", "PASSWORD")
+        ):
+            env[name] = value
+    return env
+
+
 def _resolve_repo_dir(ws_id: str) -> str:
     """Resolve a principal-scoped workspace that is itself a Git repo root."""
     import subprocess
@@ -28,6 +42,7 @@ def _resolve_repo_dir(ws_id: str) -> str:
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         capture_output=True, text=True, timeout=10, cwd=str(repo_dir),
+        env=_git_subprocess_env(),
     )
     top_level = Path(result.stdout.strip())
     if (result.returncode != 0 or not top_level.is_absolute()
@@ -130,6 +145,8 @@ def build_audit_report(task_id: str, ws_id: str) -> dict:
                 "user_goal": task.user_goal, "status": task.status,
                 "created_at": task.created_at, "updated_at": task.updated_at,
             }
+        else:
+            report["task_metadata"] = {"status": "not_found"}
         traj = build_trajectory(task_id, ws_id)
         if traj:
             report["trajectory"] = {"score": evaluate_trajectory(traj.to_dict() if hasattr(traj,'to_dict') else {})}
@@ -151,7 +168,10 @@ def export_audit_report_markdown(task_id: str, ws_id: str) -> str:
         f"",
         f"## Trajectory Evaluation",
         f"Score: {traj.get('score',{}).get('score','N/A')}/10",
-        f"Issues: {', '.join(traj.get('score',{}).get('issues',[])) or 'none'}",
+        "Issues:",
+        *[f"- {issue['rule']}: {issue['detail']}" for issue in traj.get('score', {}).get('issues', [])],
+        *(["none"] if not traj.get('score', {}).get('issues') else []),
+        *([f"Error: {report['error']}"] if report.get('error') else []),
         f"",
         f"--- Generated {report['generated_at']}",
     ]
@@ -174,6 +194,7 @@ def git_status_check(ws_id: str) -> dict:
         r2 = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True, text=True, timeout=10, cwd=repo_dir,
+            env=_git_subprocess_env(),
         )
         if r2.returncode != 0:
             return {"ok": False, "error": redact_string(r2.stderr.strip())[:500] or "branch lookup failed"}
@@ -183,6 +204,7 @@ def git_status_check(ws_id: str) -> dict:
         r3 = subprocess.run(
             ["git", "status", "--porcelain"],
             capture_output=True, text=True, timeout=10, cwd=repo_dir,
+            env=_git_subprocess_env(),
         )
         if r3.returncode != 0:
             return {"ok": False, "error": redact_string(r3.stderr.strip())[:500] or "status failed"}
@@ -216,12 +238,14 @@ def git_commit(ws_id: str, message: str = "", confirm: bool = False) -> dict:
         r = subprocess.run(
             ["git", "add", "-A", "--"],
             capture_output=True, text=True, timeout=30, cwd=repo_dir,
+            env=_git_subprocess_env(),
         )
         if r.returncode != 0:
             return {"ok": False, "error": redact_string(r.stderr.strip())[:500] or "git add failed"}
         r2 = subprocess.run(
             ["git", "commit", "-m", message, "--"],
             capture_output=True, text=True, timeout=30, cwd=repo_dir,
+            env=_git_subprocess_env(),
         )
         if r2.returncode != 0:
             return {"ok": False, "error": redact_string(r2.stderr.strip())[:500] or "commit failed"}
@@ -247,6 +271,7 @@ def git_push(ws_id: str, remote: str = "origin", confirm: bool = False) -> dict:
         remotes = subprocess.run(
             ["git", "remote"],
             capture_output=True, text=True, timeout=10, cwd=repo_dir,
+            env=_git_subprocess_env(),
         )
         if remotes.returncode != 0:
             return {"ok": False, "error": redact_string(remotes.stderr.strip())[:500] or "remote lookup failed"}
@@ -256,6 +281,7 @@ def git_push(ws_id: str, remote: str = "origin", confirm: bool = False) -> dict:
         r = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True, text=True, timeout=10, cwd=repo_dir,
+            env=_git_subprocess_env(),
         )
         if r.returncode != 0:
             return {"ok": False, "error": redact_string(r.stderr.strip())[:500] or "branch lookup failed"}
@@ -266,7 +292,7 @@ def git_push(ws_id: str, remote: str = "origin", confirm: bool = False) -> dict:
         r2 = subprocess.run(
             ["git", "push", "--", remote, f"refs/heads/{branch}:refs/heads/{branch}"],
             capture_output=True, text=True, timeout=60, cwd=repo_dir,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            env={**_git_subprocess_env(), "GIT_TERMINAL_PROMPT": "0"},
         )
         if r2.returncode != 0:
             return {"ok": False, "error": redact_string(r2.stderr.strip())[:500] or "push failed"}

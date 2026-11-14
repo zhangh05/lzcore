@@ -24,6 +24,8 @@ import json
 import logging
 import threading
 import time
+import uuid
+from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass, field
 from collections import OrderedDict, deque
 from agent.modules.browser.access import current_browser_scope, local_preview_allowed
@@ -33,6 +35,7 @@ _log = logging.getLogger(__name__)
 
 _playwright = None
 _pw_instance = None
+_pw_init_lock = None
 @dataclass
 class _PageObservations:
     console: Any = field(default_factory=lambda: deque(maxlen=200))
@@ -68,12 +71,25 @@ class _BrowserSession:
     context: Any = None
     pages: dict[int, Any] = field(default_factory=dict)
     active_tab: int = 0
-    refs: dict[str, str] = field(default_factory=dict)
+    refs: dict[str, Any] = field(default_factory=dict)
+    ref_page: Any = None
     last_used: float = field(default_factory=time.monotonic)
     observations: dict[int, _PageObservations] = field(default_factory=dict)
 
 
 _sessions: dict[Any, _BrowserSession] = {}
+
+
+def _invalidate_refs(state: _BrowserSession) -> None:
+    handles = list(state.refs.values())
+    state.refs.clear()
+    state.ref_page = None
+
+    async def dispose():
+        await asyncio.gather(*(handle.dispose() for handle in handles if hasattr(handle, "dispose")),
+                             return_exceptions=True)
+    if handles:
+        asyncio.create_task(dispose())
 
 
 def _state() -> _BrowserSession:
@@ -108,7 +124,9 @@ async def _expire_idle_sessions() -> None:
 _loop: asyncio.AbstractEventLoop | None = None
 _loop_thread: threading.Thread | None = None
 _loop_lock = threading.Lock()
-_browser_call_lock = threading.Lock()
+_scope_locks: dict[Any, asyncio.Lock] = {}
+_scope_tasks: dict[Any, set] = {}
+BROWSER_CALL_TIMEOUT = 180
 
 # ── Ref mapping: ref_id → CSS selector ─────────────────────────────
 # Snapshot assigns ref=e1, e2, ... to elements. The mapping stores
@@ -138,17 +156,22 @@ def _ensure_playwright():
 
 async def _get_page(tab_index: int | None = None) -> Any:
     """Get or create a browser page. Uses tab_index for multi-tab support."""
-    global _pw_instance
+    global _pw_instance, _pw_init_lock
     await _expire_idle_sessions()
     _ensure_playwright()
 
     if _state().browser is None:
         if _pw_instance is None:
-            _pw_instance = await _playwright().start()
+            if _pw_init_lock is None:
+                _pw_init_lock = asyncio.Lock()
+            async with _pw_init_lock:
+                if _pw_instance is None:
+                    _pw_instance = await _playwright().start()
         _state().browser = await _pw_instance.chromium.launch(headless=True)
         _state().context = await _state().browser.new_context(
             viewport=VIEWPORT,
             user_agent=USER_AGENT,
+            accept_downloads=False,
         )
         scope = current_browser_scope()
         async def scoped_route(route):
@@ -176,6 +199,7 @@ async def _new_page(index: int):
     page.on("response", observations.record_response)
     page.on("requestfailed", observations.record_failure)
     state.pages[index] = page
+    page.on("framenavigated", lambda frame: _invalidate_refs(state) if frame == page.main_frame else None)
     return page
 
 
@@ -207,17 +231,75 @@ def _browser_event_loop() -> asyncio.AbstractEventLoop:
         return _loop
 
 
-def _run(async_fn):
+def _run(async_fn, *, closing=False):
     """Run a Playwright coroutine on its persistent owning event loop."""
     future = None
-    try:
-        with _browser_call_lock:
-            future = asyncio.run_coroutine_threadsafe(async_fn, _browser_event_loop())
-            return future.result(timeout=180)
-    except Exception as e:
+    started = threading.Event()
+    from core.tools.context import get_runtime_cancel_check
+    cancel_check = get_runtime_cancel_check()
+    deadline = time.monotonic() + BROWSER_CALL_TIMEOUT
+
+    def interrupted(code):
         if future is not None:
             future.cancel()
-        return {"ok": False, "error": str(e)[:300]}
+        return {"ok": False, "error": code, "cancelled": code == "browser_cancelled",
+                "execution_may_continue": started.is_set(), "automatic_retry_allowed": False}
+    try:
+        if not closing and cancel_check and cancel_check():
+            async_fn.close()
+            return interrupted("browser_cancelled")
+        scope = current_browser_scope()
+
+        async def scoped_call():
+            task = asyncio.current_task()
+            tasks = _scope_tasks.setdefault(scope, set())
+            lock = _scope_locks.setdefault(scope, asyncio.Lock())
+            tasks.add(task)
+            entered = False
+            try:
+                if closing:
+                    others = list(tasks - {task})
+                    for other in others:
+                        other.cancel()
+                    await asyncio.gather(*others, return_exceptions=True)
+                    entered = True
+                    started.set()
+                    return await async_fn
+                async with lock:
+                    entered = True
+                    started.set()
+                    return await async_fn
+            finally:
+                if not entered:
+                    async_fn.close()
+                tasks.discard(task)
+                if not tasks:
+                    _scope_tasks.pop(scope, None)
+                    _scope_locks.pop(scope, None)
+
+        async def bounded_call():
+            return await asyncio.wait_for(scoped_call(), timeout=BROWSER_CALL_TIMEOUT)
+
+        future = asyncio.run_coroutine_threadsafe(bounded_call(), _browser_event_loop())
+        while True:
+            if not closing and cancel_check and cancel_check():
+                return interrupted("browser_cancelled")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return interrupted("browser_deadline_exceeded")
+            try:
+                return future.result(timeout=min(0.05, remaining))
+            except FutureTimeout:
+                if future.done():
+                    return interrupted("browser_deadline_exceeded")
+    except Exception as e:
+        if future is not None and future.cancelled():
+            return interrupted("browser_cancelled")
+        if future is not None:
+            future.cancel()
+        else:
+            async_fn.close()
+        return {"ok": False, "error": str(e)[:300] or type(e).__name__}
 
 
 def _browser_private_network_allowed() -> bool:
@@ -343,6 +425,7 @@ def browser_navigate(url: str, wait_selector: str = "", timeout: int = DEFAULT_T
         return blocked
     async def _nav():
         page = await _get_page()
+        _invalidate_refs(_state())
         await page.goto(url, timeout=timeout, wait_until="domcontentloaded")
         if wait_selector:
             await page.wait_for_selector(wait_selector, timeout=10000)
@@ -363,7 +446,9 @@ def browser_snapshot(selector: str = "body", compact: bool = True, max_elements:
 
     async def _snap():
         page = await _get_page()
-        _state().refs.clear()
+        _invalidate_refs(_state())
+        _state().ref_page = page
+        snapshot_id = uuid.uuid4().hex
         title = await page.title()
         url = page.url
         limit = max(1, min(int(max_elements), 500))
@@ -434,9 +519,9 @@ def browser_snapshot(selector: str = "body", compact: bool = True, max_elements:
         raw_elements = list((snapshot or {}).get("elements") or [])
         elements = []
         for item in raw_elements:
-            ref = f"e{len(elements) + 1}"
+            ref = f"e{len(elements) + 1}_{snapshot_id}"
             css_selector = str(item.pop("selector", "") or "")
-            _state().refs[ref] = f"css:{css_selector}" if css_selector else ""
+            _state().refs[ref] = await page.locator(css_selector).element_handle() if css_selector else None
             elements.append({"ref": ref, **item})
         total = int((snapshot or {}).get("total") or len(elements))
         truncated = total > len(elements)
@@ -580,16 +665,11 @@ def browser_screenshot(
 
 
 def _locator_for_ref(page: Any, ref: str):
-    """Resolve a current snapshot target without silently changing identity."""
-    mapping = _state().refs.get(ref, "")
-    if mapping.startswith("css:") and mapping[4:]:
-        return page.locator(mapping[4:])
-    if mapping and mapping.startswith("role:"):
-        parts = mapping.split(":", 2)
-        role = parts[1]
-        name = parts[2] if len(parts) > 2 else ""
-        return page.get_by_role(role, name=name, exact=True) if name else page.get_by_role(role)
-    return None
+    """Return the snapshotted DOM node, never re-resolve a reusable CSS path."""
+    state = _state()
+    if state.ref_page is not page:
+        return None
+    return state.refs.get(ref)
 
 
 def browser_click(selector: str = "", ref: str = "") -> dict:
@@ -603,7 +683,7 @@ def browser_click(selector: str = "", ref: str = "") -> dict:
                     "interaction_sent": False, **identity}
         if target is None:
             return unavailable("target_not_found", "selector or a current snapshot ref is required; take a fresh snapshot")
-        count = await target.count()
+        count = int(await target.evaluate("el => el.isConnected")) if ref else await target.count()
         if count != 1:
             return unavailable("target_not_unique" if count else "target_not_found",
                                f"target matches {count} elements; take a fresh snapshot and select one target")
@@ -625,19 +705,10 @@ def browser_type(text: str, selector: str = "", ref: str = "", clear_first: bool
         target_label = ""
 
         if ref:
-            mapping = _state().refs.get(ref, "")
-            if mapping.startswith("css:") and mapping[4:]:
-                target = page.locator(mapping[4:])
-                target_label = f"ref:{ref}"
-            elif mapping and mapping.startswith("role:"):
-                parts = mapping.split(":", 2)
-                role = parts[1]
-                name = parts[2] if len(parts) > 2 else ""
-                if name:
-                    target = page.get_by_role(role, name=name)
-                else:
-                    target = page.get_by_role(role).first
-                target_label = f"ref:{ref}"
+            target = _locator_for_ref(page, ref)
+            target_label = f"ref:{ref}"
+            if target is None:
+                return {"ok": False, "error": "stale snapshot ref; take a fresh snapshot"}
 
         if target is None and selector:
             if clear_first:
@@ -662,19 +733,11 @@ def browser_hover(selector: str = "", ref: str = "") -> dict:
     async def _hover():
         page = await _get_page()
         if ref:
-            mapping = _state().refs.get(ref, "")
-            if mapping.startswith("css:") and mapping[4:]:
-                await page.locator(mapping[4:]).hover(timeout=5000)
-                return {"ok": True, "hovered_ref": ref}
-            if mapping and mapping.startswith("role:"):
-                parts = mapping.split(":", 2)
-                role = parts[1]
-                name = parts[2] if len(parts) > 2 else ""
-                if name:
-                    await page.get_by_role(role, name=name).hover(timeout=5000)
-                else:
-                    await page.get_by_role(role).first.hover(timeout=5000)
-                return {"ok": True, "hovered_ref": ref}
+            target = _locator_for_ref(page, ref)
+            if target is None:
+                return {"ok": False, "error": "stale snapshot ref; take a fresh snapshot"}
+            await target.hover(timeout=5000)
+            return {"ok": True, "hovered_ref": ref}
         if selector:
             await page.hover(selector, timeout=5000)
             return {"ok": True, "hovered": selector}
@@ -688,17 +751,11 @@ def browser_select_option(value: str, selector: str = "", ref: str = "") -> dict
         page = await _get_page()
         target_label = ""
         if ref:
-            mapping = _state().refs.get(ref, "")
-            if mapping.startswith("css:") and mapping[4:]:
-                await page.locator(mapping[4:]).select_option(value)
-                target_label = f"ref:{ref}"
-            elif mapping and mapping.startswith("role:"):
-                parts = mapping.split(":", 2)
-                role = parts[1]
-                name = parts[2] if len(parts) > 2 else ""
-                locator = page.get_by_role(role, name=name) if name else page.get_by_role(role).first
-                await locator.select_option(value)
-                target_label = f"ref:{ref}"
+            target = _locator_for_ref(page, ref)
+            if target is None:
+                return {"ok": False, "error": "stale snapshot ref; take a fresh snapshot"}
+            await target.select_option(value)
+            target_label = f"ref:{ref}"
         elif selector:
             await page.select_option(selector, value)
             target_label = selector
@@ -772,9 +829,14 @@ def browser_evaluate(script: str) -> dict:
             result_str = json.dumps(result, default=str)
         except Exception:
             result_str = str(result)
+        if len(result_str) > 50000:
+            return {"ok": False, "error": "evaluate_result_too_large",
+                    "result_length": len(result_str), "max_result_length": 50000,
+                    "message": "Query a smaller subset of the page."}
         return {
             "ok": True, "script": script[:200],
-            "result": result_str[:50000],
+            "result": result_str,
+            "truncated": False, "result_length": len(result_str),
             "result_type": type(result).__name__,
         }
     return _run(_eval())
@@ -782,6 +844,8 @@ def browser_evaluate(script: str) -> dict:
 
 def browser_wait(wait_ms: int = 0, wait_text: str = "", timeout: int = 10000) -> dict:
     """Wait for a condition: time or text appearing on page."""
+    if wait_ms < 0 or wait_ms > 30000 or timeout < 1 or timeout > 30000:
+        return {"ok": False, "error": "browser wait budget is 1..30000ms"}
     async def _wait():
         page = await _get_page()
         if wait_text:
@@ -814,6 +878,8 @@ def browser_tabs(action: str = "list", tab_index: int = 0, url: str = "") -> dic
         # Initialize the shared browser context instead of dereferencing None.
         await _get_page()
 
+        if action in {"new", "switch", "close"}:
+            _invalidate_refs(_state())
         if action == "list":
             tabs = []
             for idx, page in list(_state().pages.items()):
@@ -890,6 +956,7 @@ def browser_navigate_back() -> dict:
     """Go back in browser history."""
     async def _back():
         page = await _get_page()
+        _invalidate_refs(_state())
         response = await page.go_back()
         if response is None:
             return {"ok": False, "error": "no browser history entry to navigate back to"}
@@ -905,4 +972,4 @@ def browser_close() -> dict:
             await _close_session(state)
             _sessions.pop(current_browser_scope(), None)
         return {"ok": True, "closed": True}
-    return _run(_close())
+    return _run(_close(), closing=True)

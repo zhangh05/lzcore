@@ -88,6 +88,36 @@ def test_project_index_failure_does_not_erase_worker_or_candidate_evidence(team,
     assert projects[0]['state'] == 'evidence_unavailable' and not projects[0]['phases']
 
 
+def test_existing_integrated_project_is_unavailable_when_new_task_index_fails(team, monkeypatch):
+    from storage import coding_state_store
+    first = team.spawn()
+    worker = subagent._load_task('parent-ws', first['subtask_id'])
+    team.spawn('qa_agent', review=worker.subtask_id)
+    assert subagent.merge_subagent_result('parent-task', worker.subtask_id, 'parent-ws')['ok']
+    identity = coding_project.project_id(worker)
+    assert coding_project.snapshot('parent-ws', identity)['phases'][0]['state'] == 'integrated'
+    original = coding_state_store.change
+    def fault(workspace, kind, identity, update, **kwargs):
+        if kind == 'projects':
+            raise OSError('project index unavailable')
+        return original(workspace, kind, identity, update, **kwargs)
+    monkeypatch.setattr(coding_state_store, 'change', fault)
+    newer = team.spawn()
+    for project in [coding_project.snapshot('parent-ws', identity),
+                    coding_project.for_session('parent-ws', 'parent-session')[0]]:
+        assert project['state'] == 'evidence_unavailable'
+        assert newer['subtask_id'] in project['unindexed_task_ids']
+        assert not project['phases']
+        facts = coding_project.guidance([project])
+        assert 'evidence_unavailable' in facts and newer['subtask_id'] in facts
+        assert 'integrated' not in facts
+    monkeypatch.setattr(coding_state_store, 'change', original)
+    subagent._save_task(subagent._load_task('parent-ws', newer['subtask_id']))
+    recovered = coding_project.snapshot('parent-ws', identity)
+    assert recovered.get('state') != 'evidence_unavailable'
+    assert any(newer['subtask_id'] in phase['task_ids'] for phase in recovered['phases'])
+
+
 def test_revision_heads_advance_phase_without_deleting_historical_candidates(team, monkeypatch):
     first = team.spawn()
     import json

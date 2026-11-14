@@ -73,6 +73,8 @@ def import_document(
     content: str,
     source: str = "",
     metadata: dict = None,
+    *,
+    normalized_document=None,
 ) -> dict:
     """Import a document as a knowledge source into ContextStore."""
     content = str(content or "")
@@ -134,9 +136,9 @@ def import_document(
         if meta.get('source_file_id'):
             files.append((meta['source_file_id'], 'source'))
         replace_owner_references(workspace_id, 'knowledge_source', source_id, files)
-        _create_basic_chunks(
-            workspace_id, source_id, title.strip()[:200], content, meta,
-            scope=source_scope,
+        counts = _create_basic_chunks(
+            workspace_id, source_id, title.strip()[:200], content, {**meta, "tags": item["tags"]},
+            scope=source_scope, document=normalized_document,
         )
     except Exception as exc:
         try:
@@ -156,6 +158,7 @@ def import_document(
         "source_id": source_id,
         "title": item["title"],
         "normalized_file_id": meta["normalized_file_id"],
+        **counts,
         "summary": f"Imported: {item['title']} ({len(content)} chars)",
     }
 
@@ -168,16 +171,17 @@ def _create_basic_chunks(
     meta: dict = None,
     *,
     scope: str = "workspace",
+    document=None,
 ):
     """Create lossless parent/child projections for a direct text import."""
     if not content or not content.strip():
-        return
+        return {"parent_count": 0, "chunk_count": 0}
     meta = meta or {}
     from agent.modules.knowledge.chunking import chunk_document
     from agent.modules.knowledge.index import replace_chunks
     from agent.modules.knowledge.schemas import NormalizedDocument
 
-    doc = NormalizedDocument(
+    doc = document or NormalizedDocument(
         source_id=source_id,
         title=title,
         source_type=str(meta.get("source_type") or "document"),
@@ -186,6 +190,7 @@ def _create_basic_chunks(
         normalized_markdown=content,
         metadata=dict(meta),
     )
+    doc.source_id = source_id
     parents, children = chunk_document(doc)
     shared_meta = {
         **meta,
@@ -195,7 +200,13 @@ def _create_basic_chunks(
     }
     for chunk in [*parents, *children]:
         chunk.metadata.update(shared_meta)
+        if document is not None:
+            chunk.index_text = (
+                f"{document.title} | {chunk.chapter} | {chunk.section} | "
+                f"{' '.join(meta.get('tags') or [])} | {chunk.content}"
+            )
     replace_chunks(workspace_id, source_id, [*parents, *children])
+    return {"parent_count": len(parents), "chunk_count": len(children)}
 
 
 def list_sources(

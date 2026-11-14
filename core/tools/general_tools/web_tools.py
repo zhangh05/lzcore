@@ -850,20 +850,13 @@ def handle_news_search(inv: ToolInvocation) -> dict:
         return _error_inv(inv, "query is required")
     recency = (args.get("recency") or "day").strip().lower()
     language = (args.get("language") or "zh-CN").strip() or "zh-CN"
-    result = _invoke_internal_web_search(inv, {
-        "query": query,
-        "top_k": _coerce_int(args.get("top_k", args.get("limit", 5)), default=5, min_value=1, max_value=10),
-        "site": args.get("site", ""),
-        "domains": args.get("domains", []),
-        "recency": recency,
-        "language": language,
-        "safe_search": args.get("safe_search", "moderate"),
-    })
-    out = {"ok": bool(result.get("ok")),
-           "summary": result.get("summary", ""),
-           "results": result.get("results", []),
-           "errors": list(result.get("errors") or [])[:5],
-           "warnings": list(result.get("warnings") or [])[:5]}
+    search_args = dict(args)
+    search_args.update(query=query, recency=recency, language=language)
+    search_args["max_results"] = _coerce_int(
+        args.get("max_results", args.get("top_k", args.get("limit", 5))),
+        default=5, min_value=1, max_value=30,
+    )
+    out = _invoke_internal_web_search(inv, search_args)
     return _decorate_realtime_search_result(
         out,
         tool_id="web.manage",
@@ -890,19 +883,15 @@ def handle_web_official_doc_search(inv: ToolInvocation) -> dict:
     if vendor in doc_targets:
         domain, base = doc_targets[vendor]
         domains = [domain]
-    result = _invoke_internal_web_search(inv, {
-        "query": query,
-        "domains": domains,
-        "top_k": _coerce_int(args.get("top_k", 5), default=5, min_value=1, max_value=10),
-        "language": args.get("language", "zh-CN"),
-        "safe_search": args.get("safe_search", "moderate"),
-    })
-    out = {"ok": bool(result.get("ok")),
-           "summary": result.get("summary", ""),
-           "results": result.get("results", []),
-           "errors": list(result.get("errors") or [])[:5],
-           "warnings": list(result.get("warnings") or [])[:5]}
-    result = dict(out)
+    search_args = dict(args)
+    # Explicit caller filters own the boundary; vendor defaults only fill a gap.
+    if not any(args.get(key) for key in ("allowed_domains", "domains", "site")) and domains:
+        search_args["domains"] = domains
+    search_args["max_results"] = _coerce_int(
+        args.get("max_results", args.get("top_k", args.get("limit", 5))),
+        default=5, min_value=1, max_value=30,
+    )
+    result = dict(_invoke_internal_web_search(inv, search_args))
     result["tool_id"] = "web.manage"
     result["source_type"] = "official_doc_search"
     result["vendor"] = vendor
@@ -912,21 +901,9 @@ def handle_web_official_doc_search(inv: ToolInvocation) -> dict:
     result["next_actions"] = list(result["next_actions"]) + [
         "优先引用 official_or_primary 结果；如需要正文细节，再调用 web.manage(action=fetch)。",
     ]
-    if not result.get("ok") and base:
-        result["status"] = "fallback_doc_index"
-        result["provider"] = "official_doc_index"
-        result["results"] = [{
-            "rank": 1,
-            "title": f"{vendor} documentation index",
-            "url": base,
-            "domain": domains[0] if domains else "",
-            "citation": f"[1] {domains[0] if domains else vendor}",
-            "source_quality": "official_or_primary",
-        }]
-        result["count"] = len(result["results"])
-        result["summary"] = "搜索未命中具体文档，已返回官方文档入口。"
-        result["results_markdown"] = f"[1] {vendor} documentation index: {base}"
-    return _result(inv, bool(result.get("results")), result)
+    # The search implementation already owns filtered fallback candidates.
+    # Do not replace a failed/filtered search with an unfiltered vendor URL.
+    return result
 
 __all__ = [
     "handle_news_search",

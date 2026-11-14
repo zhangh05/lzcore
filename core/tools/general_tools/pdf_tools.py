@@ -94,8 +94,12 @@ def handle_pdf_extract_text(inv: ToolInvocation) -> dict:
             })
 
     try:
-        reader = PyPDF2.PdfReader(str(target))
+        from io import BytesIO
+        from agent.modules.knowledge.parsers.limits import read_bounded, MAX_PDF_PAGES
+        reader = PyPDF2.PdfReader(BytesIO(read_bounded(target, MAX_PDF_SIZE)))
         page_count = len(reader.pages)
+        if page_count > MAX_PDF_PAGES:
+            return _result(inv, False, {"error": "pdf_page_limit_exceeded", "page_count": page_count})
         if not page_count or (end_page is not None and end_page >= page_count):
             return _result(inv, False, {
                 "error": "empty_pdf" if not page_count else "page_range_out_of_bounds",

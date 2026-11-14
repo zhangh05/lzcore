@@ -1,8 +1,11 @@
 # agent/runtime/durable/control.py
 """Phase 3: Runtime control primitives — checkpoint, cancel, retry, resume.
 
+Checkpoint snapshots are supported. The independent durable records have no
+executor bridge; cancel/retry/resume fail closed without changing task state.
+
 All operations:
-- Work on TaskState as single source of truth
+- Preserve TaskState as single source of truth
 - Write RuntimeEvents for audit
 - Enforce workspace boundary
 - Redact payloads before persistence
@@ -14,7 +17,7 @@ from .models import (
     RuntimeStep, RuntimeEvent, RuntimeCheckpoint,
     _next_id, _now,
 )
-from .store import save_task, append_event, save_checkpoint, get_task, get_checkpoints
+from .store import append_event, save_checkpoint, get_task
 
 # ── Idempotency / Destructive — derived from Capability Manifest ──
 
@@ -91,7 +94,7 @@ def checkpoint_task(
 # ── Cancel ──
 
 def cancel_task(task_id: str, ws_id: str) -> dict:
-    """Cancel a running/pending task. Idempotent."""
+    """Reject execution control until these records have an executor bridge."""
     task = get_task(ws_id, task_id)
     if not task or task.workspace_id != ws_id:
         return {"ok": False, "error": "task not found in workspace", "status": "not_found"}
@@ -101,35 +104,13 @@ def cancel_task(task_id: str, ws_id: str) -> dict:
         # Already terminal — idempotent return
         return {"ok": True, "status": task.status, "message": f"task already {task.status}"}
 
-    # Mark current step cancelled
-    if task.current_step_id:
-        for s in task.steps:
-            if s.step_id == task.current_step_id and s.status in ("pending", "running"):
-                s.status = "cancelled"
-                s.finished_at = _now()
-
-    task.update_status("cancelled")
-    save_task(task)
-
-    # Checkpoint the cancelled state
-    checkpoint_task(task_id, ws_id, reason="task_cancelled")
-
-    # Write event
-    append_event(RuntimeEvent(
-        event_id=_next_id("evt-cancel"),
-        task_id=task_id, workspace_id=ws_id,
-        session_id=task.session_id, run_id=task.run_id,
-        step_id=task.current_step_id,
-        type="task_cancelled", status="cancelled",
-        title="Task cancelled",
-    ))
-    return {"ok": True, "status": "cancelled", "task_id": task_id}
+    return _unsupported("cancel", task_id)
 
 
 # ── Retry Step ──
 
 def retry_step(task_id: str, step_id: str, ws_id: str) -> dict:
-    """Retry a failed step. Only idempotent/read steps allowed."""
+    """Validate the old attempt, then reject unsupported execution control."""
     task = get_task(ws_id, task_id)
     if not task or task.workspace_id != ws_id:
         return {"ok": False, "error": "task not found in workspace"}
@@ -154,42 +135,13 @@ def retry_step(task_id: str, step_id: str, ws_id: str) -> dict:
             "retry_not_supported": True,
         }
 
-    # Create retry attempt (new step referencing the original)
-    retry_step_obj = RuntimeStep(
-        step_id=_next_id("step-retry"),
-        task_id=task_id,
-        kind=target.kind,
-        title=f"Retry: {target.title or step_id}",
-        summary=target.summary,
-        tool_id=target.tool_id,
-        status="pending",
-    )
-    task.add_step(retry_step_obj)
-    task.update_status("running")
-    save_task(task)
-
-    # Events
-    append_event(RuntimeEvent(
-        event_id=_next_id("evt-retry"),
-        task_id=task.task_id, workspace_id=ws_id,
-        session_id=task.session_id, run_id=task.run_id,
-        step_id=step_id,
-        type="step_retry_requested", status="ok",
-        title=f"Retry step: {step_id}",
-        summary=f"New attempt: {retry_step_obj.step_id}",
-    ))
-    return {
-        "ok": True,
-        "status": "retry_created",
-        "original_step_id": step_id,
-        "new_step_id": retry_step_obj.step_id,
-    }
+    return _unsupported("retry", task_id)
 
 
 # ── Resume ──
 
 def resume_task(task_id: str, ws_id: str) -> dict:
-    """Resume a task from its latest checkpoint."""
+    """Reject record-only resume; a checkpoint cannot dispatch an executor."""
     task = get_task(ws_id, task_id)
     if not task or task.workspace_id != ws_id:
         return {"ok": False, "error": "task not found in workspace"}
@@ -198,37 +150,10 @@ def resume_task(task_id: str, ws_id: str) -> dict:
     if task.status not in resumable:
         return {"ok": False, "error": f"task status {task.status} not resumable"}
 
-    # Find latest checkpoint
-    cps = get_checkpoints(ws_id, task_id)
-    if not cps:
-        return {
-            "ok": False,
-            "error": "No checkpoint found for resume",
-            "resume_not_supported": True,
-        }
+    return _unsupported("resume", task_id)
 
-    latest_cp = cps[-1]
-    state_snapshot = latest_cp.get("state_snapshot", {})
 
-    # Restore from checkpoint
-    task.update_status("running")
-    if state_snapshot.get("current_step_id"):
-        task.current_step_id = state_snapshot["current_step_id"]
-    save_task(task)
-
-    # Event
-    append_event(RuntimeEvent(
-        event_id=_next_id("evt-resume"),
-        task_id=task.task_id, workspace_id=ws_id,
-        session_id=task.session_id, run_id=task.run_id,
-        step_id=latest_cp.get("step_id", ""),
-        type="task_resumed", status="ok",
-        title="Task resumed from checkpoint",
-        summary=f"Checkpoint: {latest_cp.get('checkpoint_id', '')}",
-    ))
-    return {
-        "ok": True,
-        "status": task.status,
-        "checkpoint_id": latest_cp.get("checkpoint_id"),
-        "current_step_id": task.current_step_id,
-    }
+def _unsupported(operation: str, task_id: str) -> dict:
+    return {"ok": False, "status": "unsupported", "task_id": task_id,
+            "error": "durable_execution_control_unsupported",
+            f"{operation}_not_supported": True}

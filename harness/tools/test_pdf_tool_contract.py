@@ -32,6 +32,20 @@ def _pdf_page(text=None, *, fail=False):
     return SimpleNamespace(extract_text=extract_text)
 
 
+def test_pdf_tool_rejects_page_budget_before_extract(monkeypatch, tmp_path):
+    from agent.modules.knowledge.parsers import limits
+    monkeypatch.setattr(limits, "MAX_PDF_PAGES", 1)
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    target = tmp_path / "pdf_ws" / "test.pdf"
+    target.parent.mkdir()
+    target.write_bytes(b"%PDF-stub")
+    page = SimpleNamespace(extract_text=lambda: pytest.fail("over-budget PDF extracted"))
+    monkeypatch.setitem(sys.modules, "PyPDF2", SimpleNamespace(PdfReader=lambda _: SimpleNamespace(pages=[page, page])))
+    result = handle_pdf_extract_text(ToolInvocation(tool_id="pdf.extract", workspace_id="pdf_ws",
+        arguments={"filepath": "test.pdf"}))
+    assert not result["ok"] and result["error"] == "pdf_page_limit_exceeded"
+
+
 @pytest.mark.parametrize("page_range", ["9", "1-9", "1-2-3", "0", "2-1"])
 def test_pdf_rejects_empty_out_of_bounds_and_malformed_ranges(monkeypatch, tmp_path, page_range):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
