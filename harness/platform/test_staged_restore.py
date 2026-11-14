@@ -19,7 +19,7 @@ def data(monkeypatch, tmp_path):
     return source
 
 
-def test_api_restore_only_stages_and_startup_applies(data):
+def test_api_restore_only_stages_while_running(data):
     from core.runtime import backup
 
     created = backup.create_backup()
@@ -35,12 +35,8 @@ def test_api_restore_only_stages_and_startup_applies(data):
     again = client.post(f"/api/admin/backups/{created['backup_id']}/restore", json={"confirmation": "RESTORE"})
     assert again.status_code == 409
 
-    applied = backup.apply_staged_restore()
-    assert applied["backup_id"] == created["backup_id"]
-    assert json.loads(data.read_text())["status"] == "original"
-    assert Path(applied["rollback_path"]).is_dir()
-    assert backup.pending_restore() is None and backup.apply_staged_restore() is None
-    assert not list(data.parents[3].glob(".restore-pending-*"))
+    # Applying is a pre-start step (see test_backend_start_claims_lock_and_applies_restore):
+    # this app's startup threads are live, which is exactly when swapping is unsafe.
 
 
 def test_staged_marker_cannot_point_outside_the_data_parent(data):
@@ -97,5 +93,8 @@ def test_backend_start_claims_lock_and_applies_restore(data, monkeypatch):
     try:
         assert json.loads(data.read_text())["status"] == "original"
         assert backend_main._SERVICE_LOCK is not None
+        from core.runtime.backup import pending_restore
+        assert pending_restore() is None
+        assert not list(data.parents[3].glob(".restore-pending-*"))
     finally:
         backend_main._SERVICE_LOCK.__exit__(None, None, None)
