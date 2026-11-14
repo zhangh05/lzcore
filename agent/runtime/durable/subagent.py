@@ -926,8 +926,19 @@ def _save_task(task: SubagentTask):
         try:
             record_task(task)
             if "project_state" in task.observations:
-                task.observations.pop("project_state")
-                save_subagent(task.workspace_id, task.subtask_id, asdict(task))
+                # save_subagent merges observations; omission cannot clear a
+                # resolved failure. Remove only from the exact indexed version,
+                # under the same task lock, preserving concurrent observations.
+                from storage.subagent_store import task_control_lock, read_subagent
+                from storage.records import atomic_save_json
+                with task_control_lock(task.workspace_id, task.subtask_id):
+                    current = read_subagent(task.workspace_id, task.subtask_id)
+                    if current and current["observation_revision"] == task.observation_revision:
+                        current["observations"].pop("project_state", None)
+                        current["observation_revision"] += 1
+                        atomic_save_json(task.workspace_id, ("subagents", task.subtask_id + ".json"), current)
+                        task.observations = current["observations"]
+                        task.observation_revision = current["observation_revision"]
         except Exception:
             # A factual index must not erase the worker's durable outcome.
             # Its availability is reported by the project-state projection.

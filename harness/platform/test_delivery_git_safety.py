@@ -222,3 +222,20 @@ def test_local_bare_push_and_detached_head_rejection(monkeypatch, tmp_path, repo
     assert result["error"]
     assert all(args[1] != "push" for args in calls)
     assert not isolated_git
+
+
+def test_commit_hook_does_not_inherit_application_secrets(monkeypatch, repo):
+    monkeypatch.setenv("LZCORE_TEST_SECRET", "synthetic-value")
+    monkeypatch.setenv("DATABASE_URL", "synthetic-value")
+    hook = repo / ".git/hooks/pre-commit"
+    hook.parent.mkdir()
+    hook.write_text('#!/bin/sh\n'
+                    '[ -z "${LZCORE_TEST_SECRET+x}" ] || exit 1\n'
+                    '[ -z "${DATABASE_URL+x}" ] || exit 1\n'
+                    '[ -n "$HOME" ] || exit 1\n'
+                    'echo filtered > .git/hook-result\n')
+    hook.chmod(0o755)
+    (repo / "source.txt").write_text("test\n")
+    result = delivery.git_commit("synthetic", "test hook environment", confirm=True)
+    assert result["ok"], result
+    assert (repo / ".git/hook-result").read_text().strip() == "filtered"

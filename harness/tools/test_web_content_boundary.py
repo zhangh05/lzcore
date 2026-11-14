@@ -1,8 +1,120 @@
 """Public-web fetch boundaries, with no network or real DNS access."""
 
 import pytest
+import io
+import socket
+import ssl
 
 from core.tools.general_tools import web_content as web
+
+
+@pytest.mark.parametrize("scheme,address", [("http", "8.8.8.8"), ("https", "8.8.8.8"),
+                                           ("https", "2606:4700:4700::1111")])
+@pytest.mark.parametrize("certificate_host", ["public.test", "wrong.test"])
+def test_transport_pins_socket_and_preserves_host_sni_and_certificate_check(monkeypatch, scheme, address, certificate_host):
+    import urllib3.connection as connection
+    destinations, sent, dns_calls, tls = [], [], [], []
+    sockets = []
+
+    def dns(host, port, **kwargs):
+        dns_calls.append(host)
+        # A second resolution would return loopback after successful preflight.
+        answer = address if len(dns_calls) == 1 else "127.0.0.1"
+        return [(socket.AF_INET6 if ":" in answer else socket.AF_INET, socket.SOCK_STREAM, 6, "", (answer, 0))]
+
+    class Socket:
+        def __init__(self, *args):
+            self.family = args[0]
+            self.closed = False
+            sockets.append(self)
+        def settimeout(self, value):
+            pass
+        def setsockopt(self, *args):
+            pass
+        def connect(self, destination):
+            destinations.append(destination)
+        def sendall(self, data):
+            sent.append(bytes(data))
+        def makefile(self, *args):
+            body = b"<html><p>Pinned evidence</p></html>"
+            return io.BytesIO(b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: "
+                              + str(len(body)).encode() + b"\r\nConnection: close\r\n\r\n" + body)
+        def getpeercert(self, **kwargs):
+            return {"subjectAltName": (("DNS", certificate_host),)}
+        def getpeername(self):
+            return (address, 8443)
+        def close(self):
+            self.closed = True
+
+    def wrap(**kwargs):
+        tls.append(kwargs["server_hostname"])
+        assert kwargs["ssl_context"].verify_mode == ssl.CERT_REQUIRED
+        return kwargs["sock"]
+
+    monkeypatch.setattr(web, "_fetch_cache", {})
+    monkeypatch.setattr(web.requests.utils, "get_environ_proxies", lambda url: {})
+    monkeypatch.setattr(socket, "getaddrinfo", dns)
+    monkeypatch.setattr(socket, "socket", Socket)
+    monkeypatch.setattr(connection, "ssl_wrap_socket", wrap)
+    result = web.fetch_and_extract(f"{scheme}://public.test:8443/evidence")
+    assert dns_calls == ["public.test"]
+    assert destinations == [(address, 8443)]
+    assert sockets[0].family == (socket.AF_INET6 if ":" in address else socket.AF_INET)
+    assert all(s.closed for s in sockets)
+    if scheme == "https":
+        assert tls == ["public.test"]
+    if scheme == "https" and certificate_host != "public.test":
+        assert not result["ok"] and not sent
+    else:
+        assert result["ok"] and "Pinned evidence" in result["content"]
+        assert b"Host: public.test:8443\r\n" in b"".join(sent)
+
+
+def test_environment_proxy_is_rejected_before_socket_connect(monkeypatch):
+    monkeypatch.setattr(web.requests.utils, "get_environ_proxies", lambda url: {"https": "http://proxy.test:8080"})
+    monkeypatch.setattr(web, "_pinned_adapter", lambda *a: pytest.fail("proxy transport opened"))
+    with pytest.raises(ValueError, match="environment proxy"):
+        web._open_pinned_response("https://public.test/", {"8.8.8.8"}, 1)
+
+
+def test_legacy_and_current_adapter_entries_use_the_same_pinned_pool():
+    adapter = web._pinned_adapter("https://public.test/", "8.8.8.8")
+    try:
+        request = web.requests.Request("GET", "https://public.test/").prepare()
+        assert adapter.get_connection(request.url) is adapter.get_connection_with_tls_context(request, True)
+        with pytest.raises(ValueError, match="origin mismatch"):
+            adapter.get_connection("https://other.test/")
+        with pytest.raises(ValueError, match="verified transport"):
+            adapter.send(request, verify=False)
+    finally:
+        adapter.close()
+
+
+def test_no_proxy_allows_only_direct_pinned_transport(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.test:8080")
+    monkeypatch.setenv("NO_PROXY", "public.test")
+    session = None
+    def get(self, url, **kwargs):
+        nonlocal session
+        session = self
+        assert not self.trust_env
+        assert self.get_adapter(url).__class__.__name__ == "PinnedAdapter"
+        return Response(url)
+    monkeypatch.setattr(web.requests.Session, "get", get)
+    opened, response = web._open_pinned_response("https://public.test/", {"8.8.8.8"}, 1)
+    try:
+        assert opened is session and response.status_code == 200
+    finally:
+        response.close()
+        opened.close()
+
+
+def test_unrelated_proxy_environment_metadata_does_not_block_direct_transport(monkeypatch):
+    monkeypatch.setattr(web.requests.utils, "get_environ_proxies", lambda url: {"no": "other.test"})
+    monkeypatch.setattr(web.requests.Session, "get", lambda self, url, **kwargs: Response(url))
+    session, response = web._open_pinned_response("https://public.test/", {"8.8.8.8"}, 1)
+    response.close()
+    session.close()
 
 
 class Response:
@@ -34,19 +146,19 @@ def transport(monkeypatch):
         events.append(("resolve", host))
         return {"8.8.8.8"}
 
-    def get(url, **kwargs):
-        assert kwargs["allow_redirects"] is False
-        assert kwargs["stream"] is True
+    def get(url, addresses, timeout):
+        assert addresses == {"8.8.8.8"}
         events.append(("request", url))
         calls.append(url)
         status, location = routes.get(url, (200, None))
         response = Response(url, status, location)
         responses.append(response)
-        return response
+        from types import SimpleNamespace
+        return SimpleNamespace(close=lambda: None), response
 
     monkeypatch.setattr(web, "_fetch_cache", {})
     monkeypatch.setattr(web, "_resolved_addresses", resolve)
-    monkeypatch.setattr(web.requests, "get", get)
+    monkeypatch.setattr(web, "_open_pinned_response", get)
     return routes, calls, responses, events
 
 

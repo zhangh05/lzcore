@@ -17,6 +17,32 @@ from typing import Any
 
 MAX_INPUT_ROWS = 10_000
 MAX_OUTPUT_ROWS = 200
+MAX_INPUT_BYTES = 4 * 1024 * 1024
+MAX_INPUT_COLUMNS = 256
+MAX_CELL_CHARS = 100_000
+MAX_JSON_DEPTH = 32
+
+
+def _check_value_budget(value: Any, depth: int = 0, budget=None) -> None:
+    budget = budget if budget is not None else [0, 0]
+    budget[0] += 1
+    if budget[0] > 100_000:
+        raise ValueError("data object count limit exceeded")
+    if depth > MAX_JSON_DEPTH:
+        raise ValueError("data nesting limit exceeded")
+    if isinstance(value, str) and len(value) > MAX_CELL_CHARS:
+        raise ValueError("data cell size limit exceeded")
+    budget[1] += len(value) if isinstance(value, str) else 1
+    if budget[1] > MAX_INPUT_BYTES:
+        raise ValueError("data input size limit exceeded")
+    if isinstance(value, (list, dict)):
+        if len(value) > MAX_INPUT_ROWS:
+            raise ValueError("data object size limit exceeded")
+        for item in (value.values() if isinstance(value, dict) else value):
+            _check_value_budget(item, depth + 1, budget)
+        if isinstance(value, dict):
+            for key in value:
+                _check_value_budget(key, depth + 1, budget)
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -28,9 +54,22 @@ def _normalize_rows(data: Any, metadata: dict | None = None) -> tuple[list[dict]
             return [], "empty data"
         if len(data) > MAX_INPUT_ROWS:
             return [], f"too many rows: {len(data)} > {MAX_INPUT_ROWS}"
+        try:
+            _check_value_budget(data)
+            if any(isinstance(row, (dict, list)) and len(row) > MAX_INPUT_COLUMNS for row in data):
+                raise ValueError("data column limit exceeded")
+            if len(json.dumps(data, ensure_ascii=False).encode("utf-8")) > MAX_INPUT_BYTES:
+                raise ValueError("data input byte limit exceeded")
+        except (ValueError, TypeError, RecursionError) as exc:
+            return [], str(exc)
         if isinstance(data[0], dict):
             if not all(isinstance(row, dict) for row in data):
                 return [], "all rows must be objects"
+            columns = set()
+            for row in data:
+                columns.update(row)
+                if len(columns) > MAX_INPUT_COLUMNS:
+                    return [], "data column limit exceeded"
             return data, None
         if isinstance(data[0], list):
             headers = [f"col_{i}" for i in range(len(data[0]))]
@@ -44,14 +83,65 @@ def _normalize_rows(data: Any, metadata: dict | None = None) -> tuple[list[dict]
 
 
 def _parse_rows(text: str, metadata: dict | None = None) -> list[dict]:
+    if len(text) > MAX_INPUT_BYTES or len(text.encode("utf-8")) > MAX_INPUT_BYTES:
+        raise ValueError("data input byte limit exceeded")
     text = text.strip()
     if not text:
         return []
     if text.startswith("[") or text.startswith("{"):
+        # Check nesting before json.loads allocates the object graph.
+        depth, quoted, escaped, tokens = 0, False, False, 0
+        for char in text:
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    quoted = False
+            elif char == '"':
+                quoted = True
+            elif char in "[{":
+                depth += 1
+                tokens += 1
+                if depth > MAX_JSON_DEPTH:
+                    raise ValueError("data nesting limit exceeded")
+            elif char in "]}":
+                depth -= 1
+            elif char == ",":
+                tokens += 1
+            if tokens > 100_000:
+                raise ValueError("data object count limit exceeded")
         try:
+            if text.startswith("["):
+                decoder = json.JSONDecoder()
+                rows, pos = [], 1
+                def whitespace(index):
+                    while index < len(text) and text[index] in " \t\r\n":
+                        index += 1
+                    return index
+                pos = whitespace(pos)
+                if pos < len(text) and text[pos] == "]":
+                    if pos != len(text) - 1:
+                        raise ValueError("invalid JSON trailing data")
+                    return []
+                while pos < len(text):
+                    if len(rows) >= MAX_INPUT_ROWS:
+                        raise ValueError("too many rows in JSON array")
+                    row, pos = decoder.raw_decode(text, pos)
+                    if not isinstance(row, dict):
+                        raise ValueError("JSON data must be an array of objects")
+                    rows.append(row)
+                    pos = whitespace(pos)
+                    if pos < len(text) and text[pos] == "]":
+                        if pos != len(text) - 1:
+                            raise ValueError("invalid JSON trailing data")
+                        return rows
+                    if pos >= len(text) or text[pos] != ",":
+                        raise ValueError("invalid JSON array separator")
+                    pos = whitespace(pos + 1)
+                raise ValueError("invalid JSON array")
             parsed = json.loads(text)
-            if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
-                return parsed
             if isinstance(parsed, dict):
                 return [parsed]
         except json.JSONDecodeError as exc:
@@ -75,6 +165,8 @@ def _parse_text(text: str, metadata: dict | None = None) -> tuple[list[dict], st
 
 def _unique_headers(headers: list[str], metadata: dict | None = None) -> list[str]:
     """Reserve original names before assigning suffixes to duplicate columns."""
+    if len(headers) > MAX_INPUT_COLUMNS:
+        raise ValueError("data column limit exceeded")
     reserved = set(headers)
     seen = set()
     renamed = defaultdict(list)
@@ -117,8 +209,13 @@ def _parse_csv(text: str, metadata: dict | None = None) -> list[dict]:
 
 
 def _parse_markdown_table(text: str, metadata: dict | None = None) -> list[dict]:
-    lines = text.splitlines()
-    table = [l for l in lines if l.strip().startswith("|") and l.strip().endswith("|")]
+    table = []
+    for line in io.StringIO(text):
+        line = line.strip()
+        if line.startswith("|") and line.endswith("|"):
+            table.append(line)
+            if len(table) > MAX_INPUT_ROWS + 2:
+                raise ValueError("too many rows in Markdown table")
     if len(table) < 2:
         return []
     headers = [c.strip() for c in table[0].strip("|").split("|")]
@@ -584,6 +681,8 @@ def data_render(
     output: str = "markdown",
     max_rows: int = 50,
 ) -> dict:
+    if output not in {"json", "csv", "markdown"}:
+        return {"ok": False, "error": "unsupported render output"}
     parse_metadata = {}
     if rows is not None:
         parsed, err = _normalize_rows(rows, parse_metadata)
@@ -603,6 +702,8 @@ def data_render(
         }
         if output == "json":
             result["rows"] = []
+        elif output == "csv":
+            result["csv"] = ""
         else:
             result["markdown"] = "(empty)"
         return result
@@ -625,6 +726,13 @@ def data_render(
         result["rows"] = display
         result["format"] = "json"
         result["_hint"] = f"共{len(parsed)}行，返回前{len(display)}行JSON。"
+    elif output == "csv":
+        stream = io.StringIO(newline="")
+        writer = csv.DictWriter(stream, fieldnames=cols)
+        writer.writeheader()
+        writer.writerows(display)
+        result["csv"] = stream.getvalue()
+        result["format"] = "csv"
     else:
         result["markdown"] = _md_table(display, max_rows, cols)
         result["format"] = "markdown"

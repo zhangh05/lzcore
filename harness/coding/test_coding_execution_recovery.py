@@ -23,6 +23,68 @@ def reconcile(team, identity, context=None):
     return team.client.invoke('agent.manage', {'action': 'reconcile', 'subtask_id': identity}, context=context or team.parent)
 
 
+@pytest.mark.parametrize('obstacle', ['', 'live_worker', 'foreign_worker', 'foreign_target', 'live_resource', 'live_check'])
+def test_orphan_running_review_requires_stopped_scoped_worker_and_resource_readback(team, monkeypatch, obstacle):
+    from harness.coding_record_fixtures import corrupt_record
+    first = team.spawn()
+    previous = team.spawn('qa_agent', review=first['subtask_id'])
+    producer = subagent._load_task('parent-ws', first['subtask_id'])
+    qa = subagent._load_task('parent-ws', previous['subtask_id'])
+    original = state.review(qa)
+    qa.status = 'running' if obstacle == 'live_worker' else 'failed'
+    if obstacle == 'foreign_worker':
+        qa.parent_task_id = 'other-parent'
+    if obstacle == 'foreign_target':
+        qa.coding['review_subtask_id'] = 'sub-ffffffff'
+    atomic_save_json('parent-ws', ('subagents', qa.subtask_id + '.json'), asdict(qa))
+    def interrupted_review(record):
+        record.update(state='running', judgement=None, outcome=None, validation={})
+        record['resources'].update(closed=False, cleanup_confirmed=False)
+        if obstacle == 'live_check':
+            record['validation'] = {'checks': [{'result': {'validation_environment': {'check_resource': True}}}]}
+    corrupt_record('parent-ws', 'reviews', original['id'], interrupted_review)
+    corrupt_record('parent-ws', 'candidates', state.candidate_id(producer.subtask_id),
+                   lambda r: r.update(state='under_review', accepted_reviews={}))
+    before = state.review(qa)
+    calls = []
+    def readback(resources):
+        calls.append(resources)
+        if obstacle == 'live_resource' or resources.get('check_resource'):
+            raise ValueError('coding_execution_resources_unresolved')
+        return {'closed': True, 'cleanup_confirmed': True, 'observed_via': 'docker_readback'}
+    monkeypatch.setattr('core.tools.project_execution.reconcile_environment', readback)
+    with monkeypatch.context() as patch:
+        def forbidden(*a, **kw):
+            raise AssertionError('Orphan review recovery must only read back resources')
+        patch.setattr(DockerProjectEnvironment, 'execute', forbidden)
+        patch.setattr(DockerProjectEnvironment, 'start', forbidden)
+        patch.setattr(DockerProjectEnvironment, 'close', forbidden)
+        result = reconcile(team, producer.subtask_id)
+    target = state.candidate(producer)
+    restored = state.review(qa)
+    assert not state.accepted_reviews(target)
+    if obstacle in {'live_worker', 'foreign_worker', 'foreign_target'}:
+        assert result.status != 'succeeded'
+        assert restored == before and not calls
+        assert target['state'] == 'under_review'
+    elif obstacle:
+        assert result.status != 'succeeded'
+        assert calls and target['state'] == 'execution_unknown'
+        assert restored['state'] == 'execution_unknown' and restored['outcome'] == 'unknown'
+    else:
+        assert result.status == 'succeeded' and result.output['reconciled']
+        assert target['state'] == 'review_incomplete'
+        assert restored['state'] == 'interrupted' and restored['outcome'] == 'unknown'
+        assert restored['validation'] == before['validation'] and restored['judgement'] is None
+        assert restored['recovery_observation']['resources']['observed_via'] == 'docker_readback'
+        fresh = team.spawn('qa_agent', review=producer.subtask_id)
+        assert fresh['task_status'] == 'succeeded', fresh
+        current = store.read('parent-ws', 'reviews', state.review_id(fresh['subtask_id']))
+        assert current['review_round'] == restored['review_round'] + 1
+        assert state.review(qa) == restored
+        assert subagent.merge_subagent_result('parent-task', producer.subtask_id, 'parent-ws')['ok']
+
+
 @pytest.mark.parametrize('producer_unknown', [False, True])
 def test_reconcile_then_fresh_qa_integrates_without_replaying_or_erasing_unknown(team, monkeypatch, producer_unknown):
     execute = DockerProjectEnvironment.execute

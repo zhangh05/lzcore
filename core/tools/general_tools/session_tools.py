@@ -188,10 +188,11 @@ def handle_session_export(inv: ToolInvocation) -> dict:
                 content = msg.get("content", "")
                 lines.append(f"## Message {i + 1} ({role})")
                 lines.append("")
-                lines.append(content[:1000])
+                lines.append(content)
                 lines.append("")
             md = "\n".join(lines)
-            return _ok(inv, "", {"format": "markdown", "export": md})
+            return _ok(inv, "", {"format": "markdown", "export": md,
+                                 "truncated": False, "export_length": len(md)})
     except Exception as e:
         return _error_inv(inv, str(e)[:200])
 

@@ -27,25 +27,36 @@ def parse(
     except Exception as exc:
         return _empty(title, author, source_type, scope, language, metadata, f"xlsx_open_failed: {exc!r}")
 
-    lines: list[str] = []
-    for sheet in workbook.worksheets:
-        lines.append(f"## {sheet.title}")
-        rows = []
-        for row in sheet.iter_rows(values_only=True):
-            values = ["" if value is None else str(value).replace("|", "\\|").replace("\n", " ") for value in row]
-            if any(values):
-                rows.append(values)
-        if not rows:
-            lines.append("（空工作表）")
-            continue
-        width = max(len(row) for row in rows)
-        rows = [row + [""] * (width - len(row)) for row in rows]
-        header = rows[0]
-        lines.append("| " + " | ".join(header) + " |")
-        lines.append("| " + " | ".join("---" for _ in header) + " |")
-        lines.extend("| " + " | ".join(row) + " |" for row in rows[1:])
-        lines.append("")
-    workbook.close()
+    try:
+        lines: list[str] = []
+        cells = chars = 0
+        for sheet in workbook.worksheets:
+            if (sheet.max_row or 0) > 10000 or (sheet.max_column or 0) > 256:
+                raise ValueError("xlsx_sheet_dimensions_exceeded")
+            lines.append(f"## {sheet.title}")
+            rows = []
+            for row_index, row in enumerate(sheet.iter_rows(values_only=True), 1):
+                cells += len(row)
+                if row_index > 10000 or len(row) > 256 or cells > 100000:
+                    raise ValueError("xlsx_cell_budget_exceeded")
+                values = ["" if value is None else str(value).replace("|", "\\|").replace("\n", " ") for value in row]
+                chars += sum(len(value) for value in values)
+                if chars > 2 * 1024 * 1024:
+                    raise ValueError("xlsx_text_budget_exceeded")
+                if any(values):
+                    rows.append(values)
+            if not rows:
+                lines.append("（空工作表）")
+                continue
+            width = max(len(row) for row in rows)
+            rows = [row + [""] * (width - len(row)) for row in rows]
+            header = rows[0]
+            lines.append("| " + " | ".join(header) + " |")
+            lines.append("| " + " | ".join("---" for _ in header) + " |")
+            lines.extend("| " + " | ".join(row) + " |" for row in rows[1:])
+            lines.append("")
+    finally:
+        workbook.close()
     return NormalizedDocument(
         title=title,
         author=author,

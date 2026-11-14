@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from agent.modules.knowledge.schemas import NormalizedDocument, SUPPORTED_FORMATS
+from .limits import read_bounded, validate_document
 
 
 class ParserError(Exception):
@@ -83,13 +84,15 @@ def parse_document(
     metadata = dict(metadata or {})
     if isinstance(source, (str, Path)):
         path = Path(source)
-        raw = path.read_bytes()
+        raw = read_bounded(path)
         if not title:
             title = path.stem
     else:
-        raw = bytes(source)
+        raw = read_bounded(source)
         if not title:
             title = "untitled"
+
+    validate_document(raw, fmt)
 
     if fmt in ("md", "markdown"):
         from . import md as _md

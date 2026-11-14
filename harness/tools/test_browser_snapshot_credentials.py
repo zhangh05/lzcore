@@ -26,6 +26,9 @@ def test_snapshot_sensitive_fields_never_read_value(monkeypatch, field_type, aut
         pytest.skip("node is required for the snapshot callback test")
 
     class Locator:
+        async def element_handle(self):
+            return self
+
         async def evaluate(self, script, options):
             setup = r"""
 const fs = require('fs');
@@ -69,7 +72,8 @@ process.stdout.write(JSON.stringify({snapshot, reads}));
 
     monkeypatch.setattr(core, "_get_page", get_page)
     monkeypatch.setattr(core, "_run", asyncio.run)
-    monkeypatch.setattr(core, "_state", lambda: SimpleNamespace(refs={}))
+    state = SimpleNamespace(refs={})
+    monkeypatch.setattr(core, "_state", lambda: state)
     result = core.browser_snapshot()
     row = result["elements"][0]
     assert row["role"] == "textbox"

@@ -5,6 +5,49 @@
 import pytest
 
 
+def test_file_import_chunks_and_publishes_once(knowledge_ws, monkeypatch):
+    from agent.modules.knowledge import ingestion, chunking, index, store
+    calls = []
+    original_chunk = chunking.chunk_document
+    original_replace = index.replace_chunks
+    def chunk(doc):
+        calls.append("chunk")
+        return original_chunk(doc)
+    def replace(*args, **kwargs):
+        calls.append("publish")
+        return original_replace(*args, **kwargs)
+    monkeypatch.setattr(chunking, "chunk_document", chunk)
+    monkeypatch.setattr(index, "replace_chunks", replace)
+    result = ingestion.import_file("test_ws", b"# Chapter\n\nUniqueEvidence", title="Parsed", tags=["tag"], scope="session")
+    assert result["ok"] and calls == ["chunk", "publish"]
+    chunks = index.list_chunks("test_ws", source_id=result["source_id"])["chunks"]
+    assert len(chunks) == result["parent_count"] + result["chunk_count"]
+    from core.context.context_store import get_context_store
+    stored = get_context_store("test_ws").list_items(item_type="knowledge_chunk", source_id=result["source_id"], limit=None)
+    assert all(c["scope"] == "session" and c["metadata"]["tags"] == ["tag"] for c in stored)
+    assert "UniqueEvidence" in store.read_source("test_ws", result["source_id"])["content"]
+
+
+@pytest.mark.parametrize("inactive", ["disabled", "deleted"])
+def test_reindex_inactive_source_leaves_chunks_unchanged(knowledge_ws, monkeypatch, inactive):
+    from agent.modules.knowledge import ingestion, store, index
+    from core.context.context_store import get_context_store
+    saved = store.import_document("test_ws", "Disabled", "UniqueInactiveEvidence")
+    source_id = saved["source_id"]
+    context = get_context_store("test_ws")
+    if inactive == "disabled":
+        store.disable_source("test_ws", source_id)
+    else:
+        item = context.get(source_id)
+        item["deleted"] = True
+        context.put(item)
+    before = context._items_path.read_bytes()
+    monkeypatch.setattr(index, "replace_chunks", lambda *a: pytest.fail("inactive source reindexed"))
+    result = ingestion.reindex_source("test_ws", source_id)
+    assert not result["ok"]
+    assert context._items_path.read_bytes() == before
+
+
 
 @pytest.fixture
 def knowledge_ws(monkeypatch, tmp_path):

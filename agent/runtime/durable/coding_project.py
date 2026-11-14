@@ -72,10 +72,31 @@ def _linked_records(workspace_id, kind, references, tasks):
     return records
 
 
+def _index_failures(workspace_id, session_id, parent_task_id):
+    from types import SimpleNamespace
+    from storage.subagent_store import list_subagents
+
+    failures = {}
+    for item in list_subagents(workspace_id, limit=5000):
+        if (item['session_id'] == session_id and item['parent_task_id'] == parent_task_id
+                and item.get('coding') and item.get('observations', {}).get('project_state')):
+            identity = project_id(SimpleNamespace(**item))
+            failures.setdefault(identity, []).append(item['subtask_id'])
+    return failures
+
+
+def _unavailable(identity, task_ids):
+    return {'id': identity, 'phases': [], 'state': 'evidence_unavailable',
+            'unindexed_task_ids': sorted(task_ids), 'business_acceptance': 'not_inferred'}
+
+
 def snapshot(workspace_id, identity):
     record = store.read(workspace_id, 'projects', identity)
     if not record:
         return None
+    failures = _index_failures(workspace_id, record['session_id'], record['parent_task_id'])
+    if identity in failures:
+        return {**record, **_unavailable(identity, failures[identity])}
     phases = []
     for item in record['phases'].values():
         tasks = [read_subagent(workspace_id, value) for value in item['task_ids']]
@@ -124,7 +145,7 @@ def for_session(workspace_id, session_id, parent_task_id=''):
     projects = [snapshot(workspace_id, item['id']) for item in store.list_records(workspace_id, 'projects')
             if item['session_id'] == session_id and (not parent_task_id or item['parent_task_id'] == parent_task_id)]
     from storage.subagent_store import list_subagents
-    indexed = {item['id'] for item in projects}
+    indexed = {item['id']: index for index, item in enumerate(projects)}
     for item in list_subagents(workspace_id, limit=5000):
         if (item['session_id'] != session_id or not item.get('coding')
                 or not item.get('observations', {}).get('project_state')
@@ -133,15 +154,19 @@ def for_session(workspace_id, session_id, parent_task_id=''):
         from types import SimpleNamespace
         identity = project_id(SimpleNamespace(**item))
         if identity not in indexed:
-            projects.append({'id': identity, 'phases': [], 'state': 'evidence_unavailable',
-                             'business_acceptance': 'not_inferred'})
-            indexed.add(identity)
+            indexed[identity] = len(projects)
+            projects.append(_unavailable(identity, []))
+        index = indexed[identity]
+        task_ids = set(projects[index].get('unindexed_task_ids', []))
+        task_ids.add(item['subtask_id'])
+        projects[index] = _unavailable(identity, task_ids)
     return projects
 
 
 def guidance(projects):
     """Trusted projection contains identifiers and enums, never declared prose."""
-    facts = [{'project_id': item['id'], 'state': item.get('state', 'recorded'), 'phases': [
+    facts = [{'project_id': item['id'], 'state': item.get('state', 'recorded'),
+        'unindexed_task_ids': item.get('unindexed_task_ids', []), 'phases': [
         {'phase_id': phase['phase_id'], 'state': phase['state'], 'task_ids': phase['task_ids'],
          'candidate_ids': phase['candidate_ids'], 'candidate_heads': phase['candidate_heads'], 'review_ids': phase['review_ids'], 'depends_on': phase['depends_on']}
         for phase in item['phases']]} for item in projects]

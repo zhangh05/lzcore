@@ -134,7 +134,7 @@ def _validate_fetch_url(url: str) -> None:
     _ = parsed.port
 
 
-def _validate_fetch_target(url: str) -> None:
+def _validate_fetch_target(url: str) -> set[str]:
     _validate_fetch_url(url)
     host = urlparse(url).hostname
     if _is_private_url(url):
@@ -142,6 +142,100 @@ def _validate_fetch_target(url: str) -> None:
     addresses = _resolved_addresses(host)
     if not addresses or any(_is_private_ip(address) for address in addresses):
         raise ValueError("blocked: target does not resolve exclusively to public IPs")
+    return addresses
+
+
+def _pinned_adapter(url: str, address: str):
+    """Keep origin/TLS identity while connecting a socket to a vetted literal IP."""
+    import ipaddress
+    import socket
+    from requests.adapters import HTTPAdapter
+    from urllib3.connection import HTTPConnection, HTTPSConnection
+    from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+    from urllib3.exceptions import ConnectTimeoutError, NewConnectionError
+
+    class PinnedSocket:
+        def _new_conn(self):
+            sock = socket.socket(socket.AF_INET6 if ipaddress.ip_address(address).version == 6 else socket.AF_INET,
+                                 socket.SOCK_STREAM)
+            try:
+                sock.settimeout(self.timeout)
+                for option in self.socket_options or []:
+                    sock.setsockopt(*option)
+                if self.source_address:
+                    sock.bind(self.source_address)
+                # No getaddrinfo and no second hostname resolution at connect.
+                sock.connect((address, self.port))
+                return sock
+            except socket.timeout as exc:
+                sock.close()
+                raise ConnectTimeoutError(self, "pinned connection timed out") from exc
+            except OSError as exc:
+                sock.close()
+                raise NewConnectionError(self, "pinned connection failed") from exc
+
+    class PinnedHTTP(PinnedSocket, HTTPConnection):
+        pass
+
+    class PinnedHTTPS(PinnedSocket, HTTPSConnection):
+        pass
+
+    class HTTPPool(HTTPConnectionPool):
+        ConnectionCls = PinnedHTTP
+
+    class HTTPSPool(HTTPSConnectionPool):
+        ConnectionCls = PinnedHTTPS
+
+    parsed = urlparse(requests.Request("GET", url).prepare().url)
+    pool_cls = HTTPSPool if parsed.scheme == "https" else HTTPPool
+    # Pool host remains the origin: urllib3 uses it for Host, SNI and hostname
+    # verification. requests.cert_verify still configures mandatory CA checks.
+    tls_options = {"assert_hostname": parsed.hostname} if parsed.scheme == "https" else {}
+    pool = pool_cls(parsed.hostname, port=parsed.port, **tls_options)
+
+    class PinnedAdapter(HTTPAdapter):
+        def send(self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None):
+            if proxies or verify is False:
+                raise ValueError("blocked: pinned fetch requires direct verified transport")
+            return super().send(request, stream=stream, timeout=timeout, verify=verify, cert=cert, proxies=proxies)
+
+        def get_connection(self, url, proxies=None):
+            # requests 2.28..2.31 calls this method instead of the TLS-context
+            # method. Both supported entry points must return the pinned pool.
+            if proxies:
+                raise ValueError("blocked: pinned fetch does not support proxies")
+            if urlparse(url).netloc != parsed.netloc or urlparse(url).scheme != parsed.scheme:
+                raise ValueError("blocked: pinned origin mismatch")
+            return pool
+
+        def get_connection_with_tls_context(self, request, verify, proxies=None, cert=None):
+            return self.get_connection(request.url, proxies)
+
+        def close(self):
+            pool.close()
+            super().close()
+
+    return PinnedAdapter(max_retries=0)
+
+
+def _open_pinned_response(url: str, addresses: set[str], timeout: int):
+    # A proxy can resolve the origin remotely, outside this socket boundary.
+    # Reject an applicable environment proxy, respecting NO_PROXY. Never
+    # silently bypass an operator's proxy or use its remote DNS resolution.
+    if requests.utils.select_proxy(url, requests.utils.get_environ_proxies(url)):
+        raise ValueError("blocked: environment proxy is unsupported for pinned fetch")
+    session = requests.Session()
+    session.trust_env = False  # Also prevent implicit .netrc credentials.
+    try:
+        adapter = _pinned_adapter(url, sorted(addresses)[0])
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        response = session.get(url, timeout=timeout, headers={"User-Agent": FETCH_USER_AGENT},
+                               allow_redirects=False, stream=True)
+        return session, response
+    except BaseException:
+        session.close()
+        raise
 
 
 def _check_cross_domain_redirect(final_url: str, original_url: str) -> dict | None:
@@ -452,21 +546,15 @@ def fetch_and_extract(
 
     # Fetch. Keep every response closed, including failed/oversized streams.
     resp = None
+    transport = None
     try:
         current_url = url
         for hop in range(_MAX_FETCH_REDIRECTS + 1):
             # requests must never follow a Location before this check runs.
-            _validate_fetch_target(current_url)
-            resp = requests.get(
-                current_url,
-                timeout=timeout,
-                headers={"User-Agent": FETCH_USER_AGENT},
-                allow_redirects=False,
-                stream=True,
-            )
+            addresses = _validate_fetch_target(current_url)
+            transport, resp = _open_pinned_response(current_url, addresses, timeout)
 
-            # Defense in depth only: requests still resolves independently of
-            # the preflight check; this cannot prevent DNS rebinding itself.
+            # Defense in depth in addition to the pinned socket.
             if resp.raw and hasattr(resp.raw, "_connection"):
                 conn = resp.raw._connection
                 if hasattr(conn, "sock") and hasattr(conn.sock, "getpeername"):
@@ -480,6 +568,8 @@ def fetch_and_extract(
             next_url = urljoin(current_url, resp.headers["Location"])
             resp.close()
             resp = None
+            transport.close()
+            transport = None
             current_url = next_url
 
         # Stream body with size cap
@@ -557,6 +647,8 @@ def fetch_and_extract(
     finally:
         if resp is not None:
             resp.close()
+        if transport is not None:
+            transport.close()
 
 
 # ── Quality-Aware Fetch (for deep_search) ──────────────────────────────

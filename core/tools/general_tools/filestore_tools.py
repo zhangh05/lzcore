@@ -9,6 +9,9 @@ from typing import Any
 from io import BytesIO
 from pathlib import Path
 import zipfile
+from agent.modules.knowledge.parsers.limits import (
+    read_bounded, validate_archive, read_image, MAX_IMAGE_BATCH_BYTES,
+)
 
 
 _STRUCTURED_DOCUMENT_KINDS = frozenset({"docx", "pdf", "xlsx", "pptx"})
@@ -78,7 +81,7 @@ def handle_file_extract_document(inv, *, file_id: str = "", limit: int = 50_000)
         )
 
     try:
-        raw = resolve_file_path(ws, file_id).read_bytes()
+        raw = read_bounded(resolve_file_path(ws, file_id), _MAX_EXTRACT_BYTES)
         embedded_image_count = 0
         completeness = {"partial": False}
         if file_kind == "docx":
@@ -161,7 +164,9 @@ def handle_file_extract_document_image(inv, *, file_id: str = "", image_index: i
     if image_index < 1 or image_index > 50:
         return _fail("workspace.file", "invalid_image_index", file_id=file_id)
     try:
-        with zipfile.ZipFile(resolve_file_path(ws, file_id)) as document:
+        raw_document = read_bounded(resolve_file_path(ws, file_id), _MAX_EXTRACT_BYTES)
+        with zipfile.ZipFile(BytesIO(raw_document)) as document:
+            validate_archive(document)
             names = sorted(
                 (name for name in document.namelist() if name.startswith("word/media/") and not name.endswith("/")),
                 key=lambda name: (int("".join(ch for ch in Path(name).stem if ch.isdigit()) or 0), name),
@@ -169,7 +174,7 @@ def handle_file_extract_document_image(inv, *, file_id: str = "", image_index: i
             if image_index > len(names):
                 return _fail("workspace.file", "embedded_image_not_found", file_id=file_id, image_count=len(names))
             name = names[image_index - 1]
-            raw = document.read(name)
+            raw = read_image(document, name)
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         return _fail("workspace.file", "embedded_image_extract_failed", file_id=file_id, detail=str(exc)[:200])
 
@@ -218,7 +223,9 @@ def handle_file_extract_document_images(
     if start_index < 1:
         return _fail("workspace.file", "invalid_image_index", file_id=file_id)
     try:
-        with zipfile.ZipFile(resolve_file_path(ws, file_id)) as document:
+        raw_document = read_bounded(resolve_file_path(ws, file_id), _MAX_EXTRACT_BYTES)
+        with zipfile.ZipFile(BytesIO(raw_document)) as document:
+            validate_archive(document)
             names = sorted(
                 (name for name in document.namelist() if name.startswith("word/media/") and not name.endswith("/")),
                 key=lambda name: (int("".join(ch for ch in Path(name).stem if ch.isdigit()) or 0), name),
@@ -227,7 +234,9 @@ def handle_file_extract_document_images(
             if start_index > image_count:
                 return _fail("workspace.file", "embedded_image_not_found", file_id=file_id, image_count=image_count)
             selected = list(enumerate(names[start_index - 1:start_index - 1 + limit], start=start_index))
-            extracted = [(index, name, document.read(name)) for index, name in selected]
+            if sum(document.getinfo(name).file_size for _, name in selected) > MAX_IMAGE_BATCH_BYTES:
+                raise ValueError("embedded_image_batch_too_large")
+            extracted = [(index, name, read_image(document, name)) for index, name in selected]
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         return _fail("workspace.file", "embedded_image_extract_failed", file_id=file_id, detail=str(exc)[:200])
 

@@ -185,7 +185,8 @@ def _check_pdf_page_count(path: Path) -> dict:
     try:
         import pdfplumber  # type: ignore
         import io
-        with pdfplumber.open(io.BytesIO(path.read_bytes())) as pdf:
+        from agent.modules.knowledge.parsers.limits import read_bounded
+        with pdfplumber.open(io.BytesIO(read_bounded(path, DEFAULT_MAX_FILE_BYTES))) as pdf:
             n = len(pdf.pages)
             if n > DEFAULT_MAX_PDF_PAGES:
                 return {"ok": False, "errors": ["file_too_large"]}
@@ -349,6 +350,7 @@ def import_file(
         content=doc.normalized_markdown,
         source=f"{source_type}/{doc.format}",
         metadata=source_meta,
+        normalized_document=doc,
     )
     if not saved.get("ok"):
         return {
@@ -359,86 +361,16 @@ def import_file(
         }
     source_id = saved.get("source_id") or (saved.get("source") or {}).get("source_id", "")
 
-    # 4. Chunk
-    doc.source_id = source_id
-    parents, children = _chunking.chunk_document(doc)
-
-    # 5. Inject source-level metadata into each chunk's metadata.
-    base_meta = {
-        "scope": scope,
-        "source_type": source_type,
-        "source_title": full_title,
-        "author": author or doc.author,
-        "edition": edition,
-        "language": language,
-        "format": doc.format,
-        "tags": list(tags or []),
-    }
-    for key in ("partial", "attempted_pages", "extracted_pages", "failed_pages", "page_errors"):
-        if key in doc.metadata:
-            base_meta[key] = doc.metadata[key]
-    if doc.metadata.get("partial"):
-        base_meta["warnings"] = list(doc.warnings or [])
-    if source_file_id:
-        base_meta["source_file_id"] = source_file_id
-    for key in ("hidden", "origin", "memory_id", "memory_type",
-                "memory_scope", "memory_confidence", "memory_source"):
-        if key in source_meta:
-            base_meta[key] = source_meta.get(key)
-    for c in parents:
-        c.metadata.update(base_meta)
-    for c in children:
-        c.metadata.update(base_meta)
-    # Re-build index_text for children with source_title (so BM25
-    # scores against the title boost).
-    for c in children:
-        c.index_text = (
-            f"{full_title} | {c.chapter} | {c.section} | "
-            f"{' '.join(tags or [])} | {c.content}"
-        )
-    for c in parents:
-        c.index_text = (
-            f"{full_title} | {c.chapter} | {c.section} | "
-            f"{' '.join(tags or [])} | {c.content}"
-        )
-
-    # 6. Write normalized markdown as FileRecord BEFORE chunk persistence
+    # The source store commits the parsed document's chunks exactly once.
     normalized_file_id = str(saved.get("normalized_file_id") or "")
-
-    # 7. Add file refs to chunk metadata before persistence
-    if normalized_file_id:
-        base_meta["normalized_file_id"] = normalized_file_id
-    base_meta["storage_managed"] = bool(source_file_id or normalized_file_id)
-    for c in parents:
-        c.metadata.update(base_meta)
-    for c in children:
-        c.metadata.update(base_meta)
-    # Re-build index_text for children with source_title (so BM25
-    # scores against the title boost).
-    for c in children:
-        c.index_text = (
-            f"{full_title} | {c.chapter} | {c.section} | "
-            f"{' '.join(tags or [])} | {c.content}"
-        )
-    for c in parents:
-        c.index_text = (
-            f"{full_title} | {c.chapter} | {c.section} | "
-            f"{' '.join(tags or [])} | {c.content}"
-        )
-
-    # 8. Save chunks AFTER metadata is complete
-    _index.replace_chunks(workspace_id, source_id, parents + children)
-
-    # ReferenceIndex: link source/normalized files to knowledge source
-    from storage.reference_index import replace_owner_references
-    replace_owner_references(workspace_id, 'knowledge_source', source_id,
-        [(fid, relation) for fid, relation in ((source_file_id, 'source'), (normalized_file_id, 'normalized')) if fid])
+    parent_count = saved["parent_count"]
+    chunk_count = saved["chunk_count"]
 
     result: dict[str, Any] = {
         "ok": True,
         "summary": (
             f"Imported {full_title} ({doc.format}) as {source_id} "
-            f"with {len(parents)} parent + {len(children)} child chunks."
+            f"with {parent_count} parent + {chunk_count} child chunks."
         ),
         "source_id": source_id,
         "title": full_title,
@@ -446,8 +378,8 @@ def import_file(
         "format": doc.format,
         "scope": scope,
         "language": language,
-        "parent_count": len(parents),
-        "chunk_count": len(children),
+        "parent_count": parent_count,
+        "chunk_count": chunk_count,
         "partial": bool(doc.metadata.get("partial")),
         **{key: doc.metadata[key] for key in ("attempted_pages", "extracted_pages", "failed_pages", "page_errors") if key in doc.metadata},
         "warnings": list(doc.warnings or []),
@@ -478,6 +410,10 @@ def reindex_source(workspace_id: str, source_id: str) -> dict:
                 "summary": f"source not found: {source_id}",
                 "errors": ["source_not_found"]}
     src = rec
+    if src.get("deleted") or src.get("enabled") is False:
+        return {"ok": False, "source_id": source_id,
+                "errors": ["source_inactive"],
+                "summary": "inactive knowledge sources cannot be reindexed"}
     full_markdown = rec.get("content", "") or ""
     meta = src.get("metadata", {}) or {}
     warnings = [str(item) for item in (rec.get("warnings") or [])]

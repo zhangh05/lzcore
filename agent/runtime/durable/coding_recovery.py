@@ -20,6 +20,59 @@ def stopped_resources(candidate, identity):
                for item in recovery.get("observations", []))
 
 
+def _interrupt_orphan_reviews(record):
+    """Close stopped QA attempts using exact resource read-back, never checks."""
+    from core.tools.project_execution import reconcile_environment
+    from .coding_state import finish_review
+    from .subagent import _load_task
+
+    workspace = record["workspace_id"]
+    running = [store.read(workspace, "reviews", value) for value in record["review_ids"]]
+    if any(item is None for item in running):
+        raise ValueError("coding_execution_record_unavailable")
+    running = [item for item in running if item["state"] == "running"]
+    workers = []
+    # Validate every owner before closing any attempt, including the producer.
+    for item in ([record] if running else []) + running:
+        worker = _load_task(workspace, item.get("reviewer_task_id") or item["producer_task_id"])
+        if (not worker or worker.status not in {"succeeded", "failed", "cancelled"}
+                or worker.parent_task_id != record["parent_task_id"]
+                or worker.session_id != record["session_id"]):
+            raise ValueError("coding_execution_worker_not_stopped")
+        if item is not record:
+            if (worker.profile_id != "qa_agent"
+                    or worker.coding.get("review_subtask_id") != record["producer_task_id"]
+                    or worker.coding.get("branch_workspace") != item["branch_workspace"]
+                    or item["candidate_id"] != record["id"]
+                    or item["candidate_digest"] != record["source_digest"]
+                    or item["change_digest"] != record["change"]["digest"]):
+                raise ValueError("coding_execution_review_identity_mismatch")
+            workers.append(worker)
+
+    def readback(resources):
+        try:
+            return reconcile_environment(resources)
+        except (ValueError, OSError):
+            # An unavailable daemon or a live resource cannot prove cleanup.
+            return {"closed": False, "cleanup_confirmed": False,
+                    "observed_via": "readback_unresolved"}
+
+    for item, worker in zip(running, workers):
+        observed = {"resources": readback(item["resources"]), "checks": []}
+        for index, check in enumerate(item["validation"].get("checks") or []):
+            environment = check.get("result", {}).get("validation_environment")
+            if environment:
+                observed["checks"].append({"index": index, "resources": readback(environment)})
+        resources = {**item["resources"], **observed["resources"]}
+        if any(not check["resources"].get("cleanup_confirmed") for check in observed["checks"]):
+            resources["cleanup_confirmed"] = False
+        store.change(workspace, "reviews", item["id"],
+                     lambda current: {**current, "recovery_observation": observed},
+                     expected_revision=item["revision"])
+        finish_review(worker, resources=resources, interrupted=True)
+    return bool(running)
+
+
 def reconcile_execution(task):
     from core.tools.project_execution import reconcile_environment
     from storage.project_changes import changeset, manifest_digest, project_path, quiescent_project, source_manifest
@@ -32,8 +85,16 @@ def reconcile_execution(task):
     identity = binding["candidate_id"] if task.profile_id == "qa_agent" else binding["id"]
     with store.publication_lock(task.workspace_id, identity):
         record = store.read(task.workspace_id, "candidates", identity)
+        recovered_reviews = False
+        if record["state"] in {CandidateState.REVIEWING, CandidateState.EXECUTION_UNKNOWN}:
+            recovered_reviews = _interrupt_orphan_reviews(record)
+            record = store.read(task.workspace_id, "candidates", identity)
         if record["state"] not in {CandidateState.BUILDING, CandidateState.EXECUTION_UNKNOWN}:
-            return {"ok": True, "reconciled": False, "candidate_id": identity, "state": record["state"]}
+            if recovered_reviews:
+                producer = _load_task(task.workspace_id, record["producer_task_id"])
+                _save_task(producer)
+            return {"ok": True, "reconciled": recovered_reviews, "candidate_id": identity,
+                    "state": record["state"], "requires_new_review": recovered_reviews}
         records = [record, *[store.read(task.workspace_id, "reviews", value) for value in record["review_ids"]]]
         observations = []
         for item in records:
