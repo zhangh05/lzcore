@@ -48,7 +48,12 @@ class ExtensionManifest:
         extension_storage_key(self.extension_id)
         if not self.name.strip() or not self.version.strip():
             raise ExtensionValidationError("name and version are required")
-        if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?", self.version):
+        if not re.fullmatch(
+            r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+            r"(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
+            r"(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?", self.version
+        ):
             raise ExtensionValidationError("version must use semantic versioning")
         for label, values in (
             ("capabilities", self.capabilities),

@@ -67,7 +67,7 @@ def test_inspection_runner_cancel_preserves_evidence_through_job_cleanup(monkeyp
 
     monkeypatch.setattr(worker, "collect_connection", collect)
     monkeypatch.setattr(worker, "_save_evidence_artifact", save_evidence)
-    monkeypatch.setattr(worker, "_derive_findings", lambda *_args: [])
+    monkeypatch.setattr(worker, "_derive_findings", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(worker, "record_inspection_observation", lambda *_args: {"observation_id": "obs_evidence"})
     run_job("default", job.job_id)
     finished = worker.get_inspection("default", task["task_id"])

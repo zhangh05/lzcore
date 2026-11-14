@@ -12,7 +12,7 @@ def test_workflow_runner_checks_cancel_before_start_and_after_result(monkeypatch
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
     calls = []
 
-    def finish_with_late_cancel(ws, workflow_id, _inputs, *, job_id):
+    def finish_with_late_cancel(ws, workflow_id, _inputs, *, job_id, run_id):
         calls.append(job_id)
         cancel_job(ws, job_id)
         return {"workflow_id": workflow_id, "run_id": "wfrun_synthetic", "status": "succeeded"}
@@ -70,6 +70,7 @@ def test_runner_does_not_overwrite_failed_terminal_state(monkeypatch):
     monkeypatch.setattr(runner, "claim_job_for_execution", lambda *_args: setattr(record, "status", "running") or record)
     monkeypatch.setattr(runner, "_run_export_report", lambda _record: setattr(record, "status", "failed"))
     succeeded = []
+    monkeypatch.setattr(runner, "append_log", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runner, "mark_succeeded", lambda *_args, **_kwargs: succeeded.append(True))
 
     runner.run_job(record.workspace_id, record.job_id)

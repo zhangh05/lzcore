@@ -42,6 +42,12 @@ class FakeRedis:
                 return False
             self.hset(keys[2], payload, argv[0])
             return payload
+        if keys_count == 2:
+            if self.hexists(keys[1], argv[0]):
+                return 0
+            self.lpush(keys[0], argv[1])
+            self.hset(keys[1], argv[0], argv[1])
+            return 1
         if self.hget(keys[0], argv[0]) != argv[1]:
             return 0
         self.hdel(keys[0], argv[0])
@@ -50,18 +56,38 @@ class FakeRedis:
         return 1
 
 
-def test_redis_queue_renews_and_reclaims_stale_leases():
-    queue = RedisJobQueue.__new__(RedisJobQueue)
-    queue.client = FakeRedis()
-    queue.enqueue("default", "job_12345678")
-    receipt = queue.claim("worker-a")
-    assert receipt and queue.heartbeat(receipt, "worker-a") is True
-    queue.client.hashes[queue.LEASES][receipt.lease_id] = json.dumps({"worker_id": "worker-a", "heartbeat_at": 0})
-    assert queue.reclaim_stale(30) == 1
-    retried = queue.claim("worker-b")
-    assert retried and retried.attempt == 2
-    queue.ack(retried)
-    assert queue.client.lists[queue.PROCESSING] == []
+@pytest.mark.parametrize("principal", ["", "lease-test-user"])
+def test_redis_queue_renews_and_reclaims_stale_leases(monkeypatch, tmp_path, principal):
+    from jobs.schemas import JobRecord
+    from jobs.store import create_job, get_job
+    from storage.principal import storage_principal
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr("storage.principal.known_storage_principals", lambda: [principal])
+    with storage_principal(principal):
+        create_job(JobRecord(job_id="job_12345678", workspace_id="default", status="queued"))
+        queue = RedisJobQueue.__new__(RedisJobQueue)
+        queue.client = FakeRedis()
+        dispatched = queue.enqueue("default", "job_12345678")
+        queue.enqueue("default", "job_12345678")
+        assert len(queue.client.lists[queue.QUEUED]) == 1
+        receipt = queue.claim("worker-a")
+        assert receipt and queue.heartbeat(receipt, "worker-a") is True
+        assert receipt.delivery_id == dispatched.delivery_id
+        assert receipt.principal == principal
+        assert queue.reclaim_stale(30) == 0
+        queue.client.hashes[queue.LEASES][receipt.lease_id] = json.dumps({"worker_id": "worker-a", "heartbeat_at": 0})
+        assert queue.reclaim_stale(30) == 1
+        assert queue.reclaim_stale(30) == 0
+        retried = queue.claim("worker-b")
+        assert retried and retried.attempt == 2
+        assert retried.delivery_id == dispatched.delivery_id
+        assert retried.principal == principal
+        assert get_job("default", "job_12345678").status == "queued"
+        queue.ack(retried)
+        assert queue.client.lists[queue.PROCESSING] == []
+        assert queue.client.hashes[queue.LEASES] == {}
+        assert queue.claim("worker-c") is None
 
 
 def test_backup_verify_restore_and_traversal_rejection(monkeypatch, tmp_path: Path):

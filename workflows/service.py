@@ -547,6 +547,33 @@ def get_run(workspace_id: str, run_id: str) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError): return None
 
 
+def reconcile_interrupted_runs(workspace_id: str, finished_at: str, started_before: str, *, job_id: str = "") -> int:
+    """Close lost executions without replaying tools or guessing write outcomes."""
+    root = workspace_record_dir(workspace_id, "workflows", "runs", create=False)
+    count = 0
+    for path in root.glob("*.json"):
+        with FileLock(path.with_suffix(".lock")):
+            record = _read_run_for_update(path)
+            if not record or record.get("status") not in {"running", "queued"}:
+                continue
+            if job_id:
+                if record.get("job_id") != job_id:
+                    continue
+            elif str(record.get("updated_at") or record.get("started_at") or "") >= started_before:
+                continue
+            record.update({
+                "status": "failed", "execution_outcome": "unknown",
+                "recovery_required": True, "error": "workflow_execution_interrupted",
+                "finished_at": finished_at, "updated_at": finished_at,
+            })
+            for node in record.get("nodes", []):
+                if node.get("status") in {"running", "started"}:
+                    node["status"] = "execution_unknown"
+            atomic_write_json(path, record)
+            count += 1
+    return count
+
+
 def list_runs(workspace_id: str, workflow_id: str = "", limit: int = 100) -> list[dict[str, Any]]:
     root = workspace_record_dir(workspace_id, "workflows", "runs", create=False)
     if not root.is_dir(): return []

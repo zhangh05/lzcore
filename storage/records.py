@@ -19,20 +19,14 @@ from storage.atomic_io import atomic_write_json, atomic_write_text
 from storage.ids import validate_workspace_id
 from storage.locking import FileLock
 
-_LOCKS: dict[str, threading.RLock] = {}
-_GLOBAL_LOCK = threading.RLock()
+_LOCKS = FileLock._thread_locks
+_GLOBAL_LOCK = FileLock._thread_locks_guard
 _FILE_LOCK_TIMEOUT_S = 5.0
 _FILE_LOCK_RETRY_INTERVAL_S = 0.05
 
 
 def _lock_for(path: Path) -> threading.RLock:
-    key = str(path.resolve())
-    with _GLOBAL_LOCK:
-        lock = _LOCKS.get(key)
-        if lock is None:
-            lock = threading.RLock()
-            _LOCKS[key] = lock
-        return lock
+    return FileLock.thread_lock_for(path)
 
 
 def workspace_record_dir(workspace_id: str, *parts: str, create: bool = True) -> Path:
@@ -186,7 +180,7 @@ def atomic_save_json_path(path: Path, value: Any) -> dict[str, Any]:
     return payload
 
 
-def read_json_record(workspace_id: str, parts: Iterable[str]) -> dict[str, Any] | None:
+def read_json_record(workspace_id: str, parts: Iterable[str], *, strict: bool = False) -> dict[str, Any] | None:
     path = workspace_record_file(workspace_id, *tuple(parts), create_parent=False)
     if not path.is_file():
         return None
@@ -194,7 +188,11 @@ def read_json_record(workspace_id: str, parts: Iterable[str]) -> dict[str, Any] 
         with _lock_for(path), _file_lock(path):
             data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        if strict:
+            raise
         return None
+    if strict and not isinstance(data, dict):
+        raise ValueError("non_object_json_record")
     return data if isinstance(data, dict) else None
 
 
@@ -248,12 +246,15 @@ def list_json_records(
     *,
     limit: int | None = 100,
     sort_key: Callable[[dict[str, Any]], str] | None = None,
+    suffix: str = ".json",
 ) -> list[dict[str, Any]]:
     directory = workspace_record_dir(workspace_id, *tuple(parts), create=False)
     if not directory.is_dir():
         return []
     records: list[dict[str, Any]] = []
-    for path in directory.glob("*.json"):
+    if suffix not in {".json", ".trace.json"}:
+        raise ValueError("unsupported record suffix")
+    for path in directory.glob(f"*{suffix}"):
         try:
             with _lock_for(path), _file_lock(path):
                 data = json.loads(path.read_text(encoding="utf-8"))

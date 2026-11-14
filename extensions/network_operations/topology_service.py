@@ -981,6 +981,9 @@ def _link_facts(link: dict[str, Any]) -> dict[str, Any]:
 
 def _node_facts(node: dict[str, Any]) -> dict[str, Any]:
     return {
+        "x": node.get("x", 0.0),
+        "y": node.get("y", 0.0),
+        "labels": list(node.get("labels") or []),
         "device_type": str(node.get("device_type") or ""),
         "display_name": str(node.get("display_name") or ""),
         "region_id": str(node.get("region_id") or ""),
@@ -1071,13 +1074,32 @@ def diff_topology_snapshots(before: dict[str, Any], after: dict[str, Any]) -> di
     def item_label(item: dict[str, Any]) -> str:
         return str(item.get("text") or item.get("kind") or item.get("item_id") or "")
 
-    return {
+    def modified(before_items, after_items, id_key, label):
+        return [
+            {id_key: identifier, "label": label(after_items[identifier]),
+             "changes": {key: {"from": before_items[identifier].get(key), "to": after_items[identifier].get(key)}
+                         for key in sorted(set(before_items[identifier]) | set(after_items[identifier]))
+                         if before_items[identifier].get(key) != after_items[identifier].get(key)}}
+            for identifier in before_items if identifier in after_items
+            and before_items[identifier] != after_items[identifier]
+        ]
+
+    groups_changed = modified(before_groups, after_groups, "group_id", group_label)
+    items_changed = modified(before_items, after_items, "item_id", item_label)
+    metadata_changed = [
+        {"field": key, "from": before.get(key), "to": after.get(key)}
+        for key in ("name", "description") if before.get(key) != after.get(key)
+    ]
+    diff = {
         "nodes_added": nodes_added,
         "nodes_removed": nodes_removed,
         "nodes_changed": nodes_changed,
         "links_added": links_added,
         "links_removed": links_removed,
         "links_changed": links_changed,
+        "groups_changed": groups_changed,
+        "canvas_items_changed": items_changed,
+        "metadata_changed": metadata_changed,
         "groups_added": [
             {"group_id": group_id, "label": group_label(after_groups[group_id])}
             for group_id in after_groups
@@ -1098,23 +1120,10 @@ def diff_topology_snapshots(before: dict[str, Any], after: dict[str, Any]) -> di
             for item_id in before_items
             if item_id not in after_items
         ],
-        "summary": {
-            "nodes_added": len(nodes_added),
-            "nodes_removed": len(nodes_removed),
-            "nodes_changed": len(nodes_changed),
-            "links_added": len(links_added),
-            "links_removed": len(links_removed),
-            "links_changed": len(links_changed),
-            "total_changes": (
-                len(nodes_added) + len(nodes_removed) + len(nodes_changed)
-                + len(links_added) + len(links_removed) + len(links_changed)
-                + len([g for g in after_groups if g not in before_groups])
-                + len([g for g in before_groups if g not in after_groups])
-                + len([i for i in after_items if i not in before_items])
-                + len([i for i in before_items if i not in after_items])
-            ),
-        },
     }
+    diff["summary"] = {key: len(value) for key, value in diff.items() if key != "summary"}
+    diff["summary"]["total_changes"] = sum(diff["summary"].values())
+    return diff
 
 
 def compare_topology_revision(workspace_id: str, topology_id: str, revision_id: str) -> dict[str, Any]:

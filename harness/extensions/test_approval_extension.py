@@ -13,6 +13,55 @@ def _setup(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_MASTER_KEY", "test-approval-extension-master-key")
 
 
+@pytest.mark.parametrize("phase", ["before_submit", "after_submit", "returned_failure", "enqueue"])
+def test_continuation_failure_is_not_resumed_and_only_known_unsubmitted_work_is_retryable(monkeypatch, tmp_path, phase):
+    from extensions.approval import backend
+    from agent.runtime.result import AgentResult
+    _setup(monkeypatch, tmp_path)
+    store = approval._store("default")
+    store.save("operations", "op_test", {"operation_id": "op_test", "status": "rejected",
+                                        "continuation": {"checkpoint_id": "cp_test"}})
+    store.save("continuations", "cp_test", {"checkpoint_id": "cp_test", "status": "waiting_decisions",
+                                           "operation_ids": ["op_test"], "messages": [], "tool_calls": []})
+    checkpoint = approval.claim_ready_continuation("default", "op_test")
+    request_id = checkpoint["client_request_id"]
+    calls = []
+
+    class App:
+        def submit_user_message(self, **kwargs):
+            calls.append(kwargs)
+            if phase == "after_submit":
+                raise OSError("synthetic failure")
+            return AgentResult(ok=False, errors=["synthetic failure"])
+
+    def get_app():
+        if phase == "before_submit":
+            raise OSError("synthetic unavailable")
+        return App()
+
+    monkeypatch.setattr("agent.app.service.get_default_agent_app", get_app)
+    if phase == "enqueue":
+        approval.settle_continuation("default", "cp_test", result={"ok": False}, retry_safe=True)
+        class FailingExecutor:
+            def submit(self, *_args):
+                raise RuntimeError("synthetic executor shutdown")
+        monkeypatch.setattr(backend, "_CONTINUATION_EXECUTOR", FailingExecutor())
+        with pytest.raises(RuntimeError):
+            backend._start_ready_continuation("default", "op_test")
+    else:
+        backend._resume_checkpoint("default", checkpoint)
+    settled = approval.get_continuation("default", "cp_test")
+    assert settled["status"] == ("resuming_unknown" if phase == "after_submit" else "resume_failed")
+    assert "resumed_at" not in settled
+    retry = approval.claim_ready_continuation("default", "op_test")
+    if phase in {"before_submit", "enqueue"}:
+        assert retry and retry["client_request_id"] == request_id
+        assert not calls
+    else:
+        assert retry is None and len(calls) == 1
+    assert approval.get_operation("default", "op_test")["status"] == "rejected"
+
+
 def _connection_and_skill(workspace_id: str, *, approval_enabled: bool):
     device = network.save_device(workspace_id, {
         "name": "CE-1", "host": "127.0.0.1", "vendor": "h3c",

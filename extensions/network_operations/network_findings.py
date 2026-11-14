@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import re
+import time
+import regex
 from typing import Any
 
 from storage.time_utils import now_iso
@@ -12,6 +13,13 @@ from .network_execution import list_assets
 from .network_observations import list_baselines
 from .network_planning import _inspection_target_id
 from .network_records import _store
+
+_RULE_TIMEOUT_SECONDS = 0.05
+_ANALYSIS_TIMEOUT_SECONDS = 5.0
+
+
+class InspectionRuleAnalysisTimeout(TimeoutError):
+    """Rule analysis stopped; collection and artifact persistence are separate."""
 
 
 def _finding_id(target_id: str, category: str, rule_id: str) -> str:
@@ -109,9 +117,11 @@ def _upsert_finding(
 
 
 def _derive_findings(
-    workspace_id: str, task: dict[str, Any], raw_outputs: dict[str, dict[str, str]]
+    workspace_id: str, task: dict[str, Any], raw_outputs: dict[str, dict[str, str]],
+    *, cancel_check=None,
 ) -> list[dict[str, Any]]:
     """Turn a completed read-only inspection into stable, traceable findings."""
+    deadline = time.monotonic() + _ANALYSIS_TIMEOUT_SECONDS
     is_connection_task = task.get("target_kind") == "connection" or bool(
         task.get("connection_ids")
     )
@@ -163,10 +173,20 @@ def _derive_findings(
             continue
         raw = raw_outputs.get(target_id) or {}
         joined_output = "\n".join(
-            f"{command}\n{output}" for command, output in sorted(raw.items())
+            str(output) for _command, output in sorted(raw.items())
         )
         for check in checks:
-            if re.search(str(check["pattern"]), joined_output, re.IGNORECASE):
+            if cancel_check and cancel_check():
+                raise InspectionRuleAnalysisTimeout("inspection_rule_analysis_cancelled")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise InspectionRuleAnalysisTimeout("inspection_rule_analysis_budget_exceeded")
+            try:
+                matched = regex.search(str(check["pattern"]), joined_output, regex.IGNORECASE,
+                                       timeout=min(_RULE_TIMEOUT_SECONDS, remaining), concurrent=True)
+            except TimeoutError as exc:
+                raise InspectionRuleAnalysisTimeout("inspection_rule_match_timeout") from exc
+            if matched:
                 findings.append(
                     _upsert_finding(
                         workspace_id,

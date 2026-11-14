@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -88,15 +89,26 @@ def run_migrations(
     workspace_id: str,
     migrations: list[tuple[int, Callable[[ExtensionDataStore], None]]],
 ) -> int:
-    from extensions.state import get_extension_state, set_workspace_schema_version
+    from storage.atomic_io import atomic_write_json
+    from storage.locking import FileLock
 
-    state = get_extension_state(extension_id)
-    current = int(state["schema_versions"].get(workspace_id) or 0)
     store = ExtensionDataStore(extension_id, workspace_id)
-    for version, migration in sorted(migrations, key=lambda item: item[0]):
-        if version <= current:
-            continue
-        migration(store)
-        current = version
-        set_workspace_schema_version(extension_id, workspace_id, current)
-    return current
+    # The marker and lock follow the exact principal-scoped business data root.
+    # Legacy global versions cannot prove that this principal was migrated.
+    root = store.root()
+    with FileLock(root / ".migrations.lock"):
+        marker = root / ".schema-version.json"
+        try:
+            state = json.loads(marker.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            state = {"version": 0}
+        current = state["version"]
+        if type(current) is not int or current < 0:
+            raise ValueError("invalid extension schema version")
+        for version, migration in sorted(migrations, key=lambda item: item[0]):
+            if version <= current:
+                continue
+            migration(store)
+            atomic_write_json(marker, {"version": version})
+            current = version
+        return current

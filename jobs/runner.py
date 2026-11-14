@@ -205,11 +205,16 @@ def _run_workflow(rec: JobRecord):
     if _cancel_check(rec):
         return
     payload = dict(rec.payload or {})
+    run_id = f"wfrun_{rec.job_id}_{rec.retry_count}"
+    summary = {"workflow_id": str(payload.get("workflow_id") or ""), "workflow_run_id": run_id}
+    if update_job(rec.workspace_id, rec.job_id, {"result_summary": summary}) is None:
+        raise RuntimeError("workflow_job_missing_before_execution")
     result = execute_workflow(
         rec.workspace_id,
         str(payload.get("workflow_id") or ""),
         payload.get("inputs") or {},
         job_id=rec.job_id,
+        run_id=run_id,
     )
     update_job(rec.workspace_id, rec.job_id, {"result_summary": {
         "workflow_id": result["workflow_id"],

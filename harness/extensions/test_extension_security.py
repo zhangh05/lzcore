@@ -29,6 +29,32 @@ def test_failure_threshold_quarantines_extension(monkeypatch, tmp_path):
     assert get_extension_state("vendor.sample")["last_error"] == "failure-4"
 
 
+def test_concurrent_failures_are_counted_and_late_success_cannot_clear_quarantine(monkeypatch, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from extensions import state
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    barrier = Barrier(5)
+    original_mutate = state._mutate_extension_state
+
+    def concurrent_mutate(*args):
+        barrier.wait(timeout=5)
+        return original_mutate(*args)
+
+    monkeypatch.setattr(state, "_mutate_extension_state", concurrent_mutate)
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        list(pool.map(lambda index: state.record_extension_failure("vendor.sample", f"failure-{index}"), range(5)))
+    monkeypatch.setattr(state, "_mutate_extension_state", original_mutate)
+    state.record_extension_success("vendor.sample")
+    final = state.get_extension_state("vendor.sample")
+    assert final["failure_count"] == 5
+    assert final["status"] == "quarantined" and not final["enabled"]
+    state.set_extension_enabled("vendor.sample", False)
+    state.record_extension_success("vendor.sample")
+    assert state.get_extension_state("vendor.sample")["status"] == "disabled"
+
+
 def test_extension_routes_enforce_role_and_lifecycle(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path / "workspaces"))
     monkeypatch.setenv("LZCORE_IDENTITY_ENABLED", "true")
