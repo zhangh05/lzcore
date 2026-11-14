@@ -338,7 +338,12 @@ def update_session(
                 changed = True
         return changed
 
-    return _mutate_session(session_id, ws_id, _apply)
+    with _session_lock(session_id, ws_id):
+        result = _mutate_session(session_id, ws_id, _apply)
+        if result and status in {"archived", "deleted"}:
+            from jobs.store import complete_session_jobs
+            complete_session_jobs(ws_id, session_id)
+        return result
 def archive_session(session_id: str, ws_id: str = "default") -> Optional[Dict[str, Any]]:
     """Soft-archive a session (status → 'archived')."""
     return update_session(session_id, ws_id, status="archived")
@@ -373,10 +378,24 @@ def delete_session_permanently(
         if not _session_is_tombstoned_unlocked(safe_id, ws_id):
             _mark_session_deleted_unlocked(safe_id, ws_id)
         failures: list[str] = []
+        try:
+            from jobs.store import complete_session_jobs
+            removed_jobs = complete_session_jobs(ws_id, safe_id, hard_delete=True)
+            had_data = had_data or bool(removed_jobs)
+        except (OSError, TypeError, ValueError):
+            failures.append("job_cleanup_failed")
         run_ids = list((session or {}).get("run_ids", []))
         try:
-            from storage.run_record_store import list_runs
-            for run in list_runs(ws_id, limit=5000):
+            from storage.run_record_store import is_run_record_file
+            for record_path in (_ws_root(ws_id) / "runs").glob("*.json"):
+                if not (is_run_record_file(record_path.name) or record_path.name.endswith(".trace.json")):
+                    continue
+                try:
+                    run = json.loads(record_path.read_text(encoding="utf-8"))
+                except FileNotFoundError:
+                    continue
+                if not isinstance(run, dict):
+                    raise ValueError("invalid session run record")
                 if run.get("session_id") == safe_id:
                     run_id = str(run.get("run_id") or run.get("turn_id") or "")
                     if run_id and run_id not in run_ids:
@@ -391,20 +410,24 @@ def delete_session_permanently(
             )
         runs_dir = _ws_root(ws_id) / "runs"
         for run_id in run_ids:
-            for suffix in (".json", ".trace.json", ".decision.json", ".artifacts.json"):
-                record_path = runs_dir / f"{run_id}{suffix}"
-                if record_path.is_file():
-                    try:
-                        record_path.unlink()
-                    except OSError as exc:
-                        failures.append(f"run_delete_failed:{record_path.name}")
-                        _LOG.warning(
-                            "session_delete_run_failed action=delete session_id=%s workspace_id=%s object_id=%s error_type=%s",
-                            safe_id,
-                            ws_id,
-                            record_path.name,
-                            type(exc).__name__,
-                        )
+            from storage.ids import validate_run_id
+            run_id = validate_run_id(run_id)
+            tombstone = runs_dir / f".{run_id}.deleted"
+            with FileLock(tombstone.with_suffix(".lifecycle.lock")):
+                # Retain only deletion identity, so trace writers without a
+                # session field can still reject a late completion.
+                atomic_write_json(tombstone, {"session_id": safe_id})
+                for suffix in (".json", ".trace.json", ".decision.json", ".artifacts.json"):
+                    record_path = runs_dir / f"{run_id}{suffix}"
+                    if record_path.is_file():
+                        try:
+                            record_path.unlink()
+                        except OSError as exc:
+                            failures.append(f"run_delete_failed:{record_path.name}")
+                            _LOG.warning(
+                                "session_delete_run_failed session_id=%s workspace_id=%s object_id=%s error_type=%s",
+                                safe_id, ws_id, record_path.name, type(exc).__name__,
+                            )
         if path.is_file():
             try:
                 path.unlink()

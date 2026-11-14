@@ -7,10 +7,29 @@ import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
+from contextlib import contextmanager, nullcontext
 
 from storage.redaction import redact_text, redact_value
-from storage.records import atomic_save_json, workspace_record_dir, workspace_record_file
+from storage.records import atomic_save_json, read_json_record, workspace_record_dir, workspace_record_file
 from storage.ids import validate_run_id
+from storage.locking import FileLock
+
+
+@contextmanager
+def run_record_guard(workspace_id: str, run_id: str, session_id: str = ""):
+    """Coordinate late run/trace writes with session deletion."""
+    from storage.session_store import session_record_lock, session_is_deleted
+
+    rid = validate_run_id(run_id)
+    tombstone = workspace_record_file(workspace_id, "runs", f".{rid}.deleted")
+    if not session_id:
+        existing = read_json_record(workspace_id, ("runs", f"{rid}.json"), strict=True) or {}
+        session_id = str(existing.get("session_id") or "")
+    scope = session_record_lock(session_id, workspace_id) if session_id else nullcontext()
+    with scope, FileLock(tombstone.with_suffix(".lifecycle.lock")):
+        if tombstone.exists() or (session_id and session_is_deleted(session_id, workspace_id)):
+            raise ValueError("session permanently deleted")
+        yield
 
 
 def write_run_record(state: SimpleNamespace, workspace_id: str = "default") -> str:
@@ -77,35 +96,40 @@ def write_run_record(state: SimpleNamespace, workspace_id: str = "default") -> s
         "sensitivity": "internal",
         "redaction_applied": True,
     }
-    atomic_save_json(ws_id, ("runs", f"{run_id}.json"), redact_value(record))
     session_id = str(record.get("session_id") or "")
-    if session_id:
-        try:
+    with run_record_guard(ws_id, run_id, session_id):
+        if session_id:
             from storage.session_store import add_run_to_session, auto_title_from_input, ensure_session
-
             ensure_session(session_id, ws_id, created_at=created_at)
+        atomic_save_json(ws_id, ("runs", f"{run_id}.json"), redact_value(record))
+        if session_id:
             add_run_to_session(session_id, run_id, ws_id)
             user_input = getattr(state, "user_input", "") or ""
             if user_input:
                 auto_title_from_input(session_id, user_input, ws_id)
-        except Exception:
-            pass
     return run_id
 
 
 def save_trace_record(workspace_id: str, run_id: str, record: dict[str, Any]) -> None:
     rid = validate_run_id(run_id)
-    atomic_save_json(workspace_id, ("runs", f"{rid}.trace.json"), redact_value(record))
+    session_id = str(record.get("session_id") or "")
+    with run_record_guard(workspace_id, rid, session_id):
+        if session_id:
+            from storage.session_store import ensure_session, add_run_to_session
+            ensure_session(session_id, workspace_id)
+            add_run_to_session(session_id, rid, workspace_id)
+        atomic_save_json(workspace_id, ("runs", f"{rid}.trace.json"), redact_value(record))
 
 
 def update_run_record(workspace_id: str, run_id: str, updates: dict[str, Any]) -> dict[str, Any]:
-    record = get_run(run_id, workspace_id)
-    if not record:
-        return {}
-    record.update(redact_value(updates))
-    safe_record = redact_value(record)
-    atomic_save_json(workspace_id, ("runs", f"{validate_run_id(run_id)}.json"), safe_record)
-    return safe_record
+    with run_record_guard(workspace_id, run_id):
+        record = get_run(run_id, workspace_id)
+        if not record:
+            return {}
+        record.update(redact_value(updates))
+        safe_record = redact_value(record)
+        atomic_save_json(workspace_id, ("runs", f"{validate_run_id(run_id)}.json"), safe_record)
+        return safe_record
 
 
 def read_run_sidecar(workspace_id: str, run_id: str, suffix: str = ".json") -> dict[str, Any]:

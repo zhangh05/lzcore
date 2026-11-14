@@ -3,7 +3,7 @@
 
 from typing import Optional
 
-from storage.records import atomic_save_json, list_json_records, read_json_record
+from storage.records import list_json_records, read_json_record, mutate_json_record
 
 
 def write_trace(trace, ws_id: str = "default") -> str:
@@ -18,7 +18,8 @@ def write_trace(trace, ws_id: str = "default") -> str:
     from observability.redaction import redact_trace
     data = redact_trace(trace.as_dict())
 
-    atomic_save_json(ws_id, ("runs", f"{run_id}.trace.json"), data)
+    from storage.run_record_store import save_trace_record
+    save_trace_record(ws_id, run_id, data)
 
     try:
         from observability.exporters import export_configured_trace
@@ -42,7 +43,7 @@ def list_traces(ws_id: str = "default", limit: int = 50) -> list:
     from storage.ids import validate_workspace_id
     ws_id = validate_workspace_id(ws_id)
     traces = []
-    for trace in list_json_records(ws_id, ("runs",), limit=limit):
+    for trace in list_json_records(ws_id, ("runs",), limit=limit, suffix=".trace.json"):
         try:
             traces.append({
                 "trace_id": trace.get("trace_id", ""),
@@ -61,40 +62,34 @@ def list_traces(ws_id: str = "default", limit: int = 50) -> list:
 
 
 def append_event(trace_id: str, event, ws_id: str = "default"):
-    """Append an event to an existing trace.
-
-    Performs an O(n) lookup via filename-derived hint first, falling
-    back to a single directory scan if the hint path is missing.
-    Writes are serialized by the storage record adapter.
-    """
+    """Append under one transaction; a missing trace is not created implicitly."""
     from storage.ids import validate_workspace_id
+    from storage.run_record_store import run_record_guard
+    from observability.redaction import redact_trace_event
+
     ws_id = validate_workspace_id(ws_id)
-    # Cheap filename-derived hint: most callers know run_id, so
-    # try that path first to avoid scanning the whole runs dir.
-    data = None
-    if hasattr(event, "run_id") and getattr(event, "run_id", None):
-        candidate = read_json_record(ws_id, ("runs", f"{event.run_id}.trace.json"))
-        if candidate and candidate.get("trace_id") == trace_id:
-            data = candidate
-
-    if data is None:
-        for trace in list_json_records(ws_id, ("runs",), limit=500):
+    event_data = event.as_dict() if hasattr(event, "as_dict") else dict(event)
+    run_id = str(event_data.get("run_id") or "")
+    if not run_id:
+        for trace in list_json_records(ws_id, ("runs",), limit=None, suffix=".trace.json"):
             if trace.get("trace_id") == trace_id:
-                data = trace
+                run_id = str(trace.get("run_id") or "")
                 break
-
-    if data is None:
+    if not run_id:
+        return
+    # Avoid creating an empty record when tools emit events before a trace exists.
+    candidate = read_json_record(ws_id, ("runs", f"{run_id}.trace.json"), strict=True)
+    if candidate is None or candidate.get("trace_id") != trace_id:
         return
 
-    try:
-        from observability.redaction import redact_trace_event
-        events = data.get("events", [])
-        event_data = event.as_dict() if hasattr(event, "as_dict") else event
+    def append(current):
+        if current is None or current.get("trace_id") != trace_id:
+            raise ValueError("trace disappeared or identity changed")
+        events = list(current.get("events") or [])
         events.append(redact_trace_event(event_data))
-        data["events"] = events
-        run_id = data.get("run_id") or getattr(event, "run_id", "")
-        if not run_id:
-            return
-        atomic_save_json(ws_id, ("runs", f"{run_id}.trace.json"), data)
-    except Exception:
-        pass
+        current["events"] = events
+        return current, None
+
+    session_id = str(candidate.get("session_id") or (event_data.get("metadata") or {}).get("session_id") or "")
+    with run_record_guard(ws_id, run_id, session_id):
+        mutate_json_record(ws_id, ("runs", f"{run_id}.trace.json"), append)

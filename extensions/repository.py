@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 import hashlib
 import os
-import shutil
 import tempfile
 from typing import Any
 
@@ -14,7 +13,7 @@ from storage.locking import FileLock
 from storage.records import runtime_record_dir, runtime_record_file
 from storage.time_utils import now_iso
 
-from .package import ExtensionPackageError, verify_package
+from .package import ExtensionPackageError, _package_bytes, verify_package
 
 
 def _index_path() -> Path:
@@ -32,11 +31,12 @@ def list_packages() -> list[dict[str, Any]]:
 
 
 def publish_package(package: str | Path, *, key: str | bytes | None = None) -> dict[str, Any]:
-    metadata = verify_package(package, key=key)
+    payload = _package_bytes(package)
+    metadata = verify_package(payload, key=key)
     extension_id = str(metadata["extension_id"])
     version = str(metadata["version"])
     destination = _packages_root() / f"{extension_id.replace('.', '_')}-{version}.apx"
-    package_digest = hashlib.sha256(Path(package).read_bytes()).hexdigest()
+    package_digest = hashlib.sha256(payload).hexdigest()
     record = {
         "extension_id": extension_id,
         "version": version,
@@ -61,7 +61,7 @@ def publish_package(package: str | Path, *, key: str | bytes | None = None) -> d
         os.close(fd)
         temporary = Path(temporary_name)
         try:
-            shutil.copyfile(package, temporary)
+            temporary.write_bytes(payload)
             os.replace(temporary, destination)
         finally:
             temporary.unlink(missing_ok=True)

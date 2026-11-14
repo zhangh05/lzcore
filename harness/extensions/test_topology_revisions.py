@@ -87,6 +87,23 @@ def test_structural_edits_are_recorded_and_diffed(workspace):
     assert diff["summary"]["nodes_added"] == 0
 
 
+def test_diff_includes_geometry_labels_canvas_edits_and_description():
+    before = {"name": "old", "description": "old", "nodes": [{"node_id": "n1", "x": 0, "y": 0, "labels": []}],
+              "canvas_items": [{"item_id": "i1", "text": "old", "width": 100}],
+              "groups": [{"group_id": "g1", "name": "old"}]}
+    after = {"name": "new", "description": "new", "nodes": [{"node_id": "n1", "x": 100, "y": 20, "labels": ["new"]}],
+             "canvas_items": [{"item_id": "i1", "text": "new", "width": 200}],
+             "groups": [{"group_id": "g1", "name": "new"}]}
+    diff = drawings.diff_topology_snapshots(before, after)
+    assert diff["nodes_changed"][0]["changes"]["x"] == {"from": 0, "to": 100}
+    assert set(diff["nodes_changed"][0]["changes"]) == {"x", "y", "labels"}
+    assert set(diff["canvas_items_changed"][0]["changes"]) == {"text", "width"}
+    assert diff["summary"]["metadata_changed"] == 2
+    assert diff["summary"]["total_changes"] == 5
+    assert sum(len(value) for key, value in diff.items() if key != "summary") == 5
+    assert drawings.diff_topology_snapshots(after, after)["summary"]["total_changes"] == 0
+
+
 def test_diff_reports_status_and_removal_changes(workspace):
     topo = _two_node_topology(workspace)
     linked = drawings.save_topology(workspace, {

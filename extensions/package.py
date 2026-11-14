@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import base64
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -17,6 +18,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from storage.time_utils import now_iso
+from storage.locking import FileLock
 
 from .manifest import ExtensionManifest, ExtensionValidationError, extension_storage_key
 from .registry import ExtensionRegistry
@@ -143,10 +145,21 @@ def build_package(source: str | Path, output: str | Path, *, key: str | bytes | 
     return metadata
 
 
-def verify_package(package: str | Path, *, key: str | bytes | None = None) -> dict[str, Any]:
-    package_path = Path(package)
+def _package_bytes(package: str | Path) -> bytes:
     try:
-        archive = zipfile.ZipFile(package_path, "r")
+        with Path(package).open("rb") as source:
+            payload = source.read(MAX_PACKAGE_BYTES + 1)
+    except OSError as exc:
+        raise ExtensionPackageError("invalid extension package") from exc
+    if len(payload) > MAX_PACKAGE_BYTES:
+        raise ExtensionPackageError("extension package is too large")
+    return payload
+
+
+def verify_package(package: str | Path | bytes, *, key: str | bytes | None = None) -> dict[str, Any]:
+    try:
+        payload = package if isinstance(package, bytes) else _package_bytes(package)
+        archive = zipfile.ZipFile(io.BytesIO(payload), "r")
     except (OSError, zipfile.BadZipFile) as exc:
         raise ExtensionPackageError("invalid extension package") from exc
     with archive:
@@ -204,6 +217,15 @@ def verify_package(package: str | Path, *, key: str | bytes | None = None) -> di
             raise ExtensionPackageError("invalid packaged extension manifest") from exc
         if manifest.extension_id != metadata.get("extension_id") or manifest.version != metadata.get("version"):
             raise ExtensionPackageError("package metadata does not match extension manifest")
+        if manifest.entrypoint:
+            from extensions.entrypoint import validate_entrypoint_source
+            entry_file = manifest.entrypoint.split(":", 1)[0]
+            if entry_file not in declared:
+                raise ExtensionPackageError("entrypoint not found inside extension")
+            try:
+                validate_entrypoint_source(archive.read(f"extension/{entry_file}"), entry_file)
+            except ExtensionValidationError as exc:
+                raise ExtensionPackageError(str(exc)) from exc
         result = dict(metadata)
         result["signature"] = signature
         result["manifest"] = manifest.to_dict()
@@ -214,15 +236,28 @@ def _plugin_root(value: str | Path | None = None) -> Path:
     return Path(value) if value is not None else Path(__file__).resolve().parent.parent / "plugins"
 
 
-def _version_tuple(version: str) -> tuple[int, int, int]:
-    core = version.split("-", 1)[0].split("+", 1)[0]
-    return tuple(int(part) for part in core.split("."))  # type: ignore[return-value]
+def _version_tuple(version: str) -> tuple:
+    core, separator, prerelease = version.split("+", 1)[0].partition("-")
+    identifiers = tuple((0, int(part)) if part.isdigit() else (1, part)
+                        for part in prerelease.split(".")) if separator else ()
+    return (*map(int, core.split(".")), not separator, identifiers)
 
 
 def install_package(package: str | Path, *, key: str | bytes | None = None, plugins_root: str | Path | None = None, upgrade: bool = False) -> dict[str, Any]:
-    metadata = verify_package(package, key=key)
+    payload = _package_bytes(package)
+    metadata = verify_package(payload, key=key)
     root = _plugin_root(plugins_root)
     root.mkdir(parents=True, exist_ok=True)
+    with FileLock(root / f".install-{extension_storage_key(str(metadata['extension_id']))}.lock"):
+        return _install_verified(payload, metadata, root, upgrade=upgrade)
+
+
+def _install_verified(payload: bytes, metadata: dict, root: Path, *, upgrade: bool) -> dict[str, Any]:
+    from extensions.runtime import _assert_compatible
+    try:
+        _assert_compatible(ExtensionManifest.from_dict(metadata["manifest"]))
+    except ExtensionValidationError as exc:
+        raise ExtensionPackageError(str(exc)) from exc
     extension_id = str(metadata["extension_id"])
     # Include builtins and plugins, even when a custom plugin destination is
     # supplied. Compare storage keys before touching an existing install.
@@ -243,7 +278,7 @@ def install_package(package: str | Path, *, key: str | bytes | None = None, plug
     staged.mkdir()
     backup: Path | None = None
     try:
-        with zipfile.ZipFile(package, "r") as archive:
+        with zipfile.ZipFile(io.BytesIO(payload), "r") as archive:
             for name in metadata["files"]:
                 destination = staged.joinpath(*PurePosixPath(name).parts)
                 destination.parent.mkdir(parents=True, exist_ok=True)

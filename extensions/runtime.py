@@ -28,6 +28,7 @@ class LoadedExtension:
 
 
 _CACHE: tuple[LoadedExtension, ...] | None = None
+_LOAD_ERRORS: list[str] = []
 
 
 def _version_tuple(value: str) -> tuple[int, ...]:
@@ -58,6 +59,8 @@ def _load_entrypoint(manifest: ExtensionManifest, root: Path) -> dict[str, Any]:
     source = (root / relative_file).resolve()
     if root.resolve() not in source.parents or not source.is_file():
         raise ExtensionValidationError(f"entrypoint not found inside extension: {source}")
+    from extensions.entrypoint import validate_entrypoint_source
+    validate_entrypoint_source(source.read_bytes(), relative_file)
     module_name = f"lzcore_extension_{manifest.extension_id.replace('.', '_')}"
     spec = importlib.util.spec_from_file_location(module_name, source)
     if spec is None or spec.loader is None:
@@ -318,50 +321,71 @@ def _build_workflow_templates(
 
 
 def load_extensions(*, registry: ExtensionRegistry | None = None, refresh: bool = False) -> tuple[LoadedExtension, ...]:
-    global _CACHE
+    global _CACHE, _LOAD_ERRORS
     use_default_registry = registry is None
     if registry is None and _CACHE is not None and not refresh:
         return _CACHE
     registry = registry or ExtensionRegistry()
     errors, manifests = registry.validate_all()
-    if errors:
+    if errors and not use_default_registry:
         raise ExtensionValidationError("; ".join(errors))
+    _LOAD_ERRORS = list(errors)
     loaded: list[LoadedExtension] = []
     for manifest in manifests:
         from extensions.state import get_extension_state
         lifecycle = get_extension_state(manifest.extension_id, default_enabled=manifest.enabled)
         if not lifecycle["enabled"]:
             continue
-        _assert_compatible(manifest)
-        root = _manifest_root(registry, manifest.extension_id)
-        contribution = _load_entrypoint(manifest, root)
-        route_registrar = contribution.get("register_routes")
-        if route_registrar is not None and not callable(route_registrar):
-            raise ExtensionValidationError("register_routes contribution must be callable")
-        context_resolver = contribution.get("workbench_context_resolver")
-        if context_resolver is not None and not callable(context_resolver):
-            raise ExtensionValidationError("workbench_context_resolver contribution must be callable")
-        skill_catalog = contribution.get("workbench_skill_catalog")
-        if skill_catalog is not None and not callable(skill_catalog):
-            raise ExtensionValidationError("workbench_skill_catalog contribution must be callable")
-        prompt_renderer = contribution.get("workbench_prompt_renderer")
-        if prompt_renderer is not None and not callable(prompt_renderer):
-            raise ExtensionValidationError("workbench_prompt_renderer contribution must be callable")
-        execution_interceptor = contribution.get("execution_interceptor")
-        if execution_interceptor is not None and not callable(execution_interceptor):
-            raise ExtensionValidationError("execution_interceptor contribution must be callable")
-        loaded.append(LoadedExtension(
-            manifest=manifest,
-            root=root,
-            tools=_build_tools(manifest, contribution),
-            register_routes=route_registrar,
-            migrations=tuple(contribution.get("migrations") or ()),
-            workflow_templates=_build_workflow_templates(manifest, contribution),
-            workbench_skill_catalog=skill_catalog,
-            workbench_context_resolver=context_resolver,
-            workbench_prompt_renderer=prompt_renderer,
-            execution_interceptor=execution_interceptor,
-        ))
+        stage = "compatibility"
+        try:
+            _assert_compatible(manifest)
+            stage = "entrypoint"
+            root = _manifest_root(registry, manifest.extension_id)
+            contribution = _load_entrypoint(manifest, root)
+            stage = "contributions"
+            route_registrar = contribution.get("register_routes")
+            if route_registrar is not None and not callable(route_registrar):
+                raise ExtensionValidationError("register_routes contribution must be callable")
+            context_resolver = contribution.get("workbench_context_resolver")
+            if context_resolver is not None and not callable(context_resolver):
+                raise ExtensionValidationError("workbench_context_resolver contribution must be callable")
+            skill_catalog = contribution.get("workbench_skill_catalog")
+            if skill_catalog is not None and not callable(skill_catalog):
+                raise ExtensionValidationError("workbench_skill_catalog contribution must be callable")
+            prompt_renderer = contribution.get("workbench_prompt_renderer")
+            if prompt_renderer is not None and not callable(prompt_renderer):
+                raise ExtensionValidationError("workbench_prompt_renderer contribution must be callable")
+            execution_interceptor = contribution.get("execution_interceptor")
+            if execution_interceptor is not None and not callable(execution_interceptor):
+                raise ExtensionValidationError("execution_interceptor contribution must be callable")
+            candidate = LoadedExtension(
+                manifest=manifest,
+                root=root,
+                tools=_build_tools(manifest, contribution),
+                register_routes=route_registrar,
+                migrations=tuple(contribution.get("migrations") or ()),
+                workflow_templates=_build_workflow_templates(manifest, contribution),
+                workbench_skill_catalog=skill_catalog,
+                workbench_context_resolver=context_resolver,
+                workbench_prompt_renderer=prompt_renderer,
+                execution_interceptor=execution_interceptor,
+            )
+            from core.tools.canonical_registry import CANONICAL_REGISTRY
+            existing_tools = {spec.tool_id for extension in loaded for spec, _ in extension.tools}
+            tool_ids = {spec.tool_id for spec, _ in candidate.tools}
+            if tool_ids & (set(CANONICAL_REGISTRY) | existing_tools):
+                raise ExtensionValidationError("extension tool ids conflict with registered tools")
+            existing_templates = {str(template["template_id"]) for extension in loaded for template in extension.workflow_templates}
+            if any(str(template["template_id"]) in existing_templates for template in candidate.workflow_templates):
+                raise ExtensionValidationError("duplicate extension workflow template ids")
+            loaded.append(candidate)
+        except Exception as exc:
+            if not use_default_registry:
+                raise
+            from extensions.state import update_extension_state
+            reason = f"extension_load_failed:{stage}:{type(exc).__name__}"
+            update_extension_state(manifest.extension_id, {"enabled": False, "status": "quarantined", "last_error": reason})
+            _LOAD_ERRORS.append(f"{manifest.extension_id}:{reason}")
     result = tuple(loaded)
     # Validate the aggregate extension surface while loading, so a deployment
     # never defers an ID conflict until the first request builds tool specs.
@@ -546,7 +570,11 @@ def list_workbench_skills(workspace_id: str) -> list[dict[str, Any]]:
 def _manifest_root(registry: ExtensionRegistry, extension_id: str) -> Path:
     for base in registry.roots:
         for path in sorted(base.glob("*/extension.json")) if base.is_dir() else ():
-            if ExtensionRegistry.load(path).extension_id == extension_id:
+            try:
+                manifest = ExtensionRegistry.load(path)
+            except ExtensionValidationError:
+                continue
+            if manifest.extension_id == extension_id:
                 return path.parent
     raise ExtensionValidationError(f"extension root not found: {extension_id}")
 
@@ -649,8 +677,6 @@ def register_extension_routes(app: Any) -> None:
 def public_extension_catalog() -> list[dict[str, Any]]:
     from extensions.state import get_extension_state
     errors, manifests = ExtensionRegistry().validate_all()
-    if errors:
-        raise ExtensionValidationError("; ".join(errors))
     registry = ExtensionRegistry()
     return [{
         "extension_id": manifest.extension_id,

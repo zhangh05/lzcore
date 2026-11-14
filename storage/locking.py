@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from weakref import WeakValueDictionary
 from pathlib import Path
 
 
@@ -16,9 +17,20 @@ class FileLock:
     serializes threads because POSIX file locks are process-scoped.
     """
 
-    _thread_locks: dict[str, threading.RLock] = {}
+    _thread_locks = WeakValueDictionary()
     _thread_locks_guard = threading.Lock()
     _thread_state = threading.local()
+
+    @classmethod
+    def thread_lock_for(cls, path: Path):
+        """Keep one lock alive while any holder or waiter references it."""
+        key = str(Path(path).resolve())
+        with cls._thread_locks_guard:
+            lock = cls._thread_locks.get(key)
+            if lock is None:
+                lock = threading.RLock()
+                cls._thread_locks[key] = lock
+            return lock
 
     def __init__(self, path: Path, *, timeout: float = 5.0, retry_interval: float = 0.05):
         self.path = Path(path)
@@ -34,9 +46,9 @@ class FileLock:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         key = str(self.path.resolve())
         self._key = key
-        with self._thread_locks_guard:
-            self._thread_lock = self._thread_locks.setdefault(key, threading.RLock())
+        self._thread_lock = self.thread_lock_for(self.path)
         if not self._thread_lock.acquire(timeout=self.timeout):
+            self._thread_lock = None
             raise TimeoutError(f"storage thread lock timeout: {self.path}")
         held = getattr(self._thread_state, "held", None)
         if held is None:

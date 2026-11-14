@@ -273,6 +273,11 @@ def list_references(workspace_id: str, *, limit: int = 200) -> list[dict[str, An
     return records[:limit]
 
 
+def _all_references(workspace_id: str) -> list[dict[str, Any]]:
+    # Integrity scans must not inherit UI pagination limits.
+    return _store(workspace_id).list("references", limit=None)
+
+
 @_connection_transaction
 def delete_observation(workspace_id: str, observation_id: str) -> dict[str, Any]:
     """Hard-delete an observation and every reference that depends on it.
@@ -286,15 +291,16 @@ def delete_observation(workspace_id: str, observation_id: str) -> dict[str, Any]
     if not store.get("observations", observation_id):
         raise ValueError("observation_not_found")
     deleted_references = 0
-    for reference in list_references(workspace_id, limit=INTERNAL_SCAN_LIMIT):
+    for reference in _all_references(workspace_id):
         source_ids = {
             str(item) for item in reference.get("source_observation_ids") or []
         }
-        if observation_id in source_ids and store.delete(
-            "references", str(reference["reference_id"])
-        ):
+        if observation_id in source_ids:
+            if not store.delete("references", str(reference["reference_id"])):
+                raise RuntimeError("reference_delete_failed")
             deleted_references += 1
-    store.delete("observations", observation_id)
+    if not store.delete("observations", observation_id):
+        raise RuntimeError("observation_delete_failed")
     return {
         "deleted": True,
         "observation_id": observation_id,
@@ -322,7 +328,7 @@ def delete_observations(
     selected = set(ids)
     dependent_reference_ids = [
         str(reference["reference_id"])
-        for reference in list_references(workspace_id, limit=INTERNAL_SCAN_LIMIT)
+        for reference in _all_references(workspace_id)
         if selected.intersection(
             {str(item) for item in reference.get("source_observation_ids") or []}
         )
@@ -468,7 +474,7 @@ def transition_reference(
             raise ValueError("only_candidate_reference_can_be_confirmed")
         if record.get("completeness") != "complete":
             raise ValueError("complete_observation_required_for_confirmation")
-        for current in list_references(workspace_id, limit=500):
+        for current in _all_references(workspace_id):
             if (
                 current.get("state") == "confirmed"
                 and current.get("current")

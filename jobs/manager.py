@@ -154,6 +154,10 @@ def mark_running(ws_id, job_id) -> JobRecord:
 def mark_succeeded(ws_id, job_id, result_summary=None) -> JobRecord:
     rec = get_job(ws_id, job_id)
     if not rec: return None
+    # Archive cleanup may arrive while the active turn is still unwinding.
+    # Its durable cancellation must not be overwritten by an idle-job close.
+    if rec.cancel_requested:
+        return rec
     _check_transition(rec.status, "succeeded")
     now = now_iso()
     patch = {"status": "succeeded", "finished_at": now}
