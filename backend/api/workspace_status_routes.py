@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import logging
+import uuid
+
 from flask import jsonify
 
 from backend.core.responses import error_response, ok_response
@@ -79,6 +82,8 @@ def register_workspace_status_routes(app):
             result = run_doctor(ws_id)
             body, code = ok_response(result, workspace_id=ws_id)
             return jsonify(body), code
-        except Exception as exc:
-            body, code = error_response("INTERNAL_ERROR", str(exc)[:200], 500)
+        except Exception:
+            body, code = error_response("INTERNAL_ERROR", "Storage health check failed", 500)
+            body["error_id"] = uuid.uuid4().hex
+            logging.getLogger(__name__).warning("Storage health failed: error_id=%s", body["error_id"])
             return jsonify(body), code

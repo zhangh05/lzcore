@@ -236,7 +236,7 @@ def is_current_session_authenticated() -> bool:
             flask.session["lzcore_home_workspace"] = identity_user.get("home_workspace_id", "")
             return True
         configured_username = _get_login_username()
-        if configured_username and hmac.compare_digest(username, configured_username):
+        if configured_username and hmac.compare_digest(username.encode("utf-8"), configured_username.encode("utf-8")):
             flask.session["lzcore_role"] = "admin"
             flask.session["lzcore_org"] = "default"
             flask.session["lzcore_workspaces"] = ["default"]
@@ -248,26 +248,51 @@ def is_current_session_authenticated() -> bool:
         return False
     username = _get_login_username()
     session_user = flask.session.get("lzcore_user")
-    return bool(username and session_user and hmac.compare_digest(str(session_user), username))
+    return bool(username and session_user and hmac.compare_digest(str(session_user).encode("utf-8"), username.encode("utf-8")))
+
+
+def authenticated_request_context() -> dict | None:
+    """Build request-local authority from verified credentials, never request data."""
+    if hasattr(flask.g, "authenticated_context"):
+        return flask.g.authenticated_context
+    context = None
+    if _request_has_valid_api_token():
+        context = {
+            "principal_type": "api_token", "user_id": "api-token",
+            "username": "api-token", "role": "owner", "platform_admin": True,
+            "organization_id": "default", "workspace_ids": ["default"],
+            "home_workspace_id": "default",
+        }
+    elif is_current_session_authenticated():
+        username = str(flask.session.get("lzcore_user") or "")
+        role = str(flask.session.get("lzcore_role") or "")
+        current = None
+        if _is_identity_enabled():
+            from backend.core.identity import get_user
+            current = get_user(username)
+        context = {
+            "principal_type": "session", "user_id": str((current or {}).get("user_id") or username),
+            "username": username, "role": role,
+            "platform_admin": _is_identity_enabled() and (current is None or role == "owner"),
+            "organization_id": str(flask.session.get("lzcore_org") or ""),
+            "workspace_ids": list(flask.session.get("lzcore_workspaces") or []),
+            "home_workspace_id": str(flask.session.get("lzcore_home_workspace") or ""),
+        }
+    flask.g.authenticated_context = context
+    return context
 
 
 def handle_auth_status():
-    api_token_authenticated = _request_has_valid_api_token()
-    session_authenticated = is_current_session_authenticated()
+    context = authenticated_request_context()
+    api_token_authenticated = bool(context and context["principal_type"] == "api_token")
+    session_authenticated = bool(context and context["principal_type"] == "session")
     authenticated = session_authenticated or api_token_authenticated
     # Project the loopback personal-mode authority used by privileged writes.
     # Token/login/identity deployments must never inherit this UI capability.
     personal_mode = not (_is_auth_enabled() or _is_login_enabled() or _is_identity_enabled())
-    platform_admin = api_token_authenticated or (
+    platform_admin = bool(context and context["platform_admin"]) or (
         personal_mode and _is_loopback_host(get_effective_client_address())
     )
-    if session_authenticated and _is_identity_enabled() and not api_token_authenticated:
-        try:
-            from backend.core.identity import get_user
-            current = get_user(str(flask.session.get("lzcore_user") or ""))
-            platform_admin = current is None or str(flask.session.get("lzcore_role") or "") == "owner"
-        except Exception:
-            platform_admin = False
     return flask.jsonify({
         "ok": True,
         "login_enabled": _is_login_enabled() or _is_identity_enabled(),
@@ -419,7 +444,7 @@ def _is_loopback_host(hostname: str) -> bool:
 
 
 def _unauthenticated_host_allowed(hostname: str) -> bool:
-    """Personal mode trusts loopback only, unless LAN access is explicitly enabled."""
+    """Personal authority requires loopback or an individually configured host."""
     value = (hostname or "").strip().lower()
     if _is_loopback_host(value):
         return True
@@ -430,8 +455,6 @@ def _unauthenticated_host_allowed(hostname: str) -> bool:
     }
     if value in allowed_hosts:
         return True
-    if os.environ.get("LZCORE_ALLOW_LAN", "false").strip().lower() in ("true", "1", "yes", "on"):
-        return _is_local_or_private_host(value)
     return False
 
 
@@ -464,6 +487,8 @@ def is_allowed_browser_origin(origin: str | None, request_host: str) -> bool:
         return True
     try:
         origin_url = urlparse(origin)
+        if origin_url.scheme not in {"http", "https"} or not origin_url.hostname or origin_url.username is not None or origin_url.password is not None:
+            return False
         origin_root = f"{origin_url.scheme}://{origin_url.netloc}".rstrip("/")
         host = request_host.split("@")[-1]
         origin_hostname = (origin_url.hostname or "").lower()
@@ -497,8 +522,8 @@ def is_allowed_browser_origin(origin: str | None, request_host: str) -> bool:
         if (
             origin_url.scheme in {"http", "https"}
             and origin_port in allowed_ports
-            and _is_local_or_private_host(origin_hostname)
-            and _is_local_or_private_host(request_hostname)
+            and _unauthenticated_host_allowed(origin_hostname)
+            and _unauthenticated_host_allowed(request_hostname)
         ):
             return True
         return origin_root in _configured_dev_origins()
@@ -559,16 +584,18 @@ def register_auth_middleware(app: flask.Flask) -> None:
         path = flask.request.path
 
         # DNS Rebinding protection: When authentication is disabled,
-        # request Host must be a local or trusted private host.
+        # request Host must be loopback or individually allowlisted.
         if not _is_auth_enabled() and not _is_login_enabled() and not _is_identity_enabled():
             if not _unauthenticated_host_allowed(_hostname_from_host_header(flask.request.host)):
                 logger.warning("host_rejected_untrusted: host=%s path=%s", flask.request.host, path)
                 return flask.jsonify({
                     "ok": False,
                     "error": "host_header_invalid",
-                    "message": "Host header is not permitted. Only local or private network access is allowed when authentication is disabled.",
+                    "message": "Host header must be loopback or explicitly allowlisted when authentication is disabled.",
                     "status": 403,
                 }), 403
+            if (path == "/api/local-token" or flask.request.method not in {"GET", "HEAD", "OPTIONS"}) and not _unauthenticated_host_allowed(get_effective_client_address()):
+                return flask.jsonify({"ok": False, "error": "local_client_required"}), 403
             if _browser_local_token_required() and not _presented_local_token_matches():
                 logger.warning("local_token_denied: path=%s", path)
                 return flask.jsonify({
@@ -585,8 +612,9 @@ def register_auth_middleware(app: flask.Flask) -> None:
         if _is_login_enabled() or _is_identity_enabled():
             if is_public_path(path):
                 return None
-            session_authenticated = is_current_session_authenticated()
-            api_token_authenticated = _request_has_valid_api_token()
+            context = authenticated_request_context()
+            session_authenticated = bool(context and context["principal_type"] == "session")
+            api_token_authenticated = bool(context and context["principal_type"] == "api_token")
             if session_authenticated or api_token_authenticated:
                 workspace_error = _bind_request_workspace()
                 if workspace_error:

@@ -9,6 +9,16 @@ GET  /api/runtime/tasks/<task_id>/checkpoints?workspace_id=
 
 from __future__ import annotations
 
+import logging
+import uuid
+
+
+def _internal_error():
+    from flask import jsonify, request
+    error_id = uuid.uuid4().hex
+    logging.getLogger(__name__).warning("API failure: error_id=%s endpoint=%s", error_id, request.endpoint)
+    return jsonify({"ok": False, "error": "internal_error", "error_id": error_id}), 500
+
 
 def register_state_routes(app):
     """Register runtime state API routes on the Flask app."""
@@ -117,8 +127,8 @@ def register_state_routes(app):
                 "tasks": [t.to_dict() for t in tasks],
                 "count": len(tasks),
             })
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/runtime/tasks/<task_id>")
     def api_runtime_task_detail(task_id):
@@ -136,8 +146,8 @@ def register_state_routes(app):
             if task.workspace_id != ws_id:
                 return jsonify({"ok": False, "error": "task not found in workspace"}), 404
             return jsonify({"ok": True, "task": task.to_dict()})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/runtime/tasks/<task_id>/events")
     def api_runtime_task_events(task_id):
@@ -153,8 +163,8 @@ def register_state_routes(app):
                 return jsonify({"ok": False, "error": "task not found"}), 404
             events = get_events(ws_id, task_id)
             return jsonify({"ok": True, "events": events, "count": len(events)})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/runtime/tasks/<task_id>/checkpoints")
     def api_runtime_task_checkpoints(task_id):
@@ -170,8 +180,8 @@ def register_state_routes(app):
                 return jsonify({"ok": False, "error": "task not found"}), 404
             checkpoints = get_checkpoints(ws_id, task_id)
             return jsonify({"ok": True, "checkpoints": checkpoints, "count": len(checkpoints)})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     # ── Control endpoints (POST) ──
 
@@ -190,8 +200,8 @@ def register_state_routes(app):
             if not cp:
                 return jsonify({"ok": False, "error": "task not found"}), 404
             return jsonify({"ok": True, "checkpoint_id": cp.checkpoint_id})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/runtime/tasks/<task_id>/cancel", methods=["POST"])
     def api_task_cancel(task_id):
@@ -208,8 +218,8 @@ def register_state_routes(app):
             result = cancel_task(task_id, ws_id)
             code = 200 if result["ok"] else (404 if "not found" in result.get("error","") else 400)
             return jsonify(result), code
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/runtime/tasks/<task_id>/resume", methods=["POST"])
     def api_task_resume(task_id):
@@ -226,8 +236,8 @@ def register_state_routes(app):
             result = resume_task(task_id, ws_id)
             code = 200 if result["ok"] else (404 if "not found" in result.get("error","") else 400)
             return jsonify(result), code
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/runtime/tasks/<task_id>/steps/<step_id>/retry", methods=["POST"])
     def api_task_retry_step(task_id, step_id):
@@ -244,8 +254,8 @@ def register_state_routes(app):
             result = retry_step(task_id, step_id, ws_id)
             code = 200 if result["ok"] else (404 if "not found" in result.get("error","") else 400)
             return jsonify(result), code
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     # ── Trajectory endpoints ──
 
@@ -259,8 +269,8 @@ def register_state_routes(app):
             from agent.runtime.durable.trajectory import list_trajectories
             items = list_trajectories(ws_id)
             return jsonify({"ok": True, "trajectories": items, "count": len(items)})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/runtime/trajectories/<traj_id>")
     def api_trajectory_detail(traj_id):
@@ -274,8 +284,8 @@ def register_state_routes(app):
             if not traj:
                 return jsonify({"ok": False, "error": "trajectory not found"}), 404
             return jsonify({"ok": True, "trajectory": traj})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     # ── Ecosystem endpoints ──
 
@@ -290,8 +300,8 @@ def register_state_routes(app):
             reg = EcoRegistry()
             provs = [p.to_dict() for p in reg.list_providers(ws_id)]
             return jsonify({"ok": True, "providers": provs, "count": len(provs)})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/ecosystem/import/preview", methods=["POST"])
     def api_ecosystem_import_preview():
@@ -304,8 +314,8 @@ def register_state_routes(app):
             data = request.get_json(silent=True) or {}
             result = preview_import(data)
             return jsonify(result), (200 if result.get("ok") else 400)
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/ecosystem/import/apply", methods=["POST"])
     def api_ecosystem_import_apply():
@@ -322,8 +332,8 @@ def register_state_routes(app):
             result = apply_import(data, ws_id, confirm=confirm)
             code = 200 if result.get("ok") else 400
             return jsonify(result), code
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     # ── Audit report ──
 
@@ -337,8 +347,8 @@ def register_state_routes(app):
             from agent.runtime.durable.delivery import build_audit_report
             report = build_audit_report(task_id, ws_id)
             return jsonify({"ok": True, "report": report})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()
 
     @app.route("/api/runtime/tasks/<task_id>/audit-report", methods=["GET"])
     def api_audit_report_get(task_id):
@@ -350,5 +360,5 @@ def register_state_routes(app):
             from agent.runtime.durable.delivery import export_audit_report_markdown
             md = export_audit_report_markdown(task_id, ws_id)
             return jsonify({"ok": True, "markdown": md})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)[:200]}), 500
+        except Exception:
+            return _internal_error()

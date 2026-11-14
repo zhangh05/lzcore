@@ -216,9 +216,8 @@ def _sanitize_provider(data: dict) -> dict:
 
 
 def mask_key(key: str):
-    if not key or len(key) < 8:
-        return None
-    return key[:4] + "****" + key[-4:]
+    from agent.llm.settings import mask_key as preview
+    return preview(key)
 
 
 def sanitize_settings(data: dict) -> dict:
