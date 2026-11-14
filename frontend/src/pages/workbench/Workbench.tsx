@@ -302,11 +302,17 @@ export function Workbench() {
       <section className="wb-main" aria-label="对话">
         <header className="wb-header">
           {narrow ? <Button onClick={() => setPanel("sessions")}>会话列表</Button> : null}
-          <h1 className="page-title" tabIndex={-1} title={session?.title || undefined} data-testid="wb-title">{session?.title || (sessionId ? "未命名会话" : NAMES.workbench)}</h1>
-          <span className="status-chip" data-testid="turn-response" title={`本轮响应：${turnText}（来源：本会话消息 / 实时回合；完整状态见「状态细节」）`}>本轮响应：{turnText}</span>
-          <button type="button" ref={statusBtn} className="btn ghost sm wb-status-btn" aria-haspopup="dialog" aria-expanded={statusOpen} onClick={() => setStatusOpen((o) => !o)} data-testid="open-status-details">
-            <span className={`status-dot tone-${modelTone}`} aria-hidden="true" />状态细节
-          </button>
+          {/* 两行标题区：标题一行，次级信息（本轮响应、状态细节入口）一行，字号只差一级。 */}
+          <div className="wb-title-block">
+            <h1 className="page-title" tabIndex={-1} title={session?.title || undefined} data-testid="wb-title">{session?.title || (sessionId ? "未命名会话" : NAMES.workbench)}</h1>
+            <div className="wb-meta">
+              <span className="wb-meta-text" data-testid="turn-response" title={`本轮响应：${turnText}（来源：本会话消息 / 实时回合；完整状态见「状态细节」）`}>本轮响应：{turnText}</span>
+              <span className="wb-meta-sep" aria-hidden="true" />
+              <button type="button" ref={statusBtn} className="wb-status-btn" aria-haspopup="dialog" aria-expanded={statusOpen} onClick={() => setStatusOpen((o) => !o)} data-testid="open-status-details">
+                <span className={`status-dot tone-${modelTone}`} aria-hidden="true" />状态细节
+              </button>
+            </div>
+          </div>
           <Popover anchor={statusBtn} open={statusOpen} onClose={closeStatus} label="运行状态细节" className="status-details" testId="status-details">
             <dl>
               <div><dt>运行时（GET /api/agent/status）</dt><dd data-testid="agent-status">运行时：{runtimeText}</dd></div>
@@ -318,9 +324,9 @@ export function Workbench() {
             </dl>
           </Popover>
           <span className="grow" />
-          {!progressRail || collapsed.progress ? <Button className="sm" onClick={() => setPanel("progress")} data-testid="open-progress">进度与证据</Button> : null}
-          <Button className="sm" onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
-          <MenuButton label="更多操作" className="btn ghost sm" testId="wb-more" menuTestId="wb-more-menu" items={[
+          {!progressRail || collapsed.progress ? <Button onClick={() => setPanel("progress")} data-testid="open-progress">进度与证据</Button> : null}
+          <Button onClick={() => void newSession()} data-testid="header-new-session">{NAMES.newSession}</Button>
+          <MenuButton label="更多操作" className="btn ghost" testId="wb-more" menuTestId="wb-more-menu" items={[
             { key: "catalog", label: "能力目录", onSelect: () => setDrawer("catalog"), testId: "open-catalog" },
             ...(sessionId ? [{ key: "info", label: "会话信息", onSelect: () => setDrawer("info"), testId: "open-session-info" }] : []),
           ]}>更多 ▾</MenuButton>
