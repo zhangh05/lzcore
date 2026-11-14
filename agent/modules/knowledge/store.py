@@ -285,7 +285,7 @@ def disable_source(
     if chunks:
         for chunk in chunks:
             chunk["disabled"] = disabled
-        store.put_many(chunks)
+        store.update_knowledge_chunks(chunks)
 
     return _public_view(item)
 
@@ -341,7 +341,7 @@ def rename_source(workspace_id: str, source_id: str, title: str) -> Optional[dic
     if chunks:
         for chunk in chunks:
             chunk["title"] = new_title
-        store.put_many(chunks)
+        store.update_knowledge_chunks(chunks)
 
     return _public_view(item)
 

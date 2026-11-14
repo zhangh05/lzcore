@@ -88,6 +88,8 @@ class SessionMessageStore:
                       metadata: Optional[Dict[str, Any]] = None) -> Optional[str]:
         from storage.project_changes import workspace_files_lock
         with workspace_files_lock(self.ws_id):
+            from storage.session_snapshot import _recover_rewind
+            _recover_rewind(self)
             return self._write_message(run_id, role, content, metadata)
 
     def _write_message(self, run_id: str, role: str, content: str,
@@ -123,6 +125,8 @@ class SessionMessageStore:
         # Large redacted content → artifact reference
         if len(safe_content.encode("utf-8", errors="replace")) > ARTIFACT_THRESHOLD:
             art_info = self._write_artifact(safe_content, role, rid)
+            if not art_info.get("file_id") or not art_info.get("artifact_id"):
+                raise OSError("large message artifact reference is incomplete")
             size = len(safe_content.encode("utf-8", errors="replace"))
             record = {
                 "role": role,
@@ -148,7 +152,17 @@ class SessionMessageStore:
             }
 
         msg_path = self._msg_path(rid, role)
-        _atomic_write(msg_path, record)
+        try:
+            _atomic_write(msg_path, record)
+        except Exception:
+            if record.get("artifact_ref"):
+                self._cleanup_artifact(record["artifact_ref"])
+            raise
+
+        if getattr(self, "_defer_references", False):
+            if record.get("artifact_ref"):
+                self._staged_artifacts.append(record["artifact_ref"])
+            return f"{rid}:{role}"
 
         from storage.reference_index import replace_owner_references
         attachments = list(meta.get('attachments') or [])
@@ -171,7 +185,11 @@ class SessionMessageStore:
 
     def get_messages(self) -> List[Dict[str, Any]]:
         """Return the full chat-history read-model projection of the session."""
-        return self._read_full_messages()
+        from storage.project_changes import workspace_files_lock
+        with workspace_files_lock(self.ws_id):
+            from storage.session_snapshot import _recover_rewind
+            _recover_rewind(self)
+            return self._read_full_messages()
 
     def get_history_window(self, k: int = 8) -> List[Dict[str, Any]]:
         """Return up to k most recent messages (LLM context window).
@@ -281,6 +299,7 @@ class SessionMessageStore:
 
     def _write_artifact(self, content: str, role: str, run_id: str) -> dict:
         """Write content > ARTIFACT_THRESHOLD as a managed file reference."""
+        rec = None
         try:
             from storage.file_store import write_agent_output
             from storage.reference_index import add_reference
@@ -301,6 +320,8 @@ class SessionMessageStore:
                     "storage_managed": True,
                 },
             )
+            if not rec or not rec.file_id:
+                raise OSError("large message payload was not persisted")
             if rec:
                 from storage.artifact_metadata_store import create_artifact_metadata
 
@@ -320,6 +341,8 @@ class SessionMessageStore:
                         "storage_managed": True,
                     },
                 )
+                if not artifact.get("artifact_id"):
+                    raise OSError("large message artifact metadata is incomplete")
                 add_reference(self.ws_id, rec.file_id, "artifact",
                               artifact["artifact_id"], "content",
                               metadata={"artifact_id": artifact["artifact_id"],
@@ -330,9 +353,49 @@ class SessionMessageStore:
                     "artifact_type": "message_large_content",
                     "title": title,
                 }
-        except Exception:
-            pass
-        return {}
+        except Exception as exc:
+            # Unknown commits expose the exact newly allocated file identity;
+            # reconcile only those bytes, never replay the message write.
+            record = getattr(exc, "record", None)
+            file_id = rec.file_id if rec else (record or {}).get("file_id")
+            if file_id:
+                self._cleanup_artifact({
+                    "file_id": file_id,
+                    "artifact_id": getattr(exc, "artifact_id", ""),
+                    "record": record,
+                })
+            raise
+
+    def _cleanup_artifact(self, artifact_ref: dict) -> None:
+        """Remove only newly allocated, unpublished message artifacts."""
+        from storage.artifact_metadata_store import list_artifact_records, remove_artifact_record
+        from storage.file_store import delete_file_permanently, get_file_record
+        from storage.reference_index import list_references_for_file, remove_reference
+
+        file_id = artifact_ref["file_id"]
+        artifacts = {a["artifact_id"] for a in list_artifact_records(self.ws_id)
+                     if a.get("file_id") == file_id}
+        if artifact_ref.get("artifact_id"):
+            artifacts.add(artifact_ref["artifact_id"])
+        for artifact_id in artifacts:
+            remove_artifact_record(self.ws_id, artifact_id)
+            (_ws_root(self.ws_id) / "sys/artifact-commits" / f"{artifact_id}.json").unlink(missing_ok=True)
+        for ref in list_references_for_file(self.ws_id, file_id):
+            remove_reference(self.ws_id, ref["ref_id"])
+        if get_file_record(self.ws_id, file_id):
+            if not delete_file_permanently(self.ws_id, file_id):
+                raise OSError("failed to clean unpublished message payload")
+        elif artifact_ref.get("record"):
+            # A file commit may have published bytes but not its index row.
+            import hashlib
+            from storage.file_store import _resolve_workspace_relative_path
+            record = artifact_ref["record"]
+            path = _resolve_workspace_relative_path(self.ws_id, record["path"])
+            if path.exists():
+                if hashlib.sha256(path.read_bytes()).hexdigest() != record.get("sha256"):
+                    raise OSError("unpublished message payload changed; reconciliation required")
+                path.unlink()
+        (_ws_root(self.ws_id) / "sys/file-commits" / f"{file_id}.json").unlink(missing_ok=True)
 
 
 def _message_sort_key(message: Dict[str, Any]) -> tuple:
@@ -389,10 +452,7 @@ def _write_text_atomically(path: Path, text: str) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
             f.flush()
-            try:
-                os.fsync(f.fileno())
-            except OSError:
-                pass
+            os.fsync(f.fileno())
         os.replace(tmp, path)
     except Exception:
         try:

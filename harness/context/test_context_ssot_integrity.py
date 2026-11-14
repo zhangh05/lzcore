@@ -112,9 +112,9 @@ def test_context_store_filters_after_last_write_wins(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
     store = ContextStore("alpha")
     store.put({"item_id": "same", "item_type": "memory_hit", "content": "old"})
-    store.put({"item_id": "same", "item_type": "knowledge_chunk", "content": "new"})
+    store.put({"item_id": "same", "item_type": "knowledge_source", "content": "new"})
     assert store.list_items(item_type="memory_hit") == []
-    assert store.list_items(item_type="knowledge_chunk")[0]["content"] == "new"
+    assert store.list_items(item_type="knowledge_source")[0]["content"] == "new"
 
 
 def test_memory_context_retrieval_enforces_scope(monkeypatch, tmp_path):

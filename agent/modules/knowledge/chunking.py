@@ -301,6 +301,18 @@ def _make_parents(sections: List[Tuple[str, str, str, str, Optional[int]]],
                 },
             )
             parents.append(pc)
+    # Keep legacy child IDs for parents whose numeric identity was unique.
+    # Only colliding parents need a new index; reserve all unaffected indices
+    # before allocating replacements, so a later short chapter stays stable.
+    counts: dict[int, int] = {}
+    for parent in parents:
+        counts[parent.chunk_index] = counts.get(parent.chunk_index, 0) + 1
+    reserved = set(counts)
+    next_index = max(reserved, default=-1) + 1
+    for parent in parents:
+        if counts[parent.chunk_index] > 1:
+            parent.chunk_index = next_index
+            next_index += 1
     return parents
 
 
@@ -454,4 +466,9 @@ def chunk_document(doc: NormalizedDocument) -> Tuple[List[KnowledgeChunk],
                             doc.scope or "workspace")
     children = _make_children(parents, doc.source_id, doc.title or "",
                               doc.scope or "workspace")
+    # Numeric positions describe document order, independently of stable IDs.
+    for index, parent in enumerate(parents):
+        parent.chunk_index = index
+    for index, child in enumerate(children):
+        child.chunk_index = index
     return parents, children

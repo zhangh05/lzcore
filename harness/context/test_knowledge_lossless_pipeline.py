@@ -224,7 +224,7 @@ def test_scope_filter_recovers_legacy_chunk_scope_from_its_source(tmp_path, monk
             key: value for key, value in (chunk.get("metadata") or {}).items()
             if key != "scope"
         }
-        store.put(chunk)
+        store.update_knowledge_chunks([chunk])
 
     hits = get_retriever("knowledge_legacy_scope_ws").search_knowledge(
         "LEGACY_SCOPE_MARKER", scope="global",

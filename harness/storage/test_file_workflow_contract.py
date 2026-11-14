@@ -585,12 +585,12 @@ def test_restore_unknown_only_readbacks_existing_facts(files_ws, monkeypatch):
     root = workspace_root(files_ws)
     (root / 'index/files.jsonl').write_text('')
     (root / record.path).unlink()
-    from storage import records
-    mutate = records.mutate_jsonl
-    monkeypatch.setattr(records, 'mutate_jsonl', lambda *_: (_ for _ in ()).throw(RuntimeError('after restored payload')))
+    from storage import index
+    merge = index.merge_file_records
+    monkeypatch.setattr(index, 'merge_file_records', lambda *_: (_ for _ in ()).throw(RuntimeError('after restored payload')))
     with pytest.raises(RuntimeError):
         restore_bundle(files_ws, bundle, preview=False)
-    monkeypatch.setattr(records, 'mutate_jsonl', mutate)
+    monkeypatch.setattr(index, 'merge_file_records', merge)
     assert (root / record.path).read_bytes() == b'original restore bytes'
     report = reconcile_file_commits(files_ws, apply=True)
     assert report['payload_writes'] == 0 and report['results'][0]['state'] == 'unresolved'

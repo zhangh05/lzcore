@@ -59,25 +59,10 @@ class ContextStore:
 
     def put(self, item: dict) -> str:
         """Append an item.  Returns its item_id."""
-        item = dict(item)
-        item_workspace = validate_workspace_id(
-            str(item.get("workspace_id") or self.workspace_id)
-        )
-        if item_workspace != self.workspace_id:
-            raise ValueError("context item workspace_id does not match store")
-        item_id = item.get("item_id") or f"ci_{uuid.uuid4().hex[:12]}"
-        item["item_id"] = item_id
-        item.setdefault("item_type", "unknown")
-        item["workspace_id"] = self.workspace_id
-        item.setdefault("created_at", _now_iso())
-        item.setdefault("deleted", False)
+        return self.put_many([item])[0]
 
-        with self._lock:
-            append_jsonl(self.workspace_id, ("context", "items.jsonl"), item)
-        return item_id
-
-    def put_many(self, items: list[dict]) -> list[str]:
-        """Batch append."""
+    def put_many(self, items: list[dict], *, _update_chunks: bool = False) -> list[str]:
+        """Atomically append a batch; reject duplicate chunk identities."""
         prepared: list[dict] = []
         for source_item in items:
             item = dict(source_item)
@@ -94,12 +79,109 @@ class ContextStore:
             item.setdefault("deleted", False)
             prepared.append(item)
 
-        ids = []
+        if not prepared:
+            return []
+        ids = [item["item_id"] for item in prepared]
+        if len(set(ids)) != len(ids):
+            raise ValueError("duplicate context item_id in batch")
         with self._lock:
-            for item in prepared:
-                append_jsonl(self.workspace_id, ("context", "items.jsonl"), item)
-                ids.append(item["item_id"])
+            def insert(rows):
+                live = self._live_items(rows)
+                for item in prepared:
+                    existing = live.get(item["item_id"])
+                    if _update_chunks:
+                        if (not existing or item["item_type"] != "knowledge_chunk"
+                                or existing.get("item_type") != "knowledge_chunk"
+                                or item.get("deleted")
+                                or any(item.get(key) != existing.get(key) for key in (
+                                    "source_id", "chunk_id", "parent_chunk_id", "chunk_type", "content"))):
+                            raise ValueError("knowledge chunk update cannot change identity or body")
+                        continue
+                    if existing and (
+                        item["item_type"] == "knowledge_chunk"
+                        or existing.get("item_type") == "knowledge_chunk"
+                    ):
+                        raise ValueError("duplicate knowledge chunk item_id")
+                return [*rows, *prepared], None
+
+            self._mutate_items(insert)
         return ids
+
+    def update_knowledge_chunks(self, items: list[dict]) -> list[str]:
+        """Update projections (title, scope, enabled) without replacing bodies."""
+        return self.put_many(items, _update_chunks=True)
+
+    def _mutate_items(self, mutator):
+        """Keep the previous generation on publication/durability errors.
+
+        Use the adapter's lock order, including its cross-process file lock,
+        until read-back and any rollback finish. In particular a directory
+        fsync failure can occur *after* os.replace published the new file.
+        """
+        from storage.atomic_io import atomic_write_text
+        from storage.records import _file_lock, _lock_for
+
+        path = self._items_path
+        with _lock_for(path), _file_lock(path):
+            before = path.read_bytes() if path.exists() else None
+            try:
+                return mutate_jsonl(self.workspace_id, ("context", "items.jsonl"), mutator)
+            except Exception:
+                after = path.read_bytes() if path.exists() else None
+                if after != before:
+                    if before is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        atomic_write_text(path, before.decode("utf-8"))
+                raise
+
+    @staticmethod
+    def _live_items(rows: list[dict]) -> dict[str, dict]:
+        live = {}
+        for item in rows:
+            if item.get("deleted"):
+                live.pop(item.get("item_id"), None)
+            else:
+                live[item.get("item_id")] = item
+        return live
+
+    def replace_knowledge_chunks(self, source_id: str, items: list[dict]) -> int:
+        """Build a complete generation in the adapter's temp file, then swap.
+
+        The file transaction lock covers the old-set read and publication.
+        No staged generation is visible to retrieval, even after a crash.
+        """
+        generation = uuid.uuid4().hex
+        prepared = []
+        for source in items:
+            item = dict(source)
+            if (item.get("item_type") != "knowledge_chunk"
+                    or item.get("source_id") != source_id
+                    or item.get("workspace_id", self.workspace_id) != self.workspace_id
+                    or not item.get("item_id") or item.get("deleted")):
+                raise ValueError("invalid replacement knowledge chunk")
+            item["workspace_id"] = self.workspace_id
+            item.setdefault("created_at", _now_iso())
+            item["metadata"] = {**(item.get("metadata") or {}), "index_generation": generation}
+            prepared.append(item)
+        ids = {item["item_id"] for item in prepared}
+        if len(ids) != len(prepared):
+            raise ValueError("duplicate knowledge chunk item_id")
+
+        def replace(rows):
+            live = self._live_items(rows)
+            old_ids = {iid for iid, item in live.items()
+                       if item.get("item_type") == "knowledge_chunk"
+                       and item.get("source_id") == source_id}
+            if ids.intersection(live.keys() - old_ids):
+                raise ValueError("knowledge chunk item_id belongs to another source")
+            # The adapter writes all new rows before os.replace publishes the
+            # generation. Old rows disappear only at that same commit point.
+            kept = [row for row in rows if row.get("item_id") not in old_ids]
+            return [*kept, *prepared], len(old_ids)
+
+        with self._lock:
+            return self._mutate_items(replace)
 
     def delete(self, item_id: str) -> bool:
         """Tombstone-delete an item."""

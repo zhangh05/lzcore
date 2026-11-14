@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
+from functools import wraps
 from typing import Any
 
 from extensions.network_operations.device_tools import normalize_read_only_commands
 from storage.time_utils import now_iso
+from storage.locking import FileLock
 
 from .network_records import _id, _store
 
@@ -122,6 +124,15 @@ def _script_id(value: str) -> str:
     return result
 
 
+def _script_transaction(func):
+    @wraps(func)
+    def locked(workspace_id, *args, **kwargs):
+        with FileLock(_store(workspace_id).root() / ".scripts.lock", timeout=10.0):
+            return func(workspace_id, *args, **kwargs)
+    return locked
+
+
+@_script_transaction
 def _ensure_starter_scripts(workspace_id: str) -> None:
     """Create editable per-workspace starter scripts only once.
 
@@ -145,6 +156,17 @@ def _ensure_starter_scripts(workspace_id: str) -> None:
                 store.save("scripts", template["script_id"], existing)
         return
     for template in STARTER_SCRIPTS:
+        # get() maps corrupt/unreadable JSON to None; that is not permission
+        # to replace an existing user's file with a template.
+        path = store.root() / "scripts" / f"{template['script_id']}.json"
+        try:
+            path.stat()
+        except FileNotFoundError:
+            pass
+        else:
+            if store.get("scripts", template["script_id"]) is None:
+                raise ValueError("existing inspection script is unreadable")
+            continue
         record = {
             **dict(template),
             "readonly": True,
@@ -224,6 +246,7 @@ def _normalize_checks(value: Any) -> list[dict[str, str]]:
     return normalized
 
 
+@_script_transaction
 def save_inspection_script(
     workspace_id: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -269,6 +292,7 @@ def save_inspection_script(
     return _script_safe(record)
 
 
+@_script_transaction
 def delete_inspection_script(workspace_id: str, script_id: str) -> bool:
     _ensure_starter_scripts(workspace_id)
     return _store(workspace_id).delete("scripts", _script_id(script_id))
