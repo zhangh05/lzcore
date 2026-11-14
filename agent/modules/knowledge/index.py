@@ -41,19 +41,15 @@ def replace_chunks(
     """Replace all chunks for a source_id with new_chunks."""
     store = get_context_store(workspace_id)
 
-    # Delete old chunks for this source
-    old = store.list_items(item_type="knowledge_chunk", source_id=source_id, limit=9999)
-    for item in old:
-        store.delete(item["item_id"])
-
-    # Save new chunks
-    count = save_chunks(workspace_id, new_chunks)
+    items = [_chunk_to_item(chunk.to_dict() if hasattr(chunk, "to_dict") else dict(chunk))
+             for chunk in new_chunks]
+    replaced = store.replace_knowledge_chunks(source_id, items)
 
     return {
         "ok": True,
         "source_id": source_id,
-        "replaced": len(old),
-        "new_count": count,
+        "replaced": replaced,
+        "new_count": len(items),
     }
 
 

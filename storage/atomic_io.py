@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import math
 import os
@@ -34,6 +35,26 @@ def _replace_with_retry(tmp: Path, path: Path) -> None:
     raise OSError(f"failed to replace {path}")
 
 
+def _fsync_parent_directory(path: Path) -> None:
+    """Persist a published directory entry where directory fsync is supported.
+
+    A real I/O failure propagates even though replacement has already happened;
+    callers must reconcile that uncertain commit rather than assume rollback.
+    """
+    if os.name != "posix":
+        return
+    unsupported = {errno.EINVAL, errno.ENOSYS, errno.ENOTSUP, errno.EOPNOTSUPP}
+    try:
+        fd = os.open(str(path.parent), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError as exc:
+        if exc.errno not in unsupported:
+            raise
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,10 +64,7 @@ def atomic_write_text(path: Path, text: str) -> None:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(text)
             f.flush()
-            try:
-                os.fsync(f.fileno())
-            except OSError:
-                pass
+            os.fsync(f.fileno())
     except Exception:
         try:
             tmp.unlink()
@@ -54,6 +72,7 @@ def atomic_write_text(path: Path, text: str) -> None:
             pass
         raise
     _replace_with_retry(tmp, path)
+    _fsync_parent_directory(path)
 
 
 def atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -66,10 +85,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
             f.flush()
-            try:
-                os.fsync(f.fileno())
-            except OSError:
-                pass
+            os.fsync(f.fileno())
     except Exception:
         try:
             tmp.unlink()
@@ -77,6 +93,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
             pass
         raise
     _replace_with_retry(tmp, path)
+    _fsync_parent_directory(path)
 
 
 def atomic_write_stream(path: Path, stream) -> None:
@@ -91,6 +108,7 @@ def atomic_write_stream(path: Path, stream) -> None:
             output.flush()
             os.fsync(output.fileno())
         _replace_with_retry(tmp, path)
+        _fsync_parent_directory(path)
     finally:
         tmp.unlink(missing_ok=True)
 

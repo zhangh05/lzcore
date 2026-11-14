@@ -67,6 +67,7 @@ def restore_bundle(workspace_id, raw, *, preview=True):
         return value
     from storage.atomic_io import atomic_write_stream, atomic_write_json
     from storage.records import mutate_jsonl
+    from storage.index import merge_file_records
     from storage.workspace_files import is_current_workspace_write_path
     from core.context.context_store import get_context_store
     source = io.BytesIO(raw) if isinstance(raw, bytes) else raw
@@ -168,12 +169,7 @@ def restore_bundle(workspace_id, raw, *, preview=True):
             if payload is not None and not target.exists():
                 with archive.open(payload) as stream:
                     atomic_write_stream(target, stream)
-        def merge(key, additions):
-            def update(rows):
-                known = {r[key] for r in rows}
-                return rows + [r for r in additions if r[key] not in known], None
-            return update
-        mutate_jsonl(workspace_id, ('index', 'files.jsonl'), merge('file_id', manifest['files']))
+        merge_file_records(workspace_id, manifest['files'])
         from storage.artifact_metadata_store import upsert_artifact_record
         for artifact in manifest['artifacts']:
             if artifact['artifact_id'] not in existing_artifacts:

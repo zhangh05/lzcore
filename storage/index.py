@@ -14,10 +14,10 @@ Replaces direct open()/write_text() in storage/file_store.py.
 from __future__ import annotations
 
 import json
-import os
-import uuid
+import logging
 from pathlib import Path
 
+from storage.atomic_io import atomic_write_text
 from storage.paths import workspace_root
 from storage.locking import FileLock
 
@@ -27,6 +27,7 @@ from storage.locking import FileLock
 
 _LOCK_TIMEOUT_S = 5.0
 _LOCK_RETRY_INTERVAL_S = 0.05
+_logger = logging.getLogger(__name__)
 
 
 def _index_path(workspace_id: str) -> Path:
@@ -35,11 +36,6 @@ def _index_path(workspace_id: str) -> Path:
 
 def _lock_path(workspace_id: str) -> Path:
     return workspace_root(workspace_id) / "index" / "files.lock"
-
-
-def _unique_tmp_path(base: Path) -> Path:
-    suffix = f".tmp.{os.getpid()}.{uuid.uuid4().hex[:8]}"
-    return base.with_name(base.name + suffix)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -120,17 +116,24 @@ def read_file_records(workspace_id: str) -> list[dict]:
     Deduplicates by file_id — the last occurrence wins.
     """
     idx = _index_path(workspace_id)
-    if not idx.is_file():
-        return []
+    lines = _read_lines(idx, strict=False)
+    return _records_from_lines(lines)
 
-    lines = _read_lines(idx)
+
+def _records_from_lines(lines: list[str], *, strict: bool = False) -> list[dict]:
     records = []
-    for line in lines:
+    for line_number, line in enumerate(lines, 1):
         if not line.strip():
             continue
         try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
+            record = json.loads(line)
+            if not isinstance(record, dict):
+                raise ValueError("non_object_file_index_record")
+            records.append(record)
+        except ValueError as exc:
+            if strict:
+                raise ValueError(f"malformed_file_index_record: line {line_number}") from exc
+            _logger.warning("Skipping malformed file index record at line %s", line_number)
             continue
 
     # Deduplicate: last occurrence of each file_id wins
@@ -145,16 +148,37 @@ def read_file_records(workspace_id: str) -> list[dict]:
     return [r for i, r in enumerate(records) if i in keep_indices]
 
 
+def merge_file_records(workspace_id: str, additions: list[dict]) -> None:
+    """Merge restored identities using the normal writer's lock and fresh state.
+
+    Existing identical records are idempotent; conflicting identities fail
+    closed, including identities written after restore's preview checks.
+    """
+    idx = _index_path(workspace_id)
+    with IndexLock(workspace_id):
+        lines = _read_lines(idx)
+        known = {r["file_id"]: r for r in _records_from_lines(lines)}
+        appended = []
+        for record in additions:
+            fid = record["file_id"]
+            if fid in known:
+                if known[fid] != record:
+                    raise ValueError("backup_file_identity_conflict")
+                continue
+            appended.append(json.dumps(record, ensure_ascii=False, default=str))
+            known[fid] = record
+        if appended:
+            _atomic_write_lines(idx, lines + appended)
+
+
 def update_file_record(workspace_id: str, file_id: str, updates: dict) -> bool:
     """Update a file record atomically under lock.
 
-    Returns True if the file_id was found and updated.
-    Does NOT corrupt the index on failure — old index is preserved.
+    Returns True if the file_id was found and updated. Failures before replace
+    preserve the old index; a directory fsync error after replace propagates
+    with an uncertain durability outcome.
     """
     idx = _index_path(workspace_id)
-    if not idx.is_file():
-        return False
-
     with IndexLock(workspace_id):
         lines = _read_lines(idx)
         found = False
@@ -182,9 +206,6 @@ def update_file_record(workspace_id: str, file_id: str, updates: dict) -> bool:
 def delete_file_record(workspace_id: str, file_id: str) -> bool:
     """Physically remove every version of one file record from the index."""
     idx = _index_path(workspace_id)
-    if not idx.is_file():
-        return False
-
     with IndexLock(workspace_id):
         lines = _read_lines(idx)
         kept: list[str] = []
@@ -213,14 +234,14 @@ def compact_file_index(workspace_id: str) -> dict:
       {"before": N, "after": M, "removed": N-M, "duplicates_resolved": D}
     """
     idx = _index_path(workspace_id)
-    if not idx.is_file():
-        return {"before": 0, "after": 0, "removed": 0, "duplicates_resolved": 0}
-
     with IndexLock(workspace_id):
-        records = read_file_records(workspace_id)
+        lines = _read_lines(idx)
+        if not lines:
+            return {"before": 0, "after": 0, "removed": 0, "duplicates_resolved": 0}
+        records = _records_from_lines(lines)
 
         # Count before
-        before = sum(1 for _ in _read_lines(idx) if _.strip())
+        before = sum(1 for line in lines if line.strip())
 
         # Remove soft-deleted and deduplicate
         kept = []
@@ -287,7 +308,7 @@ def validate_file_index(workspace_id: str, *, check_disk: bool = True) -> dict:
         result["stats"]["total_records"] = 0
         return result
 
-    lines = _read_lines(idx)
+    lines = _read_lines(idx, strict=False)
     records = []
     for line in lines:
         if not line.strip():
@@ -379,35 +400,27 @@ def validate_file_index(workspace_id: str, *, check_disk: bool = True) -> dict:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _read_lines(path: Path) -> list[str]:
-    """Read all lines from a file. Returns empty list if file doesn't exist."""
-    if not path.is_file():
-        return []
+def _read_lines(path: Path, *, strict: bool = True) -> list[str]:
+    """Only missing files are empty; mutations also reject malformed records."""
     try:
-        return path.read_text(encoding="utf-8").split("\n")
-    except Exception:
+        lines = path.read_text(encoding="utf-8").split("\n")
+    except FileNotFoundError:
         return []
+    except (OSError, UnicodeDecodeError) as exc:
+        if strict:
+            raise
+        _logger.warning("Unable to read file index (%s)", type(exc).__name__)
+        return []
+    if strict:
+        _records_from_lines(lines, strict=True)
+    return lines
 
 
 def _atomic_write_lines(path: Path, lines: list[str]) -> None:
-    """Write lines to path atomically via tmp + os.replace.
+    """Use the shared atomic writer, including file and directory fsync.
 
-    On any failure, the original file is left untouched.
-    Temporary file is cleaned up.
+    Before replacement failures preserve the original. Directory sync errors
+    after replacement propagate as an uncertain durability outcome.
     """
-    tmp = _unique_tmp_path(path)
     content = "\n".join(lines) + ("\n" if lines else "")
-    try:
-        tmp.write_text(content, encoding="utf-8")
-        try:
-            with tmp.open("rb") as fh:
-                os.fsync(fh.fileno())
-        except OSError:
-            pass
-        os.replace(str(tmp), str(path))
-    except Exception:
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
-        raise
+    atomic_write_text(path, content)

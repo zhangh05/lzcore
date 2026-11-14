@@ -14,6 +14,7 @@ Coverage:
   - multi-workspace concurrent writes don't interfere
 """
 
+import errno
 import json
 import threading
 import uuid
@@ -29,6 +30,8 @@ from storage.index import (
     compact_file_index,
     validate_file_index,
     IndexLock,
+    delete_file_record,
+    merge_file_records,
 )
 
 
@@ -63,6 +66,95 @@ def test_record():
         "source": "test",
         "metadata": {},
     }
+
+
+@pytest.fixture(params=["append", "update", "delete", "compact", "merge"])
+def mutate_index(request, test_record):
+    mutations = {
+        "append": lambda: append_file_record("default", {**test_record, "file_id": "file_new"}),
+        "update": lambda: update_file_record("default", test_record["file_id"], {"size_bytes": 200}),
+        "delete": lambda: delete_file_record("default", test_record["file_id"]),
+        "compact": lambda: compact_file_index("default"),
+        "merge": lambda: merge_file_records("default", [{**test_record, "file_id": "file_restored"}]),
+    }
+    return mutations[request.param]
+
+
+@pytest.mark.parametrize("error", [PermissionError("injected denied"), OSError("injected read I/O")])
+def test_mutations_reject_unreadable_index(tmp_workspace, test_record, mutate_index, monkeypatch, error):
+    idx = Path(tmp_workspace) / "index/files.jsonl"
+    original = (json.dumps(test_record) + "\n").encode()
+    idx.write_bytes(original)
+    real_read = Path.read_text
+
+    def read(path, *args, **kwargs):
+        if path == idx:
+            raise error
+        return real_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read)
+    with pytest.raises(type(error)):
+        mutate_index()
+    assert idx.read_bytes() == original
+    assert not list(idx.parent.glob("*.tmp.*"))
+
+
+@pytest.mark.parametrize("bad_line", [b"\xff", b'{"truncated":', b"[]"])
+def test_mutations_reject_corrupt_index(tmp_workspace, test_record, mutate_index, bad_line):
+    idx = Path(tmp_workspace) / "index/files.jsonl"
+    original = json.dumps(test_record).encode() + b"\n" + bad_line + b"\n"
+    idx.write_bytes(original)
+    with pytest.raises((UnicodeDecodeError, ValueError)):
+        mutate_index()
+    assert idx.read_bytes() == original
+    assert not list(idx.parent.glob("*.tmp.*"))
+
+
+def test_tolerant_read_warns_and_preserves_good_records(tmp_workspace, test_record, monkeypatch, caplog):
+    idx = Path(tmp_workspace) / "index/files.jsonl"
+    idx.write_text(json.dumps(test_record) + '\n{"bad":\n[]\n', encoding="utf-8")
+    assert read_file_records("default") == [test_record]
+    assert sum(r.levelname == "WARNING" for r in caplog.records) == 2
+    idx.write_bytes(b"\xff")
+    caplog.clear()
+    assert read_file_records("default") == []
+    assert "UnicodeDecodeError" in caplog.text
+    caplog.clear()
+    with patch.object(Path, "read_text", side_effect=PermissionError("private content")):
+        assert read_file_records("default") == []
+    assert "PermissionError" in caplog.text
+    assert "private content" not in caplog.text
+
+
+def test_merge_is_idempotent_and_rejects_identity_conflict(tmp_workspace, test_record):
+    append_file_record("default", test_record)
+    idx = Path(tmp_workspace) / "index/files.jsonl"
+    original = idx.read_bytes()
+    merge_file_records("default", [test_record])
+    assert idx.read_bytes() == original
+    with pytest.raises(ValueError, match="identity_conflict"):
+        merge_file_records("default", [
+            {**test_record, "file_id": "file_other"}, {**test_record, "size_bytes": 999},
+        ])
+    assert idx.read_bytes() == original
+
+
+@pytest.mark.parametrize("error", [errno.ENOSPC, errno.EIO])
+def test_index_fsync_failure_preserves_target(tmp_workspace, test_record, mutate_index, monkeypatch, error):
+    from storage import atomic_io
+    idx = Path(tmp_workspace) / "index/files.jsonl"
+    original = (json.dumps(test_record) + "\n").encode()
+    idx.write_bytes(original)
+
+    def fail_sync(fd):
+        raise OSError(error, "injected fsync failure")
+
+    monkeypatch.setattr(atomic_io.os, "fsync", fail_sync)
+    with pytest.raises(OSError) as failure:
+        mutate_index()
+    assert failure.value.errno == error
+    assert idx.read_bytes() == original
+    assert not list(idx.parent.glob("*.tmp.*"))
 
 
 # ═══════════════════════════════════════════════════════════════════════
