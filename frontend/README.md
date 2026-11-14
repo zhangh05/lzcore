@@ -12,6 +12,6 @@ npm --prefix frontend run build
 npm --prefix frontend run e2e
 ```
 
-开发及 preview 监听127.0.0.1；API/实时消息同源代理至显式本机目标。离线合成 mock 可使用 mock/mock_server.py；产品默认启动不使用 mock。
+开发及 preview 监听127.0.0.1；API/实时消息同源代理至显式本机目标。前端组件测试使用 src/test 里的内存后端，浏览器测试使用真实后端。
 
 [接口与迁移边界](../docs/FRONTEND.md)。

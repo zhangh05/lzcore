@@ -16,7 +16,6 @@ from extensions.runtime import (
     reset_extension_cache_for_tests,
 )
 from extensions.network_operations.skill_prompt import NETWORK_SKILL_PROMPT_VERSION
-from evaluation.runner import GoldenCase, evaluate_case
 
 
 def test_network_extension_loads_tool_and_frontend_contract():
@@ -176,16 +175,6 @@ def test_network_read_tool_runs_through_default_tool_runtime():
     assert result.status == "succeeded"
     assert result.output["ok"] is True
     assert result.output["devices"] == []
-    gate = evaluate_case(
-        GoldenCase(
-            "network-devices-read",
-            "读取网络设备与连接",
-            required_tools=("network.operations.devices_read",),
-            required_terms=("devices",),
-        ),
-        {"tool_ids": [result.tool_id], "final_response": result.summary},
-    )
-    assert gate["passed"] is True
     missing_scope = client.invoke(
         "network.operations.devices_read",
         {},

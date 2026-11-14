@@ -9,7 +9,6 @@ import pytest
 from agent.llm.router import resolve_model_candidates
 from backend.core.identity import list_users, upsert_user, verify_user
 from core.tools.mcp_client import McpProtocolError, McpServerConfig, StdioMcpClient
-from evaluation.runner import GoldenCase, evaluate_case
 from extensions.manifest import ExtensionManifest, ExtensionValidationError
 from storage.object_store import LocalObjectStore
 
@@ -23,35 +22,6 @@ def test_extension_manifest_requires_declared_surface():
         pass
     else:
         raise AssertionError("empty extension should be rejected")
-
-
-def test_platform_evaluation_baseline():
-    case = GoldenCase("read-file", "read a file", required_tools=("workspace.file",), required_terms=("完成",))
-    result = evaluate_case(case, {"tool_ids": ["workspace.file"], "final_response": "任务已完成"})
-    assert result["passed"] is True
-
-
-def test_platform_evaluation_measures_unsafe_and_wasteful_tool_behavior():
-    case = GoldenCase(
-        "read-only-research",
-        "查找官方资料",
-        required_tools=("web.manage",),
-        forbidden_tools=("exec.run",),
-        accepted_statuses=("complete", "partial"),
-        max_tool_calls=2,
-        require_evidence=True,
-    )
-    result = evaluate_case(case, {
-        "tool_ids": ["web.manage", "exec.run", "web.manage"],
-        "final_response": "已找到资料",
-        "status": "complete",
-        "evidence_count": 0,
-    })
-
-    assert result["passed"] is False
-    assert result["forbidden_tools"] == ["exec.run"]
-    assert result["tool_count_ok"] is False
-    assert result["evidence_ok"] is False
 
 
 def test_local_object_store_is_atomic_and_scoped(tmp_path):

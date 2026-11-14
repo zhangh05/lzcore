@@ -602,11 +602,6 @@ def delete_file_permanently(workspace_id: str, file_id: str) -> bool:
 
 # ── Internal helpers ─────────────────────────────────────────────────
 
-def _guess_mime(name: str, binary: bool = False) -> str:
-    from storage.file_types import classify_file
-    return classify_file(name, binary=binary)['mime_type']
-
-
 def _ext_for_kind(kind: str) -> str:
     ext_map = {
         "text": "txt", "config": "txt", "markdown": "md", "json": "json",

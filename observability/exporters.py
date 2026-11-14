@@ -7,20 +7,7 @@ import os
 import urllib.request
 import hashlib
 from datetime import datetime
-from typing import Any, Protocol
-
-
-class TraceExporter(Protocol):
-    def export(self, trace: dict[str, Any]) -> None: ...
-
-
-class JsonlTraceExporter:
-    def __init__(self, path: str):
-        self.path = path
-
-    def export(self, trace: dict[str, Any]) -> None:
-        with open(self.path, "a", encoding="utf-8") as stream:
-            stream.write(json.dumps(trace, ensure_ascii=False, default=str) + "\n")
+from typing import Any
 
 
 class OtlpHttpTraceExporter:

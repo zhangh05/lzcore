@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -14,16 +14,6 @@ class QueueReceipt:
     attempt: int
     principal: str = ""
     delivery_id: str = ""
-
-
-class JobQueue(Protocol):
-    def enqueue(self, workspace_id: str, job_id: str) -> QueueReceipt: ...
-    def claim(self, worker_id: str) -> QueueReceipt | None: ...
-    def ack(self, receipt: QueueReceipt) -> None: ...
-    def retry(self, receipt: QueueReceipt, reason: str = "") -> None: ...
-    def heartbeat(self, receipt: QueueReceipt, worker_id: str) -> bool: ...
-    def reclaim_stale(self, max_age_seconds: int) -> int: ...
-    def health(self) -> dict[str, Any]: ...
 
 
 def queue_mode() -> str:

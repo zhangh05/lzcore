@@ -834,31 +834,6 @@ def _validate_consolidation_decision(record: MemoryRecord) -> tuple[Optional[boo
             return False, [{"reason": f"llm_score_too_low ({cached_score})"}]
     return None, [{"reason": "consolidation_decision_missing"}]
 
-def _text_similarity(a: str, b: str) -> float:
-    def _tokens(text: str) -> set[str]:
-        import re
-        normalized = (text or "").lower().strip()
-        if not normalized:
-            return set()
-        words = set(re.findall(r"[a-z0-9_./:-]+", normalized))
-        cjk = re.findall(r"[\u4e00-\u9fff]", normalized)
-        if cjk:
-            words.update(cjk)
-            words.update("".join(cjk[i:i + 2]) for i in range(len(cjk) - 1))
-        if not words and normalized:
-            compact = re.sub(r"\s+", "", normalized)
-            words.update(compact[i:i + 3] for i in range(max(1, len(compact) - 2)))
-        return {w for w in words if w}
-
-    a_words = _tokens(a)
-    b_words = _tokens(b)
-    if not a_words or not b_words:
-        return 0
-    overlap = len(a_words & b_words)
-    jaccard = overlap / len(a_words | b_words)
-    containment = overlap / min(len(a_words), len(b_words))
-    return max(jaccard, containment)
-
 def _emit_event(ws_id: str, rec: MemoryRecord, event_type: str):
     if _event_hook is None:
         return
