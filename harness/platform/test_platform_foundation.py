@@ -70,7 +70,8 @@ def test_local_object_store_is_atomic_and_scoped(tmp_path):
 def test_identity_uses_hashed_password_and_role(monkeypatch, tmp_path):
     monkeypatch.setenv("LZCORE_WORKSPACE_DIR", str(tmp_path))
     user = upsert_user("alice", "correct horse", "admin")
-    assert user == {"username": "alice", "role": "admin", "organization_id": "default", "workspace_ids": ["default"], "home_workspace_id": "", "enabled": True}
+    assert user["user_id"].startswith("usr_") and user["auth_version"]
+    assert {key: value for key, value in user.items() if key not in {"user_id", "auth_version"}} == {"username": "alice", "role": "admin", "organization_id": "default", "workspace_ids": ["default"], "home_workspace_id": "", "enabled": True}
     assert verify_user("alice", "correct horse")["role"] == "admin"
     assert verify_user("alice", "wrong") is None
     assert "password_hash" not in json.dumps(list_users())
@@ -132,6 +133,8 @@ def test_identity_viewer_is_workspace_scoped(monkeypatch, tmp_path):
     assert client.post("/api/jobs/worker/run-once", headers=headers).status_code == 403
 
     upsert_user("scoped", "new-password", "operator", "tenant_b", ["tenant_b"])
+    assert client.get("/api/workspaces/tenant_b/state", headers=headers).status_code == 401
+    assert client.post("/api/auth/login", json={"username": "scoped", "password": "new-password"}, headers=headers).status_code == 200
     assert client.get("/api/workspaces/tenant_b/state", headers=headers).status_code == 200
     assert client.get("/api/workspaces/tenant_a/state", headers=headers).status_code == 403
 
@@ -185,7 +188,7 @@ def test_admin_exclusively_manages_ordinary_user_access(monkeypatch, tmp_path):
     from backend.ws.agent_ws import _ws_workspace_allowed
     assert _ws_workspace_allowed("alice", "operator", ["team_a"], "team_a", write=True) is True
     assert _ws_workspace_allowed("alice", "operator", ["team_a"], "default", write=False) is False
-    assert _ws_workspace_allowed("api-token", "owner", [], "default", write=True) is True
+    assert _ws_workspace_allowed("api-token", "owner", [], "default", write=True) is False
 
     alice_session = ordinary.post(
         "/api/sessions",

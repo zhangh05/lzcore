@@ -229,14 +229,23 @@ def is_current_session_authenticated() -> bool:
             return False
         from backend.core.identity import get_user
         identity_user = get_user(username)
-        if identity_user and identity_user.get("enabled", True):
+        if identity_user and identity_user.get("enabled", True) and (
+            identity_user.get("user_id")
+            and flask.session.get("lzcore_user_id") == identity_user["user_id"]
+            and flask.session.get("lzcore_auth_version") == identity_user.get("auth_version", "legacy")
+            and flask.session.get("lzcore_identity_type") == "managed"
+        ):
+            flask.g.verified_identity_user = identity_user
             flask.session["lzcore_role"] = identity_user.get("role", "viewer")
             flask.session["lzcore_org"] = identity_user.get("organization_id", "default")
             flask.session["lzcore_workspaces"] = list(identity_user.get("workspace_ids") or [])
             flask.session["lzcore_home_workspace"] = identity_user.get("home_workspace_id", "")
             return True
         configured_username = _get_login_username()
-        if configured_username and hmac.compare_digest(username.encode("utf-8"), configured_username.encode("utf-8")):
+        if identity_user is None and configured_username and hmac.compare_digest(username.encode("utf-8"), configured_username.encode("utf-8")) and (
+            flask.session.get("lzcore_identity_type") == "bootstrap"
+            and flask.session.get("lzcore_auth_version") == _configured_auth_version()
+        ):
             flask.session["lzcore_role"] = "admin"
             flask.session["lzcore_org"] = "default"
             flask.session["lzcore_workspaces"] = ["default"]
@@ -251,6 +260,13 @@ def is_current_session_authenticated() -> bool:
     return bool(username and session_user and hmac.compare_digest(str(session_user).encode("utf-8"), username.encode("utf-8")))
 
 
+def _configured_auth_version() -> str:
+    """A credential generation that does not expose a password digest."""
+    import hashlib
+    key = str(flask.current_app.secret_key or "").encode()
+    return hmac.new(key, (_get_login_username() + "\0" + _get_login_password()).encode(), hashlib.sha256).hexdigest()
+
+
 def authenticated_request_context() -> dict | None:
     """Build request-local authority from verified credentials, never request data."""
     if hasattr(flask.g, "authenticated_context"):
@@ -263,23 +279,85 @@ def authenticated_request_context() -> dict | None:
             "organization_id": "default", "workspace_ids": ["default"],
             "home_workspace_id": "default",
         }
+        context["credential_version"] = _token_version(_get_api_token())
     elif is_current_session_authenticated():
         username = str(flask.session.get("lzcore_user") or "")
         role = str(flask.session.get("lzcore_role") or "")
         current = None
         if _is_identity_enabled():
-            from backend.core.identity import get_user
-            current = get_user(username)
+            current = getattr(flask.g, "verified_identity_user", None)
+        from backend.core.identity import _bootstrap_storage_id, resolve_user_storage_id
+        storage_id = (current or {}).get("user_id") or (
+            _bootstrap_storage_id(username) if _is_identity_enabled() else resolve_user_storage_id(username)
+        )
         context = {
-            "principal_type": "session", "user_id": str((current or {}).get("user_id") or username),
+            "principal_type": "session", "user_id": str(storage_id),
             "username": username, "role": role,
             "platform_admin": _is_identity_enabled() and (current is None or role == "owner"),
             "organization_id": str(flask.session.get("lzcore_org") or ""),
             "workspace_ids": list(flask.session.get("lzcore_workspaces") or []),
             "home_workspace_id": str(flask.session.get("lzcore_home_workspace") or ""),
+            "identity_type": flask.session.get("lzcore_identity_type", "bootstrap"),
+            "auth_version": flask.session.get("lzcore_auth_version") or _configured_auth_version(),
+            "configured_version": _token_version(_get_login_username() + "\0" + _get_login_password()),
         }
     flask.g.authenticated_context = context
     return context
+
+
+def _token_version(token: str) -> str:
+    import hashlib
+    return hashlib.sha256(str(token or "").encode()).hexdigest()
+
+
+def capture_stream_authority() -> dict:
+    context = authenticated_request_context()
+    if context is not None:
+        return dict(context)
+    if not (_is_identity_enabled() or _is_login_enabled() or _is_auth_enabled()):
+        return {"principal_type": "personal", "username": ""}
+    return {"principal_type": "denied"}
+
+
+def stream_authority_allowed(context: dict, workspace_id: str, *, write: bool = False) -> bool:
+    """Revalidate a captured credential before each long-lived transport send."""
+    try:
+        from backend.core.identity import can_access_workspace, get_user, validate_username
+        kind = context.get("principal_type")
+        if kind == "personal":
+            return not (_is_identity_enabled() or _is_login_enabled() or _is_auth_enabled())
+        if kind == "api_token":
+            token = _get_api_token()
+            return bool(token and context.get("credential_version") == _token_version(token))
+        if kind != "session":
+            return False
+        username = context["username"]
+        if context.get("identity_type") == "managed":
+            validate_username(username)
+            current = get_user(username)
+            if not current or not current.get("enabled", True) or not current.get("user_id"):
+                return False
+            if current["user_id"] != context.get("user_id") or current.get("auth_version", "legacy") != context.get("auth_version"):
+                return False
+            return current.get("role") == "owner" or can_access_workspace(
+                current.get("role", "viewer"), current.get("workspace_ids", []), workspace_id, write=write,
+            )
+        return bool(
+            _get_login_username() == username and _get_login_password()
+            and context.get("configured_version") == _token_version(username + "\0" + _get_login_password())
+            and (not _is_identity_enabled() or get_user(username) is None)
+        )
+    except Exception:
+        return False
+
+
+def storage_principal_for_authority(context: dict):
+    from backend.core.identity import _bootstrap_storage_id
+    from storage.principal import VerifiedStoragePrincipal
+    if context.get("principal_type") == "personal":
+        return ""
+    storage_id = _bootstrap_storage_id("service/api-token") if context.get("principal_type") == "api_token" else context["user_id"]
+    return VerifiedStoragePrincipal(context["username"], storage_id)
 
 
 def handle_auth_status():
@@ -326,6 +404,11 @@ def handle_auth_status():
 def establish_identity_session(identity_user: dict) -> None:
     """Create the canonical browser session for a verified identity."""
     flask.session.clear()
+    if not identity_user.get("user_id"):
+        raise ValueError("immutable user_id required")
+    flask.session["lzcore_identity_type"] = "managed"
+    flask.session["lzcore_user_id"] = identity_user["user_id"]
+    flask.session["lzcore_auth_version"] = identity_user.get("auth_version", "legacy")
     flask.session["lzcore_user"] = identity_user["username"]
     flask.session["lzcore_role"] = identity_user.get("role", "viewer")
     flask.session["lzcore_org"] = identity_user.get("organization_id", "default")
@@ -361,6 +444,8 @@ def handle_auth_login():
     ):
         flask.session.clear()
         flask.session["lzcore_user"] = configured_username
+        flask.session["lzcore_identity_type"] = "bootstrap"
+        flask.session["lzcore_auth_version"] = _configured_auth_version()
         if _is_identity_enabled():
             flask.session["lzcore_role"] = "admin"
             flask.session["lzcore_org"] = "default"
@@ -619,14 +704,8 @@ def register_auth_middleware(app: flask.Flask) -> None:
                 workspace_error = _bind_request_workspace()
                 if workspace_error:
                     return workspace_error
-                if session_authenticated:
-                    from storage.principal import set_storage_principal
-                    flask.g._storage_principal_token = set_storage_principal(
-                        str(flask.session.get("lzcore_user") or "")
-                    )
-                elif api_token_authenticated:
-                    from storage.principal import set_storage_principal
-                    flask.g._storage_principal_token = set_storage_principal("api-token")
+                from storage.principal import set_storage_principal
+                flask.g._storage_principal_token = set_storage_principal(storage_principal_for_authority(context))
                 denied = _authorize_identity_request()
                 return denied
             logger.warning("auth_denied: path=%s reason=no_login_session", path)
@@ -663,7 +742,7 @@ def register_auth_middleware(app: flask.Flask) -> None:
         if workspace_error:
             return workspace_error
         from storage.principal import set_storage_principal
-        flask.g._storage_principal_token = set_storage_principal("api-token")
+        flask.g._storage_principal_token = set_storage_principal(storage_principal_for_authority(authenticated_request_context()))
         return None
 
     # Register teardown to clean up any auth state if needed
@@ -694,15 +773,27 @@ def _authorize_identity_request():
         return None
     path = flask.request.path
     role = str(flask.session.get("lzcore_role") or "viewer")
-    from backend.core.identity import get_user
-    current_user = get_user(str(flask.session.get("lzcore_user") or ""))
-    platform_admin = current_user is None or role == "owner"
+    context = authenticated_request_context() or {}
+    platform_admin = bool(context.get("platform_admin"))
+    global_admin = (
+        path.startswith("/api/admin/") and not path.startswith("/api/admin/operation-ledger")
+        or path.startswith("/api/jobs/worker/")
+        or path.startswith("/api/agent/llm/") and path not in {"/api/agent/llm/test", "/api/agent/llm/models"} and flask.request.method not in {"GET", "HEAD"}
+    )
+    if global_admin and not platform_admin:
+        return flask.jsonify({"ok": False, "error": "platform_admin_required"}), 403
     if path.startswith("/api/identity/") and not _role_at_least(role, "admin"):
         return flask.jsonify({"ok": False, "error": "forbidden"}), 403
     if path == "/api/workspaces" and flask.request.method == "POST" and not _role_at_least(role, "admin"):
         return flask.jsonify({"ok": False, "error": "forbidden"}), 403
-    if path == "/api/workspaces/batch-delete" and not _role_at_least(role, "admin"):
-        return flask.jsonify({"ok": False, "error": "forbidden"}), 403
+    if path == "/api/workspaces/batch-delete":
+        data = flask.request.get_json(silent=True) or {}
+        ids = data.get("workspace_ids") if isinstance(data, dict) else None
+        if not isinstance(ids, list) or not ids:
+            return flask.jsonify({"ok": False, "error": "invalid_workspace_ids"}), 400
+        denied = authorize_workspace_control(ids)
+        if denied:
+            return denied
     if path.startswith("/api/admin/") and not _role_at_least(role, "admin"):
         return flask.jsonify({"ok": False, "error": "admin_required"}), 403
     if path.startswith("/api/jobs/worker/") and not _role_at_least(role, "admin"):
@@ -724,6 +815,11 @@ def _authorize_identity_request():
     workspace_id = request_workspace_id()
     if not workspace_id:
         return None
+    if (flask.request.method == "DELETE" and path == f"/api/workspaces/{workspace_id}") or path == f"/api/workspaces/{workspace_id}/rename":
+        denied = authorize_workspace_control([workspace_id])
+        if denied:
+            return denied
+        return None
     if platform_admin:
         return None
     try:
@@ -733,6 +829,37 @@ def _authorize_identity_request():
         allowed = False
     if not allowed:
         return flask.jsonify({"ok": False, "error": "workspace_forbidden"}), 403
+    return None
+
+
+def authorize_workspace_control(workspace_ids):
+    """Preflight the complete shared control-plane operation before mutation."""
+    from storage.ids import validate_workspace_id
+    try:
+        ids = [validate_workspace_id(item) for item in workspace_ids]
+    except (TypeError, ValueError):
+        return flask.jsonify({"ok": False, "error": "invalid_workspace_id"}), 400
+    if not _is_identity_enabled():
+        return None
+    context = authenticated_request_context()
+    if not context:
+        return flask.jsonify({"ok": False, "error": "forbidden"}), 403
+    if context.get("platform_admin"):
+        return None
+    from backend.core.identity import list_organizations
+    from storage.paths import workspace_catalog_root
+    import json
+    try:
+        organizations = list_organizations()
+        for workspace_id in ids:
+            owners = [item["organization_id"] for item in organizations if workspace_id in item.get("workspace_ids", [])]
+            state = json.loads((workspace_catalog_root(workspace_id) / "sys" / "state.json").read_text(encoding="utf-8"))
+            same_org = owners == [context["organization_id"]] and state.get("organization_id") == context["organization_id"]
+            owner = bool(state.get("owner_user_id") and state["owner_user_id"] == context["user_id"])
+            if not same_org or not (owner or _role_at_least(context["role"], "admin")):
+                return flask.jsonify({"ok": False, "error": "workspace_control_forbidden"}), 403
+    except Exception:
+        return flask.jsonify({"ok": False, "error": "workspace_control_forbidden"}), 403
     return None
 
 
@@ -787,7 +914,7 @@ def _authorize_extension_request(path: str, role: str, *, platform_admin: bool):
             return flask.jsonify({"ok": False, "error": "extension_admin_required"}), 403
         return None
     lifecycle = re.match(r"^/api/extensions/([^/]+)/(enable|disable|migrate|install|upgrade|uninstall)", path)
-    if lifecycle and not _role_at_least(role, "admin"):
+    if lifecycle and (not _role_at_least(role, "admin") or not platform_admin and lifecycle.group(2) != "migrate"):
         return flask.jsonify({"ok": False, "error": "extension_admin_required"}), 403
     match = re.match(r"^/api/extensions/([^/]+)", path)
     if not match:

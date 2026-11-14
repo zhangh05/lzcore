@@ -131,6 +131,13 @@ def _drop_broadcast_client(key: str, ws: object | None = None) -> None:
 
 def _send_broadcast_recipient(key: str, ws: object, payload: str) -> None:
     while True:
+        with _active_ws_lock:
+            current = _active_ws_connections.get(key)
+        if current is None or current[2] is not ws:
+            return
+        if not _ws_workspace_allowed(current[0], "", [], current[1], write=False, authority=getattr(ws, "authority", None)):
+            _drop_broadcast_client(key, ws)
+            return
         try:
             ws.send(payload)
         except (OSError, RuntimeError, TypeError, ValueError):
@@ -319,6 +326,8 @@ class _SocketOutbox:
         self.turn_count = 0
         self.turn_started_at: float | None = None
         self.next_heartbeat_at = 0.0
+        self.authority = None
+        self.workspace_ids: set[str] = set()
         self.thread = threading.Thread(target=self._run, name="lzcore-ws-sender", daemon=True)
         self.thread.start()
 
@@ -349,6 +358,15 @@ class _SocketOutbox:
         except queue.Full:
             pass
 
+    def _authorized(self) -> bool:
+        from backend.core.auth import stream_authority_allowed
+        if self.authority is None:
+            return True  # no application frames are queued before handshake
+        if all(stream_authority_allowed(self.authority, ws_id) for ws_id in tuple(self.workspace_ids) or ("",)):
+            return True
+        self.close()
+        return False
+
     def _run(self) -> None:
         while not self.closed.is_set():
             try:
@@ -358,6 +376,8 @@ class _SocketOutbox:
                 continue
             if item is None:
                 break
+            if not self._authorized():
+                return
             try:
                 self.ws.send(item)
             except Exception:
@@ -371,6 +391,8 @@ class _SocketOutbox:
             return
         now = time.monotonic()
         if now < self.next_heartbeat_at:
+            return
+        if not self._authorized():
             return
         payload = json.dumps(_heartbeat_payload(self.turn_started_at, now), ensure_ascii=True)
         try:
@@ -414,6 +436,7 @@ def register_ws_routes(app):
         authenticated_username = ""
         authenticated_role = ""
         authenticated_workspaces: list[str] = []
+        authority = None
         ws_key = ""
         active_cancel_event = None
         outbox = _SocketOutbox(ws)
@@ -467,6 +490,8 @@ def register_ws_routes(app):
                         if has_valid_token:
                             authenticated_username = "api-token"
                             authenticated_role = "owner"
+                            from backend.core.auth import _token_version
+                            authority = {"principal_type": "api_token", "username": "api-token", "credential_version": _token_version(api_token)}
                         elif (
                             not _is_auth_enabled()
                             and not _is_login_enabled()
@@ -482,6 +507,14 @@ def register_ws_routes(app):
                         authenticated_username = str(session.get("lzcore_user") or "")
                         authenticated_role = str(session.get("lzcore_role") or "viewer")
                         authenticated_workspaces = list(session.get("lzcore_workspaces") or [])
+                        from backend.core.auth import capture_stream_authority
+                        authority = capture_stream_authority()
+                    if authority is None:
+                        authority = {"principal_type": "personal", "username": ""}
+                    from backend.core.auth import storage_principal_for_authority
+                    authenticated_username = storage_principal_for_authority(authority)
+                    outbox.authority = authority
+                    outbox.workspace_ids = set()
                     if time.monotonic() >= auth_deadline:
                         return
                     _auth_checked = True
@@ -501,10 +534,12 @@ def register_ws_routes(app):
                         authenticated_workspaces,
                         workspace_id,
                         write=False,
+                        authority=authority,
                     ):
                         ws.send(json.dumps({"type": "error", "message": "workspace_forbidden"}))
                         continue
                     ws_key = f"{id(ws)}_{threading.current_thread().ident}"
+                    outbox.workspace_ids.add(workspace_id)
                     with _active_ws_lock:
                         _active_ws_connections[ws_key] = (authenticated_username, workspace_id, outbox)
                     emit({"type": "pong", "message": "connected"})
@@ -553,10 +588,12 @@ def register_ws_routes(app):
                     authenticated_workspaces,
                     workspace_id,
                     write=True,
+                    authority=authority,
                 ):
                     ws.send(json.dumps({"type": "error", "message": "workspace_forbidden"}))
                     continue
 
+                outbox.workspace_ids.add(workspace_id)
                 metadata = msg.get("metadata", {})
                 if not isinstance(metadata, dict):
                     metadata = {}
@@ -709,10 +746,14 @@ def ws_unauthenticated_frame_allowed(
     return True
 
 
-def _ws_workspace_allowed(username: str, role: str, allowed: list[str], workspace_id: str, *, write: bool) -> bool:
+def _ws_workspace_allowed(username: str, role: str, allowed: list[str], workspace_id: str, *, write: bool, authority: dict | None = None) -> bool:
     """Mirror HTTP workspace RBAC for the WebSocket transport."""
-    if username in {"", "api-token"}:
-        return True  # authentication disabled, or the platform API token
+    if authority is not None:
+        from backend.core.auth import stream_authority_allowed
+        return stream_authority_allowed(authority, workspace_id, write=write)
+    if not username:
+        from backend.core.auth import _is_auth_enabled, _is_login_enabled, _is_identity_enabled
+        return not (_is_auth_enabled() or _is_login_enabled() or _is_identity_enabled())
     try:
         from backend.core.identity import can_access_workspace, get_user
         current = get_user(username)
@@ -775,7 +816,7 @@ def _attach_turn_replay(msg, username, role, workspaces, outbox, unsubscribers, 
     except ValueError:
         emit({"type": "error", "message": "Invalid session_id or workspace_id", "session_id": session_id, "client_request_id": client_request_id})
         return False
-    if not _ws_workspace_allowed(username, role, workspaces, workspace_id, write=False):
+    if not _ws_workspace_allowed(username, role, workspaces, workspace_id, write=False, authority=getattr(outbox, "authority", None)):
         emit({"type": "error", "message": "workspace_forbidden", "session_id": session_id, "client_request_id": client_request_id})
         return False
     from agent.runtime.turn_replay import resume_disposition, subscribe_turn
@@ -810,6 +851,8 @@ def _attach_turn_replay(msg, username, role, workspaces, outbox, unsubscribers, 
     if len(unsubscribers) >= 128:
         emit({"type": "error", "message": "resume_limit_exceeded", "session_id": session_id, "client_request_id": client_request_id})
         return False
+    if hasattr(outbox, "workspace_ids"):
+        outbox.workspace_ids.add(workspace_id)
     outbox.attach_turn()
     unsubscribers[key] = subscribe_turn(
         workspace_id, session_id, client_request_id,

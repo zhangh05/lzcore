@@ -167,16 +167,32 @@ async def _get_page(tab_index: int | None = None) -> Any:
             async with _pw_init_lock:
                 if _pw_instance is None:
                     _pw_instance = await _playwright().start()
-        _state().browser = await _pw_instance.chromium.launch(headless=True)
-        _state().context = await _state().browser.new_context(
-            viewport=VIEWPORT,
-            user_agent=USER_AGENT,
-            accept_downloads=False,
+        browser = await _pw_instance.chromium.launch(
+            headless=True,
+            # These transports do not pass through Playwright HTTP routes.
+            args=["--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"],
         )
-        scope = current_browser_scope()
-        async def scoped_route(route):
-            await _abort_blocked_browser_request(route, scope=scope)
-        await _state().context.route("**/*", scoped_route)
+        try:
+            context = await browser.new_context(
+                viewport=VIEWPORT,
+                user_agent=USER_AGENT,
+                accept_downloads=False,
+                service_workers="block",
+            )
+            scope = current_browser_scope()
+            async def scoped_route(route):
+                await _abort_blocked_browser_request(route, scope=scope)
+            async def scoped_websocket(route):
+                await _abort_blocked_browser_websocket(route, scope=scope)
+            await context.route("**/*", scoped_route)
+            # Missing API/failed setup must not leave a reusable unguarded
+            # context behind. Install every boundary before creating pages.
+            await context.route_web_socket("**/*", scoped_websocket)
+        except BaseException:
+            await browser.close()
+            raise
+        _state().browser = browser
+        _state().context = context
         await _new_page(0)
         _state().active_tab = 0
 
@@ -413,6 +429,24 @@ async def _abort_blocked_browser_request(route, *, scope=None) -> None:
         await route.abort()
         return
     await route.continue_()
+
+
+async def _abort_blocked_browser_websocket(route, *, scope=None) -> None:
+    """WebSocket handshakes use a separate Playwright routing boundary."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    try:
+        parts = urlsplit(route.url)
+        scheme = {"ws": "http", "wss": "https"}.get(parts.scheme)
+        blocked = scheme is None or _validate_browser_url(
+            urlunsplit((scheme, parts.netloc, parts.path, parts.query, parts.fragment)), scope=scope,
+        ) is not None
+    except (ValueError, TypeError):
+        blocked = True
+    if blocked:
+        await route.close(code=1008, reason="browser network policy blocked target")
+        return
+    route.connect_to_server()
 
 
 # ──── Core Actions ──────────────────────────────────────────────────

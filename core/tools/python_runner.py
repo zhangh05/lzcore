@@ -28,23 +28,24 @@ def _truthy(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _loopback_host(host: str) -> bool:
-    return host.strip().strip("[]") in {"localhost", "::1"} or host.strip().startswith(
-        "127."
-    )
-
-
 def _requires_strong_isolation() -> bool:
-    host = os.environ.get("LZCORE_RUNTIME_BIND_HOST", "127.0.0.1")
-    if not _loopback_host(host):
+    # Listener addresses do not define tenancy. The production/server
+    # profiles set REQUIRE_STRONG_ISOLATION, and authentication independently
+    # requires isolation even when the listener is loopback-only.
+    if any(_truthy(os.environ.get(name)) for name in (
+        "LZCORE_IDENTITY_ENABLED", "LZCORE_AUTH_ENABLED", "LZCORE_OIDC_ENABLED",
+        "LZCORE_LOGIN_ENABLED", "LZCORE_PYTHON_REQUIRE_STRONG_ISOLATION",
+    )):
         return True
-    if _truthy(os.environ.get("LZCORE_IDENTITY_ENABLED")):
-        return True
+    # A configured secret-file path is enough to require isolation; never
+    # read authentication material just to choose an execution boundary.
     if os.environ.get("LZCORE_LOGIN_USERNAME", "").strip() and os.environ.get(
-        "LZCORE_LOGIN_PASSWORD", ""
+        "LZCORE_LOGIN_ENABLED", ""
+    ).strip().lower() not in {"0", "false", "no", "off"} and (
+        os.environ.get("LZCORE_LOGIN_PASSWORD") or os.environ.get("LZCORE_LOGIN_PASSWORD_FILE")
     ):
         return True
-    return _truthy(os.environ.get("LZCORE_PYTHON_REQUIRE_STRONG_ISOLATION"))
+    return False
 
 
 def _empty_result(

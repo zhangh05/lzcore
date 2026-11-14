@@ -213,6 +213,10 @@ def test_websocket_broadcast_is_workspace_scoped(monkeypatch):
         "storage.principal.current_storage_principal",
         lambda: "Admin",
     )
+    # Broadcasts re-check the recipient's identity before delivery.
+    monkeypatch.setattr("backend.core.identity.get_user", lambda name: {
+        "username": name, "enabled": True, "role": "operator", "workspace_ids": ["ws_one", "ws_two"],
+    })
     monkeypatch.setattr(agent_ws, "_active_ws_connections", {
         "one": ("Admin", "ws_one", one),
         "two": ("Admin", "ws_two", two),

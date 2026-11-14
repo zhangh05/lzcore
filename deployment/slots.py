@@ -43,10 +43,38 @@ def _ignore(_directory: str, names: list[str]) -> set[str]:
 
 def _hash_tree(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(item for item in root.rglob("*") if item.is_file() and item.name != "release.json"):
-        digest.update(path.relative_to(root).as_posix().encode())
-        digest.update(path.read_bytes())
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise ReleaseError("release slot contains a symbolic link")
+        if path == root / "release.json" or path.is_dir():
+            continue
+        if not path.is_file():
+            raise ReleaseError("release slot contains a special file")
+        name = path.relative_to(root).as_posix().encode("utf-8")
+        content = path.read_bytes()
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
     return digest.hexdigest()
+
+
+def _verify_slot(base: Path, version: str) -> dict[str, Any]:
+    target = base / "releases" / _version(version)
+    if target.is_symlink() or target.resolve().parent != (base / "releases").resolve():
+        raise ReleaseError("unsafe release slot")
+    try:
+        if (target / "release.json").is_symlink():
+            raise ReleaseError("release manifest must not be a symbolic link")
+        manifest = json.loads((target / "release.json").read_text(encoding="utf-8"))
+        if (not isinstance(manifest, dict) or manifest.get("version") != version
+                or manifest.get("hash_format") != 2):
+            raise ReleaseError("release manifest mismatch or unsupported hash format; restage release")
+        if manifest.get("sha256") != _hash_tree(target):
+            raise ReleaseError("release tree checksum mismatch")
+    except (OSError, ValueError) as exc:
+        raise ReleaseError("release slot verification failed") from exc
+    return manifest
 
 
 def _source_symlink(root: Path) -> Path | None:
@@ -83,7 +111,7 @@ def stage_release(source: str | Path, version: str, *, root: str | Path | None =
         shutil.copytree(source_path, payload, ignore=_ignore)
         if any(path.name in {"config", "providers", "credentials.yaml", "secrets.yaml", "llm.yaml", "local_browser_token"} for path in payload.rglob("*")):
             raise ReleaseError("release payload contains runtime configuration")
-        manifest = {"version": version, "created_at": now_iso(), "sha256": _hash_tree(payload)}
+        manifest = {"version": version, "created_at": now_iso(), "hash_format": 2, "sha256": _hash_tree(payload)}
         (payload / "release.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         os.replace(payload, target)
         return {**manifest, "path": str(target)}
@@ -103,6 +131,15 @@ def _replace_link(link: Path, target: str) -> None:
 
 
 def _restore_links(base: Path, state: dict) -> None:
+    # Recovery and failed-health rollback also activate slots. Validate all
+    # frozen targets before touching either link, just as for explicit calls.
+    for name in ("current", "previous"):
+        if state[name]:
+            target = state[name]
+            version = _version(Path(target).name)
+            if target != os.path.join("releases", version):
+                raise ReleaseError("unsafe recovery release slot")
+            _verify_slot(base, version)
     for name in ("current", "previous"):
         target = state[name]
         if target:
@@ -144,8 +181,7 @@ def activate_release(version: str, *, root: str | Path | None = None, health_url
     with FileLock(base / "switch.lock"):
         _recover_switch(base)
         target = base / "releases" / version
-        if not (target / "release.json").is_file():
-            raise ReleaseError("release slot not found")
+        _verify_slot(base, version)
         old_target = _link_target(base / "current")
         relative = os.path.relpath(target, base)
         health = None
@@ -161,9 +197,12 @@ def rollback_release(*, root: str | Path | None = None) -> dict[str, Any]:
     with FileLock(base / "switch.lock"):
         _recover_switch(base)
         target = _link_target(base / "previous")
-        if not target or not (base / target / "release.json").is_file():
+        if not target:
             raise ReleaseError("previous release slot not found")
-        manifest = json.loads((base / target / "release.json").read_text(encoding="utf-8"))
+        version = _version(Path(target).name)
+        if target != os.path.join("releases", version):
+            raise ReleaseError("unsafe previous release slot")
+        manifest = _verify_slot(base, version)
         _switch(base, target, _link_target(base / "current"))
         return {"ok": True, "version": manifest["version"], "current": str(base / "current"), "rolled_back_at": now_iso()}
 
