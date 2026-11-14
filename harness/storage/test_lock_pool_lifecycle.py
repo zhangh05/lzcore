@@ -21,16 +21,17 @@ def test_waiting_threads_share_the_same_lock_until_all_release(tmp_path):
     path = tmp_path / "record.lock"
     waiting, acquired, release = threading.Event(), threading.Event(), threading.Event()
     shared = _lock_for(path)
-    def waiter():
+
+    def waiter(shared_lock):
         waiting.set()
         with FileLock(path) as held:
-            assert held._thread_lock is shared
+            assert held._thread_lock is shared_lock
             acquired.set()
             assert release.wait(5)
     with ThreadPoolExecutor(max_workers=1) as pool:
         try:
             with FileLock(path):
-                future = pool.submit(waiter)
+                future = pool.submit(waiter, shared)
                 assert waiting.wait(5)
                 assert not acquired.is_set()
                 assert _lock_for(path) is shared

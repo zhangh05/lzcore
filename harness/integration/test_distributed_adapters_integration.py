@@ -29,26 +29,44 @@ def test_postgres_records_are_visible_across_adapter_instances():
     assert first.read(key) is None
 
 
-def test_redis_lease_reclaim_survives_new_queue_instance():
+def test_redis_lease_reclaim_survives_new_queue_instance(monkeypatch, tmp_path):
     from jobs.queue import RedisJobQueue
+    from jobs.schemas import JobRecord
+    from jobs.store import create_job, get_job
+    from storage.principal import storage_principal
 
-    url = os.environ["LZCORE_QUEUE_URL"]
-    first = RedisJobQueue(url)
-    second = RedisJobQueue(url)
-    first.client.delete(first.QUEUED, first.PROCESSING, first.LEASES)
-    first.enqueue("integration", "job_12345678")
-    receipt = first.claim("worker-a")
-    assert receipt is not None
-    lease = first.client.hget(first.LEASES, receipt.lease_id)
-    assert lease
-    import json
-    payload = json.loads(lease)
-    payload["heartbeat_at"] = 0
-    first.client.hset(first.LEASES, receipt.lease_id, json.dumps(payload))
-    assert second.reclaim_stale(30) == 1
-    retried = second.claim("worker-b")
-    assert retried is not None and retried.attempt == 2
-    second.ack(retried)
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr("storage.principal.known_storage_principals", lambda: [])
+    with storage_principal(""):
+        url = os.environ["LZCORE_QUEUE_URL"]
+        first = RedisJobQueue(url)
+        second = RedisJobQueue(url)
+        with pytest.raises(ValueError, match="cannot dispatch a missing or unreadable job"):
+            first.enqueue("integration", "job_12345678")
+        create_job(JobRecord(job_id="job_12345678", workspace_id="integration", status="queued"))
+        first.client.delete(first.QUEUED, first.PROCESSING, first.LEASES, first.DISPATCHED)
+        dispatched = first.enqueue("integration", "job_12345678")
+        receipt = first.claim("worker-a")
+        assert receipt is not None
+        assert receipt.delivery_id == dispatched.delivery_id
+        lease = first.client.hget(first.LEASES, receipt.lease_id)
+        assert lease
+        import json
+        payload = json.loads(lease)
+        payload["heartbeat_at"] = 0
+        first.client.hset(first.LEASES, receipt.lease_id, json.dumps(payload))
+        assert second.reclaim_stale(30) == 1
+        assert second.reclaim_stale(30) == 0
+        retried = second.claim("worker-b")
+        assert retried is not None and retried.attempt == 2
+        assert (retried.workspace_id, retried.job_id, retried.principal, retried.delivery_id) == (
+            "integration", "job_12345678", "", dispatched.delivery_id,
+        )
+        assert get_job("integration", "job_12345678").status == "queued"
+        second.ack(retried)
+        assert second.client.llen(second.PROCESSING) == 0
+        assert second.client.hlen(second.LEASES) == 0
+        assert second.claim("worker-c") is None
 
 
 def test_redis_event_bus_cross_instance_delivery():
