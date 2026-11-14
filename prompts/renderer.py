@@ -17,10 +17,15 @@ def render_prompt(task: str, safe_context: dict = None, user_input: str = "",
     citations = list(citations or [])
     merged_context = dict(safe_context or {})
     merged_context.update(dict(extra or {}))
-    ctx = merged_context
+    # Auxiliary prompts leave the process: credentials are masked at every
+    # depth (dict fields, list items, loop variables, inline secrets) before
+    # any template expression can reach them.
+    from storage.redaction import redact_secret_value
+    ctx = redact_secret_value(merged_context)
+    redactions = _count_changes(merged_context, ctx)
     vars_ctx = dict(ctx)
     vars_ctx["user_input"] = user_input
-    vars_ctx["citations"] = citations
+    vars_ctx["citations"] = redact_secret_value(citations)
 
     # Load template file
     template_text = ""
@@ -39,16 +44,32 @@ def render_prompt(task: str, safe_context: dict = None, user_input: str = "",
     vars_ctx["task"] = task
     text = _render_template(template_text, vars_ctx)
 
+    context_chars = len(_safe_json(ctx))
+    max_context_chars = int(spec.input_policy.get("max_context_chars", 8000))
     return RenderedPrompt(
         prompt_id=spec.prompt_id, task=task, version=spec.version,
-        text=text, context_chars=len(_safe_json(ctx)),
+        text=text, context_chars=context_chars,
         citation_ids=[c.get("citation_id", "") for c in citations],
         warnings=[],
         metadata={
-            "context_policy_applied": True,
-            "max_context_chars": int(spec.input_policy.get("max_context_chars", 8000)),
+            # Report what actually ran. Only secret masking is enforced here;
+            # the size limit is observed, not applied by truncation.
+            "secret_redaction_applied": True,
+            "secret_fields_redacted": redactions,
+            "context_over_limit": context_chars > max_context_chars,
+            "max_context_chars": max_context_chars,
+            "require_json": bool(spec.output_policy.get("require_json", False)),
         },
     )
+
+
+def _count_changes(before, after) -> int:
+    """Number of leaf values the redactor replaced."""
+    if isinstance(before, dict) and isinstance(after, dict):
+        return sum(_count_changes(before[k], after.get(k)) for k in before)
+    if isinstance(before, (list, tuple)) and isinstance(after, list):
+        return sum(_count_changes(b, a) for b, a in zip(before, after))
+    return int(before != after)
 
 
 def _render_template(text: str, values: dict) -> str:
@@ -99,8 +120,15 @@ def _render_template(text: str, values: dict) -> str:
                 parts.append(node[1])
             elif node[0] == "variable":
                 path, _, filter_name = node[1].partition("|")
-                value = _resolve_path(context, path.strip())
-                rendered = _summary_only(value) if filter_name.strip() == "summary_only" else _stringify(value)
+                path = path.strip()
+                from storage.redaction import MASK, is_sensitive_field, redact_secret_text, redact_secret_value
+                if any(is_sensitive_field(part) for part in path.split(".")):
+                    rendered = MASK
+                else:
+                    # Attribute objects bypass dict masking; re-mask the leaf.
+                    value = redact_secret_value(_resolve_path(context, path))
+                    rendered = _summary_only(value) if filter_name.strip() == "summary_only" else _stringify(value)
+                    rendered = redact_secret_text(rendered)
                 if filter_name.strip() == "upper":
                     rendered = rendered.upper()
                 parts.append(escape_prompt_data(rendered))
@@ -132,10 +160,8 @@ def _summary_only(value) -> str:
     if not value:
         return ""
     if isinstance(value, dict):
-        safe = {
-            str(k): v for k, v in value.items()
-            if str(k).lower() not in {"secret", "password", "token", "api_key", "key", "credential"}
-        }
+        from storage.redaction import is_sensitive_field
+        safe = {str(k): v for k, v in value.items() if not is_sensitive_field(str(k))}
         for key in ("summary", "status", "title", "message"):
             if safe.get(key):
                 return str(safe.get(key))

@@ -87,11 +87,14 @@ class LoopModelGateway:
         conversation_block = (
             (ctx.extras.get("conversation_history_block") or "")
             if include_history
-            else ""
+            # Continuation anchors drop the transcript for space, but the
+            # user's standing constraints and corrections must survive.
+            else carried_user_constraints(str(ctx.extras.get("conversation_history_block") or ""))
         )
+        governing_block = str(ctx.extras.get("governing_memory_block") or "")
         retrieved_block = (
-            (ctx.extras.get("retrieved_context_block") or "") if include_history
-            else (ctx.extras.get('governing_memory_block') or '')
+            _without_lines(str(ctx.extras.get("retrieved_context_block") or ""), governing_block)
+            if include_history else ""
         )
         operational_hint = ctx.extras.get("operational_clarification") or {}
         trusted_items = [runtime_clock_prompt_item()]
@@ -132,6 +135,7 @@ class LoopModelGateway:
                     conversation_history=str(conversation_block),
                     governed_context=str(retrieved_block),
                     trusted_context_items=trusted_items,
+                    saved_user_rules=governing_block,
                 ),
             ),
         ]
@@ -465,14 +469,8 @@ class LoopModelGateway:
         payload = escape_prompt_data(json.dumps(
             projected, ensure_ascii=False, separators=(",", ":"), default=str
         ))
+        # _build_initial already carries saved user rules in their own block.
         messages = self._build_initial(ctx)
-        # Saved governing rules may be separate from retrieved observations.
-        governing = str(ctx.extras.get("governing_memory_block") or "")
-        if governing and governing not in str(ctx.extras.get("retrieved_context_block") or ""):
-            messages[-1].content += (
-                '\n<governed_context data_only="true">\n'
-                + escape_prompt_data(governing) + '\n</governed_context>'
-            )
         messages[0].content += (
             "\n\nYou are in the final synthesis phase. Tool use is disabled. "
             "The current request inherits the original goals and constraints above, including a request to continue. "
@@ -805,3 +803,69 @@ class LoopModelGateway:
                 )
             )
         return result
+
+
+def _without_lines(block: str, remove: str) -> str:
+    """Drop lines already projected as saved user rules from a data block."""
+    if not block or not remove:
+        return block
+    drop = {line for line in remove.splitlines() if line.strip()}
+    return "\n".join(line for line in block.splitlines() if line not in drop)
+
+
+_CARRIED_CONSTRAINT_TOKENS = 1200
+_HISTORY_ROLE_LINE = re.compile(r"^\s{0,4}\[(user|assistant|system|tool)\]\s?(.*)$")
+
+
+def carried_user_constraints(history_block: str, *, max_tokens: int = _CARRIED_CONSTRAINT_TOKENS) -> str:
+    """Project earlier user constraints/corrections into a bounded anchor.
+
+    Newest statements win when the budget is exceeded, and the omission is
+    reported instead of silently dropping older rules.
+    """
+    from .context_budget import estimate_text_tokens
+    from .context_compaction import history_state_signals
+
+    if not history_block.strip():
+        return ""
+    user_texts: list[str] = []
+    current_role = ""
+    current: list[str] = []
+    for line in history_block.splitlines():
+        match = _HISTORY_ROLE_LINE.match(line)
+        if match:
+            if current_role == "user" and current:
+                user_texts.append("\n".join(current))
+            current_role, current = match.group(1), [match.group(2)]
+        elif current_role:
+            current.append(line)
+    if current_role == "user" and current:
+        user_texts.append("\n".join(current))
+
+    statements: list[str] = []
+    for text in user_texts:
+        for sentence in re.split(r"[\r\n]+|(?<=[。！？.!?；;])", text):
+            sentence = sentence.strip()
+            if sentence and {"constraint", "correction"} & set(history_state_signals(sentence)):
+                if sentence not in statements:
+                    statements.append(sentence)
+    if not statements:
+        return ""
+    kept: list[str] = []
+    used = 0
+    for sentence in reversed(statements):
+        cost = estimate_text_tokens(sentence) + 2
+        if used + cost > max_tokens:
+            break
+        kept.append(sentence)
+        used += cost
+    kept.reverse()
+    omitted = len(statements) - len(kept)
+    lines = ["USER CONSTRAINTS FROM EARLIER TURNS (verbatim, oldest first):"]
+    lines.extend(f"- {sentence}" for sentence in kept)
+    if omitted:
+        lines.append(
+            f"[constraint_coverage] {omitted} earlier constraint statement(s) omitted for window "
+            "capacity; the full conversation remains in the session record."
+        )
+    return "\n".join(lines)

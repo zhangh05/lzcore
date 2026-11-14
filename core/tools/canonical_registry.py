@@ -15,6 +15,12 @@ from core.tools.schemas import ToolInvocation, ToolSpec
 from core.tools.execution_contracts import COMMAND_TIMEOUT_MAX_SECONDS, COMMAND_TIMEOUT_GUARD_SECONDS
 
 
+
+# deep_search fetches each selected page; the published schema and the
+# executor share one bound so the model is never silently truncated.
+_DEEP_SEARCH_MAX_PAGES = 5
+
+
 def handle_weather_current(inv: ToolInvocation) -> dict:
     from core.tools.general_tools.web_tools import handle_weather_current as _impl
     return _impl(inv)
@@ -276,7 +282,8 @@ def _handle_web(inv: ToolInvocation) -> dict:
     if action == "deep_search":
         from core.tools.general_tools.web_content import fetch_with_fallback
 
-        top_k = max(1, min(int(args.get("top_k") or 3), 5))
+        requested_top_k = int(args.get("top_k") or 3)
+        top_k = max(1, min(requested_top_k, _DEEP_SEARCH_MAX_PAGES))
         search_result = _handle_web(ToolInvocation(
             tool_id=inv.tool_id,
             arguments={**args, "action": "search", "depth": "deep", "max_results": max(top_k, int(args.get("max_results") or top_k))},
@@ -308,6 +315,13 @@ def _handle_web(inv: ToolInvocation) -> dict:
         return {
             "ok": usable > 0,
             "summary": f"Deep search fetched {usable}/{len(pages)} source page(s).",
+            "coverage": {
+                "requested": requested_top_k,
+                "selected": len(pages),
+                "fetched": usable,
+                "failed": len(pages) - usable,
+                "max_pages": _DEEP_SEARCH_MAX_PAGES,
+            },
             "query": args.get("query", ""),
             "search_results": search_result.get("results", []),
             "authority": search_result.get("authority", {}),
@@ -920,7 +934,7 @@ _WEB_ARGS = {
     "blocked_domains": {"type": "array", "items": {"type": "string"}},
     "site": {"type": "string"}, "vendor": {"type": "string"},
     "max_results": {"type": "integer", "minimum": 1, "maximum": 30},
-    "top_k": {"type": "integer", "minimum": 1, "maximum": 10},
+    "top_k": {"type": "integer", "minimum": 1, "maximum": _DEEP_SEARCH_MAX_PAGES},
     "extract_mode": {"type": "string", "enum": ["article", "full", "structured", "links"]},
     "max_length": {"type": "integer", "minimum": 1}, "timeout": {"type": "integer", "minimum": 1},
 }

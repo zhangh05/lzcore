@@ -49,6 +49,7 @@ def inspect_response(
     *,
     state: Any = None,
     citations: Iterable[dict[str, Any]] = (),
+    evidence_messages: Iterable[Any] = (),
 ) -> dict[str, Any]:
     cleaned, reasoning_stripped = sanitize_provider_output(resp.content)
 
@@ -66,9 +67,14 @@ def inspect_response(
 
     output_issues: list[dict[str, Any]] = []
     try:
-        from prompts.policy import check_prompt_output
+        from prompts.policy import check_prompt_output, known_references
 
-        result = check_prompt_output(None, resp.content, list(citations or ()))
+        # IDs the model was actually shown (tool results, history, context)
+        # are evidence; only references absent from every input are fakes.
+        known = known_references(*(
+            getattr(message, "content", message) for message in (evidence_messages or ())
+        ))
+        result = check_prompt_output(None, resp.content, list(citations or ()), known_refs=known)
         output_issues = list(result.issues or [])
         output_ok = bool(result.ok)
     except Exception:
