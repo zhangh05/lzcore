@@ -19,7 +19,7 @@ function Save-Transaction {
   $bytes = [Text.Encoding]::UTF8.GetBytes(($transaction | ConvertTo-Json -Depth 20))
   $stream = New-Object IO.FileStream(($journalPath + '.tmp'), [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
   try { $stream.Write($bytes,0,$bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-  if (Test-Path -LiteralPath $journalPath) { [IO.File]::Replace(($journalPath + '.tmp'), $journalPath, $null) }
+  if (Test-Path -LiteralPath $journalPath) { [IO.File]::Replace(($journalPath + '.tmp'), $journalPath, [NullString]::Value) }
   else { [IO.File]::Move(($journalPath + '.tmp'), $journalPath) }
 }
 function Register-Recovery {
