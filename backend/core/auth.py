@@ -922,14 +922,18 @@ def _authorize_extension_request(path: str, role: str, *, platform_admin: bool):
     extension_id = match.group(1)
     try:
         from extensions.registry import ExtensionRegistry
-        manifest = next((item for item in ExtensionRegistry().discover() if item.extension_id == extension_id), None)
+        # Per-extension lookup: a broken manifest elsewhere must not hide this one.
+        _, manifests = ExtensionRegistry().validate_all()
+        manifest = next((item for item in manifests if item.extension_id == extension_id), None)
     except Exception:
         manifest = None
     if manifest is None:
         return flask.jsonify({"ok": False, "error": "extension_not_found"}), 404
     if not lifecycle:
-        from extensions.state import get_extension_state
-        if not get_extension_state(extension_id, default_enabled=manifest.enabled)["enabled"]:
+        from extensions.state import get_extension_state, is_lifecycle_exempt_cancel
+        if not is_lifecycle_exempt_cancel(path, flask.request.method) and not get_extension_state(
+            extension_id, default_enabled=manifest.enabled,
+        )["enabled"]:
             return flask.jsonify({"ok": False, "error": "extension_disabled"}), 409
     minimum = str(manifest.metadata.get("minimum_role") or "viewer")
     if not _role_at_least(role, minimum):

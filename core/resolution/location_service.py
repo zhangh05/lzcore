@@ -335,6 +335,7 @@ class LocationResolver:
         admin_hint: str = "",
         limit: int = 5,
         timeout: float | None = None,
+        cancel_check=None,
     ) -> LocationResolution:
         query = str(query or "").strip()
         language = str(language or "zh").strip() or "zh"
@@ -355,7 +356,7 @@ class LocationResolver:
         resolution = self._resolve_from_providers(
             query, language=language, country_code=country_code,
             admin_hint=admin_hint, limit=limit,
-            timeout=timeout or self.timeout,
+            timeout=timeout or self.timeout, cancel_check=cancel_check,
         )
         ttl = self._cache_ttl(resolution)
         if ttl > 0:
@@ -370,6 +371,8 @@ class LocationResolver:
 
     @staticmethod
     def _cache_ttl(resolution: LocationResolution) -> float:
+        if resolution.status == "location_resolution_cancelled":
+            return 0
         if any("_error:" in warning for warning in resolution.warnings):
             return 0
         if resolution.ok:
@@ -389,12 +392,25 @@ class LocationResolver:
         admin_hint: str,
         limit: int,
         timeout: float = 6.0,
+        cancel_check=None,
     ) -> LocationResolution:
         candidates: list[LocationCandidate] = []
         provider_chain: list[str] = []
         warnings: list[str] = []
         deadline = time.monotonic() + max(0.01, float(timeout or 6.0))
+
+        def cancelled() -> bool:
+            try:
+                return bool(cancel_check and cancel_check())
+            except Exception:  # noqa: BLE001 - a broken probe means stop
+                return True
+
         for provider in self.providers:
+            if cancelled():
+                return LocationResolution(
+                    False, query, "location_resolution_cancelled",
+                    provider_chain=tuple(provider_chain), warnings=tuple(warnings),
+                )
             if time.monotonic() >= deadline:
                 warnings.append("resolution_budget_exhausted")
                 break
@@ -421,6 +437,11 @@ class LocationResolver:
             if confidence >= 0.86:
                 break
         ranked = _rank(query, candidates, country_code=country_code, admin_hint=admin_hint)
+        if cancelled():
+            return LocationResolution(
+                False, query, "location_resolution_cancelled",
+                provider_chain=tuple(provider_chain), warnings=tuple(warnings),
+            )
         if time.monotonic() >= deadline:
             return LocationResolution(
                 False, query, "location_resolution_timeout", candidates=tuple(ranked[:limit]),
@@ -456,6 +477,7 @@ class LocationResolver:
         country_code: str = "",
         admin_hint: str = "",
         limit: int = 5,
+        cancel_check=None,
     ) -> list[LocationResolution]:
         cleaned = list(dict.fromkeys(
             str(item or "").strip() for item in queries if str(item or "").strip()
@@ -464,7 +486,7 @@ class LocationResolver:
             return list(pool.map(
                 lambda item: self.resolve(
                     item, language=language, country_code=country_code,
-                    admin_hint=admin_hint, limit=limit,
+                    admin_hint=admin_hint, limit=limit, cancel_check=cancel_check,
                 ),
                 cleaned,
             ))

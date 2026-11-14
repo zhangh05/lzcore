@@ -226,24 +226,50 @@ def git_status_check(ws_id: str) -> dict:
     return result
 
 
-def git_commit(ws_id: str, message: str = "", confirm: bool = False) -> dict:
-    """Real git commit (subprocess). Requires confirm=true."""
+def _candidate_paths(paths) -> list[str] | None:
+    """Repository-relative candidate files; None when any entry is unsafe."""
+    import posixpath
+    if not isinstance(paths, (list, tuple)) or not paths or len(paths) > 1000:
+        return None
+    cleaned = []
+    for item in paths:
+        if not isinstance(item, str):
+            return None
+        value = item.replace("\\", "/").strip()
+        normalized = posixpath.normpath(value) if value else ""
+        if (not value or value.startswith(("/", "-", ":")) or re.match(r"^[A-Za-z]:", value)
+                or normalized in {".", ".."} or normalized.startswith("../") or "\x00" in value
+                or normalized == ".git" or normalized.startswith(".git/")):
+            return None
+        cleaned.append(normalized)
+    return list(dict.fromkeys(cleaned))
+
+
+def git_commit(ws_id: str, message: str = "", confirm: bool = False, paths=None) -> dict:
+    """Commit exactly the candidate files (subprocess). Requires confirm=true.
+
+    Only ``paths`` are staged and committed (``commit --only``); the user's other
+    working-tree edits and anything they had already staged stay out of the commit.
+    """
     if not confirm:
         return {"ok": False, "error": "confirm=true required to commit"}
     if not message:
         return {"ok": False, "error": "commit message required"}
+    candidates = _candidate_paths(paths)
+    if candidates is None:
+        return {"ok": False, "error": "explicit repository-relative candidate paths required"}
     try:
         import subprocess
         repo_dir = _resolve_repo_dir(ws_id)
         r = subprocess.run(
-            ["git", "add", "-A", "--"],
+            ["git", "add", "-A", "--", *candidates],
             capture_output=True, text=True, timeout=30, cwd=repo_dir,
             env=_git_subprocess_env(),
         )
         if r.returncode != 0:
             return {"ok": False, "error": redact_string(r.stderr.strip())[:500] or "git add failed"}
         r2 = subprocess.run(
-            ["git", "commit", "-m", message, "--"],
+            ["git", "commit", "--only", "-m", message, "--", *candidates],
             capture_output=True, text=True, timeout=30, cwd=repo_dir,
             env=_git_subprocess_env(),
         )

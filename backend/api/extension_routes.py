@@ -32,11 +32,19 @@ def register_extensions(app) -> None:
         if denied:
             return denied
         from extensions.registry import ExtensionRegistry
-        from extensions.runtime import reset_extension_cache_for_tests
+        from extensions.runtime import _manifest_root, preflight_extension, reset_extension_cache_for_tests
         from extensions.state import set_extension_enabled
-        known = {item.extension_id for item in ExtensionRegistry().discover()}
-        if extension_id not in known:
+        registry = ExtensionRegistry()
+        # One broken manifest elsewhere must not block a healthy extension.
+        _, manifests = registry.validate_all()
+        manifest = next((item for item in manifests if item.extension_id == extension_id), None)
+        if manifest is None:
             return jsonify({"ok": False, "error": "extension_not_found"}), 404
+        try:
+            preflight_extension(manifest, _manifest_root(registry, extension_id))
+        except ExtensionValidationError as exc:
+            stage = str(exc).split(":", 1)[0]
+            return jsonify({"ok": False, "error": "extension_preflight_failed", "stage": stage}), 422
         state = set_extension_enabled(extension_id, True)
         reset_extension_cache_for_tests()
         return jsonify({"ok": True, "lifecycle": state, "restart_required": True})
@@ -50,8 +58,8 @@ def register_extensions(app) -> None:
         from extensions.registry import ExtensionRegistry
         from extensions.runtime import reset_extension_cache_for_tests
         from extensions.state import set_extension_enabled
-        known = {item.extension_id for item in ExtensionRegistry().discover()}
-        if extension_id not in known:
+        _, manifests = ExtensionRegistry().validate_all()
+        if extension_id not in {item.extension_id for item in manifests}:
             return jsonify({"ok": False, "error": "extension_not_found"}), 404
         state = set_extension_enabled(extension_id, False)
         reset_extension_cache_for_tests()

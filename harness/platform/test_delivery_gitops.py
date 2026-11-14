@@ -134,7 +134,7 @@ class TestGitOps:
         monkeypatch.setattr(subprocess, 'run', run)
         monkeypatch.setattr('storage.events.publish', lambda *a: None)
         result = (delivery.git_status_check('ws_x') if operation == 'status' else
-                  delivery.git_commit('ws_x', 'test', confirm=True) if operation == 'commit' else
+                  delivery.git_commit('ws_x', 'test', confirm=True, paths=['file.txt']) if operation == 'commit' else
                   delivery.git_push('ws_x', confirm=True))
         assert result['ok'], result
         assert len(calls) >= 3
