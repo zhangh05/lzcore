@@ -3,7 +3,7 @@
 @layer extension {
 .studio-mode-button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-align-menu > summary::-webkit-details-marker, .studio-insert-menu > summary::-webkit-details-marker { display: none; }
-.studio-mode-button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: var(--accent-soft); color: var(--text); }
+.studio-mode-button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: var(--subtle-hover); color: var(--text); }
 .studio-align-menu { position: relative; }
 .studio-align-menu > div {
   position: absolute;
@@ -24,7 +24,7 @@
 }
 
 .studio-align-menu > div button { padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 11px; cursor: pointer; text-align: left; }
-.studio-align-menu > div button:hover { background: var(--accent-soft); color: var(--accent); }
+.studio-align-menu > div button:hover { background: var(--subtle-hover); color: var(--text); }
 .studio-insert-menu { position: relative; }
 .studio-insert-menu > div {
   position: absolute;
@@ -43,7 +43,7 @@
 }
 
 .studio-insert-menu > div button { padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; text-align: left; white-space: nowrap; }
-.studio-insert-menu > div button:hover { background: var(--accent-soft); color: var(--accent); }
+.studio-insert-menu > div button:hover { background: var(--subtle-hover); color: var(--text); }
 .studio-more { position: relative; font-size: 12px; }
 .studio-more > summary { padding: 7px 8px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
 .studio-more > div {
@@ -78,7 +78,7 @@
 }
 .canvas-context-menu { position: fixed; z-index: 1200; display: grid; gap: 2px; min-width: 168px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-menu); }
 .canvas-context-menu button { padding: 6px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
-.canvas-context-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.canvas-context-menu button:hover { background: var(--subtle-hover); color: var(--text); }
 .canvas-context-menu button.danger:hover { background: var(--danger-soft); color: var(--danger); }
 .canvas-context-menu hr { margin: 3px 4px; border: 0; border-top: 1px solid var(--line-2); }
 .modal.shortcut-help { width: min(420px, 92vw); max-height: 82vh; padding: 0; overflow: auto; border-radius: var(--lz-radius-lg); border: 1px solid var(--lz-color-border-subtle); background: var(--lz-color-bg-surface); box-shadow: var(--lz-shadow-popover); }
@@ -96,10 +96,10 @@
 .studio-views-menu { position: relative; font-size: 12px; }
 .studio-views-menu > summary { padding: 6px 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-views-menu > summary::-webkit-details-marker { display: none; }
-.studio-views-menu > summary:hover { background: var(--accent-soft); border-color: var(--accent); }
+.studio-views-menu > summary:hover { background: var(--subtle-hover); }
 .studio-views-menu > div { position: absolute; right: 0; top: 32px; z-index: 40; display: grid; gap: 3px; width: 190px; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow-menu); }
 .studio-views-menu > div > button { padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
-.studio-views-menu > div > button:hover { background: var(--accent-soft); color: var(--accent); }
+.studio-views-menu > div > button:hover { background: var(--subtle-hover); color: var(--text); }
 .studio-views-menu > div > small { padding: 4px 8px; color: var(--text-3); font-size: var(--fs-11); }
 .studio-views-menu .view-row { display: flex; align-items: center; gap: 2px; }
 .studio-views-menu .view-row > button:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -108,11 +108,11 @@
 .studio-layout-menu { position: relative; }
 .studio-layout-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-layout-menu > summary::-webkit-details-marker { display: none; }
-.studio-layout-menu > summary:hover { background: var(--accent-soft); border-color: var(--accent); }
+.studio-layout-menu > summary:hover { background: var(--subtle-hover); }
 .studio-layout-menu > summary.is-disabled { opacity: .45; pointer-events: none; }
 .studio-layout-menu > div { position: absolute; right: 0; top: 31px; z-index: 30; display: grid; gap: 3px; width: 218px; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow-menu); }
 .studio-layout-menu > div button { display: grid; gap: 1px; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
-.studio-layout-menu > div button:hover { background: var(--accent-soft); }
+.studio-layout-menu > div button:hover { background: var(--subtle-hover); }
 .studio-layout-menu > div strong { font-size: 12px; color: var(--text); }
 .studio-layout-menu > div small { font-size: var(--fs-11); color: var(--text-3); }
 .canvas-filter-count { display: inline-flex; align-items: center; gap: 5px; }

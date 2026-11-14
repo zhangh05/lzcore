@@ -4,13 +4,27 @@
 @layer base {
 :root {
   --weight-body: 400;
-  --field-border: oklch(64% 0 0);
+  --field-border: #d1d1d1;
+  /* Fluent fields carry a darker bottom stroke so the control reads as editable. */
+  --field-border-bottom: #616161;
   --scroll-thumb: color-mix(in srgb, var(--text-3) 42%, transparent);
   --scroll-thumb-hover: color-mix(in srgb, var(--text-3) 65%, transparent);
   --canvas-surface: var(--surface);
   --surface-rail: var(--surface-2);
-  /* App frame: header and sidebar sit on it; the page is a raised sheet. */
-  --surface-frame: var(--neutral-2);
+  /* Windows 11 materials: Mica frame under navigation and title bar, a layer for
+     page content, and solid card fill on the layer. */
+  --surface-frame: #f3f3f3;
+  --surface-layer: #f9f9f9;
+  --layer-stroke: rgb(0 0 0 / .06);
+  --layer-stroke-strong: rgb(0 0 0 / .1);
+  /* Windows 11 "subtle" fills for list rows, nav items and ghost buttons, and
+     the translucent fill of standard controls sitting on Mica or a layer. */
+  --subtle-hover: rgb(0 0 0 / .04);
+  --subtle-pressed: rgb(0 0 0 / .024);
+  --subtle-selected: rgb(0 0 0 / .055);
+  --control-fill-rest: rgb(255 255 255 / .7);
+  --control-fill-hover: rgb(249 249 249 / .5);
+  --control-fill-pressed: rgb(249 249 249 / .3);
 }
 :root {
   color-scheme: light;
@@ -28,7 +42,7 @@
   --text-2: var(--neutral-9);
   /* Text levels clear 4.5:1 on the four neutral product surfaces. */
   --text-3: var(--neutral-8);
-  --text-4: oklch(52% 0 0);
+  --text-4: #707070;
 
   --line: var(--border);
   --line-2: var(--border-subtle);
@@ -62,13 +76,14 @@
   --info-soft: color-mix(in oklab, var(--info) 10%, var(--surface));
   --info-text: var(--background);
   --surface-hover: var(--surface-muted);
-  --surface-selected: color-mix(in oklab, var(--foreground) 6.5%, var(--surface));
+  --surface-selected: #ebebeb;
+  --surface-pressed: #e0e0e0;
   --field: var(--surface);
 
   --focus-ring-shadow: color-mix(in oklab, var(--accent) 16%, transparent);
   --message-assistant: var(--surface);
   --message-assistant-border: var(--border-subtle);
-  --message-user: var(--surface-muted);
+  --message-user: var(--accent-subtle);
   --message-user-border: transparent;
   --shadow-composer: var(--shadow-raised);
 
@@ -98,9 +113,9 @@
 
   /* Latin first (Inter when present, then the platform UI face), then the CJK
      face each platform ships, so mixed 中文/English lines share one x-height. */
-  --font-sans: "Inter Variable", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK SC", ui-monospace, monospace;
-  --font-display: var(--font-sans);
+  --font-sans: var(--font-body);
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, "Noto Sans Mono CJK SC", ui-monospace, monospace;
+
 
   --fs-9: 9px;
   --fs-10: 10px;
@@ -131,7 +146,7 @@
   --r-10: 10px;
   --r-12: 12px;
   --r-16: 16px;
-  --r-pill: 999px;
+  --r-pill: 9999px;
 
   /* Elevation scale: one light source from above. Surfaces sit on the canvas
      with a hairline (xs/card); only floating layers (menus, dialogs, toasts)
@@ -140,7 +155,7 @@
   --shadow-sm: var(--shadow-resting);
   --shadow-md: var(--shadow-raised);
   --shadow-lg: var(--shadow-raised);
-  --shadow-float: var(--shadow-floating);
+  --shadow-float: var(--shadow-dialog);
   --shadow-card: var(--shadow-resting);
   --shadow-menu: var(--shadow-floating);
   --shadow-focus: 0 0 0 2px var(--focus-ring-shadow);
@@ -148,7 +163,7 @@
   /* Desktop-first layout. Pages fill the main column (no centred page
      max-width); only long running text is capped by --w-measure, and the
      conversation by --w-reading. Columns: nav · sessions · thread · progress. */
-  --h-header: 52px;
+  --h-header: 48px;
   /* Title and model context have their own two-line rhythm. */
   --h-context: 68px;
   --w-sidebar: 216px;
@@ -158,20 +173,21 @@
   --w-side-panel: 360px;
   --w-reading: 1040px;
   --w-measure: 72ch;
-  --h-control: 34px;
-  --h-control-compact: 30px;
+  --h-control: 32px;
+  --h-control-compact: 28px;
   --h-touch: 44px;
   --weight-heading: 600;
   --weight-label: 500;
   --focus-width: 2px;
 
-  --ease: cubic-bezier(.22, 1, .36, 1);
-  --ease-out: cubic-bezier(.16, 1, .3, 1);
-  --ease-snap: cubic-bezier(0.34, 1.18, 0.64, 1);
-  --dur-1: 120ms;
-  --dur-2: 160ms;
-  --dur-3: 240ms;
-  --dur-4: 340ms;
+  /* Fluent motion: decelerateMax for entrances, easyEase for state changes. */
+  --ease: cubic-bezier(.33, 0, .67, 1);
+  --ease-out: cubic-bezier(.1, .9, .2, 1);
+  --ease-snap: cubic-bezier(0, 0, 0, 1);
+  --dur-1: 100ms;
+  --dur-2: 150ms;
+  --dur-3: 200ms;
+  --dur-4: 300ms;
 
   --ink: var(--text);
   --ink-soft: var(--text-2);
@@ -236,8 +252,8 @@
      DESIGN.md), so it needs its own colour — one that reads as neither good nor
      failed. It used to be an alias of the region palette, which meant editing a
      categorical data colour would silently repaint every unknown state. */
-  --unknown: var(--tone-orchid);
-  --unknown-soft: color-mix(in oklab, var(--tone-orchid) 11%, var(--surface));
+  --unknown: #7a49b3;
+  --unknown-soft: color-mix(in oklab, var(--unknown) 11%, var(--surface));
   --unknown-text: var(--background);
 
 }
@@ -246,15 +262,28 @@
   color-scheme: dark;
   /* Dark values come from the Arc foundation (components/arc/foundation.css);
      only the app frame and text steps that Arc does not name are set here. */
-  --field-border: oklch(48% 0 0);
-  --surface-frame: oklch(16.5% 0 0);
-  --bg: oklch(18% 0 0);
-  --surface-2: oklch(19.5% 0 0);
-  --surface-3: oklch(26% 0 0);
+  --field-border: #525252;
+  --field-border-bottom: #adadad;
+  --surface-frame: #202020;
+  --surface-layer: #272727;
+  --layer-stroke: rgb(0 0 0 / .25);
+  --layer-stroke-strong: rgb(255 255 255 / .09);
+  --subtle-hover: rgb(255 255 255 / .06);
+  --subtle-pressed: rgb(255 255 255 / .04);
+  --subtle-selected: rgb(255 255 255 / .07);
+  --control-fill-rest: rgb(255 255 255 / .06);
+  --control-fill-hover: rgb(255 255 255 / .085);
+  --control-fill-pressed: rgb(255 255 255 / .03);
+  --bg: #202020;
+  --surface-2: #2e2e2e;
+  --surface-3: #383838;
+  --surface-selected: #383838;
+  --surface-pressed: #2e2e2e;
+  --unknown: #b696e4;
   --overlay: oklch(0% 0 0 / .5);
-  --text-2: oklch(86% 0 0);
-  --text-3: oklch(74% 0 0);
-  --text-4: oklch(66% 0 0);
+  --text-2: #d6d6d6;
+  --text-3: #adadad;
+  --text-4: #999999;
   --sh-inset: inset 0 1px 0 oklch(100% 0 0 / .04);
 }
 :root {
@@ -295,7 +324,7 @@
      2px off the content column it was labelling. One gutter, both surfaces. */
   --page-gutter: 24px;
   /* UI chrome line box; --lh-body stays for long-form prose. */
-  --lh-ui: 1.5;
+  --lh-ui: 1.43;
 }
 :root {
   /* ── Type scale (v2) ───────────────────────────────────────────────────
@@ -315,21 +344,21 @@
 
   /* ── Shape ─────────────────────────────────────────────────────────────
      Controls 6 · cards and panels 10 · dialogs and drawers 12. */
-  --r-control: 10px;
-  --r-card: 14px;
-  --r-dialog: 20px;
+  --r-control: 4px;
+  --r-card: 8px;
+  --r-dialog: 8px;
 
   /* ── Rows and chrome ───────────────────────────────────────────────────*/
   --h-row: 40px;
   --h-row-dense: 32px;
-  --h-nav-item: 34px;
+  --h-nav-item: 36px;
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 }
 /* Density is a user preference (account menu). Compact trims control and row
    height and the page gutter; type sizes never shrink below the scale. */
 [data-density="compact"] {
-  --h-control: 34px;
-  --h-control-compact: 30px;
+  --h-control: 28px;
+  --h-control-compact: 24px;
   --h-row: 34px;
   --h-row-dense: 28px;
   --page-gutter: 18px;
