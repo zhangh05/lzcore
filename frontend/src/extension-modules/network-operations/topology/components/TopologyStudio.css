@@ -25,7 +25,7 @@
 .network-admin .topology-studio.focus-mode { position: fixed; inset: var(--h-header, 56px) 0 0; z-index: 1000; height: auto; min-height: 0; }
 .conflict-note { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); font-size: var(--fs-13); border: 0; border-left: 3px solid var(--warn); }
 .topology-studio .topology-editbar { position: relative; z-index: 20; flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
-.topology-studio .topology-editbar .btn { padding: 5px 8px; height: 30px; white-space: nowrap; box-shadow: none; }
+.topology-studio .topology-editbar .btn { padding: 0 8px; height: 32px; white-space: nowrap; box-shadow: none; }
 .studio-statusbar { flex: 0 0 30px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--surface); color: var(--text-3); font-size: var(--fs-11); }
 .studio-statusbar button { margin-left: auto; padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--text-2); cursor: pointer; white-space: nowrap; }
 
@@ -152,7 +152,7 @@
     transform: scale(1) translateY(0);
   }
 }
-.topology-context-chip { display: flex; justify-content: space-between; color: var(--accent); font-size: 11px; gap: 12px; padding: 8px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border-radius: 6px; }
+.topology-context-chip { display: flex; justify-content: space-between; color: var(--accent); font-size: 12px; gap: 12px; padding: 8px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border-radius: 6px; }
 .topology-context-chip small { color: var(--text-3); font-size: var(--fs-10); }
 @media (max-width: 1180px) {
   .topology-studio .topology-editbar { padding: 5px 12px; }
@@ -262,7 +262,7 @@
   border: 1px solid var(--line);
   background: var(--surface-2, rgba(0, 0, 0, 0.02));
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: var(--weight-label);
   cursor: pointer;
   transition: all 0.12s ease;

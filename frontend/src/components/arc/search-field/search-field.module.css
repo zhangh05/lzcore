@@ -1,9 +1,10 @@
 .field { display: grid; gap: var(--space-2); min-width: 0; }
-.field label { font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-body); letter-spacing: var(--tracking-body); }
+.field label { font-size: var(--text-sm); font-weight: 400; line-height: var(--leading-body); letter-spacing: var(--tracking-body); }
 /* Focus darkens the border; the shell never changes size. */
-.shell { display: flex; min-height: var(--control-height-md); align-items: center; gap: var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 0 var(--space-3); background: var(--surface); transition: border-color var(--duration-fast) var(--ease-standard); }
-@media (hover: hover) and (pointer: fine) { .shell:hover:not(:focus-within) { border-color: var(--foreground); } }
-.shell:focus-within { border-color: var(--foreground); }
+.shell { display: flex; min-height: var(--control-height-md); align-items: center; gap: var(--space-2); border: 1px solid var(--field-border, var(--border-strong)); border-bottom-color: var(--field-border-bottom, var(--border-strong)); border-radius: var(--radius-control); padding: 0 var(--space-2) 0 var(--space-3); background: var(--surface) linear-gradient(var(--accent), var(--accent)) no-repeat 50% 100% / 0 2px; transition: border-color var(--duration-fast) var(--ease-standard), background-size var(--duration-considered) var(--ease-enter); }
+.shell:focus-within { background-size: 100% 2px; }
+@media (hover: hover) and (pointer: fine) { .shell:hover:not(:focus-within) { border-color: var(--neutral-6); border-bottom-color: var(--text-secondary); } }
+.shell:focus-within { border-bottom-color: var(--accent); }
 /* The glass wakes up with the field: muted at rest, full contrast while searching. */
 .shell > svg { flex: 0 0 auto; color: var(--text-muted); transition: color var(--duration-fast) var(--ease-standard); }
 .shell:focus-within > svg, .shell[data-filled="true"] > svg { color: var(--foreground); }

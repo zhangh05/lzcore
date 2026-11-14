@@ -48,7 +48,7 @@
 .studio-edit-tools { flex-wrap: wrap; overflow: visible; padding-right: 8px; }
 .studio-mode-button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: var(--weight-heading); }
 .studio-device-ribbon { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; margin: 0 3px; border-left: 1px solid var(--line-2); border-right: 1px solid var(--line-2); }
-.studio-device-ribbon .ribbon-label { font-size: 11px; color: var(--text-3); margin-right: 2px; user-select: none; }
+.studio-device-ribbon .ribbon-label { font-size: 12px; color: var(--text-3); margin-right: 2px; user-select: none; }
 .studio-device-chip {
   display: inline-flex;
   align-items: center;
@@ -87,7 +87,7 @@
 .studio-device-chip .device-chip-img { width: 15px; height: 15px; object-fit: contain; flex-shrink: 0; }
 .studio-device-chip.is-active .device-chip-img { filter: brightness(1.2); }
 .studio-device-status > div { padding: 10px 0; display: grid; gap: 4px; border-bottom: 1px solid var(--line); font-size: 12px; }
-.studio-device-status > div > span, .studio-device-status p { color: var(--text-3); font-size: 11px; margin-bottom: 10px; }
+.studio-device-status > div > span, .studio-device-status p { color: var(--text-3); font-size: 12px; margin-bottom: 10px; }
 @media (max-width: 900px) {
   .topology-studio .topology-save-btn.status-saved { display: none; }
 }

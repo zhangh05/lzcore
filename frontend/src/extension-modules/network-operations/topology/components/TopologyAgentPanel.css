@@ -25,17 +25,17 @@
 .topology-agent > header small { color: var(--text-3); font-size: var(--fs-11); }
 .topology-agent > header > span { margin-left: auto; color: var(--text-3); font-size: var(--fs-11); }
 .topology-agent-header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.topology-agent-new-chat-btn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text-2); font-size: 11px; cursor: pointer; transition: all .15s ease; }
+.topology-agent-new-chat-btn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text-2); font-size: 12px; cursor: pointer; transition: all .15s ease; }
 .topology-agent-new-chat-btn:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 .topology-agent-header-actions span { color: var(--text-3); font-size: var(--fs-11); }
 .topology-agent > header .agent-pulse { color: var(--accent); }
 .topology-agent-scope { padding: 12px 16px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
 .topology-agent-scope label { display: flex; justify-content: space-between; gap: 14px; align-items: center; color: var(--text-3); }
-.topology-agent-scope select { min-width: 0; width: 180px; height: 28px; padding: 2px 7px; font-size: 11px; }
+.topology-agent-scope select { min-width: 0; width: 180px; height: 28px; padding: 2px 7px; font-size: 12px; }
 .topology-agent-messages { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 14px; }
 .topology-agent-intro { padding: 26px 8px; }
 .topology-agent-intro > svg { color: var(--accent); margin-bottom: 14px; }
-.topology-agent-intro h3 { font-size: 17px; letter-spacing: -.3px; margin: 0 0 10px; }
+.topology-agent-intro h3 { font-size: 16px; letter-spacing: -.3px; margin: 0 0 10px; }
 .topology-agent-intro p { font-size: 12px; line-height: 1.9; color: var(--text-3); margin: 0 0 22px; }
 .topology-agent-intro button { width: 100%; display: flex; justify-content: space-between; padding: 11px 12px; margin: 8px 0; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--text-2); text-align: left; font-size: 12px; cursor: pointer; }
 .topology-agent-intro button:hover { color: var(--accent); border-color: var(--accent); }
@@ -44,7 +44,7 @@
 .topology-agent .message-row.user { justify-content: flex-end; }
 .topology-agent .message-row.user .message-stack { min-width: 0; width: auto; max-width: calc(100% - 36px); flex: 0 1 auto; display: flex; flex-direction: column; align-items: flex-end; }
 .topology-agent .message-row.user .chat-bubble { margin-left: auto; width: fit-content; }
-.topology-agent .message-avatar { width: 22px; height: 22px; flex: 0 0 22px; font-size: 9px; }
+.topology-agent .message-avatar { width: 22px; height: 22px; flex: 0 0 22px; font-size: 10px; }
 .topology-agent .chat-bubble { padding: 9px 12px; max-width: 100%; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .topology-agent .chat-bubble pre { max-width: 100%; overflow: auto; }
 .topology-agent .user-message-text { font-size: 12px; white-space: pre-wrap; line-height: 1.5; }
@@ -56,15 +56,15 @@
 .topology-agent-composer textarea { border: 0; outline: none; box-shadow: none; background: transparent; flex: 1; min-width: 0; width: 0; resize: none; field-sizing: content; min-height: 36px; line-height: 1.5; max-height: 160px; font-size: 12px; padding: 0; }
 .topology-agent-composer footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .topology-agent-composer-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.topology-agent-allow-edit { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); cursor: pointer; user-select: none; }
+.topology-agent-allow-edit { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); cursor: pointer; user-select: none; }
 .topology-agent-allow-edit input { margin: 0; cursor: pointer; accent-color: var(--accent); }
-.topology-agent-composer button { flex-shrink: 0; min-height: 36px; display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 0; border-radius: 6px; font-size: 11px; font-weight: var(--weight-label); cursor: pointer; transition: all .15s ease; }
+.topology-agent-composer button { flex-shrink: 0; min-height: 36px; display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 0; border-radius: 6px; font-size: 12px; font-weight: var(--weight-label); cursor: pointer; transition: all .15s ease; }
 .topology-agent-send-btn { background: var(--accent); color: var(--accent-text); }
 .topology-agent-send-btn:hover:not(:disabled) { filter: brightness(1.08); }
 .topology-agent-send-btn:disabled { background: var(--surface-3); color: var(--text-4); opacity: 1; cursor: not-allowed; }
 .topology-agent-stop-btn { background: color-mix(in srgb, var(--danger-soft) 80%, transparent); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--line)); }
 .topology-agent-stop-btn:hover { background: var(--danger); color: var(--danger-text); border-color: var(--danger); }
-.topology-agent-error { padding: 10px 16px; font-size: 11px; }
+.topology-agent-error { padding: 10px 16px; font-size: 12px; }
 .topology-agent-error { color: var(--danger); }
 .topology-agent-error button { padding: 3px; margin-left: 6px; background: transparent; border: 0; color: inherit; text-decoration: underline; }
 @media (max-width: 1180px) {
@@ -142,6 +142,6 @@
 .topology-agent .agent-msg.is-user .agent-msg-text { max-width: 88%; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .topology-agent .agent-msg.is-assistant .markdown-body { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .topology-agent .agent-msg-meta { color: var(--text-3); font-size: var(--fs-11); }
-.topology-agent .agent-version-note { margin: 4px 0 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--surface-2); color: var(--text-2); font-size: 11px; }
+.topology-agent .agent-version-note { margin: 4px 0 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--surface-2); color: var(--text-2); font-size: 12px; }
 .topology-agent-scope .btn.sm { justify-self: start; }
 }

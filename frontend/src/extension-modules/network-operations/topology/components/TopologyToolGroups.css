@@ -8,7 +8,7 @@
 .network-admin .topology-studio details[data-toolbar-menu] label { display: flex; align-items: center; gap: 7px; padding: 4px 0; font-size: var(--fs-13); color: var(--text-2); }
 .network-admin .topology-studio details[data-toolbar-menu] small { color: var(--text-3); font-size: var(--fs-11); line-height: 1.5; white-space: normal; }
 .network-admin .topology-studio details[data-toolbar-menu] strong { font-size: var(--fs-12); color: var(--text); margin-top: 4px; }
-.network-admin .topology-studio details[data-toolbar-menu] button { text-align: left; padding: 6px 8px; border-radius: var(--r-sm); }
+.network-admin .topology-studio details[data-toolbar-menu] button { text-align: left; min-height: 32px; padding: 0 8px; border-radius: var(--r-control); }
 .network-admin .topology-studio details[data-toolbar-menu] button:not(.btn) { border: 1px solid transparent; background: transparent; color: var(--text-2); font-size: var(--fs-13); cursor: pointer; }
 .network-admin .topology-studio details[data-toolbar-menu] button:hover:not(:disabled) { background: var(--subtle-hover); }
 .network-admin .topology-studio details[data-toolbar-menu] button:disabled { opacity: .45; cursor: default; }
@@ -30,7 +30,7 @@
 .network-admin .topology-studio .topology-editbar > .toolbar-right { display: flex; align-items: center; justify-content: flex-start; flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; margin: 0 0 0 auto; width: auto; }
 .network-admin .topology-studio .studio-secondary-tools { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; }
 .network-admin .topology-studio .studio-edit-tools { display: flex; align-items: center; flex: 0 0 auto; flex-wrap: nowrap; padding: 0; gap: 4px; }
-.network-admin .topology-studio .studio-edit-tools > .studio-mode-button { height: var(--h-control-compact); font-size: var(--fs-13); padding: 0 10px; }
+.network-admin .topology-studio .studio-edit-tools > .studio-mode-button { height: var(--h-control); font-size: var(--fs-14); padding: 0 10px; }
 .network-admin .topology-studio .topology-canvas-toolbar button, .network-admin .topology-studio .topology-editbar button { min-height: var(--h-control-compact); font-size: var(--fs-13); flex-shrink: 0; }
 .network-admin .topology-studio .tool-action-label { display: none; }
 .network-admin .topology-studio .topology-editbar .btn.icon-only, .network-admin .topology-studio .topology-canvas-toolbar .btn.icon-only { width: 30px; min-width: 30px; padding: 0; justify-content: center; }

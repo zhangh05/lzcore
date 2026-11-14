@@ -1,7 +1,7 @@
 /* TopologyMenus owns this component surface; cascade layers stay unchanged. */
 
 @layer extension {
-.studio-mode-button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; white-space: nowrap; list-style: none; }
+.studio-mode-button, .studio-align-menu > summary, .studio-insert-menu > summary { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-control); background: transparent; color: var(--text); font-size: var(--fs-14); cursor: pointer; white-space: nowrap; list-style: none; }
 .studio-align-menu > summary::-webkit-details-marker, .studio-insert-menu > summary::-webkit-details-marker { display: none; }
 .studio-mode-button:hover, .studio-align-menu > summary:hover, .studio-insert-menu > summary:hover { background: var(--subtle-hover); color: var(--text); }
 .studio-align-menu { position: relative; }
@@ -23,7 +23,7 @@
   box-shadow: var(--shadow-menu);
 }
 
-.studio-align-menu > div button { padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 11px; cursor: pointer; text-align: left; }
+.studio-align-menu > div button { min-height: 32px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; text-align: left; }
 .studio-align-menu > div button:hover { background: var(--subtle-hover); color: var(--text); }
 .studio-insert-menu { position: relative; }
 .studio-insert-menu > div {
@@ -42,7 +42,7 @@
   box-shadow: var(--shadow-menu);
 }
 
-.studio-insert-menu > div button { padding: 7px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; text-align: left; white-space: nowrap; }
+.studio-insert-menu > div button { min-height: 32px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; text-align: left; white-space: nowrap; }
 .studio-insert-menu > div button:hover { background: var(--subtle-hover); color: var(--text); }
 .studio-more { position: relative; font-size: 12px; }
 .studio-more > summary { padding: 7px 8px; cursor: pointer; white-space: nowrap; color: var(--text-2); }
@@ -98,7 +98,7 @@
 .studio-views-menu > summary::-webkit-details-marker { display: none; }
 .studio-views-menu > summary:hover { background: var(--subtle-hover); }
 .studio-views-menu > div { position: absolute; right: 0; top: 32px; z-index: 40; display: grid; gap: 3px; width: 190px; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow-menu); }
-.studio-views-menu > div > button { padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); font-size: 12px; text-align: left; cursor: pointer; }
+.studio-views-menu > div > button { min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--r-control); background: transparent; color: var(--text); font-size: var(--fs-14); text-align: left; cursor: pointer; }
 .studio-views-menu > div > button:hover { background: var(--subtle-hover); color: var(--text); }
 .studio-views-menu > div > small { padding: 4px 8px; color: var(--text-3); font-size: var(--fs-11); }
 .studio-views-menu .view-row { display: flex; align-items: center; gap: 2px; }

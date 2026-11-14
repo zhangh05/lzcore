@@ -1,8 +1,8 @@
-.card { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-surface); padding: var(--space-6); background: var(--surface); box-shadow: var(--shadow-resting); }
-.top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-8); }
-.top span { color: var(--text-secondary); font-size: var(--text-sm); }
-.top small { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 3px 8px; color: var(--text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
-.card p { margin: var(--space-4) 0 0; color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-body); }
+.card { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-4) var(--space-5); background: var(--surface); box-shadow: var(--shadow-resting); }
+.top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.top span { color: var(--text-secondary); font-size: var(--text-xs); }
+.top small { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--border); border-radius: var(--radius-control); padding: 0 6px; color: var(--text-secondary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.card p { margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: var(--leading-body); }
 @media (max-width: 380px) { .card { padding: var(--space-4); } .top { align-items: flex-start; flex-wrap: wrap; margin-bottom: var(--space-6); } }
 /* Text swaps: the outgoing copy is popped out of flow so the wrapper never holds both widths. */
 .swap, .swapBlock { position: relative; max-width: 100%; }
