@@ -14,6 +14,7 @@ def _permission_action(action_class: str) -> str:
         "read": "read",
         "write": "write",
         "execute": "exec",
+        "exec": "exec",
         "network": "network",
         "delete": "write",
         "admin": "write",
@@ -55,6 +56,11 @@ _NETWORK_TOOLS = {
 
 def _action_permission(tool_id: str, action: str, base_permission: str) -> str:
     action = str(action or "").strip().lower()
+    # action_class (read/write/execute/network/delete/admin) and permission
+    # vocabulary (read/write/exec/network) differ; never leak the former.
+    base_permission = _permission_action(base_permission) if base_permission else ""
+    if base_permission == "exec":
+        return "exec"
     if tool_id == "exec.run" or action in _EXEC_ACTIONS:
         return "exec"
     if tool_id == "skill.manage" and action == "mcp_call":

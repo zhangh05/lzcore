@@ -87,3 +87,12 @@ def set_workspace_schema_version(extension_id: str, workspace_id: str, version: 
         versions[workspace_id] = max(0, int(version))
         current["schema_versions"] = versions
     return _mutate_extension_state(extension_id, set_version)
+
+
+_LIFECYCLE_EXEMPT_CANCEL = __import__("re").compile(r"^/api/extensions/[^/]+(?:/[A-Za-z0-9_.:-]+)+/cancel/?$")
+
+
+def is_lifecycle_exempt_cancel(path: str, method: str) -> bool:
+    """A cancel request only reduces side effects, so it stays reachable while
+    the extension is disabled or quarantined. Role checks still apply."""
+    return str(method or "").upper() == "POST" and bool(_LIFECYCLE_EXEMPT_CANCEL.match(str(path or "")))

@@ -26,6 +26,7 @@ def handle_location_manage(inv: ToolInvocation) -> dict:
         resolution = resolve_location(
             str(args.get("query") or ""), language=language,
             country_code=country_code, admin_hint=admin_hint, limit=limit,
+            cancel_check=getattr(inv, "cancel_check", None),
         )
         payload = resolution.as_dict()
         if resolution.resolved is not None:
@@ -50,6 +51,7 @@ def handle_location_manage(inv: ToolInvocation) -> dict:
         resolutions = resolve_locations(
             cleaned, language=language, country_code=country_code,
             admin_hint=admin_hint, limit=limit,
+            cancel_check=getattr(inv, "cancel_check", None),
         )
         results = [item.as_dict() for item in resolutions]
         resolved_entities = [
