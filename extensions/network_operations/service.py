@@ -55,6 +55,7 @@ from .network_inventory import (
     delete_region,
     delete_skill,
     get_connection,
+    get_connection_for_approval,
     get_device,
     get_skill,
     list_connections,

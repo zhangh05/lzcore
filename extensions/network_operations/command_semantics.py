@@ -9,12 +9,66 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import re
-import shlex
 from typing import Any
 
 
 _UNSAFE_READ_SYNTAX = ("\n", "\r", ";", "&&", "`", "$(", ">", "<")
 _OUTPUT_WRITE_OPERATORS = ("redirect", "append", "tee")
+_READ_PIPE_FILTERS = (
+    "include", "exclude", "begin", "section", "count", "i", "e", "b", "s",
+    "no-more", "grep", "match",
+)
+_REGEX_PIPE_FILTERS = tuple(item for item in _READ_PIPE_FILTERS if item not in ("count", "no-more"))
+
+
+def _split_read_pipeline(value: str) -> list[list[str]] | None:
+    """Keep raw pipe adjacency and quoted arguments while finding stages."""
+    segments: list[list[str]] = [[]]
+    word: list[str] = []
+    quote = ""
+    escaped = False
+    for index, char in enumerate(value):
+        was_escaped = escaped
+        # Escapes affect quoting only; they cannot hide pipeline operators.
+        escaped = char == "\\" and not was_escaped and quote != "'"
+        if quote:
+            word.append(char)
+            if char == quote and not was_escaped:
+                quote = ""
+        elif char in ("'", '"') and not was_escaped:
+            quote = char
+            word.append(char)
+        elif char.isspace():
+            if word:
+                segments[-1].append("".join(word))
+                word.clear()
+        elif char == "&":
+            return None
+        elif char == "|":
+            if index + 1 < len(value) and value[index + 1] == "|":
+                return None
+            if (
+                len(segments) > 1
+                and segments[-1]
+                and segments[-1][0].lower() in _REGEX_PIPE_FILTERS
+                and word
+                and index + 1 < len(value)
+                and not value[index - 1].isspace()
+                and not value[index + 1].isspace()
+            ):
+                word.append(char)
+            else:
+                if word:
+                    segments[-1].append("".join(word))
+                    word.clear()
+                segments.append([])
+        else:
+            word.append(char)
+    if quote:
+        return None
+    if word:
+        segments[-1].append("".join(word))
+    return segments if all(segments) else None
 
 
 @dataclass(frozen=True)
@@ -59,17 +113,14 @@ def classify_raw_command(command: str, vendor: str = "") -> CommandIntent:
         # A show/display prefix does not make output redirection a read. Parse
         # pipe operators separately from quoted filter text, and preserve the
         # exact command for the executor and device-account authorization.
-        lexer = shlex.shlex(value, posix=False, punctuation_chars="|")
-        lexer.whitespace_split = True
-        lexer.commenters = ""
-        try:
-            tokens = list(lexer)
-        except ValueError:
+        segments = _split_read_pipeline(value)
+        if segments is None:
             return RAW_COMMAND_INTENTS[1]
-        if any(token == "|" and index + 1 < len(tokens)
-               and tokens[index + 1].lower() in _OUTPUT_WRITE_OPERATORS
-               for index, token in enumerate(tokens)):
-            return RAW_COMMAND_INTENTS[1]
+        for segment in segments[1:]:
+            if segment[0].lower() not in _READ_PIPE_FILTERS:
+                return RAW_COMMAND_INTENTS[1]
+            if segment[0].lower() == "no-more" and len(segment) != 1:
+                return RAW_COMMAND_INTENTS[1]
         starters = "|".join(re.escape(item) for item in observation.command_starters)
         if re.match(rf"^(?:{starters})(?:\s|$)", value, re.IGNORECASE):
             return observation
@@ -94,6 +145,7 @@ def raw_command_semantics() -> dict[str, Any]:
             "configuration_is_the_default_for_unclassified_commands": True,
             "read_command_starters": list(observations.command_starters),
             "output_write_operators": list(_OUTPUT_WRITE_OPERATORS),
+            "read_pipe_filters": list(_READ_PIPE_FILTERS),
         },
     }
 
@@ -111,7 +163,13 @@ def render_raw_command_guidance() -> str:
         "`configure`. Output pipes using "
         + ", ".join(f"`{operator}`" for operator in _OUTPUT_WRITE_OPERATORS)
         + " write files and execute as `configure`, even after a show/display command. "
-        "Read-only include/exclude filters remain observations. "
+        "Every pipe stage must be a known display filter: "
+        + ", ".join(f"`{item}`" for item in _READ_PIPE_FILTERS)
+        + "; unknown pipe stages require configuration approval. "
+        "Within a regex filter's arguments, an unquoted single `|` touching "
+        "non-whitespace on both sides is regex alternation; other unquoted "
+        "pipes separate stages, including attached pipes before any filter arguments. "
+        "Quoted pipes are argument text; unquoted `||` is never read-only. "
         "For device-originated verification, send the device's raw "
         "observation command in `action=read`; its complete output is evidence. "
         "The runtime sends the exact command text and order supplied by the model. "

@@ -754,8 +754,10 @@ def _role_at_least(role: str, minimum: str) -> bool:
 
 def _authorize_extension_request(path: str, role: str, *, platform_admin: bool):
     import re
-    if path.startswith("/api/extensions/repository") and not platform_admin:
-        return flask.jsonify({"ok": False, "error": "extension_admin_required"}), 403
+    if path == "/api/extensions/repository" or path.startswith("/api/extensions/repository/"):
+        if not platform_admin:
+            return flask.jsonify({"ok": False, "error": "extension_admin_required"}), 403
+        return None
     lifecycle = re.match(r"^/api/extensions/([^/]+)/(enable|disable|migrate|install|upgrade|uninstall)", path)
     if lifecycle and not _role_at_least(role, "admin"):
         return flask.jsonify({"ok": False, "error": "extension_admin_required"}), 403
@@ -769,7 +771,7 @@ def _authorize_extension_request(path: str, role: str, *, platform_admin: bool):
     except Exception:
         manifest = None
     if manifest is None:
-        return None
+        return flask.jsonify({"ok": False, "error": "extension_not_found"}), 404
     if not lifecycle:
         from extensions.state import get_extension_state
         if not get_extension_state(extension_id, default_enabled=manifest.enabled)["enabled"]:

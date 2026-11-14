@@ -14,6 +14,14 @@ class ExtensionValidationError(ValueError):
     """Raised when an extension manifest is unsafe or incomplete."""
 
 
+def extension_storage_key(extension_id: str) -> str:
+    """Legacy data/secret namespace; collision checks must use this exact key."""
+    value = re.sub(r"[^A-Za-z0-9_-]+", "_", extension_id).strip("_")
+    if not value:
+        raise ExtensionValidationError("invalid extension_id storage namespace")
+    return value
+
+
 @dataclass(frozen=True)
 class ExtensionManifest:
     extension_id: str
@@ -37,6 +45,7 @@ class ExtensionManifest:
     def validate(self) -> "ExtensionManifest":
         if not self.extension_id or not self.extension_id.replace(".", "").replace("-", "").replace("_", "").isalnum():
             raise ExtensionValidationError("extension_id must be a dotted identifier")
+        extension_storage_key(self.extension_id)
         if not self.name.strip() or not self.version.strip():
             raise ExtensionValidationError("name and version are required")
         if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?", self.version):

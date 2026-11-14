@@ -52,7 +52,7 @@ def _public_connection(connection: dict[str, Any] | None) -> dict[str, Any]:
         return {}
     return {
         key: connection.get(key)
-        for key in ("connection_id", "device_id", "name", "protocol", "port", "revision", "auth_method")
+        for key in ("connection_id", "device_id", "name", "protocol", "port", "revision", "auth_method", "identity_digest")
     }
 
 
@@ -77,11 +77,13 @@ def prepare_network_operation(request: dict[str, Any]) -> dict[str, Any] | None:
     skill = network.get_skill(workspace_id, skill_id)
     if not skill or not bool(skill.get("approval_enabled")):
         return None
-    connection = network.get_connection(workspace_id, connection_id)
+    connection = network.get_connection_for_approval(workspace_id, connection_id)
     device = network.get_device(workspace_id, str((connection or {}).get("device_id") or ""))
     if not connection or not device:
         # The regular tool route will return its normal structured scope error.
         return None
+    if not connection.get("revision") or not connection.get("identity_digest"):
+        raise ValueError("connection_revision_missing")
     connection_id = str(connection.get("connection_id") or "")
     selected_connection_ids = [str(value) for value in (context.get("connection_ids") or [])]
     if (
@@ -217,7 +219,7 @@ def claim_execution(workspace_id: str, operation_id: str) -> dict[str, Any]:
         target = record.get("target") if isinstance(record.get("target"), dict) else {}
         frozen_connection = target.get("connection") if isinstance(target.get("connection"), dict) else {}
         connection_id = str(frozen_connection.get("connection_id") or "")
-        current_connection = network.get_connection(workspace_id, connection_id)
+        current_connection = network.get_connection_for_approval(workspace_id, connection_id)
         current_device = network.get_device(workspace_id, str(target.get("device_id") or ""))
         skill_data = record.get("skill") if isinstance(record.get("skill"), dict) else {}
         skill = network.get_skill(workspace_id, str(skill_data.get("skill_id") or ""))
@@ -227,7 +229,9 @@ def claim_execution(workspace_id: str, operation_id: str) -> dict[str, Any]:
             and skill
             and skill.get("enabled", True)
             and connection_id in set(skill.get("connection_ids") or [])
-            and str(current_connection.get("revision") or "") == str(frozen_connection.get("revision") or "")
+            and frozen_connection.get("revision")
+            and frozen_connection.get("identity_digest")
+            and current_connection == frozen_connection
             and str(current_device.get("updated_at") or "") == str(target.get("updated_at") or "")
             and str(skill.get("updated_at") or "") == str(skill_data.get("updated_at") or "")
         )
@@ -258,7 +262,11 @@ def settle_execution(workspace_id: str, operation_id: str, result: dict[str, Any
             raise KeyError("operation_not_found")
         if record.get("status") != "executing":
             return public_record(record)
-        record["status"] = "unknown" if result.get("execution_may_continue") else "executed"
+        if result.get("approval_invalidated"):
+            record["status"] = "invalidated"
+            record["invalidated_reason"] = "server_scope_or_connection_changed"
+        else:
+            record["status"] = "unknown" if result.get("execution_may_continue") else "executed"
         record["execution"] = {
             **dict(record.get("execution") or {}),
             "finished_at": _now(),

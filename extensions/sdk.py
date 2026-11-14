@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from extensions.manifest import extension_storage_key
 from storage.records import (
     atomic_save_json,
     delete_json_record,
@@ -28,7 +29,7 @@ class ExtensionDataStore:
     def __init__(self, extension_id: str, workspace_id: str):
         self.extension_id = extension_id
         self.workspace_id = workspace_id
-        self.namespace = _segment(extension_id)
+        self.namespace = extension_storage_key(extension_id)
 
     def root(self) -> Path:
         return workspace_record_dir(self.workspace_id, "extensions", self.namespace)
@@ -64,7 +65,7 @@ class ExtensionSecretStore:
     """Encrypted secret references; plaintext never enters extension records."""
 
     def __init__(self, extension_id: str, workspace_id: str):
-        self.extension_id = _segment(extension_id)
+        self.extension_id = extension_storage_key(extension_id)
         self.workspace_id = _segment(workspace_id)
 
     def set(self, name: str, value: str) -> str:
