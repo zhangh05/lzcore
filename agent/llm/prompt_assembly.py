@@ -23,6 +23,7 @@ _TAG_NAMES = (
     "runtime_identity",
     "conversation_history",
     "governed_context",
+    "saved_user_rules",
     "current_user_request",
 )
 _GUIDANCE_SOURCES = (
@@ -31,6 +32,7 @@ _GUIDANCE_SOURCES = (
     "workbench_skill",
     "task_continuation",
     "task_state",
+    "project_state",
     "operational_guard",
     "capability_playbook",
     "cognitive_state",
@@ -65,6 +67,10 @@ def build_prompt_profile(req: LLMRequest, cfg: dict[str, Any]) -> dict[str, Any]
                 dynamic_system.append(dynamic)
         else:
             non_system.append(message)
+    # The first user message is the assembled turn; anything after it is a
+    # continuation (assistant proposals, tool results, follow-up user input).
+    first_user = next((i for i, m in enumerate(non_system) if m.role == "user"), None)
+    continuation = non_system[first_user + 1:] if first_user is not None else non_system
 
     tool_json = _canonical_tools(req.tools or [])
     stable_text = "\n\n".join(stable_system)
@@ -94,15 +100,20 @@ def build_prompt_profile(req: LLMRequest, cfg: dict[str, Any]) -> dict[str, Any]
         "runtime_identity": tagged["runtime_identity"],
         "conversation_history": tagged["conversation_history"],
         "governed_context": tagged["governed_context"],
+        "saved_user_rules": tagged["saved_user_rules"],
         "selected_skill": _layer(skill_text, cacheable=False),
         "runtime_clock": _public_layer(guidance["runtime_clock"]),
         "managed_attachments": _public_layer(guidance["managed_attachment"]),
         "capability_playbooks": _public_layer(guidance["capability_playbook"]),
         "operational_guards": _public_layer(guidance["operational_guard"]),
         "task_state": _public_layer(guidance["task_state"]),
+        "task_continuation": _public_layer(guidance["task_continuation"]),
+        "project_state": _public_layer(guidance["project_state"]),
         "cognitive_state": _public_layer(guidance["cognitive_state"]),
         "current_request": tagged["current_user_request"],
-        "continuation_messages": _layer(message_text, cacheable=False),
+        "continuation_messages": _layer(
+            "\n".join(_message_text(message) for message in continuation), cacheable=False,
+        ),
     }
     provider_type = str(cfg.get("provider_type") or "openai_compatible")
     provider = str(cfg.get("provider") or cfg.get("default_provider") or "custom")
@@ -239,7 +250,12 @@ def _layer(text: str, *, cacheable: bool) -> dict[str, Any]:
 
 
 def _message_text(message: LLMMessage) -> str:
-    return f"{message.role}:{_text_content(message.content)}:{_canonical(message.tool_calls or [])}"
+    # tool_call_id and provider protocol state are sent on the wire, so they
+    # must move the fingerprint and token estimate too.
+    return (
+        f"{message.role}:{_text_content(message.content)}:{_canonical(message.tool_calls or [])}"
+        f":{message.tool_call_id or ''}:{_canonical(message.protocol or {})}"
+    )
 
 
 def _text_content(content: Any) -> str:

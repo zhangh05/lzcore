@@ -194,6 +194,7 @@ def invoke_llm(
         citations=(safe_context or {}).get("citations", [])
         if isinstance(safe_context, dict)
         else (),
+        evidence_messages=list(req.messages or ()),
     )
     policy_metadata.update(response_policy_metadata)
     resp.metadata = {

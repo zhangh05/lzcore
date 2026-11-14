@@ -65,6 +65,7 @@ def _parse_prompt(entry: dict) -> PromptSpec:
             "forbid_fake_trace_or_job_status": outp.get("forbid_fake_trace_or_job_status", True),
             "forbid_fake_artifact_id": outp.get("forbid_fake_artifact_id", True),
             "forbid_secret_output": outp.get("forbid_secret_output", True),
+            "require_json": bool(outp.get("require_json", False)),
         },
         context_policy={
             "require_safe_llm_context": ctx.get("require_safe_llm_context", True),
@@ -98,8 +99,9 @@ def get_prompt_by_task(task: str) -> PromptSpec:
         raise PromptNotFoundError(task)
     reg = _load_registry_data()
     for p in reg:
-        if p.task == task:
+        if p.task == task and p.status == "enabled":
             return p
+    # A disabled entry is not a usable prompt; never render it silently.
     raise PromptNotFoundError(task)
 
 

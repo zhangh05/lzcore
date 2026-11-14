@@ -82,6 +82,32 @@ def redact_text(text: str, *, container_paths: bool = False) -> str:
     return text
 
 
+def redact_secret_text(text: str) -> str:
+    """Mask credentials only; keep paths that model-visible prompts may need."""
+    if not text:
+        return text
+    text = _PRIVATE_KEY_BLOCK.sub(MASK, text)
+    for pattern in _KEYWORD_PATTERNS:
+        text = re.sub(pattern, lambda m: m.group(1) + " " + MASK, text, flags=re.IGNORECASE)
+    for pattern in _FULL_MASK_PATTERNS:
+        text = re.sub(pattern, MASK, text, flags=re.IGNORECASE)
+    return text
+
+
+def redact_secret_value(value):
+    """Recursively mask credential fields and inline secrets at any depth."""
+    if isinstance(value, dict):
+        return {
+            key: MASK if is_sensitive_field(key) else redact_secret_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [redact_secret_value(item) for item in value]
+    if isinstance(value, str):
+        return redact_secret_text(value)
+    return value
+
+
 def redact_value(value, *, container_paths: bool = False):
     """Recursively redact secrets and local absolute paths before persistence."""
     if isinstance(value, dict):
