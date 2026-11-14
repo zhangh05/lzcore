@@ -58,7 +58,7 @@
 }
 
 .topology-presentation-bar .presentation-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--weight-heading);
   color: var(--text, #1e293b);
   max-width: 160px;

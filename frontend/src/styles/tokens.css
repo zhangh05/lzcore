@@ -117,17 +117,20 @@
   --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, "Noto Sans Mono CJK SC", ui-monospace, monospace;
 
 
-  --fs-9: 9px;
+  /* Fluent 2 type ramp: 10 caption2 · 12 caption1 · 14 body1 · 16 subtitle2 ·
+     20 subtitle1 · 24 title3 · 28 title2. The legacy step names stay as aliases
+     and snap to the nearest ramp size, so no screen mixes 11/13/15/18 with it. */
+  --fs-9: 10px;
   --fs-10: 10px;
-  --fs-11: 11px;
+  --fs-11: 12px;
   --fs-12: 12px;
-  --fs-13: 13px;
+  --fs-13: 14px;
   --fs-14: 14px;
-  --fs-15: 15px;
+  --fs-15: 14px;
   --fs-16: 16px;
-  --fs-18: 18px;
+  --fs-18: 20px;
   --fs-20: 20px;
-  --fs-22: 22px;
+  --fs-22: 24px;
   --fs-24: 24px;
 
   --space-1: 4px;
@@ -224,7 +227,7 @@
   --fs-lg: var(--fs-16);
   --fs-xl: var(--fs-18);
   --fs-2xl: var(--fs-24);
-  --fs-3xl: 30px;
+  --fs-3xl: 28px;
   --lh-tight: 1.25;
   --lh-base: 1.55;
   --lh-loose: 1.72;
@@ -336,9 +339,9 @@
   --lh-13: 20px;
   --lh-14: 22px;
   --lh-16: 24px;
-  --lh-18: 26px;
+  --lh-18: 28px;
   --lh-20: 28px;
-  --lh-22: 30px;
+  --lh-22: 32px;
   --lh-24: 32px;
   --weight-strong: 600;
 
@@ -366,8 +369,8 @@
   --flow-block: 22px;
 }
 :root {
-  --meta-size: 11.5px;
-  --meta-label-size: 10px;
+  --meta-size: 12px;
+  --meta-label-size: 12px;
   --meta-tracking: 0.02em;
   --meta-label-tracking: 0.08em;
   --meta-color: var(--text-4);

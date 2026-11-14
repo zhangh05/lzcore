@@ -18,6 +18,8 @@
   .grow { flex: 1; }
   h1, h2, h3 { font-family: var(--font-display); letter-spacing: 0; }
   code, kbd, samp, pre { font-family: var(--font-mono); }
+  /* Controls take the app's type, never the UA's 13.33px default. */
+  button, input, select, textarea { font-family: inherit; font-size: inherit; }
 
   /* Frame: nav | (topbar / main sheet). Every flex child may shrink so inner panes own their scroll. */
   .app-frame { display: flex; height: 100%; min-height: 0; background: var(--surface-frame); }

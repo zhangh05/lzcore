@@ -89,7 +89,7 @@
 .topology-studio .netops-canvas-wrap.space-panning .netops-cytoscape { cursor: grab !important; }
 .topology-studio .netops-canvas-wrap.space-panning.is-panning .netops-cytoscape { cursor: grabbing !important; }
 .topology-studio .netops-canvas-wrap.placing-armed .netops-cytoscape { cursor: copy; }
-.topology-studio .netops-placing-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 10px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-size: 11px; font-weight: var(--weight-label); white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.topology-studio .netops-placing-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 3px 10px; border-radius: 4px; background: var(--accent); color: var(--accent-text); font-size: 12px; font-weight: var(--weight-label); white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
 .topology-studio .netops-selection-marquee { position: absolute; z-index: 13; pointer-events: none; border: 1.5px dashed var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .topology-studio .netops-marquee-hud { position: absolute; right: 0; bottom: -24px; padding: 1px 7px; border-radius: 4px; background: #0f172a; color: #ffffff; font-size: 10px; font-family: ui-monospace, SFMono-Regular, monospace; font-weight: var(--weight-heading); white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
 .topology-studio .netops-link-preview { position: absolute; inset: 0; z-index: 11; width: 100%; height: 100%; pointer-events: none; }
@@ -165,7 +165,7 @@
   gap: 8px;
   max-width: calc(100% - 36px);
   padding: 6px 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-3);
   pointer-events: none;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
@@ -192,7 +192,7 @@
   border-radius: var(--r-control);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: var(--weight-heading);
   cursor: pointer;
   transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
@@ -218,7 +218,7 @@
   -webkit-backdrop-filter: none;
   border: 1px solid var(--line-2);
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: var(--weight-label);
   box-shadow: none;
   cursor: pointer;
@@ -289,7 +289,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: var(--weight-heading);
   color: var(--text-2, #475569);
 }
@@ -301,7 +301,7 @@
 .topology-studio .topology-minimap-close {
   background: transparent;
   border: none;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
   color: var(--text-3, #94a3b8);
   cursor: pointer;

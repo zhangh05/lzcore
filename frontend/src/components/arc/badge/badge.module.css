@@ -49,7 +49,7 @@
 :global(:root[data-theme="dark"]) .outline { --badge-border: color-mix(in oklab, var(--badge-tone) 22%, var(--border)); }
 
 /* Sizes on the four point grid. The leading edge tightens beside a mark so the visual padding matches the trailing edge. */
-.sm { --badge-height: 20px; --badge-radius: 5px; --badge-pad: 8px; --badge-gap: 4px; --badge-icon: 12px; --badge-dot: 5px; font-size: 11px; }
+.sm { --badge-height: 20px; --badge-radius: 5px; --badge-pad: 8px; --badge-gap: 4px; --badge-icon: 12px; --badge-dot: 5px; font-size: 12px; }
 .md { --badge-height: 24px; --badge-radius: 6px; --badge-pad: 10px; --badge-gap: 5px; --badge-icon: 14px; --badge-dot: 6px; }
 .lg { --badge-height: 28px; --badge-radius: 7px; --badge-pad: 12px; --badge-gap: 6px; --badge-icon: 16px; --badge-dot: 7px; font-size: var(--text-sm); }
 /* Full round ends, the original look. Declared after the sizes so it wins over their radius. */
