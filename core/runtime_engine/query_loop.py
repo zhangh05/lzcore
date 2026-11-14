@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 import time
 from collections.abc import Callable
 from typing import Any
 
-from agent.llm.schemas import LLMMessage, LLMToolCall
+from agent.llm.schemas import LLMMessage, LLMResponse, LLMToolCall
 
 from .cognitive_state import initialize_cognitive_state
 from .context_budget import RuntimeContextBudget
@@ -92,7 +94,8 @@ class QueryLoop(
         self._config = config
         self._tool_registry = tool_registry
         self._tool_runtime = tool_runtime
-        self._llm_invoke = llm_invoke
+        self._provider_invoke = llm_invoke
+        self._llm_invoke = self._invoke_with_deadline if llm_invoke is not None else None
         self._emitter = emitter
         self._executor = StreamingToolExecutor(
             tool_runtime,
@@ -118,6 +121,8 @@ class QueryLoop(
         metrics,
     ) -> QueryLoopResult:
         """Run the full query loop."""
+        self._budget = budget
+        self._loop_progress = {"seen": set(), "count": 0}
         t_start = time.monotonic()
         all_results: list[StreamingToolResult] = []
         iterations = 0
@@ -164,7 +169,19 @@ class QueryLoop(
             )
 
         def finish(**values) -> QueryLoopResult:
-            return self._finish_turn(
+            # Cancellation wins at every exit, including late completion and
+            # synthesis observers. Explicit budgets never discard tool facts.
+            if values.get("error") == "cancelled_by_user" or self._is_cancelled(ctx):
+                values.update(error="cancelled_by_user", final_response="任务已取消。")
+                ctx.extras["response_outcome"] = "cancelled"
+            elif not budget.check_execution().ok:
+                values.update(error="budget_exhausted")
+                values["final_response"] = f"显式执行预算已耗尽（{budget.exceeded}），任务未完成；已获证据保留在运行记录中。"
+                ctx.extras["response_outcome"] = "budget_exhausted"
+                ctx.extras["budget_exhausted"] = budget.exceeded
+                values["metrics"] = {**values.get("metrics", {}), "budget_exhausted": budget.exceeded}
+            values.setdefault("llm_calls", budget.llm_calls)
+            result = self._finish_turn(
                 ctx=ctx,
                 t_start=t_start,
                 all_results=all_results,
@@ -179,6 +196,27 @@ class QueryLoop(
                 cognitive_events_emitted=cognitive_events_emitted,
                 values=values,
             )
+            # Assertions/archive projection cannot turn a cancelled response
+            # into partial/successful prose, including a late synchronous stop.
+            if result.error == "cancelled_by_user" or self._is_cancelled(ctx):
+                result.error = "cancelled_by_user"
+                result.final_response = (
+                    "任务已取消。已完成的操作及证据保留在运行记录中；未完成或结果未知的写入没有自动重跑。"
+                    if all_results else "任务已取消。"
+                )
+                result.metrics["response_outcome"] = "cancelled"
+                ctx.extras["response_outcome"] = "cancelled"
+            elif result.error in {"budget_exhausted", "loop_no_progress"}:
+                outcome = "budget_exhausted" if result.error == "budget_exhausted" else "incomplete"
+                result.metrics["response_outcome"] = outcome
+                ctx.extras["response_outcome"] = outcome
+            return result
+
+        def no_progress():
+            ctx.extras["response_outcome"] = "incomplete"
+            reason = ctx.extras["loop_no_progress"]["reason"]
+            return finish(error="loop_no_progress", final_response=f"任务未完成：连续回合没有进展（{reason}）。",
+                          metrics={"loop_no_progress": dict(ctx.extras["loop_no_progress"])})
 
         # Trusted UI workflows may hand off explicit artifact ids after a
         # background task completes. Read those workspace-scoped artifacts
@@ -257,12 +295,10 @@ class QueryLoop(
             unavailable = await observe_execution_readiness(ctx)
             if unavailable:
                 return finish(tool_results=all_results, llm_calls=budget.llm_calls, **unavailable)
+            # Zero remains unlimited; a caller's positive budget is binding.
+            if not budget.check_llm_call().ok:
+                return finish()
             iterations += 1
-
-            # The counter is telemetry only.  A model-directed task has no
-            # runtime turn cap; it ends only on explicit completion,
-            # cancellation, or an external suspension such as approval.
-            budget.check_llm_call()
 
             if metrics is not None:
                 metrics.capture_context_usage(
@@ -336,6 +372,9 @@ class QueryLoop(
                     error="cancelled_by_user",
                 )
 
+            if not budget.check_execution().ok:
+                return finish()
+
             unavailable = await observe_execution_readiness(ctx)
             if unavailable:
                 if response is not None:
@@ -354,6 +393,9 @@ class QueryLoop(
                 messages = self._append_turn_nudge(
                     messages, self._truncation_continuation(response)
                 )
+                if self._observe_loop_progress(ctx, "truncated_response", response.content or "",
+                                               evidence=bool((response.content or "").strip())):
+                    return no_progress()
                 continue
 
             if response is None or response.error:
@@ -489,6 +531,10 @@ class QueryLoop(
                     )
                     ctx.extras.setdefault("explicit_individual_call_replans", 0)
                     ctx.extras["explicit_individual_call_replans"] += 1
+                    if self._observe_loop_progress(ctx, "disallowed_batch", [
+                        [tc.name, tc.arguments] for tc in tool_calls
+                    ]):
+                        return no_progress()
                     continue
                 tool_calls, batch_compile_events = compile_batchable_calls(
                     tool_calls,
@@ -548,7 +594,14 @@ class QueryLoop(
                         messages, tool_calls, fake_results, response=response,
                         workspace_id=ctx.workspace_id,
                     )
-                    # Don't count these as successful tool calls
+                    if self._observe_loop_progress(ctx, "invalid_tool_call", {
+                        "calls": [[tc.name, tc.arguments] for tc in tool_calls],
+                        # Human messages embed the fresh call id; typed errors
+                        # and details describe whether the failure changed.
+                        "errors": [[item.get("code"), item.get("details")]
+                                   for item in structured_errors],
+                    }):
+                        return no_progress()
                     continue
                 tool_calls = gate["tool_calls"]
                 # Semantic repair and canonical argument normalization may have
@@ -567,6 +620,10 @@ class QueryLoop(
                     )
                     ctx.extras.setdefault("explicit_individual_call_replans", 0)
                     ctx.extras["explicit_individual_call_replans"] += 1
+                    if self._observe_loop_progress(ctx, "disallowed_batch", [
+                        [tc.name, tc.arguments] for tc in tool_calls
+                    ]):
+                        return no_progress()
                     continue
 
                 # Deduplicate only after deterministic alias/argument repair.
@@ -606,8 +663,8 @@ class QueryLoop(
                         checkpoint("prepared", prepared_manifest)
                     except Exception as exc:  # noqa: BLE001 -- persistence must not own the agent loop
                         self._record_checkpoint_degradation(ctx, "prepared", exc)
-                # Execute tools (parallel read-only, serial writes). Aggregate
-                # budgets are telemetry and never discard a model-proposed call.
+                # Execute tools (parallel read-only, serial writes) within any
+                # explicit aggregate budget.
                 execution_started = time.monotonic()
                 # Keep the model-requested graph distinct from server-owned
                 # read recovery. The latter is rendered as auto-tracking
@@ -669,9 +726,8 @@ class QueryLoop(
                             }
                         )
                     # ── Tracking: auto-poll producer-declared long tasks ──
-                    polled_results = await self._settle_tracking(
-                        ctx, results, budget=budget
-                    )
+                    polled_results = (await self._settle_tracking(ctx, results, budget=budget)
+                                      if budget.check_execution().ok else [])
                 finally:
                     budget.end_execution()
                     execution_duration_ms += (
@@ -816,6 +872,14 @@ class QueryLoop(
                     failed_tool_calls=sum(1 for result in results if not result.ok),
                 )
 
+                # Fingerprint producer facts before evidence registration adds
+                # fresh projection/artifact identities for the same observation.
+                successful_call_ids = {r.call_id for r in results if r.ok}
+                round_fingerprint = self._progress_fingerprint({
+                    "calls": [[tc.name, tc.arguments] for tc in tool_calls
+                              if tc.id in successful_call_ids],
+                    "results": [[r.tool_name, r.ok, r.error, r.output] for r in results],
+                })
                 registered_evidence_ids = register_tool_evidence(
                     ctx.extras,
                     results,
@@ -960,6 +1024,11 @@ class QueryLoop(
                         "Additional tools remain available for a genuine unresolved evidence gap; never claim "
                         "visual details not present in the image.",
                     )
+                if not budget.check_execution().ok:
+                    return finish()
+                if self._observe_loop_progress(ctx, "no_new_tool_evidence", round_fingerprint,
+                                               evidence=any(r.ok for r in results)):
+                    return no_progress()
                 continue
 
             # No tool calls is only a proposed final response. Runtime-owned
@@ -1010,7 +1079,13 @@ class QueryLoop(
 
             from .completion import observe_completion, terminal_completion
 
-            completion = await observe_completion(ctx)
+            if self._is_cancelled(ctx):
+                return finish()
+            completion = await observe_completion(ctx, budget)
+            if self._is_cancelled(ctx) or (completion or {}).get("cancelled"):
+                return finish(error="cancelled_by_user")
+            if not budget.check_execution().ok:
+                return finish()
             terminal = terminal_completion(completion)
             if terminal:
                 from core.tools.redaction import redact_string
@@ -1079,3 +1154,46 @@ class QueryLoop(
                     "max_parallel_width": self._executor.max_parallel_width,
                 },
             )
+
+    async def _call_llm(self, messages, ctx, **kwargs):
+        """Bound provider and synthesis waits by an explicit request deadline."""
+        budget = getattr(self, "_budget", None)
+        remaining = budget.remaining_execution_seconds() if budget else float("inf")
+        if remaining <= 0:
+            return LLMResponse(error="budget_exhausted")
+        try:
+            return await asyncio.wait_for(
+                super()._call_llm(messages, ctx, **kwargs), timeout=remaining,
+            )
+        except asyncio.TimeoutError:
+            budget.check_execution()
+            return LLMResponse(error="budget_exhausted")
+
+    def _invoke_with_deadline(self, **kwargs):
+        """Keep a slow synchronous provider from blocking the sync bridge exit."""
+        from concurrent.futures import TimeoutError as FutureTimeout
+        from storage.principal import ContextThreadPoolExecutor
+
+        budget = getattr(self, "_budget", None)
+        remaining = budget.remaining_execution_seconds() if budget else float("inf")
+        if not math.isfinite(remaining):
+            return self._provider_invoke(**kwargs)
+        if remaining <= 0:
+            return LLMResponse(error="budget_exhausted")
+        kwargs["timeout"] = min(float(kwargs.get("timeout") or remaining), remaining)
+        extra = dict(kwargs.get("extra") or {})
+        cancel_check = extra.get("__runtime_cancel_check")
+        extra["__runtime_cancel_check"] = lambda: (
+            (callable(cancel_check) and cancel_check()) or not budget.check_execution().ok
+        )
+        kwargs["extra"] = extra
+        executor = ContextThreadPoolExecutor(max_workers=1, thread_name_prefix="budgeted-provider")
+        future = executor.submit(self._provider_invoke, **kwargs)
+        try:
+            return future.result(timeout=remaining)
+        except FutureTimeout:
+            if future.done():
+                raise
+            return LLMResponse(error="budget_exhausted")
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)

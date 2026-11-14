@@ -43,7 +43,7 @@ def test_final_checks_preserve_model_reply_and_actual_outcome(status, error):
 def test_working_rounds_do_not_trigger_checks_or_count_based_stops(outcome):
     config = SSOTRuntimeConfig(max_llm_calls=25)
     runtime = ToolRuntime(config)
-    runtime.register('data.manage', lambda args: ({'ok': False, 'error': 'same error'}
+    runtime.register('data.manage', lambda args: ({'ok': False, 'error': f'observed failure: {args["text"]}'}
         if outcome == 'failure' else {'ok': True, 'rows': ['observed'], 'changed': False}))
     registry = {'data.manage': {'description': 'observe', 'args_schema': {'type': 'object',
         'properties': {'action': {'type': 'string'}, 'text': {'type': 'string'}}}}}
@@ -54,9 +54,10 @@ def test_working_rounds_do_not_trigger_checks_or_count_based_stops(outcome):
         if len(calls) > 15:
             return LLMResponse(content='Done in my chosen sequence.')
         if outcome == 'truncated':
-            return LLMResponse(finish_reason='length', metadata={'output_truncated': True})
+            return LLMResponse(content=f'New section {len(calls)}', finish_reason='length',
+                               metadata={'output_truncated': True})
         return LLMResponse(tool_calls=[LLMToolCall(id=f'call-{len(calls)}', name='data.manage',
-            arguments={'action': 'parse', 'text': 'same requested observation'})])
+            arguments={'action': 'parse', 'text': f'new requested observation {len(calls)}'})])
 
     def check():
         checks.append(len(calls))
