@@ -352,11 +352,11 @@ def stream_authority_allowed(context: dict, workspace_id: str, *, write: bool = 
 
 
 def storage_principal_for_authority(context: dict):
-    from backend.core.identity import _bootstrap_storage_id
+    from backend.core.identity import api_token_storage_id
     from storage.principal import VerifiedStoragePrincipal
     if context.get("principal_type") == "personal":
         return ""
-    storage_id = _bootstrap_storage_id("service/api-token") if context.get("principal_type") == "api_token" else context["user_id"]
+    storage_id = api_token_storage_id() if context.get("principal_type") == "api_token" else context["user_id"]
     return VerifiedStoragePrincipal(context["username"], storage_id)
 
 

@@ -212,7 +212,37 @@ def verify_backup(archive_path: str | Path) -> dict[str, Any]:
         return manifest
 
 
+def _extract_verified(archive_path: str | Path, manifest: dict[str, Any], data: Path) -> None:
+    data.mkdir()
+    with tarfile.open(archive_path, "r:gz") as archive:
+        for entry in manifest["files"]:
+            name = str(entry["path"])
+            target = data.joinpath(*_safe_member(name).parts)
+            if target.resolve() == data.resolve() or not target.resolve().is_relative_to(data.resolve()):
+                raise BackupError("restore target escapes staging directory")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            stream = archive.extractfile(f"data/{name}")
+            with target.open("wb") as output_stream:
+                if stream:
+                    shutil.copyfileobj(stream, output_stream, length=1024 * 1024)
+
+
+def _swap_in(data: Path, root: Path, rollback: Path) -> None:
+    with FileLock(backup_root() / "restore.lock", timeout=30):
+        if rollback.exists():
+            raise BackupError("restore rollback path already exists")
+        if root.exists():
+            os.replace(root, rollback)
+        try:
+            os.replace(data, root)
+        except Exception:
+            if rollback.exists() and not root.exists():
+                os.replace(rollback, root)
+            raise
+
+
 def restore_backup(archive_path: str | Path, *, confirmation: str) -> dict[str, Any]:
+    """Replace the data root immediately. Only for an offline process (CLI)."""
     _require_local_data_plane()
     if confirmation != "RESTORE":
         raise BackupError("restore confirmation is required")
@@ -224,34 +254,96 @@ def restore_backup(archive_path: str | Path, *, confirmation: str) -> dict[str, 
     rollback = parent / f".{root.name}-before-{manifest['backup_id']}"
     try:
         data = stage / root.name
-        data.mkdir()
-        with tarfile.open(archive_path, "r:gz") as archive:
-            for entry in manifest["files"]:
-                name = str(entry["path"])
-                target = data.joinpath(*_safe_member(name).parts)
-                if target.resolve() == data.resolve() or not target.resolve().is_relative_to(data.resolve()):
-                    raise BackupError("restore target escapes staging directory")
-                target.parent.mkdir(parents=True, exist_ok=True)
-                stream = archive.extractfile(f"data/{name}")
-                with target.open("wb") as output_stream:
-                    if stream:
-                        shutil.copyfileobj(stream, output_stream, length=1024 * 1024)
+        _extract_verified(archive_path, manifest, data)
         if archive_hash != _file_hash(Path(archive_path)):
             raise BackupError("backup archive changed during restore")
-        with FileLock(backup_root() / "restore.lock", timeout=30):
-            if rollback.exists():
-                raise BackupError("restore rollback path already exists")
-            if root.exists():
-                os.replace(root, rollback)
-            try:
-                os.replace(data, root)
-            except Exception:
-                if rollback.exists() and not root.exists():
-                    os.replace(rollback, root)
-                raise
+        _swap_in(data, root, rollback)
         return {"ok": True, "backup_id": manifest["backup_id"], "restored_at": now_iso(), "rollback_path": str(rollback)}
     finally:
         shutil.rmtree(stage, ignore_errors=True)
+
+
+def _pending_marker() -> Path:
+    return _data_root().parent / ".lzcore-pending-restore.json"
+
+
+def stage_restore_backup(archive_path: str | Path, *, confirmation: str) -> dict[str, Any]:
+    """Verify and extract a backup beside the data root without touching live data.
+
+    A running service never swaps its own data root: the staged copy is
+    applied by :func:`apply_staged_restore` on the next start, before any
+    request or background worker can read or write the old tree.
+    """
+    _require_local_data_plane()
+    if confirmation != "RESTORE":
+        raise BackupError("restore confirmation is required")
+    archive_hash = _file_hash(Path(archive_path))
+    manifest = verify_backup(archive_path)
+    root = _data_root()
+    marker = _pending_marker()
+    with FileLock(backup_root() / "restore.lock", timeout=30):
+        if marker.exists():
+            raise BackupError("a restore is already staged; restart the service to apply it")
+        stage = Path(tempfile.mkdtemp(prefix=".restore-pending-", dir=root.parent))
+        try:
+            _extract_verified(archive_path, manifest, stage / root.name)
+            if archive_hash != _file_hash(Path(archive_path)):
+                raise BackupError("backup archive changed during restore")
+            record = {
+                "backup_id": manifest["backup_id"],
+                "stage": stage.name,
+                "data_root": str(root),
+                "archive_sha256": archive_hash,
+                "staged_at": now_iso(),
+            }
+            temporary = marker.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            os.replace(temporary, marker)
+        except Exception:
+            shutil.rmtree(stage, ignore_errors=True)
+            raise
+    return {"ok": True, "status": "restart_required", "restart_required": True,
+            "backup_id": manifest["backup_id"], "staged_at": record["staged_at"]}
+
+
+def pending_restore() -> dict[str, Any] | None:
+    marker = _pending_marker()
+    if not marker.is_file():
+        return None
+    try:
+        record = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"status": "invalid"}
+    return {key: record.get(key) for key in ("backup_id", "staged_at")}
+
+
+def apply_staged_restore() -> dict[str, Any] | None:
+    """Apply a staged restore; call only before the service starts serving."""
+    marker = _pending_marker()
+    if not marker.is_file():
+        return None
+    root = _data_root()
+    record = json.loads(marker.read_text(encoding="utf-8"))
+    stage_name = str(record.get("stage") or "")
+    backup_id = str(record.get("backup_id") or "")
+    if (not re.fullmatch(r"\.restore-pending-[A-Za-z0-9_]+", stage_name)
+            or not re.fullmatch(r"backup-[A-Za-z0-9_-]+", backup_id)
+            or record.get("data_root") != str(root)):
+        raise BackupError("staged restore marker is invalid; remove it after inspection")
+    stage = root.parent / stage_name
+    data = stage / root.name
+    if not data.is_dir():
+        raise BackupError("staged restore payload is missing")
+    rollback = root.parent / f".{root.name}-before-{backup_id}"
+    _swap_in(data, root, rollback)
+    marker.unlink()
+    shutil.rmtree(stage, ignore_errors=True)
+    return {"ok": True, "backup_id": backup_id, "restored_at": now_iso(), "rollback_path": str(rollback)}
+
+
+def service_instance_lock_path() -> Path:
+    """Held by a running backend for its lifetime; offline restore refuses while held."""
+    return _data_root().parent / ".runtime" / "backend-instance.lock"
 
 
 def list_backups() -> list[dict[str, Any]]:

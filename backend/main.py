@@ -441,6 +441,34 @@ def create_app():
                 "[inspection startup] reconcile failed: %s", exc, exc_info=True,
             )
         try:
+            from extensions.approval.service import migrate_all_legacy_records
+            migrated = migrate_all_legacy_records()
+            if migrated["migrated"] or migrated["failed"]:
+                import logging as _approval_log
+                _approval_log.getLogger(__name__).warning(
+                    "[approval startup] legacy plaintext records migrated=%s failed=%s",
+                    migrated["migrated"], migrated["failed"],
+                )
+        except Exception as exc:
+            import logging as _approval_log
+            _approval_log.getLogger(__name__).warning(
+                "[approval startup] legacy migration failed: %s", type(exc).__name__,
+            )
+        try:
+            from extensions.sdk import migrate_legacy_extension_secrets
+            rekeyed = migrate_legacy_extension_secrets()
+            if any(rekeyed.values()):
+                import logging as _secret_log
+                _secret_log.getLogger(__name__).warning(
+                    "[extension secrets startup] legacy references migrated=%s ambiguous=%s failed=%s",
+                    rekeyed["migrated"], rekeyed["ambiguous"], rekeyed["failed"],
+                )
+        except Exception as exc:
+            import logging as _secret_log
+            _secret_log.getLogger(__name__).warning(
+                "[extension secrets startup] migration failed: %s", type(exc).__name__,
+            )
+        try:
             from agent.runtime.durable.subagent import reconcile_subagent_tasks
             reconciled = reconcile_subagent_tasks(started_before=_backend_started_at)
             if reconciled:
@@ -615,6 +643,30 @@ def create_app():
 
     return app
 
+
+_SERVICE_LOCK = None
+
+
+def _prepare_service_start():
+    """Claim the data root and apply a staged restore before anything reads it."""
+    global _SERVICE_LOCK
+    from core.runtime.backup import apply_staged_restore, service_instance_lock_path
+    from storage.locking import FileLock
+    lock_path = service_instance_lock_path()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock = FileLock(lock_path, timeout=0)
+    try:
+        lock.__enter__()
+    except TimeoutError:
+        raise SystemExit("another LZCore backend is already using this data directory") from None
+    _SERVICE_LOCK = lock
+    applied = apply_staged_restore()
+    if applied:
+        print(f"Applied staged restore {applied['backup_id']} (rollback: {applied['rollback_path']})")
+
+
+if __name__ == "__main__":
+    _prepare_service_start()
 
 app = create_app()
 

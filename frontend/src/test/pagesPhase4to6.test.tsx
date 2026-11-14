@@ -200,6 +200,18 @@ describe("系统（阶段 5）", () => {
     await waitFor(() => expect(log.find((l) => l.path.includes("/restore"))?.body).toEqual({ confirmation: "RESTORE" }));
   });
 
+  it("工作区改名只改显示名，不发送新 id", async () => {
+    const { log } = renderAt("/system/workspaces?ws=ws-demo-1", { role: "admin" });
+    const table = await screen.findByTestId("workspaces-table");
+    fireEvent.click(within(table).getAllByRole("button", { name: "改名" })[0]);
+    const input = (await screen.findByText("显示名")).parentElement!.querySelector("input")!;
+    expect(input).toHaveValue("演示工作区 A");
+    fireEvent.change(input, { target: { value: "  核心网巡检  " } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(log.find((l) => l.path.endsWith("/rename"))?.body).toEqual({ name: "核心网巡检" }));
+    expect(log.find((l) => l.path.endsWith("/rename"))?.path).toContain("ws-demo-1");
+  });
+
   it("保留策略：未预览不能应用；应用体为 dry_run:false, confirm:true", async () => {
     const { log } = renderAt("/system?ws=ws-demo-1&tab=retention", { role: "admin" });
     const box = await screen.findByTestId("retention");

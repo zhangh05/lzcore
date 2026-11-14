@@ -47,10 +47,11 @@ def register_admin_routes(app) -> None:
         denied = deny_remote_admin_write()
         if denied:
             return denied
-        from core.runtime.backup import BackupError, backup_path, restore_backup
+        from core.runtime.backup import BackupError, backup_path, stage_restore_backup
         confirmation = str((request.get_json(silent=True) or {}).get("confirmation") or "")
         try:
-            result = restore_backup(backup_path(backup_id), confirmation=confirmation)
+            # A live service never swaps its own data root: stage now, apply on restart.
+            result = stage_restore_backup(backup_path(backup_id), confirmation=confirmation)
         except BackupError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 409
         return jsonify(result)

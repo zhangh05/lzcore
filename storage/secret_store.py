@@ -147,6 +147,11 @@ def get_secret(reference: str) -> str:
     secret_id = str(reference).removeprefix("secret://")
     if secret_id.startswith(("extension/", "extension-v2/")):
         check_extension_secret_reference(reference)
+    return _read_secret(secret_id)
+
+
+def _read_secret(secret_id: str) -> str:
+    """Read without namespace checks. Only for owner-proved maintenance."""
     from storage.os_secret_store import available, get_os_secret
     if available():
         stored = get_os_secret(secret_id)
@@ -187,6 +192,11 @@ def delete_secret(reference: str) -> bool:
     secret_id = str(reference).removeprefix("secret://")
     if secret_id.startswith(("extension/", "extension-v2/")):
         check_extension_secret_reference(reference)
+    return _delete_secret(secret_id)
+
+
+def _delete_secret(secret_id: str) -> bool:
+    """Delete without namespace checks. Only for owner-proved maintenance."""
     from storage.os_secret_store import available, delete_os_secret
     path = _path()
     with FileLock(path.with_name("encrypted.lock")):

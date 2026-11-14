@@ -84,7 +84,8 @@ def principal_storage_key(username: str) -> str:
     from backend.core.identity import _bootstrap_storage_id, resolve_user_storage_id
 
     if username == "api-token":
-        return _bootstrap_storage_id("service/api-token")
+        from backend.core.identity import api_token_storage_id
+        return api_token_storage_id()
 
     return resolve_user_storage_id(username)
 

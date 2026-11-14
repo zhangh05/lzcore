@@ -407,3 +407,52 @@ def execution_interceptor(request: dict[str, Any]) -> dict[str, Any] | None:
             "command_count": len(record["commands"]),
         },
     }
+
+
+def migrate_legacy_records(workspace_id: str) -> dict[str, int]:
+    """Move plaintext payloads of pre-SecretStore records into secure storage.
+
+    Each legacy record is rewritten through ``save_record`` under its own lock:
+    active records keep the exact payload in SecretStore, terminal ones keep
+    only the redacted projection. When the secure backend is unavailable the
+    record is left untouched (it is still projected safely on read) and
+    reported as ``failed`` so the next start retries.
+    """
+    store = _store(workspace_id)
+    result = {"migrated": 0, "failed": 0}
+    for collection, id_field, lock_for in (
+        ("operations", "operation_id", _record_lock),
+        ("continuations", "checkpoint_id", _continuation_lock),
+    ):
+        for listed in store.list(collection, limit=None):
+            record_id = str(listed.get(id_field) or "")
+            if not record_id or listed.get("_payload_protected"):
+                continue
+            with lock_for(workspace_id, record_id):
+                record = store.get(collection, record_id)
+                if not record or record.get("_payload_protected"):
+                    continue
+                try:
+                    save_record(store, collection, record_id, record)
+                    result["migrated"] += 1
+                except Exception:
+                    result["failed"] += 1
+    return result
+
+
+def migrate_all_legacy_records() -> dict[str, int]:
+    """Startup maintenance across every known principal and workspace."""
+    from backend.core.identity import get_user
+    from storage.principal import known_storage_principals, storage_principal
+    from storage.workspace_store import list_workspace_ids
+
+    totals = {"migrated": 0, "failed": 0}
+    workspace_ids = list_workspace_ids(include_system=False) or ["default"]
+    for principal in known_storage_principals() or [""]:
+        identity = get_user(principal)
+        scoped = list(identity.get("workspace_ids") or []) if isinstance(identity, dict) else workspace_ids
+        with storage_principal(principal):
+            for workspace_id in sorted(set(scoped)):
+                for key, value in migrate_legacy_records(workspace_id).items():
+                    totals[key] += value
+    return totals
