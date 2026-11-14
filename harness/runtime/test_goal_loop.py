@@ -7,6 +7,7 @@ from agent.llm.schemas import LLMResponse, LLMToolCall
 from core.runtime_engine.engine import SSOTRuntimeEngine
 from core.runtime_engine.goal_assertions import evaluate_goal_assertions
 from core.runtime_engine.goal_loop import (
+    goal_loop_nudge,
     goal_loop_summary,
     observe_tool_round,
     supersede_generic_goals_after_completion_evidence,
@@ -50,6 +51,63 @@ def test_recoverable_failure_installs_runtime_owned_goal():
     assert evaluated["required"] is False
     assert evaluated["assertions"][0]["status"] == "unknown"
     assert recovery_final_gate(ctx, []).should_continue is False
+
+
+def test_repeated_same_failure_reuses_goal_and_projects_only_state_changes():
+    ctx = _ctx()
+    nudges = []
+    for index in range(10):
+        call = LLMToolCall(id=f"attempt-{index}", name="workspace.file",
+                           arguments={"action": "read", "filepath": "files/data/a.txt"})
+        result = StreamingToolResult("workspace.file", call.id, {}, False,
+                                     error="not found", error_code="ARGS_INVALID")
+        observe_tool_round(ctx, [call], [result], is_read_only_call=lambda _: True)
+        nudges.append(goal_loop_nudge(ctx))
+    assert len(ctx.extras["recovery_goals"]) == len(ctx.extras["goal_assertions"]) == 1
+    goal = ctx.extras["recovery_goals"][0]
+    assert goal["attempts"] == 10
+    assert goal["attempt_call_ids"] == [f"attempt-{index}" for index in range(10)]
+    assert len(ctx.extras["goal_loop_observations"]) == 10
+    assert nudges[0] and nudges[1:] == [""] * 9
+    other = LLMToolCall(id="other-file", name="workspace.file",
+                        arguments={"action": "read", "filepath": "files/data/b.txt"})
+    observe_tool_round(ctx, [other], [StreamingToolResult(
+        "workspace.file", other.id, {}, False, error="not found", error_code="ARGS_INVALID",
+    )], is_read_only_call=lambda _: True)
+    assert len(ctx.extras["recovery_goals"]) == 2
+    assert goal_loop_nudge(ctx)
+
+
+def test_failure_after_resolution_gets_new_goal_revision_and_assertion():
+    ctx = _ctx()
+    failed = LLMToolCall(id="first", name="web.manage", arguments={"action": "search", "query": "x"})
+    observe_tool_round(ctx, [failed], [_result("first", ok=False, code="ARGS_INVALID")],
+                       is_read_only_call=lambda _: True)
+    old_id = ctx.extras["recovery_goals"][0]["goal_id"]
+    succeeded = LLMToolCall(id="second", name="web.manage", arguments=failed.arguments)
+    observe_tool_round(ctx, [succeeded], [_result("second", ok=True)], is_read_only_call=lambda _: True)
+    assert ctx.extras["recovery_goals"][0]["status"] == "passed"
+    failed_again = LLMToolCall(id="third", name="web.manage", arguments=failed.arguments)
+    observe_tool_round(ctx, [failed_again], [_result("third", ok=False, code="ARGS_INVALID")],
+                       is_read_only_call=lambda _: True)
+    assert len(ctx.extras["goal_assertions"]) == 2
+    assert ctx.extras["recovery_goals"][0]["status"] == "passed"
+    assert ctx.extras["recovery_goals"][1]["goal_id"] != old_id
+    assert ctx.extras["recovery_goals"][1]["status"] == "pending"
+
+
+def test_goal_dedup_keeps_distinct_resources_with_identical_target_previews():
+    ctx = _ctx()
+    prefix = "files/data/" + "x" * 240
+    for index in range(2):
+        call = LLMToolCall(id=f"attempt-{index}", name="workspace.file",
+                           arguments={"action": "read", "filepath": prefix + str(index)})
+        observe_tool_round(ctx, [call], [StreamingToolResult(
+            "workspace.file", call.id, {}, False, error="not found", error_code="ARGS_INVALID",
+        )], is_read_only_call=lambda _: True)
+    goals = ctx.extras["recovery_goals"]
+    assert goals[0]["target"] == goals[1]["target"]
+    assert len({goal["goal_id"] for goal in goals}) == 2
 
 
 def test_policy_failure_does_not_create_recovery_goal():

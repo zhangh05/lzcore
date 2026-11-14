@@ -157,22 +157,32 @@ def run_ssot_turn(
     metadata_in["__raw_user_input"] = user_input
     history_exclude_run_id = ""
     history_exclude_client_request_id = str(metadata_in.get("client_request_id") or "")
-    history_block = _build_history_block(
-        session,
-        user_input=user_input,
-        max_tokens=runtime_context_budget.history_tokens,
-        exclude_run_id=history_exclude_run_id,
-        exclude_client_request_id=history_exclude_client_request_id,
-    )
+    from storage.message_store import MessageHistoryUnavailable
+    try:
+        history_block = _build_history_block(
+            session,
+            user_input=user_input,
+            max_tokens=runtime_context_budget.history_tokens,
+            exclude_run_id=history_exclude_run_id,
+            exclude_client_request_id=history_exclude_client_request_id,
+        )
+        context_messages = _load_context_messages(
+            session,
+            exclude_run_id=history_exclude_run_id,
+            exclude_client_request_id=history_exclude_client_request_id,
+        )
+    except MessageHistoryUnavailable:
+        return AgentResult(
+            ok=False, session_id=session_id, turn_id=turn.turn_id, trace_id=trace_id,
+            final_response="会话历史暂不可读，已停止本轮模型和工具执行。请稍后重试。",
+            errors=["session_history_unavailable"], error_type="session_history_unavailable",
+            metadata={"history_read": {"status": "failed", "source": "message_store"},
+                      "execution_outcome": "failed", "tool_execution_outcome": "not_started"},
+        )
     if history_block:
         metadata_in["conversation_history_block"] = history_block
     # One server-filtered history projection feeds every state resolver. This
     # prevents current pre-written requests from becoming continuation history.
-    context_messages = _load_context_messages(
-        session,
-        exclude_run_id=history_exclude_run_id,
-        exclude_client_request_id=history_exclude_client_request_id,
-    )
     # Session task continuation is a separate SSOT. Only server-derived
     # relation/progress fields enter trusted guidance; historic user wording
     # remains untrusted in the conversation history block.

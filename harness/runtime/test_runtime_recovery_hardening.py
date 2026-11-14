@@ -2,6 +2,8 @@
 
 import asyncio
 
+import pytest
+
 from agent.llm.schemas import LLMResponse
 from core.runtime_engine.budget_controller import BudgetController
 from core.runtime_engine.models import ExecutionNode
@@ -49,6 +51,50 @@ def test_malformed_tool_arguments_become_recoverable_validation_feedback():
         LLMToolCall(id="array-json", name="exec.run", arguments="[]"),
     ])[0]
     assert "__invalid_tool_arguments_json__" in non_object.arguments
+
+
+@pytest.mark.parametrize("arguments", [[1], True, False, None, [], 1, 'null', 'true', '1'])
+def test_decoded_non_object_arguments_are_rejected_before_execution(arguments):
+    loop = QueryLoop(SSOTRuntimeConfig(), {}, None)
+    call = loop._parse_tool_calls([{
+        "id": "bad-shape", "name": "data.manage", "arguments": arguments,
+    }])[0]
+    ctx = StatelessContext("test", "s", "r", "inspect")
+    prepared = loop._prepare_tool_calls(ctx, [call])
+    assert call.id == "bad-shape"
+    assert prepared["ok"] is False and prepared["hard_block"] is False
+    assert [error["code"] for error in prepared["validation_errors"]] == ["INVALID_TOOL_ARGUMENTS_JSON"]
+
+
+def test_invalid_decoded_arguments_feedback_preserves_earlier_results():
+    from core.runtime_engine.tool_runtime import ToolRuntime
+
+    config = SSOTRuntimeConfig(max_llm_calls=6)
+    seen = []
+    prompts = []
+    runtime = ToolRuntime(config)
+    runtime.register("data.manage", lambda args: seen.append(args) or {"ok": True, "rows": [42]})
+    responses = iter([
+        LLMResponse(tool_calls=[LLMToolCall(id="good", name="data.manage", arguments={"action": "parse", "text": "42"})]),
+        LLMResponse(tool_calls=[{"id": "bad", "name": "data.manage", "arguments": [1]}]),
+        LLMResponse(content="已保留第一次结果；第二次调用参数无效。"),
+    ])
+
+    def model(**kwargs):
+        prompts.append(kwargs["messages"])
+        return next(responses)
+
+    registry = {"data.manage": {"args_schema": {
+        "type": "object", "properties": {"action": {"type": "string"}},
+    }}}
+    loop = QueryLoop(config, registry, runtime, llm_invoke=model)
+    ctx = StatelessContext("test", "s", "r", "inspect")
+    result = asyncio.run(loop.run(ctx, BudgetController(config), None))
+    assert len(seen) == 1, result
+    assert any(item.call_id == "good" and item.ok and item.output["rows"] == [42]
+               for item in result.tool_results)
+    assert "INVALID_TOOL_ARGUMENTS_JSON" in str([message.content for message in prompts[-1]])
+    assert result.error is None
 
 
 def test_persisted_tool_context_is_added_to_assistant_history_only():

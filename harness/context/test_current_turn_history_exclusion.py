@@ -79,7 +79,8 @@ def test_ssot_runtime_inflight_and_terminal_user_persistence_share_request_ident
     messages = SessionMessageStore(session_id=session_id, ws_id=workspace_id).get_messages()
     users = [message for message in messages if message["role"] == "user"]
     assert len(users) == 1
-    assert users[0]["run_id"] == user_message_storage_run_id(request_id, turn.turn_id)
+    assert users[0]["run_id"] == turn.turn_id
+    assert users[0]["message_id"] == f"{user_message_storage_run_id(request_id, turn.turn_id)}:user"
     assert users[0]["metadata"]["client_request_id"] == request_id
     api_messages = get_session_messages(session_id, workspace_id)
     api_users = [message for message in api_messages if message["role"] == "user"]

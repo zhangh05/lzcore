@@ -13,7 +13,7 @@ RUNTIME_BOUNDARIES = (
     "auto_tracking_results", "safe_read_recovery", "network_execution_evidence",
 )
 DATA_BOUNDARIES = (*RUNTIME_BOUNDARIES, "provided_context", "selected_skill_context",
-                   "skill_authored_instructions")
+                   "skill_authored_instructions", "evidence_manifest")
 
 
 def escape_prompt_data(value, *, boundaries=DATA_BOUNDARIES) -> str:

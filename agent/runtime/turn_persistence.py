@@ -124,6 +124,7 @@ def persist_run_record(session, turn, result, context) -> bool:
                 from agent.runtime.message_identity import workbench_message_metadata
 
                 store.write_message(user_message_run_id, "user", user_input, metadata={
+                    "run_id": run_id,
                     "created_at": state.created_at,
                     "intent": state.intent,
                     "client_request_id": client_request_id,

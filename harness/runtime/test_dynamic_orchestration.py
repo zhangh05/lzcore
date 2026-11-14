@@ -13,7 +13,7 @@ from core.runtime_engine.orchestration import (
     binding_source_allowed, binding_target_allowed, OrchestrationError, StepEvidence,
     validate_incremental_graph,
 )
-from core.runtime_engine.query_loop import StreamingToolExecutor
+from core.runtime_engine.query_loop import StreamingToolExecutor, StreamingToolResult
 
 
 def _ctx() -> StatelessContext:
@@ -409,6 +409,83 @@ def test_read_only_parallel_timeout_is_failed_not_unknown():
     assert result.ok is False
     assert result.error_code == "PARALLEL_LAYER_TIMEOUT"
     assert result.execution_may_continue is False
+
+
+def test_parallel_timeout_preserves_completed_evidence_and_cancels_only_pending():
+    async def scenario():
+        executor = StreamingToolExecutor(object(), SSOTRuntimeConfig(parallel_layer_timeout_ms=20))
+        fast_completed = asyncio.Event()
+        slow_cancelled = asyncio.Event()
+
+        async def execute_one(call, **_kwargs):
+            if call.id == "fast":
+                fast_completed.set()
+                return StreamingToolResult(
+                    tool_name=call.name, call_id=call.id, ok=True, output={"value": 42},
+                )
+            await fast_completed.wait()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                slow_cancelled.set()
+
+        executor._execute_one = execute_one
+        calls = [LLMToolCall(id=call_id, name="data.manage", arguments={"action": "parse"})
+                 for call_id in ("slow", "fast")]
+        results = await executor.execute(calls, ctx=_ctx())
+        assert [result.call_id for result in results] == ["slow", "fast"]
+        assert results[0].error_code == "PARALLEL_LAYER_TIMEOUT"
+        assert results[0].ok is False and results[0].execution_may_continue is False
+        assert results[1].ok is True and results[1].output["value"] == 42
+        assert slow_cancelled.is_set()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("binding", [False, True])
+def test_batch_compiler_preserves_explicit_step_referenced_by_consumer(binding):
+    from core.runtime_engine.batch_compiler import compile_batchable_calls
+
+    registry = {"web.manage": {"metadata": {"batching": [{
+        "source_action": "weather", "target_action": "weather_batch",
+        "group_by": ["days"], "collect_arg": "location", "collection_arg": "locations",
+        "max_batch_size": 10,
+    }]}}}
+    calls = [LLMToolCall(
+        id=f"provider{index}", name="web.manage", step_id=f"forecast{index}",
+        arguments={"action": "weather", "location": city, "days": 2},
+    ) for index, city in enumerate(("A", "B"))]
+    calls.append(LLMToolCall(
+        id="provider3", name="data.manage", step_id="consume",
+        arguments={"action": "stats"}, depends_on=["forecast0"],
+        result_bindings={"rows": "steps.forecast0.output.rows"} if binding else {},
+    ))
+    validate = lambda items: validate_incremental_graph(
+        items, binding_source_validator=lambda *_: True, binding_target_validator=lambda *_: True,
+    )
+    compiled, events = compile_batchable_calls(calls, registry)
+    assert validate(compiled) == validate(calls) == [["forecast0", "forecast1"], ["consume"]]
+    assert compiled == calls and events == []
+
+
+def test_batch_compiler_keeps_goal_links_and_separates_different_goal_contracts():
+    from core.runtime_engine.batch_compiler import compile_batchable_calls
+
+    registry = {"web.manage": {"metadata": {"batching": [{
+        "source_action": "weather", "target_action": "weather_batch",
+        "group_by": [], "collect_arg": "location", "collection_arg": "locations",
+        "max_batch_size": 10,
+    }]}}}
+    calls = [LLMToolCall(
+        id=f"provider{index}", name="web.manage", step_id=f"forecast{index}",
+        arguments={"action": "weather", "location": city}, goal_ids=["goal-A"],
+    ) for index, city in enumerate(("A", "B"))]
+    compiled, events = compile_batchable_calls(calls, registry)
+    assert len(compiled) == len(events) == 1
+    assert compiled[0].goal_ids == ["goal-A"] and compiled[0].step_id == "forecast0"
+    assert compiled[0].arguments["locations"] == ["A", "B"]
+    calls[1].goal_ids = ["goal-B"]
+    assert compile_batchable_calls(calls, registry) == (calls, [])
 
 
 def test_execution_budget_rejects_graph_deeper_than_limit():

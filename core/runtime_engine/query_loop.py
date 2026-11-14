@@ -218,6 +218,10 @@ class QueryLoop(
             return finish(error="loop_no_progress", final_response=f"任务未完成：连续回合没有进展（{reason}）。",
                           metrics={"loop_no_progress": dict(ctx.extras["loop_no_progress"])})
 
+        if ctx.extras.get("approval_resume_error"):
+            return finish(error="approval_resume_error", hard_block=True,
+                          final_response="审批接续证据无效，任务未恢复；未重放任何已暂停或已完成的操作。")
+
         # Trusted UI workflows may hand off explicit artifact ids after a
         # background task completes. Read those workspace-scoped artifacts
         # through the canonical runtime before planning, then let the LLM decide
@@ -381,9 +385,7 @@ class QueryLoop(
                     self._context_continuation.preserve_unexecuted_response(response)
                 return finish(tool_results=all_results, llm_calls=budget.llm_calls, **unavailable)
 
-            if response is not None and (response.metadata or {}).get(
-                "output_truncated"
-            ):
+            if response is not None and self._response_is_truncated(response):
                 # A partial provider response is evidence, not a terminal
                 # answer. Preserve every received token in the conversation
                 # and ask the same model to continue before any final result
@@ -807,6 +809,9 @@ class QueryLoop(
                                     "id": call.id,
                                     "name": call.name,
                                     "arguments": dict(call.arguments or {}),
+                                    "step_id": call.step_id,
+                                    "depends_on": list(call.depends_on or []),
+                                    "result_bindings": dict(call.result_bindings or {}),
                                     "failure_policy": call.failure_policy,
                                     "goal_ids": list(call.goal_ids or []),
                                 }
@@ -828,7 +833,10 @@ class QueryLoop(
                             workbench_context=dict(
                                 ctx.extras.get("workbench_context") or {}
                             ),
-                            context_window_state=self._context_continuation.checkpoint_state(),
+                            context_window_state={
+                                **self._context_continuation.checkpoint_state(),
+                                "runtime_orchestration": self._approval_orchestration_checkpoint(ctx),
+                            },
                         )
                         ctx.extras["approval_continuation"] = {
                             "checkpoint_id": checkpoint["checkpoint_id"],

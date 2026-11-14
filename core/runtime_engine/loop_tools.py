@@ -570,9 +570,7 @@ class StreamingToolExecutor(ReadRetryPolicy):
                 async with semaphore:
                     return await self._execute_one(tc, ctx=ctx, budget=budget)
 
-            tasks = [bounded(tc) for tc in group]
-            # return_exceptions=True: collect every result, even if some fail
-            gather = asyncio.gather(*tasks, return_exceptions=True)
+            tasks = [asyncio.create_task(bounded(tc)) for tc in group]
             timeout_seconds = self._config.parallel_layer_timeout_ms / 1000.0
             if budget is not None:
                 timeout_seconds = min(
@@ -580,10 +578,16 @@ class StreamingToolExecutor(ReadRetryPolicy):
                     max(0.001, budget.remaining_execution_seconds()),
                 )
             try:
-                ro_results = await asyncio.wait_for(gather, timeout=timeout_seconds)
-            except asyncio.TimeoutError:
-                ro_results = [
-                    StreamingToolResult(
+                done, _ = await asyncio.wait(tasks, timeout=timeout_seconds)
+            finally:
+                # Cancellation also owns all children. Late pending results are
+                # discarded; a worker that cannot stop must not become evidence.
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                settled = await asyncio.gather(*tasks, return_exceptions=True)
+            ro_results = [
+                result if task in done and not task.cancelled() else StreamingToolResult(
                         tool_name=tc.name,
                         call_id=tc.id,
                         output={
@@ -598,10 +602,10 @@ class StreamingToolExecutor(ReadRetryPolicy):
                         error_code="PARALLEL_LAYER_TIMEOUT",
                         execution_may_continue=False,
                     )
-                    for tc in group
-                ]
+                for tc, task, result in zip(group, tasks, settled)
+            ]
             for tc, r in zip(group, ro_results):
-                if isinstance(r, Exception):
+                if isinstance(r, BaseException):
                     result_by_id[tc.id] = StreamingToolResult(
                         tool_name=tc.name,
                         call_id=tc.id,

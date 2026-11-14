@@ -108,6 +108,7 @@ def goal_loop_nudge(ctx) -> str:
         and goal.get("status") == "pending"
     ]
     if not open_goals:
+        ctx.extras.pop("_goal_loop_projection", None)
         return ""
     payload = [
         {
@@ -124,6 +125,15 @@ def goal_loop_nudge(ctx) -> str:
         }
         for goal in open_goals
     ]
+    # Attempt counters remain in state/audit. Repeating the same control state
+    # does not warrant appending the entire guidance again to model history.
+    projection = json.dumps(
+        [{key: value for key, value in item.items() if key != "attempts"} for item in payload],
+        ensure_ascii=False, sort_keys=True,
+    )
+    if ctx.extras.get("_goal_loop_projection") == projection:
+        return ""
+    ctx.extras["_goal_loop_projection"] = projection
     return (
         "[RUNTIME GOAL LOOP] A tool attempt failed. This is advisory, not an additional user requirement. "
         "Decide whether the missing observation is still needed for the user's task. If the available "
@@ -221,23 +231,42 @@ def _install_generic_goal(ctx, call: Any, observation: dict[str, Any]) -> None:
 
     source_call_id = str(observation["call_id"])
     identity = {
-        "source_call_id": source_call_id,
         "tool_id": observation["tool_id"],
         "action": observation["action"],
         "target": observation["target"],
+        "failure_class": observation["failure_class"],
+        "error_code": observation["error_code"],
+        # The displayed target is bounded. Hash the exact request too, so long
+        # resource names or distinct observations cannot collapse accidentally.
+        "arguments": getattr(call, "arguments", {}) or {},
     }
-    goal_id = "tool-goal-" + hashlib.sha256(
-        json.dumps(identity, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()[:20]
+    fingerprint = hashlib.sha256(
+        json.dumps(identity, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
     goals = ctx.extras.setdefault("recovery_goals", [])
     if not isinstance(goals, list):
         goals = []
         ctx.extras["recovery_goals"] = goals
-    existing = next((item for item in goals if isinstance(item, dict) and item.get("goal_id") == goal_id), None)
+    same_gap = [item for item in goals if isinstance(item, dict)
+                and item.get("goal_type") == "tool_recovery"
+                and item.get("recovery_identity") == fingerprint]
+    existing = next((item for item in same_gap if item.get("status") == "pending"), None)
+    if existing is not None:
+        attempt_ids = existing.setdefault("attempt_call_ids", [])
+        if source_call_id not in attempt_ids:
+            attempt_ids.append(source_call_id)
+            existing["attempts"] = int(existing.get("attempts") or 1) + 1
+        return
+    # A new failure after resolution is a new state revision, never a mutation
+    # of the historical passed/superseded assertion.
+    goal_id = "tool-goal-" + hashlib.sha256(
+        f"{fingerprint}:{len(same_gap)}".encode("utf-8")
+    ).hexdigest()[:20]
     if existing is None:
         goals.append({
             "goal_id": goal_id,
             "goal_type": "tool_recovery",
+            "recovery_identity": fingerprint,
             "evidence_kind": "tool_observation",
             "target": dict(observation["target"]),
             "fact": observation["action"],
@@ -245,6 +274,7 @@ def _install_generic_goal(ctx, call: Any, observation: dict[str, Any]) -> None:
             "source_call_id": source_call_id,
             "source_tool_id": observation["tool_id"],
             "failure_class": observation["failure_class"],
+            "error_code": observation["error_code"],
             "strategy_candidates": DEFAULT_RECOVERY_STRATEGIES.candidates(observation["failure_class"]),
             "status": "pending",
             "attempts": 1,

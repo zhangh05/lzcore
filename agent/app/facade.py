@@ -49,8 +49,9 @@ def _restore_session_history(session, session_id: str, workspace_id: str):
             if history:
                 session.history = history
                 logger.info("Restored %d history messages for session %s from disk", len(history), session_id)
-    except Exception as e:
-        logger.warning("Failed to restore session history from disk for %s: %s", session_id, e)
+    except Exception:
+        from storage.message_store import MessageHistoryUnavailable
+        raise MessageHistoryUnavailable("session_history_unavailable") from None
 
 
 class AgentApp:
@@ -75,7 +76,16 @@ class AgentApp:
         - turns for the same session are serialized to prevent history,
           context, tool-result, and trace cross-talk.
         """
-        sid, session, turn_lock = self.session_manager.get_or_create(session_id, workspace_id)
+        from storage.message_store import MessageHistoryUnavailable
+        try:
+            sid, session, turn_lock = self.session_manager.get_or_create(session_id, workspace_id)
+        except MessageHistoryUnavailable:
+            return AgentResult(
+                ok=False, session_id=session_id or "",
+                final_response="会话历史暂不可读，已停止本轮模型和工具执行。请稍后重试。",
+                errors=["session_history_unavailable"], error_type="session_history_unavailable",
+                metadata={"history_read": {"status": "failed", "source": "message_store"}},
+            )
         # Persist caller-owned session metadata before the first run/message.
         # This keeps session, run, and job projections aligned even if the
         # process stops immediately after the turn.
@@ -86,6 +96,14 @@ class AgentApp:
         # lock, but inside this session's turn lock. Different sessions can run
         # concurrently; the same session cannot interleave turns.
         with turn_lock:
+            from storage.session_store import get_session
+            stored = get_session(sid, workspace_id)
+            if stored and stored.get("status") == "archived" and (stored.get("metadata") or {}).get("reset_archived"):
+                return AgentResult(
+                    ok=False, session_id=sid, error_type="session_reset_archived",
+                    errors=["session_reset_archived"],
+                    final_response="此会话已重置并归档，请创建新会话。",
+                )
             if metadata is None:
                 metadata = {}
             elif not isinstance(metadata, dict):
@@ -115,6 +133,10 @@ class AgentApp:
             )
             thread = AgentThread(session=session)
             return thread.submit(op)
+
+    def reset_session(self, session_id: str, workspace_id: str) -> None:
+        """Archive the old conversation and evict its live instance."""
+        self.session_manager.archive_for_reset(session_id, workspace_id)
 
     def inspect_sessions(self) -> dict:
         """Return a snapshot of active sessions for diagnostics."""

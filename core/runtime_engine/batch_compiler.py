@@ -59,17 +59,25 @@ def compile_batchable_calls(
     """
     if not allow_batching:
         return calls, []
+    from .orchestration import OrchestrationError, parse_reference
+
     referenced_ids = {
         dependency
         for call in calls
         for dependency in (call.depends_on or [])
     }
     for call in calls:
-        referenced_ids.update(str(value) for value in (call.result_bindings or {}).values())
+        for reference in (call.result_bindings or {}).values():
+            try:
+                source_id, _ = parse_reference(reference)
+            except OrchestrationError:
+                # Let graph validation reject the original invalid graph.
+                return calls, []
+            referenced_ids.add(source_id)
 
     candidates: dict[tuple[Any, ...], list[tuple[int, LLMToolCall, dict[str, Any]]]] = defaultdict(list)
     for position, call in enumerate(calls):
-        if call.id in referenced_ids or call.depends_on or call.result_bindings:
+        if str(call.step_id or call.id) in referenced_ids or call.depends_on or call.result_bindings:
             continue
         tool_id = call.name.replace("__", ".")
         metadata = (tool_registry.get(tool_id) or {}).get("metadata") or {}
@@ -92,7 +100,9 @@ def compile_batchable_calls(
                 continue
             group_by = tuple(str(value) for value in contract.get("group_by") or [])
             group_values = tuple(_freeze(args.get(key)) for key in group_by)
-            key = (tool_id, str(contract.get("source_action") or ""), group_by, group_values)
+            # Distinct goal/failure contracts must keep independent outcomes.
+            key = (tool_id, str(contract.get("source_action") or ""), group_by, group_values,
+                   tuple(call.goal_ids or []), call.failure_policy)
             candidates[key].append((position, call, contract))
             break
 
@@ -145,7 +155,9 @@ def compile_batchable_calls(
                     id=first_call.id,
                     name=first_call.name,
                     arguments=args,
+                    step_id=first_call.step_id,
                     failure_policy=first_call.failure_policy,
+                    goal_ids=list(first_call.goal_ids or []),
                 )
                 replacements[min(positions)] = (len(positions), compiled, contract)
                 consumed.update(positions)

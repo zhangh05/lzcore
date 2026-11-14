@@ -79,11 +79,11 @@ def _invoke_llm_for_ssot_runtime(**kwargs):
         try:
             from agent.llm.capabilities import supports_vision
 
-            effective_config = resolve_invocation_candidates(
+            candidates = resolve_invocation_candidates(
                 "assistant_chat",
                 config_override,
-            )[0]
-            if supports_vision(effective_config):
+            )
+            if any(supports_vision(candidate) for candidate in candidates):
                 from agent.runtime.vision_inputs import build_vision_content
                 from core.runtime_engine.evidence import evidence_to_vision_references
 

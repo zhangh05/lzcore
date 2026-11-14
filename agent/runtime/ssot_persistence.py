@@ -12,8 +12,8 @@ from agent.runtime.utils import now_iso
 def _persist_inflight_user_message(session, turn, user_input: str) -> None:
     """Durably retain the original request before tools can run.
 
-    The terminal run persistence writes the same `(run_id, user)` projection
-    again, so this is idempotent.  An interrupted process therefore restores a
+    Terminal persistence writes the same request-stable user message key,
+    with the execution run_id retained separately. An interrupted process restores a
     safe untrusted context for an explicit later resume.
     """
     if not user_input or isinstance(
@@ -40,6 +40,7 @@ def _persist_inflight_user_message(session, turn, user_input: str) -> None:
         "user",
         user_input,
         metadata={
+            "run_id": turn.turn_id,
             "created_at": now_iso(),
             "client_request_id": str(metadata.get("client_request_id") or ""),
             "attachments": list(metadata.get("attachments") or []),

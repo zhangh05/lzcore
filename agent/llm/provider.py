@@ -432,6 +432,7 @@ def _api_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
             metadata={
                 "error_type": error_type,
                 "http_status": http_status,
+                "retry_after": e.headers.get("Retry-After") if e.headers else None,
                 "error_detail": redacted[:200],
             },
         )
@@ -593,6 +594,8 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     reasoning_fields: dict = {}
     stream_done = False
     resp = None
+    from agent.llm.reasoning_filter import ReasoningFilter
+    public_text = ReasoningFilter()
 
     try:
         resp = _post_llm(
@@ -610,6 +613,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
                 metadata={
                     "error_type": f"provider_http_{resp.status_code}",
                     "http_status": resp.status_code,
+                    "retry_after": getattr(resp, "headers", {}).get("Retry-After"),
                     "error_detail": error_body[:200],
                 },
             )
@@ -709,7 +713,9 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
                 # example, are accumulated but never surfaced to
                 # the user.
                 if req.metadata.get("stream_to_user"):
-                    _push_stream_token(token)
+                    visible = public_text.feed(token)
+                    if visible:
+                        _push_stream_token(visible)
 
             # Tool calls (accumulated across chunks)
             tc_list = delta.get("tool_calls")
@@ -753,6 +759,10 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
                 resp.close()
             except Exception:
                 pass
+        if req.metadata.get("stream_to_user"):
+            visible = public_text.feed("", final=True)
+            if visible:
+                _push_stream_token(visible)
 
     # Compatible gateways may supply either a finish reason or [DONE].
     # Text or syntactically complete tool JSON is never a completion signal.
@@ -1177,6 +1187,8 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
     message_stopped = False
     open_blocks = set()
     response = None
+    from agent.llm.reasoning_filter import ReasoningFilter
+    public_text = ReasoningFilter()
     try:
         response = _post_llm(url, json=body, headers=headers, timeout=_llm_timeout_tuple(cfg), stream=True)
         if response.status_code != 200:
@@ -1186,9 +1198,11 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
                 metadata={
                     "error_type": f"provider_http_{response.status_code}",
                     "http_status": response.status_code,
+                    "retry_after": getattr(response, "headers", {}).get("Retry-After"),
                     "error_detail": detail[:200],
                 },
             )
+        response.encoding = "utf-8"
         for raw in response.iter_lines(decode_unicode=True):
             if _is_stream_cancelled(req):
                 response.close()
@@ -1235,7 +1249,10 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
                         )
                     content_parts.append(token)
                     block["text"] = block.get("text", "") + token
-                    if req.metadata.get("stream_to_user") and token: _push_stream_token(token)
+                    if req.metadata.get("stream_to_user") and token:
+                        visible = public_text.feed(token)
+                        if visible:
+                            _push_stream_token(visible)
                 elif delta.get("type") == "thinking_delta":
                     block["thinking"] = block.get("thinking", "") + str(delta.get("thinking") or "")
                 elif delta.get("type") == "signature_delta":
@@ -1266,6 +1283,10 @@ def _anthropic_messages_stream(url, body, headers, cfg, req) -> LLMResponse:
                 response.close()
             except Exception:
                 pass
+        if req.metadata.get("stream_to_user"):
+            visible = public_text.feed("", final=True)
+            if visible:
+                _push_stream_token(visible)
     if not message_stopped or not stop_reason or open_blocks:
         return _failed_stream_response(
             content_parts, cfg, model=model, usage=usage, finish_reason=stop_reason,
