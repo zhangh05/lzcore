@@ -40,7 +40,7 @@ def test_remote_unauthenticated_admin_write_is_denied(monkeypatch, tmp_path):
     assert response.status_code == 403
     body = response.get_json()
     assert body["ok"] is False
-    assert body["error"] == "remote_admin_write_denied"
+    assert body["error"] == "local_client_required"
 
 
 def test_loopback_unauthenticated_admin_write_still_works(monkeypatch, tmp_path):

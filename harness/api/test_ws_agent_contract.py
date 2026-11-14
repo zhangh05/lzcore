@@ -24,6 +24,9 @@ def test_ws_handshake_connection_allowance_uses_effective_client(
     for key in ("LZCORE_AUTH_ENABLED", "LZCORE_LOGIN_ENABLED", "LZCORE_IDENTITY_ENABLED"):
         monkeypatch.setenv(key, "false")
     monkeypatch.setenv("TRUSTED_PROXY", trusted_proxy)
+    # This test isolates connection quotas; remote personal clients now need
+    # individual authorization before the slot check can be reached.
+    monkeypatch.setenv("LZCORE_ALLOWED_HOSTS", "192.168.1.20")
     monkeypatch.setattr(agent_ws, "_WS_MAX_CONNECTIONS", 10)
     monkeypatch.setattr(agent_ws, "_WS_MAX_CONNECTIONS_PER_IP", 1)
     monkeypatch.setattr(agent_ws, "_WS_MAX_CONNECTIONS_PER_LOOPBACK", 2)

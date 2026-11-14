@@ -138,6 +138,7 @@ def test_lan_personal_mode_status_matches_privileged_write_guard(
     monkeypatch.setenv("LZCORE_AUTH_ENABLED", "true" if valid_token else "false")
     monkeypatch.setenv("LZCORE_API_TOKEN", "test-service-token" if valid_token else "")
     monkeypatch.setenv("LZCORE_ALLOW_LAN", "true")
+    monkeypatch.setenv("LZCORE_ALLOWED_HOSTS", "192.168.1.8")
     monkeypatch.setenv("LZCORE_ALLOW_UNAUTHENTICATED_NETWORK", "true")
     app = Flask(__name__)
     app.secret_key = "synthetic-session-secret"
@@ -159,7 +160,7 @@ def test_lan_personal_mode_status_matches_privileged_write_guard(
     write = client.post("/api/admin/test-write", **options)
     assert write.status_code == (200 if local or valid_token else 403)
     if not local and not valid_token:
-        assert write.json["error"] == "remote_admin_write_denied"
+        assert write.json["error"] == "local_client_required"
 
 
 def test_valid_token_keeps_admin_projection_with_ordinary_identity_cookie(monkeypatch):

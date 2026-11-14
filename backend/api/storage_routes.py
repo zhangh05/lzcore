@@ -2,9 +2,37 @@
 
 from __future__ import annotations
 
+import logging
+import uuid
+
 from flask import Response, jsonify, request, send_file, stream_with_context
 
 from storage.ids import validate_workspace_id
+
+
+# Only fixed, public validation codes may cross the HTTP boundary. Storage
+# exceptions can embed filenames, credentials or dependency response bodies.
+_PUBLIC_ERRORS = frozenset({
+    "invalid_workspace_id", "invalid_file_view", "invalid_file_location",
+    "invalid_file_query", "invalid_file_cursor", "invalid_file_name",
+    "invalid_content_range", "invalid_content_search", "invalid_inspection_range",
+    "invalid_pdf_page", "file_unavailable", "file_not_found", "artifact_unavailable",
+    "secret_artifact_not_readable", "artifact_has_no_managed_payload",
+    "exactly_one_file_reference_required", "source_file_unavailable",
+    "binary_source_requires_a_format_processor", "document_processor_unavailable",
+    "no_structured_processor_for_file_kind", "active_pdf_required",
+    "ocr_processor_unavailable", "ocr_processor_failed", "backup_file_required",
+    "working_material_outside_managed_directories", "working_material_outside_writable_project",
+    "publish_source_outside_managed_files", "publish_source_outside_assigned_project",
+    "artifact_publication_blocked",
+})
+
+
+def _safe_error_fields(exc: Exception) -> dict:
+    code = str(exc) if isinstance(exc, ValueError) else ""
+    error_id = uuid.uuid4().hex
+    logging.getLogger(__name__).warning("Storage API failure: error_id=%s endpoint=%s", error_id, request.endpoint)
+    return {"error": code if code in _PUBLIC_ERRORS else "storage_operation_failed", "error_id": error_id}
 
 
 def register_storage_routes(app) -> None:
@@ -31,7 +59,9 @@ def register_storage_routes(app) -> None:
                 sort=request.args.get('sort', 'created'), logical_type=request.args.get('logical_type', ''), cursor=request.args.get('cursor', ''), limit=int(request.args.get('limit', 100)))
             return jsonify({'ok': True, **page})
         except ValueError as exc:
-            return jsonify({'ok': False, 'error': str(exc)}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
+        except OSError as exc:
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 500
 
     @app.route('/api/storage/search')
     def api_storage_content_search():
@@ -48,7 +78,7 @@ def register_storage_routes(app) -> None:
             result['files'] = [{**files[h['file_id']], 'search_hit': h} for h in result['hits'] if h['file_id'] in files]
             return jsonify({'ok': True, **result})
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/search/rebuild', methods=['POST'])
     def api_storage_search_rebuild():
@@ -58,7 +88,7 @@ def register_storage_routes(app) -> None:
             ws = validate_workspace_id(data.get('workspace_id', ''))
             return jsonify({'ok': True, **synchronize(ws, documents=True, rebuild=True)})
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/files/<file_id>/inspect')
     def api_storage_file_inspect(file_id):
@@ -67,7 +97,7 @@ def register_storage_routes(app) -> None:
             ws = validate_workspace_id(request.args.get('workspace_id', ''))
             return jsonify({'ok': True, **inspect_file(ws, file_id, offset=int(request.args.get('offset', 0)), limit=int(request.args.get('limit', 50)))})
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/files/<file_id>/page', methods=['POST'])
     def api_storage_file_page(file_id):
@@ -77,7 +107,7 @@ def register_storage_routes(app) -> None:
             ws = validate_workspace_id(data.get('workspace_id', ''))
             return jsonify({'ok': True, **render_pdf_page(ws, file_id, page=int(data.get('page', 1)), ocr=data.get('ocr') is True)})
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route("/api/storage/files/<file_id>/relations")
     def api_storage_file_relations(file_id):
@@ -103,7 +133,7 @@ def register_storage_routes(app) -> None:
                 offset=int(request.args.get('offset', 0)),
                 max_chars=min(100_000, int(request.args.get('limit', 100_000))))
         except (OSError, ValueError) as exc:
-            return jsonify({"ok": False, "error": str(exc)[:160]}), 400
+            return jsonify({"ok": False, **_safe_error_fields(exc)}), 400
         if content is None:
             return jsonify({"ok": False, "error": "file_not_found"}), 404
         return jsonify({"ok": True, **content})
@@ -152,7 +182,7 @@ def register_storage_routes(app) -> None:
             result = restore_file(workspace_id, file_id)
             return jsonify(result), 200 if result.get('ok') else 409
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/files/<file_id>', methods=['GET', 'PATCH'])
     def api_storage_file_metadata(file_id):
@@ -163,7 +193,7 @@ def register_storage_routes(app) -> None:
             record = organize_file(workspace_id, file_id, name=data.get('name'), folder=data.get('folder')) if request.method == 'PATCH' else resolve_reference(workspace_id, file_id=file_id)
             return jsonify({'ok': True, 'file': record})
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/files/<file_id>/download')
     def api_storage_file_download(file_id):
@@ -187,9 +217,9 @@ def register_storage_routes(app) -> None:
             ws = validate_workspace_id(data.get('workspace_id', ''))
             return jsonify({'ok': True, **reconcile_file_commits(ws, apply=data.get('apply') is True)})
         except ValueError as exc:
-            return jsonify({'ok': False, 'error': str(exc)}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
         except (OSError, RuntimeError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160], 'error_code': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}), 409
+            return jsonify({'ok': False, **_safe_error_fields(exc), 'error_code': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}), 409
 
     @app.route('/api/storage/sources/content')
     def api_storage_source_content():
@@ -206,7 +236,7 @@ def register_storage_routes(app) -> None:
                 raise ValueError('binary_source_requires_a_format_processor')
             return jsonify({'ok': True, 'content': content[:100_000], 'truncated': len(content) > 100_000, 'path_basis': 'workspace_root'})
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/health')
     def api_file_workspace_health():
@@ -215,7 +245,7 @@ def register_storage_routes(app) -> None:
             ws = validate_workspace_id(request.args.get('workspace_id', ''))
             return jsonify({'ok': True, 'health': file_health(ws, hashes=request.args.get('hashes') == 'true')})
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/migration', methods=['POST'])
     def api_storage_migration():
@@ -225,9 +255,9 @@ def register_storage_routes(app) -> None:
             ws = validate_workspace_id(data.get('workspace_id', ''))
             return jsonify({'ok': True, **migrate_references(ws, apply=data.get('apply') is True)})
         except ValueError as exc:
-            return jsonify({'ok': False, 'error': str(exc)}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
         except (OSError, RuntimeError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160], 'error_code': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}), 409
+            return jsonify({'ok': False, **_safe_error_fields(exc), 'error_code': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}), 409
 
     @app.route('/api/storage/backup')
     def api_storage_backup():
@@ -242,7 +272,7 @@ def register_storage_routes(app) -> None:
             except Exception:
                 output.close(); raise
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/restore', methods=['POST'])
     def api_storage_restore_bundle():
@@ -256,9 +286,9 @@ def register_storage_routes(app) -> None:
             result = restore_bundle(ws, upload.stream, preview=request.form.get('apply') != 'true')
             return jsonify(result), 200 if result.get('ok') else 409
         except (ValueError, KeyError, TypeError, zipfile.BadZipFile) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
         except (OSError, RuntimeError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160], 'error_code': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}), 409
+            return jsonify({'ok': False, **_safe_error_fields(exc), 'error_code': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}), 409
 
     @app.route('/api/storage/sources')
     def api_storage_sources():
@@ -267,7 +297,7 @@ def register_storage_routes(app) -> None:
             ws = validate_workspace_id(request.args.get('workspace_id', ''))
             return jsonify({'ok': True, **source_entries(ws, request.args.get('filepath', 'files/data'), offset=int(request.args.get('offset', 0)), limit=int(request.args.get('limit', 100)))})
         except (ValueError, OSError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160]}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
 
     @app.route('/api/storage/sources/move', methods=['POST'])
     def api_storage_source_move():
@@ -277,9 +307,9 @@ def register_storage_routes(app) -> None:
             ws = validate_workspace_id(data.get('workspace_id', ''))
             return jsonify({'ok': True, **move_source(ws, data.get('filepath', ''), data.get('destination', ''))})
         except ValueError as exc:
-            return jsonify({'ok': False, 'error': str(exc)}), 400
+            return jsonify({'ok': False, **_safe_error_fields(exc)}), 400
         except (OSError, RuntimeError) as exc:
-            return jsonify({'ok': False, 'error': str(exc)[:160], 'error_code': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}), 409
+            return jsonify({'ok': False, **_safe_error_fields(exc), 'error_code': 'EXECUTION_UNKNOWN', 'automatic_retry_allowed': False}), 409
 
     @app.route("/api/storage/events")
     def api_storage_events():

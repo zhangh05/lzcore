@@ -2,7 +2,7 @@
 
 import re
 
-from flask import jsonify, request, session
+from flask import jsonify, request
 
 from backend.core.identity import (
     create_organization,
@@ -23,19 +23,22 @@ from backend.core.identity import (
 def _context():
     if not identity_enabled():
         return None, (jsonify({"ok": False, "error": "identity_disabled"}), 404)
-    role = str(session.get("lzcore_role") or "")
+    from backend.core.auth import authenticated_request_context
+    authenticated = authenticated_request_context()
+    if authenticated is None:
+        return None, (jsonify({"ok": False, "error": "forbidden"}), 403)
+    role = authenticated["role"]
     if not has_role(role, "admin"):
         return None, (jsonify({"ok": False, "error": "forbidden"}), 403)
-    username = str(session.get("lzcore_user") or "")
-    user = get_user(username)
-    platform_admin = user is None or role == "owner"
+    username = authenticated["username"]
+    platform_admin = authenticated["platform_admin"]
     if platform_admin:
         from storage.workspace_store import list_workspace_ids
         ensure_organization("default", "默认组织", list_workspace_ids())
     return {
         "username": username,
         "role": role,
-        "organization_id": str(session.get("lzcore_org") or "default"),
+        "organization_id": authenticated["organization_id"] or "default",
         "platform_admin": platform_admin,
     }, None
 

@@ -34,6 +34,9 @@ sock = Sock()
 _log = logging.getLogger("ws.agent")
 _MAX_WS_INPUT_LENGTH = 262144  # 256KB — supports long user inputs
 _MAX_WS_METADATA_JSON = 16384
+# Allow the existing 262144-character input even as escaped Unicode JSON,
+# while bounding the transport buffer before parsing/authentication.
+_MAX_WS_MESSAGE_BYTES = 4 * 1024 * 1024
 _WS_HEARTBEAT_INTERVAL_SECONDS = 2.0
 _WS_FIRST_FRAME_TIMEOUT_SECONDS = max(1.0, float(os.getenv("LZCORE_WS_FIRST_FRAME_TIMEOUT", "5")))
 # The bundled synchronous web service has 16 request threads. Keep four free
@@ -380,6 +383,10 @@ class _SocketOutbox:
 
 def register_ws_routes(app):
     """Register WebSocket routes on the Flask app."""
+    options = dict(app.config.get("SOCK_SERVER_OPTIONS") or {})
+    configured_limit = options.get("max_message_size")
+    options["max_message_size"] = min(configured_limit, _MAX_WS_MESSAGE_BYTES) if isinstance(configured_limit, int) and configured_limit > 0 else _MAX_WS_MESSAGE_BYTES
+    app.config["SOCK_SERVER_OPTIONS"] = options
     sock.init_app(app)
     try:
         from agent.runtime.turn_replay import ensure_replay_listener
@@ -416,18 +423,28 @@ def register_ws_routes(app):
             outbox.send(json.dumps(payload, ensure_ascii=True, default=str))
 
         try:
-            first_frame = True
+            auth_deadline = time.monotonic() + _WS_FIRST_FRAME_TIMEOUT_SECONDS
             while True:
-                raw = ws.receive(timeout=_WS_FIRST_FRAME_TIMEOUT_SECONDS if first_frame else 300)
+                timeout = 300 if _auth_checked else auth_deadline - time.monotonic()
+                if timeout <= 0:
+                    return
+                raw = ws.receive(timeout=timeout)
                 if raw is None:
                     break
-                first_frame = False
+                if not _auth_checked and time.monotonic() >= auth_deadline:
+                    return
+                if len(raw.encode("utf-8") if isinstance(raw, str) else raw) > _MAX_WS_MESSAGE_BYTES:
+                    ws.send(json.dumps({"type": "error", "message": "frame_too_large"}))
+                    return
 
                 try:
                     msg = json.loads(raw)
-                except json.JSONDecodeError:
+                except (ValueError, TypeError):
                     ws.send(json.dumps({"type": "error", "message": "Invalid JSON"}, ensure_ascii=True))
-                    continue
+                    return
+                if not isinstance(msg, dict):
+                    ws.send(json.dumps({"type": "error", "message": "JSON object required"}))
+                    return
 
                 # WebSocket routes are outside /api, so the Flask auth
                 # middleware does not protect them. Authenticate the first
@@ -465,6 +482,8 @@ def register_ws_routes(app):
                         authenticated_username = str(session.get("lzcore_user") or "")
                         authenticated_role = str(session.get("lzcore_role") or "viewer")
                         authenticated_workspaces = list(session.get("lzcore_workspaces") or [])
+                    if time.monotonic() >= auth_deadline:
+                        return
                     _auth_checked = True
 
                 # System WebSocket — register for broadcasts, skip agent turn
@@ -655,6 +674,8 @@ def _same_origin_ws_request() -> bool:
     )
     if not _is_auth_enabled() and not _is_login_enabled() and not _is_identity_enabled():
         if not _unauthenticated_host_allowed(_hostname_from_host_header(request.host)):
+            return False
+        if not _unauthenticated_host_allowed(get_effective_client_address()):
             return False
     return True
 

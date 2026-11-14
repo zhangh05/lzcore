@@ -3,7 +3,13 @@
 from backend.core.auth import is_allowed_browser_origin
 
 
-def test_tailscale_workbench_port_can_write_to_local_backend():
+def test_tailscale_workbench_requires_explicit_origin_allowlist(monkeypatch):
+    monkeypatch.delenv("LZCORE_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.delenv("LZCORE_ALLOWED_HOSTS", raising=False)
+    assert is_allowed_browser_origin(
+        "http://100.124.182.34:5274", "127.0.0.1:8011",
+    ) is False
+    monkeypatch.setenv("LZCORE_ALLOWED_ORIGINS", "http://100.124.182.34:5274")
     assert is_allowed_browser_origin(
         "http://100.124.182.34:5274",
         "127.0.0.1:8011",
@@ -50,7 +56,7 @@ def test_browser_write_without_local_token_is_rejected(monkeypatch, tmp_path):
     assert allowed.status_code != 403 or allowed.get_json().get("error") != "local_token_required"
 
 
-def test_private_lan_host_is_denied_unless_lan_is_explicitly_enabled(monkeypatch):
+def test_private_lan_host_requires_individual_allowlist(monkeypatch):
     from backend.core.auth import _unauthenticated_host_allowed
 
     monkeypatch.delenv("LZCORE_ALLOW_LAN", raising=False)
@@ -59,6 +65,8 @@ def test_private_lan_host_is_denied_unless_lan_is_explicitly_enabled(monkeypatch
     assert _unauthenticated_host_allowed("localhost") is True
     assert _unauthenticated_host_allowed("192.168.1.8") is False
     monkeypatch.setenv("LZCORE_ALLOW_LAN", "true")
+    assert _unauthenticated_host_allowed("192.168.1.8") is False
+    monkeypatch.setenv("LZCORE_ALLOWED_HOSTS", "192.168.1.8")
     assert _unauthenticated_host_allowed("192.168.1.8") is True
 
 

@@ -189,9 +189,8 @@ def _sanitize(data: dict) -> dict:
 
 
 def _mask_key(key: str) -> Optional[str]:
-    if not key or len(key) < 8:
-        return None
-    return key[:4] + "****" + key[-4:]
+    from agent.llm.settings import mask_key
+    return mask_key(key)
 
 
 # ── Public API ──

@@ -8,6 +8,7 @@ or:
     python -m backend.main --port 8011
 """
 
+import io
 import os
 import sys
 from pathlib import Path
@@ -55,6 +56,28 @@ from backend.core.rate_limit import rate_limit_middleware
 from storage.ids import validate_workspace_id
 
 
+class _RequestBodyInput(io.RawIOBase):
+    """Probe one byte past the bound so JSON cannot accept a truncated body."""
+
+    def __init__(self, stream, limit: int):
+        self._stream = stream
+        self._limit = limit
+        self._received = 0
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        data = self._stream.read(min(len(buffer), self._limit - self._received))
+        count = len(data)
+        buffer[:count] = data
+        self._received += count
+        if self._received == self._limit and self._stream.read(1):
+            from werkzeug.exceptions import RequestEntityTooLarge
+            raise RequestEntityTooLarge()
+        return count
+
+
 def _invalid_workspace_response():
     return jsonify({"ok": False, "error": "invalid_workspace_id"}), 400
 
@@ -79,6 +102,33 @@ def create_app():
     validate_network_listener(os.environ.get("LZCORE_LISTEN_HOST") or "127.0.0.1")
     app = Flask(__name__, static_folder=None)
     app.config["PORT"] = UNIFIED_PORT
+    from storage.policy import MAX_UPLOAD_BYTES
+    from artifacts.store import _get_max_size
+    from extensions.package import MAX_PACKAGE_BYTES
+    multipart_overhead = 1_048_576
+    app.config["MAX_CONTENT_LENGTH"] = max(MAX_UPLOAD_BYTES, _get_max_size(), MAX_PACKAGE_BYTES) + multipart_overhead
+
+    @app.before_request
+    def _request_body_limit():
+        # Runs before authentication can parse JSON or request.form. Werkzeug
+        # also enforces this on terminated/chunked streams, not only headers.
+        limit = app.config["MAX_CONTENT_LENGTH"]
+        if request.path == "/api/knowledge/upload":
+            limit = min(limit, MAX_UPLOAD_BYTES + multipart_overhead)
+        elif request.path.endswith("/artifacts/upload"):
+            limit = min(limit, _get_max_size() + multipart_overhead)
+        elif request.path == "/api/extensions/repository/publish":
+            limit = min(limit, MAX_PACKAGE_BYTES + multipart_overhead)
+        request.max_content_length = limit
+        if request.content_length is not None and request.content_length > limit:
+            from werkzeug.exceptions import RequestEntityTooLarge
+            raise RequestEntityTooLarge()
+        if request.environ.get("wsgi.input_terminated"):
+            request.environ["wsgi.input"] = _RequestBodyInput(request.environ["wsgi.input"], limit)
+
+    @app.errorhandler(413)
+    def _request_too_large(_error):
+        return jsonify({"ok": False, "error": "request_too_large"}), 413
     from backend.core.identity import ensure_identity_storage_ids, identity_enabled
     if identity_enabled():
         ensure_identity_storage_ids()
@@ -106,6 +156,7 @@ def create_app():
             gate.release()
 
     # ── CORS: allow configured workbench origins (Vite / LAN access) ──
+    cors_allowed_headers = "Content-Type, Authorization, X-Requested-With, X-LZCore-Local-Token, X-API-Key"
     def _allowed_cors_origin():
         origin = request.headers.get("Origin")
         if not origin:
@@ -127,7 +178,7 @@ def create_app():
                 resp.headers["Access-Control-Allow-Origin"] = origin
                 resp.headers["Access-Control-Allow-Credentials"] = "true"
             resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-            resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+            resp.headers["Access-Control-Allow-Headers"] = cors_allowed_headers
             resp.headers["Access-Control-Max-Age"] = "86400"
             return resp
 
@@ -138,7 +189,7 @@ def create_app():
             resp.headers["Access-Control-Allow-Origin"] = origin
             resp.headers["Access-Control-Allow-Credentials"] = "true"
             resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-            resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            resp.headers["Access-Control-Allow-Headers"] = cors_allowed_headers
         return resp
 
     # ── Rate limiting (before all routes) ──
@@ -546,7 +597,9 @@ def create_app():
         origin = request.headers.get("Origin")
         if origin and not is_allowed_browser_origin(origin, request.host):
             return jsonify({"ok": False, "error": "origin_denied"}), 403
-        return jsonify({"ok": True, "token": local_browser_token()})
+        response = jsonify({"ok": True, "token": local_browser_token()})
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.route("/")
     def backend_root():
