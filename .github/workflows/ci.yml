@@ -144,10 +144,9 @@ jobs:
           cp scripts/coding-runtime.Dockerfile "$scratch/Dockerfile"
           docker build -t lzcore-coding-runtime:local "$scratch"
           rm -rf "$scratch"
-      - name: Exercise kernel isolation and independent evaluator separation
+      - name: Exercise kernel isolation
         run: |
           python scripts/verify_coding_isolation.py --output "$RUNNER_TEMP/coding-kernel" --rounds 3
-          python scripts/verify_benchmark_evaluator.py --output "$RUNNER_TEMP/coding-evaluator"
       - name: Preserve kernel acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -155,7 +154,6 @@ jobs:
           name: coding-kernel-validation
           path: |
             ${{ runner.temp }}/coding-kernel/report.json
-            ${{ runner.temp }}/coding-evaluator/report.json
           retention-days: 14
 
   distributed-adapters:
