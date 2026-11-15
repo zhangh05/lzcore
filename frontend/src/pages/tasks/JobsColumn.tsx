@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import type { HttpOutcome } from "../../contracts/auth";
 import { canOfferConfirmedJobRetry, jobOutcomeView, type JobFacts } from "../../contracts/outcomeState";
 import { listOf, useApi } from "../../kit/useApi";
+import SegmentedControl from "../../components/arc/segmented-control/segmented-control";
 import { Chip, ConfirmDialog, FailureNote, JsonBlock, LoadState, ReceiptNote } from "../../kit/ui";
 
 export interface JobRow extends JobFacts {
@@ -47,6 +48,12 @@ function inFilter(j: JobRow, f: Filter): boolean {
 
 const ACTIVE = new Set(["queued", "running", "cancel_requested"]);
 
+/** 状态点颜色：失败红，其余灰。队列走完不等于目标完成，所以不用绿色。 */
+function statusTone(j: JobRow): "danger" | "neutral" {
+  const st = String(j.status ?? "");
+  return st === "failed" || st === "error" ? "danger" : "neutral";
+}
+
 const JOB_ERROR_ZH: Record<string, string> = {
   backend_restart_during_job: "执行期间服务重启了，这次没有跑完",
   cancelled_by_user: "已被手动取消",
@@ -76,18 +83,12 @@ export function JobsColumn({ ws }: { ws: string }) {
     return () => window.clearInterval(t);
   }, [hasActive, reload]);
   return (
-    <aside className="jobs-column card" aria-label="作业队列" data-testid="jobs-column">
-      <h2>后台队列</h2>
+    <aside className={`jobs-column card ${sel.size ? "has-selection" : ""}`} aria-label="作业队列" data-testid="jobs-column">
+      <h2>{hasActive ? <span className="live-dot is-live" aria-hidden="true" /> : null}后台队列{hasActive ? <span className="muted jobs-live">自动刷新中</span> : null}</h2>
       <p className="muted jobs-sub">排队和执行情况。任务是否真正做成，以左侧任务详情为准。</p>
       {result ? (result.o.kind === "http" && result.o.status < 300 ? <ReceiptNote text={`${result.label}已提交`} /> : <FailureNote outcome={result.o} />) : null}
-      <div className="job-filters" role="group" aria-label="按状态筛选作业">
-        {FILTERS.map((f) => (
-          <button key={f.key} type="button" className={`btn ghost sm ${filter === f.key ? "is-active" : ""}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
-            {f.label}{f.key === "all" ? "" : ` ${all.filter((j) => inFilter(j, f.key)).length}`}
-          </button>
-        ))}
-        {hasActive ? <span className="muted">自动刷新中</span> : null}
-      </div>
+      <SegmentedControl label="按状态筛选作业" className="job-filters" value={filter} onValueChange={(v) => setFilter(v as Filter)}
+        options={FILTERS.map((f) => ({ value: f.key, label: f.label, accessory: f.key === "all" ? undefined : <span className="tab-count">{all.filter((j) => inFilter(j, f.key)).length}</span> }))} />
       {sel.size ? <div className="row-actions"><Button variant="danger" onClick={() => setDel(list.filter((j) => sel.has(j.job_id)))} data-testid="jobs-batch-delete">删除所选（{sel.size}）</Button></div> : null}
       <LoadState value={jobs} onReload={reload}>{() => list.length === 0 ? <p className="muted">{all.length ? "没有符合筛选的作业。" : "队列为空。"}</p> : (
         <ul className="job-list">
@@ -95,8 +96,9 @@ export function JobsColumn({ ws }: { ws: string }) {
             const v = jobOutcomeView(j);
             const retryable = canOfferConfirmedJobRetry(j);
             return (
-              <li key={j.job_id} className="job-item" data-job={j.job_id} data-goal={v.goal} title={`作业编号 ${j.job_id}`}>
+              <li key={j.job_id} className={`job-item ${ACTIVE.has(String(j.status)) ? "is-active" : ""}`} data-job={j.job_id} data-goal={v.goal} title={`作业编号 ${j.job_id}`}>
                 <div className="job-head">
+                  <span className={`live-dot ${ACTIVE.has(String(j.status)) ? "is-live" : `tone-${statusTone(j)}`}`} aria-hidden="true" />
                   <input type="checkbox" checked={sel.has(j.job_id)} disabled={ACTIVE.has(String(j.status))} aria-label={`选择 ${j.job_id}`}
                     onChange={(e) => { const n = new Set(sel); if (e.target.checked) n.add(j.job_id); else n.delete(j.job_id); setSel(n); }} />
                   <strong className="job-title" title={j.title}>{jobTitle(j)}</strong>

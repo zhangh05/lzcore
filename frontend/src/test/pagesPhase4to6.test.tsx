@@ -1,6 +1,6 @@
 import { SchemaFields, toolLabel, workflowInputNames } from "../kit/SchemaFields";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AuthGateView } from "../app/AuthGate";
 import { CORE_FORBIDDEN_DOMAIN_WORDS } from "../contracts/naming";
 import { ApprovalCard } from "../extension-modules/approval/ApprovalCard";
@@ -258,6 +258,19 @@ describe("系统（阶段 5）", () => {
     fireEvent.change(within(dialog).getByTestId("confirm-text"), { target: { value: "RESTORE" } });
     fireEvent.click(within(dialog).getByTestId("confirm-submit"));
     await waitFor(() => expect(log.find((l) => l.path.includes("/restore"))?.body).toEqual({ confirmation: "RESTORE" }));
+  });
+
+  it("新建工作区后，顶栏的工作区列表会重新读取", async () => {
+    const { log } = renderAt("/system/workspaces?ws=ws-demo-1", { role: "admin" });
+    await screen.findByTestId("workspaces-table");
+    const spy = vi.spyOn(globalThis, "fetch");
+    const listReads = () => spy.mock.calls.filter(([u, init]) => /\/api\/workspaces(\?|$)/.test(String(u)) && (!init?.method || init.method === "GET")).length;
+    fireEvent.change(screen.getByPlaceholderText("新工作区 id"), { target: { value: "ws-new" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    await waitFor(() => expect(log.some((l) => l.path === "/api/workspaces" && l.method === "POST")).toBe(true));
+    // 管理表 + 顶栏切换器各读一次
+    await waitFor(() => expect(listReads()).toBeGreaterThanOrEqual(2));
+    spy.mockRestore();
   });
 
   it("工作区改名只改显示名，不发送新 id", async () => {

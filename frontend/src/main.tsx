@@ -7,6 +7,7 @@ import "./styles/semantic.css";
 import "./styles/shell.css";
 import "./styles/components.css";
 import "./styles/pages.css";
+import "./styles/polish.css";
 import "./styles/markdown.css";
 import "./desktop/desktop.css";
 import { BrowserRouter } from "./router";

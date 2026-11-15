@@ -1,0 +1,122 @@
+/* Visual layer over the shared components: depth, motion and rhythm.
+   Fluent 2 restraint — soft elevation instead of borders everywhere, one accent,
+   motion that explains (things arrive, rows answer the pointer), never decorates.
+   Everything here is cosmetic; layout and semantics stay in components/pages. */
+@layer polish {
+  @keyframes lz-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes lz-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes lz-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 45%, transparent); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+  @keyframes lz-sheen { from { background-position: -160% 0; } to { background-position: 260% 0; } }
+
+  /* ── Page: arrives as one piece, header first ─────────────────────── */
+  .page > .page-header { animation: lz-rise 220ms var(--ease-out) both; }
+  .page > :not(.page-header) { animation: lz-rise 280ms var(--ease-out) 30ms both; }
+  .page-title { letter-spacing: -.01em; }
+
+  /* ── Surfaces: a resting shadow carries the edge, the border only hints ── */
+  .card, .table-wrap {
+    border-color: color-mix(in oklab, var(--line) 70%, transparent);
+    border-radius: 10px;
+    box-shadow: var(--shadow-resting), 0 0 0 .5px color-mix(in oklab, var(--line) 40%, transparent);
+  }
+
+  /* ── Tables: tinted header, rows that answer the pointer ───────────── */
+  .table th { background: color-mix(in oklab, var(--surface-2) 70%, var(--surface)); color: var(--text-3); font-weight: 600; letter-spacing: .02em; }
+  .table th:first-child { border-top-left-radius: 10px; }
+  .table th:last-child { border-top-right-radius: 10px; }
+  .table th, .table td { padding-inline: var(--space-4); }
+  .table tbody tr { animation: lz-fade var(--dur-4) var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 14) * 18ms); }
+  .table tr.is-clickable td { transition: background var(--dur-2) var(--ease); }
+  .table tr.is-clickable td:first-child { box-shadow: inset 2px 0 0 transparent; transition: box-shadow var(--dur-2) var(--ease), background var(--dur-2) var(--ease); }
+  .table tr.is-clickable:hover td:first-child, .table tr.is-clickable:focus-visible td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+  .table :is(td, th).is-time { white-space: nowrap; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .table :is(td, th).is-nowrap { white-space: nowrap; }
+
+  /* ── Empty tables: a calm, centred placeholder instead of a stray line ── */
+  .table-empty { display: grid; place-items: center; min-height: 148px; padding: var(--space-6) var(--space-4); border: 1px dashed color-mix(in oklab, var(--line) 80%, transparent); border-radius: 12px; background: color-mix(in oklab, var(--surface-2) 45%, transparent); text-align: center; animation: lz-fade var(--dur-4) var(--ease-out) both; }
+  * + .table-empty { margin-top: var(--space-3); }
+  .table-empty > p.muted { margin: 0; max-width: 46ch; }
+  .table-empty > p.muted::before { content: ""; display: block; width: 36px; height: 36px; margin: 0 auto var(--space-2); border-radius: 10px; background: var(--surface-3) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='M22 12h-6l-2 3h-4l-2-3H2'/%3E%3Cpath d='M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/%3E%3C/svg%3E") center / 18px no-repeat; }
+  .table-empty:has(> [class*="empty"]) { border: 0; background: transparent; padding: 0; min-height: 0; }
+
+  /* ── Grids of cards lift slightly under the pointer ─────────────────── */
+  .card-grid > li > :is(.card, a, button) { transition: transform var(--dur-3) var(--ease-out), box-shadow var(--dur-3) var(--ease-out), border-color var(--dur-2) var(--ease); }
+  @media (hover: hover) and (pointer: fine) {
+    .card-grid > li > :is(.card, a, button):hover { transform: translateY(-2px); box-shadow: var(--shadow-raised); }
+  }
+  .card-grid > li { animation: lz-rise var(--dur-4) var(--ease-out) both; }
+  .card-grid > li:nth-child(2) { animation-delay: 30ms; } .card-grid > li:nth-child(3) { animation-delay: 60ms; }
+  .card-grid > li:nth-child(4) { animation-delay: 90ms; } .card-grid > li:nth-child(n + 5) { animation-delay: 120ms; }
+
+  /* ── Inline notes read as calm callouts, not boxes ──────────────────── */
+  .inline-alert { border-radius: 8px; }
+
+  /* ── Shared live indicator (running work) ───────────────────────────── */
+  .live-dot { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--text-3); }
+  .live-dot.tone-ok { background: var(--ok); } .live-dot.tone-danger { background: var(--danger); }
+  .live-dot.tone-warn { background: var(--warn); } .live-dot.tone-info { background: var(--accent); }
+  .live-dot.is-live { background: var(--accent); animation: lz-pulse 1.6s var(--ease) infinite; }
+
+  /* ── Tasks: overview strip ─────────────────────────────────────────── */
+  .tasks-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-5); }
+  .tasks-overview > article { border-radius: 12px; border-color: color-mix(in oklab, var(--line) 60%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 4%, var(--surface)) 0%, var(--surface) 70%); }
+  @media (max-width: 900px) { .tasks-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  /* ── Tasks: run history, grouped by day ─────────────────────────────── */
+  .run-groups { display: flex; flex-direction: column; gap: var(--space-5); }
+  .run-day { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); color: var(--text-2); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .03em; }
+  .run-day::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
+  .run-day-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--surface-3); color: var(--text-3); font-size: 11px; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+  .run-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .run-list > li { animation: lz-rise 320ms var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 16) * 22ms); }
+  .run-row {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
+    width: 100%; padding: 12px var(--space-4); border: 1px solid color-mix(in oklab, var(--line) 60%, transparent); border-radius: 10px;
+    background: var(--surface); box-shadow: var(--shadow-resting); color: inherit; font: inherit; text-align: left; cursor: pointer;
+    transition: transform var(--dur-3) var(--ease-out), box-shadow var(--dur-3) var(--ease-out), border-color var(--dur-2) var(--ease);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .run-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-raised); border-color: color-mix(in oklab, var(--accent) 35%, var(--line)); }
+  }
+  .run-row:active { transform: scale(.995); }
+  .run-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .run-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--surface-3); color: var(--text-3); }
+  .run-row.tone-ok .run-icon { background: var(--ok-soft); color: var(--ok); }
+  .run-row.tone-warn .run-icon { background: var(--warn-soft); color: var(--warn); }
+  .run-row.tone-danger .run-icon { background: var(--danger-soft); color: var(--danger); }
+  .run-row.tone-info .run-icon { background: var(--accent-soft); color: var(--accent); }
+  .run-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .run-title { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .run-sub { overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
+  .run-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .run-side time { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .runs-recent { margin-top: var(--space-4); font-size: var(--fs-xs); }
+
+  /* ── Tasks: background queue ────────────────────────────────────────── */
+  .tasks-layout { grid-template-columns: minmax(0, 1fr) 384px; }
+  @media (max-width: 1100px) { .tasks-layout { grid-template-columns: minmax(0, 1fr); } }
+  .jobs-column { border-radius: 12px; }
+  .jobs-column h2 { align-items: center; gap: var(--space-2); }
+  .jobs-live { margin-left: auto; }
+  .jobs-column .job-filters { display: flex; margin: var(--space-2) 0 var(--space-3); }
+  .job-item { padding: 10px var(--space-2); margin: 0 calc(-1 * var(--space-2)); border-bottom: 0; border-radius: 8px; transition: background var(--dur-2) var(--ease); }
+  .job-item + .job-item { margin-top: 2px; }
+  @media (hover: hover) and (pointer: fine) { .job-item:hover { background: var(--subtle-hover); } }
+  .job-item.is-active { background: color-mix(in oklab, var(--accent) 6%, transparent); }
+  .job-item > .row-actions:last-child { top: 6px; right: var(--space-2); }
+  .job-head { padding-right: 64px; }
+  .job-meta { padding-left: 16px; }
+  .job-item > .row-actions:not(:last-child), .job-item > .job-progress, .job-item > .job-error { margin-left: 16px; }
+  /* Selection checkboxes appear on hover, or for every row once anything is selected. */
+  .job-head input[type="checkbox"] { width: 0; margin: 0; opacity: 0; transition: opacity var(--dur-2) var(--ease), width var(--dur-2) var(--ease); }
+  .job-item:hover .job-head input[type="checkbox"], .job-head input[type="checkbox"]:focus-visible, .has-selection .job-head input[type="checkbox"] { width: 16px; opacity: 1; }
+  .job-progress progress { width: 120px; }
+  .job-item.is-active .job-progress progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), color-mix(in oklab, var(--accent) 55%, white), var(--accent)); background-size: 200% 100%; animation: lz-sheen 1.8s linear infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .page > *, .table tbody tr, .card-grid > li, .live-dot.is-live, .run-list > li { animation: none; }
+    .run-row, .job-head input[type="checkbox"] { transition: none; }
+    .run-row:hover { transform: none; }
+    .card-grid > li > :is(.card, a, button):hover { transform: none; }
+  }
+}

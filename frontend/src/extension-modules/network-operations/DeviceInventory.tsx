@@ -54,7 +54,7 @@ export function DeviceInventory({ ws, devices, devicesState, reloadDevices, conn
   return (
     <div className="inv" data-testid="net-devices">
       <div className="inv-toolbar">
-        <SearchField label="搜索设备" value={query} onValueChange={setQuery} placeholder="搜索名称、地址、型号、区域" className="inv-search" />
+        <SearchField label="搜索设备" hideLabel value={query} onValueChange={setQuery} placeholder="搜索名称、地址、型号、区域" className="inv-search" />
         <SegmentedControl label="按健康筛选" value={filter} onValueChange={(v) => setFilter(v as Filter)} options={([["all", "全部"], ["warn", "需关注"], ["untested", "未测试"]] as const).map(([k, label]) => ({
           value: k, label, accessory: <span className="tab-count">{counts[k]}</span>,
         }))} />

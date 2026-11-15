@@ -322,7 +322,10 @@ function OrgMembers({ org, users, onClose, onWritten }: { org: OrgRec; users: Us
 
 // ── 工作区管理（A13-管理） ─────────────────────────────────
 export function WorkspacesAdminPage() {
-  const [list, reload] = useApi("/api/workspaces");
+  const [list, reloadList] = useApi("/api/workspaces");
+  const { reloadWorkspaces } = useShell();
+  // 管理页的改动同步到顶栏的工作区切换器。
+  const reload = () => { reloadList(); reloadWorkspaces(); };
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
   const [create, setCreate] = useState("");
@@ -396,7 +399,7 @@ export function BackupsPage() {
         <Result r={r} />
         <LoadState value={list} onReload={reload}>{() => (
           <Table testId="backups-table" rows={listOf<{ backup_id: string; created_at?: string; size_bytes?: number }>(list, "backups")} rowKey={(b) => b.backup_id}
-            columns={[{ key: "id", label: "备份", render: (b) => <code>{b.backup_id}</code> }, { key: "t", label: "时间", render: (b) => fmtTime(b.created_at) },
+            columns={[{ key: "id", label: "备份", render: (b) => <code>{b.backup_id}</code> }, { key: "t", label: "时间", className: "is-time", render: (b) => fmtTime(b.created_at) },
               { key: "a", label: "", render: (b) => <Button variant="danger" onClick={() => setRestore(b.backup_id)} data-testid="backup-restore">恢复</Button> }]} />
         )}</LoadState>
         <Read title="生产就绪检查" path="/api/admin/production" />
