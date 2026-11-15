@@ -92,3 +92,46 @@ def test_transport_metadata_keeps_only_provider_and_thinking():
     )
     assert out["model_selection"] == {"provider": "deepseek", "thinking": "adaptive"}
     assert "model_selection" not in normalize_metadata({"model_selection": "deepseek"}, transport="http", stream_mode="sse")
+
+
+def test_local_endpoint_runs_without_a_key(monkeypatch, tmp_path):
+    providers = _providers(monkeypatch, tmp_path)
+    (providers / "ollama.json").write_text(json.dumps({
+        "enabled": True, "provider": "ollama", "base_url": "http://localhost:11434/v1", "model": "llama3.1",
+    }))
+    from agent.llm.turn_model import is_local_endpoint, provider_selectable, resolve_model_selection
+
+    assert is_local_endpoint("http://127.0.0.1:11434/v1")
+    assert is_local_endpoint("http://[::1]:8080")
+    assert not is_local_endpoint("https://api.deepseek.com/v1")
+    assert not is_local_endpoint("http://localhost.evil.example/v1")
+    assert not provider_selectable({"model": "x", "base_url": "https://gateway.example/v1"})
+    assert resolve_model_selection({"provider": "ollama"})["model"] == "llama3.1"
+
+
+def test_workbench_models_lists_every_connected_provider(monkeypatch, tmp_path):
+    providers = _providers(monkeypatch, tmp_path)
+    (providers / "ollama.json").write_text(json.dumps({
+        "enabled": True, "provider": "ollama", "base_url": "http://localhost:11434/v1", "model": "llama3.1",
+    }))
+    (providers / "openai.json").write_text(json.dumps({
+        "enabled": True, "provider": "openai", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini",
+    }))
+    from flask import Flask
+    from backend.api.llm_api import handle_workbench_models
+
+    with Flask(__name__).app_context():
+        body = handle_workbench_models().get_json()
+    listed = {m["provider"] for m in body["models"]}
+    assert {"minimax", "deepseek", "ollama"} <= listed
+    assert "openai" not in listed
+    assert body["models"][0]["provider"] == "minimax"
+
+
+def test_keyless_local_request_sends_no_authorization_header():
+    from agent.llm.provider import _bearer_headers
+
+    assert "Authorization" not in _bearer_headers({"api_key": ""})
+    assert _bearer_headers({"api_key": "sk-x"}, Accept="text/event-stream") == {
+        "Content-Type": "application/json", "Accept": "text/event-stream", "Authorization": "Bearer sk-x",
+    }

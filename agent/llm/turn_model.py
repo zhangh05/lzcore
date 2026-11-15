@@ -30,9 +30,21 @@ def supports_thinking_control(model: str) -> bool:
     return str(model or "").lower().startswith("minimax-m3")
 
 
+def is_local_endpoint(base_url: object) -> bool:
+    """True for a model server on this machine (e.g. Ollama), which needs no key."""
+    from urllib.parse import urlparse
+    try:
+        host = (urlparse(str(base_url or "")).hostname or "").lower()
+    except ValueError:
+        return False
+    return host in {"localhost", "127.0.0.1", "::1"} or host.endswith(".localhost")
+
+
 def provider_selectable(cfg: dict) -> bool:
-    """A provider can run a turn when it is enabled, has a model and a key."""
-    return bool(cfg.get("enabled", True) and cfg.get("model") and cfg.get("key_configured"))
+    """A provider can run a turn when it is enabled, has a model, and either a
+    key or a local endpoint that needs none."""
+    return bool(cfg.get("enabled", True) and cfg.get("model")
+                and (cfg.get("key_configured") or is_local_endpoint(cfg.get("base_url"))))
 
 
 def normalize_model_selection(raw: object) -> dict | None:

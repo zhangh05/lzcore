@@ -170,10 +170,24 @@ def test_draft_protocol_override_is_tested_without_mutating_saved_vendor(catalog
     assert requests[-1]["path"] == "/v1/messages"
     assert store.load_provider_config(saved["provider"])["provider_type"] == "openai_compatible"
     assert store.get_active_provider() != saved["provider"]
-    request_count = len(requests)
+    # The test gateway is on 127.0.0.1: a local endpoint needs no key, so a
+    # cleared key still reaches it, just without credentials.
     cleared = client.post("/api/agent/llm/test", json={"provider": saved["provider"], "clear_api_key": True})
-    assert not cleared.get_json()["llm_used"]
-    assert len(requests) == request_count
+    assert cleared.get_json()["llm_used"]
+    assert requests[-1]["authorization"] is None
+
+
+def test_remote_endpoint_without_key_never_sends_a_request(monkeypatch):
+    import agent.llm.provider as provider
+    from agent.llm.provider import ERROR_TYPE_MISSING_API_KEY, _api_generate
+
+    def no_network(*_args, **_kwargs):
+        raise AssertionError("must not reach the network")
+
+    monkeypatch.setattr(provider, "_api_generate_stream", no_network)
+    req = provider.LLMRequest(task="probe", stream=True)
+    out = _api_generate(req, {"base_url": "https://gateway.example.com/v1", "model": "m", "api_key": ""})
+    assert out.metadata["error_type"] == ERROR_TYPE_MISSING_API_KEY
 
 
 def test_added_vendor_can_be_selected_by_existing_task_routing(catalog, monkeypatch):

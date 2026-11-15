@@ -124,14 +124,14 @@ describe("模型服务", () => {
     expect(within(sheet).getByTestId("provider-model")).toHaveValue("gpt-4o-mini");
   });
 
-  it("已接入与可添加分开：有密钥 / 当前 / 本机服务算已接入", () => {
+  it("已接入与可添加分开：有密钥 / 系统默认 / 本机服务算已接入", () => {
     expect(isConnected({ provider: "openai", key_configured: false, base_url: "https://api.openai.com/v1" }, "deepseek")).toBe(false);
     expect(isConnected({ provider: "ollama", base_url: "http://localhost:11434/v1" }, "deepseek")).toBe(true);
     expect(isConnected({ provider: "provider_abc" }, "deepseek")).toBe(true);
     expect(isConnected({ provider: "deepseek" }, "deepseek")).toBe(true);
   });
 
-  it("从画廊接入 OpenAI：先测草稿（不保存）→ 填密钥后测试通过 → 保存并设为当前", async () => {
+  it("从画廊接入 OpenAI：先测草稿（不保存）→ 填密钥后测试通过 → 保存后直接出现在已接入里", async () => {
     const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
     const settings = await screen.findByTestId("model-settings");
     await waitFor(() => expect(within(settings).getAllByText("deepseek-chat").length).toBeGreaterThan(0));
@@ -146,9 +146,18 @@ describe("模型服务", () => {
     await waitFor(() => expect(within(sheet).getByTestId("llm-test-result")).toHaveTextContent("连接正常"));
     const probe = log.filter((l) => l.path === "/api/agent/llm/test").pop()!;
     expect(probe.body).toMatchObject({ provider: "openai", api_key: "sk-new-1234", model: "gpt-4o-mini", base_url: "https://api.openai.com/v1" });
-    fireEvent.click(within(sheet).getByTestId("provider-save-activate"));
-    await waitFor(() => expect(log.find((l) => l.path === "/api/agent/llm/activate")?.body).toEqual({ provider: "openai" }));
-    expect(log.find((l) => l.path === "/api/agent/llm/providers/openai")?.body).toMatchObject({ api_key: "sk-new-1234", model: "gpt-4o-mini" });
+    expect(screen.queryByText("当前")).toBeNull();
+    expect(within(sheet).queryByTestId("provider-save-activate")).toBeNull();
+    fireEvent.click(within(sheet).getByTestId("provider-save"));
+    await waitFor(() => expect(log.find((l) => l.path === "/api/agent/llm/providers/openai")?.body).toMatchObject({ api_key: "sk-new-1234", model: "gpt-4o-mini" }));
+    // 已有可用的默认服务（DeepSeek），保存不会去切换它
+    expect(log.some((l) => l.path === "/api/agent/llm/activate")).toBe(false);
     await waitFor(() => expect(within(screen.getByTestId("providers-table")).getByText("OpenAI")).toBeInTheDocument());
+  });
+
+  it("每个已接入的服务都能单独测试连接", async () => {
+    const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    fireEvent.click(await screen.findByTestId("provider-test-deepseek", {}, { timeout: 4000 }));
+    await waitFor(() => expect(log.filter((l) => l.path === "/api/agent/llm/test").pop()?.body).toMatchObject({ provider: "deepseek" }));
   });
 });

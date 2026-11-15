@@ -120,7 +120,7 @@ export function SettingsPage() {
   const admin = isAdmin(auth);
   return (
     <div className="page" data-testid="settings-page">
-      <PageHeader title={NAMES.settings} subtitle={admin ? "模型服务：助手当前使用的模型，以及可以切换或接入的服务。" : "查看助手使用的模型服务（修改需要管理员）。"} />
+      <PageHeader title={NAMES.settings} subtitle={admin ? "模型服务：接入后，对话时可以在输入框里直接选用。" : "查看已接入的模型服务（修改需要管理员）。"} />
       <ModelSettings admin={admin} platform={auth.platform_admin === true} />
     </div>
   );

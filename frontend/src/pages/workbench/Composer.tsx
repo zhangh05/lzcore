@@ -79,16 +79,16 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
     }
   }, [saved, sessionKey]);
 
-  // 模型：只列服务端确认可用（有模型、有密钥）的厂商；接口不可用时整组隐藏，按当前启用的模型发送。
+  // 模型：列出全部已接入的服务（有模型，且有密钥或是本机服务），直接选；没选过时用列表第一个（系统默认）。接口不可用时整组隐藏。
   const [modelsRes] = useApi("/api/workbench/models");
   const models = modelsRes.state === "ok" ? listOf<TurnModel>(modelsRes, "models").filter((m) => m.provider && m.model) : [];
   const [modelPick, setModelPick] = useState<ModelSelection | null>(() => rememberedModel(ws));
   const chosen = modelPick ? models.find((m) => m.provider === modelPick.provider) : undefined;
-  const effective = chosen ?? models.find((m) => m.is_active);
+  const effective = chosen ?? models.find((m) => m.is_active) ?? models[0];
   const thinking: ThinkingMode = effective?.supports_thinking && modelPick?.thinking ? modelPick.thinking : "provider_default";
   const pickModel = (next: ModelSelection | null) => { setModelPick(next); rememberModel(ws, next); };
-  const modelSelection: ModelSelection | undefined = (chosen && !chosen.is_active) || thinking !== "provider_default"
-    ? { provider: (chosen ?? effective)!.provider, thinking } : undefined;
+  const modelSelection: ModelSelection | undefined = effective && (chosen || !effective.is_active || thinking !== "provider_default")
+    ? { provider: effective.provider, thinking } : undefined;
 
   const input = useRef<HTMLTextAreaElement>(null);
   // 输入框随内容长高，到上限后内部滚动；工具栏始终一行，运行中不会把卡片撑高。
@@ -174,10 +174,9 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
             {models.length ? (
               <label className="composer-chip" title={effective ? `${effective.label} · ${effective.model}` : "模型"}>
                 <span className="sr-only">模型</span>
-                <select value={chosen?.provider ?? ""} aria-label="模型" data-testid="model-select" disabled={running || submitting}
-                  onChange={(e) => pickModel(e.target.value ? { provider: e.target.value, thinking: modelPick?.thinking ?? "provider_default" } : null)}>
-                  <option value="">{models.find((m) => m.is_active)?.model ?? "默认模型"}（默认）</option>
-                  {models.filter((m) => !m.is_active).map((m) => <option key={m.provider} value={m.provider}>{m.model} · {m.label}</option>)}
+                <select value={effective?.provider ?? ""} aria-label="模型" data-testid="model-select" disabled={running || submitting}
+                  onChange={(e) => pickModel({ provider: e.target.value, thinking: modelPick?.thinking ?? "provider_default" })}>
+                  {models.map((m) => <option key={m.provider} value={m.provider}>{m.model} · {m.label}</option>)}
                 </select>
               </label>
             ) : null}

@@ -337,8 +337,16 @@ def _optional_openai_fields_rejected(response: LLMResponse) -> bool:
     return int((response.metadata or {}).get("http_status") or 0) in {400, 422}
 
 
+def _bearer_headers(cfg: dict, **extra: str) -> dict:
+    headers = {"Content-Type": "application/json", **extra}
+    if cfg.get("api_key"):
+        headers["Authorization"] = "Bearer " + cfg["api_key"]
+    return headers
+
+
 def _api_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
-    if not cfg.get("api_key"):
+    from agent.llm.turn_model import is_local_endpoint
+    if not cfg.get("api_key") and not is_local_endpoint(cfg.get("base_url")):
         return LLMResponse(
             error="API key not configured",
             metadata={"error_type": ERROR_TYPE_MISSING_API_KEY},
@@ -383,10 +391,7 @@ def _api_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
             types = [p.get("type","?") for p in cont]
             imgs = sum(1 for p in cont if p.get("type")=="image_url")
             _debug_log("[api] multimodal: %s -> %s image(s)", types, imgs)
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + cfg.get("api_key", ""),
-        }
+        headers = _bearer_headers(cfg)
         cache_fallback = False
 
         def _send(active_body: dict) -> dict:
@@ -579,11 +584,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     """
     import requests as _requests
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + cfg.get("api_key", ""),
-        "Accept": "text/event-stream",
-    }
+    headers = _bearer_headers(cfg, Accept="text/event-stream")
 
     content_parts = []
     finish_reason = ""
