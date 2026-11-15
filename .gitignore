@@ -65,3 +65,4 @@ frontend/playwright-report/
 
 # 评测结果（本地生成）
 evals/results/
+!evals/fixtures/*.log
