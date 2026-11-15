@@ -9,7 +9,8 @@
   --field-border-bottom: #616161;
   --scroll-thumb: color-mix(in srgb, var(--text-3) 42%, transparent);
   --scroll-thumb-hover: color-mix(in srgb, var(--text-3) 65%, transparent);
-  --canvas-surface: var(--surface);
+  /* Drawing canvas: a soft neutral under the diagram so white region cards, device names and links stand off it. */
+  --canvas-surface: #eceef0;
   --surface-rail: var(--surface-2);
   /* Windows 11 materials: Mica frame under navigation and title bar, a layer for
      page content, and solid card fill on the layer. */
@@ -269,6 +270,7 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
+  --canvas-surface: var(--surface);
   /* Dark values come from the Arc foundation (components/arc/foundation.css);
      only the app frame and text steps that Arc does not name are set here. */
   --field-border: #525252;

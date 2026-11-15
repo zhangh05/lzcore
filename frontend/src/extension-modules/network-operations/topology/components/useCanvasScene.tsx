@@ -110,7 +110,7 @@ export function useCanvasScene({
                 : currentZoneTone(style.color, "color"),
             // Light tints read as paper in light mode; on a dark canvas they must
             // stay a wash or they glare.
-            fillOpacity: isText ? 0 : theme === "dark" ? 0.14 : 0.72,
+            fillOpacity: isText ? 0 : theme === "dark" ? 0.14 : 0.94,
             borderWidth: isText
               ? 1.5
               : Math.max(2, (style as any).borderWidth || 2),

@@ -12,6 +12,7 @@ import {
   IconTrash,
   IconDownload,
   IconClose,
+  IconGrip,
 } from "../platform/components/Icon";
 import { confirm } from "../platform/components/ConfirmDialog";
 import { nativeSaveBlob } from "./topologyExport";
@@ -472,6 +473,60 @@ export function TopologyWhiteboard({
     }
   };
 
+  // 工具栏位置：null = 默认底部居中；拖动后记住左上角坐标（相对画板），并限制在画板内。
+  const toolbarRef = useRef<HTMLElement | null>(null);
+  const [dockPos, setDockPos] = useState<{ x: number; y: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const clampDock = useCallback((x: number, y: number) => {
+    const host = containerRef.current;
+    const bar = toolbarRef.current;
+    if (!host || !bar) return { x, y };
+    const maxX = Math.max(8, host.clientWidth - bar.offsetWidth - 8);
+    const maxY = Math.max(8, host.clientHeight - bar.offsetHeight - 8);
+    return { x: Math.min(Math.max(8, x), maxX), y: Math.min(Math.max(8, y), maxY) };
+  }, []);
+  const startDockDrag = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    const host = containerRef.current;
+    const bar = toolbarRef.current;
+    if (!host || !bar || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const hostBox = host.getBoundingClientRect();
+    const barBox = bar.getBoundingClientRect();
+    const offX = e.clientX - barBox.left;
+    const offY = e.clientY - barBox.top;
+    setDockPos({ x: barBox.left - hostBox.left, y: barBox.top - hostBox.top });
+    setDragging(true);
+    const move = (ev: PointerEvent) => setDockPos(clampDock(ev.clientX - hostBox.left - offX, ev.clientY - hostBox.top - offY));
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, [clampDock]);
+  const nudgeDock = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
+    const step = e.shiftKey ? 40 : 10;
+    const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const host = containerRef.current;
+    const bar = toolbarRef.current;
+    if (!host || !bar) return;
+    const hostBox = host.getBoundingClientRect();
+    const barBox = bar.getBoundingClientRect();
+    setDockPos(clampDock(barBox.left - hostBox.left + d[0], barBox.top - hostBox.top + d[1]));
+  }, [clampDock]);
+  // 画板尺寸变化后把工具栏收回可见范围。
+  useEffect(() => {
+    if (!dockPos) return;
+    const onResize = () => setDockPos((p) => (p ? clampDock(p.x, p.y) : p));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [dockPos, clampDock]);
+
   if (!active) return null;
 
   return (
@@ -567,63 +622,82 @@ export function TopologyWhiteboard({
         </div>
       ))}
 
-      {/* Floating Whiteboard Control Dock */}
+      {/* 浮动工具条：紧凑的图标按钮，左侧握把可拖到画布任意位置（不挡住要批注的设备）。 */}
       <aside
-        className="topology-whiteboard-toolbar"
+        ref={toolbarRef}
+        className={`topology-whiteboard-toolbar${dockPos ? " is-moved" : ""}${dragging ? " is-dragging" : ""}`}
+        style={dockPos ? { left: dockPos.x, top: dockPos.y } : undefined}
         aria-label="画板工具栏"
         onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
       >
+        <span
+          className="wb-grip"
+          role="button"
+          tabIndex={0}
+          title="拖动工具栏（方向键微调，双击回到底部）"
+          aria-label="拖动工具栏"
+          onPointerDown={startDockDrag}
+          onKeyDown={nudgeDock}
+          onDoubleClick={() => setDockPos(null)}
+        >
+          <IconGrip size={14} />
+        </span>
         <div className="toolbar-section tools-group">
           <button
             type="button"
             className={`wb-tool-btn ${tool === "pen" ? "is-active" : ""}`}
             title="自由画笔：划线批注、圈出关键设备"
+            aria-label="画笔"
+            aria-pressed={tool === "pen"}
             onClick={() => setTool("pen")}
           >
-            <IconPencil size={15} />
-            <span>画笔</span>
+            <IconPencil size={16} />
           </button>
           <button
             type="button"
             className={`wb-tool-btn ${tool === "highlighter" ? "is-active" : ""}`}
             title="荧光高亮笔：半透明高亮路径与连线，不遮挡标签"
+            aria-label="荧光笔"
+            aria-pressed={tool === "highlighter"}
             onClick={() => setTool("highlighter")}
           >
-            <IconHighlighter size={15} />
-            <span>荧光笔</span>
+            <IconHighlighter size={16} />
           </button>
           <button
             type="button"
             className={`wb-tool-btn ${tool === "arrow" ? "is-active" : ""}`}
             title="指向箭头：拖拽绘制指示箭头"
+            aria-label="箭头"
+            aria-pressed={tool === "arrow"}
             onClick={() => setTool("arrow")}
           >
-            <IconArrowUpRight size={15} />
-            <span>箭头</span>
+            <IconArrowUpRight size={16} />
           </button>
           <button
             type="button"
             className={`wb-tool-btn ${tool === "rect" ? "is-active" : ""}`}
             title="框选标注：拖拽画出矩形范围框"
+            aria-label="框选"
+            aria-pressed={tool === "rect"}
             onClick={() => setTool("rect")}
           >
-            <IconBox size={15} />
-            <span>框选</span>
+            <IconBox size={16} />
           </button>
           <button
             type="button"
             className={`wb-tool-btn ${tool === "note" ? "is-active" : ""}`}
             title="便签批注：点击画布放置文字便签"
+            aria-label="便签"
+            aria-pressed={tool === "note"}
             onClick={() => setTool("note")}
           >
-            <IconNote size={15} />
-            <span>便签</span>
+            <IconNote size={16} />
           </button>
         </div>
 
         <div className="toolbar-divider" />
 
-        {/* Colors */}
         <div className="toolbar-section colors-group">
           {COLORS.map((c) => (
             <button
@@ -632,6 +706,8 @@ export function TopologyWhiteboard({
               className={`wb-color-btn ${color === c.id ? "is-active" : ""}`}
               style={{ backgroundColor: c.id }}
               title={`${c.label} (${c.hint})`}
+              aria-label={c.label}
+              aria-pressed={color === c.id}
               onClick={() => setColor(c.id)}
             />
           ))}
@@ -639,7 +715,6 @@ export function TopologyWhiteboard({
 
         <div className="toolbar-divider" />
 
-        {/* Sizes */}
         <div className="toolbar-section sizes-group">
           {SIZES.map((s) => (
             <button
@@ -648,6 +723,8 @@ export function TopologyWhiteboard({
               className={`wb-size-btn ${size === s.id ? "is-active" : ""}`}
               onClick={() => setSize(s.id)}
               title={`笔触粗细: ${s.label}`}
+              aria-label={`笔触${s.label}`}
+              aria-pressed={size === s.id}
             >
               <span style={{ width: s.id + 2, height: s.id + 2 }} />
             </button>
@@ -656,25 +733,26 @@ export function TopologyWhiteboard({
 
         <div className="toolbar-divider" />
 
-        {/* Actions */}
         <div className="toolbar-section actions-group">
           <button
             type="button"
             className="wb-action-btn"
             title="撤销上一笔 (Ctrl+Z)"
+            aria-label="撤销"
             disabled={strokes.length === 0 && notes.length === 0}
             onClick={handleUndo}
           >
-            <IconUndo size={14} />
+            <IconUndo size={15} />
           </button>
           <button
             type="button"
             className="wb-action-btn"
             title="清空画板所有笔触与便签"
+            aria-label="清空"
             disabled={strokes.length === 0 && notes.length === 0}
             onClick={handleClear}
           >
-            <IconTrash size={14} />
+            <IconTrash size={15} />
           </button>
           <button
             type="button"
@@ -683,15 +761,16 @@ export function TopologyWhiteboard({
             onClick={handleExport}
           >
             <IconDownload size={14} />
-            <span>导出批注</span>
+            <span>导出</span>
           </button>
           <button
             type="button"
             className="wb-action-btn close-btn"
             title="关闭画板批注"
+            aria-label="关闭画板批注"
             onClick={onClose}
           >
-            <IconClose size={14} />
+            <IconClose size={15} />
           </button>
         </div>
       </aside>
