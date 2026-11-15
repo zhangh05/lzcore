@@ -582,7 +582,8 @@ def _handle_text(inv: ToolInvocation) -> dict:
 
 def _handle_workspace_file(inv: ToolInvocation) -> dict:
     from storage.project_changes import workspace_files_lock
-    from core.tools.general_tools.shared import _caller_workspace
+    from core.tools.general_tools.shared import _caller_workspace, normalize_source_arguments
+    normalize_source_arguments(inv, ("filepath", "subdir"))
     with workspace_files_lock(_caller_workspace(inv)):
         from core.tools.project_execution import environment_for
         from core.tools.general_tools.shared import _workspace_path
@@ -675,6 +676,9 @@ def _handle_workspace_filestore(inv: ToolInvocation) -> dict:
     )
 
     action = _action(inv) or "references"
+    if action in {'source_list', 'source_move', 'pack', 'extract_archive', 'export'}:
+        from core.tools.general_tools.shared import normalize_source_arguments
+        normalize_source_arguments(inv, ("filepath", "destination"))
     if action in {'list', 'resolve', 'materialize', 'publish', 'rename', 'move', 'restore', 'delete', 'inspect', 'render_page', 'source_list', 'source_move', 'pack', 'extract_archive', 'search', 'reindex', 'health', 'migration_preview', 'migrate', 'export', 'restore_bundle_preview', 'restore_bundle', 'reconcile_preview', 'reconcile'}:
         from storage.file_workspace import files_page, resolve_reference, working_material, publish_file, organize_file
         from storage.file_store import FileCommitUnknown
@@ -842,7 +846,7 @@ _EXEC_ARGS = {
         "description": "Structured data supplied to action=python as the input_data variable; may be bound from a prior tool step.",
     },
     "description": {"type": "string"},
-    "working_dir": {"type": "string", "description": "Explicit workspace-relative working directory. When omitted, strict project execution uses its assigned project root; trusted local execution uses the workspace root. Container cwd is for paths inside command, never the working_dir parameter. workspace.file paths always resolve from the workspace root."},
+    "working_dir": {"type": "string", "description": "Explicit workspace-relative working directory (e.g. files/data/reports). When omitted, strict project execution uses its assigned project root; local execution starts in files/data, so a shell-created notes/a.md is files/data/notes/a.md for workspace.file. Container cwd is for paths inside command, never the working_dir parameter. workspace.file paths always resolve from the workspace root."},
     "timeout": {"type": "integer", "minimum": 1, "maximum": COMMAND_TIMEOUT_MAX_SECONDS,
                 "description": "Operation timeout in seconds; shell defaults to 30. The runtime reserves separate return/cleanup time. Explicit server execution caps still apply."},
     "target": {"type": "string", "enum": ["local"], "default": "local"},
@@ -961,8 +965,8 @@ _DATA_ARGS = {
     "column": {"type": "string", "description": "Required for distinct: the exact input column name."}, "conditions": {"type": "array", "description": "Required for filter: predicates combined with AND; op defaults to eq.", "items": _schema({
         "column": {"type": "string"}, "op": {"type": "string", "enum": ["eq", "neq", "gt", "lt", "gte", "lte", "contains", "in"]}, "value": {},
     }, ["column"])},
-    "group_by": {"type": "array", "items": {"type": "string"}}, "metrics": {"type": "array", "description": "Aggregate metrics; omit for row count (column=*, func=count). group_by optionally partitions the input.", "items": _schema({
-        "column": {"type": "string", "description": "Column or * for row count."},
+    "group_by": {"type": "array", "items": {"type": "string"}, "description": "Columns to group by; year(col), month(col) (YYYY-MM) and day(col) derive date parts."}, "metrics": {"type": "array", "description": "Aggregate metrics; omit for row count (column=*, func=count). group_by optionally partitions the input.", "items": _schema({
+        "column": {"type": "string", "description": "Column, * for row count, or arithmetic over columns such as qty*price."},
         "func": {"type": "string", "enum": ["count", "sum", "avg", "min", "max"]},
     })},
     "by": {"type": "array", "items": {"type": "string"}, "description": "Required for sort: ordered column names; order defaults to asc."}, "order": {"type": "string", "enum": ["asc", "desc"]},
@@ -980,6 +984,9 @@ _DATA_ARGS = {
     "on": {"type": "string", "description": "Required for join: common key column in both datasets. Supply a right-side input; how defaults to inner."}, "how": {"type": "string", "enum": ["inner", "left"]},
 }
 
+# Must match storage.memory_governance.SUPPORTED_MEMORY_TYPES (checked by tests).
+MEMORY_TYPES = ("profile", "semantic_fact", "procedural_rule", "core_rule", "episodic_case", "knowledge_note")
+
 _MEMORY_ARGS = {
     "memory_key": {"type": "string", "description": "Explicit stable topic identity for revisions; shared words alone do not establish a replacement."},
     "supersedes_memory_id": {"type": "string", "description": "Exact visible record to replace; tool proposals require review before replacing active memory."},
@@ -988,7 +995,13 @@ _MEMORY_ARGS = {
     "limit": {"type": "integer", "minimum": 1, "maximum": 100},
     "title": {"type": "string"},
     "content": {"type": "string"},
-    "memory_id": {"type": "string"}, "memory_type": {"type": "string"},
+    "memory_id": {"type": "string"},
+    "memory_type": {
+        "type": "string", "enum": list(MEMORY_TYPES), "default": "knowledge_note",
+        "description": "Record kind. profile: stable facts/preferences about the user (ID numbers, home city, reply style); "
+                       "semantic_fact: general facts; procedural_rule: how-to steps; core_rule: standing instructions; "
+                       "episodic_case: what happened in a past task; knowledge_note: anything else.",
+    },
     "scope": {"type": "string", "enum": ["global", "workspace", "session", "task"]}, "field": {"type": "string"},
     "value": {}, "merge": {"type": "boolean"}, "session_id": {"type": "string"},
     "tags": {"type": "array", "items": {"type": "string"}, "description": "Short topic labels for create/update; stored with the record (max 10, 32 chars each) and matched by search."},
@@ -1010,7 +1023,7 @@ _SYSTEM_ARGS = {
 
 _WORKSPACE_FILE_ARGS = {
     "encoding": {"type": "string", "description": "Text create/read/edit/patch/extract_document: default UTF-8; read/edit/patch detect Unicode BOMs and preserve original encoding/BOM. Supply a known legacy codec such as gb18030 explicitly; no lossy decoding."},
-    "filepath": {"type": "string", "description": "Path relative to the workspace root for create/read/edit/patch/delete, never relative to exec.run cwd. In coding assignments include project_dir, e.g. files/data/project/src/main.ts. Container /workspace paths belong to exec.run only."},
+    "filepath": {"type": "string", "description": "Workspace path, e.g. files/data/report.md. A bare relative path such as notes/a.md means files/data/notes/a.md, the same place exec.run starts. In coding assignments include project_dir, e.g. files/data/project/src/main.ts. Container /workspace paths belong to exec.run only."},
     "content": {"type": "string", "description": "Text content for create/write/write_artifact."},
     "limit": {"type": "integer", "minimum": 1, "description": "read: maximum lines; list/glob/search: maximum entries (up to 200); extract_document_images: up to 8 images."},
     "offset": {"type": "integer", "minimum": 0}, "subdir": {"type": "string"},

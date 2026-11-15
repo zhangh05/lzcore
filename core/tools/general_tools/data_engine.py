@@ -440,6 +440,82 @@ def data_distinct(text: str = "", rows: list | None = None, column: str = "") ->
     }
 
 
+# ── Derived columns for aggregate ─────────────────────────
+# Models naturally ask for "sum of qty*price" or "group by month(date)".
+# These are expanded into per-row values before aggregation; anything else
+# is still rejected as an unknown column.
+_DATE_PART = re.compile(r"^\s*(year|month|day)\s*\(\s*([^()]+?)\s*\)\s*$", re.I)
+_DATE_PREFIX = re.compile(r"^\s*(\d{4})[-/.年](\d{1,2})(?:[-/.月](\d{1,2}))?")
+
+
+def _date_part(value: Any, part: str) -> str:
+    m = _DATE_PREFIX.match(str(value or ""))
+    if not m:
+        return ""
+    year, month, day = m.group(1), int(m.group(2)), int(m.group(3) or 0)
+    if part == "year":
+        return year
+    if part == "month":
+        return f"{year}-{month:02d}"
+    return f"{year}-{month:02d}-{day:02d}" if day else ""
+
+
+def _compile_expression(expr: str, available: set[str]):
+    """Compile +-*/ arithmetic over column names; None if it is not such an expression."""
+    import ast
+
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError:
+        return None
+    allowed = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Add, ast.Sub, ast.Mult, ast.Div,
+               ast.USub, ast.UAdd, ast.Name, ast.Load, ast.Constant)
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, allowed):
+            return None
+        if isinstance(node, ast.Constant) and not isinstance(node.value, (int, float)):
+            return None
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+    if not names or not names <= available:
+        return None
+    code = compile(tree, "<expr>", "eval")
+
+    def evaluate(row: dict) -> Any:
+        env = {}
+        for name in names:
+            n = _safe_number(row.get(name, ""))
+            if n is None:
+                return None
+            env[name] = n
+        try:
+            return eval(code, {"__builtins__": {}}, env)  # noqa: S307 - AST restricted to arithmetic
+        except ZeroDivisionError:
+            return None
+
+    return evaluate
+
+
+def _with_derived_columns(rows: list[dict], group_keys: list[str], metrics: list[dict]) -> list[dict]:
+    available = set(_columns(rows))
+    derive: dict[str, Any] = {}
+    for key in group_keys:
+        m = _DATE_PART.match(key)
+        if key not in available and m and m.group(2) in available:
+            part, col = m.group(1).lower(), m.group(2)
+            derive[key] = lambda row, part=part, col=col: _date_part(row.get(col), part)
+    for metric in metrics:
+        col = str(metric.get("column", "*"))
+        if col != "*" and col not in available and col not in derive:
+            fn = _compile_expression(col, available)
+            if fn is not None:
+                derive[col] = fn
+    if not derive:
+        return rows
+    return [{**row, **{name: fn(row) for name, fn in derive.items()}} for row in rows]
+
+
 def data_aggregate(
     text: str = "", rows: list | None = None,
     group_by: str | list[str] | None = None,
@@ -464,6 +540,7 @@ def data_aggregate(
     else:
         group_keys = []
 
+    parsed = _with_derived_columns(parsed, group_keys, metrics)
     available = set(_columns(parsed))
     missing_groups = [key for key in group_keys if key not in available]
     if missing_groups:

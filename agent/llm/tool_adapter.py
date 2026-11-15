@@ -122,7 +122,11 @@ def _build_tool_description(tool: dict, metadata: dict, canonical_tool_id: str) 
     boundary = _format_action_profiles(tool.get("action_profiles") or metadata.get("action_profiles"))
     if boundary:
         parts.append(f"Action boundaries: {boundary}")
-    requirements = _format_action_requirements(canonical_tool_id, metadata)
+    action_enum = ((tool.get("input_schema") or {}).get("properties") or {}).get("action", {}).get("enum")
+    requirements = _format_action_requirements(
+        canonical_tool_id, metadata,
+        allowed_actions=set(action_enum) if isinstance(action_enum, list) else None,
+    )
     if requirements:
         parts.append(f"Required arguments by action: {requirements}")
     bindings = _format_bindable_inputs(metadata)
@@ -243,7 +247,9 @@ def _default_param_description(name: str) -> str:
     return _PARAM_DESCRIPTIONS.get(str(name or ""), "")
 
 
-def _format_action_requirements(tool_id: str, metadata: dict | None = None) -> str:
+def _format_action_requirements(
+    tool_id: str, metadata: dict | None = None, *, allowed_actions: set[str] | None = None,
+) -> str:
     """Expose conditional action requirements in the LLM-visible description."""
     try:
         from core.tools.action_requirements import ACTION_REQUIRED_ALL, ACTION_REQUIRED_ANY, ACTION_REQUIRED_WHEN
@@ -261,6 +267,9 @@ def _format_action_requirements(tool_id: str, metadata: dict | None = None) -> s
         action for (tid, action) in set(ACTION_REQUIRED_ALL) | set(ACTION_REQUIRED_ANY)
         if tid == tool_id
     } | set(extension_all) | set(extension_any))
+    if allowed_actions is not None:
+        # Only describe actions the model is actually offered.
+        actions = [a for a in actions if a in allowed_actions]
     for action in actions:
         bits: list[str] = []
         all_fields = tuple(ACTION_REQUIRED_ALL.get((tool_id, action), ())) + tuple(extension_all.get(action) or ())
