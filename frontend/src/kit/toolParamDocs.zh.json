@@ -1,0 +1,284 @@
+{
+  "_note": "工具参数的中文名称、说明与选项。后端 input_schema 的英文说明是写给模型的，界面只用这里的中文。harness/tools/test_tool_param_docs_zh.py 保证每个工具参数都有中文名、每个带说明的参数都有中文说明。",
+  "labels": {
+    "action": "操作", "workspace_id": "工作区", "query": "搜索内容", "queries": "地点列表", "limit": "数量上限", "offset": "起始位置",
+    "url": "网址", "text": "文本", "title": "标题", "name": "名称", "content": "内容", "summary": "摘要", "description": "说明", "comment": "备注",
+    "timeout": "超时", "tags": "标签", "scope": "范围", "format": "格式", "value": "值", "key": "按键", "field": "字段",
+    "after_revision": "等待起点", "background": "后台运行", "coding_assignment": "编码任务", "instruction": "任务说明", "max_turns": "最多轮数",
+    "parent_task_id": "上级任务", "profile_id": "子助手类型", "session_id": "会话", "subtask_id": "子任务", "subtask_ids": "子任务列表",
+    "until": "等到", "wait_for": "等待条件", "wait_seconds": "最长等待（秒）", "review": "检查内容",
+    "amount": "滚动距离", "as_file": "保存为文件", "clear_first": "先清空", "compact": "精简输出", "direction": "方向", "full_page": "整页截图",
+    "max_elements": "最多元素数", "ref": "元素引用", "script": "脚本", "selector": "选择器", "tab_action": "标签页操作", "tab_index": "标签页序号",
+    "wait_ms": "等待（毫秒）", "wait_selector": "等待元素", "wait_text": "等待文字",
+    "aggfunc": "汇总方式", "by": "排序依据", "column": "列", "columns": "列", "conditions": "筛选条件", "group_by": "分组依据", "how": "连接方式",
+    "index": "行索引列", "max_rows": "最多行数", "metrics": "统计指标", "on": "连接列", "order": "顺序", "output": "输出格式",
+    "right_rows": "右表数据", "right_source_filepath": "右表文件", "right_text": "右表文本", "rows": "数据行", "source_filepath": "数据文件", "values": "数值列",
+    "code": "Python 代码", "command": "命令", "env_vars": "环境变量", "input_data": "输入数据", "shell": "命令行", "target": "执行位置", "working_dir": "工作目录",
+    "artifact_id": "制品", "chunk_id": "片段", "chunk_type": "片段类型", "include_deleted": "包含已删除", "include_disabled": "包含已停用",
+    "level": "检索粒度", "source_id": "来源",
+    "admin_hint": "省 / 州 / 地区", "country_code": "国家代码", "language": "语言", "latitude": "纬度", "longitude": "经度",
+    "memory_id": "记忆", "memory_key": "记忆主题", "memory_type": "记忆类型", "merge": "合并", "supersedes_memory_id": "替换的记忆",
+    "commands": "命令列表", "connection_id": "连接", "connection_ids": "连接列表", "facts": "要采集的信息", "device_id": "设备",
+    "script_id": "巡检脚本", "task_id": "任务", "skill_id": "Skill",
+    "canvas_item_ids": "图元范围", "canvas_item_updates": "图元更新", "canvas_items": "图元", "include_neighbors": "包含相邻对象", "layout": "自动布局",
+    "link_ids": "连线范围", "link_updates": "连线更新", "links": "连线", "node_ids": "节点范围", "node_updates": "节点更新", "nodes": "节点",
+    "remove_canvas_item_ids": "删除图元", "remove_link_ids": "删除连线", "remove_node_ids": "删除节点", "response_detail": "返回内容",
+    "topology_id": "拓扑图", "translate": "整体平移", "version": "版本号", "seconds": "等待秒数",
+    "text_a": "文本 A", "text_b": "文本 B",
+    "arguments": "调用参数", "confirm": "确认执行", "provider_id": "服务", "skill_name": "Skill 名称", "tool_name": "工具名",
+    "char_limit": "最多字符数", "char_offset": "字符起点", "checkpoint_id": "检查点", "dry_run": "只预览", "log_level": "日志级别",
+    "message_index": "消息序号", "operation": "操作名", "reason": "原因", "run_id": "运行记录", "snapshot_id": "快照", "status": "状态",
+    "pattern": "匹配规则",
+    "allowed_domains": "只看这些域名", "authority_profile": "来源类型", "blocked_domains": "排除这些域名", "days": "预报天数", "depth": "搜索深度",
+    "domains": "限定域名", "extract_mode": "提取方式", "location": "地点", "locations": "地点列表", "max_length": "最大长度", "max_results": "最多结果数",
+    "recency": "时间范围", "safe_search": "安全搜索", "site": "站点", "source": "来源", "top_k": "取前几条", "units": "单位", "vendor": "厂商",
+    "artifact_type": "制品类型", "asset_id": "资源", "evidence_view": "查看范围", "producer_id": "产出者",
+    "filepath": "文件路径", "page_range": "页码范围",
+    "encoding": "编码", "file_id": "托管文件", "filename": "文件名", "image_index": "图片序号", "new_string": "替换为", "old_string": "原文",
+    "patch_text": "补丁内容", "replace_all": "全部替换", "start_index": "起始图片序号", "subdir": "子目录",
+    "cursor": "翻页位置", "destination": "目标路径", "folder": "文件夹", "force": "强制", "hashes": "计算校验和", "lifecycle": "状态",
+    "ocr": "文字识别", "page": "页码", "permanent": "永久删除", "sort": "排序", "source_file_ids": "源文件", "view": "视图"
+  },
+  "tools": {
+    "agent.manage": {
+      "label": "子助手",
+      "params": {
+        "after_revision": { "hint": "按子任务记录上次看到的进展版本，只等新的变化；不填就立即读取。" },
+        "background": { "hint": "默认在后台运行并立即返回任务；选「否」最多等 15 秒再返回，不影响任务本身继续执行。" },
+        "instruction": { "hint": "创建子任务时必填：写清要达成的结果、范围和需要的证据。" },
+        "profile_id": { "hint": "子助手的专长，默认是资料研究。" },
+        "subtask_ids": { "hint": "等待时必填：要等的子任务。" },
+        "until": { "hint": "等到有新进展，还是等到结束；默认等到结束。超时不会终止任务。" },
+        "wait_for": { "hint": "多个子任务时，等任意一个还是全部；默认任意一个。" },
+        "wait_seconds": { "hint": "默认 15 秒，超时返回当前进展，不算失败。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "spawn": "创建子任务", "start": "启动", "list": "列出", "get": "查看", "wait": "等待", "status": "查看状态", "cancel": "取消", "merge": "合并结果", "reconcile": "核对" },
+        "profile_id": { "research_agent": "资料研究", "file_agent": "文件处理", "data_agent": "数据分析", "coding_agent": "编写代码", "frontend_agent": "前端开发", "qa_agent": "质量检查" },
+        "until": { "change": "有新进展", "terminal": "结束" },
+        "wait_for": { "any": "任意一个", "all": "全部" }
+      }
+    },
+    "agent.review": { "label": "独立检查", "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } } },
+    "browser.manage": {
+      "label": "浏览器操作",
+      "params": {
+        "script": { "hint": "在页面里执行的 JavaScript，需要服务端开启该能力。" },
+        "timeout": { "hint": "打开页面或等待的超时，单位毫秒。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "navigate": "打开网页", "snapshot": "读取页面结构", "screenshot": "截图", "click": "点击", "type": "输入文字", "extract": "提取内容", "scroll": "滚动", "hover": "悬停", "press_key": "按键", "select_option": "选择下拉项", "evaluate": "执行脚本", "wait": "等待", "tabs": "标签页", "network": "网络请求", "console": "控制台", "navigate_back": "后退", "close": "关闭" },
+        "direction": { "up": "上", "down": "下", "left": "左", "right": "右" },
+        "tab_action": { "list": "列出", "new": "新建", "switch": "切换", "close": "关闭" }
+      }
+    },
+    "data.manage": {
+      "label": "数据处理",
+      "params": {
+        "aggfunc": { "hint": "透视表的汇总方式；「计数」不需要数值列，其余都需要。" },
+        "right_source_filepath": { "hint": "合并时右表来自的文件（工作区内的 UTF-8 文件），也可以直接给文本或数据行。" },
+        "source_filepath": { "hint": "工作区内的 CSV / JSON / Markdown 文件，会完整读取；也可以直接给文本或数据行。" },
+        "values": { "hint": "透视表的数值列；求和、平均、最小、最大时必填。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "parse": "解析", "stats": "统计概览", "distinct": "去重取值", "aggregate": "分组汇总", "filter": "筛选", "sort": "排序", "render": "生成表格", "pivot": "透视表", "join": "合并两表" },
+        "aggfunc": { "sum": "求和", "count": "计数", "avg": "平均", "min": "最小", "max": "最大" },
+        "how": { "inner": "只保留两边都有的", "left": "保留左表全部" },
+        "order": { "asc": "升序", "desc": "降序" },
+        "output": { "markdown": "Markdown 表格", "json": "JSON", "csv": "CSV" }
+      }
+    },
+    "exec.run": {
+      "label": "执行命令",
+      "params": {
+        "code": { "hint": "要运行的 Python 代码；操作选「Python」时必填。" },
+        "command": { "hint": "要执行的命令；操作选「命令行」或「斜杠命令」时必填。" },
+        "input_data": { "hint": "传给 Python 的结构化数据（变量名 input_data），可以引用上一步的结果。" },
+        "shell": { "hint": "默认用系统自带的命令行；PowerShell 只在 Windows 上可用。" },
+        "timeout": { "hint": "超时秒数，命令默认 30 秒。" },
+        "working_dir": { "hint": "相对工作区的目录；不填就用工作区根目录。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "shell": "命令行", "python": "Python", "slash": "斜杠命令" },
+        "shell": { "native": "系统默认", "cmd": "cmd", "powershell": "PowerShell" },
+        "target": { "local": "本机" }
+      }
+    },
+    "knowledge.manage": {
+      "label": "知识库",
+      "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } },
+      "options": {
+        "action": { "search": "检索", "read": "读取", "list": "列出", "chunk": "查看片段", "import": "导入", "reindex": "重建索引" },
+        "level": { "chunk": "按片段", "source": "按来源" }
+      }
+    },
+    "location.manage": {
+      "label": "地点解析",
+      "params": {
+        "admin_hint": { "hint": "可选，限定在某个省、州或地区。" },
+        "country_code": { "hint": "可选，两位国家代码，例如 CN、US。" },
+        "queries": { "hint": "批量解析时用，2 到 20 个地点，每行一个。" },
+        "query": { "hint": "要解析的地名或地址。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": { "action": { "resolve": "解析地点", "resolve_batch": "批量解析", "reverse": "坐标转地址" } }
+    },
+    "memory.manage": {
+      "label": "记忆",
+      "params": {
+        "memory_key": { "hint": "稳定的主题标识，用来更新同一主题的记忆；字面相似不算同一主题。" },
+        "supersedes_memory_id": { "hint": "要替换的那条记忆；替换生效中的记忆需要先审核。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "search": "搜索", "get": "查看", "review": "待审核列表", "confirm": "确认", "create": "新建", "update": "更新", "delete": "删除", "profile_get": "读取个人偏好", "profile_set": "设置个人偏好" },
+        "scope": { "global": "全局", "workspace": "工作区", "session": "会话", "task": "任务" }
+      }
+    },
+    "network.operations.context_read": { "label": "读取网络环境与证据", "params": {} },
+    "network.operations.device.manage": {
+      "label": "网络设备命令",
+      "params": { "timeout": { "hint": "超时秒数。" } },
+      "options": { "action": { "probe": "连通测试", "read": "只读命令", "collect": "采集信息", "configure": "下发配置" } }
+    },
+    "network.operations.devices_read": { "label": "读取设备与连接", "params": {} },
+    "network.operations.inspection": {
+      "label": "网络巡检",
+      "params": {},
+      "options": { "action": { "run": "开始巡检", "list": "列出", "get": "查看", "cancel": "取消", "retry": "重试" } }
+    },
+    "network.operations.skills_read": { "label": "读取网络 Skill", "params": {} },
+    "network.operations.topology": {
+      "label": "拓扑绘图",
+      "params": {
+        "canvas_item_ids": { "hint": "读取时只看这些图元；范围都不填就读整张图。" },
+        "canvas_item_updates": { "hint": "按图元 ID 更新或新建。改名保留 ID；手动给坐标会关闭自动包围。" },
+        "canvas_items": { "hint": "同「图元更新」。" },
+        "comment": { "hint": "设计说明。" },
+        "description": { "hint": "图纸描述。" },
+        "include_neighbors": { "hint": "局部读取时默认带上相邻的节点、连线和所属区域。" },
+        "layout": { "hint": "可选的辅助布局；不填就保持手动坐标。" },
+        "link_ids": { "hint": "读取时只看这些连线；范围都不填就读整张图。" },
+        "link_updates": { "hint": "要添加或更新的连线：两端节点、接口、类型、标注。" },
+        "links": { "hint": "同「连线更新」。" },
+        "name": { "hint": "图纸名称。" },
+        "node_ids": { "hint": "读取时只看这些节点；范围都不填就读整张图。" },
+        "node_updates": { "hint": "要添加或更新的节点：名称、设备类型、坐标、所属区域、IP、角色、厂商、型号。" },
+        "nodes": { "hint": "同「节点更新」。" },
+        "query": { "hint": "按名称、标注或 ID 查找，不区分大小写。" },
+        "remove_canvas_item_ids": { "hint": "删除区域框、文字等图元，设备和连线保留。" },
+        "remove_link_ids": { "hint": "只删除这些连线。" },
+        "remove_node_ids": { "hint": "删除这些设备节点及它们的连线。" },
+        "response_detail": { "hint": "修改后返回变更内容还是整张图。" },
+        "summary": { "hint": "拓扑说明。" },
+        "title": { "hint": "图纸标题。" },
+        "topology_id": { "hint": "要操作的拓扑图。" },
+        "translate": { "hint": "整体平移节点或区域；可以选择是否一起移动区域里的成员。" },
+        "version": { "hint": "读取时拿到的版本号；版本过旧会拒绝写入，需要先重新读取。" }
+      },
+      "options": {
+        "action": { "read": "读取", "patch": "修改" },
+        "response_detail": { "changes": "只返回变更", "full": "返回整张图" }
+      }
+    },
+    "network.operations.wait": { "label": "等待网络收敛", "params": {} },
+    "report.manage": {
+      "label": "报告",
+      "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } },
+      "options": { "action": { "save": "保存报告", "diff": "对比两段文本", "document": "生成文档" } }
+    },
+    "skill.manage": {
+      "label": "技能",
+      "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } },
+      "options": { "action": { "list": "列出", "find": "查找", "load": "加载", "inspect": "查看详情", "mcp_list_tools": "列出 MCP 工具", "mcp_call": "调用 MCP 工具" } }
+    },
+    "system.manage": {
+      "label": "系统信息",
+      "params": {
+        "query": { "hint": "在历史对话存档里查找的关键词；「搜索上下文」时必填。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "diagnostics": "诊断", "health": "健康状态", "selfcheck": "自检", "local_info": "本机信息", "tasks": "任务列表", "audit_log": "审计日志", "run_get": "查看运行记录", "session_get": "查看会话", "session_checkpoint": "会话存档点", "session_rewind": "会话回退", "session_export": "导出会话", "session_snapshot": "会话快照", "context_index": "上下文目录", "context_read": "读取上下文", "context_search": "搜索上下文" },
+        "format": { "json": "JSON", "markdown": "Markdown" }
+      }
+    },
+    "text.analyze": {
+      "label": "文本分析",
+      "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } },
+      "options": { "action": { "redact": "遮蔽敏感信息", "extract_entities": "提取实体", "match": "匹配" } }
+    },
+    "web.manage": {
+      "label": "网页搜索",
+      "params": {
+        "authority_profile": { "hint": "偏好的信息来源；一般选「自动」，需要官方文档、厂商资料、标准或安全公告时再指定。" },
+        "days": { "hint": "天气预报的天数（1–10）。" },
+        "latitude": { "hint": "可选，查天气时与经度一起使用。" },
+        "location": { "hint": "查天气的一个具体地点。" },
+        "locations": { "hint": "批量查天气，2 到 10 个地点。" },
+        "longitude": { "hint": "可选，查天气时与纬度一起使用。" },
+        "query": { "hint": "搜索或深度搜索的关键词。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "search": "搜索", "fetch": "读取网页", "weather": "查天气", "weather_batch": "批量查天气", "deep_search": "深度搜索" },
+        "authority_profile": { "auto": "自动", "general_web": "普通网页", "official_docs": "官方文档", "network_vendor": "网络厂商资料", "protocol_standard": "协议标准", "security_advisory": "安全公告" },
+        "depth": { "fast": "快速", "balanced": "均衡", "deep": "深入" },
+        "extract_mode": { "article": "正文", "full": "全文", "structured": "结构化", "links": "链接" },
+        "safe_search": { "strict": "严格", "moderate": "适中", "off": "关闭" },
+        "source": { "web": "网页", "news": "新闻", "docs": "文档" },
+        "units": { "metric": "公制", "imperial": "英制" }
+      }
+    },
+    "workspace.artifact": {
+      "label": "工作区制品",
+      "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } },
+      "options": {
+        "action": { "list": "列出", "read": "读取", "save": "保存", "tag": "打标签", "delete": "删除" },
+        "evidence_view": { "current": "当前", "history": "历史", "deliverables": "交付物" }
+      }
+    },
+    "workspace.document.pdf.extract_text": { "label": "PDF 文本提取", "params": { "page_range": { "hint": "例如 1-3 或 2,5；不填就是全部页。" } } },
+    "workspace.file": {
+      "label": "工作区文件",
+      "params": {
+        "content": { "hint": "新建或写入时的文本内容。" },
+        "encoding": { "hint": "默认 UTF-8，会自动识别并保留原有编码；旧编码文件（如 GB18030）请明确填写。" },
+        "file_id": { "hint": "提取文档内容或图片时用的托管文件，不是路径。" },
+        "filepath": { "hint": "相对工作区根目录的路径。" },
+        "image_index": { "hint": "Word 文档里第几张图片，从 1 开始。" },
+        "limit": { "hint": "读取时是最多行数；列出、查找时是最多条数（最多 200）；提取图片最多 8 张。" },
+        "new_string": { "hint": "替换成的文字；留空表示删除原文。" },
+        "old_string": { "hint": "要替换的原文，必须完全一致且唯一（包括换行）。" },
+        "patch_text": { "hint": "单个文件的统一 diff 补丁。" },
+        "query": { "hint": "在文件内容里按原文查找，返回路径和行号。" },
+        "start_index": { "hint": "批量提取时从第几张图片开始，从 1 开始。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "list": "列出", "read": "读取", "read_image": "读取图片", "extract_document": "提取文档内容", "extract_document_image": "提取文档图片", "extract_document_images": "批量提取文档图片", "create": "新建", "write": "写入", "write_artifact": "写入制品", "edit": "修改片段", "patch": "打补丁", "glob": "按模式找文件", "search": "搜索内容", "delete": "删除" }
+      }
+    },
+    "workspace.filestore": {
+      "label": "托管文件",
+      "params": {
+        "destination": { "hint": "工作区内的新路径，不能覆盖已有文件。" },
+        "encoding": { "hint": "查看文本 / CSV 时的编码，默认 UTF-8；旧编码请明确填写。" },
+        "filepath": { "hint": "相对工作区的路径。" },
+        "folder": { "hint": "文件库里的文件夹，例如「项目/原件」，和磁盘目录无关。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": {
+        "action": { "list": "列出", "resolve": "定位", "inspect": "查看", "render_page": "渲染页面", "search": "搜索", "reindex": "重建索引", "health": "健康检查", "migration_preview": "迁移预览", "migrate": "迁移", "export": "导出", "restore_bundle_preview": "恢复包预览", "restore_bundle": "恢复包", "reconcile_preview": "对账预览", "reconcile": "对账", "source_list": "来源列表", "source_move": "移动原件", "pack": "打包", "extract_archive": "解压", "materialize": "生成副本", "publish": "发布", "rename": "重命名", "move": "移动", "restore": "恢复", "delete": "删除", "references": "引用", "import": "导入", "reconcile_trash_preview": "回收站对账预览", "reconcile_trash": "回收站对账" },
+        "lifecycle": { "active": "在用", "soft_deleted": "回收站", "archived": "已归档", "purged": "已清除" },
+        "sort": { "created": "创建时间", "name": "名称", "size": "大小" },
+        "view": { "files": "文件", "all": "全部", "evidence": "证据", "history": "历史", "deliverables": "交付物" }
+      }
+    },
+    "workspace.metadata.get": { "label": "工作区信息", "params": {} }
+  }
+}

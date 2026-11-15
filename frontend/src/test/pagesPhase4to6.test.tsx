@@ -1,4 +1,4 @@
-import { workflowInputNames } from "../kit/SchemaFields";
+import { SchemaFields, toolLabel, workflowInputNames } from "../kit/SchemaFields";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AuthGateView } from "../app/AuthGate";
@@ -219,6 +219,22 @@ describe("工作流：用表单填参数和输入，不用手写 JSON", () => {
     fireEvent.change(dialog.querySelector('[data-input="topic"]')!, { target: { value: "本周巡检" } });
     fireEvent.click(within(dialog).getByTestId("workflow-run-submit"));
     await waitFor(() => expect(log.find((l) => l.path.startsWith("/api/workflows/wf1/runs"))?.body).toMatchObject({ inputs: { topic: "本周巡检" }, enqueue: true }));
+  });
+
+  it("参数名称、说明、选项显示中文，不显示写给模型的英文说明", () => {
+    const schema = { type: "object", required: ["action"], properties: {
+      action: { type: "string", enum: ["search", "deep_search"] },
+      query: { type: "string", description: "Search query for action=search|deep_search." },
+      authority_profile: { type: "string", enum: ["auto", "official_docs"], description: "Evidence-source policy." },
+      unknown_param: { type: "string", description: "English only." },
+    } };
+    const { container } = render(<SchemaFields toolId="web.manage" schema={schema} value={{ query: "x", authority_profile: "auto" }} onChange={() => {}} />);
+    expect(container).toHaveTextContent("搜索内容");
+    expect(container).toHaveTextContent("搜索或深度搜索的关键词。");
+    expect(container).toHaveTextContent("深度搜索");
+    expect(container).toHaveTextContent("官方文档");
+    expect(container).not.toHaveTextContent(/Search query|Evidence-source|English only/);
+    expect(toolLabel("web.manage", "Web 搜索/网页")).toBe("网页搜索（web.manage）");
   });
 
   it("从节点参数里找出工作流输入名", () => {
