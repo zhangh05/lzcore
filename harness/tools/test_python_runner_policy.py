@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import pytest
 
 from core.tools.python_runner import (
     BestEffortPythonRunner,
@@ -102,3 +103,23 @@ def test_container_runner_streams_script_without_host_bind_mount(monkeypatch, tm
     assert '"private": "value"' in invocation["kwargs"]["input"]
     assert invocation["kwargs"]["env"]["DOCKER_HOST"] == "unix:///run/docker.sock"
     assert not list(tmp_path.rglob("script.py"))
+
+
+@pytest.mark.parametrize("timeout", [180, 600])
+def test_python_action_honors_published_timeout(monkeypatch, timeout):
+    from core.tools.general_tools.command_tools import handle_python_exec
+    from core.tools import python_exec, project_execution
+    from core.tools.schemas import ToolInvocation
+
+    seen = []
+    monkeypatch.setattr(project_execution, "environment_for", lambda _ws: None)
+
+    def execute(**kwargs):
+        seen.append(kwargs["timeout"])
+        return {"ok": True, "stdout": "completed", "timeout_seconds": kwargs["timeout"]}
+
+    monkeypatch.setattr(python_exec, "execute_python_code", execute)
+    result = handle_python_exec(ToolInvocation(tool_id="exec.run", workspace_id="python_timeout",
+        arguments={"action": "python", "code": "print(1)", "timeout": timeout}))
+    assert result["ok"] and seen == [timeout]
+    assert result["timeout_seconds"] == timeout

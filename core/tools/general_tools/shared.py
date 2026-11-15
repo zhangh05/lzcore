@@ -285,6 +285,9 @@ def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
 
     proc = None
     try:
+        if _cancel_requested(cancel_check):
+            return {"ok": False, "executed": False, "cancelled": True,
+                    "error_code": "TOOL_CANCELLED", "error": "command cancelled before start"}
         # The previous unconditional /bin/bash default made exec.run unusable
         # on Windows; choose the native shell at this final execution boundary.
         argv = argv_override if argv_override is not None else _shell_argv(command, shell=shell, os_name=_os.name)
@@ -344,14 +347,23 @@ def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
             kill_process_tree(proc.pid)
         except Exception:
             pass
-        # Collect whatever output was produced before the kill
+        # Retain read-back evidence after termination. Killing a process cannot
+        # undo effects that occurred before the timeout.
         try:
             proc.kill()
-            proc.wait(timeout=2)
         except Exception:
             pass
+        try:
+            stdout, stderr = proc.communicate(timeout=2)
+        except Exception:
+            stdout, stderr = "", ""
+        from core.tools.redaction import redact_tool_output
         return {"ok": False, "error": f"command timed out after {actual_timeout}s",
-                "process_tree_killed": True}
+                "executed": True, "execution_may_continue": True,
+                "automatic_retry_allowed": False, "error_code": "TOOL_TIMEOUT_UNCERTAIN",
+                "stdout": redact_tool_output(stdout or "", container_paths=container_paths),
+                "stderr": redact_tool_output(stderr or "", container_paths=container_paths),
+                "timeout_seconds": actual_timeout, "process_tree_killed": True}
     except FileNotFoundError as e:
         return {"ok": False, "error": f"command not found: {e}"}
     except Exception as e:

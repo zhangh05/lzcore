@@ -59,6 +59,7 @@ class ToolExecutor:
                 f"Action {missing['action']} requires one of {missing['one_of_fields']}"
             )
         if schema_errors:
+            schema_errors = redact_tool_output(schema_errors)
             return ToolResult(
                 invocation_id=invocation.invocation_id,
                 tool_id=invocation.tool_id,
@@ -136,11 +137,25 @@ class ToolExecutor:
         try:
             raw = handler(invocation)
         except Exception as exc:
-            return _failed_result(
+            result = _failed_result(
                 invocation.invocation_id, invocation.tool_id,
                 f"Execution failed: {str(exc)[:200]}",
                 int((time.time() - start_time) * 1000),
             )
+            from core.runtime_engine.contracts import is_read_only_call
+            uncertain = not is_read_only_call(spec.tool_id, invocation.arguments, spec.as_dict())
+            result.output = {
+                "ok": False, "executed": True,
+                "error": result.summary,
+                "error_code": "EXECUTION_UNKNOWN" if uncertain else "TOOL_EXCEPTION",
+                "execution_may_continue": uncertain,
+                "hint": ("Handler failed after start; read-back/reconcile the target before any further write."
+                         if uncertain else "Read failed; check the error and retry the evidence query if appropriate."),
+            }
+            if uncertain:
+                result.output["automatic_retry_allowed"] = False
+            result.policy_decision = decision
+            return result
 
         # ── 7. Redact output ──
         from core.tools.project_execution import public_container_temp_paths

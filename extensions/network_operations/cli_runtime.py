@@ -252,7 +252,16 @@ class InteractiveCLISession:
                 error_code="cli_session_unsynchronized",
             )
         try:
-            self._send((str(command).strip() + "\r\n").encode("ascii", errors="strict"))
+            payload = (str(command).strip() + "\r\n").encode(self.encoding, errors="strict")
+        except (UnicodeError, LookupError):
+            return CLICommandResult(
+                command=command, output="", prompt=self.prompt, complete=False,
+                pages=0, encoding=self.encoding, duration_ms=0,
+                error_code="command_encoding_error",
+                device_error="Command cannot be encoded for this session; revise the text or verify the device encoding.",
+            )
+        try:
+            self._send(payload)
         except (OSError, EOFError):
             self._synchronized = False
             return CLICommandResult(
