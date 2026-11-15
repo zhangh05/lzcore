@@ -140,3 +140,12 @@ def test_hard_fixture_answers_match_task_expectations():
     assert sum(ips.values()) == 65
     assert ips.most_common(2) == [("10.0.0.3", 22), ("10.0.0.42", 14)]
     assert paths.most_common(1) == [("/static/app.js", 18)]
+
+
+def test_csv_commas_are_not_treated_as_thousands_separators(tmp_path):
+    out = tmp_path / "files" / "data"
+    out.mkdir(parents=True)
+    (out / "top_month_products.csv").write_text("product,qty,revenue\nA,28,350.00\nB,20,600.00\nC,3,297.00\n",
+                                                encoding="utf-8")
+    task = next(t for t in TASKS if t["id"] == "hard-chain-top-month")
+    assert eval_run.grade(task, "最高的是产品 B，600 元", [], tmp_path) == []
