@@ -38,7 +38,7 @@ API_key.txt
 # Generated audit/planning output
 reports/
 
-node_modules/
+node_modules
 *.tsbuildinfo
 frontend/vite.config.ts.timestamp-*.mjs
 
