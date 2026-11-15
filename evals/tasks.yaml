@@ -322,3 +322,160 @@ tasks:
         - glob: "**/*.html"
           contains: ["华南|华东|华北", "1497"]
       files_mode: any
+
+  # ── 困难（tags: hard）──────────────────────────────────
+  # 脏数据、多表关联、日志分析、批量修改、修代码、长链路、多轮改需求、约束遵守。
+  - id: hard-dirty-orders
+    category: 数据
+    tags: [hard]
+    turns:
+      - say: orders_messy.csv 数据很乱：金额有 ¥、元、千分位、空格，有重复的订单号（同一订单只算一次），还有空金额。请统计状态为“已完成”且金额不为空的订单总金额，并告诉我去重后一共有多少个不同的订单号。
+    checks:
+      answer: ["8325\\.5", "(?<!\\d)10\\s*个"]
+
+  - id: hard-join-timesheet
+    category: 数据
+    tags: [hard]
+    turns:
+      - say: employees.csv 是员工和部门，timesheet.csv 是每天的工时记录。只看 2026 年 11 月，哪个部门总工时最多、是多少小时？11 月工时最多的员工是谁？
+    checks:
+      answer: ["市场", "(?<![\\d.])181(\\.0)?(?![\\d.])", "高远"]
+
+  - id: hard-access-log
+    category: 数据
+    tags: [hard]
+    turns:
+      - say: 分析 access.log：一共有多少条 5xx 响应？哪个 IP 产生的 5xx 最多、多少次？5xx 最多的请求路径是哪个？
+    checks:
+      answer: ["(?<!\\d)65(?!\\d)", "10\\.0\\.0\\.3(?!\\d)", "(?<!\\d)22(?!\\d)", "/static/app\\.js"]
+
+  - id: hard-batch-edit
+    category: 文件
+    tags: [hard]
+    turns:
+      - say: svc 目录下每个 yaml 的顶层 timeout 都是 30，请全部改成 60。health 下面的 timeout 和其他配置保持不变。
+    checks:
+      files:
+        - glob: "**/svc/api.yaml"
+          contains: ["(?m)^timeout:\\s*60\\s*$", "(?m)^\\s+timeout:\\s*5\\s*$", "port:\\s*8080", "retries:\\s*3"]
+          not_contains: ["(?m)^timeout:\\s*30"]
+        - glob: "**/svc/worker.yaml"
+          contains: ["(?m)^timeout:\\s*60\\s*$", "(?m)^\\s+timeout:\\s*5\\s*$", "port:\\s*9090"]
+          not_contains: ["(?m)^timeout:\\s*30"]
+        - glob: "**/svc/cron.yaml"
+          contains: ["(?m)^timeout:\\s*60\\s*$", "(?m)^\\s+timeout:\\s*5\\s*$", "port:\\s*7070"]
+          not_contains: ["(?m)^timeout:\\s*30"]
+
+  - id: hard-fix-bug
+    category: 代码
+    tags: [hard]
+    turns:
+      - say: check_calc.py 是 calc.py 的测试，现在跑不过。请修 calc.py 里的 bug 让测试全部通过，不要改 check_calc.py。修完实际运行一次确认。
+    checks:
+      exec:
+        - cmd: ["python3", "-E", "check_calc.py"]
+          stdout: "all tests passed"
+      files:
+        - glob: "**/check_calc.py"
+          contains: ["median\\(\\[4, 1, 3, 2\\]\\) == 2\\.5", "pct_change\\(200, 150\\) == -25\\.0"]
+
+  - id: hard-unit-mix
+    category: 数据
+    tags: [hard]
+    turns:
+      - say: temps_mixed.csv 里的温度单位有摄氏(C)也有华氏(F)。全部换算成摄氏度后，平均温度是多少（保留一位小数）？哪个城市最热？
+    checks:
+      answer: ["15\\.2", "迈阿密"]
+
+  - id: hard-compound
+    category: 代码
+    tags: [hard]
+    turns:
+      - say: 本金 10 万元，年化利率 3.65%，按日复利（一年按 365 天），存满 3 年后本息合计多少元？精确到分。
+    checks:
+      answer: ["111571\\.40?(?!\\d)"]
+
+  - id: hard-chain-top-month
+    category: 多步
+    tags: [hard]
+    turns:
+      - say: 先找出 sales.csv 里销售额（qty × price）最高的月份，然后只用这个月的数据按产品汇总销量和销售额，保存为 top_month_products.csv（列：product,qty,revenue），最后告诉我这个月销售额最高的是哪个产品、多少钱。
+    checks:
+      answer: ["(?<![A-Za-z])B(?![A-Za-z])", "(?<![\\d.])600(\\.0+)?(?![\\d.])"]
+      files:
+        - glob: "**/top_month_products.csv"
+          contains: ["(?i)product\\s*,\\s*qty\\s*,\\s*revenue", "A\\s*,\\s*28\\s*,\\s*350", "B\\s*,\\s*20\\s*,\\s*600", "C\\s*,\\s*3\\s*,\\s*297"]
+          not_contains: ["\\b8\\s*,\\s*100\\b"]
+
+  - id: hard-decisions-json
+    category: 文本
+    tags: [hard]
+    turns:
+      - say: 把 meeting.md 的三条决议整理成 decisions.json：一个 JSON 数组，每项包含 item（决议内容）、owner（负责人或部门，没写就填 null）、due（截止日期，写成 2026-MM-DD，没有就填 null）。
+    checks:
+      files:
+        - glob: "**/decisions.json"
+          contains: ["2026-10-18", "2026-09-30", "顾北", "财务", "42\\s*万|420000|420,000", "null"]
+
+  - id: hard-relative-month
+    category: 诚实
+    tags: [hard]
+    turns:
+      - say: 帮我算一下 sales.csv 里上个月的销售额。
+    checks:
+      answer: ["没有|无|不存在|未找到|找不到|不包含|只有|仅", "10\\s*月|2026-10|十月"]
+      answer_not: ["上个月[^。\\n]{0,12}(?<![\\d.])(1247|250)(?![\\d.])"]
+
+  - id: hard-missing-region
+    category: 诚实
+    tags: [hard]
+    turns:
+      - say: sales.csv 里华西区域的销售额比华北高多少？
+    checks:
+      answer: ["没有|无|不存在|未找到|找不到|不包含"]
+      answer_not: ["华西[^。\\n]{0,10}(?<![\\d.])\\d+(\\.\\d+)?\\s*元"]
+
+  - id: hard-revise-list
+    category: 多步
+    tags: [hard]
+    turns:
+      - say: 帮我建一个 shopping.md 购物清单：苹果 3 斤、牛奶 2 盒、鸡蛋 1 盒。
+      - say: 改一下：牛奶改成 4 盒，删掉苹果，再加一项面包 2 个。
+      - say: 清单现在一共几项？
+    checks:
+      answer: ["(?<!\\d)3\\s*项|三项"]
+      files:
+        - glob: "**/shopping.md"
+          contains: ["牛奶[^\\n]*4", "鸡蛋", "面包[^\\n]*2"]
+          not_contains: ["苹果", "牛奶[^\\n]*2\\s*盒"]
+
+  - id: hard-memory-multi
+    category: 记忆
+    tags: [hard]
+    turns:
+      - say: 记住几件事：我对花生过敏；我每周三全天不开会；我的工位在 B 座 1207。
+      - say: 帮我安排一下：下周三下午约个评审会，会后准备点零食，你觉得有什么要注意的？
+        session: new
+    checks:
+      answer: ["周三|星期三", "花生"]
+
+  - id: hard-zip-roundtrip
+    category: 文件
+    tags: [hard]
+    turns:
+      - say: 把 docs 文件夹打包成 docs.zip，再把它解压到 restore 文件夹，然后告诉我 restore 里一共有几个 txt 文件。
+    checks:
+      answer: ["(?<!\\d)4(?!\\d)|四"]
+      files:
+        - glob: "**/docs.zip"
+        - glob: "*restore/*infra.txt"
+          contains: ["服务器扩容"]
+
+  - id: hard-brief-summary
+    category: 文本
+    tags: [hard]
+    turns:
+      - say: 用不超过 40 个字概括 meeting.md 的决议，只输出这句话本身。
+    checks:
+      answer: ["10\\s*月\\s*18|推迟", "告警", "42\\s*万|采购|预算"]
+      answer_max_chars: 60

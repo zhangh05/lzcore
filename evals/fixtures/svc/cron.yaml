@@ -1,0 +1,7 @@
+name: cron
+port: 7070
+timeout: 30
+retries: 3
+health:
+  path: /health
+  timeout: 5

@@ -16,6 +16,7 @@ import fnmatch
 import json
 import re
 import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -95,8 +96,11 @@ def _files(ws_dir: Path) -> list[Path]:
 
 def _match_file(ws_dir: Path, spec: dict) -> tuple[bool, str]:
     base = ws_dir / "files"
-    candidates = [p for p in _files(ws_dir) if fnmatch.fnmatch(p.relative_to(base).as_posix(), spec["glob"])
-                  or fnmatch.fnmatch(p.name, spec["glob"].split("/")[-1])]
+    pattern = spec["glob"]
+    # "**/x.md" 也匹配根目录下的 x.md；带目录的 glob（svc/api.yaml）只按完整路径匹配。
+    by_name = "/" not in pattern.removeprefix("**/")
+    candidates = [p for p in _files(ws_dir) if fnmatch.fnmatch(p.relative_to(base).as_posix(), pattern)
+                  or (by_name and fnmatch.fnmatch(p.name, pattern.removeprefix("**/")))]
     if not candidates:
         return False, f"没有找到 {spec['glob']}"
     for path in candidates:
@@ -108,6 +112,22 @@ def _match_file(ws_dir: Path, spec: dict) -> tuple[bool, str]:
                 not any(re.search(r, text, re.I) for r in spec.get("not_contains", [])):
             return True, ""
     return False, f"{spec['glob']} 内容不符合（找到 {len(candidates)} 个候选）"
+
+
+def _run_check(ws_dir: Path, spec: dict) -> tuple[bool, str]:
+    """在工作区 files/data 下运行一条验证命令（例如跑测试），看退出码和输出。"""
+    cwd = ws_dir / "files" / "data"
+    label = " ".join(spec["cmd"])
+    try:
+        proc = subprocess.run(spec["cmd"], cwd=cwd, capture_output=True, text=True, timeout=spec.get("timeout", 60))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"验证命令 `{label}` 无法运行：{type(exc).__name__}"
+    if proc.returncode != spec.get("exit", 0):
+        tail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or [""]
+        return False, f"验证命令 `{label}` 退出码 {proc.returncode}：{tail[0][:120]}"
+    if spec.get("stdout") and not re.search(spec["stdout"], proc.stdout):
+        return False, f"验证命令 `{label}` 输出缺少 /{spec['stdout']}/"
+    return True, ""
 
 
 _CJK = re.compile(r"[\u4e00-\u9fff]")
@@ -144,6 +164,13 @@ def grade(task: dict, answer: str, tool_ids: list[str], ws_dir: Path) -> list[st
                 fails.append("没有符合要求的输出文件：" + "；".join(m for _, m in results))
         else:
             fails.extend(m for ok, m in results if not ok)
+    limit = checks.get("answer_max_chars")
+    if limit and len(answer.strip()) > limit:
+        fails.append(f"回复 {len(answer.strip())} 字，超过 {limit} 字限制")
+    for spec in checks.get("exec", []):
+        ok, msg = _run_check(ws_dir, spec)
+        if not ok:
+            fails.append(msg)
     if checks.get("tools_any") and not set(checks["tools_any"]) & set(tool_ids):
         fails.append(f"没有用到 {checks['tools_any']}")
     if checks.get("no_tools") and tool_ids:
@@ -221,6 +248,7 @@ def run_task(svc: Service, task: dict, provider: str, stamp: str) -> dict:
     return {
         "id": task["id"],
         "category": task.get("category", ""),
+        "tags": task.get("tags") or [],
         "provider": provider,
         "passed": not fails,
         "fails": fails,
@@ -308,6 +336,14 @@ def write_report(results: list[dict], out: Path, provider: str) -> str:
         ok = sum(r["passed"] for r in rows)
         lines.append(f"| {cat} | {ok}/{len(rows)} | {sum(r['tool_calls'] for r in rows) / len(rows):.1f} | "
                      f"{sum(r['seconds'] for r in rows) / len(rows):.0f} 秒 |")
+    hard = [r for r in results if "hard" in r.get("tags", [])]
+    if hard and len(hard) < n:
+        easy = [r for r in results if r not in hard]
+        lines += ["", "## 难度", "", "| 难度 | 通过 | 平均工具调用 | 平均耗时 |", "| --- | --- | --- | --- |"]
+        for label, rows in (("基础", easy), ("困难", hard)):
+            ok = sum(r["passed"] for r in rows)
+            lines.append(f"| {label} | {ok}/{len(rows)} | {sum(r['tool_calls'] for r in rows) / len(rows):.1f} | "
+                         f"{sum(r['seconds'] for r in rows) / len(rows):.0f} 秒 |")
     lines += ["", "## 工具使用", "", "| 工具 | 调用 | 失败 |", "| --- | --- | --- |"]
     for tid, (cnt, err) in sorted(tool_use.items(), key=lambda kv: -kv[1][0]):
         lines.append(f"| `{tid}` | {cnt} | {err} |")
@@ -343,6 +379,7 @@ def main() -> int:
     ap.add_argument("--root", default=str(DEFAULT_ROOT), help="服务的仓库根目录（用来定位 workspaces/）")
     ap.add_argument("--only", default="", help="逗号分隔的任务 id")
     ap.add_argument("--category", default="", help="逗号分隔的类别")
+    ap.add_argument("--tag", default="", help="逗号分隔的标签，例如 hard；只跑带这些标签的任务")
     ap.add_argument("--skip-network", action="store_true")
     ap.add_argument("--keep", action="store_true", help="保留临时工作区，方便排查")
     ap.add_argument("--timeout", type=float, default=600, help="单轮对话超时秒数")
@@ -356,6 +393,9 @@ def main() -> int:
     if args.category:
         cats = {s.strip() for s in args.category.split(",") if s.strip()}
         tasks = [t for t in tasks if t.get("category") in cats]
+    if args.tag:
+        tags = {s.strip() for s in args.tag.split(",") if s.strip()}
+        tasks = [t for t in tasks if tags & set(t.get("tags") or [])]
     if args.skip_network:
         tasks = [t for t in tasks if "network" not in (t.get("tags") or [])]
     if not tasks:

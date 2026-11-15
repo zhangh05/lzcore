@@ -1,0 +1,7 @@
+name: worker
+port: 9090
+timeout: 30
+retries: 3
+health:
+  path: /health
+  timeout: 5
