@@ -225,7 +225,7 @@ class MemoryStore:
             "session_id": record.session_id,
             "task_id": record.task_id,
             "expires_at": record.expires_at,
-            "tags": [],
+            "tags": normalize_memory_tags((record.metadata or {}).get("tags")),
             "status": record.status,
             "memory_status": record.status,
             "confirmation_status": "confirmed",
@@ -402,6 +402,7 @@ class MemoryStore:
         records = [r for r in records if (not scope_filter or r['scope'] == scope_filter)
                    and (not type_filter or r['memory_type'] == type_filter)
                    and (not status_filter or r['status'] == status_filter)]
+        records = [r if r.get("tags") else {**r, "tags": _record_tags(r)} for r in records]
         count = offset + limit if limit else len(records)
         if not str(query or "").strip():
             return records[offset:offset + limit] if limit else records[offset:]
@@ -852,11 +853,43 @@ def _rank_records(query: str, records: list[dict], limit: int) -> list[dict]:
 
     def score(record: dict) -> tuple[int, str]:
         text = " ".join(str(record.get(key, "")) for key in ("summary", "content", "memory_type"))
+        text += " " + " ".join(_record_tags(record))
         record_terms = _tokens(text)
         return (len(terms & record_terms), str(record.get("updated_at") or record.get("created_at") or ""))
 
     ranked = sorted(records, key=score, reverse=True)
     return [record for record in ranked if score(record)[0] > 0][:limit]
+
+
+MEMORY_TAG_LIMIT = 10
+MEMORY_TAG_MAX_CHARS = 32
+
+
+def normalize_memory_tags(value: Any) -> list[str]:
+    """Trim, de-duplicate and bound caller-supplied memory tags."""
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple)):
+        return []
+    tags: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        tag = " ".join(str(item or "").split())[:MEMORY_TAG_MAX_CHARS]
+        key = tag.lower()
+        if not tag or key in seen:
+            continue
+        seen.add(key)
+        tags.append(tag)
+        if len(tags) >= MEMORY_TAG_LIMIT:
+            break
+    return tags
+
+
+def _record_tags(record: dict) -> list[str]:
+    tags = record.get("tags")
+    if not tags:
+        tags = (record.get("metadata") or {}).get("tags")
+    return normalize_memory_tags(tags)
 
 
 def _tokens(text: str) -> set[str]:

@@ -50,6 +50,8 @@ class ToolRuntimeClient:
         except (KeyError, TypeError, ValueError):
             _LOG.debug("tool id normalization failed for %r", tool_id, exc_info=True)
         spec = self._registry.get_tool(tool_id)
+        from core.tools.canonical_registry import drop_retired_arguments
+        arguments = drop_retired_arguments(tool_id, arguments)
         return canonicalize_tool_arguments(arguments, spec.input_schema if spec else {})
 
     def invoke(

@@ -31,7 +31,11 @@ def _via_gate(title: str, content: str, ws_id: str, source: str = "llm_tool",
               citations: list = None, tags: list = None,
               memory_key: str = '', supersedes_memory_id: str = '') -> dict:
     """Write memory through MemoryWriteGate. Gate decides status."""
-    from storage.memory_governance import MemoryRecord, MemoryWriteGate
+    from storage.memory_governance import MemoryRecord, MemoryWriteGate, normalize_memory_tags
+    metadata = {'memory_key': memory_key, 'supersedes_memory_id': supersedes_memory_id}
+    clean_tags = normalize_memory_tags(tags)
+    if clean_tags:
+        metadata['tags'] = clean_tags
     rec = MemoryRecord(
         workspace_id=ws_id, session_id=session_id, task_id=task_id,
         scope=scope, memory_type=memory_type,
@@ -41,10 +45,16 @@ def _via_gate(title: str, content: str, ws_id: str, source: str = "llm_tool",
         confidence=0.5,  # Neutral default; gate adjusts via _auto_confirm
         citations=citations or [], created_by=source,
         redacted=True,
-        metadata={'memory_key': memory_key, 'supersedes_memory_id': supersedes_memory_id},
+        metadata=metadata,
     )
     gate = MemoryWriteGate()
     return gate.write(rec)
+
+
+def _result_tags(record: dict) -> list[str]:
+    from storage.memory_governance import normalize_memory_tags
+    tags = record.get("tags") or (record.get("metadata") or {}).get("tags")
+    return normalize_memory_tags(tags)
 
 
 def handle_memory_search(inv: ToolInvocation) -> dict:
@@ -73,6 +83,7 @@ def handle_memory_search(inv: ToolInvocation) -> dict:
             "memory_type": r.get("memory_type", ""),
             "scope": r.get("scope"), "workspace_id": r.get("workspace_id"),
             "updated_at": r.get("updated_at"), "metadata": r.get("metadata"),
+            "tags": _result_tags(r),
         } for r in results[:limit]]
         return _ok(inv, "", {
             "results": safe, "count": len(safe),
@@ -196,7 +207,7 @@ def handle_memory_list(inv: ToolInvocation) -> dict:
                 "memory_type": r.get("memory_type", ""),
                 "scope": r.get("scope", ""),
                 "created_at": r.get("created_at", ""),
-                "tags": (r.get("tags") or [])[:5],
+                "tags": _result_tags(r)[:5],
             })
         return _ok(inv, "", {
             "results": summaries, "count": len(summaries),
@@ -319,8 +330,12 @@ def handle_memory_update(inv: ToolInvocation) -> dict:
         rec = store.get(ws, memory_id)
         if not rec:
             return _error_inv(inv, f"memory_id not found: {memory_id}")
-        from storage.memory_governance import MemoryRecord, MemoryWriteGate
+        from storage.memory_governance import MemoryRecord, MemoryWriteGate, normalize_memory_tags
         replacing_active = rec.status == "active"
+        metadata = {**dict(rec.metadata or {}), "supersedes_memory_id": rec.memory_id,
+                    "authority": "agent_inference", "generation_origin": "memory_tool_update"}
+        if "tags" in args:
+            metadata["tags"] = normalize_memory_tags(args.get("tags"))
         proposal = MemoryRecord(
             workspace_id=ws,
             session_id=rec.session_id,
@@ -335,8 +350,7 @@ def handle_memory_update(inv: ToolInvocation) -> dict:
             confidence=rec.confidence,
             citations=list(rec.citations or []),
             created_by="llm_tool",
-            metadata={**dict(rec.metadata or {}), "supersedes_memory_id": rec.memory_id,
-                      "authority": "agent_inference", "generation_origin": "memory_tool_update"},
+            metadata=metadata,
         )
         result = MemoryWriteGate(store).write(proposal)
         if not result.get("ok"):

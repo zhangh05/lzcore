@@ -362,7 +362,7 @@ def test_public_schemas_expose_handler_consumed_arguments():
     expected = {
         "exec.run": {"command", "code", "description", "working_dir", "timeout", "target", "shell", "env_vars"},
         "browser.manage": {"url", "selector", "ref", "text", "script", "key", "value", "wait_selector", "wait_text", "timeout", "wait_ms", "compact", "max_elements", "full_page", "as_file", "clear_first", "direction", "amount", "tab_action", "tab_index"},
-        "web.manage": {"query", "source", "url", "location", "latitude", "longitude", "days", "language", "units", "recency", "safe_search", "depth", "domains", "allowed_domains", "blocked_domains", "site", "vendor", "max_results", "top_k", "extract_mode", "max_length", "timeout"},
+        "web.manage": {"query", "source", "url", "location", "latitude", "longitude", "days", "language", "units", "recency", "safe_search", "depth", "domains", "allowed_domains", "blocked_domains", "site", "vendor", "max_results", "top_k", "extract_mode", "timeout"},
         "location.manage": {"query", "queries", "latitude", "longitude", "language", "country_code", "admin_hint", "limit"},
         "data.manage": {"text", "rows", "column", "conditions", "group_by", "metrics", "by", "order", "max_rows", "output", "index", "columns", "values", "aggfunc", "right_text", "right_rows", "on", "how"},
         "report.manage": {"title", "content", "summary", "text_a", "text_b"},
@@ -370,7 +370,7 @@ def test_public_schemas_expose_handler_consumed_arguments():
         "memory.manage": {"query", "limit", "title", "content", "memory_id", "memory_type", "scope", "field", "value", "merge", "session_id", "tags"},
         "skill.manage": {"query", "limit", "skill_name", "provider_id", "tool_name", "arguments", "confirm"},
         "agent.manage": {"instruction", "profile_id", "max_turns", "background", "subtask_id", "parent_task_id"},
-        "system.manage": {"run_id", "session_id", "snapshot_id", "operation", "reason", "format", "dry_run", "status", "limit", "log_level"},
+        "system.manage": {"run_id", "session_id", "snapshot_id", "reason", "format", "dry_run", "limit", "log_level"},
         "text.analyze": {"text", "pattern"},
         "workspace.file": {"filepath", "file_id", "limit", "offset", "subdir", "pattern", "old_string", "new_string", "replace_all", "patch_text", "filename", "content", "dry_run"},
         "workspace.artifact": {"artifact_id", "query", "limit", "title", "content", "tags", "artifact_type", "evidence_view", "producer_id", "asset_id"},

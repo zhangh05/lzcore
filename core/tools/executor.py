@@ -49,6 +49,8 @@ class ToolExecutor:
             )
 
         # ── 3. Validate arguments against schema ──
+        from core.tools.canonical_registry import drop_retired_arguments
+        invocation.arguments = drop_retired_arguments(spec.tool_id, invocation.arguments)
         schema_errors = _validate_arguments(invocation.arguments, spec.input_schema)
         from core.tools.action_requirements import missing_action_arguments
         for missing in (missing_action_arguments(spec.tool_id, invocation.arguments, spec.metadata)
