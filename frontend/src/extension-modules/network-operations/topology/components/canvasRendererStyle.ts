@@ -15,11 +15,15 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
         "font-family":
           '"Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", "PingFang SC", sans-serif',
         "font-size": 12,
-        "font-weight": 400,
-        color: "#242424",
+        "font-weight": 600,
+        color: "#1b1b1b",
         "text-wrap": "wrap",
         "text-max-width": 128,
-        "text-background-opacity": 0,
+        // A light chip behind the name keeps it crisp where links cross it.
+        "text-background-shape": "roundrectangle",
+        "text-background-color": "#ffffff",
+        "text-background-opacity": 0.86,
+        "text-background-padding": "2px",
         "text-border-width": 0,
         width: 76,
         height: 60,
@@ -27,6 +31,10 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
         "border-width": DRAWING_DEFAULTS.nodeBorderWidth,
         "border-color": DRAWING_DEFAULTS.nodeBorder,
         "text-opacity": "data(labelOpacity)",
+        // Manual stacking: region cards (1) < links (5) < devices (10).
+        // The default "auto" draws every edge under every node, so links that
+        // cross a region would sit beneath its fill and look washed out.
+        "z-index-compare": "manual",
         "z-index": 10,
       },
     },
@@ -75,6 +83,8 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
     {
       selector: "edge",
       style: {
+        "z-index-compare": "manual",
+        "z-index": 5,
         width: "data(edgeWidth)",
         opacity: "data(visible)",
         "line-color": "data(edgeColor)",
@@ -97,10 +107,12 @@ export function canvasRendererStyle({}: canvasRendererStylePorts) {
         label: "data(label)",
         "font-family":
           '"Cascadia Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace',
-        "font-size": 10,
+        "font-size": 10.5,
         "font-weight": 400,
-        "min-zoomed-font-size": 0,
-        color: "#242424",
+        // Interface labels are detail: below ~67% zoom they turn into noise
+        // over the links, so they appear once the user zooms in.
+        "min-zoomed-font-size": 7,
+        color: "#303030",
         "text-background-shape": "roundrectangle",
         "text-background-color": "#ffffff",
         "text-background-opacity": 0.95,

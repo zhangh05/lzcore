@@ -74,7 +74,8 @@ export function useCanvasTheme({
       .selector("node")
       .style({
         color: labelText,
-        "text-background-opacity": 0,
+        "text-background-color": labelSurface,
+        "text-background-opacity": dark ? 0.78 : 0.86,
         "text-border-width": 0,
       })
       .selector("node[vendorTint]")

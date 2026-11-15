@@ -72,7 +72,7 @@ export type TopologyCanvasItem = {
  * Neutral comes first and is the default for new regions; colour is opt-in.
  */
 export const ZONE_COLOR_PRESETS = [
-  { key: "slate", name: "中性灰", fill: "#f5f5f5", border: "#c7c7c7", color: "#424242" },
+  { key: "slate", name: "中性灰", fill: "#fbfbfb", border: "#c4c7ca", color: "#3a3a3a" },
   { key: "blue", name: "品牌蓝", fill: "#ebf3fc", border: "#96c6fa", color: "#0f548c" },
   { key: "teal", name: "青", fill: "#e9f6f7", border: "#9bd2d6", color: "#00666d" },
   { key: "green", name: "绿", fill: "#f1faf1", border: "#9fd89f", color: "#0e700e" },
@@ -85,6 +85,8 @@ export const ZONE_COLOR_PRESETS = [
  * today's tones so old sheets match new ones; the stored document is not rewritten.
  */
 const LEGACY_ZONE_TONES: Record<string, (typeof ZONE_COLOR_PRESETS)[number]["key"]> = {
+  // 4.2.0 的中性灰
+  "#f5f5f5": "slate", "#c7c7c7": "slate",
   "#eff6ff": "blue", "#93c5fd": "blue", "#1e40af": "blue",
   "#f0fdf4": "green", "#86efac": "green", "#166534": "green",
   "#fffbeb": "amber", "#fcd34d": "amber", "#92400e": "amber",

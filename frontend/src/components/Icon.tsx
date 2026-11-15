@@ -5,6 +5,7 @@
  */
 export {
   Archive as IconArchive,
+  GripVertical as IconGrip,
   RotateCw as IconRedo,
   History as IconHistory,
   Undo2 as IconUndo,

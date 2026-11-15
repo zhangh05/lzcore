@@ -70,4 +70,16 @@ describe("TopologyWhiteboard", () => {
 
     expect(screen.getByPlaceholderText("输入批注内容...")).toBeDefined();
   });
+
+  it("toolbar is icon-only and can be moved by its grip, double-click puts it back", () => {
+    render(<TopologyWhiteboard active={true} onClose={vi.fn()} />);
+    const bar = screen.getByLabelText("画板工具栏");
+    expect(screen.getByRole("button", { name: "画笔" }).textContent).toBe("");
+    const grip = screen.getByRole("button", { name: "拖动工具栏" });
+    fireEvent.keyDown(grip, { key: "ArrowDown" });
+    expect(bar.className).toContain("is-moved");
+    expect(bar.style.top).not.toBe("");
+    fireEvent.doubleClick(grip);
+    expect(bar.className).not.toContain("is-moved");
+  });
 });

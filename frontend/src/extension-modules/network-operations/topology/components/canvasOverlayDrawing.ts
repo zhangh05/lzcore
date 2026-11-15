@@ -45,8 +45,8 @@ export function renderWorldGrid(
   const startY = ((panY % screenStep) + screenStep) % screenStep;
   // A dot grid marks the snapping lattice without drawing a sheet of graph
   // paper behind the diagram; every fifth dot is a touch stronger.
-  const dotColor = isDark ? "rgba(255, 255, 255, 0.16)" : "rgba(0, 0, 0, 0.16)";
-  const majorColor = isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)";
+  const dotColor = isDark ? "rgba(255, 255, 255, 0.16)" : "rgba(0, 0, 0, 0.13)";
+  const majorColor = isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.24)";
   const radius = screenStep < 14 ? 0.6 : 0.9;
   for (let x = startX; x <= w; x += screenStep) {
     const majorX = Math.abs(Math.round((x - panX) / zoom)) % (step * 5) < 0.5;

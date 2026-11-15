@@ -34,90 +34,109 @@
 }
 .topology-whiteboard-toolbar {
   position: absolute;
-  bottom: 24px;
+  bottom: 64px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 70;
+  /* 按内容定宽：left:50% 的绝对定位默认只给一半宽度，会把按钮挤成竖排。 */
+  width: max-content;
+  max-width: calc(100% - 16px);
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 4px 6px 4px 2px;
   background: var(--surface);
-  border: 1px solid var(--line, #e2e8f0);
-  border-radius: var(--r-12);
-  box-shadow: var(--shadow-menu);
-  backdrop-filter: none;
+  border: 1px solid var(--line, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: var(--shadow-floating);
   animation: wbToolbarSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
+.topology-whiteboard-toolbar.is-moved { bottom: auto; transform: none; animation: none; }
+.topology-whiteboard-toolbar.is-dragging { box-shadow: var(--shadow-dialog); cursor: grabbing; }
+
+.wb-grip {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 28px;
+  border-radius: 4px;
+  color: var(--text-3, #707070);
+  cursor: grab;
+  touch-action: none;
+}
+.wb-grip:hover { background: var(--subtle-hover, rgba(0,0,0,.05)); color: var(--text, #242424); }
+.wb-grip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.is-dragging .wb-grip { cursor: grabbing; }
 
 .topology-whiteboard-toolbar .toolbar-section {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .topology-whiteboard-toolbar .toolbar-divider {
   width: 1px;
-  height: 20px;
-  background: var(--line, #e2e8f0);
-  margin: 0 2px;
+  height: 18px;
+  background: var(--line, #e0e0e0);
+  margin: 0 3px;
 }
-.wb-tool-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px;
-  font-size: 12px;
-  font-weight: var(--weight-label);
-  color: var(--text-2, #64748b);
+.topology-whiteboard-toolbar button { min-height: 0; box-shadow: none; }
+.wb-tool-btn,
+.wb-action-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-2, #616161);
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: 0;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.12s ease;
-  white-space: nowrap;
+  transition: background-color 0.1s ease, color 0.1s ease;
 }
 
-.wb-tool-btn:hover {
-  background: var(--surface-2, #f1f5f9);
-  color: var(--text, #0f172a);
+.wb-tool-btn:hover,
+.wb-action-btn:hover:not(:disabled) {
+  background: var(--subtle-hover, rgba(0,0,0,.05));
+  color: var(--text, #242424);
 }
 
 .wb-tool-btn.is-active {
-  background: var(--accent-soft, #e0f2fe);
-  border-color: var(--accent, #0284c7);
-  color: var(--accent, #0284c7);
+  background: var(--subtle-selected, rgba(0,0,0,.08));
+  color: var(--accent, #0f6cbd);
 }
 .wb-color-btn {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
+  margin: 0 3px;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 0;
   cursor: pointer;
   padding: 0;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / .12);
+  transition: transform 0.1s ease;
   outline: none;
 }
 
-.wb-color-btn:hover {
-  transform: scale(1.15);
-}
+.wb-color-btn:hover { transform: scale(1.15); }
 
 .wb-color-btn.is-active {
-  transform: scale(1.25);
-  box-shadow: 0 0 0 2px var(--surface, #ffffff), 0 0 0 3.5px var(--text, #0f172a);
+  box-shadow: 0 0 0 2px var(--surface, #ffffff), 0 0 0 3.5px var(--text, #242424);
 }
+.wb-color-btn:focus-visible { box-shadow: 0 0 0 2px var(--surface, #ffffff), 0 0 0 3.5px var(--accent); }
 .wb-size-btn {
   width: 22px;
-  height: 22px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 4px;
   cursor: pointer;
   padding: 0;
+  color: var(--text-2, #616161);
 }
 
 .wb-size-btn span {
@@ -126,32 +145,11 @@
   display: block;
 }
 
-.wb-size-btn:hover {
-  background: var(--surface-2, #f1f5f9);
-}
+.wb-size-btn:hover { background: var(--subtle-hover, rgba(0,0,0,.05)); }
 
 .wb-size-btn.is-active {
-  background: var(--surface-3, #e2e8f0);
-  border-color: var(--line, #cbd5e1);
-  color: var(--accent, #0284c7);
-}
-.wb-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 8px;
-  font-size: 12px;
-  color: var(--text-2, #64748b);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-
-.wb-action-btn:hover:not(:disabled) {
-  background: var(--surface-2, #f1f5f9);
-  color: var(--text, #0f172a);
+  background: var(--subtle-selected, rgba(0,0,0,.08));
+  color: var(--accent, #0f6cbd);
 }
 
 .wb-action-btn:disabled {
@@ -160,16 +158,18 @@
 }
 
 .wb-action-btn.highlight {
-  background: var(--accent, #0284c7);
-  color: var(--accent-text);
-  border-color: var(--accent, #0284c7);
-  padding: 5px 10px;
-  font-weight: var(--weight-label);
+  width: auto;
+  display: inline-flex;
+  gap: 4px;
+  padding: 0 10px;
+  margin: 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--accent, #0f6cbd);
+  color: var(--accent-foreground, #ffffff);
 }
 
-.wb-action-btn.highlight:hover {
-  filter: brightness(1.08);
-}
+.wb-action-btn.highlight:hover:not(:disabled) { background: var(--accent-strong, #115ea3); color: var(--accent-foreground, #ffffff); }
 
 .wb-action-btn.close-btn:hover {
   background: var(--danger-soft);
