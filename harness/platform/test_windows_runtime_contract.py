@@ -222,3 +222,14 @@ def test_bash_pipeline_preserves_upstream_failure_through_governed_exec(tmp_path
     handled = client.invoke('exec.run', {'action':'shell', 'command':"{ exit 7; } | cat || printf 'handled\\n'"}, context=context)
     assert handled.status == 'succeeded' and handled.output['exit_code'] == 0
     assert handled.output['stdout'].strip() == 'handled'
+
+
+def test_shell_defaults_to_user_visible_files_area(monkeypatch, tmp_path):
+    """Shell-created files must land where workspace.file and the UI look (files/data)."""
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("LZCORE_RUNTIME_BIND_HOST", "127.0.0.1")
+    result = command_tools.handle_command_exec(_inv("exec.run", command="echo hi > made_by_shell.txt"))
+    assert result["ok"] is True, result
+    from storage.paths import workspace_root
+    assert (workspace_root("default") / "files" / "data" / "made_by_shell.txt").is_file()
+    assert not (workspace_root("default") / "made_by_shell.txt").exists()

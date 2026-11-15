@@ -1,6 +1,7 @@
 # core/tools/general_tools/shared.py
 """Shared helpers for split general tools."""
 
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -376,3 +377,63 @@ def _run_shell(command: str, cwd: str = None, shell: str = "/bin/bash",
             except Exception:
                 pass
         return {"ok": False, "error": str(e)[:200]}
+
+
+_SOURCE_TOP_LEVEL = ("files", "inbox")
+# Workspace-internal state directories: a path into them is never re-rooted,
+# even before the directory exists, so writes there stay rejected.
+_INTERNAL_TOP_LEVEL = frozenset({
+    "sys", "index", "context", "sessions", "runs", "memory", "usage", "jobs", "audits",
+    "operations", "durable", "subagents", "workflows", "coding-state", "extensions", "catalog", "users",
+})
+
+
+def normalize_source_path(workspace_id: str, path: object) -> object:
+    """Resolve a model-supplied source path the way shell commands see it.
+
+    exec.run starts in files/data, so models naturally write ``docs/a.txt`` or
+    ``.``.  Workspace tools resolve paths from the workspace root, where such a
+    path is missing or outside the managed source area.  A bare relative path
+    is therefore taken as relative to files/data when its first component does
+    not exist at the workspace root.  Paths into existing root directories
+    (sys, index, ...), absolute, traversal and backslash paths are returned
+    unchanged so the normal security checks still reject them.
+    """
+    if not isinstance(path, str) or "\\" in path:
+        return path
+    raw = path.strip()
+    while raw.startswith("./"):
+        raw = raw[2:]
+    if raw in ("", "."):
+        return "files/data" if path.strip() in (".", "./") else path
+    if raw.startswith("/") or re.match(r"^[A-Za-z]:", raw) or ".." in raw.split("/"):
+        return path
+    first = raw.split("/", 1)[0]
+    if first in _SOURCE_TOP_LEVEL:
+        return raw
+    if first in _INTERNAL_TOP_LEVEL:
+        return path
+    try:
+        if safe_workspace_path(workspace_id, first).exists():
+            return path
+    except PathSecurityError:
+        return path
+    return f"files/data/{raw}"
+
+
+def normalize_source_arguments(inv: "ToolInvocation", keys: tuple[str, ...]) -> None:
+    args = dict(inv.arguments or {})
+    ws = _caller_workspace(inv)
+    from core.tools.project_execution import environment_for
+    if environment_for(ws) is not None:
+        # Coding projects have their own governed path contract.
+        return
+    changed = False
+    for key in keys:
+        if key in args:
+            new = normalize_source_path(ws, args[key])
+            if new != args[key]:
+                args[key] = new
+                changed = True
+    if changed:
+        inv.arguments = args

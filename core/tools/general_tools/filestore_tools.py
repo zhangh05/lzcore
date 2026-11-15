@@ -315,7 +315,9 @@ def handle_file_import_workspace_path(inv, *, filepath: str = "") -> dict[str, A
         target = resolve_importable_workspace_path(ws, filepath)
     except ValueError as exc:
         if str(exc) == "path_not_allowed":
-            return _fail("workspace.filestore", "path_not_allowed", filepath=filepath)
+            return _fail("workspace.filestore", "path_not_allowed: import only takes uploads under inbox/. "
+                         "Files under files/data are already workspace sources; read them with workspace.file "
+                         "or pass the same filepath to the tool that needs them.", filepath=filepath)
         return _fail("workspace.filestore", "path_not_in_workspace", filepath=filepath)
 
     if not target.exists():

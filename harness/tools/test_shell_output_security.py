@@ -159,8 +159,8 @@ def test_exec_defaults_to_current_workspace(monkeypatch, tmp_path):
         arguments={"action": "shell", "command": "pwd"},
     ))
 
-    assert captured["cwd"] == str((tmp_path / "default").resolve())
-    assert result["working_dir"] == "."
+    assert captured["cwd"] == str((tmp_path / "default" / "files" / "data").resolve())
+    assert result["working_dir"] == "files/data"
 
 
 def test_exec_rejects_workdir_outside_current_workspace(monkeypatch, tmp_path):

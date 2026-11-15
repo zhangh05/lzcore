@@ -80,6 +80,7 @@
         "aggfunc": { "hint": "透视表的汇总方式；「计数」不需要数值列，其余都需要。" },
         "by": { "hint": "排序时必填：按优先级列出列名；默认升序。" },
         "column": { "hint": "去重取值时必填：输入表格中的准确列名。" },
+        "group_by": { "hint": "分组依据的列；可用 year(列)、month(列)（年-月）、day(列) 按日期分组。" },
         "columns": { "hint": "透视表必填：该输入列的值将成为输出表格的列。" },
         "conditions": { "hint": "筛选时必填：多条条件需同时满足；比较方式默认相等。" },
         "index": { "hint": "透视表必填：该输入列的值用来区分输出行。" },
@@ -145,13 +146,15 @@
       "label": "记忆",
       "params": {
         "memory_key": { "hint": "稳定的主题标识，用来更新同一主题的记忆；字面相似不算同一主题。" },
+        "memory_type": { "hint": "记忆类别：个人资料与偏好、一般事实、操作步骤、长期规则、过往案例或其他笔记。" },
         "supersedes_memory_id": { "hint": "要替换的那条记忆；替换生效中的记忆需要先审核。" },
         "tags": { "hint": "新建或更新时给记忆加主题标签，每行一个，最多 10 个；搜索时标签也能命中。" },
         "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
       },
       "options": {
         "action": { "search": "搜索", "get": "查看", "review": "待审核列表", "confirm": "确认", "create": "新建", "update": "更新", "delete": "删除", "profile_get": "读取个人偏好", "profile_set": "设置个人偏好" },
-        "scope": { "global": "全局", "workspace": "工作区", "session": "会话", "task": "任务" }
+        "scope": { "global": "全局", "workspace": "工作区", "session": "会话", "task": "任务" },
+        "memory_type": { "profile": "个人资料与偏好", "semantic_fact": "一般事实", "procedural_rule": "操作步骤", "core_rule": "长期规则", "episodic_case": "过往案例", "knowledge_note": "其他笔记" }
       }
     },
     "network.operations.context_read": { "label": "读取网络环境与证据", "params": {} },

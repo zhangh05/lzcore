@@ -350,3 +350,23 @@ def _extract_structured_output(stdout: str) -> Any:
             except json.JSONDecodeError:
                 return None
     return structured
+
+
+_AVAILABILITY_CACHE: dict[str, tuple[float, bool]] = {}
+_AVAILABILITY_TTL_SECONDS = 60.0
+
+
+def python_execution_available() -> bool:
+    """Whether action=python can actually run here (cached briefly; the probe may call docker)."""
+    import time
+
+    now = time.monotonic()
+    cached = _AVAILABILITY_CACHE.get("python")
+    if cached and now - cached[0] < _AVAILABILITY_TTL_SECONDS:
+        return cached[1]
+    try:
+        available = not isinstance(select_python_runner(), UnavailableStrongIsolationRunner)
+    except Exception:
+        available = False
+    _AVAILABILITY_CACHE["python"] = (now, available)
+    return available

@@ -156,15 +156,22 @@ def _handle_command_exec(inv: ToolInvocation) -> dict:
     # v3.7: pass through cwd, env_vars, timeout
     requested_cwd = (inv.arguments.get("working_dir") or "").strip()
     if not requested_cwd:
-        # Agent commands operate in the caller's durable user + workspace
-        # directory by default.  Running from the application source tree made
-        # relative paths returned by workspace.file unreadable and allowed
-        # generated deliverables to be mistaken for durable workspace files.
+        # Agent commands start in the workspace's user-visible source area
+        # (files/data), the same place workspace.file creates files and the UI
+        # lists them.  Starting at the workspace root put shell-created files
+        # next to internal state where the user never sees them.  An explicit
+        # working_dir stays workspace-root relative, like workspace.file paths.
+        # An isolated coding project maps the workspace root to its bound
+        # project root, so it keeps that default.
         from storage.paths import ensure_workspace_storage_dirs, workspace_root
+        from core.tools.project_execution import environment_for as _environment_for
 
         workspace_id = _caller_workspace(inv)
         ensure_workspace_storage_dirs(workspace_id)
-        cwd = str(workspace_root(workspace_id))
+        if _environment_for(workspace_id) is not None:
+            cwd = str(workspace_root(workspace_id))
+        else:
+            cwd = str(workspace_root(workspace_id) / "files" / "data")
     else:
         # Commands may only use a directory below the caller's workspace.
         # An arbitrary absolute cwd would bypass the storage boundary even
@@ -205,7 +212,7 @@ def _handle_command_exec(inv: ToolInvocation) -> dict:
         timeout=timeout,
         cancel_check=getattr(inv, "cancel_check", None),
     )
-    result.setdefault("working_dir", requested_cwd or ".")
+    result.setdefault("working_dir", requested_cwd or ("." if isolated is not None else "files/data"))
     # Attach caller-provided description without interpreting command content.
     description = (inv.arguments.get("description") or "").strip()
     if description:
