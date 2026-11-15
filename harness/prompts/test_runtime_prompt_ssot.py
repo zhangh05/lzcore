@@ -329,6 +329,57 @@ def test_llm_tool_descriptions_include_action_level_boundaries():
     assert "delete=write/high" in desc or "write/high:[delete]" in desc
 
 
+@pytest.mark.parametrize("field", ["usage_hint", "not_for"])
+def test_tool_catalog_refreshes_changed_selection_guidance(field):
+    from copy import deepcopy
+    from core.runtime_engine.loop_tool_catalog import _build_cached_tool_definitions
+
+    catalog = {"sample.read": {
+        "description": "Read a sample.",
+        "args_schema": {"type": "object", "properties": {}},
+        "metadata": {field: "original-selection-guidance"},
+    }}
+    first = _build_cached_tool_definitions(catalog)
+    revised = deepcopy(catalog)
+    revised["sample.read"]["metadata"][field] = "revised-selection-guidance"
+    second = _build_cached_tool_definitions(revised)
+    assert "revised-selection-guidance" in second[0]["function"]["description"]
+    assert "original-selection-guidance" not in second[0]["function"]["description"]
+    assert "original-selection-guidance" in first[0]["function"]["description"]
+    second[0]["function"]["description"] = "caller mutation"
+    assert _build_cached_tool_definitions(revised)[0] != second[0]
+
+
+@pytest.mark.parametrize("field", ["usage_hint", "not_for"])
+def test_tool_guidance_with_a_shared_description_prefix_keeps_distinct_tail(field):
+    from agent.llm.tool_adapter import tool_spec_to_openai_function
+
+    shared = "Shared contextual information. " * 8
+    instruction = "Use file_id for the original registered bytes."
+    tool = tool_spec_to_openai_function({
+        "tool_id": "sample.read",
+        "description": shared + "Read the current text projection.",
+        "metadata": {field: shared + instruction},
+    })
+    assert instruction in tool["function"]["description"]
+
+
+def test_core_tools_publish_distinct_selection_criteria_and_exclusions():
+    from core.tools.canonical_registry import to_openai_tools
+    from core.tools.tool_namespace import TOOL_NAMESPACE
+
+    functions = {item["function"]["name"]: item["function"] for item in to_openai_tools()}
+    criteria = []
+    for tool_id, entry in TOOL_NAMESPACE.items():
+        assert entry.usage_hint.strip(), tool_id
+        assert entry.not_for.strip(), tool_id
+        description = functions[tool_id.replace(".", "__")]["description"]
+        assert entry.usage_hint in description, tool_id
+        assert entry.not_for in description, tool_id
+        criteria.append(entry.usage_hint.split(". ", 1)[0])
+    assert len(criteria) == len(set(criteria))
+
+
 def test_llm_tool_descriptions_publish_safe_result_binding_contracts():
     from agent.runtime.ssot_runtime import _build_ssot_runtime_tool_registry
     from core.runtime_engine.query_loop import _build_cached_tool_definitions
