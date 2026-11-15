@@ -77,7 +77,7 @@ function FilesView({ ws }: { ws: string }) {
                 { key: "folder", label: "文件夹", render: (f) => fileFolder(f) || "—", sortValue: fileFolder },
                 { key: "type", label: "类型", render: (f) => fileType(f) ?? "—" },
                 { key: "size", label: "大小", render: (f) => (typeof f.size_bytes === "number" ? `${Math.ceil(f.size_bytes / 1024)} KB` : "—"), sortValue: (f) => f.size_bytes ?? 0 },
-                { key: "time", label: "创建", render: (f) => fmtTime(f.created_at), sortValue: (f) => f.created_at ?? "" },
+                { key: "time", label: "创建", className: "is-time", render: (f) => fmtTime(f.created_at), sortValue: (f) => f.created_at ?? "" },
               ]} /><LoadMore paged={filesPage} testId="files-load-more" /></>
           )}</LoadState>
         </>
@@ -387,7 +387,7 @@ function MemoryView({ ws }: { ws: string }) {
             { key: "summary", label: "记忆", render: (m) => <button type="button" className="link-button" onClick={(e) => { e.stopPropagation(); setOpened(m.memory_id); }} data-testid="memory-open">{m.summary || m.content?.slice(0, 60) || m.memory_id}</button> },
             { key: "status", label: "状态", render: (m) => <Chip tone={m.status === "conflict" ? "warn" : m.status === "active" ? "ok" : "info"}>{MEMORY_STATUS_LABEL[m.status ?? ""] ?? m.status ?? "未上报"}</Chip> },
             { key: "conflict", label: "冲突", render: (m) => m.status === "conflict" ? <span data-testid="memory-conflict-hint">与 {(m.metadata?.conflict_memory_ids ?? []).join("、") || "已有记忆"} 冲突 <Button onClick={() => setConfirming(m)}>采用这条</Button></span> : "—" },
-            { key: "time", label: "更新", render: (m) => fmtTime(m.updated_at), sortValue: (m) => m.updated_at ?? "" },
+            { key: "time", label: "更新", className: "is-time", render: (m) => fmtTime(m.updated_at), sortValue: (m) => m.updated_at ?? "" },
           ]} /><LoadMore paged={memPage} testId="memory-load-more" /></>
       )}</LoadState>
       {confirming ? <ConfirmDialog title="采用这条记忆？" danger={false} confirmLabel="确认采用" onCancel={() => setConfirming(null)}

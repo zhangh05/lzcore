@@ -155,7 +155,7 @@ function Inspections({ ws, openId, onOpen }: { ws: string; openId: string | null
       <LoadState value={list} onReload={reload}>{() => (
         <><Table testId="inspections-table" rows={page.items} rowKey={(t) => t.task_id} onRowOpen={(t) => onOpen(t.task_id)} empty={<p className="muted">还没有巡检。</p>}
           columns={[{ key: "id", label: "巡检", render: (t) => <code>{t.task_id}</code> }, { key: "s", label: "状态", render: (t) => <Chip tone={t.status === "partial" ? "warn" : t.status === "unknown" ? "unknown" : "neutral"}>{INSPECTION_STATUS[t.status ?? ""] ?? t.status ?? "未上报"}</Chip> },
-            { key: "n", label: "目标数", render: (t) => String(t.connection_ids?.length ?? "—") }, { key: "t", label: "时间", render: (t) => fmtTime(t.created_at) }]} /><LoadMore paged={page} testId="inspections-load-more" /></>
+            { key: "n", label: "目标数", render: (t) => String(t.connection_ids?.length ?? "—") }, { key: "t", label: "时间", className: "is-time", render: (t) => fmtTime(t.created_at) }]} /><LoadMore paged={page} testId="inspections-load-more" /></>
       )}</LoadState>
       {create ? <CreateInspection ws={ws} onClose={() => setCreate(false)} onDone={(o) => { setR({ label: "巡检入队", o }); setCreate(false); reload(); }} /> : null}
       {openId ? <InspectionDetail ws={ws} taskId={openId} onClose={() => onOpen(null)} onOpenOther={onOpen} /> : null}
@@ -270,7 +270,7 @@ function ContextView({ ws }: { ws: string }) {
       <LoadState value={ctx} onReload={reload}>{() => (
         <>
           <Table rows={observations} rowKey={(o) => o.observation_id} selectable selected={sel} onSelect={setSel} empty={<p className="muted">没有观察记录。</p>}
-            columns={[{ key: "s", label: "观察", render: (o) => o.summary ?? o.observation_id }, { key: "st", label: "状态", render: (o) => o.status ?? "—" }, { key: "t", label: "时间", render: (o) => fmtTime(o.observed_at) }]} />
+            columns={[{ key: "s", label: "观察", render: (o) => o.summary ?? o.observation_id }, { key: "st", label: "状态", render: (o) => o.status ?? "—" }, { key: "t", label: "时间", className: "is-time", render: (o) => fmtTime(o.observed_at) }]} />
           <details><summary>完整上下文</summary><JsonBlock value={ctx.state === "ok" ? ctx.data : null} /></details>
         </>
       )}</LoadState>

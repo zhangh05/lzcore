@@ -19,6 +19,8 @@ interface ShellValue {
   workspaces: WorkspacesState;
   workspaceId: string | null;
   switchWorkspace: (id: string) => void;
+  /** 重新读取工作区列表（新建 / 改名 / 删除工作区后调用）。 */
+  reloadWorkspaces: () => void;
   extensions: ExtensionRegistryState;
   /** 带上当前工作区的应用内路径。 */
   hrefFor: (path: string) => string;
@@ -55,6 +57,8 @@ export function ShellProvider({ auth, onSignedOut, children }: { auth: AuthStatu
   const [workspaces, setWorkspaces] = useState<WorkspacesState>({ kind: "loading" });
   const [extensions, setExtensions] = useState<ExtensionRegistryState>({ kind: "loading" });
 
+  const [wsRev, setWsRev] = useState(0);
+  const reloadWorkspaces = useCallback(() => setWsRev((n) => n + 1), []);
   useEffect(() => {
     let off = false;
     void httpGet("/api/workspaces").then((o) => {
@@ -64,6 +68,11 @@ export function ShellProvider({ auth, onSignedOut, children }: { auth: AuthStatu
       if (o.status !== 200 || !Array.isArray(list)) return setWorkspaces({ kind: "error", reason: `工作区列表读取失败（HTTP ${o.status}）。` });
       setWorkspaces({ kind: "ready", list: list.filter((w) => w && typeof w.workspace_id === "string") });
     });
+    return () => { off = true; };
+  }, [auth.role, wsRev]);
+
+  useEffect(() => {
+    let off = false;
     void httpGet("/api/extensions").then((o) => {
       if (off) return;
       if (o.kind === "network_error") return setExtensions({ kind: "error", reason: "无法连接服务" });
@@ -101,6 +110,6 @@ export function ShellProvider({ auth, onSignedOut, children }: { auth: AuthStatu
     onSignedOut();
   }, [onSignedOut]);
 
-  const value: ShellValue = { auth, workspaces, workspaceId, switchWorkspace, extensions, hrefFor, signOut };
+  const value: ShellValue = { auth, workspaces, workspaceId, switchWorkspace, reloadWorkspaces, extensions, hrefFor, signOut };
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }

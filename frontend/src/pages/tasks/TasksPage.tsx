@@ -8,13 +8,14 @@ import type { HttpOutcome } from "../../contracts/auth";
 import { listOf, useApi } from "../../kit/useApi";
 import { Chip, Drawer, FailureNote, KeyValues, LoadState, RawData, ReceiptNote, Table, Tabs, fmtTime, useUrlTab } from "../../kit/ui";
 import { FactSummary } from "../../kit/factSummary";
-import { outcomePlain, outcomeZh, type RunAudit, type TraceEvent } from "../workbench/ProgressPanel";
+import { outcomeZh, type RunAudit, type TraceEvent } from "../workbench/ProgressPanel";
 
-/** 去掉 Markdown 记号并截短，列表里只看一句话。 */
-const plainSummary = (v?: string) => (v ?? "").replace(/[#*`|>_~-]{1,}/g, " ").replace(/\s+/g, " ").trim().slice(0, 90);
 import { renderMarkdown } from "../../utils/markdown";
 import { Link, useSearchParams } from "../../router";
 import { JobsColumn } from "./JobsColumn";
+import { RunList, TasksOverview, type RunRow } from "./RunList";
+import { EmptyState } from "../../components/arc/empty-state/empty-state";
+import { IconChecklist, IconHistory } from "../../components/Icon";
 import { OUTCOME_FIELD_MISSING, runtimeActionGate, runtimeStatusLabel, type RuntimeTask, type SessionTaskView } from "./model";
 
 const TABS = ["tasks", "runs", "reports", "trajectories"] as const;
@@ -31,6 +32,7 @@ export function TasksPage() {
   return (
     <div className="page" data-testid="tasks-page">
       <PageHeader title={NAMES.tasks} subtitle="跟踪任务进度、运行记录和报告。" />
+      <Overview ws={ws} />
       <Tabs label="任务视图" current={tab} onChange={(t: Tab) => setTab(t)} tabs={[{ key: "tasks", label: "任务" }, { key: "runs", label: "运行记录" }, { key: "reports", label: "报告" }, { key: "trajectories", label: "执行轨迹" }]} />
       <div className="tasks-layout">
         <div className="tasks-main">
@@ -47,6 +49,16 @@ export function TasksPage() {
   );
 }
 
+function Overview({ ws }: { ws: string }) {
+  const [runs] = useApi(`/api/workspaces/${enc(ws)}/runs`);
+  const [jobs] = useApi("/api/jobs", { workspace_id: ws, limit: 50 });
+  // 数据未到时先按 0 占位，避免卡片晚到把下方内容往下推。
+  const jobList = listOf<{ status?: string }>(jobs, "jobs");
+  const active = jobList.filter((j) => ["queued", "running", "cancel_requested"].includes(String(j.status))).length;
+  const failed = jobList.filter((j) => j.status === "failed" || j.status === "error").length;
+  return <TasksOverview runs={listOf<RunRow>(runs, "runs")} active={active} failedJobs={failed} />;
+}
+
 function RuntimeTaskList({ ws, onOpen }: { ws: string; onOpen: (id: string) => void }) {
   const [tasks, reload] = useApi("/api/runtime/tasks", { workspace_id: ws });
   return (
@@ -54,13 +66,13 @@ function RuntimeTaskList({ ws, onOpen }: { ws: string; onOpen: (id: string) => v
       <p className="inline-alert tone-info" role="note" data-testid="outcome-missing-note">「执行结束」不等于任务做成了。点开任务可以看到结果和需要你确认的事项。</p>
       <LoadState value={tasks} onReload={reload}>{() => (
         <Table testId="runtime-tasks" rows={listOf<RuntimeTask>(tasks, "tasks")} rowKey={(t) => t.task_id} onRowOpen={(t) => onOpen(t.task_id)}
-          empty={<p className="muted">还没有任务。在工作台发起对话或运行工作流后，会出现在这里。</p>}
+          empty={<EmptyState title="还没有任务" description="在工作台发起对话或运行工作流后，任务会出现在这里。" icon={<IconChecklist size={20} />} />}
           columns={[
             { key: "goal", label: "目标", render: (t) => t.user_goal || <code>{t.task_id}</code> },
             { key: "status", label: "运行时状态", render: (t) => <Chip>{runtimeStatusLabel(t.status)}</Chip>, sortValue: (t) => t.status ?? "" },
             { key: "outcome", label: "目标结论", render: () => <span className="muted">{OUTCOME_FIELD_MISSING}</span> },
             { key: "session", label: "会话", render: (t) => t.session_id ? <Link to={withWorkspace(`/workbench?session=${enc(t.session_id)}`, ws)}>打开会话</Link> : "—" },
-            { key: "updated", label: "更新", render: (t) => fmtTime(t.updated_at), sortValue: (t) => t.updated_at ?? "" },
+            { key: "updated", label: "更新", className: "is-time", render: (t) => fmtTime(t.updated_at), sortValue: (t) => t.updated_at ?? "" },
           ]} />
       )}</LoadState>
     </>
@@ -181,15 +193,11 @@ function RunsView({ ws, onOpen }: { ws: string; onOpen: (id: string) => void }) 
   return (
     <>
       <LoadState value={runs} onReload={reload}>{() => (
-        <Table testId="runs-table" rows={listOf<Record<string, string>>(runs, "runs")} rowKey={(r) => r.run_id} onRowOpen={(r) => onOpen(r.run_id)} empty={<p className="muted">没有运行记录。</p>}
-          columns={[
-            { key: "title", label: "内容", render: (r) => <span className="run-title" title={`运行编号 ${r.run_id}`}>{plainSummary(r.title ?? r.goal ?? r.final_response_summary ?? r.intent) || "—"}</span> },
-            { key: "status", label: "结果", render: (r) => { const o = outcomePlain(r.execution_outcome); return <Chip tone={o?.tone ?? "neutral"}>{o?.label ?? r.status ?? "未上报"}</Chip>; } },
-            { key: "time", label: "时间", render: (r) => fmtTime(r.created_at) },
-          ]} />
+        listOf<RunRow>(runs, "runs").length === 0
+          ? <EmptyState title="还没有运行记录" description="在工作台发起对话或运行工作流后，每一轮都会记在这里。" icon={<IconHistory size={20} />} />
+          : <RunList testId="runs-table" rows={listOf<RunRow>(runs, "runs")} onOpen={onOpen} />
       )}</LoadState>
-      <h3>最近运行（跨工作区汇总）</h3>
-      <LoadState value={recent}>{() => <p className="muted">{listOf(recent, "runs").length} 条</p>}</LoadState>
+      <LoadState value={recent}>{() => <p className="muted runs-recent">所有工作区最近共 {listOf(recent, "runs").length} 次运行</p>}</LoadState>
     </>
   );
 }
@@ -265,7 +273,7 @@ function ReportsTable({ rows, onOpen, onOpenRun, testId }: { rows: ReportRec[]; 
         { key: "t", label: "报告", render: (r) => r.title || r.artifact_id },
         { key: "run", label: "运行", render: (r) => r.run_id ? (onOpenRun ? <Button variant="ghost" onClick={(e) => { e.stopPropagation(); onOpenRun(r.run_id!); }}>{r.run_id}</Button> : <code>{r.run_id}</code>) : "—" },
         { key: "s", label: "密级", render: (r) => r.sensitivity ?? "—" },
-        { key: "time", label: "时间", render: (r) => fmtTime(r.created_at) },
+        { key: "time", label: "时间", className: "is-time", render: (r) => fmtTime(r.created_at) },
         { key: "a", label: "", render: (r) => <Button onClick={(e) => { e.stopPropagation(); onOpen(r.artifact_id); }} data-testid={`report-open-${r.artifact_id}`}>阅读</Button> },
       ]} />
   );
@@ -356,7 +364,7 @@ function TrajectoriesView({ ws }: { ws: string }) {
     <>
       <LoadState value={v} onReload={reload}>{() => (
         <Table rows={listOf<Record<string, string>>(v, "trajectories")} rowKey={(t) => t.trajectory_id ?? t.id} onRowOpen={(t) => setOpen(t.trajectory_id ?? t.id)} empty={<p className="muted">没有轨迹。</p>}
-          columns={[{ key: "id", label: "轨迹", render: (t) => <code>{t.trajectory_id ?? t.id}</code> }, { key: "task", label: "任务", render: (t) => t.task_id ?? "—" }, { key: "time", label: "时间", render: (t) => fmtTime(t.created_at) }]} />
+          columns={[{ key: "id", label: "轨迹", render: (t) => <code>{t.trajectory_id ?? t.id}</code> }, { key: "task", label: "任务", render: (t) => t.task_id ?? "—" }, { key: "time", label: "时间", className: "is-time", render: (t) => fmtTime(t.created_at) }]} />
       )}</LoadState>
       {open ? <Drawer title={`轨迹 ${open}`} onClose={() => setOpen(null)}><LoadState value={one}>{(d) => <FactSummary value={(d as { trajectory?: unknown }).trajectory ?? d} />}</LoadState></Drawer> : null}
     </>

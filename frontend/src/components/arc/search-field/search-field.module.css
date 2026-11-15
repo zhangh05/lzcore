@@ -1,4 +1,5 @@
 .field { display: grid; gap: var(--space-2); min-width: 0; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .field label { font-size: var(--text-sm); font-weight: 400; line-height: var(--leading-body); letter-spacing: var(--tracking-body); }
 /* Focus darkens the border; the shell never changes size. */
 .shell { display: flex; min-height: var(--control-height-md); align-items: center; gap: var(--space-2); border: 1px solid var(--field-border, var(--border-strong)); border-bottom-color: var(--field-border-bottom, var(--border-strong)); border-radius: var(--radius-control); padding: 0 var(--space-2) 0 var(--space-3); background: var(--surface) linear-gradient(var(--accent), var(--accent)) no-repeat 50% 100% / 0 2px; transition: border-color var(--duration-fast) var(--ease-standard), background-size var(--duration-considered) var(--ease-enter); }

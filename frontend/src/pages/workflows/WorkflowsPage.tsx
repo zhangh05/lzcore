@@ -64,7 +64,7 @@ function WorkflowList({ ws }: { ws: string; onRun: (id: string) => void }) {
             { key: "n", label: "工作流", render: (w) => w.name ?? w.workflow_id },
             { key: "s", label: "节点 / 层次", render: (w) => `${w.nodes?.length ?? 0} 个节点 · ${w.execution_layers?.length ?? "?"} 层` },
             { key: "st", label: "状态", render: (w) => <Chip tone={w.status === "active" ? "ok" : "neutral"}>{w.status === "active" ? "启用" : w.status === "draft" ? "草稿" : w.status ?? "未上报"}</Chip> },
-            { key: "t", label: "更新", render: (w) => fmtTime(w.updated_at) },
+            { key: "t", label: "更新", className: "is-time", render: (w) => fmtTime(w.updated_at) },
             { key: "a", label: "", render: (w) => <span className="row-actions">
               <Button onClick={() => setRun(w)} data-testid="workflow-run">运行</Button>
               <Button onClick={async () => { const o = await api.get(`/api/workflows/${enc(w.workflow_id)}`, { workspace_id: ws }); setEdit(bodyOf<{ workflow?: WorkflowDef }>(o)?.workflow ?? w); }}>编辑</Button>
@@ -152,7 +152,7 @@ function RunsList({ ws, onOpen }: { ws: string; onOpen: (id: string) => void }) 
       {!current ? <p className="muted">还没有工作流。</p> : (
         <LoadState value={runs} onReload={reload}>{() => (
           <Table testId="wf-runs-table" rows={listOf<WfRun>(runs, "runs")} rowKey={(r) => r.run_id} onRowOpen={(r) => onOpen(r.run_id)} empty={<p className="muted">没有运行记录。</p>}
-            columns={[{ key: "id", label: "运行", render: (r) => <code>{r.run_id}</code> }, { key: "s", label: "状态", render: (r) => <Chip>{RUN_STATUS_LABEL[r.status ?? ""] ?? r.status ?? "未上报"}</Chip> }, { key: "t", label: "开始时间", render: (r) => fmtTime(r.started_at) }]} />
+            columns={[{ key: "id", label: "运行", render: (r) => <code>{r.run_id}</code> }, { key: "s", label: "状态", render: (r) => <Chip>{RUN_STATUS_LABEL[r.status ?? ""] ?? r.status ?? "未上报"}</Chip> }, { key: "t", label: "开始时间", className: "is-time", render: (r) => fmtTime(r.started_at) }]} />
         )}</LoadState>
       )}
     </>

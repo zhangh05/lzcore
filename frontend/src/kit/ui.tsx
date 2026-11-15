@@ -2,7 +2,7 @@
  * 页面通用部件：统一页头 / 空态已在 components/EmptyState；这里是表格、tab、对话框、抽屉、
  * 回执提示、失败说明、409 冲突面板、preview|apply 两段式。
  */
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { motionTokens } from "../components/arc/lib/motion-tokens";
@@ -110,6 +110,8 @@ export interface Column<R> {
   label: string;
   render: (row: R) => ReactNode;
   sortValue?: (row: R) => string | number;
+  /** 单元格附加样式：`is-time`（不换行、等宽数字）、`is-nowrap`、`num`。 */
+  className?: string;
 }
 
 /** 原生 table：aria-sort、行选择、「N 项已选 · 清除」。 */
@@ -122,7 +124,7 @@ export function Table<R>({ rows, columns, rowKey, selectable, selected, onSelect
   const col = sort ? columns.find((c) => c.key === sort.key) : undefined;
   if (col?.sortValue && sort) sorted.sort((a, b) => (col.sortValue!(a) > col.sortValue!(b) ? 1 : -1) * sort.dir);
   const sel = selected ?? new Set<string>();
-  if (rows.length === 0) return <>{empty ?? <p className="muted">没有数据。</p>}</>;
+  if (rows.length === 0) return <div className="table-empty">{empty ?? <p className="muted">没有数据。</p>}</div>;
   return (
     <div className="table-wrap">
       {selectable && sel.size > 0 ? (
@@ -133,17 +135,17 @@ export function Table<R>({ rows, columns, rowKey, selectable, selected, onSelect
           <tr>
             {selectable ? <th scope="col"><span className="sr-only">选择</span></th> : null}
             {columns.map((c) => (
-              <th key={c.key} scope="col" aria-sort={sort?.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : undefined}>
+              <th key={c.key} scope="col" className={c.className} aria-sort={sort?.key === c.key ? (sort.dir === 1 ? "ascending" : "descending") : undefined}>
                 {c.sortValue ? <button type="button" className="th-sort" onClick={() => setSort((s) => ({ key: c.key, dir: s?.key === c.key && s.dir === 1 ? -1 : 1 }))}>{c.label}</button> : c.label}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {sorted.map((r) => {
+          {sorted.map((r, i) => {
             const k = rowKey(r);
             return (
-              <tr key={k} data-row={k} tabIndex={onRowOpen ? 0 : undefined}
+              <tr key={k} data-row={k} style={{ "--i": i } as CSSProperties} tabIndex={onRowOpen ? 0 : undefined}
                 onKeyDown={(e) => { if (onRowOpen && (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) { e.preventDefault(); onRowOpen(r); } }}
                 onClick={onRowOpen ? (e) => { if ((e.target as HTMLElement).closest("button,a,input,label")) return; onRowOpen(r); } : undefined}
                 className={onRowOpen ? "is-clickable" : undefined}>
@@ -152,7 +154,7 @@ export function Table<R>({ rows, columns, rowKey, selectable, selected, onSelect
                     const next = new Set(sel); if (e.target.checked) next.add(k); else next.delete(k); onSelect?.(next);
                   }} /></td>
                 ) : null}
-                {columns.map((c) => <td key={c.key}>{c.render(r)}</td>)}
+                {columns.map((c) => <td key={c.key} className={c.className}>{c.render(r)}</td>)}
               </tr>
             );
           })}

@@ -1,6 +1,6 @@
 /* Product tokens: themes, spacing, type, controls and semantic outcomes. */
 /* Cascade order for the whole app: tokens → shell → shared components → pages. */
-@layer base, shell, components, pages;
+@layer base, shell, components, pages, polish;
 @layer base {
 :root {
   --weight-body: 400;
