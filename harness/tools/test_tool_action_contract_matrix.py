@@ -324,6 +324,40 @@ def test_workspace_read_success_satisfies_its_published_output_contract(monkeypa
     assert result["preview"] == "x" * 600
 
 
+@pytest.mark.parametrize("size", [5000, 5001])
+def test_report_document_length_boundary_matches_published_schema(size):
+    from core.tools.context import ToolRuntimeContext
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.executor import _validate_arguments
+    from agent.llm.tool_adapter import tool_spec_to_openai_function
+    from artifacts.store import list_artifacts
+    from storage.workspace_store import ensure_workspace
+
+    workspace_id = "report_contract_ws"
+    ensure_workspace(workspace_id)
+    client = get_default_tool_runtime_client()
+    spec = next(item for item in client.list_tools() if item["tool_id"] == "report.manage")
+    schema = tool_spec_to_openai_function(spec)["function"]["parameters"]
+    arguments = {"action": "document", "title": "boundary", "summary": "文" * size}
+    before = list_artifacts(workspace_id)
+    result = client.invoke("report.manage", arguments, context=ToolRuntimeContext(
+        workspace_id=workspace_id, session_id="report-session", run_id="report-run",
+        requested_by="turn_runner", module="contract_matrix",
+    ))
+    if size == 5000:
+        assert _validate_arguments(dict(arguments), schema) == []
+        assert result.status == "succeeded"
+        assert arguments["summary"] in result.output["document"]
+        assert result.output["format"] == "markdown"
+        assert result.artifact_ids == []
+    else:
+        assert _validate_arguments(dict(arguments), schema)
+        assert result.status == "blocked"
+        assert result.output["executed"] is False
+        assert result.output["error_code"] == "TOOL_ARGUMENT_VALIDATION_FAILED"
+    assert list_artifacts(workspace_id) == before
+
+
 def test_public_schemas_expose_handler_consumed_arguments():
     expected = {
         "exec.run": {"command", "code", "description", "working_dir", "timeout", "target", "shell", "env_vars"},
@@ -731,6 +765,35 @@ def test_action_contract_risk_is_enforced_by_real_policy():
         assert decision.allowed is True
 
 
+@pytest.mark.parametrize("action, uncertain", [("list", False), ("write", True)])
+def test_executor_handler_exception_preserves_execution_and_recovery_facts(action, uncertain):
+    from core.tools.executor import ToolExecutor
+    from core.tools.registry import ToolRegistry
+    from core.tools.schemas import ToolInvocation, ToolSpec
+
+    calls = []
+    def fail_after_start(_inv):
+        calls.append(True)
+        raise OSError("connection lost; password synthetic-exception-canary")
+
+    registry = ToolRegistry()
+    entry = CANONICAL_REGISTRY["workspace.file"]
+    registry.register_tool(ToolSpec(tool_id="workspace.file", name="file", description="file",
+                                    input_schema=entry.input_schema), fail_after_start)
+    args = {"action": action}
+    if action == "write":
+        args.update(filename="result.txt", content="result")
+    result = ToolExecutor(registry).execute(ToolInvocation(tool_id="workspace.file", workspace_id="test_ws", arguments=args))
+    assert result.status == "failed" and calls == [True]
+    assert result.output["executed"] is True
+    assert result.output["execution_may_continue"] is uncertain
+    assert result.output["error_code"] == ("EXECUTION_UNKNOWN" if uncertain else "TOOL_EXCEPTION")
+    assert "synthetic-exception-canary" not in str(result.as_dict())
+    if uncertain:
+        assert result.output["automatic_retry_allowed"] is False
+        assert "read-back" in result.output["hint"]
+
+
 def test_governed_executor_does_not_invent_handler_success():
     from core.tools.executor import ToolExecutor
     from core.tools.registry import ToolRegistry
@@ -768,3 +831,13 @@ def test_text_and_diff_results_preserve_coverage_and_stop_expensive_regex(monkey
     diff = invoke("report.manage", {"action": "diff", "text_a": before, "text_b": after})
     assert diff["truncated"] is False and diff["lines_removed"] == diff["lines_added"] == 1
     assert "x" * 200 in diff["diff"] and "y" * 200 in diff["diff"]
+
+
+def test_session_snapshot_is_a_write_in_the_published_catalog():
+    """session_snapshot creates a snapshot; the catalog must not advertise it as a read."""
+    from core.tools.catalog_snapshot import build_catalog_snapshot
+
+    tool = next(t for t in build_catalog_snapshot()["tools"] if t["tool_id"] == "system.manage")
+    profile = next(p for p in tool["action_profiles"] if p["action"] == "session_snapshot")
+    assert profile["permission_action"] == "write"
+    assert profile["read_only"] is False

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from core.tools.schemas import ToolInvocation
+from core.tools.execution_contracts import COMMAND_TIMEOUT_MAX_SECONDS
 from storage.ids import validate_workspace_id
 
 from core.tools.general_tools.shared import _caller_workspace, _error_inv, _ok, _result, _run_shell, _unavailable, _workspace_path
@@ -327,7 +328,7 @@ def _handle_python_exec(inv: ToolInvocation) -> dict:
     run_id = inv.arguments.get("run_id", "")
     code = str(inv.arguments.get("code", "")).strip()
     input_data = inv.arguments.get("input_data")
-    timeout = min(int(inv.arguments.get("timeout", 30) or 30), 60)  # v3.7: max 60s
+    timeout = max(1, min(int(inv.arguments.get("timeout", 30) or 30), COMMAND_TIMEOUT_MAX_SECONDS))
 
     if not code:
         return _error_inv(inv, "code is required")

@@ -800,7 +800,7 @@ def data_pivot(
 
     # Build Markdown pivot table
     md = f"| {index} \\ {columns} | " + " | ".join(display_columns) + " |\n"
-    md += "|---|" + "|".join(["---" for _ in ck_sorted]) + "|\n"
+    md += "|---|" + "|".join(["---" for _ in display_columns]) + "|\n"
     for rk in display_rows:
         md += f"| {rk} | " + " | ".join(str(pivot_result[rk].get(ck, 0)) for ck in display_columns) + " |\n"
 

@@ -78,8 +78,17 @@
       "label": "数据处理",
       "params": {
         "aggfunc": { "hint": "透视表的汇总方式；「计数」不需要数值列，其余都需要。" },
+        "by": { "hint": "排序时必填：按优先级列出列名；默认升序。" },
+        "column": { "hint": "去重取值时必填：输入表格中的准确列名。" },
+        "columns": { "hint": "透视表必填：该输入列的值将成为输出表格的列。" },
+        "conditions": { "hint": "筛选时必填：多条条件需同时满足；比较方式默认相等。" },
+        "index": { "hint": "透视表必填：该输入列的值用来区分输出行。" },
+        "metrics": { "hint": "分组汇总指标；不填时默认统计行数，可用分组列划分数据。" },
+        "on": { "hint": "合并两表时必填：两表共同的键列；还需提供右表数据，默认只保留两边都有的行。" },
+        "rows": { "hint": "输入表格数据行；同一侧的数据行、文本、源文件三选一。已有大文件优先提供源文件路径。" },
+        "text": { "hint": "CSV、JSON 或 Markdown 表格文本；也可改为提供数据行或源文件路径。" },
         "right_source_filepath": { "hint": "合并时右表来自的文件（工作区内的 UTF-8 文件），也可以直接给文本或数据行。" },
-        "source_filepath": { "hint": "工作区内的 CSV / JSON / Markdown 文件，会完整读取；也可以直接给文本或数据行。" },
+        "source_filepath": { "hint": "工作区内的 CSV / JSON / Markdown 文件，会完整读取；同一侧不能再同时给文本或数据行。" },
         "values": { "hint": "透视表的数值列；求和、平均、最小、最大时必填。" },
         "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
       },
@@ -110,7 +119,12 @@
     },
     "knowledge.manage": {
       "label": "知识库",
-      "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } },
+      "params": {
+        "chunk_id": { "hint": "读取片段时使用；只有未提供来源且读取层级为片段时才生效。" },
+        "level": { "hint": "默认读取片段；按来源读取需提供来源标识。只要给了来源标识，就会优先读取完整来源。" },
+        "source_id": { "hint": "重建索引或按来源读取时必填；读取时优先于片段标识，查看片段列表时可用来限定来源。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
       "options": {
         "action": { "search": "检索", "read": "读取", "list": "列出", "chunk": "查看片段", "import": "导入", "reindex": "重建索引" },
         "level": { "chunk": "按片段", "source": "按来源" }
@@ -188,8 +202,14 @@
     "network.operations.wait": { "label": "等待网络收敛", "params": {} },
     "report.manage": {
       "label": "报告",
-      "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } },
-      "options": { "action": { "save": "保存报告", "diff": "对比两段文本", "document": "生成文档" } }
+      "params": {
+        "content": { "hint": "保存报告时必填：持久保存为报告制品的正文。" },
+        "summary": { "hint": "生成文档时必填，最多 5000 个字符；只返回 Markdown 文本，不会保存文件。" },
+        "text_a": { "hint": "对比时必填：修改前的文本，可以为空文本。" },
+        "text_b": { "hint": "对比时必填：修改后的文本，可以为空文本。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": { "action": { "save": "保存报告", "diff": "对比两段文本", "document": "生成文档文本" } }
     },
     "skill.manage": {
       "label": "技能",

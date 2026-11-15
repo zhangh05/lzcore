@@ -112,6 +112,15 @@ def test_pivot_count_does_not_require_a_numeric_value_column():
     assert result["pivot"]["east"] == {"down": 1, "up": 2}
 
 
+def test_wide_pivot_markdown_uses_the_returned_column_bound():
+    result = data_pivot(rows=[{"site": "中文区域", "kind": str(i)} for i in range(MAX_OUTPUT_ROWS + 3)],
+                        index="site", columns="kind")
+    assert result["ok"] and result["truncated"]
+    assert result["total_columns"] == MAX_OUTPUT_ROWS + 3
+    assert result["returned_columns"] == MAX_OUTPUT_ROWS
+    assert {len(line.strip("|").split("|")) for line in result["markdown"].splitlines()} == {MAX_OUTPUT_ROWS + 1}
+
+
 def test_pivot_count_action_contract_does_not_require_values():
     from core.tools.action_requirements import ACTION_REQUIRED_ALL
 

@@ -238,6 +238,30 @@ def test_cli_runtime_handles_fragmented_pager_gb18030_and_prompt_completion():
     assert io.sent == [b"display version\r\n", b" "]
 
 
+@pytest.mark.parametrize("encoding", ["utf-8", "gb18030"])
+def test_cli_sends_chinese_commands_in_the_current_session_encoding(encoding):
+    driver, _ = resolve_driver("h3c")
+    command = "description 联智中枢"
+    io = ScriptedIO([(command + "\r\n已完成\r\n<CE1>").encode(encoding)])
+    session = InteractiveCLISession(send=io.send, receive=io.receive, driver=driver, initial_text="<CE1>", timeout=1)
+    session.encoding = encoding
+    result = session.run_command(command)
+    assert result.complete and not result.error_code
+    assert result.dispatch_status == "sent" and "已完成" in result.output
+    assert io.sent == [(command + "\r\n").encode(encoding)]
+
+
+def test_cli_encoding_failure_is_a_known_unsent_command():
+    driver, _ = resolve_driver("h3c")
+    io = ScriptedIO()
+    session = InteractiveCLISession(send=io.send, receive=io.receive, driver=driver, initial_text="<CE1>")
+    session.encoding = "ascii"
+    result = session.run_command("description 中文")
+    assert result.error_code == "command_encoding_error"
+    assert result.dispatch_status == "not_sent" and not result.complete
+    assert session.synchronized and io.sent == []
+
+
 def test_cli_runtime_does_not_treat_idle_output_as_complete_without_prompt():
     driver, _source = resolve_driver("h3c")
     io = ScriptedIO([b"display current-configuration\r\npartial output"])

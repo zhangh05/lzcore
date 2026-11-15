@@ -135,7 +135,14 @@ class ToolRuntimeClient:
             ))
 
         # ── Execute through full pipeline ──
-        result = self._executor.execute(invocation)
+        from core.tools.context import bind_runtime_cancel_check, reset_runtime_cancel_check
+        token = (bind_runtime_cancel_check(invocation.cancel_check)
+                 if callable(invocation.cancel_check) else None)
+        try:
+            result = self._executor.execute(invocation)
+        finally:
+            if token is not None:
+                reset_runtime_cancel_check(token)
         self._append_trace_event(result, context)
         return self._record_result(result)
 
