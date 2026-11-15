@@ -108,6 +108,55 @@ def _reject_unsafe_local_exec(inv: ToolInvocation, command: str) -> dict | None:
     return None
 
 
+
+# Workspace-root-relative prefixes the model often keeps writing in shell
+# commands even though the default cwd is already files/data (the same paths
+# workspace.file accepts).  Matched only at the start of a path token.
+_WORKSPACE_PREFIX_RE = re.compile(
+    r"(?<![\w./\\~$:@%+-])(files[/\\]data(?:[/\\]|(?=[\s'\"`;|&)<>]|$))|files[/\\]|inbox[/\\])"
+)
+_PATH_TOKEN_END_RE = re.compile(r"[\s'\"`;|&)<>]")
+
+
+def _rebase_workspace_prefixes(command: str, workspace_dir, cwd: str) -> tuple[str, int]:
+    """Rewrite ``files/data/x``-style paths so they resolve from cwd files/data.
+
+    Only paths whose target (or its parent, for new files) exists in the
+    workspace are rewritten, and nothing changes when cwd itself contains a
+    ``files``/``inbox`` entry, so literal text and real subfolders are left
+    alone.
+    """
+    from pathlib import Path
+
+    root = Path(workspace_dir)
+    here = Path(cwd)
+    rewrites = 0
+
+    def _replace(match: re.Match) -> str:
+        nonlocal rewrites
+        prefix = match.group(1)
+        head = prefix.replace("\\", "/").split("/")[0]
+        if (here / head).exists():
+            return prefix
+        rest = command[match.end():]
+        end = _PATH_TOKEN_END_RE.search(rest)
+        tail = rest[: end.start()] if end else rest
+        target = root / (prefix.replace("\\", "/") + tail)
+        if not (target.exists() or target.parent.is_dir()):
+            return prefix
+        normalized = prefix.replace("\\", "/")
+        if normalized.startswith("files/data"):
+            replacement = "./" if normalized.endswith("/") else "."
+        elif normalized.startswith("files/"):
+            replacement = "../"
+        else:
+            replacement = "../../inbox/"
+        rewrites += 1
+        return replacement
+
+    return _WORKSPACE_PREFIX_RE.sub(_replace, command), rewrites
+
+
 def handle_command_exec(inv: ToolInvocation) -> dict:
     return _managed_execution(inv, _handle_command_exec)
 
@@ -155,6 +204,7 @@ def _handle_command_exec(inv: ToolInvocation) -> dict:
 
     # v3.7: pass through cwd, env_vars, timeout
     requested_cwd = (inv.arguments.get("working_dir") or "").strip()
+    rebased = 0
     if not requested_cwd:
         # Agent commands start in the workspace's user-visible source area
         # (files/data), the same place workspace.file creates files and the UI
@@ -172,6 +222,7 @@ def _handle_command_exec(inv: ToolInvocation) -> dict:
             cwd = str(workspace_root(workspace_id))
         else:
             cwd = str(workspace_root(workspace_id) / "files" / "data")
+            command, rebased = _rebase_workspace_prefixes(command, workspace_root(workspace_id), cwd)
     else:
         # Commands may only use a directory below the caller's workspace.
         # An arbitrary absolute cwd would bypass the storage boundary even
@@ -213,6 +264,11 @@ def _handle_command_exec(inv: ToolInvocation) -> dict:
         cancel_check=getattr(inv, "cancel_check", None),
     )
     result.setdefault("working_dir", requested_cwd or ("." if isolated is not None else "files/data"))
+    if rebased:
+        result["path_note"] = (
+            "cwd is files/data; workspace paths like files/data/x and inbox/x "
+            "in the command were resolved relative to it"
+        )
     # Attach caller-provided description without interpreting command content.
     description = (inv.arguments.get("description") or "").strip()
     if description:
