@@ -105,7 +105,10 @@ def _match_file(ws_dir: Path, spec: dict) -> tuple[bool, str]:
         return False, f"没有找到 {spec['glob']}"
     for path in candidates:
         try:
-            text = _norm(path.read_text(encoding="utf-8", errors="replace"))
+            text = path.read_text(encoding="utf-8", errors="replace")
+            # CSV 里的逗号是分隔符，"A,28,350" 不能当成千分位去掉。
+            if path.suffix.lower() not in {".csv", ".tsv"}:
+                text = _norm(text)
         except OSError:
             continue
         if all(re.search(r, text, re.I) for r in spec.get("contains", [])) and \
