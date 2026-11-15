@@ -12,7 +12,7 @@ import { TurnTransport, turnErrorText, wsUrl, type Frame } from "../../realtime/
 import { useNavigate, useSearchParams } from "../../router";
 import { CatalogDrawer } from "./CatalogDrawer";
 import { Composer, type SendOptions } from "./Composer";
-import { IconMore, IconPlus } from "../../components/Icon";
+import { IconChat, IconMore, IconPlus } from "../../components/Icon";
 import type { ChatMessage, SessionSummary, StopState } from "./model";
 import { ProgressPanel, hasProgressContent } from "./ProgressPanel";
 import { SessionColumn } from "./SessionColumn";
@@ -351,9 +351,10 @@ export function Workbench() {
           </>
         ) : (
           <div className="empty-state" data-testid="workbench-empty">
+            <span className="empty-state-icon is-soft" aria-hidden="true"><IconChat size={22} /></span>
             <h2 className="empty-state-title">选择或新建一个会话</h2>
             <p className="empty-state-reason">会话列表在左侧；也可以按 Ctrl K 选择「新建会话」。</p>
-            <Button variant="primary" onClick={() => void newSession()} data-testid="empty-new-session">新建会话并开始</Button>
+            <div className="empty-state-action"><Button variant="primary" onClick={() => void newSession()} data-testid="empty-new-session">新建会话并开始</Button></div>
           </div>
         )}
       </section>

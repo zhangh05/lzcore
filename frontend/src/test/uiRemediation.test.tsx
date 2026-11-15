@@ -183,6 +183,6 @@ describe("工作台：按真实公开字段投影，事实源分开", () => {
     fireEvent.click(await screen.findByTestId("open-status-details"));
     await waitFor(() => expect(screen.getByTestId("llm-health")).toHaveTextContent("（时间未上报）"));
     expect(screen.getByTestId("llm-health")).not.toHaveTextContent("2026");
-    expect(screen.getByTestId("llm-last-success")).toHaveTextContent(/最近成功：.*2026/);
+    expect(screen.getByTestId("llm-last-success")).toHaveTextContent(/最近成功：.*9月1日/);
   });
 });
