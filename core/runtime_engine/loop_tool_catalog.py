@@ -30,6 +30,8 @@ def _tool_registry_signature(tool_registry: dict) -> str:
                     meta, "args_schema", _tool_meta_get(meta, "input_schema", {})
                 ),
                 "risk_level": _tool_meta_get(meta, "risk_level", "low"),
+                "usage_hint": _tool_meta_get(_tool_meta_get(meta, "metadata", {}), "usage_hint", ""),
+                "not_for": _tool_meta_get(_tool_meta_get(meta, "metadata", {}), "not_for", ""),
                 "action_profiles": _tool_meta_get(meta, "action_profiles", []),
                 "action_requirements": _tool_meta_get(
                     _tool_meta_get(meta, "metadata", {}),

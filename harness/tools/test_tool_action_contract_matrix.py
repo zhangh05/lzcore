@@ -324,6 +324,40 @@ def test_workspace_read_success_satisfies_its_published_output_contract(monkeypa
     assert result["preview"] == "x" * 600
 
 
+@pytest.mark.parametrize("size", [5000, 5001])
+def test_report_document_length_boundary_matches_published_schema(size):
+    from core.tools.context import ToolRuntimeContext
+    from core.tools.integration import get_default_tool_runtime_client
+    from core.tools.executor import _validate_arguments
+    from agent.llm.tool_adapter import tool_spec_to_openai_function
+    from artifacts.store import list_artifacts
+    from storage.workspace_store import ensure_workspace
+
+    workspace_id = "report_contract_ws"
+    ensure_workspace(workspace_id)
+    client = get_default_tool_runtime_client()
+    spec = next(item for item in client.list_tools() if item["tool_id"] == "report.manage")
+    schema = tool_spec_to_openai_function(spec)["function"]["parameters"]
+    arguments = {"action": "document", "title": "boundary", "summary": "文" * size}
+    before = list_artifacts(workspace_id)
+    result = client.invoke("report.manage", arguments, context=ToolRuntimeContext(
+        workspace_id=workspace_id, session_id="report-session", run_id="report-run",
+        requested_by="turn_runner", module="contract_matrix",
+    ))
+    if size == 5000:
+        assert _validate_arguments(dict(arguments), schema) == []
+        assert result.status == "succeeded"
+        assert arguments["summary"] in result.output["document"]
+        assert result.output["format"] == "markdown"
+        assert result.artifact_ids == []
+    else:
+        assert _validate_arguments(dict(arguments), schema)
+        assert result.status == "blocked"
+        assert result.output["executed"] is False
+        assert result.output["error_code"] == "TOOL_ARGUMENT_VALIDATION_FAILED"
+    assert list_artifacts(workspace_id) == before
+
+
 def test_public_schemas_expose_handler_consumed_arguments():
     expected = {
         "exec.run": {"command", "code", "description", "working_dir", "timeout", "target", "shell", "env_vars"},

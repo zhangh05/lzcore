@@ -940,20 +940,22 @@ _WEB_ARGS = {
 }
 
 _DATA_ARGS = {
-    "rows": {"type": "array"}, "text": {"type": "string"},
-    "source_filepath": {"type": "string", "description": "Workspace-relative UTF-8 CSV/JSON/Markdown source; alternative to text/rows, reads the complete file without copying its contents through the model."},
+    "rows": {"type": "array", "description": "Input table rows; choose rows, text, or source_filepath per dataset. Prefer source_filepath for large existing files."},
+    "text": {"type": "string", "description": "CSV, JSON, or Markdown table text; alternative to rows or source_filepath."},
+    "source_filepath": {"type": "string", "description": "Workspace-relative UTF-8 CSV/JSON/Markdown source; reads the complete file without copying its contents through the model. Do not combine with text/rows on the same side."},
     "right_source_filepath": {"type": "string", "description": "Workspace-relative UTF-8 source for the right side of join; alternative to right_text/right_rows."},
-    "column": {"type": "string"}, "conditions": {"type": "array", "items": _schema({
+    "column": {"type": "string", "description": "Required for distinct: the exact input column name."}, "conditions": {"type": "array", "description": "Required for filter: predicates combined with AND; op defaults to eq.", "items": _schema({
         "column": {"type": "string"}, "op": {"type": "string", "enum": ["eq", "neq", "gt", "lt", "gte", "lte", "contains", "in"]}, "value": {},
     }, ["column"])},
-    "group_by": {"type": "array", "items": {"type": "string"}}, "metrics": {"type": "array", "items": _schema({
+    "group_by": {"type": "array", "items": {"type": "string"}}, "metrics": {"type": "array", "description": "Aggregate metrics; omit for row count (column=*, func=count). group_by optionally partitions the input.", "items": _schema({
         "column": {"type": "string", "description": "Column or * for row count."},
         "func": {"type": "string", "enum": ["count", "sum", "avg", "min", "max"]},
     })},
-    "by": {"type": "array", "items": {"type": "string"}}, "order": {"type": "string", "enum": ["asc", "desc"]},
+    "by": {"type": "array", "items": {"type": "string"}, "description": "Required for sort: ordered column names; order defaults to asc."}, "order": {"type": "string", "enum": ["asc", "desc"]},
     "max_rows": {"type": "integer", "minimum": 1, "maximum": 200},
     "output": {"type": "string", "enum": ["markdown", "json", "csv"]},
-    "index": {"type": "string"}, "columns": {"type": "string"},
+    "index": {"type": "string", "description": "Required for pivot: input column whose values identify output rows."},
+    "columns": {"type": "string", "description": "Required for pivot: input column whose values become output columns."},
     "values": {"type": "string", "description": "Pivot value column; required for sum, avg, min, and max."},
     "aggfunc": {
         "type": "string", "enum": ["sum", "count", "avg", "min", "max"],
@@ -961,7 +963,7 @@ _DATA_ARGS = {
         "description": "Pivot aggregate. count needs no values column; all other choices require values.",
     },
     "right_text": {"type": "string"}, "right_rows": {"type": "array"},
-    "on": {"type": "string"}, "how": {"type": "string", "enum": ["inner", "left"]},
+    "on": {"type": "string", "description": "Required for join: common key column in both datasets. Supply a right-side input; how defaults to inner."}, "how": {"type": "string", "enum": ["inner", "left"]},
 }
 
 _MEMORY_ARGS = {
@@ -1063,8 +1065,24 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         }],
     }),
     _entry("data.manage", _handle_data, {**_COMMON, **_DATA_ARGS, "action": {"type": "string", "enum": ["parse", "stats", "distinct", "aggregate", "filter", "sort", "render", "pivot", "join"]}}, required=["action"], description="Structured data processing. Supply text, rows, or source_filepath (up to 10,000 input rows); joins also accept right_source_filepath. Returned rows are bounded previews with coverage fields; pivot also bounds displayed columns to 200. Process original inputs for full-dataset statistics, never a truncated preview."),
-    _entry("report.manage", _handle_report, {**_COMMON, "action": {"type": "string", "enum": ["save", "diff", "document"]}, "title": {"type": "string"}, "content": {"type": "string"}, "summary": {"type": "string"}, "text_a": {"type": "string"}, "text_b": {"type": "string"}}, required=["action"], description="Report operations. save requires content; diff requires text_a/text_b; document requires summary."),
-    _entry("knowledge.manage", _handle_knowledge, {**_COMMON, "action": {"type": "string", "enum": ["search", "read", "list", "chunk", "import", "reindex"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "artifact_id": {"type": "string"}, "level": {"type": "string", "enum": ["chunk", "source"]}, "chunk_id": {"type": "string"}, "source_id": {"type": "string"}, "chunk_type": {"type": "string"}, "scope": {"type": "string"}, "include_disabled": {"type": "boolean"}, "include_deleted": {"type": "boolean"}}, required=["action"], risk="medium", description="Knowledge operations. search requires query; read requires chunk_id or source_id; list lists sources; chunk lists chunks; import requires artifact_id; reindex requires source_id."),
+    _entry("report.manage", _handle_report, {
+        **_COMMON, "action": {"type": "string", "enum": ["save", "diff", "document"]},
+        "title": {"type": "string"},
+        "content": {"type": "string", "description": "Required for save: report body persisted as a report artifact."},
+        "summary": {"type": "string", "maxLength": 5000, "description": "Required for document: supplied summary formatted as Markdown and returned, not saved; at most 5000 characters."},
+        "text_a": {"type": "string", "description": "Required for diff: original text; empty text is valid."},
+        "text_b": {"type": "string", "description": "Required for diff: revised text; empty text is valid."},
+    }, required=["action"], description="Report text operations: save persists content as a report artifact; diff compares text_a/text_b; document formats summary as Markdown without saving or generating a binary document."),
+    _entry("knowledge.manage", _handle_knowledge, {
+        **_COMMON, "action": {"type": "string", "enum": ["search", "read", "list", "chunk", "import", "reindex"]},
+        "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+        "artifact_id": {"type": "string"},
+        "level": {"type": "string", "enum": ["chunk", "source"], "description": "For read, defaults to chunk. level=source requires source_id; any supplied source_id selects the full source even when level=chunk."},
+        "chunk_id": {"type": "string", "description": "For read: exact chunk identifier, used only when source_id is absent and level is chunk."},
+        "source_id": {"type": "string", "description": "Required for reindex or read with level=source. On read, takes precedence over chunk_id; on chunk, optionally filters the chunk list."},
+        "chunk_type": {"type": "string"}, "scope": {"type": "string"},
+        "include_disabled": {"type": "boolean"}, "include_deleted": {"type": "boolean"},
+    }, required=["action"], risk="medium", description="Indexed workspace knowledge: search discovers chunks by query; read retrieves a chunk or full source (source_id takes precedence); list discovers sources, chunk lists chunks. import indexes an existing artifact_id; reindex rebuilds source_id. Use web.manage for fresh public facts and memory.manage for saved preferences."),
     _entry("memory.manage", _handle_memory, {**_COMMON, **_MEMORY_ARGS, "action": {"type": "string", "enum": ["search", "get", "review", "confirm", "create", "update", "delete", "profile_get", "profile_set"]}}, required=["action"], risk="medium", description="Scoped memory and revision operations. Tool-generated writes and profile changes are candidates; confirm records explicit operator review, not personal user verification. get returns full text and provenance by memory_id; search/review support offset pagination. create requires content; update requires memory_id and replacement content; confirm/delete require memory_id; profile_set requires field and value."),
     _entry("skill.manage", _handle_skill, {**_COMMON, "action": {"type": "string", "enum": ["list", "find", "load", "inspect", "mcp_list_tools", "mcp_call"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "skill_name": {"type": "string"}, "provider_id": {"type": "string"}, "tool_name": {"type": "string"}, "arguments": {"type": "object"}, "confirm": {"type": "boolean"}}, required=["action"], risk="medium", permission="exec", description="Skill operations. find requires query; load/inspect require skill_name; MCP actions require provider_id and mcp_call also requires tool_name."),
     _entry("agent.review", _handle_agent_review, {**_COMMON, "review": _qa_review_schema()},
@@ -1120,7 +1138,7 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
             "delete": {"filepath": "workspace_path"},
         },
     }),
-    _entry("workspace.artifact", _handle_workspace_artifact, {**_COMMON, "action": {"type": "string", "enum": ["list", "read", "save", "tag", "delete"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "artifact_id": {"type": "string"}, "content": {"type": "string"}, "title": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}, "artifact_type": {"type": "string"}, "evidence_view": {"type": "string", "enum": ["current", "history", "deliverables"]}, "producer_id": {"type": "string"}, "asset_id": {"type": "string"}}, required=["action"], description="Workspace artifact operations. list may filter by query, evidence_view, producer_id, or asset_id."),
+    _entry("workspace.artifact", _handle_workspace_artifact, {**_COMMON, "action": {"type": "string", "enum": ["list", "read", "save", "tag", "delete"]}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}, "artifact_id": {"type": "string"}, "content": {"type": "string"}, "title": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}, "artifact_type": {"type": "string"}, "evidence_view": {"type": "string", "enum": ["current", "history", "deliverables"]}, "producer_id": {"type": "string"}, "asset_id": {"type": "string"}}, required=["action"], description="Saved workspace evidence records. list filters titles/types by query and may restrict evidence_view, producer_id or asset_id; read uses artifact_id; save stores content; tag adds tags; delete is recoverable. Use workspace.file for source paths and workspace.filestore for original bytes."),
     _entry("workspace.filestore", _handle_workspace_filestore, {**_COMMON,
         "action": {"type": "string", "enum": ["list", "resolve", "inspect", "render_page", "search", "reindex", "health", "migration_preview", "migrate", "export", "restore_bundle_preview", "restore_bundle", "reconcile_preview", "reconcile", "source_list", "source_move", "pack", "extract_archive", "materialize", "publish", "rename", "move", "restore", "delete", "references", "import", "reconcile_trash_preview", "reconcile_trash"]},
         "file_id": {"type": "string"}, "artifact_id": {"type": "string"},

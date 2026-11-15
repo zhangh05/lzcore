@@ -131,7 +131,6 @@ def _build_tool_description(tool: dict, metadata: dict, canonical_tool_id: str) 
     outputs = _format_referenceable_outputs(metadata)
     if outputs:
         parts.append(f"Referenceable result fields: {outputs}")
-    normalized_base = " ".join(base.split())
     normalized_rendered = " ".join(rendered_base.split())
     normalized_usage = " ".join(str(usage_hint or "").split())
     if usage_hint and normalized_usage not in normalized_rendered:
@@ -139,10 +138,10 @@ def _build_tool_description(tool: dict, metadata: dict, canonical_tool_id: str) 
             usage_remainder = normalized_usage[len(normalized_rendered):].lstrip(" .;,，；。")
             if usage_remainder:
                 parts.append(f"Additional guidance: {_soft_truncate(usage_remainder, 360)}")
-        elif normalized_usage[:160] != normalized_base[:160]:
+        else:
             parts.append(f"Use when: {_soft_truncate(str(usage_hint), 360)}")
     normalized_not_for = " ".join(str(not_for or "").split())
-    if not_for and normalized_not_for[:100] not in normalized_base:
+    if not_for and normalized_not_for not in normalized_rendered:
         rendered_not_for = _soft_truncate(str(not_for), 320)
         if normalized_not_for.lower().startswith(("do not ", "never ")):
             parts.append(rendered_not_for)
