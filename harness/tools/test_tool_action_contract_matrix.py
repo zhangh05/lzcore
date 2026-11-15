@@ -831,3 +831,13 @@ def test_text_and_diff_results_preserve_coverage_and_stop_expensive_regex(monkey
     diff = invoke("report.manage", {"action": "diff", "text_a": before, "text_b": after})
     assert diff["truncated"] is False and diff["lines_removed"] == diff["lines_added"] == 1
     assert "x" * 200 in diff["diff"] and "y" * 200 in diff["diff"]
+
+
+def test_session_snapshot_is_a_write_in_the_published_catalog():
+    """session_snapshot creates a snapshot; the catalog must not advertise it as a read."""
+    from core.tools.catalog_snapshot import build_catalog_snapshot
+
+    tool = next(t for t in build_catalog_snapshot()["tools"] if t["tool_id"] == "system.manage")
+    profile = next(p for p in tool["action_profiles"] if p["action"] == "session_snapshot")
+    assert profile["permission_action"] == "write"
+    assert profile["read_only"] is False
