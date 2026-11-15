@@ -275,7 +275,6 @@ def _handle_web(inv: ToolInvocation) -> dict:
         return fetch_and_extract(
             url=str(args.get("url") or ""),
             extract_mode=str(args.get("extract_mode") or "article"),
-            max_length=int(args.get("max_length") or 15000),
             timeout=int(args.get("timeout") or 15),
             workspace_id=str(args.get("workspace_id") or inv.workspace_id or "default"),
         )
@@ -296,7 +295,6 @@ def _handle_web(inv: ToolInvocation) -> dict:
             fetched = fetch_with_fallback(
                 str(item.get("url") or ""),
                 workspace_id=str(inv.workspace_id or "default"),
-                max_length=int(args.get("max_length") or 20000),
                 timeout=int(args.get("timeout") or 15),
             )
             pages.append({
@@ -936,8 +934,24 @@ _WEB_ARGS = {
     "max_results": {"type": "integer", "minimum": 1, "maximum": 30},
     "top_k": {"type": "integer", "minimum": 1, "maximum": _DEEP_SEARCH_MAX_PAGES},
     "extract_mode": {"type": "string", "enum": ["article", "full", "structured", "links"]},
-    "max_length": {"type": "integer", "minimum": 1}, "timeout": {"type": "integer", "minimum": 1},
+    "timeout": {"type": "integer", "minimum": 1},
 }
+
+# Arguments that older saved workflows or clients may still send but that no
+# handler reads.  They are absent from the published schema (so the model is
+# never invited to use them) and silently dropped before validation (so stored
+# calls keep running).  fetch/deep_search always return complete page text.
+RETIRED_ARGUMENTS: dict[str, frozenset[str]] = {
+    "web.manage": frozenset({"max_length"}),
+    "system.manage": frozenset({"status", "operation"}),
+}
+
+
+def drop_retired_arguments(tool_id: str, arguments: Any) -> Any:
+    retired = RETIRED_ARGUMENTS.get(str(tool_id or ""))
+    if not retired or not isinstance(arguments, dict) or not retired.intersection(arguments):
+        return arguments
+    return {key: value for key, value in arguments.items() if key not in retired}
 
 _DATA_ARGS = {
     "rows": {"type": "array", "description": "Input table rows; choose rows, text, or source_filepath per dataset. Prefer source_filepath for large existing files."},
@@ -977,7 +991,7 @@ _MEMORY_ARGS = {
     "memory_id": {"type": "string"}, "memory_type": {"type": "string"},
     "scope": {"type": "string", "enum": ["global", "workspace", "session", "task"]}, "field": {"type": "string"},
     "value": {}, "merge": {"type": "boolean"}, "session_id": {"type": "string"},
-    "tags": {"type": "array", "items": {"type": "string"}},
+    "tags": {"type": "array", "items": {"type": "string"}, "description": "Short topic labels for create/update; stored with the record (max 10, 32 chars each) and matched by search."},
 }
 
 _SYSTEM_ARGS = {
@@ -989,9 +1003,9 @@ _SYSTEM_ARGS = {
     "char_limit": {"type": "integer", "minimum": 1, "maximum": 32000},
     "run_id": {"type": "string"}, "session_id": {"type": "string"},
     "snapshot_id": {"type": "string"}, "log_level": {"type": "string"},
-    "operation": {"type": "string"}, "reason": {"type": "string"},
+    "reason": {"type": "string"},
     "format": {"type": "string", "enum": ["json", "markdown"]},
-    "dry_run": {"type": "boolean"}, "status": {"type": "string"},
+    "dry_run": {"type": "boolean"},
 }
 
 _WORKSPACE_FILE_ARGS = {
