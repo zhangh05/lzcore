@@ -101,7 +101,7 @@ def _match_file(ws_dir: Path, spec: dict) -> tuple[bool, str]:
         return False, f"没有找到 {spec['glob']}"
     for path in candidates:
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = _norm(path.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             continue
         if all(re.search(r, text, re.I) for r in spec.get("contains", [])) and \
@@ -110,10 +110,26 @@ def _match_file(ws_dir: Path, spec: dict) -> tuple[bool, str]:
     return False, f"{spec['glob']} 内容不符合（找到 {len(candidates)} 个候选）"
 
 
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+_LATIN = re.compile(r"[A-Za-z]")
+
+
+def _language_drift(prompt: str, answer: str) -> bool:
+    """中文提问却用英文回复。去掉代码、路径和链接后，中文字数远少于英文字母数。"""
+    if not _CJK.search(prompt):
+        return False
+    prose = re.sub(r"```.*?```|`[^`]*`|https?://\S+|[\w./-]+\.[A-Za-z]{2,4}\b", " ", answer, flags=re.S)
+    cjk, latin = len(_CJK.findall(prose)), len(_LATIN.findall(prose))
+    return latin > 40 and cjk * 4 < latin
+
+
 def grade(task: dict, answer: str, tool_ids: list[str], ws_dir: Path) -> list[str]:
     checks = task.get("checks") or {}
     text = _norm(answer)
     fails: list[str] = []
+    prompt = (task.get("turns") or [{}])[-1].get("say", "")
+    if not checks.get("allow_english") and _language_drift(prompt, answer):
+        fails.append("中文提问却用英文回复")
     for pattern in checks.get("answer", []):
         if not re.search(pattern, text, re.I):
             fails.append(f"回复缺少 /{pattern}/")
@@ -180,7 +196,7 @@ def _turn_record(resp: dict, seconds: float) -> dict:
     }
 
 
-def run_task(svc: Service, task: dict, provider: str, stamp: str, keep: bool) -> dict:
+def run_task(svc: Service, task: dict, provider: str, stamp: str) -> dict:
     ws_id = f"ev{stamp}-{task['id']}"[:64]
     svc.create_workspace(ws_id)
     ws_dir = svc.workspace_dir(ws_id)
@@ -188,24 +204,20 @@ def run_task(svc: Service, task: dict, provider: str, stamp: str, keep: bool) ->
     turns: list[dict] = []
     session_id = None
     started = time.time()
-    try:
-        for turn in task["turns"]:
-            if turn.get("session") == "new":
-                session_id = None
-            t0 = time.time()
-            resp = svc.send(ws_id, turn["say"], provider, session_id)
-            rec = _turn_record(resp, time.time() - t0)
-            turns.append(rec)
-            session_id = resp.get("session_id") or session_id
-        answer = turns[-1]["answer"] if turns else ""
-        tool_ids = [t["id"] for rec in turns for t in rec["tools"]]
-        fails = grade(task, answer, tool_ids, ws_dir)
-        if any(rec["http"] and rec["http"] >= 400 for rec in turns):
-            fails.insert(0, "请求失败：" + "；".join(f"HTTP {r['http']} {r['errors']}" for r in turns if r["http"] >= 400))
-        usage = _usage(ws_dir)
-    finally:
-        if not keep:
-            svc.delete_workspace(ws_id)
+    for turn in task["turns"]:
+        if turn.get("session") == "new":
+            session_id = None
+        t0 = time.time()
+        resp = svc.send(ws_id, turn["say"], provider, session_id)
+        rec = _turn_record(resp, time.time() - t0)
+        turns.append(rec)
+        session_id = resp.get("session_id") or session_id
+    answer = turns[-1]["answer"] if turns else ""
+    tool_ids = [t["id"] for rec in turns for t in rec["tools"]]
+    fails = grade(task, answer, tool_ids, ws_dir)
+    if any(rec["http"] and rec["http"] >= 400 for rec in turns):
+        fails.insert(0, "请求失败：" + "；".join(f"HTTP {r['http']} {r['errors']}" for r in turns if r["http"] >= 400))
+    usage = _usage(ws_dir)
     return {
         "id": task["id"],
         "category": task.get("category", ""),
@@ -217,8 +229,25 @@ def run_task(svc: Service, task: dict, provider: str, stamp: str, keep: bool) ->
         "tool_errors": sum(1 for r in turns for t in r["tools"] if not t["ok"]),
         "usage": usage,
         "turns": turns,
-        "workspace": ws_id if keep else None,
+        "workspace": ws_id,
     }
+
+
+def cleanup(svc: Service, stamp: str) -> None:
+    """统一在最后删除临时工作区。
+
+    回合结束后，会话反思等后台任务还会异步写入工作区，逐个任务立即删除会被它们重新建出目录。
+    所以等一会儿再删，删完再清扫一次本地残留（只清本次运行的 ev<stamp>- 前缀）。
+    """
+    time.sleep(20)
+    prefix = f"ev{stamp}-"
+    root = svc.root / "workspaces"
+    for path in sorted(root.glob(prefix + "*")):
+        svc.delete_workspace(path.name)
+    time.sleep(5)
+    for path in root.glob(prefix + "*"):
+        if path.is_dir() and path.name.startswith(prefix):
+            shutil.rmtree(path, ignore_errors=True)
 
 
 # ── 报告 ────────────────────────────────────────────────
@@ -341,7 +370,7 @@ def main() -> int:
     with (out / "results.jsonl").open("w", encoding="utf-8") as fh:
         for i, task in enumerate(tasks, 1):
             try:
-                res = run_task(svc, task, args.provider, stamp, args.keep)
+                res = run_task(svc, task, args.provider, stamp)
             except Exception as exc:  # 单个任务出错不影响其余任务
                 res = {"id": task["id"], "category": task.get("category", ""), "provider": args.provider,
                        "passed": False, "fails": [f"运行出错：{type(exc).__name__}: {exc}"], "seconds": 0,
@@ -352,6 +381,8 @@ def main() -> int:
             mark = "PASS" if res["passed"] else "FAIL"
             print(f"[{i}/{len(tasks)}] {mark} {task['id']} ({res['seconds']:.0f}s, {res['tool_calls']} tools)"
                   + ("" if res["passed"] else f"  {'; '.join(res['fails'])[:200]}"), flush=True)
+    if not args.keep:
+        cleanup(svc, stamp)
     write_report(results, out, args.provider)
     passed = sum(r["passed"] for r in results)
     print(f"\n通过 {passed}/{len(results)}，报告：{out / 'report.md'}")
