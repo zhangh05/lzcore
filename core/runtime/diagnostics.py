@@ -46,10 +46,10 @@ def get_diagnostics(workspace_id: str = "default") -> DiagnosticReport:
     # 1. Workspace
     if exists:
         components.append(ComponentStatus("workspace", "ok",
-            f"Workspace '{workspace_id}' exists"))
+            f"工作区「{workspace_id}」可用"))
     else:
         components.append(ComponentStatus("workspace", "error",
-            f"Workspace '{workspace_id}' not found"))
+            f"找不到工作区「{workspace_id}」"))
 
     # 2. Canonical capability and tool sources
     try:
@@ -57,29 +57,29 @@ def get_diagnostics(workspace_id: str = "default") -> DiagnosticReport:
         from core.tools.integration import get_default_tool_runtime_client
         tool_count = get_default_tool_runtime_client().tool_count
         components.append(ComponentStatus("capabilities", "ok",
-            f"{len(list_enabled())} capabilities, {tool_count} tools",
+            f"已启用 {len(list_enabled())} 项能力，共 {tool_count} 个工具",
             {"capability_count": len(list_all()), "tool_count": tool_count}))
     except Exception as e:
-        components.append(ComponentStatus("capabilities", "error", f"Catalog failed: {str(e)[:100]}"))
+        components.append(ComponentStatus("capabilities", "error", f"能力目录读取失败：{str(e)[:100]}"))
 
     # 3. Run stats
     try:
         counts = workspace_counts(workspace_id) if exists else {"runs": 0, "artifacts": 0, "jobs": 0}
-        components.append(ComponentStatus("runs", "ok", f"{counts['runs']} run records",
+        components.append(ComponentStatus("runs", "ok", f"共 {counts['runs']} 条运行记录",
             {"count": counts["runs"]}))
-        components.append(ComponentStatus("artifacts", "ok", f"{counts['artifacts']} artifacts",
+        components.append(ComponentStatus("artifacts", "ok", f"共 {counts['artifacts']} 个产出文件",
             {"count": counts["artifacts"]}))
-        components.append(ComponentStatus("jobs", "ok", f"{counts['jobs']} jobs",
+        components.append(ComponentStatus("jobs", "ok", f"共 {counts['jobs']} 个后台作业",
             {"count": counts["jobs"]}))
     except Exception:
-        components.append(ComponentStatus("storage_counts", "warning", "Cannot read storage counts"))
+        components.append(ComponentStatus("storage_counts", "warning", "无法读取存储统计"))
 
     # 6. Agent runtime
     try:
         from agent.runtime_status import get_runtime_status
         agent_status = get_runtime_status(probe_llm=False)
         components.append(ComponentStatus("agent", "ok",
-            f"Runtime: {agent_status.get('runtime_engine', '?')}",
+            f"运行时：{agent_status.get('runtime_engine', '未上报')}",
             {"runtime_mode": agent_status.get("runtime_engine", "")}))
     except Exception as e:
         components.append(ComponentStatus("agent", "error", str(e)[:100]))
@@ -90,7 +90,7 @@ def get_diagnostics(workspace_id: str = "default") -> DiagnosticReport:
         client = get_default_tool_runtime_client()
         tools = client.list_tools()
         components.append(ComponentStatus("tool_runtime", "ok",
-            f"{len(tools)} tools registered",
+            f"已注册 {len(tools)} 个工具",
             {"tool_count": len(tools), "tools": [t["tool_id"] for t in tools]}))
     except Exception as e:
         components.append(ComponentStatus("tool_runtime", "warning", str(e)[:100]))
@@ -100,7 +100,7 @@ def get_diagnostics(workspace_id: str = "default") -> DiagnosticReport:
         from agent.llm.runtime import get_llm_status
         llm = get_llm_status(probe_provider=False)
         components.append(ComponentStatus("llm", "ok",
-            f"Enabled: {llm.get('enabled')}, Provider: {llm.get('provider', 'disabled')}",
+            (f"已启用，默认服务：{llm.get('provider') or '未设置'}" if llm.get("enabled") else "模型未启用"),
             {"enabled": llm.get("enabled"), "provider": llm.get("provider", "disabled"),
              "safe_mode": llm.get("safe_mode", True)}))
     except Exception as e:
@@ -111,16 +111,16 @@ def get_diagnostics(workspace_id: str = "default") -> DiagnosticReport:
         from core.runtime.archive import get_archive_audits
         audits = get_archive_audits(workspace_id)
         components.append(ComponentStatus("archive", "ok",
-            f"{len(audits)} archive audits",
+            f"共 {len(audits)} 条归档审计",
             {"audit_count": len(audits)}))
     except Exception as e:
         components.append(ComponentStatus("archive", "warning", str(e)[:100]))
 
     # 10. Memory
     try:
-        components.append(ComponentStatus("memory", "ok", "Memory system available"))
+        components.append(ComponentStatus("memory", "ok", "记忆系统可用"))
     except Exception:
-        components.append(ComponentStatus("memory", "warning", "Memory status unavailable"))
+        components.append(ComponentStatus("memory", "warning", "记忆状态不可读"))
 
     # 11. Production dependencies
     try:

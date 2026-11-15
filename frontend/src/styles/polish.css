@@ -87,6 +87,7 @@
   /* Toolbars: filters on the left, the page's action on the right. */
   .row-actions > .grow { flex: 1 1 auto; }
   .page-toolbar > form.row-actions { margin: 0; }
+  .wb-meta-text.tone-danger { color: var(--danger); }
   /* Session list: group titles as quiet captions. */
   .session-group-title { color: var(--text-3); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .02em; }
 
