@@ -71,7 +71,7 @@ export function groupSessionsByDay(list: SessionSummary[], now = new Date()): { 
   for (const s of sorted) {
     const raw = s.updated_at ?? s.created_at;
     const d = raw ? new Date(raw) : null;
-    const key = !d || Number.isNaN(d.getTime()) ? "更早" : day(d) === today ? "今天" : day(d) === yesterday ? "昨天" : d.toLocaleDateString("zh-CN");
+    const key = !d || Number.isNaN(d.getTime()) ? "更早" : day(d) === today ? "今天" : day(d) === yesterday ? "昨天" : d.getFullYear() === now.getFullYear() ? `${d.getMonth() + 1}月${d.getDate()}日` : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
     groups.set(key, [...(groups.get(key) ?? []), s]);
   }
   return [...groups.entries()].map(([label, items]) => ({ label, items }));

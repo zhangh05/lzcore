@@ -76,7 +76,7 @@ function FilesView({ ws }: { ws: string }) {
                 { key: "name", label: "名称", render: fileName, sortValue: fileName },
                 { key: "folder", label: "文件夹", render: (f) => fileFolder(f) || "—", sortValue: fileFolder },
                 { key: "type", label: "类型", render: (f) => fileType(f) ?? "—" },
-                { key: "size", label: "大小", render: (f) => (typeof f.size_bytes === "number" ? `${Math.ceil(f.size_bytes / 1024)} KB` : "—"), sortValue: (f) => f.size_bytes ?? 0 },
+                { key: "size", label: "大小", className: "num", render: (f) => (typeof f.size_bytes === "number" ? `${Math.ceil(f.size_bytes / 1024)} KB` : "—"), sortValue: (f) => f.size_bytes ?? 0 },
                 { key: "time", label: "创建", className: "is-time", render: (f) => fmtTime(f.created_at), sortValue: (f) => f.created_at ?? "" },
               ]} /><LoadMore paged={filesPage} testId="files-load-more" /></>
           )}</LoadState>
@@ -240,15 +240,16 @@ function KnowledgeView({ ws }: { ws: string }) {
   };
   return (
     <>
-      <div className="row-actions">
-        <label className="btn">上传到知识库<input type="file" hidden onChange={async (e) => {
-          const f = e.target.files?.[0]; if (!f) return;
-          setNotice({ label: "上传", o: await uploadMultipart("/api/knowledge/upload", { workspace_id: ws }, f) }); reload(); e.target.value = "";
-        }} /></label>
+      <div className="row-actions page-toolbar">
         <form className="row-actions" onSubmit={async (e) => { e.preventDefault(); setSearched(q.trim()); setHits(await api.get("/api/knowledge/search", { workspace_id: ws, q: q.trim() })); }}>
           <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="检索知识" aria-label="检索知识" />
           <Button type="submit" disabled={!q.trim()}>检索</Button>
         </form>
+        <span className="grow" />
+        <label className="btn primary">上传到知识库<input type="file" hidden onChange={async (e) => {
+          const f = e.target.files?.[0]; if (!f) return;
+          setNotice({ label: "上传", o: await uploadMultipart("/api/knowledge/upload", { workspace_id: ws }, f) }); reload(); e.target.value = "";
+        }} /></label>
       </div>
       {notice ? (notice.o.kind === "http" && notice.o.status < 300 ? <ReceiptNote text={`${notice.label}已提交`} /> : <FailureNote outcome={notice.o} />) : null}
       {hits ? (hits.kind === "http" && hits.status === 200 ? (
@@ -366,19 +367,21 @@ function MemoryView({ ws }: { ws: string }) {
   const blocked = writeState.kind === "unknown" || writeState.kind === "writing";
   return (
     <>
-      <form className="card" onSubmit={async (e) => {
+      <details className="card compose-card" data-testid="memory-compose">
+      <summary>新增记忆<span className="muted">写下需要助手长期记住的事实或偏好</span></summary>
+      <form onSubmit={async (e) => {
         e.preventDefault();
         setWriteState({ kind: "writing" });
         setWriteState(await writeMemory(ws, { memory_id: stableMemoryId(draftKey), title: draft.title, content: draft.content, user_confirmed: !pendingReview }));
         reload();
       }}>
-        <h3>新增记忆</h3>
         <label className="field"><span>标题</span><input data-testid="memory-title" value={draft.title} onChange={(e) => { setDraft({ ...draft, title: e.target.value }); setWriteState({ kind: "idle" }); }} /></label>
         <label className="field"><span>内容</span><textarea data-testid="memory-content" value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={3} /></label>
         <label className="check"><input type="checkbox" checked={pendingReview} onChange={(e) => setPendingReview(e.target.checked)} data-testid="memory-pending-toggle" /> 先放入待确认（不立即生效，稍后在详情里确认或驳回）</label>
         <Button type="submit" variant="primary" disabled={blocked || !draft.content.trim()} data-testid="memory-save">保存</Button>
         <MemoryWriteView ws={ws} state={writeState} onState={setWriteState} />
       </form>
+      </details>
       {notice ? (notice.o.kind === "http" && notice.o.status < 300 ? <ReceiptNote text={`${notice.label}已提交`} /> : <FailureNote outcome={notice.o} />) : null}
       {sel.size ? <Button variant="danger" onClick={() => setBatch(true)} data-testid="memory-batch-delete">删除所选（{sel.size}）</Button> : null}
       <LoadState value={list} onReload={reload}>{() => (

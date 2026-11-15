@@ -308,10 +308,23 @@ export function JsonBlock({ value }: { value: unknown }) {
   return <pre className="json-block">{JSON.stringify(value, null, 2)}</pre>;
 }
 
-export function fmtTime(v?: unknown): string {
+/** 日期标签：今天 / 昨天 / 11月12日；跨年时带年份。 */
+export function fmtDay(d: Date, now = new Date()): string {
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(now) - start(d)) / 86_400_000);
+  if (diff === 0) return "今天";
+  if (diff === 1) return "昨天";
+  const md = `${d.getMonth() + 1}月${d.getDate()}日`;
+  return d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}年${md}`;
+}
+
+/** 时间：「今天 14:05」「11月10日 03:53」「2025年3月2日 09:00」——不显示秒，读起来像日历而不是日志。 */
+export function fmtTime(v?: unknown, now = new Date()): string {
   if (!v || typeof v !== "string") return "—";
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? v : d.toLocaleString("zh-CN", { hour12: false });
+  if (Number.isNaN(d.getTime())) return v;
+  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return `${fmtDay(d, now)} ${hm}`;
 }
 
 // ── 产品化数据呈现（系统 / 用量等页）：状态、指标、条目在前；完整原始数据折叠在后。 ──

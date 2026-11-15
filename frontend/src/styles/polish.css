@@ -57,6 +57,39 @@
   .live-dot.tone-warn { background: var(--warn); } .live-dot.tone-info { background: var(--accent); }
   .live-dot.is-live { background: var(--accent); animation: lz-pulse 1.6s var(--ease) infinite; }
 
+  /* ── Typography & restraint ─────────────────────────────────────────
+     One accent, used for action. Content reads in ink; colour is for state. */
+  .page-subtitle { color: var(--text-3); }
+  .page-header { margin-bottom: var(--space-5); }
+  .page h3:not([class]) { margin: var(--space-6) 0 var(--space-2); font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+  /* Row titles that open a detail read as ink, not as a column of links. */
+  .table td :is(.link-button, a:not(.btn)) { color: var(--text); font-weight: 500; text-decoration: none; }
+  .table tr:hover td :is(.link-button, a:not(.btn)), .table td :is(.link-button, a:not(.btn)):focus-visible { color: var(--accent); }
+  .table td code { color: var(--text-3); }
+  /* Six system metrics fit one row instead of five-and-an-orphan. */
+  .metric-grid { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+  .metric { border-radius: 10px; border-color: color-mix(in oklab, var(--line) 60%, transparent); box-shadow: var(--shadow-resting); }
+  .metric-label { color: var(--text-3); }
+  /* Empty states: icon in a soft tile, title, one line, then the action. */
+  .empty-state { gap: var(--space-2); }
+  .empty-state-icon.is-soft { width: 44px; height: 44px; margin-bottom: var(--space-1); border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+  .empty-state-icon.is-soft svg { width: 22px; height: 22px; }
+  .empty-state-title { font-size: var(--fs-16); line-height: 24px; }
+  /* Collapsible composer cards (new memory, …): a quiet row until opened. */
+  .compose-card { padding: 0; }
+  .compose-card > summary { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-3) var(--space-4); cursor: pointer; font-weight: 600; list-style: none; }
+  .compose-card > summary::-webkit-details-marker { display: none; }
+  .compose-card > summary::before { content: "+"; display: inline-grid; place-items: center; align-self: center; width: 18px; height: 18px; margin: 0; border: 0; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-weight: 600; line-height: 1; transform: none; transition: transform var(--dur-2) var(--ease); }
+  .compose-card[open] > summary::before { transform: rotate(45deg); }
+  .compose-card > summary .muted { font-size: var(--fs-xs); font-weight: 400; }
+  .compose-card > form { display: flex; flex-direction: column; gap: var(--space-2); padding: 0 var(--space-4) var(--space-4); }
+  .compose-card > form > .btn, .compose-card > form > button { align-self: flex-start; }
+  /* Toolbars: filters on the left, the page's action on the right. */
+  .row-actions > .grow { flex: 1 1 auto; }
+  .page-toolbar > form.row-actions { margin: 0; }
+  /* Session list: group titles as quiet captions. */
+  .session-group-title { color: var(--text-3); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .02em; }
+
   /* ── Tasks: overview strip ─────────────────────────────────────────── */
   .tasks-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-5); }
   .tasks-overview > article { border-radius: 12px; border-color: color-mix(in oklab, var(--line) 60%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 4%, var(--surface)) 0%, var(--surface) 70%); }
