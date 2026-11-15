@@ -437,12 +437,24 @@ def _update_workspace_catalog(ws_id: str, patch: dict) -> None:
         atomic_write_json(path, state)
 
 
+_RESERVED_ROOT_NAMES = frozenset({"catalog", "users"})
+
+
 def _user_workspace_paths(ws_id: str) -> list[Path]:
-    """Return every user-owned data directory for a logical workspace."""
-    users_root = get_workspace_root() / "users"
-    if not users_root.is_dir():
-        return []
+    """Return every data directory for a logical workspace.
+
+    Besides each user's root, include the principal-less root
+    (``<workspace root>/<ws_id>``) that local single-user mode writes to;
+    otherwise deleting a workspace leaves all of its data behind.
+    """
+    root = get_workspace_root()
     paths: list[Path] = []
+    unowned = root / ws_id
+    if ws_id not in _RESERVED_ROOT_NAMES and unowned.is_dir():
+        paths.append(unowned)
+    users_root = root / "users"
+    if not users_root.is_dir():
+        return paths
     for user_root in users_root.iterdir():
         candidate = user_root / "workspaces" / ws_id
         if candidate.is_dir():
