@@ -11,7 +11,7 @@ eval_run = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(eval_run)
 
 TASKS = yaml.safe_load((ROOT / "evals" / "tasks.yaml").read_text(encoding="utf-8"))["tasks"]
-CHECK_KEYS = {"answer", "answer_not", "files", "files_mode", "tools_any", "no_tools"}
+CHECK_KEYS = {"answer", "answer_not", "files", "files_mode", "tools_any", "no_tools", "allow_english"}
 
 
 def test_task_ids_are_unique_and_valid_workspace_suffixes():
@@ -57,3 +57,18 @@ def test_grade_answer_files_and_tools(tmp_path):
     assert eval_run.grade({"checks": {"no_tools": True}}, "391", ["exec.run"], tmp_path)
     missing = eval_run.grade({"checks": {"files": [{"glob": "**/x.md"}]}}, "", [], tmp_path)
     assert missing and "没有找到" in missing[0]
+
+
+def test_language_drift_flags_english_reply_to_chinese_prompt(tmp_path):
+    task = {"turns": [{"say": "帮我总结 budget.xlsx"}], "checks": {}}
+    english = "I've searched thoroughly, and the file isn't in this workspace. It does not exist here."
+    assert eval_run.grade(task, english, [], tmp_path) == ["中文提问却用英文回复"]
+    chinese = "没有找到 `files/data/budget_2027.xlsx`，工作区里也没有任何 .xlsx 文件，请确认文件名。"
+    assert eval_run.grade(task, chinese, [], tmp_path) == []
+
+
+def test_file_checks_ignore_thousands_separators(tmp_path):
+    (tmp_path / "files" / "data").mkdir(parents=True)
+    (tmp_path / "files" / "data" / "r.md").write_text("总销售额 ¥1,497.00", encoding="utf-8")
+    task = {"checks": {"files": [{"glob": "**/*.md", "contains": ["1497"]}]}}
+    assert eval_run.grade(task, "", [], tmp_path) == []
