@@ -11,7 +11,7 @@ import type { HttpOutcome } from "../../contracts/auth";
 import { AdvancedJsonPanel, Field, FormError, ModeToggle, useAdvancedJson, type FieldErrors } from "../../kit/form";
 import { listOf, useApi } from "../../kit/useApi";
 import { Dialog, FailureNote } from "../../kit/ui";
-import { SchemaFields, schemaProblem, schemaUsable, type JsonSchema } from "../../kit/SchemaFields";
+import { SchemaFields, schemaProblem, schemaUsable, toolLabel, type JsonSchema } from "../../kit/SchemaFields";
 
 export interface WfNode { node_id: string; name?: string; tool_id: string; arguments?: Record<string, unknown>; depends_on?: string[]; when?: unknown }
 export interface WorkflowDef { workflow_id: string; name?: string; description?: string; status?: string; version?: number; nodes?: WfNode[]; execution_layers?: string[][]; updated_at?: string; template_id?: string }
@@ -51,7 +51,7 @@ export function validateWorkflow(d: Draft, tools: Set<string>, schemas: Map<stri
     try {
       const v = JSON.parse(n.args || "{}");
       if (!v || typeof v !== "object" || Array.isArray(v)) e.args = "参数必须是 JSON 对象 {…}";
-      else { const problem = schemaProblem(schemas.get(n.tool_id), v); if (problem) e.args = problem; }
+      else { const problem = schemaProblem(schemas.get(n.tool_id), v, n.tool_id); if (problem) e.args = problem; }
     } catch { e.args = "参数不是合法 JSON"; }
     if (n.depends_on.includes(n.node_id)) e.depends_on = "不能依赖自己";
     if (Object.keys(e).length) nodeErrors[i] = e;
@@ -148,7 +148,7 @@ export function WorkflowFormDialog({ ws, workflow, onClose, onSaved }: { ws: str
                     <div className="form-grid">
                       <Field label="节点 id" required error={ne.node_id}>{(b) => <input {...b} value={n.node_id} onChange={(e) => setNode(i, { node_id: e.target.value })} data-testid="wf-node-id" />}</Field>
                       <Field label="显示名">{(b) => <input {...b} value={n.name} onChange={(e) => setNode(i, { name: e.target.value })} />}</Field>
-                      <Field full label="工具" required error={ne.tool_id}>{(b) => <select {...b} value={n.tool_id} onChange={(e) => setNode(i, { tool_id: e.target.value, args: keepArgsFor(n.args, schemas.get(e.target.value)) })} data-testid="wf-node-tool"><option value="">选择工具</option>{tools.map((t) => <option key={t.tool_id} value={t.tool_id}>{t.display_name ? `${t.display_name}（${t.tool_id}）` : t.tool_id}</option>)}</select>}</Field>
+                      <Field full label="工具" required error={ne.tool_id}>{(b) => <select {...b} value={n.tool_id} onChange={(e) => setNode(i, { tool_id: e.target.value, args: keepArgsFor(n.args, schemas.get(e.target.value)) })} data-testid="wf-node-tool"><option value="">选择工具</option>{tools.map((t) => <option key={t.tool_id} value={t.tool_id}>{toolLabel(t.tool_id, t.display_name)}</option>)}</select>}</Field>
                       <Field full label="依赖（先执行）" error={ne.depends_on}>{(b) => (
                         <div className="form-checks" id={b.id}>{d.nodes.filter((_, j) => j !== i).map((o) => o.node_id).filter(Boolean).map((id) => <label key={id}><input type="checkbox" checked={n.depends_on.includes(id)} onChange={(e) => setNode(i, { depends_on: e.target.checked ? [...n.depends_on, id] : n.depends_on.filter((x) => x !== id) })} /> {id}</label>)}{d.nodes.length < 2 ? <span className="muted">无其他节点</span> : null}</div>
                       )}</Field>
@@ -165,7 +165,7 @@ export function WorkflowFormDialog({ ws, workflow, onClose, onSaved }: { ws: str
                         return asForm ? (
                           <div className="form-field is-full">
                             <div className="wf-args-head"><span>参数</span>{toggle}</div>
-                            <SchemaFields schema={schema!} value={obj!} onChange={(v) => setNode(i, { args: JSON.stringify(v, null, 2) })} testId="wf-node-params" />
+                            <SchemaFields toolId={n.tool_id} schema={schema!} value={obj!} onChange={(v) => setNode(i, { args: JSON.stringify(v, null, 2) })} testId="wf-node-params" />
                             {ne.args ? <p className="form-error" role="alert" data-testid="field-error">{ne.args}</p> : null}
                           </div>
                         ) : (

@@ -6,6 +6,7 @@
  * 值为空即不写入（不往请求里塞空字符串）；schema 之外已有的键原样保留。
  */
 import { useId, useState } from "react";
+import docs from "./toolParamDocs.zh.json";
 
 export interface JsonSchema {
   type?: string | string[];
@@ -23,16 +24,21 @@ export interface JsonSchema {
 
 const HIDDEN = new Set(["workspace_id"]);
 
-/** 常见参数名的中文标签；没收录的显示原名。 */
-const LABELS: Record<string, string> = {
-  action: "操作", query: "搜索内容", url: "网址", path: "路径", filepath: "文件路径", content: "内容", text: "文本", title: "标题",
-  name: "名称", description: "说明", command: "命令", cwd: "工作目录", timeout: "超时（秒）", max_results: "最多结果数", top_k: "取前几条",
-  location: "地点", locations: "地点列表", days: "天数", language: "语言", domains: "限定域名", allowed_domains: "允许的域名", blocked_domains: "排除的域名",
-  depth: "深度", source: "来源", recency: "时间范围", site: "站点", vendor: "厂商", units: "单位", seconds: "秒数", review: "检查内容",
-  memory_id: "记忆 ID", tags: "标签", scope: "范围", format: "格式", limit: "数量上限", offset: "起始位置", device_id: "设备", device_ids: "设备",
-  summary: "摘要", authority_profile: "来源类型", extract_mode: "提取方式", latitude: "纬度", longitude: "经度", safe_search: "安全搜索", max_length: "最大长度", file_id: "文件", filename: "文件名", encoding: "编码", pattern: "匹配规则", mode: "模式", id: "ID", key: "键", value: "值",
+/**
+ * 中文名称、说明与选项来自 toolParamDocs.zh.json。后端 schema 的英文 description 是写给模型的，界面不显示；
+ * 没有中文说明的参数就不显示说明，未收录的名称 / 选项原样显示。
+ */
+type ParamDoc = { label?: string; hint?: string };
+type ToolDoc = { label?: string; params?: Record<string, ParamDoc>; options?: Record<string, Record<string, string>> };
+const DOCS = docs as unknown as { labels: Record<string, string>; tools: Record<string, ToolDoc> };
+export const paramLabel = (k: string, toolId?: string) => (toolId && DOCS.tools[toolId]?.params?.[k]?.label) || DOCS.labels[k] || k;
+export const paramHint = (k: string, toolId?: string) => (toolId && DOCS.tools[toolId]?.params?.[k]?.hint) || "";
+export const optionLabel = (k: string, v: unknown, toolId?: string) => (toolId && DOCS.tools[toolId]?.options?.[k]?.[String(v)]) || String(v);
+/** 工具下拉里的名字：中文名为主，原 id 放括号里便于对照。 */
+export const toolLabel = (toolId: string, displayName?: string) => {
+  const zh = DOCS.tools[toolId]?.label || displayName;
+  return zh ? `${zh}（${toolId}）` : toolId;
 };
-export const paramLabel = (k: string) => LABELS[k] ?? k;
 
 type Kind = "enum" | "bool" | "number" | "string" | "lines" | "json";
 function kindOf(s: JsonSchema): Kind {
@@ -49,14 +55,14 @@ function kindOf(s: JsonSchema): Kind {
 const isEmpty = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
 
 /** 按 schema 校验当前值，返回第一处问题（中文）；没问题返回 null。 */
-export function schemaProblem(schema: JsonSchema | undefined, value: Record<string, unknown>): string | null {
+export function schemaProblem(schema: JsonSchema | undefined, value: Record<string, unknown>, toolId?: string): string | null {
   if (!schema?.properties) return null;
-  for (const k of schema.required ?? []) if (isEmpty(value[k])) return `请填写「${paramLabel(k)}」`;
+  for (const k of schema.required ?? []) if (isEmpty(value[k])) return `请填写「${paramLabel(k, toolId)}」`;
   for (const [k, s] of Object.entries(schema.properties)) {
     const v = value[k];
     if (isEmpty(v) || typeof v !== "number") continue;
-    if (s.minimum !== undefined && v < s.minimum) return `「${paramLabel(k)}」不能小于 ${s.minimum}`;
-    if (s.maximum !== undefined && v > s.maximum) return `「${paramLabel(k)}」不能大于 ${s.maximum}`;
+    if (s.minimum !== undefined && v < s.minimum) return `「${paramLabel(k, toolId)}」不能小于 ${s.minimum}`;
+    if (s.maximum !== undefined && v > s.maximum) return `「${paramLabel(k, toolId)}」不能大于 ${s.maximum}`;
   }
   return null;
 }
@@ -80,10 +86,10 @@ function JsonCell({ id, value, onChange }: { id: string; value: unknown; onChang
   );
 }
 
-function ParamField({ name, schema, value, required, onChange }: { name: string; schema: JsonSchema; value: unknown; required: boolean; onChange: (v: unknown) => void }) {
+function ParamField({ name, schema, value, required, onChange, toolId }: { name: string; schema: JsonSchema; value: unknown; required: boolean; onChange: (v: unknown) => void; toolId?: string }) {
   const id = useId();
   const kind = kindOf(schema);
-  const label = paramLabel(name);
+  const label = paramLabel(name, toolId);
   const ref = typeof value === "string" && /\$\{[^}]+\}/.test(value);
   let control;
   if (kind === "enum" && !ref) {
@@ -92,7 +98,7 @@ function ParamField({ name, schema, value, required, onChange }: { name: string;
         const raw = e.target.value; const hit = schema.enum!.find((x) => String(x) === raw); onChange(raw === "" ? undefined : hit);
       }} data-param={name}>
         <option value="">{required ? "请选择" : "不填（用默认）"}</option>
-        {schema.enum!.map((o) => <option key={String(o)} value={String(o)}>{String(o)}</option>)}
+        {schema.enum!.map((o) => <option key={String(o)} value={String(o)}>{optionLabel(name, o, toolId)}</option>)}
       </select>
     );
   } else if (kind === "bool" && !ref) {
@@ -113,8 +119,8 @@ function ParamField({ name, schema, value, required, onChange }: { name: string;
   } else {
     control = <input id={id} value={value === undefined || value === null ? "" : String(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} data-param={name} />;
   }
-  const range = schema.minimum !== undefined || schema.maximum !== undefined ? `范围 ${schema.minimum ?? "…"} – ${schema.maximum ?? "…"}` : "";
-  const hint = [schema.description, range, kind === "json" ? "这一项结构较复杂，用 JSON 填写。" : ""].filter(Boolean).join(" ");
+  const range = schema.minimum !== undefined || schema.maximum !== undefined ? `范围 ${schema.minimum ?? "…"} – ${schema.maximum ?? "…"}。` : "";
+  const hint = [paramHint(name, toolId), range, kind === "json" ? "这一项结构较复杂，用 JSON 填写。" : ""].filter(Boolean).join(" ");
   return (
     <div className="form-field schema-field">
       <label htmlFor={id}>{label}{label !== name ? <span className="schema-key">{name}</span> : null}{required ? <span className="req" aria-hidden="true"> *</span> : null}</label>
@@ -124,7 +130,7 @@ function ParamField({ name, schema, value, required, onChange }: { name: string;
   );
 }
 
-export function SchemaFields({ schema, value, onChange, testId }: { schema: JsonSchema; value: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void; testId?: string }) {
+export function SchemaFields({ schema, value, onChange, testId, toolId }: { schema: JsonSchema; value: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void; testId?: string; toolId?: string }) {
   const props = Object.entries(schema.properties ?? {}).filter(([k]) => !HIDDEN.has(k));
   const required = new Set(schema.required ?? []);
   const primary = props.filter(([k]) => required.has(k) || k === "action" || !isEmpty(value[k]));
@@ -134,7 +140,7 @@ export function SchemaFields({ schema, value, onChange, testId }: { schema: Json
     if (isEmpty(v)) delete next[k]; else next[k] = v;
     onChange(next);
   };
-  const field = ([k, s]: [string, JsonSchema]) => <ParamField key={k} name={k} schema={s} value={value[k]} required={required.has(k)} onChange={(v) => set(k, v)} />;
+  const field = ([k, s]: [string, JsonSchema]) => <ParamField key={k} name={k} schema={s} value={value[k]} required={required.has(k)} onChange={(v) => set(k, v)} toolId={toolId} />;
   return (
     <div className="schema-fields" data-testid={testId}>
       {primary.length ? <div className="schema-grid">{primary.map(field)}</div> : <p className="muted">这个工具没有必填参数。</p>}
