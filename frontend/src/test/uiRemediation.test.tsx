@@ -154,7 +154,7 @@ describe("工作台：按真实公开字段投影，事实源分开", () => {
     renderAt("/workbench?ws=ws-demo-1&session=s-real42");
     fireEvent.click(await screen.findByTestId("open-status-details"));
     expect(await screen.findByTestId("llm-health")).toHaveTextContent(/^模型最近检测：/);
-    await waitFor(() => expect(screen.getByTestId("turn-response")).toHaveTextContent("本轮响应：已收到回复"));
+    await waitFor(() => expect(screen.getByTestId("turn-response")).toHaveTextContent("上次回复"));
   });
 
   it("「最近检测」以 health 探测为准；顶层 connected 与探测不一致时如实标注", async () => {

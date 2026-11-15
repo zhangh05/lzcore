@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { api, bodyOf, enc } from "../../api/client";
 import { useShell, withWorkspace } from "../../app/shellContext";
 import { Button } from "../../components/Button";
+import { IconPlus } from "../../components/Icon";
 import { PageHeader } from "../../components/EmptyState";
 import type { HttpOutcome } from "../../contracts/auth";
 import { NAMES } from "../../contracts/naming";
@@ -54,7 +55,11 @@ function WorkflowList({ ws }: { ws: string; onRun: (id: string) => void }) {
   const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
   return (
     <>
-      <div className="row-actions"><Button variant="primary" onClick={() => setEdit("new")} data-testid="workflow-new">新建工作流</Button></div>
+      <div className="row-actions page-toolbar">
+        <span className="muted">{list.state === "ok" ? `${listOf<Workflow>(list, "workflows").length} 个工作流` : ""}</span>
+        <span className="grow" />
+        <Button variant="primary" onClick={() => setEdit("new")} data-testid="workflow-new"><IconPlus size={15} aria-hidden="true" />新建工作流</Button>
+      </div>
       {saved ? <p className="readback-note" role="status" data-testid="workflow-readback">{saved}</p> : null}
       <Result r={r} />
       {r && r.o.kind === "http" && r.o.status === 202 ? <p className="muted">已入队的作业：<code>{String(bodyOf<{ job?: { job_id?: string } }>(r.o)?.job?.job_id ?? "未返回")}</code>，可在「{NAMES.tasks}」的作业队列中查看。</p> : null}
@@ -129,6 +134,7 @@ function Templates({ ws }: { ws: string }) {
       <Result r={r} />
       <LoadState value={list} onReload={reload}>{() => (
         <Table testId="templates-table" rows={listOf<{ template_id: string; name?: string; description?: string }>(list, "templates")} rowKey={(t) => t.template_id}
+          empty={<p className="muted">还没有可用的模板。在「工作流」里新建一个，常用的流程可以存成模板复用。</p>}
           columns={[{ key: "n", label: "模板", render: (t) => t.name ?? t.template_id }, { key: "d", label: "说明", render: (t) => t.description ?? "—" },
             { key: "a", label: "", render: (t) => <Button onClick={() => setInst({ template_id: t.template_id, name: t.name ?? "" })} data-testid="instantiate">实例化</Button> }]} />
       )}</LoadState>

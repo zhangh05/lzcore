@@ -293,9 +293,12 @@ export function Workbench() {
   const recentFailureText = llm.state === "ok" ? (recentFailure?.at ? `${fmtTime(recentFailure.at)}${recentFailure.error_type ? ` · ${recentFailure.error_type}` : ""}` : "无") : "—";
   const runtimeText = agentStatus.state === "ok" ? String((statusBody as Record<string, unknown>)?.status ?? ((statusBody as Record<string, unknown>)?.runtime_engine ? "已接入" : "未上报")) : agentStatus.state === "error" ? "不可读" : "读取中";
   const modelTone = llm.state !== "ok" ? "unknown" : modelLabel === "已连接" ? "ok" : modelLabel === "未上报" ? "unknown" : "warn";
-  const turnText = live ? live.status : lastAssistant
-    ? `${lastAssistant.ok === false || lastAssistant.metadata?.status === "error" || (lastAssistant.errors ?? []).length ? "本轮报错" : "已收到回复"}${lastAssistant.created_at ? `（${fmtTime(lastAssistant.created_at)}）` : ""}`
-    : sessionId ? "本会话暂无回复" : "未选择会话";
+  const lastFailed = !!lastAssistant && (lastAssistant.ok === false || lastAssistant.metadata?.status === "error" || (lastAssistant.errors ?? []).length > 0);
+  // 标题下的一行：只说用户关心的「上一次回复怎么样」，没有会话时不显示。
+  const turnText = live ? "正在回复…" : lastAssistant
+    ? `${lastFailed ? "上次回复出错" : "上次回复"}${lastAssistant.created_at ? ` · ${fmtTime(lastAssistant.created_at)}` : ""}`
+    : sessionId ? "还没有回复" : "";
+  const modelText = llm.state !== "ok" ? "运行状态" : modelLabel === "未上报" ? "运行状态" : `模型${modelLabel}`;
   const progressFacts = hasProgressContent(lastAssistant, task, live?.events ?? []);
   const progressRail = !compact && progressFacts;
   return (
@@ -308,10 +311,12 @@ export function Workbench() {
           <div className="wb-title-block">
             <h1 className="page-title" tabIndex={-1} title={session?.title || undefined} data-testid="wb-title">{session?.title || (sessionId ? "未命名会话" : NAMES.workbench)}</h1>
             <div className="wb-meta">
-              <span className="wb-meta-text" data-testid="turn-response" title={`本轮响应：${turnText}（来源：本会话消息 / 实时回合；完整状态见「状态细节」）`}>本轮响应：{turnText}</span>
-              <span className="wb-meta-sep" aria-hidden="true" />
-              <button type="button" ref={statusBtn} className="wb-status-btn" aria-haspopup="dialog" aria-expanded={statusOpen} onClick={() => setStatusOpen((o) => !o)} data-testid="open-status-details">
-                <span className={`status-dot tone-${modelTone}`} aria-hidden="true" />状态细节
+              {turnText ? <>
+                <span className={`wb-meta-text ${lastFailed && !live ? "tone-danger" : ""}`} data-testid="turn-response" title="来自本会话的消息；完整状态点右侧查看">{turnText}</span>
+                <span className="wb-meta-sep" aria-hidden="true" />
+              </> : null}
+              <button type="button" ref={statusBtn} className="wb-status-btn" aria-haspopup="dialog" aria-expanded={statusOpen} onClick={() => setStatusOpen((o) => !o)} data-testid="open-status-details" title="查看运行状态细节">
+                <span className={`status-dot tone-${modelTone}`} aria-hidden="true" />{modelText}
               </button>
             </div>
           </div>

@@ -89,7 +89,7 @@ export function ModelSettings({ admin, platform }: { admin: boolean; platform: b
       {r ? (r.o.kind === "http" && r.o.status < 300 ? <ReceiptNote text={`${r.label}已完成`} /> : <FailureNote outcome={r.o} />) : null}
 
       <section className="models-section">
-        <header className="models-section-head"><h2>已接入的模型服务</h2><span className="muted">{connected.length} 个 · 对话时可在输入框里直接选用</span></header>
+        <header className="models-section-head"><h2>已接入的模型服务</h2><span className="muted">共 {connected.length} 个</span></header>
         <LoadState value={list} onReload={reload}>{() => (
           <ul className="model-grid" data-testid="providers-table">
             {connected.map((p) => {
