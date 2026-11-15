@@ -161,11 +161,17 @@ def _handle_command_exec(inv: ToolInvocation) -> dict:
         # lists them.  Starting at the workspace root put shell-created files
         # next to internal state where the user never sees them.  An explicit
         # working_dir stays workspace-root relative, like workspace.file paths.
+        # An isolated coding project maps the workspace root to its bound
+        # project root, so it keeps that default.
         from storage.paths import ensure_workspace_storage_dirs, workspace_root
+        from core.tools.project_execution import environment_for as _environment_for
 
         workspace_id = _caller_workspace(inv)
         ensure_workspace_storage_dirs(workspace_id)
-        cwd = str(workspace_root(workspace_id) / "files" / "data")
+        if _environment_for(workspace_id) is not None:
+            cwd = str(workspace_root(workspace_id))
+        else:
+            cwd = str(workspace_root(workspace_id) / "files" / "data")
     else:
         # Commands may only use a directory below the caller's workspace.
         # An arbitrary absolute cwd would bypass the storage boundary even
@@ -206,7 +212,7 @@ def _handle_command_exec(inv: ToolInvocation) -> dict:
         timeout=timeout,
         cancel_check=getattr(inv, "cancel_check", None),
     )
-    result.setdefault("working_dir", requested_cwd or "files/data")
+    result.setdefault("working_dir", requested_cwd or ("." if isolated is not None else "files/data"))
     # Attach caller-provided description without interpreting command content.
     description = (inv.arguments.get("description") or "").strip()
     if description:
