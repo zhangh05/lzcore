@@ -342,11 +342,12 @@ def handle_provider_delete(provider_id: str):
 def handle_workbench_models():
     """GET /api/workbench/models — models a workbench turn may run on.
 
-    Only providers that are enabled and configured with a model and a key are
-    listed. No URLs or keys leave the server; a turn names the provider id.
+    Every connected provider is listed: enabled, with a model, and with a key
+    or a local endpoint that needs none. No URLs or keys leave the server; a
+    turn names the provider id.
     """
     from agent.llm.settings import resolve_provider_llm_config
-    from agent.llm.turn_model import supports_thinking_control
+    from agent.llm.turn_model import provider_selectable, supports_thinking_control
 
     active = get_active_provider()
     models = []
@@ -356,7 +357,7 @@ def handle_workbench_models():
             cfg = resolve_provider_llm_config(provider_id)
         except ValueError:
             continue
-        if not (cfg.get("enabled", True) and cfg.get("model") and cfg.get("api_key")):
+        if not provider_selectable({**cfg, "key_configured": bool(cfg.get("api_key"))}):
             continue
         model = str(cfg.get("model") or "")
         models.append({

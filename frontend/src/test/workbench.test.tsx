@@ -133,6 +133,9 @@ describe("工作台（阶段 2）", () => {
     localStorage.clear();
     const { Fake } = renderAt("/workbench?ws=ws-demo-1&session=s-partial");
     const model = await screen.findByTestId("model-select");
+    // 已接入的模型全部直接列出，不再区分「默认」
+    expect([...model.querySelectorAll("option")].map((o) => o.value)).toEqual(["minimax", "deepseek"]);
+    expect(model).not.toHaveTextContent("默认");
     expect(screen.getByTestId("thinking-select")).toBeInTheDocument();
     fireEvent.change(screen.getByTestId("thinking-select"), { target: { value: "adaptive" } });
     fireEvent.change(screen.getByTestId("composer-input"), { target: { value: "你好" } });

@@ -10,17 +10,12 @@ import { PasswordField } from "../../components/arc/password-field/password-fiel
 import SegmentedControl from "../../components/arc/segmented-control/segmented-control";
 import { Slider } from "../../components/arc/slider/slider";
 import type { HttpOutcome } from "../../contracts/auth";
-import { listOf, useApi, type Loadable } from "../../kit/useApi";
-import { Chip, ConfirmDialog, FailureNote, LoadState, RawData, ReceiptNote, fmtTime } from "../../kit/ui";
+import { listOf, useApi } from "../../kit/useApi";
+import { Chip, ConfirmDialog, FailureNote, LoadState, ReceiptNote } from "../../kit/ui";
 
 export interface Provider {
   provider: string; label?: string; provider_type?: string; protocol?: string; base_url?: string; model?: string;
   key_configured?: boolean; key_preview?: string | null; is_active?: boolean; temperature?: number; max_tokens?: number;
-}
-export interface LlmStatus {
-  provider?: string; model?: string; provider_type?: string; enabled?: boolean; connected?: boolean; key_configured?: boolean;
-  health?: { connected?: boolean; checked_at?: string; last_checked_at?: string; last_error?: string | null; last_error_type?: string | null };
-  last_success?: { at?: string } | null; recent_failure?: { at?: string; error_type?: string; error_summary?: string } | null;
 }
 
 const PROTOCOLS = [["openai_compatible", "OpenAI 兼容"], ["anthropic_messages", "Anthropic Messages"]] as const;
@@ -59,59 +54,68 @@ function TestResult({ t }: { t: TestState }) {
   );
 }
 
+/** 能直接在对话里选用：有模型，且有密钥或是本机服务。 */
+const usable = (p: Provider) => !!p.model && (!!p.key_configured || isLocal(p.base_url));
+
 export function ModelSettings({ admin, platform }: { admin: boolean; platform: boolean }) {
   const [list, reload] = useApi("/api/agent/llm/providers");
-  const [status, reloadStatus] = useApi("/api/agent/llm/status");
   const [sheet, setSheet] = useState<{ provider: Provider; isNew: boolean } | null>(null);
   const [del, setDel] = useState<Provider | null>(null);
   const [r, setR] = useState<{ label: string; o: HttpOutcome } | null>(null);
-  const [test, setTest] = useState<TestState>({ phase: "idle" });
-  const [switching, setSwitching] = useState<string | null>(null);
+  const [tests, setTests] = useState<Record<string, TestState>>({});
   const data = list.state === "ok" ? (list.data as { active?: string; providers?: Provider[]; templates?: Provider[] }) : null;
   const active = String(data?.active ?? "");
   const providers = listOf<Provider>(list, "providers");
-  const current = providers.find((p) => p.provider === active || p.is_active);
   const connected = providers.filter((p) => isConnected(p, active));
   const gallery = providers.filter((p) => !isConnected(p, active) && p.provider !== "custom");
-  const activate = async (p: Provider) => {
-    setSwitching(p.provider);
-    const o = await api.post("/api/agent/llm/activate", { provider: p.provider });
-    setSwitching(null); setR({ label: `切换到 ${p.label ?? p.provider}`, o }); setTest({ phase: "idle" }); reload(); reloadStatus();
+  // 后台任务和新对话默认用的服务由系统自动维护：现有默认不可用时，下一次保存的服务接替它。
+  const defaultUsable = connected.some((p) => (p.provider === active || p.is_active) && usable(p));
+  const testOne = async (p: Provider) => {
+    setTests((t) => ({ ...t, [p.provider]: { phase: "running" } }));
+    const next = await runProbe({ provider: p.provider });
+    setTests((t) => ({ ...t, [p.provider]: next }));
+  };
+  const remove = async (p: Provider) => {
+    if (p.provider === active || p.is_active) {
+      const heir = connected.find((x) => x.provider !== p.provider && usable(x));
+      if (heir) await api.post("/api/agent/llm/activate", { provider: heir.provider });
+    }
+    setR({ label: "删除", o: await api.del(`/api/agent/llm/providers/${enc(p.provider)}`) });
+    reload();
   };
   const blank = (type: string): Provider => ({ provider: "", label: "", provider_type: type, base_url: "", model: "" });
   return (
     <div className="models" data-testid="model-settings">
-      <CurrentModel current={current} status={status} test={test} onTest={async () => { setTest({ phase: "running" }); setTest(await runProbe({})); reloadStatus(); }}
-        onEdit={admin && current ? () => setSheet({ provider: current, isNew: false }) : undefined} />
       {r ? (r.o.kind === "http" && r.o.status < 300 ? <ReceiptNote text={`${r.label}已完成`} /> : <FailureNote outcome={r.o} />) : null}
 
       <section className="models-section">
-        <header className="models-section-head"><h2>已接入的模型服务</h2><span className="muted">{connected.length} 个</span></header>
+        <header className="models-section-head"><h2>已接入的模型服务</h2><span className="muted">{connected.length} 个 · 对话时可在输入框里直接选用</span></header>
         <LoadState value={list} onReload={reload}>{() => (
           <ul className="model-grid" data-testid="providers-table">
             {connected.map((p) => {
-              const isActive = p.provider === active || p.is_active;
               const needsKey = !p.key_configured && !isLocal(p.base_url);
+              const t = tests[p.provider] ?? { phase: "idle" };
               return (
-                <li key={p.provider} className={`model-card ${isActive ? "is-active" : ""}`}>
+                <li key={p.provider} className="model-card" data-provider={p.provider}>
                   <header>
                     <Avatar p={p} />
                     <div className="model-card-title"><strong>{p.label ?? p.provider}</strong><span>{hostOf(p.base_url) || "未设置地址"}</span></div>
-                    {isActive ? <Chip tone="ok">当前</Chip> : needsKey ? <Chip tone="warn">缺少密钥</Chip> : null}
+                    {needsKey ? <Chip tone="warn">缺少密钥</Chip> : !p.model ? <Chip tone="warn">未选模型</Chip> : null}
                   </header>
                   <div className="model-card-model"><IconSparkle size={13} aria-hidden="true" /><code>{p.model || "未选择模型"}</code></div>
                   <div className="model-card-meta">
                     <span>{protocolLabel(p.provider_type ?? p.protocol)}</span>
                     <span><IconKey size={12} aria-hidden="true" />{p.key_configured ? p.key_preview ?? "已配置" : isLocal(p.base_url) ? "本机无需密钥" : "未配置"}</span>
                   </div>
-                  {admin ? (
-                    <footer>
-                      {!isActive ? <Button className="sm" variant="primary" onClick={() => void activate(p)} disabled={switching === p.provider || needsKey} title={needsKey ? "先填写 API Key" : undefined}>{switching === p.provider ? "切换中…" : "设为当前"}</Button> : null}
-                      <Button className="sm" onClick={() => setSheet({ provider: p, isNew: false })}><IconEdit size={14} aria-hidden="true" />配置</Button>
-                      <span className="grow" />
-                      {!isActive && p.provider.startsWith("provider_") ? <Button className="sm" variant="ghost" onClick={() => setDel(p)} aria-label={`删除 ${p.label ?? p.provider}`}><IconTrash size={14} aria-hidden="true" /></Button> : null}
-                    </footer>
-                  ) : null}
+                  <TestResult t={t} />
+                  <footer>
+                    <Button className="sm" onClick={() => void testOne(p)} disabled={t.phase === "running" || !usable(p)} data-testid={`provider-test-${p.provider}`}>
+                      <IconBolt size={14} aria-hidden="true" />{t.phase === "running" ? "测试中…" : "测试连接"}
+                    </Button>
+                    {admin ? <Button className="sm" onClick={() => setSheet({ provider: p, isNew: false })}><IconEdit size={14} aria-hidden="true" />配置</Button> : null}
+                    <span className="grow" />
+                    {admin && p.provider.startsWith("provider_") ? <Button className="sm" variant="ghost" onClick={() => setDel(p)} aria-label={`删除 ${p.label ?? p.provider}`}><IconTrash size={14} aria-hidden="true" /></Button> : null}
+                  </footer>
                 </li>
               );
             })}
@@ -142,43 +146,11 @@ export function ModelSettings({ admin, platform }: { admin: boolean; platform: b
         </section>
       ) : <p className="muted">修改模型服务需要管理员权限。</p>}
 
-      {sheet ? <ProviderSheet provider={sheet.provider} isNew={sheet.isNew} platform={platform} active={active}
-        onClose={() => setSheet(null)} onSaved={(label, o) => { setR({ label, o }); setSheet(null); setTest({ phase: "idle" }); reload(); reloadStatus(); }} /> : null}
+      {sheet ? <ProviderSheet provider={sheet.provider} isNew={sheet.isNew} platform={platform} becomeDefault={!defaultUsable}
+        onClose={() => setSheet(null)} onSaved={(label, o) => { setR({ label, o }); setSheet(null); reload(); }} /> : null}
       {del ? <ConfirmDialog title="删除模型服务？" details={<p>将删除「{del.label ?? del.provider}」的配置（含已保存的密钥）。</p>} confirmText={del.label ?? del.provider} confirmLabel="删除"
-        onCancel={() => setDel(null)} onConfirm={async () => { const p = del; setDel(null); setR({ label: "删除", o: await api.del(`/api/agent/llm/providers/${enc(p.provider)}`) }); reload(); }} /> : null}
+        onCancel={() => setDel(null)} onConfirm={async () => { const p = del; setDel(null); await remove(p); }} /> : null}
     </div>
-  );
-}
-
-function CurrentModel({ current, status, test, onTest, onEdit }: { current?: Provider; status: Loadable<unknown>; test: TestState; onTest: () => void; onEdit?: () => void }) {
-  const s = status.state === "ok" ? (status.data as LlmStatus) : null;
-  const probe = s?.health?.connected;
-  const checkedAt = s?.health?.checked_at ?? s?.health?.last_checked_at;
-  const tone = probe ? "ok" : probe === false ? "fail" : "unknown";
-  return (
-    <section className={`model-hero is-${tone}`} aria-label="当前模型">
-      <div className="model-hero-main">
-        {current ? <Avatar p={current} size={48} /> : <span className="model-avatar" aria-hidden="true" style={{ width: 48, height: 48 }}>?</span>}
-        <div className="model-hero-text">
-          <span className="model-hero-eyebrow"><span className={`live-indicator is-${tone}`} aria-hidden="true" />{probe ? "正在使用 · 连接正常" : probe === false ? "正在使用 · 最近探测失败" : "正在使用"}</span>
-          <h2>{current?.label ?? s?.provider ?? "未选择模型服务"}</h2>
-          <p><code>{current?.model || s?.model || "未选择模型"}</code><span>{hostOf(current?.base_url)}</span><span>{protocolLabel(current?.provider_type ?? s?.provider_type)}</span></p>
-        </div>
-        <div className="model-hero-actions">
-          <Button onClick={onTest} disabled={test.phase === "running"}><IconBolt size={15} aria-hidden="true" />{test.phase === "running" ? "测试中…" : "测试连接"}</Button>
-          {onEdit ? <Button variant="ghost" onClick={onEdit}>配置</Button> : null}
-        </div>
-      </div>
-      <dl className="model-hero-stats">
-        <div><dt>最近成功</dt><dd>{s?.last_success?.at ? fmtTime(s.last_success.at) : "—"}</dd></div>
-        <div><dt>最近失败</dt><dd className={s?.recent_failure?.at ? "is-warn" : ""}>{s?.recent_failure?.at ? `${fmtTime(s.recent_failure.at)}${s.recent_failure.error_type ? ` · ${s.recent_failure.error_type}` : ""}` : "无"}</dd></div>
-        <div><dt>最近探测</dt><dd>{checkedAt ? fmtTime(checkedAt) : "—"}</dd></div>
-        <div><dt>密钥</dt><dd>{current?.key_configured ? current.key_preview ?? "已配置" : isLocal(current?.base_url) ? "本机无需" : "未配置"}</dd></div>
-      </dl>
-      <TestResult t={test} />
-      {s?.health?.last_error ? <p className="model-hero-error"><IconWarningCircle size={14} aria-hidden="true" />{s.health.last_error_type ? `${s.health.last_error_type}：` : ""}{s.health.last_error}</p> : null}
-      {status.state === "ok" ? <RawData value={status.data} path="/api/agent/llm/status" label="诊断原文" /> : null}
-    </section>
   );
 }
 
@@ -195,8 +167,8 @@ async function fetchModels(body: Record<string, unknown>): Promise<Catalog> {
   return { phase: "fail", error: b?.http_status ? `${reason}（服务商返回 ${b.http_status}）` : reason };
 }
 
-function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: {
-  provider: Provider; isNew: boolean; platform: boolean; active: string; onClose: () => void; onSaved: (label: string, o: HttpOutcome) => void;
+function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSaved }: {
+  provider: Provider; isNew: boolean; platform: boolean; becomeDefault: boolean; onClose: () => void; onSaved: (label: string, o: HttpOutcome) => void;
 }) {
   const [f, setF] = useState({
     label: provider.label ?? "", provider_type: provider.provider_type ?? provider.protocol ?? "openai_compatible",
@@ -212,7 +184,6 @@ function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: 
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((prev) => ({ ...prev, [k]: v })); setTest({ phase: "idle" }); };
   const lockUrl = !isNew && !platform;
   const missing = [!f.label.trim() && "名称", !f.base_url.trim() && "接口地址", !f.model.trim() && "模型"].filter(Boolean) as string[];
-  const isActive = provider.provider === active || provider.is_active;
   const hasKey = !!f.api_key || !!provider.key_configured || isLocal(f.base_url);
   const close = () => { setOpen(false); onClose(); };
 
@@ -236,7 +207,7 @@ function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: 
 
   const models = catalog.phase === "ok" ? catalog.models : [];
   const options = [...models.map((m) => ({ value: m.id, label: m.label && m.label !== m.id ? `${m.label} · ${m.id}` : m.id, keywords: [m.id, m.owned_by ?? ""] })),
-    ...(f.model && !models.some((m) => m.id === f.model) ? [{ value: f.model, label: `${f.model}（当前）`, keywords: [f.model] }] : [])];
+    ...(f.model && !models.some((m) => m.id === f.model) ? [{ value: f.model, label: `${f.model}（已填写）`, keywords: [f.model] }] : [])];
   const useCombobox = !manual && models.length > 0;
 
   const fields = () => {
@@ -252,7 +223,7 @@ function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: 
     if (f.api_key) draft.api_key = f.api_key;
     setTest(await runProbe(draft));
   };
-  const save = async (andActivate: boolean) => {
+  const save = async () => {
     setBusy(true); setErrors([]);
     try {
       let o: HttpOutcome;
@@ -269,10 +240,12 @@ function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: 
         setErrors(b?.errors ?? (b?.error ? [b.error] : ["保存失败"]));
         return;
       }
-      if (andActivate && id && !isActive) {
+      // 现有默认服务不可用时，让刚保存的这个接替，后台任务和新对话才有可用的模型。
+      if (becomeDefault && id) {
         const a = await api.post("/api/agent/llm/activate", { provider: id });
-        onSaved(`保存并切换到 ${f.label || id}`, a);
-      } else onSaved(`保存 ${f.label || id}`, o);
+        if (!(a.kind === "http" && a.status < 300)) { onSaved(`保存 ${f.label || id}`, a); return; }
+      }
+      onSaved(`保存 ${f.label || id}`, o);
     } finally { setBusy(false); }
   };
 
@@ -332,8 +305,7 @@ function ProviderSheet({ provider, isNew, platform, active, onClose, onSaved }: 
             {missing.length ? <span className="sheet-hint">还需填写：{missing.join("、")}</span> : null}
             <span className="grow" />
             <Button variant="ghost" onClick={close}>取消</Button>
-            <Button onClick={() => void save(false)} loading={busy} disabled={missing.length > 0} data-testid="provider-save">保存</Button>
-            {!isActive ? <Button variant="primary" onClick={() => void save(true)} loading={busy} disabled={missing.length > 0} data-testid="provider-save-activate">保存并设为当前</Button> : null}
+            <Button variant="primary" onClick={() => void save()} loading={busy} disabled={missing.length > 0} data-testid="provider-save">保存</Button>
           </div>
         </div>
       </DrawerContent>
