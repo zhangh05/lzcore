@@ -172,6 +172,24 @@ def test_public_redirect_to_loopback_is_blocked_before_second_request(transport)
     assert responses[0].closed and not responses[0].body_read
 
 
+@pytest.mark.parametrize("first, second", [
+    ("https://public.test/Manual", "https://public.test/manual"),
+    ("https://public.test/search?q=ABC", "https://public.test/search?q=abc"),
+    ("https://public.test/manual", "https://public.test/manual/"),
+])
+def test_fetch_cache_keeps_distinct_resource_urls_separate(transport, monkeypatch, first, second):
+    monkeypatch.setattr(Response, "text", property(lambda self: f"<html><p>Evidence for {self.url}</p></html>"))
+    left = web.fetch_and_extract(first)
+    right = web.fetch_and_extract(second)
+    assert left["ok"] and right["ok"]
+    assert transport[1] == [first, second]
+    assert left["url"] == first and right["url"] == second
+    assert left["content"] != right["content"]
+    cached = web.fetch_and_extract(second)
+    assert cached["cached"] and cached["content"] == right["content"]
+    assert transport[1] == [first, second]
+
+
 @pytest.mark.parametrize("address", [
     "127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254",
     "100.64.0.1", "224.0.0.1", "240.0.0.1", "0.0.0.0",

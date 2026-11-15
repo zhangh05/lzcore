@@ -92,3 +92,21 @@ def test_command_output_keys_and_values_are_redacted_without_losing_collisions()
     assert "third accepted" in safe["output"].values()
     assert "fourth accepted" in safe["output"].values()
     assert "first-synthetic" in str(original)
+
+
+def test_schema_failure_redacts_rejected_argument_from_every_result_projection():
+    from core.tools.executor import ToolExecutor
+    from core.tools.registry import ToolRegistry
+    from core.tools.schemas import ToolInvocation, ToolSpec
+
+    registry = ToolRegistry()
+    calls = []
+    registry.register_tool(ToolSpec(tool_id="test.validation", name="validation", description="validation",
+        input_schema={"type": "object", "properties": {"action": {"type": "string", "enum": ["read"]}}}),
+        lambda _inv: calls.append(True) or {"ok": True})
+    result = ToolExecutor(registry).execute(ToolInvocation(tool_id="test.validation",
+        arguments={"action": "password synthetic-validation-canary"}))
+    assert result.status == "blocked" and result.redacted and calls == []
+    assert result.output["error_code"] == "TOOL_ARGUMENT_VALIDATION_FAILED"
+    assert "synthetic-validation-canary" not in json.dumps(result.as_dict())
+    assert "action" in result.output["error"] and "read" in result.output["error"]

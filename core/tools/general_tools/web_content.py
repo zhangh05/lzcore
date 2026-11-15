@@ -50,8 +50,9 @@ _fetch_cache_lock = threading.Lock()
 
 def _cache_key(workspace_id: str, url: str, extract_mode: str) -> str:
     """Workspace-scoped cache key."""
-    normalized = url.lower().strip().rstrip("/")
-    raw = f"{workspace_id}:{normalized}:{extract_mode}"
+    # Paths and query values are case-sensitive; a trailing slash can also
+    # identify a different resource. Never merge distinct evidence sources.
+    raw = f"{workspace_id}:{url}:{extract_mode}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 

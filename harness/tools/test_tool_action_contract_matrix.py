@@ -731,6 +731,35 @@ def test_action_contract_risk_is_enforced_by_real_policy():
         assert decision.allowed is True
 
 
+@pytest.mark.parametrize("action, uncertain", [("list", False), ("write", True)])
+def test_executor_handler_exception_preserves_execution_and_recovery_facts(action, uncertain):
+    from core.tools.executor import ToolExecutor
+    from core.tools.registry import ToolRegistry
+    from core.tools.schemas import ToolInvocation, ToolSpec
+
+    calls = []
+    def fail_after_start(_inv):
+        calls.append(True)
+        raise OSError("connection lost; password synthetic-exception-canary")
+
+    registry = ToolRegistry()
+    entry = CANONICAL_REGISTRY["workspace.file"]
+    registry.register_tool(ToolSpec(tool_id="workspace.file", name="file", description="file",
+                                    input_schema=entry.input_schema), fail_after_start)
+    args = {"action": action}
+    if action == "write":
+        args.update(filename="result.txt", content="result")
+    result = ToolExecutor(registry).execute(ToolInvocation(tool_id="workspace.file", workspace_id="test_ws", arguments=args))
+    assert result.status == "failed" and calls == [True]
+    assert result.output["executed"] is True
+    assert result.output["execution_may_continue"] is uncertain
+    assert result.output["error_code"] == ("EXECUTION_UNKNOWN" if uncertain else "TOOL_EXCEPTION")
+    assert "synthetic-exception-canary" not in str(result.as_dict())
+    if uncertain:
+        assert result.output["automatic_retry_allowed"] is False
+        assert "read-back" in result.output["hint"]
+
+
 def test_governed_executor_does_not_invent_handler_success():
     from core.tools.executor import ToolExecutor
     from core.tools.registry import ToolRegistry

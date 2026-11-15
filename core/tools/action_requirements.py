@@ -247,9 +247,9 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts("skill.manage", ("mcp_call",), _EXE
 ACTION_EXECUTION_CONTRACTS.update(_contracts("report.manage", ("diff", "document"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("report.manage", ("save",), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts(
-    "system.manage", ("diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_export", "session_snapshot", "context_index", "context_read", "context_search"), _READ,
+    "system.manage", ("diagnostics", "health", "selfcheck", "local_info", "tasks", "audit_log", "run_get", "session_get", "session_export", "context_index", "context_read", "context_search"), _READ,
 ))
-ACTION_EXECUTION_CONTRACTS.update(_contracts("system.manage", ("session_checkpoint",), _WRITE))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("system.manage", ("session_checkpoint", "session_snapshot"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("system.manage", ("session_rewind",), _DELETE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts(
     "text.analyze", ("redact", "extract_entities", "match"), _READ,
