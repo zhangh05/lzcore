@@ -114,3 +114,25 @@ def test_identity_upgrade_assigns_immutable_ids_without_preserving_legacy_roots(
     assert user_id.startswith("usr_") and len(user_id) == 36
     assert (user_data_root(user_id) / "profile.json").is_file()
     assert not (tmp_path / "users" / "legacy-old-root").exists()
+
+
+def test_delete_workspace_removes_principal_less_local_root(monkeypatch, tmp_path):
+    """Local single-user mode writes to <root>/<ws_id>; delete must not leave it behind."""
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    ensure_workspace("solo")
+    local = workspace_root("solo")
+    assert local == tmp_path / "solo"
+    (local / "files" / "data").mkdir(parents=True, exist_ok=True)
+    (local / "files" / "data" / "note.txt").write_text("x", encoding="utf-8")
+
+    assert delete_workspace("solo")["ok"] is True
+    assert not (tmp_path / "catalog" / "solo").exists()
+    assert not local.exists()
+
+
+def test_delete_workspace_never_touches_reserved_root_dirs(monkeypatch, tmp_path):
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    with storage_principal("Admin"):
+        ensure_workspace("users")
+    assert delete_workspace("users")["ok"] is True
+    assert (tmp_path / "users").is_dir()
