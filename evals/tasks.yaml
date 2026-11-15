@@ -8,6 +8,7 @@
 #   files:       工作区 files/ 下按 glob 找文件，至少一个满足 contains / not_contains
 #   tools_any:   至少用过其中一个工具
 #   no_tools:    整个任务不应调用任何工具
+#   allow_english: 允许英文回复（默认中文提问必须中文回复）
 # tags: network 表示需要访问外网，可用 --skip-network 跳过。
 
 tasks:
@@ -171,6 +172,7 @@ tasks:
     checks:
       answer: ["reset", "power"]
       no_tools: true
+      allow_english: true
 
   # ── 记忆 ──────────────────────────────────────────────
   - id: memory-recall
