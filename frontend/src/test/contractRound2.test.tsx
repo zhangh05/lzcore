@@ -72,8 +72,10 @@ describe("F10 分页", () => {
     }) as typeof fetch;
     render(<List />);
     expect(await screen.findByText("a", undefined, { timeout: 3000 })).toBeTruthy();
-    expect(screen.getByText(/已显示 1 \/ 共 2/)).toBeTruthy();
-    await act(async () => { screen.getByRole("button", { name: "加载更多" }).click(); });
+    // 列表和分页条可能分两次渲染（CI 上较慢）：都用 find* 等它们出现。
+    expect(await screen.findByText(/已显示 1 \/ 共 2/)).toBeTruthy();
+    const more = await screen.findByRole("button", { name: "加载更多" });
+    await act(async () => { more.click(); });
     expect(await screen.findByText("b", undefined, { timeout: 3000 })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "加载更多" })).toBeNull();
     expect(seen.some((p) => p.includes("cursor=c2"))).toBe(true);
