@@ -38,7 +38,7 @@ def test_normalize_rejects_bad_shapes_and_drops_noop():
     with pytest.raises(ModelSelectionError):
         normalize_model_selection("deepseek")
     with pytest.raises(ModelSelectionError):
-        normalize_model_selection({"provider": "deepseek", "thinking": "max"})
+        normalize_model_selection({"provider": "deepseek", "thinking": "turbo"})
 
 
 def test_turn_model_scopes_resolution_and_reaches_bound_threads(monkeypatch, tmp_path):

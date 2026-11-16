@@ -12,10 +12,13 @@ import { Slider } from "../../components/arc/slider/slider";
 import type { HttpOutcome } from "../../contracts/auth";
 import { listOf, useApi } from "../../kit/useApi";
 import { Chip, ConfirmDialog, FailureNote, LoadState, ReceiptNote } from "../../kit/ui";
+import { formatTokens, type CapabilityOverrides, type ModelProfile } from "../../kit/modelProfile";
+import { CapabilityChips, CapabilitySettings } from "./ModelCapabilities";
 
 export interface Provider {
   provider: string; label?: string; provider_type?: string; protocol?: string; base_url?: string; model?: string;
   key_configured?: boolean; key_preview?: string | null; is_active?: boolean; temperature?: number; max_tokens?: number;
+  thinking?: string; capabilities?: CapabilityOverrides | null; vision_enabled?: boolean; profile?: ModelProfile | null;
 }
 
 const PROTOCOLS = [["openai_compatible", "OpenAI 兼容"], ["anthropic_messages", "Anthropic Messages"]] as const;
@@ -103,6 +106,7 @@ export function ModelSettings({ admin, platform }: { admin: boolean; platform: b
                     {needsKey ? <Chip tone="warn">缺少密钥</Chip> : !p.model ? <Chip tone="warn">未选模型</Chip> : null}
                   </header>
                   <div className="model-card-model"><IconSparkle size={13} aria-hidden="true" /><code>{p.model || "未选择模型"}</code></div>
+                  <CapabilityChips profile={p.profile} />
                   <div className="model-card-meta">
                     <span>{protocolLabel(p.provider_type ?? p.protocol)}</span>
                     <span><IconKey size={12} aria-hidden="true" />{p.key_configured ? p.key_preview ?? "已配置" : isLocal(p.base_url) ? "本机无需密钥" : "未配置"}</span>
@@ -154,7 +158,13 @@ export function ModelSettings({ admin, platform }: { admin: boolean; platform: b
   );
 }
 
-interface ModelOption { id: string; label?: string; owned_by?: string }
+interface ModelOption { id: string; label?: string; owned_by?: string; capabilities?: { vision?: boolean; reasoning?: boolean; tools?: boolean; context_window?: number } }
+/** 列表里每个模型后面标出目录已知的能力：识图 · 思考 · 上下文。 */
+const capsTag = (m: ModelOption) => {
+  const c = m.capabilities;
+  if (!c) return "";
+  return [c.vision ? "识图" : "", c.reasoning ? "思考" : "", c.context_window ? formatTokens(c.context_window) : ""].filter(Boolean).join(" · ");
+};
 type Catalog = { phase: "idle" } | { phase: "loading" } | { phase: "ok"; models: ModelOption[]; source?: string } | { phase: "fail"; error: string };
 
 /** 用填写中的地址与密钥向服务端要模型列表（服务端代为请求 /models，密钥不出后端日志）。 */
@@ -174,6 +184,9 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
     label: provider.label ?? "", provider_type: provider.provider_type ?? provider.protocol ?? "openai_compatible",
     base_url: provider.base_url ?? "", model: provider.model ?? "", api_key: "",
     temperature: provider.temperature ?? 0.2, max_tokens: provider.max_tokens ?? 4096,
+    thinking: provider.thinking ?? "provider_default",
+    // 旧配置的 vision_enabled 视同「识图」的手动设置。
+    capabilities: { ...(typeof provider.vision_enabled === "boolean" ? { vision: provider.vision_enabled } : {}), ...(provider.capabilities ?? {}) } as CapabilityOverrides,
   });
   const [open, setOpen] = useState(true);
   const [test, setTest] = useState<TestState>({ phase: "idle" });
@@ -181,7 +194,11 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((prev) => ({ ...prev, [k]: v })); setTest({ phase: "idle" }); };
+  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => {
+    // 能力设置属于某个模型：换模型后回到自动识别，思考档位回到服务商默认。
+    setF((prev) => (k === "model" && v !== prev.model ? { ...prev, model: v as string, capabilities: {}, thinking: "provider_default" } : { ...prev, [k]: v }));
+    setTest({ phase: "idle" });
+  };
   const lockUrl = !isNew && !platform;
   const missing = [!f.label.trim() && "名称", !f.base_url.trim() && "接口地址", !f.model.trim() && "模型"].filter(Boolean) as string[];
   const hasKey = !!f.api_key || !!provider.key_configured || isLocal(f.base_url);
@@ -206,12 +223,17 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
   }, [f.base_url, f.api_key, f.provider_type]); // 只随地址 / 密钥 / 协议变化触发
 
   const models = catalog.phase === "ok" ? catalog.models : [];
-  const options = [...models.map((m) => ({ value: m.id, label: m.label && m.label !== m.id ? `${m.label} · ${m.id}` : m.id, keywords: [m.id, m.owned_by ?? ""] })),
+  const options = [...models.map((m) => {
+    const name = m.label && m.label !== m.id ? `${m.label} · ${m.id}` : m.id;
+    const tag = capsTag(m);
+    return { value: m.id, label: tag ? `${name}（${tag}）` : name, keywords: [m.id, m.owned_by ?? "", ...(m.capabilities?.vision ? ["识图", "vision"] : [])] };
+  }),
     ...(f.model && !models.some((m) => m.id === f.model) ? [{ value: f.model, label: `${f.model}（已填写）`, keywords: [f.model] }] : [])];
   const useCombobox = !manual && models.length > 0;
 
   const fields = () => {
-    const body: Record<string, unknown> = { label: f.label.trim(), provider_type: f.provider_type, model: f.model.trim(), temperature: Number(f.temperature), max_tokens: Number(f.max_tokens) };
+    const body: Record<string, unknown> = { label: f.label.trim(), provider_type: f.provider_type, model: f.model.trim(), temperature: Number(f.temperature), max_tokens: Number(f.max_tokens),
+      thinking: f.thinking, capabilities: { vision: null, reasoning: null, temperature: null, context_window: null, ...f.capabilities } };
     if (!lockUrl) body.base_url = f.base_url.trim();
     if (f.api_key) body.api_key = f.api_key;
     return body;
@@ -283,6 +305,13 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
             </div>
             {catalog.phase === "fail" ? <Alert tone="warning" title="没能获取模型列表" data-testid="provider-models-error">{catalog.error}。仍可手动填写模型名。</Alert> : null}
           </div>
+
+          <section className="sheet-field sheet-caps" aria-label="模型能力">
+            <span className="sheet-label">模型能力</span>
+            <CapabilitySettings draft={{ provider: isNew ? undefined : provider.provider, model: f.model, base_url: f.base_url, provider_type: f.provider_type, api_key: f.api_key || undefined }}
+              overrides={f.capabilities} onOverrides={(next) => setF((prev) => ({ ...prev, capabilities: next }))}
+              thinking={f.thinking} onThinking={(next) => setF((prev) => ({ ...prev, thinking: next }))} />
+          </section>
 
           <details className="sheet-advanced">
             <summary>高级设置<span className="muted">温度、最大输出</span></summary>

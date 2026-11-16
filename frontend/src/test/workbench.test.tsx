@@ -134,7 +134,8 @@ describe("工作台（阶段 2）", () => {
     const { Fake } = renderAt("/workbench?ws=ws-demo-1&session=s-partial");
     const model = await screen.findByTestId("model-select");
     // 已接入的模型全部直接列出，不再区分「默认」
-    expect([...model.querySelectorAll("option")].map((o) => o.value)).toEqual(["minimax", "deepseek"]);
+    expect([...model.querySelectorAll("option")].map((o) => o.value)).toEqual(["minimax", "deepseek", "gateway"]);
+    expect(model).toHaveTextContent("gpt-6.1-sol · 网关 · 识图");
     expect(model).not.toHaveTextContent("默认");
     expect(screen.getByTestId("thinking-select")).toBeInTheDocument();
     fireEvent.change(screen.getByTestId("thinking-select"), { target: { value: "adaptive" } });
@@ -144,6 +145,25 @@ describe("工作台（阶段 2）", () => {
     expect(Fake.instances[0].sent[0].metadata).toMatchObject({ model_selection: { provider: "minimax", thinking: "adaptive" } });
     fireEvent.change(model, { target: { value: "deepseek" } });
     expect(screen.queryByTestId("thinking-select")).toBeNull();
+    localStorage.clear();
+  });
+
+  it("思考档位按模型能力给出：推理模型列出推理强度，随消息发送；换模型后不带着不支持的档位", async () => {
+    localStorage.clear();
+    const { Fake } = renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    const model = await screen.findByTestId("model-select");
+    fireEvent.change(model, { target: { value: "gateway" } });
+    const thinking = screen.getByTestId("thinking-select");
+    expect([...thinking.querySelectorAll("option")].map((o) => o.textContent)).toEqual(["思考：默认", "思考：低", "思考：中", "思考：高", "思考：超高", "思考：最高"]);
+    fireEvent.change(thinking, { target: { value: "xhigh" } });
+    fireEvent.change(screen.getByTestId("composer-input"), { target: { value: "你好" } });
+    fireEvent.click(screen.getByTestId("send-btn"));
+    await waitFor(() => expect(Fake.instances[0]?.sent.length).toBe(1));
+    expect(Fake.instances[0].sent[0].metadata).toMatchObject({ model_selection: { provider: "gateway", thinking: "xhigh" } });
+    // MiniMax 没有 xhigh：切过去后档位回到默认
+    fireEvent.change(model, { target: { value: "minimax" } });
+    expect(screen.getByTestId("thinking-select")).toHaveValue("provider_default");
+    expect([...screen.getByTestId("thinking-select").querySelectorAll("option")].map((o) => o.value)).toEqual(["provider_default", "adaptive", "disabled"]);
     localStorage.clear();
   });
 

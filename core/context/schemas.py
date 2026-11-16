@@ -85,12 +85,20 @@ def resolve_budget_for_model(model: str = "") -> ContextBudget:
       - Floor at 8000 chars, cap at 80_000 chars.
       - If model unknown, use the default 12000 chars.
     """
+    # Window comes from the model profile (models.dev catalog, then name
+    # heuristics); MODEL_CONTEXT_WINDOWS remains only as the offline fallback.
     model_lower = model.lower().strip()
     window = 0
-    for key, size in MODEL_CONTEXT_WINDOWS.items():
-        if key in model_lower:
-            window = size
-            break
+    if model_lower:
+        from agent.llm.model_profile import profile_for_model_name
+        profile = profile_for_model_name(model)
+        if profile.sources.get("context_window") in ("catalog", "heuristic"):
+            window = profile.context_window
+    if not window:
+        for key, size in MODEL_CONTEXT_WINDOWS.items():
+            if key in model_lower:
+                window = size
+                break
 
     if window > 0:
         # 25% of window for context, with sensible bounds

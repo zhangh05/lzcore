@@ -40,6 +40,8 @@ datas = [
     (str(ROOT / "frontend" / "dist"), "frontend/dist"),
     (str(ROOT / "prompts"), "prompts"),
     (str(ROOT / "scripts" / "windows_update.ps1"), "scripts"),
+    # 内置模型能力目录（models.dev 精简版），由 agent/llm/model_profile.py 读取。
+    (str(ROOT / "agent" / "llm" / "model_catalog_data.json"), "agent/llm"),
     (str(ICON), "."),
 ]
 for path in (ROOT / "config").glob("*"):

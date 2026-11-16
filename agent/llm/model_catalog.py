@@ -43,6 +43,18 @@ def _http_error_detail(error: HTTPError) -> str:
         return str(error.reason)
 
 
+def _annotate_capabilities(models: dict, cfg: dict) -> None:
+    """Mark what each listed model can do when the bundled catalog knows it."""
+    from agent.llm.model_profile import resolve_model_profile
+    for model_id, item in models.items():
+        profile = resolve_model_profile({**cfg, "model": model_id, "capabilities": None, "vision_enabled": None})
+        if profile.catalog_ref:
+            item["capabilities"] = {
+                "vision": profile.vision, "reasoning": profile.reasoning, "tools": profile.tools,
+                "context_window": profile.context_window,
+            }
+
+
 def list_models(cfg: dict) -> dict:
     """Return a normalized catalog or a safe provider failure, without writes."""
     base_url = (cfg.get("base_url") or "").rstrip("/")
@@ -91,6 +103,7 @@ def list_models(cfg: dict) -> dict:
             if isinstance(entry.get("owned_by"), str):
                 item["owned_by"] = entry["owned_by"]
             models[model_id] = item
+        _annotate_capabilities(models, cfg)
         return {
             "ok": True,
             "models": [models[model_id] for model_id in sorted(models)[:MAX_MODELS]],

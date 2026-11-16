@@ -16,7 +16,11 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Iterator
 
-THINKING_MODES = ("provider_default", "adaptive", "disabled")
+from agent.llm.model_profile import EFFORT_LEVELS
+
+# provider_default leaves the vendor's default; adaptive/disabled toggle MiniMax
+# style thinking; effort levels map to reasoning_effort on OpenAI-compatible APIs.
+THINKING_MODES = ("provider_default", "adaptive", "disabled", *EFFORT_LEVELS)
 
 _TURN_MODEL: ContextVar[dict | None] = ContextVar("lzcore_turn_model", default=None)
 
@@ -25,9 +29,10 @@ class ModelSelectionError(ValueError):
     """The requested model cannot be used for this turn."""
 
 
-def supports_thinking_control(model: str) -> bool:
-    """Mirror of the request builder: only MiniMax-M3 models accept a thinking mode."""
-    return str(model or "").lower().startswith("minimax-m3")
+def supports_thinking_control(model: str, config: dict | None = None) -> bool:
+    """Whether a turn may pick a thinking mode for this model (see model_profile)."""
+    from agent.llm.model_profile import resolve_model_profile
+    return bool(resolve_model_profile({**(config or {}), "model": model}).thinking_options)
 
 
 def is_local_endpoint(base_url: object) -> bool:
@@ -60,7 +65,7 @@ def normalize_model_selection(raw: object) -> dict | None:
     elif not isinstance(provider, str) or len(provider) > 80:
         raise ModelSelectionError("provider must be a provider id")
     if thinking not in THINKING_MODES:
-        raise ModelSelectionError("thinking must be provider_default, adaptive or disabled")
+        raise ModelSelectionError("thinking must be provider_default, adaptive, disabled or an effort level")
     if provider is None and thinking == "provider_default":
         return None
     return {"provider": provider, "thinking": thinking}
@@ -82,10 +87,12 @@ def resolve_model_selection(selection: dict | None) -> dict | None:
         raise ModelSelectionError(f"{label} 未配置模型或密钥，不能用于本轮")
     thinking = selection.get("thinking") or "provider_default"
     if thinking != "provider_default":
-        if not supports_thinking_control(cfg.get("model", "")):
-            raise ModelSelectionError(f"{cfg.get('model')} 不支持调节思考模式")
-        if thinking == "disabled" and str(cfg.get("model", "")).lower().startswith("minimax-m3.1"):
-            raise ModelSelectionError("MiniMax-M3.1 只能使用自适应思考")
+        from agent.llm.model_profile import resolve_model_profile
+        profile = resolve_model_profile(cfg)
+        if thinking not in profile.thinking_options:
+            raise ModelSelectionError(f"{cfg.get('model')} 不支持思考档位「{thinking}」")
+        if thinking == "disabled" and profile.thinking_required:
+            raise ModelSelectionError(f"{cfg.get('model')} 不能关闭思考")
         cfg["thinking"] = thinking
     cfg["config_source"] = "turn_selection"
     return cfg

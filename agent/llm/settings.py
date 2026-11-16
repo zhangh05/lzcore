@@ -162,6 +162,14 @@ def resolve_provider_llm_config(provider_id: str) -> dict:
 
 
 def _provider_runtime_config(provider_id: str, cfg: dict, api_key: str) -> dict:
+    runtime = _provider_runtime_fields(provider_id, cfg, api_key)
+    # Context budgets size themselves from the model's real window (catalog or user override).
+    from agent.llm.model_profile import resolve_model_profile
+    runtime["context_window_tokens"] = resolve_model_profile(runtime).context_window
+    return runtime
+
+
+def _provider_runtime_fields(provider_id: str, cfg: dict, api_key: str) -> dict:
     return {
         "enabled": cfg.get("enabled", True),
         "provider": provider_id,
@@ -170,6 +178,7 @@ def _provider_runtime_config(provider_id: str, cfg: dict, api_key: str) -> dict:
         "base_url": cfg.get("base_url", ""),
         "model": cfg.get("model", ""),
         **({"vision_enabled": cfg["vision_enabled"]} if "vision_enabled" in cfg else {}),
+        **({"capabilities": dict(cfg["capabilities"])} if isinstance(cfg.get("capabilities"), dict) else {}),
         "temperature": cfg.get("temperature", 0.2),
         "top_p": cfg.get("top_p"),
         "thinking": cfg.get("thinking", "provider_default"),
@@ -241,6 +250,9 @@ def validate_llm_settings(data: dict, *, new_provider: bool = False) -> list:
     for flag in ("enabled", "safe_mode", "clear_api_key", "vision_enabled"):
         if flag in data and not isinstance(data[flag], bool):
             errors.append(f"{flag} must be boolean")
+    if "capabilities" in data:
+        from agent.llm.model_profile import validate_overrides
+        errors.extend(validate_overrides(data["capabilities"]))
     if "api_key" in data and data["api_key"] is not None and not isinstance(data["api_key"], str):
         errors.append("api_key must be a string")
     if not data.get("model") and data.get("provider") not in ("disabled", "mock"):
@@ -254,16 +266,22 @@ def validate_llm_settings(data: dict, *, new_provider: bool = False) -> list:
     if isinstance(temp, bool) or not isinstance(temp, (int, float)) or not 0 <= temp <= 2:
         errors.append("temperature must be 0-2")
     mt = data.get("max_tokens", 4096)
-    if isinstance(mt, bool) or not isinstance(mt, int) or mt < 1 or mt > 128000:
-        errors.append("max_tokens must be 1-128000")
+    if isinstance(mt, bool) or not isinstance(mt, int) or mt < 1 or mt > 1_048_576:
+        errors.append("max_tokens must be 1-1048576")
     if "prompt_cache_enabled" in data and not isinstance(data.get("prompt_cache_enabled"), bool):
         errors.append("prompt_cache_enabled must be boolean")
     top_p = data.get("top_p")
     if top_p is not None and (isinstance(top_p, bool) or not isinstance(top_p, (int, float)) or not 0 < top_p <= 1):
         errors.append("top_p must be greater than 0 and at most 1")
+    from agent.llm.turn_model import THINKING_MODES
     thinking = data.get("thinking", "provider_default")
-    if not isinstance(thinking, str) or thinking not in {"provider_default", "adaptive", "disabled"}:
-        errors.append("thinking must be provider_default, adaptive or disabled")
-    if data.get("thinking") == "disabled" and str(data.get("model", "")).lower().startswith("minimax-m3.1"):
-        errors.append("MiniMax-M3.1 requires adaptive thinking")
+    if not isinstance(thinking, str) or thinking not in THINKING_MODES:
+        errors.append("thinking must be provider_default, adaptive, disabled or an effort level")
+    elif thinking != "provider_default" and data.get("model"):
+        from agent.llm.model_profile import resolve_model_profile
+        profile = resolve_model_profile(data)
+        if thinking not in profile.thinking_options:
+            errors.append(f"{data.get('model')} does not support thinking={thinking}")
+        elif thinking == "disabled" and profile.thinking_required:
+            errors.append(f"{data.get('model')} requires thinking")
     return errors
