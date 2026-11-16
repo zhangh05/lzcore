@@ -112,7 +112,7 @@ def test_workspace_write_artifact_creates_lineaged_file_and_artifact(tmp_workspa
     ))
 
     assert result["ok"] is True
-    assert result["filepath"].endswith("__result.csv")
+    assert result["filepath"] == "files/data/result.csv"
     assert result["artifact_ids"] == [result["artifact_id"]]
     record = get_file_record("test_ws", result["file_id"])
     assert record["run_id"] == "run_1"
@@ -476,3 +476,28 @@ def test_every_non_image_chat_upload_kind_has_a_canonical_read_path():
     picker_kinds = {"text", "config", "markdown", "json", "yaml", "xml", "html", "pdf", "docx", "xlsx", "pptx"}
     assert picker_kinds <= (set(BINARY_KINDS) | set(TEXT_KINDS))
     assert picker_kinds <= _EXTRACTABLE_FILE_KINDS
+
+
+def test_outputs_and_uploads_use_plain_names_without_overwriting(tmp_workspace):
+    import io
+    from storage.file_store import import_user_upload, write_agent_output
+    from storage.paths import workspace_root
+
+    ws_id = "test_ws"
+    data = workspace_root(ws_id) / "files" / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    (data / "销售报告.md").write_text("用户自己的文件", encoding="utf-8")
+
+    first = write_agent_output(workspace_id=ws_id, content="新报告", logical_type="artifact_output",
+                               file_kind="md", title="销售报告", ext="md")
+    second = write_agent_output(workspace_id=ws_id, content="再一份", logical_type="artifact_output",
+                                file_kind="md", title="销售报告", ext="md")
+    assert first.path == "files/data/销售报告_2.md"
+    assert second.path == "files/data/销售报告_3.md"
+    assert (data / "销售报告.md").read_text(encoding="utf-8") == "用户自己的文件"
+
+    upload = import_user_upload(ws_id, io.BytesIO(b"a,b\n1,2\n"), "data.csv")
+    assert upload.path == "files/data/data.csv"
+    again = import_user_upload(ws_id, io.BytesIO(b"a,b\n3,4\n"), "data.csv")
+    assert again.path == "files/data/data_2.csv"
+    assert (data / "data.csv").read_bytes() == b"a,b\n1,2\n"

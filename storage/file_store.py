@@ -43,6 +43,20 @@ def _safe_name(name: str, max_len: int = 80) -> str:
     return safe[:max_len] or "unnamed"
 
 
+def _claim_output_path(target_dir: Path, stem: str, ext: str) -> Path:
+    """Reserve the first free ``stem.ext`` / ``stem_N.ext`` without overwriting."""
+    suffix = f".{ext}" if ext else ""
+    for n in range(1, 10_000):
+        candidate = target_dir / (f"{stem}{suffix}" if n == 1 else f"{stem}_{n}{suffix}")
+        try:
+            fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            continue
+        os.close(fd)
+        return candidate
+    raise FileExistsError(f"no free output name for {stem}{suffix}")
+
+
 def _sha256_of_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -189,7 +203,8 @@ def import_user_upload(
     rel_dir = _dir_for_type(logical_type)
     target_dir = ws / rel_dir
     target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"{fid}__{safe}"
+    name = Path(safe)
+    target = _claim_output_path(target_dir, name.stem or fid, name.suffix.lstrip("."))
     rel_path = target.relative_to(ws).as_posix()
 
     # Write file
@@ -278,8 +293,6 @@ def write_agent_output(
     tmp_dir = ws / "files" / "tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     tmp_file = tmp_dir / f"{fid}.tmp"
-    target = target_dir / f"{fid}__{safe_title}.{ext}"
-    rel_path = target.relative_to(ws).as_posix()
 
     is_binary = isinstance(content, bytes)
     if is_binary:
@@ -287,7 +300,15 @@ def write_agent_output(
     else:
         tmp_file.write_text(content, encoding="utf-8")
 
-    shutil.move(str(tmp_file), str(target))
+    # The file id lives in the index, not the name: users see "report.md",
+    # and a clash gets "report_2.md" instead of overwriting their file.
+    target = _claim_output_path(target_dir, safe_title, ext)
+    rel_path = target.relative_to(ws).as_posix()
+    try:
+        os.replace(tmp_file, target)
+    except OSError:
+        target.unlink(missing_ok=True)
+        raise
 
     size = target.stat().st_size
     data = content if is_binary else content.encode("utf-8")

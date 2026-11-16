@@ -365,7 +365,8 @@ def handle_ws_write_artifact_file(inv: ToolInvocation) -> dict:
     content = str(inv.arguments.get("content", ""))
     try:
         validate_workspace_id(ws)
-        safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename or "output.txt")
+        from storage.file_store import _safe_name
+        safe_name = _safe_name(Path(str(filename or "output.txt")).name or "output.txt")
         suffix = Path(safe_name).suffix.lstrip(".") or "txt"
         from storage.file_types import classify_file
         if classify_file(safe_name)['binary'] and suffix != 'svg':
