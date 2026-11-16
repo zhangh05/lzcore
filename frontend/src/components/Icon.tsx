@@ -52,6 +52,7 @@ export {
   EllipsisVertical as IconMore,
   SendHorizontal as IconSend,
   Paperclip as IconAttachment,
+  Hand as IconHand,
   PencilLine as IconEdit,
   Plug as IconPlugs,
   Plus as IconPlus,

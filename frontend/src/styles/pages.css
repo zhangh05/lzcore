@@ -66,6 +66,18 @@
   /* Per-message actions recede until wanted: subtle buttons, a quiet note. */
   .message-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-2); margin-left: -8px; }
   .message-note { color: var(--text-3); font-size: var(--fs-12); }
+  /* Attachments sent with a message: image thumbnails open the original, files open a download. */
+  .message-attachments { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); max-width: min(80%, 680px); }
+  .message-attachment a { display: block; color: inherit; text-decoration: none; }
+  .message-attachment.is-image img { display: block; width: auto; height: auto; max-width: 240px; max-height: 180px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface-2); object-fit: cover; }
+  .message-attachment.is-file a { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 280px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--surface); font-size: var(--fs-12); }
+  .message-attachment.is-file a:hover { background: var(--surface-hover); }
+  .message-attachment.is-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Copy stays out of the way: shown on hover or keyboard focus, always on the latest reply and on touch screens. */
+  .message-tools { display: flex; justify-content: flex-end; margin-top: calc(var(--space-1) * -1); }
+  .message-copy { display: inline-flex; color: var(--text-3); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+  .message:hover .message-copy, .message:focus-within .message-copy, .message-actions.is-last .message-copy { opacity: 1; }
+  @media (hover: none) { .message-copy { opacity: 1; } }
   .message-body { white-space: pre-wrap; }
   .tool-cards { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); }
   .tool-card { border: 1px solid var(--line); border-radius: var(--r-control); padding: 6px var(--space-3); font-size: var(--fs-sm); background: var(--surface); transition: background var(--dur-1) var(--ease); }
@@ -122,6 +134,11 @@
   .composer-attachment span { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .composer-attachment button { width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); cursor: pointer; }
   .composer-attachment button:hover { background: var(--subtle-hover); color: var(--text); }
+  /* Pasted or picked images preview as a thumbnail; remove sits on its corner. */
+  .composer-attachment.has-thumb { position: relative; height: 56px; padding: 0; overflow: visible; background: transparent; }
+  .composer-attachment.has-thumb img { display: block; width: 56px; height: 56px; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; background: var(--surface-2); }
+  .composer-attachment.has-thumb button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); color: var(--text-2); box-shadow: var(--shadow-sm); line-height: 1; }
+  .wb-composer.is-dragging .composer-card { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
   .composer-toolbar { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 48px; padding: 6px 8px 8px 8px; }
   .composer-scope, .composer-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-width: 0; }
   .composer-actions { margin-left: auto; flex-shrink: 0; }

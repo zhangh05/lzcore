@@ -13,6 +13,7 @@ import { clearLocalAuth, ensureLocalBrowserToken } from "../../../../api/localAu
 import { TurnTransport, turnErrorText, wsUrl, type Frame, type TurnHandlers } from "../../../../realtime/turnTransport";
 import { emitTopologyUpdated } from "../platform/realtime/turnTransport";
 import { renderMarkdown } from "../../../../utils/markdown";
+import { TurnModelSelects, useTurnModel } from "../../../../kit/turnModel";
 import { useNavigate } from "../platform/router";
 import { IconSparkle, IconClose, IconSend, IconStop } from "../platform/components/Icon";
 import type { Topology } from "./topologyDocument";
@@ -66,6 +67,7 @@ export function TopologyAgentPanel({
   const [live, setLive] = useState<LivePanelTurn | null>(null);
   const [input, setInput] = useState("");
   const [allowEdit, setAllowEdit] = useState(true);
+  const turnModel = useTurnModel(workspaceId);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
   const [versionNote, setVersionNote] = useState<{ before: number; readback: "reading" | "done" | "failed" } | null>(null);
@@ -197,7 +199,7 @@ export function TopologyAgentPanel({
       setLive({ clientRequestId, sessionId: sid, text: "", status: "已发送 · 等待服务端受理", baseVersion: baseline.version });
       transportRef.current.sendMessage({
         workspaceId, sessionId: sid, text, clientRequestId,
-        metadata: { workbench_selection: buildTopologySelection(baseline, captured, allowEdit) },
+        metadata: { workbench_selection: buildTopologySelection(baseline, captured, allowEdit), ...(turnModel.modelSelection ? { model_selection: turnModel.modelSelection } : {}) },
         handlers: turnHandlers(sid, baseline.version),
       });
     } catch (err) {
@@ -302,6 +304,9 @@ export function TopologyAgentPanel({
           <div className="topology-agent-composer-meta">
             <label className="topology-agent-allow-edit"><input type="checkbox" checked={allowEdit} onChange={(e) => setAllowEdit(e.target.checked)} disabled={running || preparing} /><span>允许修改拓扑</span></label>
             <small>上下文：{selection.label}</small>
+          </div>
+          <div className="topology-agent-model">
+            <TurnModelSelects state={turnModel} disabled={running || preparing} chipClassName="composer-chip" />
           </div>
         </footer>
       </form>

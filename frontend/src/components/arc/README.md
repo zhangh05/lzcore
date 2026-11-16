@@ -11,4 +11,6 @@ Not vendored: `confirm-morph` (relies on React 19 boolean `inert`); the app keep
 
 `skeleton` is vendored unmodified (workbench progress panel loading → content crossfade).
 
+`copy-button` is vendored unmodified (per-message copy in the workbench thread); its registry fetch also refreshed `lib/use-copy-feedback.ts` to the current upstream version (same API).
+
 Only components the app uses are kept; deleted ones can be fetched again. To add another component, fetch it the same way, keep these patches, and run `npm run typecheck`.

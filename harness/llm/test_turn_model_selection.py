@@ -126,6 +126,8 @@ def test_workbench_models_lists_every_connected_provider(monkeypatch, tmp_path):
     assert {"minimax", "deepseek", "ollama"} <= listed
     assert "openai" not in listed
     assert body["models"][0]["provider"] == "minimax"
+    vision = {m["provider"]: m["supports_vision"] for m in body["models"]}
+    assert vision["minimax"] is True and vision["deepseek"] is False and vision["ollama"] is False
 
 
 def test_keyless_local_request_sends_no_authorization_header():

@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   onBroadcast: null as null | ((name: string, data: Record<string, unknown>) => void),
   emitted: [] as Array<Record<string, unknown>>,
   order: [] as string[],
+  sent: [] as Array<{ metadata?: Record<string, unknown> }>,
 }));
 
 vi.mock("../../../../api/client", () => ({
@@ -29,7 +30,7 @@ vi.mock("../../../../realtime/turnTransport", () => ({
   TurnTransport: class {
     constructor(o: { onBroadcast?: (name: string, data: Record<string, unknown>) => void }) { h.onBroadcast = o.onBroadcast ?? null; }
     subscribeBroadcasts() {}
-    sendMessage(o: { handlers: { onDone: () => void } }) { h.handlers = o.handlers; }
+    sendMessage(o: { handlers: { onDone: () => void }; metadata?: Record<string, unknown> }) { h.sent.push(o); h.handlers = o.handlers; }
     resumeTurn(o: { clientRequestId: string; sessionId: string; handlers: { onDone: () => void } }) { h.order.push("resume"); h.resumed.push(o); h.handlers = o.handlers; }
     close() {}
   },
@@ -50,7 +51,7 @@ async function sendFirstTurn(onCompleted: () => Promise<boolean>) {
   await waitFor(() => expect(h.handlers).not.toBeNull());
 }
 
-beforeEach(() => { h.messages = []; h.handlers = null; h.existing = null; h.jobs = []; h.resumed = []; h.emitted = []; h.order = []; });
+beforeEach(() => { h.messages = []; h.handlers = null; h.existing = null; h.jobs = []; h.resumed = []; h.emitted = []; h.order = []; h.sent = []; try { localStorage.clear(); } catch { /* ignore */ } });
 
 describe("TopologyAgentPanel", () => {
   it("keeps the user's message visible when the first send creates the session", async () => {
@@ -102,5 +103,23 @@ describe("TopologyAgentPanel", () => {
     h.onBroadcast!("topology_updated", { workspace_id: "w", topology_id: "t1", version: 5 });
     h.onBroadcast!("something_else", {});
     expect(h.emitted).toEqual([{ workspace_id: "w", topology_id: "t1", version: 5 }]);
+  });
+
+  it("lets the drawing assistant pick the model for a turn, like the workbench composer", async () => {
+    // useApi 在测试 setup 里已加载（绑定真实 api 客户端），所以这里直接给 fetch 喂模型列表。
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url).includes("/api/workbench/models") ? { models: [
+      { provider: "minimax", label: "MiniMax", model: "MiniMax-M3", is_active: true, supports_thinking: false, requires_thinking: false },
+      { provider: "test", label: "test", model: "gpt-6.1-sol", is_active: false, supports_thinking: false, requires_thinking: false },
+    ] } : {}), { status: 200, headers: { "content-type": "application/json" } })));
+    render(<TopologyAgentPanel workspaceId="w" topology={topo} selection={selection} onCompleted={async () => true} />);
+    const select = await screen.findByTestId("model-select");
+    expect((select as HTMLSelectElement).value).toBe("minimax");
+    fireEvent.change(select, { target: { value: "test" } });
+    fireEvent.change(screen.getByTestId("agent-input"), { target: { value: "画两台交换机" } });
+    fireEvent.click(screen.getByTestId("agent-send"));
+    await waitFor(() => expect(h.sent).toHaveLength(1));
+    expect(h.sent[0].metadata?.model_selection).toEqual({ provider: "test", thinking: "provider_default" });
+    expect(h.sent[0].metadata?.workbench_selection).toBeTruthy();
+    vi.unstubAllGlobals();
   });
 });

@@ -3,7 +3,7 @@ import { type ReferenceLine } from "./TopologyReferenceLines";
 import type { Topology } from "./topologyDocument";
 import { type NodeRuntimeStatus } from "./topologyPalette";
 
-export type CanvasMode = "select" | "connect";
+export type CanvasMode = "select" | "connect" | "pan";
 
 export type Position = { element_id: string; x: number; y: number };
 

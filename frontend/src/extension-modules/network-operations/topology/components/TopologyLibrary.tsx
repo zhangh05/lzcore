@@ -30,7 +30,7 @@ export type TopologyLibraryProps = {
     import("react").SetStateAction<string | null>
   >;
   setCanvasMode: import("react").Dispatch<
-    import("react").SetStateAction<"select" | "connect">
+    import("react").SetStateAction<"select" | "connect" | "pan">
   >;
   setManualNodeName: import("react").Dispatch<
     import("react").SetStateAction<string>
