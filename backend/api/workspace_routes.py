@@ -257,7 +257,7 @@ def register_workspace_routes(app):
             return jsonify({"ok": False, "error": "invalid_workspace_id"}), 400
         from storage.paths import workspace_catalog_root
         is_new = not workspace_catalog_root(ws_id).exists()
-        ensure_workspace(ws_id)
+        ensure_workspace(ws_id, revive=True)
         from flask import session
         from backend.core.identity import identity_enabled
         organization_id = str(session.get("lzcore_org") or data.get("organization_id") or "default")

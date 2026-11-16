@@ -80,12 +80,19 @@ def _record_experience_and_maybe_reflect(
                 task_id=task_id,
             )
             future.add_done_callback(_log_memory_reflection_failure)
-    except Exception:
+    except Exception as exc:
+        from storage.workspace_tombstones import WorkspaceDeletedError
+        if isinstance(exc, WorkspaceDeletedError):
+            _LOG.debug("skip experience journal for deleted workspace %s", workspace_id)
+            return
         _LOG.warning("experience journal write failed", exc_info=True)
 
 
 def _log_memory_reflection_failure(done: concurrent.futures.Future) -> None:
+    from storage.workspace_tombstones import WorkspaceDeletedError
     try:
         done.result()
+    except WorkspaceDeletedError:
+        _LOG.debug("background memory reflection skipped: workspace deleted")
     except Exception:
         _LOG.warning("background memory reflection failed", exc_info=True)

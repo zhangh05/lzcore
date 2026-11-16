@@ -265,12 +265,11 @@ def run_task(svc: Service, task: dict, provider: str, stamp: str) -> dict:
 
 
 def cleanup(svc: Service, stamp: str) -> None:
-    """统一在最后删除临时工作区。
+    """统一在最后删除临时工作区，删完再清扫一次本地残留（只清本次运行的 ev<stamp>- 前缀）。
 
-    回合结束后，会话反思等后台任务还会异步写入工作区，逐个任务立即删除会被它们重新建出目录。
-    所以等一会儿再删，删完再清扫一次本地残留（只清本次运行的 ev<stamp>- 前缀）。
+    服务端删除后会拦住后台反思等迟到的写入，清扫只是兜底（例如连的是旧版本服务）。
     """
-    time.sleep(20)
+    time.sleep(3)
     prefix = f"ev{stamp}-"
     root = svc.root / "workspaces"
     for path in sorted(root.glob(prefix + "*")):
