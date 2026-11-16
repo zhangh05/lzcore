@@ -276,7 +276,7 @@ def validate_llm_settings(data: dict, *, new_provider: bool = False) -> list:
     from agent.llm.turn_model import THINKING_MODES
     thinking = data.get("thinking", "provider_default")
     if not isinstance(thinking, str) or thinking not in THINKING_MODES:
-        errors.append("thinking must be provider_default, adaptive, disabled or an effort level")
+        errors.append("thinking must be provider_default, adaptive, enabled, disabled or an effort level")
     elif thinking != "provider_default" and data.get("model"):
         from agent.llm.model_profile import resolve_model_profile
         profile = resolve_model_profile(data)

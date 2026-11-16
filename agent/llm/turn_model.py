@@ -18,9 +18,11 @@ from typing import Iterator
 
 from agent.llm.model_profile import EFFORT_LEVELS
 
-# provider_default leaves the vendor's default; adaptive/disabled toggle MiniMax
-# style thinking; effort levels map to reasoning_effort on OpenAI-compatible APIs.
-THINKING_MODES = ("provider_default", "adaptive", "disabled", *EFFORT_LEVELS)
+# provider_default leaves the vendor's default; adaptive / enabled / disabled
+# switch thinking on or off; effort levels pick a depth (reasoning_effort,
+# Anthropic output_config.effort, or a thinking budget).  Which values a model
+# takes and how they are sent is model_profile's ``thinking_style``.
+THINKING_MODES = ("provider_default", "adaptive", "enabled", "disabled", *EFFORT_LEVELS)
 
 _TURN_MODEL: ContextVar[dict | None] = ContextVar("lzcore_turn_model", default=None)
 
@@ -65,7 +67,7 @@ def normalize_model_selection(raw: object) -> dict | None:
     elif not isinstance(provider, str) or len(provider) > 80:
         raise ModelSelectionError("provider must be a provider id")
     if thinking not in THINKING_MODES:
-        raise ModelSelectionError("thinking must be provider_default, adaptive, disabled or an effort level")
+        raise ModelSelectionError("thinking must be provider_default, adaptive, enabled, disabled or an effort level")
     if provider is None and thinking == "provider_default":
         return None
     return {"provider": provider, "thinking": thinking}

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AuthGateView } from "../app/AuthGate";
-import { isConnected } from "../pages/system/ModelSettings";
+import { isConnected, isRemovable } from "../pages/system/ModelSettings";
 import { BrowserRouter } from "../router";
 import { appHandler, type AppFixtureOptions, type Logged } from "./appFixture";
 import { installFixture } from "./backendFixture";
@@ -16,7 +16,7 @@ function profileFor(model: string) {
   return { model, vision, pdf: false, tools: true, reasoning: effort, temperature: !effort, context_window: vision ? 128000 : 64000, max_output: 8192,
     thinking_options: effort ? ["low", "medium", "high"] : [], thinking_required: false, cost_per_million: null,
     catalog_ref: model.startsWith("gpt") || effort ? `openai/${model}` : model === "deepseek-chat" ? "deepseek/deepseek-chat" : "", display_name: "",
-    sources: { vision: "catalog", reasoning: "catalog", temperature: "catalog", context_window: "catalog", _base: "catalog" } };
+    sources: { vision: "catalog", tools: "catalog", reasoning: "catalog", temperature: "catalog", context_window: "catalog", _base: "catalog" } };
 }
 
 /** 在应用夹具之上补模型服务与网络 Skill 接口，记录全部写请求。 */
@@ -51,6 +51,11 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
         : { status: 200, body: { ok: false, error: "provider rejected the request", http_status: 401 } };
     }
     const save = /^\/api\/agent\/llm\/providers\/([^/]+)$/.exec(p);
+    if (save && method === "DELETE") {
+      const rec = providers.find((x) => x.provider === save[1])!;
+      Object.assign(rec, { key_configured: false, key_preview: null });
+      return { status: 200, body: { ok: true, deleted: true } };
+    }
     if (save && method === "POST") {
       const rec = providers.find((x) => x.provider === save[1])!;
       const b = body as { api_key?: string; model?: string };
@@ -144,6 +149,30 @@ describe("模型服务", () => {
     expect(isConnected({ provider: "deepseek" }, "deepseek")).toBe(true);
   });
 
+  it("能删除：自建的、内置但保存过配置的；没配置过的内置服务没有删除按钮", () => {
+    expect(isRemovable({ provider: "provider_abc" })).toBe(true);
+    expect(isRemovable({ provider: "custom", key_configured: true })).toBe(true);
+    expect(isRemovable({ provider: "minimax", updated_at: "2026-10-06T00:00:00Z" })).toBe(true);
+    expect(isRemovable({ provider: "ollama", base_url: "http://localhost:11434/v1" })).toBe(false);
+  });
+
+  it("删除已接入的内置服务（当前默认）：先把默认切到其他可用服务，再清除配置，卡片回到「添加」画廊", async () => {
+    const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    const table = await screen.findByTestId("providers-table", {}, { timeout: 4000 });
+    expect(within(table).queryByTestId("provider-delete-ollama")).toBeNull();
+    fireEvent.click(within(table).getByTestId("provider-delete-deepseek"));
+    const dialog = await screen.findByTestId("confirm-dialog");
+    expect(dialog).toHaveTextContent("回到「添加模型服务」里");
+    expect(dialog).toHaveTextContent("删除后默认会切换到其他可用的服务");
+    fireEvent.change(within(dialog).getByTestId("confirm-text"), { target: { value: "DeepSeek" } });
+    fireEvent.click(within(dialog).getByTestId("confirm-submit"));
+    await waitFor(() => expect(log.some((l) => l.method === "DELETE" && l.path === "/api/agent/llm/providers/deepseek")).toBe(true));
+    const order = log.map((l) => l.path);
+    expect(order.indexOf("/api/agent/llm/activate")).toBeLessThan(order.indexOf("/api/agent/llm/providers/deepseek"));
+    expect(log.find((l) => l.path === "/api/agent/llm/activate")?.body).toMatchObject({ provider: "ollama" });
+    expect(await screen.findByTestId("provider-add-deepseek")).toBeInTheDocument();
+  });
+
   it("从画廊接入 OpenAI：先测草稿（不保存）→ 填密钥后测试通过 → 保存后直接出现在已接入里", async () => {
     const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
     const settings = await screen.findByTestId("model-settings");
@@ -199,6 +228,24 @@ describe("模型服务", () => {
     fireEvent.click(within(sheet).getByTestId("provider-save"));
     await waitFor(() => expect(log.find((l) => l.path === "/api/agent/llm/providers/deepseek")?.body).toMatchObject({
       capabilities: { vision: true, reasoning: null, temperature: null, context_window: 32000 }, thinking: "provider_default",
+    }));
+  });
+
+  it("工具调用和最大输出上限可以手动设；超过上限的最大输出会提示截断", async () => {
+    const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    const card = (await screen.findByTestId("providers-table", {}, { timeout: 4000 })).querySelector('[data-provider="deepseek"]') as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: /配置/ }));
+    const sheet = await screen.findByTestId("provider-sheet");
+    const caps = await within(sheet).findByTestId("capability-settings");
+    await waitFor(() => expect(caps).toHaveTextContent("自动：支持 · 内置模型目录"));
+    fireEvent.click(within(within(caps).getByRole("group", { name: "工具调用" })).getByRole("button", { name: "不支持" }));
+    expect(caps).toHaveTextContent("智能体只能直接回答");
+    fireEvent.change(within(caps).getByTestId("provider-max-output"), { target: { value: "32000" } });
+    fireEvent.change(within(sheet).getByTestId("provider-max-tokens"), { target: { value: "40000" } });
+    expect(sheet).toHaveTextContent("超过模型上限 32K，发送时会按 32K 截断");
+    fireEvent.click(within(sheet).getByTestId("provider-save"));
+    await waitFor(() => expect(log.find((l) => l.path === "/api/agent/llm/providers/deepseek")?.body).toMatchObject({
+      max_tokens: 40000, capabilities: { tools: false, max_output: 32000, vision: null },
     }));
   });
 

@@ -19,6 +19,7 @@ export interface Provider {
   provider: string; label?: string; provider_type?: string; protocol?: string; base_url?: string; model?: string;
   key_configured?: boolean; key_preview?: string | null; is_active?: boolean; temperature?: number; max_tokens?: number;
   thinking?: string; capabilities?: CapabilityOverrides | null; vision_enabled?: boolean; profile?: ModelProfile | null;
+  is_builtin?: boolean; updated_at?: string | null;
 }
 
 const PROTOCOLS = [["openai_compatible", "OpenAI 兼容"], ["anthropic_messages", "Anthropic Messages"]] as const;
@@ -26,6 +27,8 @@ const protocolLabel = (p?: string) => PROTOCOLS.find(([k]) => k === p)?.[1] ?? p
 const hostOf = (url?: string) => { try { return url ? new URL(url).host : ""; } catch { return url ?? ""; } };
 const isLocal = (url?: string) => /^(localhost|127\.|\[::1\])/.test(hostOf(url));
 /** 已接入 = 有密钥、当前在用、本机服务（无需密钥）或用户自建的；其余内置预设只出现在「添加」画廊里。 */
+/** 能删除 = 用户自建的，或内置服务上保存过配置/密钥（删除即清空配置，回到「添加」画廊）；没配置过的内置服务删了也没变化。 */
+export const isRemovable = (p: Provider) => p.provider.startsWith("provider_") || !!p.updated_at || !!p.key_configured;
 export const isConnected = (p: Provider, active: string) => !!p.key_configured || p.provider === active || !!p.is_active || isLocal(p.base_url) || p.provider.startsWith("provider_");
 
 /** 名称首字母 + 由 id 推出的稳定色相，作为服务商的头像（不引入第三方商标图形）。 */
@@ -55,6 +58,15 @@ function TestResult({ t }: { t: TestState }) {
   ) : (
     <p className="probe is-fail" role="alert" data-testid="llm-test-result"><IconWarningCircle size={16} aria-hidden="true" />测试未通过 · {t.ms} ms<span className="probe-reply">{t.error || "服务端未给出原因"}</span></p>
   );
+}
+
+/** 每次请求的最大输出：显示模型上限，超过时说明会被截断。 */
+function maxTokensHint(value: number, override: number | null, profile: ModelProfile | null): string {
+  const known = override ?? (profile && profile.sources.max_output && profile.sources.max_output !== "unknown" ? profile.max_output : null);
+  if (!known) return "单次回复最多生成的 token 数。";
+  return value > known
+    ? `超过模型上限 ${formatTokens(known)}，发送时会按 ${formatTokens(known)} 截断。`
+    : `单次回复最多生成的 token 数，模型上限 ${formatTokens(known)}。`;
 }
 
 /** 能直接在对话里选用：有模型，且有密钥或是本机服务。 */
@@ -118,7 +130,7 @@ export function ModelSettings({ admin, platform }: { admin: boolean; platform: b
                     </Button>
                     {admin ? <Button className="sm" onClick={() => setSheet({ provider: p, isNew: false })}><IconEdit size={14} aria-hidden="true" />配置</Button> : null}
                     <span className="grow" />
-                    {admin && p.provider.startsWith("provider_") ? <Button className="sm" variant="ghost" onClick={() => setDel(p)} aria-label={`删除 ${p.label ?? p.provider}`}><IconTrash size={14} aria-hidden="true" /></Button> : null}
+                    {admin && isRemovable(p) ? <Button data-testid={`provider-delete-${p.provider}`} className="sm" variant="ghost" onClick={() => setDel(p)} aria-label={`删除 ${p.label ?? p.provider}`}><IconTrash size={14} aria-hidden="true" /></Button> : null}
                   </footer>
                 </li>
               );
@@ -152,7 +164,14 @@ export function ModelSettings({ admin, platform }: { admin: boolean; platform: b
 
       {sheet ? <ProviderSheet provider={sheet.provider} isNew={sheet.isNew} platform={platform} becomeDefault={!defaultUsable}
         onClose={() => setSheet(null)} onSaved={(label, o) => { setR({ label, o }); setSheet(null); reload(); }} /> : null}
-      {del ? <ConfirmDialog title="删除模型服务？" details={<p>将删除「{del.label ?? del.provider}」的配置（含已保存的密钥）。</p>} confirmText={del.label ?? del.provider} confirmLabel="删除"
+      {del ? <ConfirmDialog title="删除模型服务？" details={<>
+        <p>{del.provider.startsWith("provider_")
+          ? <>将删除「{del.label ?? del.provider}」的配置（含已保存的密钥）。</>
+          : <>将清除「{del.label ?? del.provider}」的配置和已保存的密钥，它会回到「添加模型服务」里，之后可以重新接入。</>}</p>
+        {(del.provider === active || del.is_active) ? (connected.some((x) => x.provider !== del.provider && usable(x))
+          ? <p className="muted">它是当前默认模型，删除后默认会切换到其他可用的服务。</p>
+          : <p className="muted">它是当前默认模型，删除后没有其他可用的模型服务，需要重新接入一个。</p>) : null}
+      </>} confirmText={del.label ?? del.provider} confirmLabel="删除"
         onCancel={() => setDel(null)} onConfirm={async () => { const p = del; setDel(null); await remove(p); }} /> : null}
     </div>
   );
@@ -194,6 +213,7 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [profile, setProfile] = useState<ModelProfile | null>(null);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => {
     // 能力设置属于某个模型：换模型后回到自动识别，思考档位回到服务商默认。
     setF((prev) => (k === "model" && v !== prev.model ? { ...prev, model: v as string, capabilities: {}, thinking: "provider_default" } : { ...prev, [k]: v }));
@@ -233,7 +253,7 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
 
   const fields = () => {
     const body: Record<string, unknown> = { label: f.label.trim(), provider_type: f.provider_type, model: f.model.trim(), temperature: Number(f.temperature), max_tokens: Number(f.max_tokens),
-      thinking: f.thinking, capabilities: { vision: null, reasoning: null, temperature: null, context_window: null, ...f.capabilities } };
+      thinking: f.thinking, capabilities: { vision: null, tools: null, reasoning: null, temperature: null, context_window: null, max_output: null, ...f.capabilities } };
     if (!lockUrl) body.base_url = f.base_url.trim();
     if (f.api_key) body.api_key = f.api_key;
     return body;
@@ -310,14 +330,15 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
             <span className="sheet-label">模型能力</span>
             <CapabilitySettings draft={{ provider: isNew ? undefined : provider.provider, model: f.model, base_url: f.base_url, provider_type: f.provider_type, api_key: f.api_key || undefined }}
               overrides={f.capabilities} onOverrides={(next) => setF((prev) => ({ ...prev, capabilities: next }))}
-              thinking={f.thinking} onThinking={(next) => setF((prev) => ({ ...prev, thinking: next }))} />
+              thinking={f.thinking} onThinking={(next) => setF((prev) => ({ ...prev, thinking: next }))} onProfile={setProfile} />
           </section>
 
           <details className="sheet-advanced">
             <summary>高级设置<span className="muted">温度、最大输出</span></summary>
             <div className="sheet-adv">
               <Slider label="温度" min={0} max={2} step={0.1} value={Number(f.temperature)} onValueChange={(v) => set("temperature", v)} format={(v) => v.toFixed(1)} showValue />
-              <Input label="最大输出 tokens" type="number" min={256} step={256} value={f.max_tokens} onChange={(e) => set("max_tokens", Number(e.target.value))} />
+              <Input label="最大输出 tokens" type="number" min={256} step={256} value={f.max_tokens} onChange={(e) => set("max_tokens", Number(e.target.value))}
+                data-testid="provider-max-tokens" description={maxTokensHint(Number(f.max_tokens), f.capabilities.max_output ?? null, profile)} />
             </div>
           </details>
 

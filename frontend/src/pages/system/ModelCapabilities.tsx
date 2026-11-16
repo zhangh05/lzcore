@@ -34,9 +34,11 @@ const TRI_OPTIONS = [{ value: "auto", label: "自动" }, { value: "on", label: "
 export interface CapabilityDraft { provider?: string; model: string; base_url: string; provider_type: string; api_key?: string }
 type Detect = { phase: "idle" } | { phase: "running" } | { phase: "done"; text: string; tone: "ok" | "warn" | "fail" };
 
-export function CapabilitySettings({ draft, overrides, onOverrides, thinking, onThinking }: {
+export function CapabilitySettings({ draft, overrides, onOverrides, thinking, onThinking, onProfile }: {
   draft: CapabilityDraft; overrides: CapabilityOverrides; onOverrides: (next: CapabilityOverrides) => void;
   thinking: string; onThinking: (next: string) => void;
+  /** 自动识别结果变化时通知（高级设置里的「最大输出」据此显示模型上限）。 */
+  onProfile?: (profile: ModelProfile | null) => void;
 }) {
   const [auto, setAuto] = useState<ModelProfile | null>(null);
   const [detect, setDetect] = useState<Detect>({ phase: "idle" });
@@ -54,6 +56,7 @@ export function CapabilitySettings({ draft, overrides, onOverrides, thinking, on
     return () => window.clearTimeout(t);
   }, [model, draft.base_url, draft.provider_type, draft.provider]);
   useEffect(() => setDetect({ phase: "idle" }), [model, draft.base_url]);
+  useEffect(() => onProfile?.(auto), [auto, onProfile]);
 
   if (!model) return <p className="sheet-hint" data-testid="capabilities-empty">选好模型后，这里会显示它的能力。</p>;
 
@@ -96,6 +99,12 @@ export function CapabilitySettings({ draft, overrides, onOverrides, thinking, on
         </div>
       </div>
       <div className="caps-row">
+        <div className="caps-text"><strong>工具调用</strong><span>{overrides.tools === false
+          ? "已设为不支持：不向模型发送工具，智能体只能直接回答，不能执行操作。"
+          : autoHint(auto?.tools, auto?.sources.tools)}</span></div>
+        <SegmentedControl label="工具调用" value={toTri(overrides.tools)} onValueChange={(v) => set({ tools: fromTri(v) })} options={TRI_OPTIONS} />
+      </div>
+      <div className="caps-row">
         <div className="caps-text"><strong>深度思考</strong><span>{autoHint(auto?.reasoning, auto?.sources.reasoning)}</span></div>
         <SegmentedControl label="深度思考" value={toTri(overrides.reasoning)} onValueChange={(v) => set({ reasoning: fromTri(v) })} options={TRI_OPTIONS} />
       </div>
@@ -116,6 +125,12 @@ export function CapabilitySettings({ draft, overrides, onOverrides, thinking, on
         onChange={(e) => set({ context_window: e.target.value ? Number(e.target.value) : null })}
         placeholder={auto ? `自动：${auto.context_window}` : ""}
         description={auto ? `留空使用自动值 ${formatTokens(auto.context_window)}（${SOURCE_LABEL[auto.sources.context_window ?? "unknown"]}）。` : undefined} />
+      <Input label="最大输出上限（tokens）" type="number" min={1000} step={1000} value={overrides.max_output ?? ""} data-testid="provider-max-output"
+        onChange={(e) => set({ max_output: e.target.value ? Number(e.target.value) : null })}
+        placeholder={auto ? `自动：${auto.max_output}` : ""}
+        description={auto ? (auto.sources.max_output && auto.sources.max_output !== "unknown"
+          ? `模型单次回复最多能生成的长度。留空使用自动值 ${formatTokens(auto.max_output)}（${SOURCE_LABEL[auto.sources.max_output]}），请求会按它截断。`
+          : "模型单次回复最多能生成的长度。目录里没有这个模型，留空时不做截断。") : undefined} />
     </div>
   );
 }
