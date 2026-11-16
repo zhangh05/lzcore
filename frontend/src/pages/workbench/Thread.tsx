@@ -1,5 +1,5 @@
 import { renderMarkdown } from "../../utils/markdown";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { api, bodyOf } from "../../api/client";
 import { Button } from "../../components/Button";
 import { OutcomeBar } from "../../components/OutcomeBar";
@@ -111,6 +111,40 @@ function MessageAvatar({ role, live = false }: { role: string; live?: boolean })
   return <span className="message-avatar is-user" aria-hidden="true">{label.slice(0, 1).toUpperCase()}</span>;
 }
 
+/**
+ * 单条消息。回读后内容没变的消息沿用同一个对象（见 reuseUnchanged），这里 memo 后就不会重新渲染、也不会重新解析 Markdown；
+ * 回合结束时只有新增的那几条会更新。
+ */
+const MessageItem = memo(function MessageItem({ m, ws, sessionId, isLast, verifyTaskId, available }: {
+  m: ChatMessage; ws: string; sessionId: string; isLast: boolean; verifyTaskId?: string; available: Set<string>;
+}) {
+  const kind = m.role === "assistant" ? terminalKind(m) : "normal";
+  const verify = unknownTargetHref(ws, sessionId, verifyTaskId, m.metadata?.operation_id);
+  const html = useMemo(() => (m.role === "assistant" ? renderMarkdown(m.content) : ""), [m.role, m.content]);
+  return (
+    <li className={`message role-${m.role}`} data-role={m.role}>
+      <MessageAvatar role={m.role} />
+      <div className="message-main">
+      {m.role === "assistant" ? <div className="message-body markdown-body" dangerouslySetInnerHTML={{ __html: html }} /> : <div className="message-body">{m.content}</div>}
+      {m.role === "assistant" ? (
+        <>
+          {kind === "cancelled" ? <p className="inline-alert tone-info" role="status">本轮已按请求停止（服务端确认）。</p> : null}
+          {kind === "error" ? <p className="inline-alert tone-danger" role="alert">本轮报错：{(m.errors ?? []).join("；")}</p> : null}
+          <ToolCards m={m} ws={ws} available={available} />
+          <OutcomeBar facts={turnFacts(m)} toolCalls={m.metadata?.tool_calls ?? []} verifyHref={verify} resumeHref={verify} />
+          {isLast ? (
+            <div className="row-actions message-actions">
+              <MemoryAction ws={ws} sessionId={sessionId} m={m} />
+              <KnowledgeAction ws={ws} m={m} />
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      </div>
+    </li>
+  );
+});
+
 export function Thread({ ws, sessionId, messages, live, task, availableExtensions, onResume }: {
   ws: string; sessionId: string; messages: ChatMessage[]; live: LiveTurn | null;
   task: SessionTask | null; availableExtensions: Set<string>; onResume: (taskId: string) => void;
@@ -121,32 +155,11 @@ export function Thread({ ws, sessionId, messages, live, task, availableExtension
     <div className="wb-thread" data-testid="thread">
       {messages.length === 0 && !live ? <p className="muted">在下方输入第一句话开始。</p> : null}
       <ol className="messages">
-        {messages.map((m, i) => {
-          const kind = m.role === "assistant" ? terminalKind(m) : "normal";
-          const verify = unknownTargetHref(ws, sessionId, m.metadata?.task_id ?? (taskUnknown ? task?.task_id : undefined), m.metadata?.operation_id);
-          return (
-            <li key={m.message_id ?? i} className={`message role-${m.role}`} data-role={m.role}>
-              <MessageAvatar role={m.role} />
-              <div className="message-main">
-              {m.role === "assistant" ? <div className="message-body markdown-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }} /> : <div className="message-body">{m.content}</div>}
-              {m.role === "assistant" ? (
-                <>
-                  {kind === "cancelled" ? <p className="inline-alert tone-info" role="status">本轮已按请求停止（服务端确认）。</p> : null}
-                  {kind === "error" ? <p className="inline-alert tone-danger" role="alert">本轮报错：{(m.errors ?? []).join("；")}</p> : null}
-                  <ToolCards m={m} ws={ws} available={availableExtensions} />
-                  <OutcomeBar facts={turnFacts(m)} toolCalls={m.metadata?.tool_calls ?? []} verifyHref={verify} resumeHref={verify} />
-                  {m === lastAssistant ? (
-                    <div className="row-actions message-actions">
-                      <MemoryAction ws={ws} sessionId={sessionId} m={m} />
-                      <KnowledgeAction ws={ws} m={m} />
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-              </div>
-            </li>
-          );
-        })}
+        {messages.map((m, i) => (
+          // 会话消息只追加不重排，按位置作 key：本地乐观插入的用户消息换成服务端版本时原地更新，不会卸载重建。
+          <MessageItem key={i} m={m} ws={ws} sessionId={sessionId} isLast={m === lastAssistant}
+            verifyTaskId={m.metadata?.task_id ?? (taskUnknown ? task?.task_id : undefined)} available={availableExtensions} />
+        ))}
         {live ? (
           <li className="message role-assistant is-live" aria-live="polite" data-testid="live-turn">
             <MessageAvatar role="assistant" live />

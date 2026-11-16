@@ -5,6 +5,8 @@ import { installFixture, type FixtureOptions } from "./backendFixture";
 export interface AppFixtureOptions extends FixtureOptions {
   conflict?: "none" | "annotations" | "topology" | "approval" | "approval_network" | "memory";
   jobs?: "data" | "mapping1";
+  /** 拿到会话消息表的引用，测试里可以模拟服务端在回合结束时追加回复。 */
+  messagesRef?: { current?: Record<string, unknown[]> };
 }
 
 export interface Logged { method: string; path: string; body: unknown }
@@ -37,6 +39,7 @@ export function appHandler(opts: AppFixtureOptions, log: Logged[]): FakeHandler 
     "s-real42": [{ role: "user", content: "6×7？", run_id: "run-42" }, { message_id: "a42", role: "assistant", content: "42", run_id: "run-42", created_at: "2026-11-09T10:00:00Z",
       metadata: { client_request_id: "cr42", stage_outputs: [{ id: "model-1", label: "模型输出 1", text: "42" }, { id: "", label: "", text: "" }] } }],
   };
+  if (opts.messagesRef) opts.messagesRef.current = messages;
   const taskState: Record<string, unknown> = {
     "s-unknown": { task_id: "t-unknown", objective: "整理周报", status: "partial", unknowns: [{ kind: "unknown_outcome" }] },
     "s-mapping2": { task_id: "t-mapping2", status: "partial", unknowns: [{ kind: "unknown_outcome" }] },

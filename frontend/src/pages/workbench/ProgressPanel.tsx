@@ -6,6 +6,8 @@ import { IconCheckCircle, IconChevronLeft, IconChevronRight, IconClock, IconInfo
 import { stageViews, type ChatMessage } from "./model";
 import type { SessionTask } from "./Workbench";
 import { renderMarkdown } from "../../utils/markdown";
+import { Skeleton } from "../../components/arc/skeleton/skeleton";
+import { FadeSwap } from "../../components/FadeSwap";
 
 /** 有没有可展示的进度事实：阶段输出（有字段的）、会话 task-state、或本轮实时事件。 */
 export function hasProgressContent(last: ChatMessage | undefined, task: SessionTask | null, liveEvents: string[]): boolean {
@@ -109,6 +111,10 @@ export function ProgressPanel({ ws, last, task, liveEvents, collapsed, onToggle 
   const lastRun = last?.run_id ?? (typeof last?.metadata?.run_id === "string" ? last.metadata.run_id : undefined);
   const running = liveEvents.length > 0;
   const persisted = usePersistedRun(ws, running ? undefined : lastRun);
+  // 回合结束时实时事件会清空，而运行记录还要再读一次：这段时间继续显示刚才的实时步骤，读到后再平滑换成运行记录，
+  // 不让「处理过程」先变空再填满。父级按会话给本组件设 key，换会话时自然清空。
+  const lastLive = useRef<string[]>([]);
+  if (running) lastLive.current = liveEvents;
   if (collapsed) return <aside className="wb-progress is-collapsed" aria-label="本轮详情（已收起）"><Button variant="ghost" onClick={onToggle} aria-label="展开本轮详情" icon={<IconChevronLeft size={16} aria-hidden="true" />} /></aside>;
   const stages = stageViews(last?.metadata?.stage_outputs);
   const msgRun = lastRun;
@@ -132,6 +138,10 @@ export function ProgressPanel({ ws, last, task, liveEvents, collapsed, onToggle 
     if (e.key === "ArrowLeft") setWidth((w) => Math.min(640, w + 16));
     if (e.key === "ArrowRight") setWidth((w) => Math.max(260, w - 16));
   };
+  // live：本轮实时步骤（结束后、运行记录到达前继续显示）；loading：没有可显示的步骤，正在读运行记录；recorded：运行记录或空状态。
+  const holdLive = !running && !!lastRun && !auditReady && lastLive.current.length > 0;
+  const shownLive = running ? liveEvents : lastLive.current;
+  const stepsMode: "live" | "loading" | "recorded" = running || holdLive ? "live" : lastRun && !auditReady ? "loading" : "recorded";
   const ToneIcon = running ? IconClock : outcome ? TONE_ICON[outcome.tone] : IconInfo;
   return (
     <aside className="wb-progress" style={{ width }} aria-label="本轮详情" data-testid="progress-panel">
@@ -171,12 +181,12 @@ export function ProgressPanel({ ws, last, task, liveEvents, collapsed, onToggle 
 
       <section className="pp-section">
         <h3>处理过程</h3>
-        {running ? (
-          <ol className="pp-steps is-live" data-testid="timeline">{liveEvents.map((e, i) => <li key={i} className={i === liveEvents.length - 1 ? "is-current" : ""}><span className="pp-step-dot" aria-hidden="true" /><span className="pp-step-label">{liveLabel(e).label}{liveLabel(e).detail ? <span className="pp-step-extra"> · {liveLabel(e).detail}</span> : null}</span></li>)}</ol>
+        <Skeleton loading={stepsMode === "loading"} lines={4} label="正在读取处理记录">
+        <FadeSwap swapKey={stepsMode === "live" ? "live" : "recorded"}>
+        {stepsMode === "live" ? (
+          <ol className={`pp-steps ${running ? "is-live" : ""}`} data-testid="timeline">{shownLive.map((e, i) => <li key={i} className={running && i === shownLive.length - 1 ? "is-current" : ""}><span className="pp-step-dot" aria-hidden="true" /><span className="pp-step-label">{liveLabel(e).label}{liveLabel(e).detail ? <span className="pp-step-extra"> · {liveLabel(e).detail}</span> : null}</span></li>)}</ol>
         ) : !lastRun ? (
           <p className="pp-empty">还没有处理记录。</p>
-        ) : !auditReady ? (
-          <p className="pp-empty">正在读取处理记录…</p>
         ) : persisted.trace?.length ? (
           <ol className="pp-steps" data-testid="timeline">
             {persisted.trace.map((e, i) => {
@@ -192,6 +202,8 @@ export function ProgressPanel({ ws, last, task, liveEvents, collapsed, onToggle 
             })}
           </ol>
         ) : <p className="pp-empty">{persisted.trace ? "这一轮没有记录到处理步骤。" : "处理记录暂时读不到。"}</p>}
+        </FadeSwap>
+        </Skeleton>
       </section>
 
       {thoughts.length ? (

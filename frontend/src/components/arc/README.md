@@ -9,4 +9,6 @@ React 18 compatibility (Arc targets React 19 typings), kept as small patches:
 
 Not vendored: `confirm-morph` (relies on React 19 boolean `inert`); the app keeps its type-to-confirm dialog.
 
+`skeleton` is vendored unmodified (workbench progress panel loading → content crossfade).
+
 Only components the app uses are kept; deleted ones can be fetched again. To add another component, fetch it the same way, keep these patches, and run `npm run typecheck`.

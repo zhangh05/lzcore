@@ -13,7 +13,7 @@ import { useNavigate, useSearchParams } from "../../router";
 import { CatalogDrawer } from "./CatalogDrawer";
 import { Composer, type SendOptions } from "./Composer";
 import { IconChat, IconMore, IconPlus } from "../../components/Icon";
-import type { ChatMessage, SessionSummary, StopState } from "./model";
+import { reuseIfSame, reuseUnchanged, type ChatMessage, type SessionSummary, type StopState } from "./model";
 import { ProgressPanel, hasProgressContent } from "./ProgressPanel";
 import { SessionColumn } from "./SessionColumn";
 import type { SubagentCall } from "./subagents";
@@ -121,27 +121,40 @@ export function Workbench() {
   // 命令面板 / 外部入口的「新建会话」意图：真正创建会话。
   useEffect(() => { if (intent === "new-session" && ws) void newSession(); }, [intent, ws, newSession]);
 
-  const loadMessages = useCallback(async () => {
-    if (!ws || !sessionId) { setMessages([]); return []; }
+  // 读与写分开：fetch* 只读服务端，apply* 才改界面状态。回合结束时先把三份都读完，再在同一帧里一起换上，
+  // 避免「正式回复已出现、流式草稿还没消失」「详情栏先清空再填满」这类中间态。
+  const fetchMessages = useCallback(async (): Promise<{ list: ChatMessage[] } | { error: string }> => {
+    if (!ws || !sessionId) return { list: [] };
     const o = await api.get(`/api/sessions/${enc(sessionId)}/messages`, { workspace_id: ws });
     const list = bodyOf<{ messages?: ChatMessage[] }>(o)?.messages;
-    if (o.kind === "http" && o.status === 200 && Array.isArray(list)) { setMessages(list); setMsgError(null); return list; }
-    setMsgError(describeFailure(o));
+    if (o.kind === "http" && o.status === 200 && Array.isArray(list)) return { list };
+    return { error: describeFailure(o) };
+  }, [ws, sessionId]);
+  const applyMessages = useCallback((r: { list: ChatMessage[] } | { error: string }) => {
+    if ("list" in r) { setMessages((prev) => reuseUnchanged(prev, r.list)); setMsgError(null); return r.list; }
+    setMsgError(r.error);
     return null;
-  }, [ws, sessionId]);
+  }, []);
+  const loadMessages = useCallback(async () => applyMessages(await fetchMessages()), [fetchMessages, applyMessages]);
 
-  const loadTask = useCallback(async () => {
-    if (!ws || !sessionId) { setTask(null); return; }
+  const fetchTask = useCallback(async (): Promise<SessionTask | null> => {
+    if (!ws || !sessionId) return null;
     const o = await api.get(`/api/runtime/sessions/${enc(sessionId)}/task-state`, { workspace_id: ws });
-    setTask(bodyOf<{ task_state?: { task?: SessionTask } }>(o)?.task_state?.task ?? null);
+    return bodyOf<{ task_state?: { task?: SessionTask } }>(o)?.task_state?.task ?? null;
   }, [ws, sessionId]);
+  const loadTask = useCallback(async () => { const t = await fetchTask(); setTask((prev) => reuseIfSame(prev, t)); }, [fetchTask]);
 
   // 当前会话详情只从这里回读（GET /api/sessions/<id>）：首次进入、会话栏改名 / 归档 / 恢复之后、回合结束（可能自动起标题）之后。
-  const loadSession = useCallback(async () => {
-    if (!ws || !sessionId) { setSession(null); return; }
+  // 返回 undefined 表示没读到，保留现有详情。
+  const fetchSession = useCallback(async (): Promise<SessionSummary | null | undefined> => {
+    if (!ws || !sessionId) return null;
     const o = await api.get(`/api/sessions/${enc(sessionId)}`, { workspace_id: ws });
-    if (o.kind === "http" && o.status === 200) setSession(bodyOf<{ session?: SessionSummary }>(o)?.session ?? null);
+    return o.kind === "http" && o.status === 200 ? bodyOf<{ session?: SessionSummary }>(o)?.session ?? null : undefined;
   }, [ws, sessionId]);
+  const applySession = useCallback((s: SessionSummary | null | undefined) => {
+    if (s !== undefined) setSession((prev) => reuseIfSame(prev, s));
+  }, []);
+  const loadSession = useCallback(async () => applySession(await fetchSession()), [fetchSession, applySession]);
 
   useEffect(() => {
     setLive(null); setStopState("idle"); setStopError(null);
@@ -164,14 +177,16 @@ export function Workbench() {
 
   const settle = useCallback(async (note?: string) => {
     // 服务端终态优先：回合结束后用服务端消息替换本地流式内容。
-    await loadMessages();
-    await loadTask();
-    await loadSession();
-    setSessionsVersion((n) => n + 1); // 回合可能自动起标题：列表与主标题一起回读
+    // 三份回读并行取完，再同步一次性换上（React 会合并成一次渲染）：流式草稿和正式回复不会同时出现。
+    const [msgs, nextTask, nextSession] = await Promise.all([fetchMessages(), fetchTask(), fetchSession()]);
+    applyMessages(msgs);
+    setTask((prev) => reuseIfSame(prev, nextTask));
+    applySession(nextSession);
     setLive(null);
     setStopState("idle");
     if (note) setStopError(note);
-  }, [loadMessages, loadTask, loadSession]);
+    setSessionsVersion((n) => n + 1); // 回合可能自动起标题：会话列表也回读，未变的行沿用旧数据
+  }, [fetchMessages, fetchTask, fetchSession, applyMessages, applySession]);
 
   const turnHandlers = useMemo(() => ({
     onToken: (t: string) => setLive((l) => l && { ...l, text: l.text + t, status: "生成中" }),
@@ -363,11 +378,11 @@ export function Workbench() {
           </div>
         )}
       </section>
-      {progressRail ? <ProgressPanel ws={ws} last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={collapsed.progress} onToggle={() => setCollapsed((c) => ({ ...c, progress: !c.progress }))} /> : null}
+      {progressRail ? <ProgressPanel key={sessionId ?? ""} ws={ws} last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={collapsed.progress} onToggle={() => setCollapsed((c) => ({ ...c, progress: !c.progress }))} /> : null}
       {panel ? <Drawer title={panel === "sessions" ? "会话列表" : "本轮详情"} onClose={() => setPanel(null)}>
         <div className="wb-panel-drawer">
           {panel === "sessions" ? <SessionColumn ws={ws} currentId={sessionId} onOpen={openSession} onNew={() => void newSession()} collapsed={false} onToggle={() => setPanel(null)} onChanged={onSessionChanged} refreshKey={sessionsVersion} />
-            : <ProgressPanel ws={ws} last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={false} onToggle={() => setPanel(null)} />}
+            : <ProgressPanel key={sessionId ?? ""} ws={ws} last={lastAssistant} task={task} liveEvents={live?.events ?? []} collapsed={false} onToggle={() => setPanel(null)} />}
         </div>
       </Drawer> : null}
       {drawer === "catalog" ? <CatalogDrawer ws={ws} onClose={() => setDrawer(null)} /> : null}
