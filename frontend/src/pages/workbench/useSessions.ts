@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, bodyOf, enc } from "../../api/client";
 import type { HttpOutcome } from "../../contracts/auth";
-import type { SessionSummary } from "./model";
+import { reuseUnchanged, type SessionSummary } from "./model";
 
 export function useSessions(ws: string | null, status: "active" | "archived", currentId?: string | null) {
   const [list, setList] = useState<SessionSummary[] | null>(null);
@@ -13,7 +13,7 @@ export function useSessions(ws: string | null, status: "active" | "archived", cu
     void api.get("/api/sessions", { workspace_id: ws, status, limit: 200 }).then((o) => {
       if (off) return;
       const b = bodyOf<{ sessions?: SessionSummary[] }>(o);
-      if (o.kind === "http" && o.status === 200 && Array.isArray(b?.sessions)) { setList(b!.sessions!); setError(null); }
+      if (o.kind === "http" && o.status === 200 && Array.isArray(b?.sessions)) { const next = b!.sessions!; setList((prev) => prev ? reuseUnchanged(prev, next) : next); setError(null); }
       else { setList([]); setError(o); }
     });
     return () => { off = true; };

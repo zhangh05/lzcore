@@ -327,3 +327,45 @@ describe("浮层层级（R2）", () => {
     expect(await screen.findByTestId("palette-hint")).toHaveTextContent("只搜索动作、页面和工作区");
   });
 });
+
+describe("回合结束的刷新范围", () => {
+  it("一次性换上终态：流式草稿与正式回复不同时出现，已有消息节点不重建", async () => {
+    const messagesRef: { current?: Record<string, unknown[]> } = {};
+    const { Fake } = renderAt("/workbench?ws=ws-demo-1&session=s-partial", { messagesRef });
+    const input = await screen.findByTestId("composer-input");
+    const oldAssistant = await waitFor(() => {
+      const el = document.querySelector('.messages li[data-role="assistant"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    const oldHtml = oldAssistant.querySelector(".message-body")!;
+    fireEvent.change(input, { target: { value: "继续" } });
+    fireEvent.click(screen.getByTestId("send-btn"));
+    await waitFor(() => expect(Fake.instances[0]?.sent.length).toBe(1));
+    const sock = Fake.instances[0];
+    const crid = (sock.sent[0] as { metadata: { client_request_id: string } }).metadata.client_request_id;
+    act(() => sock.push({ type: "token", content: "第三份", seq: 1 }));
+    const userLi = Array.from(document.querySelectorAll('.messages li[data-role="user"]')).at(-1)!;
+
+    // 服务端此时已经写好了这一轮：用户消息 + 正式回复。
+    messagesRef.current!["s-partial"] = [...messagesRef.current!["s-partial"],
+      { message_id: "u9", role: "user", content: "继续" },
+      { message_id: "a9", role: "assistant", content: "第三份也读到了。", ok: true, errors: [], metadata: { client_request_id: crid, tool_calls: [] } }];
+    const overlaps: number[] = [];
+    const mo = new MutationObserver(() => {
+      const live = document.querySelector('[data-testid="live-turn"]');
+      const finals = document.querySelectorAll('.messages li[data-role="assistant"]:not(.is-live)').length;
+      if (live && finals > 1) overlaps.push(finals);
+    });
+    mo.observe(document.body, { subtree: true, childList: true, characterData: true });
+    act(() => sock.push({ type: "done", client_request_id: crid }));
+    await waitFor(() => expect(screen.queryByTestId("live-turn")).toBeNull());
+    await waitFor(() => expect(document.querySelectorAll('.messages li[data-role="assistant"]').length).toBe(2));
+    mo.disconnect();
+
+    expect(overlaps).toEqual([]);
+    // 未变化的旧回复连 DOM 节点都没有换；乐观插入的用户消息原地换成服务端版本。
+    expect(document.querySelector('.messages li[data-role="assistant"] .message-body')).toBe(oldHtml);
+    expect(Array.from(document.querySelectorAll('.messages li[data-role="user"]')).at(-1)).toBe(userLi);
+  });
+});

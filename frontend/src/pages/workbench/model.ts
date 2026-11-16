@@ -136,3 +136,23 @@ export function terminalKind(m: ChatMessage): "cancelled" | "error" | "normal" {
   if (m.errors && m.errors.length && m.metadata?.execution_outcome !== "unknown") return "error";
   return "normal";
 }
+
+/**
+ * 回读后的结构共享：内容没变的条目沿用旧对象，只有真正变化的条目换成新对象。
+ * 会话消息是追加式的，按位置比较即可；这样回合结束回读整页消息时，只有新增 / 变化的那几条会重新渲染。
+ */
+export function reuseUnchanged<T>(prev: readonly T[], next: readonly T[]): T[] {
+  let same = prev.length === next.length;
+  const out = next.map((item, i) => {
+    const old = prev[i];
+    if (old !== undefined && (old === item || JSON.stringify(old) === JSON.stringify(item))) return old;
+    same = false;
+    return item;
+  });
+  return same ? (prev as T[]) : out;
+}
+
+/** 单个对象的同样处理：内容一致就沿用旧对象，避免无意义的重新渲染。 */
+export function reuseIfSame<T>(prev: T, next: T): T {
+  return prev === next || JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+}
