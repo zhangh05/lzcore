@@ -34,7 +34,7 @@ export interface SessionTask {
 }
 
 export interface LiveStep { callId: string; toolId: string; state: "running" | "ok" | "fail"; summary?: string; durationMs?: number }
-export interface LiveTurn { clientRequestId: string; text: string; events: string[]; status: string; jobId?: string; steps?: LiveStep[]; subagentCalls?: SubagentCall[] }
+export interface LiveTurn { clientRequestId: string; text: string; events: string[]; status: string; jobId?: string; steps?: LiveStep[]; subagentCalls?: SubagentCall[]; providerRetries?: number }
 
 /** 把实时事件投影进本轮的步骤与子任务观察；只是展示，终态仍以服务端 done/回读为准。 */
 export function applyLiveEvent(l: LiveTurn, name: string, data: Record<string, unknown>): LiveTurn {
@@ -53,13 +53,17 @@ export function applyLiveEvent(l: LiveTurn, name: string, data: Record<string, u
   const subagentCalls = name === "subagent_observation" && data.result && typeof data.result === "object"
     ? [...(l.subagentCalls ?? []), { call_id: callId || undefined, tool_id: toolId || "agent.manage", ok: data.ok !== false, result: data.result as Record<string, unknown> }]
     : l.subagentCalls;
+  // 模型连接失败时服务端会一直重试（直到恢复或用户停止）：状态要如实说在重试，不能一直显示「模型处理中」。
+  const providerRetries = name === "provider_retrying" ? Number(data.attempt) || (l.providerRetries ?? 0) + 1 : l.providerRetries;
+  const retrying = providerRetries ? `模型连接失败，正在第 ${providerRetries} 次重试 · 可以停止本轮` : "";
   return {
     ...l,
     steps,
     subagentCalls,
+    providerRetries,
     events: [...l.events, `${name}${toolId ? ` · ${toolId}` : ""}${data.title ? ` · ${String(data.title)}` : ""}`],
     jobId: String(data.job_id ?? l.jobId ?? "") || undefined,
-    status: name === "model_started" ? "模型处理中" : name === "tool_call" ? `调用工具 ${toolId}` : name === "subagent_observation" ? "子任务进行中" : l.status,
+    status: name === "provider_retrying" ? retrying : name === "model_started" ? (retrying || "模型处理中") : name === "tool_call" ? `调用工具 ${toolId}` : name === "subagent_observation" ? "子任务进行中" : l.status,
   };
 }
 
