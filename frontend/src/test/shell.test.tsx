@@ -35,7 +35,8 @@ describe("应用壳", () => {
     const select = screen.getByTestId("workspace-switcher") as HTMLSelectElement;
     expect(Array.from(select.options).map((o) => o.value)).toEqual(["ws-demo-1", "ws-demo-2"]);
     expect(select.innerHTML).not.toContain("default");
-    expect(new URLSearchParams(window.location.search).get("ws")).toBe("ws-demo-1");
+    // 地址栏的 ws 由路由在工作区确定后补写，可能晚于切换器渲染一拍。
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("ws")).toBe("ws-demo-1"));
   });
 
   it("顶栏不再有全局「待核对」；/review 没有目标时回到任务页", async () => {
