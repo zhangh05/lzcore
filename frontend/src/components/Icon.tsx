@@ -18,6 +18,7 @@ export {
   BookOpenText as IconBook,
   Brain as IconBrain,
   Briefcase as IconWorkspace,
+  ArrowDown as IconArrowDown,
   ChevronDown as IconChevronDown,
   ChevronUp as IconChevronUp,
   ChevronLeft as IconChevronLeft,

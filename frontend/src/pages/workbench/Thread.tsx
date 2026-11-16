@@ -1,7 +1,8 @@
 import { renderMarkdown } from "../../utils/markdown";
-import { memo, useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useStickToBottom } from "use-stick-to-bottom";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import remend from "remend";
-import { motion, useReducedMotion } from "motion/react";
 import { motionTokens } from "../../components/arc/lib/motion-tokens";
 import { api, bodyOf } from "../../api/client";
 import { Button } from "../../components/Button";
@@ -17,7 +18,7 @@ import { terminalKind, turnFacts, unknownTargetHref, type ChatMessage } from "./
 import type { LiveTurn, SessionTask } from "./Workbench";
 import { SubagentCard } from "./SubagentCard";
 import { BrandGlyph } from "../../components/BrandGlyph";
-import { IconBook, IconBrain } from "../../components/Icon";
+import { IconArrowDown, IconBook, IconBrain } from "../../components/Icon";
 import { useOptionalShell } from "../../app/shellContext";
 import { partitionSubagentCalls } from "./subagents";
 
@@ -167,8 +168,21 @@ export function Thread({ ws, sessionId, messages, live, task, availableExtension
   const liveMessage = useMemo(() => (live ? liveAsMessage(live) : null), [live]);
   const status = live?.status ?? "";
   const streaming = useMemo(() => ({ status }), [status]);
+  // 贴底滚动（use-stick-to-bottom，StackBlitz，MIT）：在底部时跟随流式输出；用户往上翻就松开，不抢滚动；
+  // 内容高度变化（排版、工具卡片展开）也会跟上。离开底部时显示「回到底部」。
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({ initial: "instant", resize: "smooth" });
+  // 换会话直接落到底部；自己发出一轮时，即使正往上翻也带回底部看回复。
+  useEffect(() => { void scrollToBottom("instant"); }, [ws, sessionId, scrollToBottom]);
+  const turnId = live?.clientRequestId;
+  useEffect(() => {
+    if (turnId) { void scrollToBottom("smooth"); return; }
+    // 回合结束：结果栏、操作按钮在最后一刻出现，人还在底部就补一次贴底（往上翻着的不动）。
+    void scrollToBottom({ animation: "smooth", preserveScrollPosition: true, wait: true });
+  }, [turnId, scrollToBottom]);
   return (
-    <div className="wb-thread" data-testid="thread">
+    <div className="wb-thread-wrap">
+    <div className="wb-thread" data-testid="thread" ref={scrollRef}>
+      <div className="wb-thread-content" ref={contentRef}>
       {messages.length === 0 && !live ? <p className="muted">在下方输入第一句话开始。</p> : null}
       <ol className="messages">
         {/* 实时回复必须和历史消息在同一个数组里：React 只在同一组兄弟间按 key 复用节点。 */}
@@ -184,7 +198,25 @@ export function Thread({ ws, sessionId, messages, live, task, availableExtension
         ]}
       </ol>
       {task && !live ? <TaskResumeBar ws={ws} sessionId={sessionId} task={task} onResume={onResume} /> : null}
+      </div>
     </div>
+    <AnimatePresence>
+      {!isAtBottom ? <JumpToBottom key="jump" live={!!live} onClick={() => void scrollToBottom("smooth")} /> : null}
+    </AnimatePresence>
+    </div>
+  );
+}
+
+/** 回到底部：离开底部时浮在对话区下沿；正在回复时提示有新内容。 */
+function JumpToBottom({ live, onClick }: { live: boolean; onClick: () => void }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div className="jump-to-bottom" initial={{ opacity: 0, y: reduce ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduce ? 0 : 6 }}
+      transition={{ duration: reduce ? motionTokens.duration.instant : motionTokens.duration.fast, ease: [...motionTokens.ease.enter] }}>
+      <Button variant="secondary" className="sm" icon={<IconArrowDown size={14} aria-hidden="true" />} onClick={onClick} data-testid="jump-to-bottom">
+        {live ? "有新内容 · 回到底部" : "回到底部"}
+      </Button>
+    </motion.div>
   );
 }
 

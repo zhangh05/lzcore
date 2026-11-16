@@ -38,10 +38,13 @@
   .wb-status-btn:hover, .wb-status-btn[aria-expanded="true"] { background: var(--subtle-hover); color: var(--text); }
   .wb-status-btn .status-dot { width: 6px; height: 6px; }
   .wb-header .btn { flex: none; }
-  .wb-thread { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--space-8) var(--space-8) var(--space-4); scroll-behavior: smooth; }
+  .wb-thread-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .jump-to-bottom { position: absolute; inset-inline: 0; bottom: var(--space-3); z-index: 2; display: flex; justify-content: center; pointer-events: none; }
+  .jump-to-bottom button { pointer-events: auto; background: var(--bg-elev); box-shadow: var(--shadow-md); border-radius: var(--r-pill); padding-inline: var(--space-3); }
+  .wb-thread { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--space-8) var(--space-8) var(--space-4); }
   /* The conversation column: wide enough that a 1440px window is not two empty margins,
      narrow enough that a line of prose stays readable (~45 CJK characters). */
-  .wb-thread > .muted, .wb-thread > .resume-bar { max-width: var(--w-chat); margin-inline: auto; }
+  .wb-thread-content > .muted, .wb-thread-content > .resume-bar { max-width: var(--w-chat); margin-inline: auto; }
   .messages { --w-chat: 960px; list-style: none; margin: 0 auto; padding: 0; width: 100%; max-width: var(--w-chat); display: flex; flex-direction: column; gap: var(--space-6); }
   /* Every turn is avatar + content. Both sides read at Fluent body 14/22. */
   .message { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--space-3); align-items: start; min-width: 0; max-width: 100%; overflow-wrap: anywhere; font-size: var(--fs-14); line-height: 22px; animation: message-in var(--dur-4) var(--ease-out); }
