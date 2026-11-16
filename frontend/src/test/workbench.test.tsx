@@ -405,3 +405,58 @@ describe("对话区贴底滚动", () => {
     await waitFor(() => expect(screen.queryByTestId("jump-to-bottom")).toBeNull(), { timeout: 3000 });
   });
 });
+
+describe("消息附件与复制", () => {
+  it("用户消息显示随消息发出的图片缩略图和文件；每条消息都能复制原文", async () => {
+    const messagesRef: { current?: Record<string, unknown[]> } = {};
+    renderAt("/workbench?ws=ws-demo-1&session=s-partial", { messagesRef });
+    // 服务端历史里的用户消息带附件引用（请求在下一个微任务才发出）
+    messagesRef.current!["s-partial"][0] = { role: "user", content: "汇总三份", metadata: { attachments: [
+      { file_id: "file_img1", name: "截图.png", kind: "image", mime_type: "image/png", size_bytes: 10 },
+      { file_id: "file_doc1", name: "月报.xlsx", kind: "file", mime_type: "application/vnd.ms-excel", size_bytes: 20 },
+    ] } };
+    const box = await screen.findByTestId("message-attachments");
+    const img = within(box).getByRole("img", { name: "截图.png" });
+    expect(img.getAttribute("src")).toBe("/api/storage/files/file_img1/preview?workspace_id=ws-demo-1");
+    expect(within(box).getByRole("link", { name: /月报\.xlsx/ }).getAttribute("href")).toBe("/api/storage/files/file_doc1/download?workspace_id=ws-demo-1");
+
+    const copied: string[] = [];
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (t: string) => { copied.push(t); } } });
+    const copies = screen.getAllByRole("button", { name: "复制" });
+    expect(copies).toHaveLength(2);
+    await act(async () => { copies[0].click(); });
+    await act(async () => { copies[1].click(); });
+    expect(copied).toEqual(["汇总三份", "已汇总两份；第三份无法读取。"]);
+  });
+
+  it("选中不识图的模型又带了图片：提示图片不会发给模型，并给出能识图的模型", async () => {
+    renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    await screen.findByTestId("composer-input");
+    const select = await screen.findByTestId("model-select");
+    const input = screen.getByTestId("composer").querySelector("input[type=file]") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "a.png", { type: "image/png" })] } });
+    expect(screen.queryByTestId("vision-unsupported")).toBeNull();
+    fireEvent.change(select, { target: { value: "deepseek" } });
+    expect(await screen.findByTestId("vision-unsupported")).toHaveTextContent("deepseek-chat 不支持识图，图片不会发给模型。要识图请换成 MiniMax-M3");
+  });
+
+  it("在输入区任意位置粘贴截图：显示缩略图，按时间重新命名，不必先点进文本框", async () => {
+    renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    await screen.findByTestId("composer-input");
+    const created: string[] = [];
+    const origCreate = URL.createObjectURL, origRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = () => { created.push("blob:x"); return "blob:x"; };
+    URL.revokeObjectURL = () => {};
+    try {
+      const shot = new File(["png"], "image.png", { type: "image/png" });
+      fireEvent.paste(screen.getByTestId("send-btn"), { clipboardData: { files: [shot], items: [] } });
+      const chip = await screen.findByTestId("composer-attachment");
+      const img = within(chip).getByRole("img");
+      expect(img.getAttribute("src")).toBe("blob:x");
+      expect(img.getAttribute("alt")).toMatch(/^粘贴的图片-\d{6}\.png$/);
+      expect(screen.getByTestId("composer-input")).toHaveFocus();
+      fireEvent.click(within(chip).getByRole("button", { name: /移除/ }));
+      expect(screen.queryByTestId("composer-attachment")).toBeNull();
+    } finally { URL.createObjectURL = origCreate; URL.revokeObjectURL = origRevoke; }
+  });
+});

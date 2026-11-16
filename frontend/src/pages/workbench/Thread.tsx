@@ -4,7 +4,8 @@ import { useStickToBottom } from "use-stick-to-bottom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import remend from "remend";
 import { motionTokens } from "../../components/arc/lib/motion-tokens";
-import { api, bodyOf } from "../../api/client";
+import { api, bodyOf, enc } from "../../api/client";
+import { CopyButton } from "../../components/arc/copy-button/copy-button";
 import { Button } from "../../components/Button";
 import { OutcomeBar } from "../../components/OutcomeBar";
 import { deriveToolAttemptState, TOOL_ATTEMPT_LABEL } from "../../contracts/outcomeState";
@@ -14,11 +15,11 @@ import { MemoryWriteView } from "../../kit/MemoryWriteView";
 import { stableMemoryId, writeMemory, type MemoryWriteState } from "../../kit/memoryWrite";
 import { FailureNote, ReceiptNote } from "../../kit/ui";
 import type { HttpOutcome } from "../../contracts/auth";
-import { terminalKind, turnFacts, unknownTargetHref, type ChatMessage } from "./model";
+import { terminalKind, turnFacts, unknownTargetHref, type ChatAttachment, type ChatMessage } from "./model";
 import type { LiveTurn, SessionTask } from "./Workbench";
 import { SubagentCard } from "./SubagentCard";
 import { BrandGlyph } from "../../components/BrandGlyph";
-import { IconArrowDown, IconBook, IconBrain } from "../../components/Icon";
+import { IconArrowDown, IconAttachment, IconBook, IconBrain } from "../../components/Icon";
 import { useOptionalShell } from "../../app/shellContext";
 import { partitionSubagentCalls } from "./subagents";
 
@@ -117,6 +118,32 @@ function MessageAvatar({ role, live = false }: { role: string; live?: boolean })
  * 流式中的回复也用它渲染（streaming 非空）：边流边排版 Markdown（remend 先补齐未闭合的语法），工具调用直接按最终卡片样式显示；
  * 结束时同一个节点换上服务端终态，只有结果栏和操作按钮是新出现的。
  */
+/** 消息里带的附件：图片显示缩略图（点开看原图），文件显示名称（点开下载）。都走托管文件的只读预览 / 下载接口。 */
+function MessageAttachments({ ws, items }: { ws: string; items: ChatAttachment[] }) {
+  const [broken, setBroken] = useState<Set<string>>(() => new Set());
+  const url = (a: ChatAttachment, kind: "preview" | "download") => `/api/storage/files/${enc(a.file_id)}/${kind}?workspace_id=${enc(ws)}`;
+  return (
+    <ul className="message-attachments" data-testid="message-attachments">
+      {items.map((a) => a.kind === "image" && !broken.has(a.file_id) ? (
+        <li key={a.file_id} className="message-attachment is-image">
+          <a href={url(a, "preview")} target="_blank" rel="noreferrer" title={a.name}>
+            <img src={url(a, "preview")} alt={a.name} loading="lazy" onError={() => setBroken((b) => new Set(b).add(a.file_id))} />
+          </a>
+        </li>
+      ) : (
+        <li key={a.file_id} className="message-attachment is-file">
+          <a href={url(a, "download")} title={`下载 ${a.name}`}><IconAttachment size={14} aria-hidden="true" /><span>{a.name}</span></a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** 复制这条消息的原文（助手消息复制 Markdown 源文）。Arc copy-button，图标态：复制 → 对勾。 */
+function MessageCopy({ text }: { text: string }) {
+  return <span className="message-copy" data-testid="message-copy"><CopyButton value={text} label="复制" iconOnly variant="plain" /></span>;
+}
+
 const MessageItem = memo(function MessageItem({ m, ws, sessionId, isLast, verifyTaskId, available, streaming }: {
   m: ChatMessage; ws: string; sessionId: string; isLast: boolean; verifyTaskId?: string; available: Set<string>;
   streaming?: { status: string } | null;
@@ -128,12 +155,15 @@ const MessageItem = memo(function MessageItem({ m, ws, sessionId, isLast, verify
   const content = useDeferredValue(m.content);
   const source = live ? content : m.content;
   const html = useMemo(() => (m.role === "assistant" && source ? renderMarkdown(live ? remend(source) : source) : ""), [m.role, source, live]);
+  const attachments = useMemo(() => (Array.isArray(m.metadata?.attachments) ? m.metadata.attachments.filter((a) => a && typeof a.file_id === "string") : []), [m.metadata?.attachments]);
   return (
     <li className={`message role-${m.role} ${live ? "is-live is-streaming" : ""}`} data-role={m.role}
       aria-live={live ? "polite" : undefined} data-testid={live ? "live-turn" : undefined}>
       <MessageAvatar role={m.role} live={live} />
       <div className="message-main">
+      {m.role !== "assistant" && attachments.length ? <MessageAttachments ws={ws} items={attachments} /> : null}
       {m.role === "assistant" ? (html ? <div className="message-body markdown-body" dangerouslySetInnerHTML={{ __html: html }} /> : null) : <div className="message-body">{m.content}</div>}
+      {m.role !== "assistant" && m.content ? <div className="message-tools"><MessageCopy text={m.content} /></div> : null}
       {m.role === "assistant" ? (
         <>
           {kind === "cancelled" ? <p className="inline-alert tone-info" role="status">本轮已按请求停止（服务端确认）。</p> : null}
@@ -144,10 +174,11 @@ const MessageItem = memo(function MessageItem({ m, ws, sessionId, isLast, verify
           ) : (
             <Reveal>
               <OutcomeBar facts={turnFacts(m)} toolCalls={m.metadata?.tool_calls ?? []} verifyHref={verify} resumeHref={verify} />
-              {isLast ? (
-                <div className="row-actions message-actions">
-                  <MemoryAction ws={ws} sessionId={sessionId} m={m} />
-                  <KnowledgeAction ws={ws} m={m} />
+              {isLast || m.content ? (
+                <div className={`row-actions message-actions ${isLast ? "is-last" : ""}`}>
+                  {m.content ? <MessageCopy text={m.content} /> : null}
+                  {isLast ? <MemoryAction ws={ws} sessionId={sessionId} m={m} /> : null}
+                  {isLast ? <KnowledgeAction ws={ws} m={m} /> : null}
                 </div>
               ) : null}
             </Reveal>

@@ -44,7 +44,7 @@ export type TopologyCanvasStageProps = {
   binding: boolean;
   bookmarks: { name: string; x: number; y: number; zoom: number }[];
   canvasApiRef: import("react").MutableRefObject<CanvasApi | null>;
-  canvasMode: "select" | "connect";
+  canvasMode: "select" | "connect" | "pan";
   canvasSelectedElementIds: string[];
   changeReferenceLines: (lines: ReferenceLine[]) => void;
   compactMode: boolean;
@@ -130,7 +130,7 @@ export type TopologyCanvasStageProps = {
   >;
   setBinding: import("react").Dispatch<import("react").SetStateAction<boolean>>;
   setCanvasMode: import("react").Dispatch<
-    import("react").SetStateAction<"select" | "connect">
+    import("react").SetStateAction<"select" | "connect" | "pan">
   >;
   setCanvasSelectedElementIds: import("react").Dispatch<
     import("react").SetStateAction<string[]>
@@ -775,7 +775,9 @@ export function TopologyCanvasStage({
         <span className={`canvas-mode-hint ${workspaceMode === "view" ? "is-view-mode" : ""}`}>
           {workspaceMode === "view"
             ? "拖拽平移 · 滚轮缩放 · 点击设备查看最近观测"
-            : canvasMode === "connect"
+            : canvasMode === "pan"
+              ? "平移：拖动挪动画面 · 滚轮缩放 · V 回到选择"
+              : canvasMode === "connect"
               ? "连线：点击或拖拽连接两台设备，自动配对接口 · Esc 退出"
               : armedNodeType
                 ? "点击空白处连续放置设备 · Esc 或右键退出"

@@ -1,0 +1,26 @@
+/* Press is a Motion spring (whileTap), so it works on touch too, where iOS skips :active. touch-action removes the double tap zoom delay. */
+.button { display: inline-flex; width: max-content; max-width: 100%; min-height: var(--control-height-sm); align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 0 var(--space-3); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-sm); font-weight: 500; line-height: 1; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
+@media (hover: hover) and (pointer: fine) {
+  .button:hover:not(:disabled) { background: var(--surface-muted); }
+  .plain:hover:not(:disabled) { color: var(--foreground); }
+}
+/* Touch gets a fill while the finger is down, since there is no hover to show the button is live. */
+@media (hover: none) { .button:active:not(:disabled) { background: var(--surface-muted); } .plain:active:not(:disabled) { color: var(--foreground); } }
+.button:disabled { cursor: not-allowed; opacity: .5; }
+/* Only the glyph takes the state color; the label stays in the foreground color. */
+.glyph { position: relative; display: grid; flex: none; place-items: center; color: inherit; transition: color var(--duration-fast) var(--ease-standard); }
+.glyph[data-state="copied"] { color: var(--success); }
+.glyph[data-state="error"] { color: var(--danger); }
+.glyphLayer { display: grid; grid-area: 1 / 1; place-items: center; }
+.glyphLayer svg { display: block; overflow: visible; }
+/* Every word sits in one grid cell: invisible sizers hold the longest word's width, the visible word crossfades centered on top. */
+.label { display: inline-grid; min-width: 0; align-items: center; justify-items: center; white-space: nowrap; }
+.sizer, .word { grid-area: 1 / 1; padding-block: 2px; white-space: nowrap; }
+.sizer { visibility: hidden; }
+.word { display: block; }
+.iconOnly { width: var(--control-height-sm); padding: 0; }
+/* Icon-only buttons keep a 40px touch target on phones without growing visually. */
+@media (pointer: coarse) { .iconOnly { position: relative; } .iconOnly::after { position: absolute; inset: calc((40px - var(--control-height-sm)) / -2); content: ""; } }
+.plain { border-color: transparent; background: transparent; color: var(--text-secondary); }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .button, .glyph { transition: none; } }

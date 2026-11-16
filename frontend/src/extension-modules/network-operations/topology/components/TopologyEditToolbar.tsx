@@ -5,6 +5,7 @@ import {
   IconBox,
   IconExpand,
   IconGrid,
+  IconHand,
   IconLink,
   IconLock,
   IconMenu,
@@ -38,7 +39,7 @@ export type TopologyEditToolbarProps = {
   armedNodeType: string | null;
   bookmarks: { name: string; x: number; y: number; zoom: number }[];
   canvasApiRef: import("react").MutableRefObject<CanvasApi | null>;
-  canvasMode: "select" | "connect";
+  canvasMode: "select" | "connect" | "pan";
   canvasSelectedElementIds: string[];
   changeReferenceLines: (lines: ReferenceLine[]) => void;
   compactMode: boolean;
@@ -73,7 +74,7 @@ export type TopologyEditToolbarProps = {
     import("react").SetStateAction<string | null>
   >;
   setCanvasMode: import("react").Dispatch<
-    import("react").SetStateAction<"select" | "connect">
+    import("react").SetStateAction<"select" | "connect" | "pan">
   >;
   setCompactMode: import("react").Dispatch<
     import("react").SetStateAction<boolean>
@@ -187,6 +188,19 @@ export function TopologyEditToolbar({
           >
             <IconLink size={13} />
             连线
+          </button>
+          <button
+            className="studio-mode-button"
+            aria-label="平移画布"
+            aria-pressed={canvasMode === "pan"}
+            onClick={() => {
+              setCanvasMode("pan");
+              setArmedNodeType(null);
+            }}
+            title="平移画布：拖动挪动画面（也可按住空格或中键临时平移）"
+          >
+            <IconHand size={13} />
+            平移
           </button>
 
           <details className="studio-insert-menu" data-toolbar-menu>

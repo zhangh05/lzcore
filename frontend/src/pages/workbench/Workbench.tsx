@@ -218,7 +218,7 @@ export function Workbench() {
       uploaded.push({ file_id: fid, name: a.name, kind: a.kind, mime_type: a.file.type || "application/octet-stream", size_bytes: a.size });
     }
     const clientRequestId = stableId("cr");
-    setMessages((m) => [...m, { role: "user", content: text }]);
+    setMessages((m) => [...m, { role: "user", content: text, ...(uploaded.length ? { metadata: { attachments: uploaded } } : {}) }]);
     setLive({ clientRequestId, text: "", events: [], status: "已发送 · 等待服务端受理" });
     setStopState("idle"); setStopError(null);
     const metadata: Record<string, unknown> = {};

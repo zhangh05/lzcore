@@ -306,7 +306,7 @@ export default function NetOpsCanvas(props: Props) {
     !isViewMode && props.mode === "select" && !!props.armedNodeType;
   return (
     <div
-      className={`netops-canvas-wrap ${isViewMode ? "interaction-view" : "interaction-edit"} ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""} ${spaceHeld || (isViewMode && isPanning) ? (isPanning ? "space-panning is-panning" : "space-panning") : ""}`}
+      className={`netops-canvas-wrap ${isViewMode ? "interaction-view" : "interaction-edit"} ${props.gridEnabled ? "grid-on" : ""} ${marqueeArmed ? "marquee-armed" : ""} ${placing ? "placing-armed" : ""} ${spaceHeld || props.mode === "pan" || (isViewMode && isPanning) ? (isPanning ? "space-panning is-panning" : "space-panning") : ""}`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
       onContextMenu={(event) => {

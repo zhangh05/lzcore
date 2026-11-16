@@ -191,10 +191,11 @@ export function useCanvasRenderer({
     const cy = cyRef.current;
     if (!cy) return;
     const isViewMode = props.interactionMode === "view";
-    const layoutEditing = !isViewMode && props.mode !== "connect";
+    const panTool = props.mode === "pan";
+    const layoutEditing = !isViewMode && props.mode !== "connect" && !panTool;
     cy.panningEnabled(true);
     cy.userPanningEnabled(true);
-    cy.boxSelectionEnabled(!isViewMode);
+    cy.boxSelectionEnabled(!isViewMode && !panTool);
     cy.autounselectify?.(isViewMode);
     cy.autoungrabify(!layoutEditing);
     if (isViewMode) {

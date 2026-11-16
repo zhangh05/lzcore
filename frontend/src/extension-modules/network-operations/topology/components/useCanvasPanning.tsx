@@ -75,8 +75,11 @@ export function useCanvasPanning({
     const onMouseDown = (event: MouseEvent) => {
       const isMiddle = event.button === 1;
       const isSpaceDrag = event.button === 0 && spaceHeld;
+      // 查看模式和编辑模式的「平移」工具：左键拖动直接挪画布。
       const isViewModeDrag =
-        propsRef.current.interactionMode === "view" && event.button === 0;
+        (propsRef.current.interactionMode === "view" ||
+          propsRef.current.mode === "pan") &&
+        event.button === 0;
       if (!isMiddle && !isSpaceDrag && !isViewModeDrag) return;
       if (!(event.target instanceof Node) || !host.contains(event.target))
         return;

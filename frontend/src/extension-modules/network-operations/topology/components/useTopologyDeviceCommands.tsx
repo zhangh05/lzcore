@@ -44,7 +44,7 @@ export type useTopologyDeviceCommandsPorts = {
     import("react").SetStateAction<string | null>
   >;
   setCanvasMode: import("react").Dispatch<
-    import("react").SetStateAction<"select" | "connect">
+    import("react").SetStateAction<"select" | "connect" | "pan">
   >;
   setIsInspectorOpen: import("react").Dispatch<
     import("react").SetStateAction<boolean>

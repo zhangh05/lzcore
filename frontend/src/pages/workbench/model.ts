@@ -34,6 +34,9 @@ export function stageViews(stages: unknown): StageView[] {
   return out;
 }
 
+/** 随消息保存的附件引用（服务端校验后的形状，见 backend/core/chat_attachments.py）。 */
+export interface ChatAttachment { file_id: string; name: string; kind: "image" | "file" | string; mime_type?: string; size_bytes?: number }
+
 export interface ChatMessage {
   message_id?: string;
   role: "user" | "assistant" | string;
@@ -52,6 +55,7 @@ export interface ChatMessage {
     task_id?: string;
     operation_id?: string;
     cancelled?: boolean;
+    attachments?: ChatAttachment[];
     [k: string]: unknown;
   } | null;
 }

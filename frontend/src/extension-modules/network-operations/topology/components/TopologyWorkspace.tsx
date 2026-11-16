@@ -275,7 +275,7 @@ export default function TopologyWorkspace({
       return true;
     }
   });
-  const [canvasMode, setCanvasMode] = useState<"select" | "connect">("select");
+  const [canvasMode, setCanvasMode] = useState<"select" | "connect" | "pan">("select");
 
   useEffect(() => {
     try {

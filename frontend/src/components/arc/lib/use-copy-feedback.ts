@@ -23,11 +23,22 @@ export async function writeClipboard(text: string): Promise<void> {
   const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index)) : [];
   const area = document.createElement("textarea");
   area.value = text;
-  area.setAttribute("readonly", "");
-  area.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;";
+  // Off screen but rendered (iOS will not select inside an invisible or pointer-less node), at the current scroll
+  // position so nothing jumps, and 16px so iOS never zooms.
+  area.style.cssText = `position:absolute;left:-9999px;top:${window.scrollY || document.documentElement.scrollTop}px;width:1px;height:1px;font-size:16px;border:0;padding:0;margin:0;`;
   document.body.appendChild(area);
+  // iOS Safari ignores select() on a textarea, so it gets a range selection over an editable node instead; while the
+  // node is editable only for this instant, the keyboard never opens. Other browsers take select() as usual.
+  area.contentEditable = "true";
+  area.readOnly = false;
+  const range = document.createRange();
+  range.selectNodeContents(area);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
   area.select();
   area.setSelectionRange(0, text.length);
+  area.contentEditable = "false";
+  area.readOnly = true;
   let ok = false;
   try { ok = document.execCommand("copy"); } catch { ok = false; }
   area.remove();

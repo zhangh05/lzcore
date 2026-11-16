@@ -30,7 +30,7 @@ export type TopologyContextMenuProps = {
   openLinkComposer: (sourceId?: string, targetId?: string) => void;
   selectedNodes: TopologyNode[];
   setCanvasMode: import("react").Dispatch<
-    import("react").SetStateAction<"select" | "connect">
+    import("react").SetStateAction<"select" | "connect" | "pan">
   >;
   setContextMenu: import("react").Dispatch<
     import("react").SetStateAction<CanvasContextTarget | null>

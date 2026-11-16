@@ -4,32 +4,15 @@ import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEve
 import { Button } from "../../components/Button";
 import { IconAttachment, IconFolder, IconLock, IconSend, IconStop } from "../../components/Icon";
 import { useApi, listOf } from "../../kit/useApi";
+import { TurnModelSelects, useTurnModel, type ModelSelection } from "../../kit/turnModel";
 import { LoadMore, usePaged } from "../../kit/usePaged";
 import { Drawer, FailureNote, fmtTime } from "../../kit/ui";
 import { admitAttachments, attachmentKind, scopeLocked, stopLabel, type PendingAttachment, type SessionSummary, type StopState } from "./model";
 
 interface Skill { extension_id: string; skill_id: string; name: string; description?: string; resources: { resource_id: string; name: string; description?: string }[]; default_resource_ids?: string[]; selection_mode?: "single" | "multiple" }
 const skillKey = (skill: Skill) => JSON.stringify([skill.extension_id, skill.skill_id]);
-export interface ModelSelection { provider: string; thinking: ThinkingMode }
+export type { ModelSelection } from "../../kit/turnModel";
 export interface SendOptions { attachments: PendingAttachment[]; workbenchSelection?: WorkbenchSelection; resumeTaskId?: string; modelSelection?: ModelSelection }
-
-type ThinkingMode = "provider_default" | "adaptive" | "disabled";
-interface TurnModel { provider: string; label: string; model: string; is_active: boolean; supports_thinking: boolean; requires_thinking: boolean }
-const THINKING_LABEL: Record<ThinkingMode, string> = { provider_default: "思考：默认", adaptive: "思考：自适应", disabled: "思考：关闭" };
-
-/** 上次在这个工作区选的模型；只是本机偏好，读写失败就当没选过。 */
-function rememberedModel(ws: string): ModelSelection | null {
-  try {
-    const raw = JSON.parse(localStorage.getItem(`lzcore.composer.model:${ws}`) || "null");
-    return raw && typeof raw.provider === "string" ? { provider: raw.provider, thinking: raw.thinking ?? "provider_default" } : null;
-  } catch { return null; }
-}
-function rememberModel(ws: string, value: ModelSelection | null) {
-  try {
-    if (value) localStorage.setItem(`lzcore.composer.model:${ws}`, JSON.stringify(value));
-    else localStorage.removeItem(`lzcore.composer.model:${ws}`);
-  } catch { /* 偏好写不进去不影响发送 */ }
-}
 
 interface ManagedFile { file_id: string; original_name?: string; name?: string; filename?: string; size_bytes?: number; mime_type?: string; created_at?: string; metadata?: { folder?: string } }
 
@@ -79,16 +62,12 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
     }
   }, [saved, sessionKey]);
 
-  // 模型：列出全部已接入的服务（有模型，且有密钥或是本机服务），直接选；没选过时用列表第一个（系统默认）。接口不可用时整组隐藏。
-  const [modelsRes] = useApi("/api/workbench/models");
-  const models = modelsRes.state === "ok" ? listOf<TurnModel>(modelsRes, "models").filter((m) => m.provider && m.model) : [];
-  const [modelPick, setModelPick] = useState<ModelSelection | null>(() => rememberedModel(ws));
-  const chosen = modelPick ? models.find((m) => m.provider === modelPick.provider) : undefined;
-  const effective = chosen ?? models.find((m) => m.is_active) ?? models[0];
-  const thinking: ThinkingMode = effective?.supports_thinking && modelPick?.thinking ? modelPick.thinking : "provider_default";
-  const pickModel = (next: ModelSelection | null) => { setModelPick(next); rememberModel(ws, next); };
-  const modelSelection: ModelSelection | undefined = effective && (chosen || !effective.is_active || thinking !== "provider_default")
-    ? { provider: effective.provider, thinking } : undefined;
+  const turnModel = useTurnModel(ws);
+  const { models, effective, modelSelection } = turnModel;
+
+  // 选中的模型不识图时，图片附件不会发给模型（服务端会跳过）；先说清楚，并指出哪些已接入的模型能识图。
+  const visionGap = attachments.some((a) => a.kind === "image") && effective?.supports_vision === false;
+  const visionModels = models.filter((m) => m.supports_vision).map((m) => m.model);
 
   const input = useRef<HTMLTextAreaElement>(null);
   // 输入框随内容长高，到上限后内部滚动；工具栏始终一行，运行中不会把卡片撑高。
@@ -107,11 +86,16 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
   const fromFiles = (files: FileList | File[], source: PendingAttachment["source"]) =>
     admit(Array.from(files).map((f) => ({ id: nextId(), name: f.name || "粘贴的图片", size: f.size, kind: attachmentKind(f.type), source, file: f })));
 
-  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const imgs = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
-    if (imgs.length) { e.preventDefault(); fromFiles(imgs, "paste"); }
+  // 粘贴：整个输入区都接（不必先点进文本框）；截图、复制的图片文件都算。剪贴板里的图片多半都叫 image.png，按时间重新命名好区分。
+  const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    const files = clipboardFiles(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    fromFiles(files.map((f, i) => f.type.startsWith("image/") && /^image\.\w+$/i.test(f.name) ? new File([f], pastedName(f.type, i), { type: f.type }) : f), "paste");
+    input.current?.focus();
   };
-  const onDrop = (e: DragEvent<HTMLDivElement>) => { e.preventDefault(); if (e.dataTransfer?.files?.length) fromFiles(e.dataTransfer.files, "drop"); };
+  const [dragging, setDragging] = useState(false);
+  const onDrop = (e: DragEvent<HTMLDivElement>) => { e.preventDefault(); setDragging(false); if (e.dataTransfer?.files?.length) fromFiles(e.dataTransfer.files, "drop"); };
 
   const submit = async () => {
     const t = text.trim();
@@ -132,17 +116,22 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
 
   const stopIdle = stopState === "idle";
   return (
-    <div className="wb-composer" onDragOver={(e) => e.preventDefault()} onDrop={onDrop} data-testid="composer">
+    <div className={`wb-composer ${dragging ? "is-dragging" : ""}`} data-testid="composer" onPaste={onPaste} onDrop={onDrop}
+      onDragOver={(e) => { e.preventDefault(); if (e.dataTransfer?.types?.includes("Files")) setDragging(true); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}>
       {skills.state === "error" ? <FailureNote outcome={skills.outcome} /> : null}
       {skillId && !skill && skills.state === "ok" ? <p className="inline-alert tone-warn" role="status">当前 Skill 不在可用目录中，请检查扩展状态和资源权限。</p> : null}
+      {visionGap ? <p className="inline-alert tone-warn" role="status" data-testid="vision-unsupported">
+        当前模型 {effective!.model} 不支持识图，图片不会发给模型。{visionModels.length ? `要识图请换成 ${visionModels.join("、")}。` : "已接入的模型都不支持识图。"}
+      </p> : null}
       {rejected.length ? <p className="inline-alert tone-warn" role="alert" data-testid="attachment-rejected">{rejected.map((r) => `${r.name}：${r.reason}`).join("；")}</p> : null}
       <div className={`composer-card ${running ? "is-running" : ""}`}>
         {attachments.length ? (
           <ul className="composer-attachments">
-            {attachments.map((a) => <li key={a.id} className="composer-attachment"><IconAttachment size={14} aria-hidden="true" /><span>{a.name}</span><button type="button" aria-label={`移除 ${a.name}`} onClick={() => setAttachments(attachments.filter((x) => x.id !== a.id))}>×</button></li>)}
+            {attachments.map((a) => <AttachmentChip key={a.id} a={a} onRemove={() => setAttachments((cur) => cur.filter((x) => x.id !== a.id))} />)}
           </ul>
         ) : null}
-        <textarea ref={input} className="composer-input" value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste} rows={1}
+        <textarea ref={input} className="composer-input" value={text} onChange={(e) => setText(e.target.value)} rows={1}
           aria-label="输入消息" placeholder={running ? "本轮运行中，可以先写下一句" : "输入消息，Enter 发送，Shift+Enter 换行"} data-testid="composer-input"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
         <div className="composer-toolbar">
@@ -171,24 +160,7 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
             {lock.locked ? <span className="composer-lock" data-testid="scope-locked" title={lock.reason}><IconLock size={14} aria-hidden="true" /><span className="sr-only">{lock.reason}</span></span> : null}
           </div>
           <div className="composer-actions">
-            {models.length ? (
-              <label className="composer-chip" title={effective ? `${effective.label} · ${effective.model}` : "模型"}>
-                <span className="sr-only">模型</span>
-                <select value={effective?.provider ?? ""} aria-label="模型" data-testid="model-select" disabled={running || submitting}
-                  onChange={(e) => pickModel({ provider: e.target.value, thinking: modelPick?.thinking ?? "provider_default" })}>
-                  {models.map((m) => <option key={m.provider} value={m.provider}>{m.model} · {m.label}</option>)}
-                </select>
-              </label>
-            ) : null}
-            {effective?.supports_thinking ? (
-              <label className="composer-chip" title="思考强度">
-                <span className="sr-only">思考强度</span>
-                <select value={thinking} aria-label="思考强度" data-testid="thinking-select" disabled={running || submitting}
-                  onChange={(e) => pickModel({ provider: (chosen ?? effective).provider, thinking: e.target.value as ThinkingMode })}>
-                  {(Object.keys(THINKING_LABEL) as ThinkingMode[]).map((k) => <option key={k} value={k} disabled={k === "disabled" && effective.requires_thinking}>{THINKING_LABEL[k]}</option>)}
-                </select>
-              </label>
-            ) : null}
+            <TurnModelSelects state={turnModel} disabled={running || submitting} chipClassName="composer-chip" />
             {running ? (
               <button type="button" className={`composer-send is-stop ${stopIdle ? "" : "has-label"}`} onClick={onStop} disabled={stopState === "requesting" || stopState === "requested"}
                 data-testid="stop-btn" data-stop={stopState} title={stopLabel(stopState)}>
@@ -221,6 +193,38 @@ export function Composer({ ws, session, running, stopState, onSend, onStop }: {
         setPicker(null);
       }} /> : null}
     </div>
+  );
+}
+
+/** 剪贴板里的文件（截图、复制的图片 / 文件）。有的浏览器只放在 items 里，两处都看。 */
+function clipboardFiles(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  const files = Array.from(data.files ?? []);
+  if (files.length) return files;
+  return Array.from(data.items ?? []).filter((it) => it.kind === "file").map((it) => it.getAsFile()).filter((f): f is File => !!f);
+}
+function pastedName(mime: string, i: number) {
+  const d = new Date();
+  const two = (n: number) => String(n).padStart(2, "0");
+  const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "png";
+  return `粘贴的图片-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}${i ? `-${i + 1}` : ""}.${ext}`;
+}
+
+/** 待发送附件：本地图片显示缩略图，其余显示文件名。缩略图用对象 URL，移除或卸载时释放。 */
+function AttachmentChip({ a, onRemove }: { a: PendingAttachment; onRemove: () => void }) {
+  const [thumb, setThumb] = useState<string | null>(null);
+  useEffect(() => {
+    if (a.kind !== "image" || !a.file || typeof URL.createObjectURL !== "function") return;
+    const url = URL.createObjectURL(a.file);
+    setThumb(url);
+    return () => URL.revokeObjectURL(url);
+  }, [a.kind, a.file]);
+  return (
+    <li className={`composer-attachment ${thumb ? "has-thumb" : ""}`} data-testid="composer-attachment" title={a.name}>
+      {thumb ? <img src={thumb} alt={a.name} /> : <IconAttachment size={14} aria-hidden="true" />}
+      {thumb ? null : <span>{a.name}</span>}
+      <button type="button" aria-label={`移除 ${a.name}`} onClick={onRemove}>×</button>
+    </li>
   );
 }
 
