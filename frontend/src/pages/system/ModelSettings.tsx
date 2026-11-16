@@ -19,6 +19,7 @@ export interface Provider {
   provider: string; label?: string; provider_type?: string; protocol?: string; base_url?: string; model?: string;
   key_configured?: boolean; key_preview?: string | null; is_active?: boolean; temperature?: number; max_tokens?: number;
   thinking?: string; capabilities?: CapabilityOverrides | null; vision_enabled?: boolean; profile?: ModelProfile | null;
+  is_builtin?: boolean; updated_at?: string | null;
 }
 
 const PROTOCOLS = [["openai_compatible", "OpenAI 兼容"], ["anthropic_messages", "Anthropic Messages"]] as const;
@@ -26,6 +27,8 @@ const protocolLabel = (p?: string) => PROTOCOLS.find(([k]) => k === p)?.[1] ?? p
 const hostOf = (url?: string) => { try { return url ? new URL(url).host : ""; } catch { return url ?? ""; } };
 const isLocal = (url?: string) => /^(localhost|127\.|\[::1\])/.test(hostOf(url));
 /** 已接入 = 有密钥、当前在用、本机服务（无需密钥）或用户自建的；其余内置预设只出现在「添加」画廊里。 */
+/** 能删除 = 用户自建的，或内置服务上保存过配置/密钥（删除即清空配置，回到「添加」画廊）；没配置过的内置服务删了也没变化。 */
+export const isRemovable = (p: Provider) => p.provider.startsWith("provider_") || !!p.updated_at || !!p.key_configured;
 export const isConnected = (p: Provider, active: string) => !!p.key_configured || p.provider === active || !!p.is_active || isLocal(p.base_url) || p.provider.startsWith("provider_");
 
 /** 名称首字母 + 由 id 推出的稳定色相，作为服务商的头像（不引入第三方商标图形）。 */
@@ -118,7 +121,7 @@ export function ModelSettings({ admin, platform }: { admin: boolean; platform: b
                     </Button>
                     {admin ? <Button className="sm" onClick={() => setSheet({ provider: p, isNew: false })}><IconEdit size={14} aria-hidden="true" />配置</Button> : null}
                     <span className="grow" />
-                    {admin && p.provider.startsWith("provider_") ? <Button className="sm" variant="ghost" onClick={() => setDel(p)} aria-label={`删除 ${p.label ?? p.provider}`}><IconTrash size={14} aria-hidden="true" /></Button> : null}
+                    {admin && isRemovable(p) ? <Button data-testid={`provider-delete-${p.provider}`} className="sm" variant="ghost" onClick={() => setDel(p)} aria-label={`删除 ${p.label ?? p.provider}`}><IconTrash size={14} aria-hidden="true" /></Button> : null}
                   </footer>
                 </li>
               );
@@ -152,7 +155,14 @@ export function ModelSettings({ admin, platform }: { admin: boolean; platform: b
 
       {sheet ? <ProviderSheet provider={sheet.provider} isNew={sheet.isNew} platform={platform} becomeDefault={!defaultUsable}
         onClose={() => setSheet(null)} onSaved={(label, o) => { setR({ label, o }); setSheet(null); reload(); }} /> : null}
-      {del ? <ConfirmDialog title="删除模型服务？" details={<p>将删除「{del.label ?? del.provider}」的配置（含已保存的密钥）。</p>} confirmText={del.label ?? del.provider} confirmLabel="删除"
+      {del ? <ConfirmDialog title="删除模型服务？" details={<>
+        <p>{del.provider.startsWith("provider_")
+          ? <>将删除「{del.label ?? del.provider}」的配置（含已保存的密钥）。</>
+          : <>将清除「{del.label ?? del.provider}」的配置和已保存的密钥，它会回到「添加模型服务」里，之后可以重新接入。</>}</p>
+        {(del.provider === active || del.is_active) ? (connected.some((x) => x.provider !== del.provider && usable(x))
+          ? <p className="muted">它是当前默认模型，删除后默认会切换到其他可用的服务。</p>
+          : <p className="muted">它是当前默认模型，删除后没有其他可用的模型服务，需要重新接入一个。</p>) : null}
+      </>} confirmText={del.label ?? del.provider} confirmLabel="删除"
         onCancel={() => setDel(null)} onConfirm={async () => { const p = del; setDel(null); await remove(p); }} /> : null}
     </div>
   );

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AuthGateView } from "../app/AuthGate";
-import { isConnected } from "../pages/system/ModelSettings";
+import { isConnected, isRemovable } from "../pages/system/ModelSettings";
 import { BrowserRouter } from "../router";
 import { appHandler, type AppFixtureOptions, type Logged } from "./appFixture";
 import { installFixture } from "./backendFixture";
@@ -51,6 +51,11 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
         : { status: 200, body: { ok: false, error: "provider rejected the request", http_status: 401 } };
     }
     const save = /^\/api\/agent\/llm\/providers\/([^/]+)$/.exec(p);
+    if (save && method === "DELETE") {
+      const rec = providers.find((x) => x.provider === save[1])!;
+      Object.assign(rec, { key_configured: false, key_preview: null });
+      return { status: 200, body: { ok: true, deleted: true } };
+    }
     if (save && method === "POST") {
       const rec = providers.find((x) => x.provider === save[1])!;
       const b = body as { api_key?: string; model?: string };
@@ -142,6 +147,30 @@ describe("模型服务", () => {
     expect(isConnected({ provider: "ollama", base_url: "http://localhost:11434/v1" }, "deepseek")).toBe(true);
     expect(isConnected({ provider: "provider_abc" }, "deepseek")).toBe(true);
     expect(isConnected({ provider: "deepseek" }, "deepseek")).toBe(true);
+  });
+
+  it("能删除：自建的、内置但保存过配置的；没配置过的内置服务没有删除按钮", () => {
+    expect(isRemovable({ provider: "provider_abc" })).toBe(true);
+    expect(isRemovable({ provider: "custom", key_configured: true })).toBe(true);
+    expect(isRemovable({ provider: "minimax", updated_at: "2026-10-06T00:00:00Z" })).toBe(true);
+    expect(isRemovable({ provider: "ollama", base_url: "http://localhost:11434/v1" })).toBe(false);
+  });
+
+  it("删除已接入的内置服务（当前默认）：先把默认切到其他可用服务，再清除配置，卡片回到「添加」画廊", async () => {
+    const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    const table = await screen.findByTestId("providers-table", {}, { timeout: 4000 });
+    expect(within(table).queryByTestId("provider-delete-ollama")).toBeNull();
+    fireEvent.click(within(table).getByTestId("provider-delete-deepseek"));
+    const dialog = await screen.findByTestId("confirm-dialog");
+    expect(dialog).toHaveTextContent("回到「添加模型服务」里");
+    expect(dialog).toHaveTextContent("删除后默认会切换到其他可用的服务");
+    fireEvent.change(within(dialog).getByTestId("confirm-text"), { target: { value: "DeepSeek" } });
+    fireEvent.click(within(dialog).getByTestId("confirm-submit"));
+    await waitFor(() => expect(log.some((l) => l.method === "DELETE" && l.path === "/api/agent/llm/providers/deepseek")).toBe(true));
+    const order = log.map((l) => l.path);
+    expect(order.indexOf("/api/agent/llm/activate")).toBeLessThan(order.indexOf("/api/agent/llm/providers/deepseek"));
+    expect(log.find((l) => l.path === "/api/agent/llm/activate")?.body).toMatchObject({ provider: "ollama" });
+    expect(await screen.findByTestId("provider-add-deepseek")).toBeInTheDocument();
   });
 
   it("从画廊接入 OpenAI：先测草稿（不保存）→ 填密钥后测试通过 → 保存后直接出现在已接入里", async () => {
