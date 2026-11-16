@@ -93,14 +93,12 @@
   .network-evidence-artifact details { flex-basis: 100%; }
   .live-status { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; }
   .live-dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--accent); animation: live-pulse 1.4s var(--ease-in-out) infinite; }
-  .stream-caret { display: inline-block; width: .5em; height: 1.1em; margin-left: 2px; vertical-align: -.18em; border-radius: 2px; background: var(--text); animation: caret-blink 1s steps(2, start) infinite; }
   @keyframes live-pulse { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: 1; transform: scale(1); } }
   @keyframes caret-blink { to { visibility: hidden; } }
-  @media (prefers-reduced-motion: reduce) { .live-dot, .stream-caret { animation: none; } }
-  .live-progress { display: grid; gap: var(--space-2); margin: var(--space-2) 0; }
-  .live-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font-size: var(--fs-sm); }
-  .live-steps li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
-  .live-step-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 48ch; }
+  /* 流式回复：光标跟在最后一段文字后面（正文已按 Markdown 排版）。 */
+  .message.is-streaming .markdown-body > :is(p, li):last-child::after,
+  .message.is-streaming .markdown-body > :is(ul, ol):last-child > li:last-child::after { content: ""; display: inline-block; width: .5em; height: 1.1em; margin-left: 2px; vertical-align: -.18em; border-radius: 2px; background: var(--text); animation: caret-blink 1s steps(2, start) infinite; }
+  @media (prefers-reduced-motion: reduce) { .live-dot, .message.is-streaming .markdown-body *::after { animation: none; } }
   .outcome-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; font-size: var(--fs-sm); color: var(--text-2); }
   .outcome-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
   .resume-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }

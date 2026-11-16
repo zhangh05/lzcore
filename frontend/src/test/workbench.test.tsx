@@ -344,13 +344,20 @@ describe("回合结束的刷新范围", () => {
     await waitFor(() => expect(Fake.instances[0]?.sent.length).toBe(1));
     const sock = Fake.instances[0];
     const crid = (sock.sent[0] as { metadata: { client_request_id: string } }).metadata.client_request_id;
-    act(() => sock.push({ type: "token", content: "第三份", seq: 1 }));
+    act(() => sock.push({ type: "token", content: "**第三份", seq: 1 }));
+    act(() => sock.push({ type: "event", name: "tool_call", data: { call_id: "c9", tool_id: "files.read" } }));
     const userLi = Array.from(document.querySelectorAll('.messages li[data-role="user"]')).at(-1)!;
+    // 流式中就按 Markdown 排版（未闭合的 ** 先补齐），工具调用直接是最终的卡片样式。
+    const liveLi = screen.getByTestId("live-turn");
+    await waitFor(() => expect(liveLi.querySelector(".markdown-body strong")).toHaveTextContent("第三份"));
+    const liveCard = liveLi.querySelector('.tool-card[data-tool-state="pending"]')!;
+    expect(liveCard).not.toBeNull();
+    expect(liveLi.querySelector('[data-testid="outcome-bar"]')).toBeNull();
 
     // 服务端此时已经写好了这一轮：用户消息 + 正式回复。
     messagesRef.current!["s-partial"] = [...messagesRef.current!["s-partial"],
       { message_id: "u9", role: "user", content: "继续" },
-      { message_id: "a9", role: "assistant", content: "第三份也读到了。", ok: true, errors: [], metadata: { client_request_id: crid, tool_calls: [] } }];
+      { message_id: "a9", role: "assistant", content: "**第三份**也读到了。", ok: true, errors: [], metadata: { client_request_id: crid, tool_calls: [{ call_id: "c9", tool_id: "files.read", ok: true, result: { text: "x" } }] } }];
     const overlaps: number[] = [];
     const mo = new MutationObserver(() => {
       const live = document.querySelector('[data-testid="live-turn"]');
@@ -367,5 +374,12 @@ describe("回合结束的刷新范围", () => {
     // 未变化的旧回复连 DOM 节点都没有换；乐观插入的用户消息原地换成服务端版本。
     expect(document.querySelector('.messages li[data-role="assistant"] .message-body')).toBe(oldHtml);
     expect(Array.from(document.querySelectorAll('.messages li[data-role="user"]')).at(-1)).toBe(userLi);
+    // 流式回复与正式回复是同一个节点：原地合并终态，工具卡片也原地从「调用中」变成「调用已返回」。
+    const finalLi = Array.from(document.querySelectorAll('.messages li[data-role="assistant"]')).at(-1)!;
+    expect(finalLi).toBe(liveLi);
+    expect(finalLi.classList.contains("is-live")).toBe(false);
+    expect(finalLi.querySelector(".tool-card")).toBe(liveCard);
+    expect(liveCard.getAttribute("data-tool-state")).toBe("ok");
+    expect(finalLi.querySelector('[data-testid="outcome-bar"]')).not.toBeNull();
   });
 });

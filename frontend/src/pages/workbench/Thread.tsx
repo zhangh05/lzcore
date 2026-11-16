@@ -1,5 +1,8 @@
 import { renderMarkdown } from "../../utils/markdown";
-import { memo, useMemo, useState } from "react";
+import { memo, useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import remend from "remend";
+import { motion, useReducedMotion } from "motion/react";
+import { motionTokens } from "../../components/arc/lib/motion-tokens";
 import { api, bodyOf } from "../../api/client";
 import { Button } from "../../components/Button";
 import { OutcomeBar } from "../../components/OutcomeBar";
@@ -34,7 +37,7 @@ function ToolCards({ m, ws, available }: { m: ChatMessage; ws: string; available
           <li key={c.call_id ?? c.tool_id} className={`tool-card tone-${state === "unknown" ? "unknown" : state === "fail" ? "danger" : "neutral"}`} data-tool-state={state}>
             <details>
               <summary><code>{c.tool_id}</code> <span className="status-chip">{TOOL_ATTEMPT_LABEL[state]}</span> {c.summary ? <span className="muted">{c.summary}</span> : null}</summary>
-              {c.result ? <pre className="json-block">{JSON.stringify(c.result, null, 2)}</pre> : <p className="muted">没有返回内容。</p>}
+              {c.result ? <pre className="json-block">{JSON.stringify(c.result, null, 2)}</pre> : <p className="muted">{state === "pending" ? "等待工具返回…" : "没有返回内容。"}</p>}
             </details>
             {custom ? custom.r.render(ws, custom.key!, c) : null}
           </li>
@@ -45,30 +48,27 @@ function ToolCards({ m, ws, available }: { m: ChatMessage; ws: string; available
   );
 }
 
-const STEP_LABEL = { running: "进行中", ok: "已返回", fail: "失败" } as const;
-const STEP_TONE = { running: "info", ok: "ok", fail: "danger" } as const;
+/**
+ * 把本轮实时状态投影成一条「进行中」的助手消息：与回合结束后服务端写回的正式消息走同一个 MessageItem、同一个位置 key，
+ * 所以结束时是同一个 DOM 节点原地合并终态，而不是卸掉草稿再挂上正式回复。仅展示；终态以服务端为准。
+ */
+export function liveAsMessage(live: LiveTurn): ChatMessage {
+  const steps = (live.steps ?? []).map((st) => ({
+    call_id: st.callId, tool_id: st.toolId,
+    status: st.state === "running" ? "running" : undefined, ok: st.state === "ok",
+    summary: st.summary,
+  }));
+  return { role: "assistant", content: live.text, metadata: { client_request_id: live.clientRequestId, tool_calls: [...(live.subagentCalls ?? []), ...steps] } };
+}
 
-/** 本轮实时进展：工具步骤（tool_call/tool_result）与子任务观察。仅展示；终态以服务端为准。 */
-function LiveProgress({ live }: { live: LiveTurn }) {
-  const steps = live.steps ?? [];
-  const { tasks } = partitionSubagentCalls(live.subagentCalls ?? []);
-  if (!steps.length && !tasks.length) return null;
+/** 回合结束才出现的结果栏和操作：短促淡入，不推挤正文。 */
+function Reveal({ children }: { children: ReactNode }) {
+  const reduce = useReducedMotion();
   return (
-    <div className="live-progress" data-testid="live-progress">
-      {tasks.length ? <div className="subagent-list">{tasks.map((g) => <SubagentCard key={g.id} group={g} />)}</div> : null}
-      {steps.length ? (
-        <ol className="live-steps" aria-label="本轮工具步骤">
-          {steps.map((st) => (
-            <li key={st.callId} data-step-state={st.state}>
-              <span className={`status-chip tone-${STEP_TONE[st.state]}`}>{STEP_LABEL[st.state]}</span>
-              <code>{st.toolId}</code>
-              {st.durationMs != null ? <span className="muted">{Math.round(st.durationMs)}ms</span> : null}
-              {st.summary ? <span className="muted live-step-summary">{st.summary}</span> : null}
-            </li>
-          ))}
-        </ol>
-      ) : null}
-    </div>
+    <motion.div initial={{ opacity: 0, y: reduce ? 0 : 2 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reduce ? motionTokens.duration.instant : motionTokens.duration.standard, ease: [...motionTokens.ease.enter] }}>
+      {children}
+    </motion.div>
   );
 }
 
@@ -112,32 +112,45 @@ function MessageAvatar({ role, live = false }: { role: string; live?: boolean })
 }
 
 /**
- * 单条消息。回读后内容没变的消息沿用同一个对象（见 reuseUnchanged），这里 memo 后就不会重新渲染、也不会重新解析 Markdown；
- * 回合结束时只有新增的那几条会更新。
+ * 单条消息。回读后内容没变的消息沿用同一个对象（见 reuseUnchanged），这里 memo 后就不会重新渲染、也不会重新解析 Markdown。
+ * 流式中的回复也用它渲染（streaming 非空）：边流边排版 Markdown（remend 先补齐未闭合的语法），工具调用直接按最终卡片样式显示；
+ * 结束时同一个节点换上服务端终态，只有结果栏和操作按钮是新出现的。
  */
-const MessageItem = memo(function MessageItem({ m, ws, sessionId, isLast, verifyTaskId, available }: {
+const MessageItem = memo(function MessageItem({ m, ws, sessionId, isLast, verifyTaskId, available, streaming }: {
   m: ChatMessage; ws: string; sessionId: string; isLast: boolean; verifyTaskId?: string; available: Set<string>;
+  streaming?: { status: string } | null;
 }) {
-  const kind = m.role === "assistant" ? terminalKind(m) : "normal";
+  const live = !!streaming;
+  const kind = m.role === "assistant" && !live ? terminalKind(m) : "normal";
   const verify = unknownTargetHref(ws, sessionId, verifyTaskId, m.metadata?.operation_id);
-  const html = useMemo(() => (m.role === "assistant" ? renderMarkdown(m.content) : ""), [m.role, m.content]);
+  // 流式时 token 很密：排版跟在输入后面做，不阻塞逐字更新。
+  const content = useDeferredValue(m.content);
+  const source = live ? content : m.content;
+  const html = useMemo(() => (m.role === "assistant" && source ? renderMarkdown(live ? remend(source) : source) : ""), [m.role, source, live]);
   return (
-    <li className={`message role-${m.role}`} data-role={m.role}>
-      <MessageAvatar role={m.role} />
+    <li className={`message role-${m.role} ${live ? "is-live is-streaming" : ""}`} data-role={m.role}
+      aria-live={live ? "polite" : undefined} data-testid={live ? "live-turn" : undefined}>
+      <MessageAvatar role={m.role} live={live} />
       <div className="message-main">
-      {m.role === "assistant" ? <div className="message-body markdown-body" dangerouslySetInnerHTML={{ __html: html }} /> : <div className="message-body">{m.content}</div>}
+      {m.role === "assistant" ? (html ? <div className="message-body markdown-body" dangerouslySetInnerHTML={{ __html: html }} /> : null) : <div className="message-body">{m.content}</div>}
       {m.role === "assistant" ? (
         <>
           {kind === "cancelled" ? <p className="inline-alert tone-info" role="status">本轮已按请求停止（服务端确认）。</p> : null}
           {kind === "error" ? <p className="inline-alert tone-danger" role="alert">本轮报错：{(m.errors ?? []).join("；")}</p> : null}
           <ToolCards m={m} ws={ws} available={available} />
-          <OutcomeBar facts={turnFacts(m)} toolCalls={m.metadata?.tool_calls ?? []} verifyHref={verify} resumeHref={verify} />
-          {isLast ? (
-            <div className="row-actions message-actions">
-              <MemoryAction ws={ws} sessionId={sessionId} m={m} />
-              <KnowledgeAction ws={ws} m={m} />
-            </div>
-          ) : null}
+          {live ? (
+            <p className="live-status"><span className="live-dot" aria-hidden="true" /><span className="shimmer-text">{streaming!.status || "思考中…"}</span></p>
+          ) : (
+            <Reveal>
+              <OutcomeBar facts={turnFacts(m)} toolCalls={m.metadata?.tool_calls ?? []} verifyHref={verify} resumeHref={verify} />
+              {isLast ? (
+                <div className="row-actions message-actions">
+                  <MemoryAction ws={ws} sessionId={sessionId} m={m} />
+                  <KnowledgeAction ws={ws} m={m} />
+                </div>
+              ) : null}
+            </Reveal>
+          )}
         </>
       ) : null}
       </div>
@@ -151,25 +164,24 @@ export function Thread({ ws, sessionId, messages, live, task, availableExtension
 }) {
   const lastAssistant = useMemo(() => [...messages].reverse().find((m) => m.role === "assistant"), [messages]);
   const taskUnknown = !!task && (task.unknowns?.length ?? 0) > 0;
+  const liveMessage = useMemo(() => (live ? liveAsMessage(live) : null), [live]);
+  const status = live?.status ?? "";
+  const streaming = useMemo(() => ({ status }), [status]);
   return (
     <div className="wb-thread" data-testid="thread">
       {messages.length === 0 && !live ? <p className="muted">在下方输入第一句话开始。</p> : null}
       <ol className="messages">
-        {messages.map((m, i) => (
-          // 会话消息只追加不重排，按位置作 key：本地乐观插入的用户消息换成服务端版本时原地更新，不会卸载重建。
-          <MessageItem key={i} m={m} ws={ws} sessionId={sessionId} isLast={m === lastAssistant}
-            verifyTaskId={m.metadata?.task_id ?? (taskUnknown ? task?.task_id : undefined)} available={availableExtensions} />
-        ))}
-        {live ? (
-          <li className="message role-assistant is-live" aria-live="polite" data-testid="live-turn">
-            <MessageAvatar role="assistant" live />
-            <div className="message-main">
-              {live.text ? <div className="message-body">{live.text}<span className="stream-caret" aria-hidden="true" /></div> : null}
-              <LiveProgress live={live} />
-              <p className="live-status"><span className="live-dot" aria-hidden="true" /><span className="shimmer-text">{live.status || "思考中…"}</span></p>
-            </div>
-          </li>
-        ) : null}
+        {/* 实时回复必须和历史消息在同一个数组里：React 只在同一组兄弟间按 key 复用节点。 */}
+        {[
+          ...messages.map((m, i) => (
+            // 会话消息只追加不重排，按位置作 key：本地乐观插入的用户消息换成服务端版本时原地更新，不会卸载重建。
+            <MessageItem key={i} m={m} ws={ws} sessionId={sessionId} isLast={m === lastAssistant}
+              verifyTaskId={m.metadata?.task_id ?? (taskUnknown ? task?.task_id : undefined)} available={availableExtensions} />
+          )),
+          // 流式回复占下一个位置：回合结束后服务端的正式回复正好落在这里，于是同一个节点原地换上终态。
+          ...(liveMessage ? [<MessageItem key={messages.length} m={liveMessage} ws={ws} sessionId={sessionId} isLast={false}
+            available={availableExtensions} streaming={streaming} />] : []),
+        ]}
       </ol>
       {task && !live ? <TaskResumeBar ws={ws} sessionId={sessionId} task={task} onResume={onResume} /> : null}
     </div>
