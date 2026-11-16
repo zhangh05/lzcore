@@ -430,6 +430,7 @@ def handle_workbench_models():
             "thinking_options": list(profile.thinking_options),
             "requires_thinking": profile.thinking_required,
             "supports_vision": profile.vision,
+            "supports_tools": profile.tools,
             "context_window": profile.context_window,
         })
     models.sort(key=lambda m: (not m["is_active"], m["label"]))

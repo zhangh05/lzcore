@@ -60,6 +60,15 @@ function TestResult({ t }: { t: TestState }) {
   );
 }
 
+/** 每次请求的最大输出：显示模型上限，超过时说明会被截断。 */
+function maxTokensHint(value: number, override: number | null, profile: ModelProfile | null): string {
+  const known = override ?? (profile && profile.sources.max_output && profile.sources.max_output !== "unknown" ? profile.max_output : null);
+  if (!known) return "单次回复最多生成的 token 数。";
+  return value > known
+    ? `超过模型上限 ${formatTokens(known)}，发送时会按 ${formatTokens(known)} 截断。`
+    : `单次回复最多生成的 token 数，模型上限 ${formatTokens(known)}。`;
+}
+
 /** 能直接在对话里选用：有模型，且有密钥或是本机服务。 */
 const usable = (p: Provider) => !!p.model && (!!p.key_configured || isLocal(p.base_url));
 
@@ -204,6 +213,7 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [profile, setProfile] = useState<ModelProfile | null>(null);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => {
     // 能力设置属于某个模型：换模型后回到自动识别，思考档位回到服务商默认。
     setF((prev) => (k === "model" && v !== prev.model ? { ...prev, model: v as string, capabilities: {}, thinking: "provider_default" } : { ...prev, [k]: v }));
@@ -243,7 +253,7 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
 
   const fields = () => {
     const body: Record<string, unknown> = { label: f.label.trim(), provider_type: f.provider_type, model: f.model.trim(), temperature: Number(f.temperature), max_tokens: Number(f.max_tokens),
-      thinking: f.thinking, capabilities: { vision: null, reasoning: null, temperature: null, context_window: null, ...f.capabilities } };
+      thinking: f.thinking, capabilities: { vision: null, tools: null, reasoning: null, temperature: null, context_window: null, max_output: null, ...f.capabilities } };
     if (!lockUrl) body.base_url = f.base_url.trim();
     if (f.api_key) body.api_key = f.api_key;
     return body;
@@ -320,14 +330,15 @@ function ProviderSheet({ provider, isNew, platform, becomeDefault, onClose, onSa
             <span className="sheet-label">模型能力</span>
             <CapabilitySettings draft={{ provider: isNew ? undefined : provider.provider, model: f.model, base_url: f.base_url, provider_type: f.provider_type, api_key: f.api_key || undefined }}
               overrides={f.capabilities} onOverrides={(next) => setF((prev) => ({ ...prev, capabilities: next }))}
-              thinking={f.thinking} onThinking={(next) => setF((prev) => ({ ...prev, thinking: next }))} />
+              thinking={f.thinking} onThinking={(next) => setF((prev) => ({ ...prev, thinking: next }))} onProfile={setProfile} />
           </section>
 
           <details className="sheet-advanced">
             <summary>高级设置<span className="muted">温度、最大输出</span></summary>
             <div className="sheet-adv">
               <Slider label="温度" min={0} max={2} step={0.1} value={Number(f.temperature)} onValueChange={(v) => set("temperature", v)} format={(v) => v.toFixed(1)} showValue />
-              <Input label="最大输出 tokens" type="number" min={256} step={256} value={f.max_tokens} onChange={(e) => set("max_tokens", Number(e.target.value))} />
+              <Input label="最大输出 tokens" type="number" min={256} step={256} value={f.max_tokens} onChange={(e) => set("max_tokens", Number(e.target.value))}
+                data-testid="provider-max-tokens" description={maxTokensHint(Number(f.max_tokens), f.capabilities.max_output ?? null, profile)} />
             </div>
           </details>
 

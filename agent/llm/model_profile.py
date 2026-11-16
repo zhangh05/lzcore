@@ -13,6 +13,9 @@ Resolution order, per field:
    provider's endpoint first, then by model id across first-party vendors.
 3. Conservative name heuristics for models the catalog does not know.
 4. Defaults (source "unknown"): text only, tools on, no thinking control, 128K context.
+
+``max_output`` is the model's output ceiling; a provider's ``max_tokens`` (the
+per-request setting) is clamped to it when the ceiling is known.
 """
 
 from __future__ import annotations
@@ -30,10 +33,22 @@ DEFAULT_CONTEXT_WINDOW = 128_000
 DEFAULT_MAX_OUTPUT = 8_192
 THINKING_DEFAULT = "provider_default"
 EFFORT_LEVELS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+# Thinking budgets (tokens) behind low / medium / high on budget-style models.
+BUDGET_LEVELS = {"low": 2_048, "medium": 8_192, "high": 24_576}
 # Fields a user may pin on a provider; ``None`` (or absent) means "automatic".
-# Only fields that change what lzcore sends are overridable; tool support is
-# reported from the catalog but the agent always needs tools.
-OVERRIDE_BOOL_FIELDS = ("vision", "reasoning", "temperature")
+# Only fields that change what lzcore sends are overridable.  tools=False sends
+# no tool definitions, so the agent can only answer in plain text.
+OVERRIDE_BOOL_FIELDS = ("vision", "tools", "reasoning", "temperature")
+# How a thinking choice is written into the request body (see provider.py):
+#   minimax          {"thinking": {"type": "adaptive" | "disabled"}}          (MiniMax M3, Anthropic protocol)
+#   anthropic_effort {"thinking": {"type": "adaptive"}, "output_config": {"effort": level}}
+#   anthropic_budget {"thinking": {"type": "enabled", "budget_tokens": n}} / {"type": "disabled"}
+#   effort           {"reasoning_effort": level}                               (OpenAI compatible)
+#   enable_thinking  {"enable_thinking": bool, "thinking_budget": n?}          (DashScope / SiliconFlow)
+#   thinking_type    {"thinking": {"type": "enabled" | "disabled"}}            (Zhipu / Ark / DeepSeek / Kimi)
+ENABLE_THINKING_VENDORS = ("alibaba", "alibaba-cn", "siliconflow", "siliconflow-cn")
+THINKING_TYPE_VENDORS = ("zhipuai", "zhipuai-coding-plan", "volcengine", "volcengine-coding-plan", "byteplus",
+                         "deepseek", "moonshotai", "moonshotai-cn")
 OVERRIDE_INT_FIELDS = ("context_window", "max_output")
 
 
@@ -51,6 +66,9 @@ class ModelProfile:
     thinking_options: tuple[str, ...] = ()
     # The model rejects thinking="disabled" (e.g. MiniMax-M3.1).
     thinking_required: bool = False
+    thinking_style: str = ""
+    # (min, max) budget tokens a budget-style model accepts.
+    thinking_budget: tuple[int, int] | None = None
     cost_per_million: tuple[float, float] | None = None
     catalog_ref: str = ""
     display_name: str = ""
@@ -68,6 +86,7 @@ class ModelProfile:
             "max_output": self.max_output,
             "thinking_options": list(self.thinking_options),
             "thinking_required": self.thinking_required,
+            "thinking_style": self.thinking_style,
             "cost_per_million": list(self.cost_per_million) if self.cost_per_million else None,
             "catalog_ref": self.catalog_ref,
             "display_name": self.display_name,
@@ -142,6 +161,16 @@ def _candidate_ids(model: str) -> list[str]:
     return result
 
 
+def endpoint_vendor(base_url: str, catalog_ref: str) -> str:
+    """The catalog provider of ``catalog_ref`` when the endpoint is that provider's own API.
+
+    Vendor-specific request fields are only safe on the vendor's endpoint; a
+    gateway serving the same model id may expect something else.
+    """
+    pid = catalog_ref.split("/", 1)[0] if catalog_ref else ""
+    return pid if pid and pid in _providers_for_endpoint(base_url) else ""
+
+
 def lookup_catalog(model: str, base_url: str = "") -> tuple[str, dict[str, Any]] | None:
     """Return ("provider/model", record) or None."""
     providers = load_catalog()["providers"]
@@ -193,19 +222,59 @@ def _heuristic(model: str) -> dict[str, Any]:
 
 # ── thinking controls lzcore can actually send ─────────────────────────
 
-def _thinking(model: str, protocol: str, record: dict[str, Any]) -> tuple[tuple[str, ...], bool]:
+@dataclass(frozen=True)
+class _Thinking:
+    options: tuple[str, ...] = ()
+    required: bool = False
+    style: str = ""
+    budget: tuple[int, int] | None = None
+
+
+def _thinking(model: str, protocol: str, record: dict[str, Any], vendor: str) -> _Thinking:
     name = model.lower()
     # MiniMax M3 family speaks Anthropic Messages with {"thinking": {"type": ...}}.
     if name.startswith("minimax-m3"):
-        return ("adaptive", "disabled"), name.startswith("minimax-m3.1")
-    if protocol != "openai_compatible":
-        return (), False
-    # OpenAI-compatible chat completions accept reasoning_effort.
+        return _Thinking(("adaptive", "disabled"), name.startswith("minimax-m3.1"), "minimax")
+    kinds: dict[str, dict[str, Any]] = {}
     for opt in record.get("reasoning_options") or []:
-        if opt.get("type") == "effort":
-            values = tuple(v for v in EFFORT_LEVELS if v in (opt.get("values") or []))
-            return values, False
-    return (), False
+        if isinstance(opt, dict) and opt.get("type") and opt["type"] not in kinds:
+            kinds[opt["type"]] = opt
+    effort = tuple(v for v in EFFORT_LEVELS if v in (kinds.get("effort", {}).get("values") or []))
+    budget_opt = kinds.get("budget_tokens")
+    budget = None
+    if budget_opt is not None:
+        low = int(budget_opt.get("min") or 1_024)
+        budget = (low, max(low, int(budget_opt.get("max") or 10_000_000)))
+    if protocol == "anthropic_messages":
+        # Claude 4.6+ thinks adaptively and takes an effort level; budget_tokens
+        # is rejected on 4.7+.  Older models (Haiku / Sonnet 4.5) take a budget.
+        if effort:
+            return _Thinking(tuple(v for v in effort if v != "none"), False, "anthropic_effort")
+        if budget_opt is not None or "toggle" in kinds:
+            return _Thinking(("disabled", "low", "medium", "high"), False, "anthropic_budget", budget or (1_024, 10_000_000))
+        return _Thinking()
+    if protocol != "openai_compatible":
+        return _Thinking()
+    # OpenAI-compatible chat completions accept reasoning_effort.
+    if effort:
+        return _Thinking(effort, False, "effort")
+    if vendor in ENABLE_THINKING_VENDORS:
+        if budget_opt is not None:
+            return _Thinking(("disabled", "low", "medium", "high"), False, "enable_thinking", budget)
+        if "toggle" in kinds:
+            return _Thinking(("enabled", "disabled"), False, "enable_thinking")
+    if vendor in THINKING_TYPE_VENDORS and ("toggle" in kinds or budget_opt is not None):
+        return _Thinking(("enabled", "disabled"), False, "thinking_type")
+    return _Thinking()
+
+
+def thinking_budget_tokens(profile: "ModelProfile", level: str) -> int:
+    """Budget tokens for a low / medium / high choice, inside the model's range."""
+    value = BUDGET_LEVELS.get(level, BUDGET_LEVELS["medium"])
+    if profile.thinking_budget:
+        low, high = profile.thinking_budget
+        value = min(max(value, low), high)
+    return value
 
 
 # ── public API ──────────────────────────────────────────────────────────
@@ -279,15 +348,14 @@ def resolve_model_profile(config: dict | None) -> ModelProfile:
         return default
 
     vision = bool(pick("vision", "vision", False))
-    tools = bool(record["tools"]) if isinstance(record.get("tools"), bool) else True
-    sources["tools"] = "catalog" if isinstance(record.get("tools"), bool) else "unknown"
+    tools = bool(pick("tools", "tools", True))
     reasoning = bool(pick("reasoning", "reasoning", False))
     temperature = bool(pick("temperature", "temperature", True))
     context_window = int(pick("context_window", "context", DEFAULT_CONTEXT_WINDOW))
     max_output = int(pick("max_output", "output", DEFAULT_MAX_OUTPUT))
-    thinking_options, thinking_required = _thinking(model, protocol, record)
+    thinking = _thinking(model, protocol, record, endpoint_vendor(str(config.get("base_url") or ""), hit[0] if hit else ""))
     if overrides.get("reasoning") is False:
-        thinking_options, thinking_required = (), False
+        thinking = _Thinking()
     cost = record.get("cost")
     return ModelProfile(
         model=model,
@@ -298,8 +366,10 @@ def resolve_model_profile(config: dict | None) -> ModelProfile:
         temperature=temperature,
         context_window=context_window,
         max_output=max_output,
-        thinking_options=thinking_options,
-        thinking_required=thinking_required,
+        thinking_options=thinking.options,
+        thinking_required=thinking.required,
+        thinking_style=thinking.style,
+        thinking_budget=thinking.budget,
         cost_per_million=(float(cost[0]), float(cost[1])) if isinstance(cost, list) and len(cost) == 2 else None,
         catalog_ref=hit[0] if hit else "",
         display_name=str(record.get("name") or ""),

@@ -69,7 +69,8 @@ def test_overrides_are_validated():
     assert validate_overrides({"vision": "yes"})
     assert validate_overrides({"context_window": 12})
     assert validate_overrides({"unknown": True})
-    assert validate_overrides({"tools": False})  # reported, not overridable
+    assert validate_overrides({"tools": False}) == []
+    assert validate_overrides({"max_output": 64_000}) == []
     assert validate_overrides([1])
 
 
@@ -116,6 +117,47 @@ def test_request_bodies_follow_model_capabilities():
     req = LLMRequest(task="t", messages=[LLMMessage(role="user", content="hi")], model="MiniMax-M3")
     cfg = {"provider": "minimax", "model": "MiniMax-M3", "provider_type": "anthropic_messages", "thinking": "disabled"}
     assert _to_anthropic_messages_request(req, cfg)["thinking"] == {"type": "disabled"}
+
+    def shaped(model, protocol, thinking="provider_default", base_url="", max_tokens=4096, **extra):
+        body = {"model": model, "temperature": 0.2, "max_tokens": max_tokens}
+        _apply_model_capabilities(body, {"model": model, "provider_type": protocol, "base_url": base_url,
+                                         "thinking": thinking, **extra}, protocol=protocol)
+        return body
+
+    # Claude 4.6+: adaptive thinking with an effort level, never budget_tokens.
+    opus = shaped("claude-opus-5-5", "anthropic_messages", "xhigh")
+    assert opus["thinking"] == {"type": "adaptive"} and opus["output_config"] == {"effort": "xhigh"}
+    # Older Claude: a thinking budget below max_tokens, and no custom temperature.
+    haiku = shaped("claude-haiku-4-5", "anthropic_messages", "medium")
+    assert haiku["thinking"] == {"type": "enabled", "budget_tokens": 8192}
+    assert haiku["max_tokens"] > 8192 and "temperature" not in haiku
+    assert shaped("claude-haiku-4-5", "anthropic_messages", "disabled")["thinking"] == {"type": "disabled"}
+    # DashScope (Qwen): enable_thinking plus a budget within the model's range.
+    dashscope = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    qwen = shaped("qwen-plus", "openai_compatible", "high", dashscope)
+    assert qwen["enable_thinking"] is True and qwen["thinking_budget"] == 24576
+    assert shaped("qwen-plus", "openai_compatible", "disabled", dashscope)["enable_thinking"] is False
+    # Zhipu: thinking.type on the vendor's own endpoint...
+    zhipu = "https://open.bigmodel.cn/api/paas/v4"
+    assert shaped("glm-4.7", "openai_compatible", "enabled", zhipu)["thinking"] == {"type": "enabled"}
+    # ...but a gateway serving the same model gets no vendor-specific field.
+    assert profile_of("glm-4.7", "https://gw.example/v1").thinking_options == ()
+    # A known output ceiling caps max_tokens; an unknown one does not.
+    assert shaped("glm-5", "openai_compatible", base_url="https://dashscope.aliyuncs.com/compatible-mode/v1", max_tokens=100_000)["max_tokens"] == 16384
+    assert shaped("private-model", "openai_compatible", max_tokens=100_000)["max_tokens"] == 100_000
+    assert shaped("private-model", "openai_compatible", max_tokens=100_000, capabilities={"max_output": 32_000})["max_tokens"] == 32_000
+
+    # tools=False: no tool definitions are sent on either protocol.
+    tool = {"type": "function", "function": {"name": "echo", "description": "", "parameters": {"type": "object", "properties": {}}}}
+    treq = LLMRequest(task="t", messages=[LLMMessage(role="user", content="hi")], model="x", tools=[tool])
+    acfg = {"model": "claude-haiku-4-5", "provider_type": "anthropic_messages"}
+    assert "tools" in _to_anthropic_messages_request(treq, acfg)
+    assert "tools" not in _to_anthropic_messages_request(treq, {**acfg, "capabilities": {"tools": False}})
+
+
+def profile_of(model, base_url):
+    from agent.llm.model_profile import resolve_model_profile
+    return resolve_model_profile({"model": model, "base_url": base_url, "provider_type": "openai_compatible"})
 
 
 def test_turn_selection_accepts_only_supported_thinking_levels(monkeypatch, tmp_path):
