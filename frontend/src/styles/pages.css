@@ -494,6 +494,21 @@
   .model-card-model code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: var(--fs-sm); background: none; padding: 0; }
   .model-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--fs-xs); color: var(--text-3); }
   .model-card-meta span { display: inline-flex; align-items: center; gap: 4px; }
+  /* Capabilities from the model catalog or the user's settings. */
+  .model-caps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+  .model-caps-source { flex-basis: 100%; font-size: var(--fs-xs); color: var(--text-3); }
+  .caps { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-radius: var(--r-control); background: var(--surface-2); }
+  .caps-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2) var(--space-3); }
+  .caps-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .caps-text strong { font-size: var(--fs-sm); font-weight: var(--weight-label); }
+  .caps-text span { font-size: var(--fs-xs); color: var(--text-3); }
+  .caps-detect { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .caps-detect-result { font-size: var(--fs-xs); }
+  .caps-detect-result.tone-ok { color: var(--success); }
+  .caps-detect-result.tone-warn { color: var(--warn); }
+  .caps-detect-result.tone-fail { color: var(--danger); }
+  .caps-select select { min-width: 140px; height: 32px; padding: 0 var(--space-2); border: 1px solid var(--control-stroke); border-radius: var(--r-control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-sm); }
+  @media (max-width: 520px) { .caps-row { grid-template-columns: minmax(0, 1fr); } }
   .model-card > footer { display: flex; align-items: center; gap: var(--space-2); margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--line-2); }
 
   .model-gallery { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-2); }

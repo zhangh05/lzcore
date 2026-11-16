@@ -9,6 +9,16 @@ import type { FakeHandler } from "./fakeBackend";
 
 const NB = "/api/extensions/network.operations";
 
+/** 夹具里的模型目录：gpt-4 系列识图，o4-mini 有推理强度，其余纯文本。 */
+function profileFor(model: string) {
+  const vision = /gpt-4/.test(model);
+  const effort = /^o4/.test(model);
+  return { model, vision, pdf: false, tools: true, reasoning: effort, temperature: !effort, context_window: vision ? 128000 : 64000, max_output: 8192,
+    thinking_options: effort ? ["low", "medium", "high"] : [], thinking_required: false, cost_per_million: null,
+    catalog_ref: model.startsWith("gpt") || effort ? `openai/${model}` : model === "deepseek-chat" ? "deepseek/deepseek-chat" : "", display_name: "",
+    sources: { vision: "catalog", reasoning: "catalog", temperature: "catalog", context_window: "catalog", _base: "catalog" } };
+}
+
 /** 在应用夹具之上补模型服务与网络 Skill 接口，记录全部写请求。 */
 function renderAt(url: string, opts: AppFixtureOptions = {}) {
   window.history.replaceState({}, "", url);
@@ -16,7 +26,8 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
   const app = appHandler(opts, log);
   let active = "deepseek";
   const providers = [
-    { provider: "deepseek", label: "DeepSeek", provider_type: "openai_compatible", base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", key_configured: true, key_preview: "sk-a****wxyz" },
+    { provider: "deepseek", label: "DeepSeek", provider_type: "openai_compatible", base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", key_configured: true, key_preview: "sk-a****wxyz",
+      profile: profileFor("deepseek-chat") },
     { provider: "openai", label: "OpenAI", provider_type: "openai_compatible", base_url: "https://api.openai.com/v1", model: "gpt-4o-mini", key_configured: false },
     { provider: "ollama", label: "Ollama (本地)", provider_type: "openai_compatible", base_url: "http://localhost:11434/v1", model: "llama3.1", key_configured: false },
   ];
@@ -24,6 +35,8 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
     const p = path.split("?")[0];
     if (method !== "GET") log.push({ method, path: p, body });
     if (p === "/api/agent/llm/providers" && method === "GET") return { status: 200, body: { ok: true, active, providers: providers.map((x) => ({ ...x, is_active: x.provider === active })) } };
+    if (p === "/api/agent/llm/profile") return { status: 200, body: { ok: true, profile: profileFor(String((body as { model?: string }).model)) } };
+    if (p === "/api/agent/llm/test" && (body as { probe?: string }).probe === "vision") return { status: 200, body: { ok: true, probe: "vision", vision: true, expected: "blue", response: "Blue" } };
     if (p === "/api/agent/llm/test") {
       const b = body as { api_key?: string; provider?: string };
       return b.provider === "openai" && !b.api_key
@@ -34,7 +47,7 @@ function renderAt(url: string, opts: AppFixtureOptions = {}) {
       const b = body as { api_key?: string; provider?: string; base_url?: string };
       const saved = providers.find((x) => x.provider === b.provider);
       return b.api_key || saved?.key_configured
-        ? { status: 200, body: { ok: true, source: "api.openai.com", models: [{ id: "gpt-4.1", owned_by: "openai" }, { id: "gpt-4o-mini", owned_by: "openai" }, { id: "o4-mini", owned_by: "openai" }] } }
+        ? { status: 200, body: { ok: true, source: "api.openai.com", models: [{ id: "gpt-4.1", owned_by: "openai", capabilities: { vision: true, reasoning: false, tools: true, context_window: 1047576 } }, { id: "gpt-4o-mini", owned_by: "openai" }, { id: "o4-mini", owned_by: "openai" }] } }
         : { status: 200, body: { ok: false, error: "provider rejected the request", http_status: 401 } };
     }
     const save = /^\/api\/agent\/llm\/providers\/([^/]+)$/.exec(p);
@@ -106,7 +119,7 @@ describe("模型服务", () => {
     expect(log.filter((l) => l.path === "/api/agent/llm/models").pop()?.body).toMatchObject({ provider: "openai", provider_type: "openai_compatible", api_key: "sk-new-1234", base_url: "https://api.openai.com/v1" });
     expect(within(sheet).getByText(/获取 3 个模型/)).toBeInTheDocument();
     fireEvent.click(combo);
-    fireEvent.click(await within(sheet).findByRole("option", { name: "gpt-4.1" }));
+    fireEvent.click(await within(sheet).findByRole("option", { name: /^gpt-4\.1（识图 · 1\.05M）$/ }));
     fireEvent.click(within(sheet).getByTestId("provider-test"));
     await waitFor(() => expect(within(sheet).getByTestId("llm-test-result")).toHaveTextContent("连接正常"));
     expect(log.filter((l) => l.path === "/api/agent/llm/test").pop()?.body).toMatchObject({ model: "gpt-4.1", api_key: "sk-new-1234" });
@@ -159,5 +172,52 @@ describe("模型服务", () => {
     const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
     fireEvent.click(await screen.findByTestId("provider-test-deepseek", {}, { timeout: 4000 }));
     await waitFor(() => expect(log.filter((l) => l.path === "/api/agent/llm/test").pop()?.body).toMatchObject({ provider: "deepseek" }));
+  });
+
+  it("卡片显示模型能力：识图 / 深度思考 / 上下文，来自内置目录", async () => {
+    renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    const card = (await screen.findByTestId("providers-table", {}, { timeout: 4000 })).querySelector('[data-provider="deepseek"]') as HTMLElement;
+    const caps = await within(card).findByTestId("model-caps");
+    expect(caps).toHaveTextContent("上下文 64K");
+    expect(caps).toHaveTextContent("能力来自内置模型目录");
+    expect(caps).not.toHaveTextContent("识图");
+  });
+
+  it("配置里能把识图手动设为支持，也能一键检测；保存时带上能力设置", async () => {
+    const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    const card = (await screen.findByTestId("providers-table", {}, { timeout: 4000 })).querySelector('[data-provider="deepseek"]') as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: /配置/ }));
+    const sheet = await screen.findByTestId("provider-sheet");
+    const caps = await within(sheet).findByTestId("capability-settings");
+    await waitFor(() => expect(caps).toHaveTextContent("自动：不支持 · 内置模型目录"));
+    // 一键检测：发带图请求，模型认出颜色后设为「支持」
+    fireEvent.click(within(caps).getByTestId("detect-vision"));
+    expect(await within(caps).findByTestId("detect-vision-result")).toHaveTextContent("检测通过：模型认出了图片是蓝色");
+    expect(log.filter((l) => l.path === "/api/agent/llm/test").pop()?.body).toMatchObject({ probe: "vision", provider: "deepseek", model: "deepseek-chat" });
+    expect(within(within(caps).getByRole("group", { name: "识图" })).getByRole("button", { name: "支持" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(within(caps).getByTestId("provider-context-window"), { target: { value: "32000" } });
+    fireEvent.click(within(sheet).getByTestId("provider-save"));
+    await waitFor(() => expect(log.find((l) => l.path === "/api/agent/llm/providers/deepseek")?.body).toMatchObject({
+      capabilities: { vision: true, reasoning: null, temperature: null, context_window: 32000 }, thinking: "provider_default",
+    }));
+  });
+
+  it("换模型后能力回到自动；推理模型可选默认思考档位", async () => {
+    const { log } = renderAt("/system/settings?ws=ws-demo-1", { role: "admin" });
+    const card = (await screen.findByTestId("providers-table", {}, { timeout: 4000 })).querySelector('[data-provider="deepseek"]') as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: /配置/ }));
+    const sheet = await screen.findByTestId("provider-sheet");
+    const caps = await within(sheet).findByTestId("capability-settings");
+    fireEvent.click(within(within(caps).getByRole("group", { name: "识图" })).getByRole("button", { name: "支持" }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "手动输入" }));
+    fireEvent.change(within(sheet).getByTestId("provider-model"), { target: { value: "o4-mini" } });
+    const thinking = await within(sheet).findByTestId("provider-thinking", {}, { timeout: 3000 });
+    expect(within(within(caps).getByRole("group", { name: "识图" })).getByRole("button", { name: "自动" })).toHaveAttribute("aria-pressed", "true");
+    expect(caps).toHaveTextContent("自动：不发送温度");
+    fireEvent.change(thinking, { target: { value: "high" } });
+    fireEvent.click(within(sheet).getByTestId("provider-save"));
+    await waitFor(() => expect(log.find((l) => l.path === "/api/agent/llm/providers/deepseek")?.body).toMatchObject({
+      model: "o4-mini", thinking: "high", capabilities: { vision: null },
+    }));
   });
 });

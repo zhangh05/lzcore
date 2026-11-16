@@ -34,7 +34,7 @@ class LLMClient:
             config_override=self._generation_override,
         )
 
-    def probe(self, message: str = "Reply with OK.") -> dict:
+    def probe(self, message: str = "Reply with OK.", *, image_data_url: str = "", max_tokens: int = 16) -> dict:
         """Exercise the selected provider's real chat-completions transport.
 
         Connectivity testing must not depend on task templates, output policy,
@@ -44,7 +44,7 @@ class LLMClient:
         from agent.llm.schemas import LLMMessage, LLMRequest
 
         from agent.llm.config import _llm_disabled_by_env
-        probe_cfg = {**self._cfg, "enabled": not _llm_disabled_by_env(), "temperature": 0.0, "max_tokens": 16}
+        probe_cfg = {**self._cfg, "enabled": not _llm_disabled_by_env(), "temperature": 0.0, "max_tokens": max_tokens}
         from core.tools.redaction import redact_tool_output
 
         # Replace the actual key before regex redaction and before any output
@@ -74,11 +74,14 @@ class LLMClient:
                 task="connection_probe",
                 messages=[
                     LLMMessage(role="system", content="You are a connectivity probe. Reply briefly."),
-                    LLMMessage(role="user", content=message or "Reply with OK."),
+                    LLMMessage(role="user", content=(
+                        [{"type": "text", "text": message}, {"type": "image_url", "image_url": {"url": image_data_url}}]
+                        if image_data_url else (message or "Reply with OK.")
+                    )),
                 ],
                 model=self._cfg.get("model", ""),
                 temperature=0.0,
-                max_tokens=16,
+                max_tokens=max_tokens,
                 stream=True,
                 metadata={"stream_to_user": False, "stream_scope": "probe"},
             ), probe_cfg)

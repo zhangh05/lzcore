@@ -1,20 +1,15 @@
-"""Explicit, conservative model capability detection."""
+"""Model capability checks used on the request path.
+
+Capabilities come from :mod:`agent.llm.model_profile` (user overrides, then
+the bundled models.dev catalog, then conservative name heuristics).  Unknown
+models stay text-only: sending images optimistically turns an understandable
+limitation into a provider 400.
+"""
 
 from __future__ import annotations
 
 
 def supports_vision(config: dict | None) -> bool:
-    """Whether the configured chat model accepts OpenAI-style image inputs.
-
-    Unknown models default to false.  Sending image payloads optimistically
-    turns an understandable limitation into a provider 400, as MiniMax-M3
-    demonstrates, so users must explicitly select a known vision model or set
-    ``vision_enabled`` in a custom provider configuration.
-    """
-    config = config or {}
-    configured = config.get("vision_enabled")
-    if isinstance(configured, bool):
-        return configured
-    model = str(config.get("model") or "").lower()
-    vision_markers = ("minimax-m3", "gpt-4o", "gpt-4.1", "gpt-5", "gemini", "qwen-vl", "qwen2-vl", "vision")
-    return any(marker in model for marker in vision_markers)
+    """Whether the configured chat model accepts image inputs."""
+    from agent.llm.model_profile import resolve_model_profile
+    return resolve_model_profile(config).vision

@@ -50,19 +50,13 @@ def project_json_to_tokens(value: Any, max_tokens: int) -> tuple[Any, bool]:
 
 
 def resolve_model_context_tokens(model: str, configured: int = 0) -> int:
+    """Configured window first, then the model profile (catalog / heuristics)."""
     if configured and configured > 0:
         return int(configured)
-    name = str(model or "").lower()
-    windows = (
-        (("minimax-m3", "deepseek-v3", "deepseek-v4"), 512_000),
-        (("claude",), 200_000),
-        (("gpt-4o", "gpt-4-turbo", "qwen-max", "glm-4"), 128_000),
-        (("gpt-3.5",), 16_000),
-    )
-    for aliases, size in windows:
-        if any(alias in name for alias in aliases):
-            return size
-    return DEFAULT_CONTEXT_WINDOW_TOKENS
+    if not str(model or "").strip():
+        return DEFAULT_CONTEXT_WINDOW_TOKENS
+    from agent.llm.model_profile import profile_for_model_name
+    return profile_for_model_name(str(model)).context_window or DEFAULT_CONTEXT_WINDOW_TOKENS
 
 
 @dataclass(frozen=True)

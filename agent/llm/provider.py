@@ -305,6 +305,22 @@ def _is_official_openai(cfg: dict) -> bool:
     return provider == "openai" and "api.openai.com" in base_url
 
 
+def _apply_model_capabilities(body: dict, cfg: dict, *, protocol: str) -> None:
+    """Shape sampling / thinking fields to what the model accepts (model_profile)."""
+    from agent.llm.model_profile import EFFORT_LEVELS, resolve_model_profile
+    profile = resolve_model_profile({**cfg, "model": body.get("model") or cfg.get("model")})
+    if not profile.temperature:
+        # Reasoning models such as o-series / GPT-5 reject non-default temperature.
+        body.pop("temperature", None)
+    thinking = cfg.get("thinking", "provider_default")
+    if thinking == "provider_default" or thinking not in profile.thinking_options:
+        return
+    if protocol == "anthropic_messages" and thinking in ("adaptive", "disabled"):
+        body["thinking"] = {"type": thinking}  # MiniMax M3 family
+    elif protocol == "openai_compatible" and thinking in EFFORT_LEVELS:
+        body["reasoning_effort"] = thinking
+
+
 def _apply_openai_cache_fields(body: dict, req: LLMRequest, cfg: dict) -> bool:
     """Apply only fields documented by the official OpenAI endpoint.
 
@@ -361,6 +377,7 @@ def _api_generate(req: LLMRequest, cfg: dict) -> LLMResponse:
         }
         if cfg.get("top_p") is not None:
             body_dict["top_p"] = cfg["top_p"]
+        _apply_model_capabilities(body_dict, cfg, protocol="openai_compatible")
         if req.tools:
             body_dict["tools"] = req.tools
             body_dict["tool_choice"] = "auto"
@@ -1058,9 +1075,7 @@ def _to_anthropic_messages_request(req: LLMRequest, cfg: dict) -> dict:
     }
     if cfg.get("top_p") is not None:
         body["top_p"] = cfg["top_p"]
-    thinking = cfg.get("thinking", "provider_default")
-    if str(body["model"]).lower().startswith("minimax-m3") and thinking != "provider_default":
-        body["thinking"] = {"type": thinking}
+    _apply_model_capabilities(body, cfg, protocol="anthropic_messages")
     if stable_system or dynamic_system:
         if _anthropic_prompt_cache_enabled(cfg):
             # Anthropic's prefix hierarchy is tools -> system -> messages. A

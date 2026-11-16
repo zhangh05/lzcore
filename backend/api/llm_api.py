@@ -174,6 +174,8 @@ def handle_llm_test():
         if errors:
             return jsonify({"ok": False, "errors": errors}), 400
     client = LLMClient(overrides=overrides if overrides else None)
+    if data.get("probe") == "vision":
+        return _vision_probe(client)
     output = client.probe(message or "Reply with OK.")
     try:
         from agent.llm.config import record_recent_failure, record_recent_success
@@ -199,6 +201,53 @@ def handle_llm_test():
     })
 
 
+def handle_llm_profile():
+    """POST /api/agent/llm/profile — resolve capabilities for a draft model.
+
+    Lets the settings sheet show what will be detected automatically before
+    saving. Only model / endpoint / protocol / overrides are read; no keys.
+    """
+    from agent.llm.model_profile import resolve_model_profile, validate_overrides
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "profile request must be an object"}), 400
+    model = data.get("model")
+    if not isinstance(model, str) or not model.strip() or len(model) > 200:
+        return jsonify({"ok": False, "error": "model is required"}), 400
+    errors = validate_overrides(data.get("capabilities"))
+    if errors:
+        return jsonify({"ok": False, "errors": errors}), 400
+    draft = {key: data[key] for key in ("provider", "provider_type", "base_url", "capabilities") if isinstance(data.get(key), (str, dict))}
+    return jsonify({"ok": True, "profile": resolve_model_profile({**draft, "model": model.strip()}).as_dict()})
+
+
+def _vision_probe(client):
+    """Send a solid-color image and check the model names the color.
+
+    Detects vision support for models the catalog does not know (custom
+    gateways, private deployments) instead of guessing from the name.
+    """
+    import secrets
+    from agent.llm.model_profile import (
+        VISION_PROBE_COLORS, VISION_PROBE_PROMPT, vision_probe_image, vision_probe_passed,
+    )
+    color = secrets.choice(sorted(VISION_PROBE_COLORS))
+    output = client.probe(VISION_PROBE_PROMPT, image_data_url=vision_probe_image(color), max_tokens=512)
+    reply = str(output.get("response") or "")
+    seen = bool(output["ok"]) and vision_probe_passed(color, reply)
+    return jsonify({
+        "ok": bool(output["ok"]),
+        "probe": "vision",
+        "vision": seen,
+        "expected": color,
+        "provider": output["provider"],
+        "model": output["model"],
+        "response": reply[:200],
+        "fallback_reason": output["error"],
+        "metadata": output["metadata"],
+    })
+
+
 # ═══════════════════════════════════════════════════
 # Per-provider config endpoints (new)
 # ═══════════════════════════════════════════════════
@@ -212,6 +261,9 @@ def _sanitize_provider(data: dict) -> dict:
     result["key_configured"] = bool(key)
     result["key_preview"] = mask_key(key) if key else None
     result["api_key"] = None
+    if data.get("model"):
+        from agent.llm.model_profile import resolve_model_profile
+        result["profile"] = resolve_model_profile(data).as_dict()
     return result
 
 
@@ -269,7 +321,13 @@ def handle_provider_save(provider_id: str):
     if not isinstance(data, dict):
         return jsonify({"ok": False, "error": "provider config must be an object"}), 400
 
-    errors = validate_llm_settings({**load_provider_config(provider_id), **data, "provider": provider_id})
+    existing = load_provider_config(provider_id)
+    merged = {**existing, **data, "provider": provider_id}
+    # A new model without an explicit thinking choice starts from the provider default
+    # (save_provider_config settles it the same way), so a stale level never blocks the save.
+    if "thinking" not in data and str(data.get("model") or existing.get("model") or "") != str(existing.get("model") or ""):
+        merged["thinking"] = "provider_default"
+    errors = validate_llm_settings(merged)
     if errors:
         return jsonify({"ok": False, "errors": errors}), 400
 
@@ -347,8 +405,8 @@ def handle_workbench_models():
     turn names the provider id.
     """
     from agent.llm.settings import resolve_provider_llm_config
-    from agent.llm.capabilities import supports_vision
-    from agent.llm.turn_model import provider_selectable, supports_thinking_control
+    from agent.llm.model_profile import resolve_model_profile
+    from agent.llm.turn_model import provider_selectable
 
     active = get_active_provider()
     models = []
@@ -361,15 +419,18 @@ def handle_workbench_models():
         if not provider_selectable({**cfg, "key_configured": bool(cfg.get("api_key"))}):
             continue
         model = str(cfg.get("model") or "")
+        profile = resolve_model_profile(cfg)
         models.append({
             "provider": provider_id,
             "label": item.get("label") or provider_id,
             "model": model,
             "is_active": provider_id == active,
             "thinking": cfg.get("thinking", "provider_default"),
-            "supports_thinking": supports_thinking_control(model),
-            "requires_thinking": model.lower().startswith("minimax-m3.1"),
-            "supports_vision": supports_vision(cfg),
+            "supports_thinking": bool(profile.thinking_options),
+            "thinking_options": list(profile.thinking_options),
+            "requires_thinking": profile.thinking_required,
+            "supports_vision": profile.vision,
+            "context_window": profile.context_window,
         })
     models.sort(key=lambda m: (not m["is_active"], m["label"]))
     return jsonify({"ok": True, "models": models, "active": active})

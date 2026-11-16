@@ -32,7 +32,7 @@ PROVIDERS_DIR = Path(os.environ.get("LZCORE_CONFIG_DIR") or ROOT / "config").res
 ACTIVE_FILE = PROVIDERS_DIR / "_active"
 
 PROVIDER_EDIT_FIELDS = ("enabled", "base_url", "model", "temperature", "max_tokens",
-                        "safe_mode", "prompt_cache_enabled", "vision_enabled", "label", "top_p", "thinking", "provider_type")
+                        "safe_mode", "prompt_cache_enabled", "vision_enabled", "capabilities", "label", "top_p", "thinking", "provider_type")
 
 # ── Built-in provider presets ──
 
@@ -180,8 +180,11 @@ def _sanitize(data: dict) -> dict:
     """Return a sanitized version for API responses (mask API key)."""
     key = data.get("api_key", "")
     public = {key: value for key, value in data.items() if key != "secret_ref"}
+    from agent.llm.model_profile import resolve_model_profile
     return {
         **public,
+        # What the model can do, and where each answer came from (user / catalog / heuristic / default).
+        "profile": resolve_model_profile(data).as_dict() if data.get("model") else None,
         "key_configured": bool(key),
         "key_preview": _mask_key(key) if key else None,
         "api_key": None,  # never return the key
@@ -241,6 +244,12 @@ def create_provider_config(data: dict) -> dict:
     errors = validate_llm_settings(cfg, new_provider=True)
     if errors:
         raise ValueError("; ".join(errors))
+    from agent.llm.model_profile import normalize_overrides
+    cleaned = normalize_overrides(cfg.get("capabilities"))
+    if cleaned:
+        cfg["capabilities"] = cleaned
+    else:
+        cfg.pop("capabilities", None)
     _ensure_dir()
     with FileLock(PROVIDERS_DIR / ".providers.lock"):
         _write_json(provider_id, cfg)
@@ -268,11 +277,18 @@ def save_provider_config(provider_id: str, data: dict) -> dict:
 
 def _save_provider_config(provider_id: str, data: dict) -> dict:
     existing = load_provider_config(provider_id)
+    previous_model = str(existing.get("model") or "").strip()
 
     # Merge allowed fields from incoming data
     for key in PROVIDER_EDIT_FIELDS:
         if key in data:
             existing[key] = data[key]
+    if "capabilities" in data:
+        from agent.llm.model_profile import validate_overrides
+        cap_errors = validate_overrides(data["capabilities"])
+        if cap_errors:
+            raise ValueError("; ".join(cap_errors))
+    _settle_model_capabilities(existing, data, previous_model)
     existing["provider_type"] = resolve_protocol(provider_id, existing)
     if isinstance(existing.get("label"), str):
         existing["label"] = existing["label"].strip()
@@ -296,6 +312,32 @@ def _save_provider_config(provider_id: str, data: dict) -> dict:
 
     _write_json(provider_id, existing)
     return existing
+
+
+def _settle_model_capabilities(cfg: dict, data: dict, previous_model: str) -> None:
+    """Keep capability settings attached to the model they were made for.
+
+    Overrides describe one model; switching models without sending new ones
+    returns to automatic detection, and a thinking level the new model cannot
+    take falls back to the provider default instead of failing the save.
+    """
+    from agent.llm.model_profile import normalize_overrides, resolve_model_profile
+    model_changed = str(cfg.get("model") or "").strip() != previous_model
+    if "capabilities" in data:
+        cleaned = normalize_overrides(data.get("capabilities"))
+        if cleaned:
+            cfg["capabilities"] = cleaned
+        else:
+            cfg.pop("capabilities", None)
+        cfg.pop("vision_enabled", None)  # superseded by capabilities.vision
+    elif model_changed:
+        cfg.pop("capabilities", None)
+        if "vision_enabled" not in data:
+            cfg.pop("vision_enabled", None)
+    thinking = cfg.get("thinking") or "provider_default"
+    if model_changed and "thinking" not in data and thinking != "provider_default":
+        if thinking not in resolve_model_profile(cfg).thinking_options:
+            cfg["thinking"] = "provider_default"
 
 
 def provider_has_saved_config(provider_id: str) -> bool:

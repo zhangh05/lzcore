@@ -80,6 +80,21 @@ _MODEL_PRICE_PER_1K: dict[str, tuple[float, float]] = {
 }
 
 
+def _price_per_1k(model: str) -> tuple[float, float]:
+    """USD per 1K tokens: models.dev catalog price, else the small local table."""
+    model_key = (model or "default").lower()
+    if model_key in _MODEL_PRICE_PER_1K:
+        return _MODEL_PRICE_PER_1K[model_key]
+    try:
+        from agent.llm.model_profile import profile_for_model_name
+        cost = profile_for_model_name(model).cost_per_million if model else None
+    except Exception:
+        cost = None
+    if cost:
+        return cost[0] / 1000.0, cost[1] / 1000.0
+    return _MODEL_PRICE_PER_1K["default"]
+
+
 def record_llm_call(
     workspace_id: str = "default",
     session_id: str = "",
@@ -96,8 +111,7 @@ def record_llm_call(
 ) -> dict:
     """Record an LLM call and persist to JSONL."""
     total = input_tokens + output_tokens
-    model_key = (model or "default").lower()
-    prices = _MODEL_PRICE_PER_1K.get(model_key, _MODEL_PRICE_PER_1K["default"])
+    prices = _price_per_1k(model)
     cost = (input_tokens / 1000.0) * prices[0] + (output_tokens / 1000.0) * prices[1]
 
     record = TokenRecord(
