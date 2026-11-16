@@ -60,3 +60,25 @@ def test_api_delete_then_create_same_id(root, monkeypatch):
     assert client.post("/api/workspaces", json={"workspace_id": "cycle"}).status_code == 200
     append_jsonl("cycle", ("usage", "token_usage.jsonl"), {"fresh": True})
     assert (root / "catalog" / "cycle").is_dir()
+
+
+@pytest.mark.parametrize("restart", [False, True])
+def test_user_memory_from_deleted_workspace_does_not_recreate_it(root, restart):
+    from storage.memory_governance import MemoryRecord, MemoryStore, MemoryWriteGate, expire_memory
+    from storage.workspace_tombstones import reset
+
+    ensure_workspace("origin")
+    ensure_workspace("other")
+    record = MemoryRecord(workspace_id="origin", scope="global", memory_type="profile",
+                          source="user", status="active", content="常驻城市：杭州")
+    assert MemoryWriteGate().write(record)["ok"] is True
+    assert delete_workspace("origin")["ok"] is True
+    if restart:
+        reset()  # a new server process no longer remembers the deletion
+
+    # The memory is user-level, so it is still visible and can be retired
+    # from another workspace without bringing "origin" back.
+    assert MemoryStore().get("other", record.memory_id) is not None
+    assert expire_memory("origin", record.memory_id)["ok"] is True
+    assert not (root / "origin").exists()
+    assert not (root / "catalog" / "origin").exists()

@@ -198,6 +198,11 @@ class MemoryStore:
         d = self._dir(record.workspace_id); d.mkdir(parents=True, exist_ok=True)
         atomic_write_json(self._path(record.workspace_id, record.memory_id), record.to_dict())
 
+        if _workspace_gone(record.workspace_id):
+            # User-level memory outlives the workspace it came from; its
+            # per-workspace retrieval projection must not resurrect that
+            # workspace's directory.
+            return
         if _projection_hook is not None:
             try:
                 _projection_hook(record)
@@ -251,6 +256,8 @@ class MemoryStore:
         })
 
     def delete_projection(self, ws_id: str, memory_id: str) -> None:
+        if _workspace_gone(ws_id):
+            return
         if _delete_hook is not None:
             try:
                 _delete_hook(ws_id, memory_id)
@@ -622,6 +629,20 @@ class MemoryWriteGate:
         if warnings:
             result["warnings"] = warnings
         return result
+
+
+def _workspace_gone(ws_id: str) -> bool:
+    """True when the workspace was deleted (this process) or no longer exists on disk."""
+    from storage.paths import workspace_catalog_root, workspace_root
+    from storage.workspace_tombstones import is_deleted
+    if is_deleted(ws_id):
+        return True
+    try:
+        catalog = workspace_catalog_root(ws_id)
+        return (catalog.parent.is_dir() and not catalog.is_dir()
+                and not workspace_root(ws_id).exists())
+    except ValueError:
+        return False
 
 
 # ── Promotion ──
