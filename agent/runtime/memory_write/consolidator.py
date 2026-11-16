@@ -20,8 +20,11 @@ def consolidate_experiences(
     task_id: str,
 ) -> dict[str, Any]:
     from storage.memory_event_store import reflection_lock
+    from storage.workspace_tombstones import is_deleted
     from agent.runtime.memory_write.event_log import pending_experiences
 
+    if is_deleted(workspace_id):
+        return {"ok": True, "status": "workspace_deleted", "processed": 0}
     with reflection_lock(workspace_id, session_id):
         total = 0
         rejected = 0

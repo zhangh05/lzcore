@@ -91,6 +91,8 @@ def workspace_catalog_root(workspace_id: str) -> Path:
 
 def ensure_workspace_storage_dirs(workspace_id: str) -> None:
     """Create all standard storage directories for a workspace."""
+    from storage.workspace_tombstones import ensure_not_deleted
+    ensure_not_deleted(workspace_id)
     ws = workspace_root(workspace_id)
     for rel in [
         "files/data",

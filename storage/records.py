@@ -36,6 +36,8 @@ def workspace_record_dir(workspace_id: str, *parts: str, create: bool = True) ->
     safe_parts = [_safe_part(part, allow_ext=False) for part in parts]
     path = storage_paths.workspace_root(ws).joinpath(*safe_parts)
     if create:
+        from storage.workspace_tombstones import ensure_not_deleted
+        ensure_not_deleted(ws)
         path.mkdir(parents=True, exist_ok=True)
     return path
 

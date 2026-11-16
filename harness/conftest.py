@@ -150,3 +150,12 @@ def sample_config():
         "owner: platform\n"
         "review: required\n"
     )
+
+
+@pytest.fixture(autouse=True)
+def reset_workspace_tombstones():
+    """Deleted-workspace marks are process-wide; keep tests independent."""
+    from storage.workspace_tombstones import reset
+    reset()
+    yield
+    reset()

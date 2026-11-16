@@ -23,8 +23,17 @@ from storage.locking import FileLock
 _LOG = logging.getLogger(__name__)
 
 
-def ensure_workspace(ws_id: str = "default") -> str:
+def ensure_workspace(ws_id: str = "default", *, revive: bool = False) -> str:
+    """Create or open a workspace.
+
+    A workspace deleted during this process is only recreated by an explicit
+    create (``revive=True``); late background writes must not bring it back.
+    """
+    from storage.workspace_tombstones import ensure_not_deleted, revive as _revive
     ws_id = validate_workspace_id(ws_id)
+    if revive:
+        _revive(ws_id)
+    ensure_not_deleted(ws_id)
     catalog = workspace_catalog_root(ws_id)
     with FileLock(catalog / "sys" / "workspace-init.lock"):
         yaml_path = catalog / "sys" / "workspace.yaml"
@@ -201,6 +210,10 @@ def delete_workspace(ws_id: str) -> dict:
     ws_path = workspace_catalog_root(ws_id)
     if not ws_path.is_dir():
         return {"ok": False, "error": "workspace not found"}
+    from storage.workspace_tombstones import mark_deleted, revive
+    # Mark first so background writers that finish during or after the
+    # removal cannot recreate the directories.
+    mark_deleted(ws_id)
     try:
         shutil.rmtree(ws_path)
         for user_path in _user_workspace_paths(ws_id):
@@ -212,6 +225,8 @@ def delete_workspace(ws_id: str) -> dict:
             _LOG.warning("workspace identity mapping delete failed", exc_info=True)
         return {"ok": True}
     except Exception as exc:
+        if ws_path.is_dir():
+            revive(ws_id)
         return {"ok": False, "error": str(exc)}
 
 
