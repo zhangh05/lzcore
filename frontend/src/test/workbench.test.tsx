@@ -383,3 +383,25 @@ describe("回合结束的刷新范围", () => {
     expect(finalLi.querySelector('[data-testid="outcome-bar"]')).not.toBeNull();
   });
 });
+
+describe("对话区贴底滚动", () => {
+  it("往上翻后出现「回到底部」，点了回到底部", async () => {
+    renderAt("/workbench?ws=ws-demo-1&session=s-partial");
+    await screen.findByTestId("composer-input");
+    const el = screen.getByTestId("thread");
+    Object.defineProperty(el, "scrollHeight", { configurable: true, get: () => 2000 });
+    Object.defineProperty(el, "clientHeight", { configurable: true, get: () => 500 });
+    let top = 1500;
+    Object.defineProperty(el, "scrollTop", { configurable: true, get: () => top, set: (v: number) => { top = v; } });
+    expect(screen.queryByTestId("jump-to-bottom")).toBeNull();
+    // 用户向上翻：滚轮向上 + 滚动位置变小
+    const tick = () => new Promise((r) => setTimeout(r, 20));
+    await act(async () => { el.dispatchEvent(new Event("scroll")); await tick(); });
+    await act(async () => { top = 600; el.dispatchEvent(new Event("scroll")); await tick(); });
+    const btn = await screen.findByTestId("jump-to-bottom");
+    expect(btn).toHaveTextContent("回到底部");
+    await act(async () => { btn.click(); });
+    await waitFor(() => expect(top).toBeGreaterThan(1490), { timeout: 3000 });
+    await waitFor(() => expect(screen.queryByTestId("jump-to-bottom")).toBeNull(), { timeout: 3000 });
+  });
+});
