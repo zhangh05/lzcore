@@ -1,4 +1,24 @@
 from __future__ import annotations
+import pytest
+
+
+@pytest.mark.parametrize("failure", [ConnectionError, TimeoutError])
+def test_heartbeat_exception_revokes_execution_lease(failure, monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    from jobs.worker import _heartbeat_loop
+
+    lost = threading.Event()
+    writes = []
+    monkeypatch.setattr("jobs.worker._write_state", lambda value: writes.append(value))
+
+    def heartbeat(*_args):
+        raise failure("unavailable")
+
+    _heartbeat_loop(SimpleNamespace(heartbeat=heartbeat), SimpleNamespace(job_id="synthetic"),
+                    "worker", threading.Event(), {}, 0, lost)
+    assert lost.is_set()
+    assert writes == []
 
 
 

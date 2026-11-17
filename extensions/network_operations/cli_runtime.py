@@ -13,6 +13,8 @@ from extensions.network_operations.device_drivers import DeviceDriver, resolve_d
 ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 CONTROL_EXCEPT_LAYOUT = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 MAX_PAGER_ADVANCES = 500
+MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+SCAN_WINDOW_BYTES = 64 * 1024
 # A device can emit a console/syslog notice immediately after returning its
 # prompt.  Waiting for a brief quiet period prevents that late notice from
 # leaking into the next command's buffer while keeping normal CLI latency low.
@@ -43,7 +45,7 @@ def _terminal_prompt_and_notices(text: str, driver: DeviceDriver) -> tuple[str, 
     """
     lines = [
         line.strip()
-        for line in normalize_terminal_text(text).split("\n")
+        for line in text.split("\n")
         if line.strip()
     ]
     for index in range(len(lines) - 2, -1, -1):
@@ -60,7 +62,7 @@ def _terminal_prompt_and_notices(text: str, driver: DeviceDriver) -> tuple[str, 
             for line in trailing
         ):
             return prompt, trailing
-    prompt = driver.extract_prompt(normalize_terminal_text(text))
+    prompt = driver.extract_prompt(text)
     return prompt, []
 
 
@@ -133,18 +135,46 @@ def decode_terminal_bytes(data: bytes, encodings: tuple[str, ...] = ("utf-8", "g
     return data.decode("utf-8", errors="replace"), "utf-8-replace"
 
 
-def normalize_terminal_text(text: str) -> str:
+def normalize_terminal_text(text: str, *, _source_positions: list[int] | None = None) -> str:
     """Normalize terminal redraws while retaining meaningful line layout."""
-    value = ANSI_ESCAPE.sub("", str(text or ""))
+    source = str(text or "")
+    if _source_positions is None:
+        value = ANSI_ESCAPE.sub("", source)
+    else:
+        # Streaming pager detection also needs stable identities in the raw
+        # transcript, including when ANSI escapes or redraws were removed.
+        positions = []
+        start = 0
+        for escape in ANSI_ESCAPE.finditer(source):
+            positions.extend(range(start, escape.start()))
+            start = escape.end()
+        positions.extend(range(start, len(source)))
+        value = "".join(source[index] for index in positions)
     # Apply destructive backspace semantics instead of merely deleting the
     # backspace byte; many pagers erase their own marker this way.
     reduced: list[str] = []
-    for char in value:
+    reduced_positions: list[int] = []
+    for index, char in enumerate(value):
         if char == "\b":
             if reduced and reduced[-1] not in {"\n", "\r"}:
                 reduced.pop()
+                if _source_positions is not None:
+                    reduced_positions.pop()
             continue
         reduced.append(char)
+        if _source_positions is not None:
+            reduced_positions.append(positions[index])
+    if _source_positions is not None:
+        normalized = []
+        for index, char in enumerate(reduced):
+            if char == "\n" and index and reduced[index - 1] == "\r":
+                continue
+            char = "\n" if char == "\r" else char
+            if CONTROL_EXCEPT_LAYOUT.fullmatch(char):
+                continue
+            normalized.append(char)
+            _source_positions.append(reduced_positions[index])
+        return "".join(normalized)
     value = "".join(reduced).replace("\r\n", "\n").replace("\r", "\n")
     value = CONTROL_EXCEPT_LAYOUT.sub("", value)
     return value
@@ -324,17 +354,31 @@ class InteractiveCLISession:
         pages = 0
         peer_closed = False
         truncated = False
-        matched_spans: set[tuple[int, int, str]] = set()
-        encoding = self.encoding
+        matched_spans: set[tuple[int, str]] = set()
         observed_prompt = ""
-        observed_notices: list[str] = []
         prompt_observed_at = 0.0
         confirmations = 0
 
+        def finish(*, complete=False, error_code="") -> CLIReadResult:
+            decoded, encoding = decode_terminal_bytes(bytes(raw), self.driver.encodings)
+            text = _remove_pagers(normalize_terminal_text(decoded), self.driver)
+            prompt, notices = _terminal_prompt_and_notices(text, self.driver) if complete else ("", [])
+            if complete and not prompt:
+                # A tail window can begin inside an ordinary output line.
+                # Confirm the boundary against the full transcript once.
+                complete, error_code = False, "prompt_timeout"
+            if complete:
+                self.encoding = encoding
+            return CLIReadResult(
+                text=text, prompt=prompt, complete=complete, pages=pages,
+                encoding=encoding, error_code=error_code, truncated=truncated,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                async_notices=notices,
+            )
+
         while time.monotonic() < deadline:
             if cancel and cancel():
-                decoded, encoding = decode_terminal_bytes(bytes(raw), self.driver.encodings)
-                return CLIReadResult(normalize_terminal_text(decoded), error_code="cancelled", encoding=encoding)
+                return finish(error_code="cancelled")
             try:
                 chunk = self._receive()
             except (OSError, EOFError):
@@ -344,99 +388,76 @@ class InteractiveCLISession:
                 peer_closed = True
                 break
             if chunk:
-                raw.extend(chunk)
-                decoded, encoding = decode_terminal_bytes(bytes(raw), self.driver.encodings)
-                normalized = normalize_terminal_text(decoded)
-                for rule in self.driver.pager_rules:
-                    for match in rule.pattern.finditer(normalized):
-                        key = (match.start(), match.end(), rule.name)
-                        if key in matched_spans:
-                            continue
-                        matched_spans.add(key)
-                        pages += 1
-                        if pages > MAX_PAGER_ADVANCES:
-                            return CLIReadResult(
-                                _remove_pagers(normalized, self.driver),
-                                pages=pages,
-                                encoding=encoding,
-                                error_code="pager_limit_exceeded",
-                                duration_ms=int((time.monotonic() - started) * 1000),
-                            )
-                        self._send(rule.response)
+                previous_size = len(raw)
+                remaining = MAX_OUTPUT_BYTES - previous_size
+                raw.extend(chunk[:remaining])
+                if len(chunk) > remaining:
+                    truncated = True
+                    break
+                # Scan overlapping bounded windows, including large receive
+                # chunks. Pager identities use raw byte offsets so normalization
+                # and a moving window cannot count the same marker twice.
+                step = SCAN_WINDOW_BYTES // 2
+                for end in range(previous_size, len(raw) + step, step):
+                    end = min(end, len(raw))
+                    if end <= previous_size:
+                        continue
+                    start = max(0, end - SCAN_WINDOW_BYTES)
+                    decoded, encoding = decode_terminal_bytes(bytes(raw[start:end]), self.driver.encodings)
+                    normalized = normalize_terminal_text(decoded)
+                    source_positions: list[int] | None = None
+                    for rule in self.driver.pager_rules:
+                        for match in rule.pattern.finditer(normalized):
+                            if source_positions is None:
+                                source_positions = []
+                                normalize_terminal_text(decoded, _source_positions=source_positions)
+                            source_start = source_positions[match.start()]
+                            if start and source_start == 0:
+                                continue  # a marker cut at the window boundary
+                            offset = start + len(decoded[:source_start].encode(encoding))
+                            key = (offset, rule.name)
+                            if key in matched_spans:
+                                continue
+                            matched_spans.add(key)
+                            pages += 1
+                            if pages > MAX_PAGER_ADVANCES:
+                                return finish(error_code="pager_limit_exceeded")
+                            self._send(rule.response)
+                    if end == len(raw):
+                        break
                 prompt, notices = _terminal_prompt_and_notices(
                     _remove_pagers(normalized, self.driver), self.driver,
                 )
                 if not prompt and observed_prompt:
-                    # New ordinary output after a prompt means the prompt was
-                    # part of command payload, not a terminal boundary.
-                    observed_prompt, observed_notices = "", []
+                    observed_prompt = ""
                 if not prompt and CONFIRMATION_PROMPT.search(normalized):
-                    # The network device account and selected Skill already
-                    # authorized this command.  A Y/N question is a transport
-                    # continuation, so answer it once and retain both prompt
-                    # and answer in the command transcript.
                     if confirmations < 1:
                         confirmations += 1
                         self._send(b"Y\r\n")
                         continue
-                    return CLIReadResult(normalized, pages=pages, encoding=encoding,
-                                         error_code="interaction_required")
+                    return finish(error_code="interaction_required")
                 if not prompt and INTERACTION_PROMPT.search(normalized):
-                    return CLIReadResult(normalized, pages=pages, encoding=encoding,
-                                         error_code="interaction_required")
+                    return finish(error_code="interaction_required")
                 if prompt:
                     terminal_text = _remove_pagers(normalized, self.driver).strip()
-                    if not notices and terminal_text == prompt:
-                        # A prompt already buffered before command dispatch is
-                        # deliberately returned immediately.  run_command()
-                        # keeps the boundary open and consumes the real
-                        # response without treating this stale prompt as data.
-                        self.encoding = encoding
-                        return CLIReadResult(
-                            text=_remove_pagers(normalized, self.driver),
-                            prompt=prompt,
-                            complete=True,
-                            pages=pages,
-                            encoding=encoding,
-                            duration_ms=int((time.monotonic() - started) * 1000),
-                        )
-                    observed_prompt, observed_notices = prompt, notices
+                    if not notices and terminal_text == prompt and len(raw) <= SCAN_WINDOW_BYTES:
+                        # Only a complete prompt-only buffer is a stale prompt.
+                        return finish(complete=True)
+                    observed_prompt = prompt
                     prompt_observed_at = time.monotonic()
             else:
                 if observed_prompt and time.monotonic() - prompt_observed_at >= max(
                     0.02, float(self.driver.prompt_settle_seconds),
                 ):
-                    text = _remove_pagers(normalize_terminal_text(
-                        decode_terminal_bytes(bytes(raw), self.driver.encodings)[0]
-                    ), self.driver)
-                    self.encoding = encoding
-                    return CLIReadResult(
-                        text=text,
-                        prompt=observed_prompt,
-                        complete=True,
-                        pages=pages,
-                        encoding=encoding,
-                        duration_ms=int((time.monotonic() - started) * 1000),
-                        async_notices=observed_notices,
-                    )
+                    return finish(complete=True)
                 time.sleep(0.02)
 
-        decoded, encoding = decode_terminal_bytes(bytes(raw), self.driver.encodings)
-        text = _remove_pagers(normalize_terminal_text(decoded), self.driver)
         error_code = (
             "output_limit_exceeded" if truncated else
             "connection_closed" if peer_closed else
             "prompt_timeout"
         )
-        return CLIReadResult(
-            text=text,
-            complete=False,
-            pages=pages,
-            encoding=encoding,
-            error_code=error_code,
-            truncated=truncated,
-            duration_ms=int((time.monotonic() - started) * 1000),
-        )
+        return finish(error_code=error_code)
 
 
 def _remove_pagers(text: str, driver: DeviceDriver) -> str:

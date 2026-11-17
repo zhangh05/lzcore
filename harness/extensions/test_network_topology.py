@@ -51,6 +51,23 @@ def _drawing(workspace, **overrides):
     return drawings.save_topology(workspace, payload)
 
 
+def test_patch_rejects_invalid_ip_without_erasing_saved_address(workspace):
+    topo = _drawing(workspace, nodes=[{"node_id": "a", "ip": "192.0.2.1", "x": 0, "y": 0}], links=[])
+    with pytest.raises(ValueError, match="topology_ip_invalid"):
+        drawings.patch_topology(workspace, topo["topology_id"], {
+            "node_updates": [{"node_id": "a", "ip": "invalid address"}],
+        })
+    assert drawings.get_topology(workspace, topo["topology_id"]) == topo
+    updated = drawings.patch_topology(workspace, topo["topology_id"], {
+        "node_updates": [{"node_id": "a", "ip": " 192.0.2.2 "}],
+    })
+    assert updated["nodes"][0]["ip"] == "192.0.2.2"
+    cleared = drawings.patch_topology(workspace, topo["topology_id"], {
+        "node_updates": [{"node_id": "a", "ip": None}],
+    })
+    assert cleared["nodes"][0]["ip"] is None
+
+
 def test_zone_is_fitted_around_nodes_that_name_it(workspace):
     topo = drawings.save_topology(workspace, {
         "name": "分区",

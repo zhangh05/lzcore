@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import tarfile
+import threading
 
 import pytest
 
@@ -68,6 +69,8 @@ def test_redis_queue_renews_and_reclaims_stale_leases(monkeypatch, tmp_path, pri
         create_job(JobRecord(job_id="job_12345678", workspace_id="default", status="queued"))
         queue = RedisJobQueue.__new__(RedisJobQueue)
         queue.client = FakeRedis()
+        queue._dispatch_lock = threading.Lock()
+        queue._next_dispatch_at = 0.0
         dispatched = queue.enqueue("default", "job_12345678")
         queue.enqueue("default", "job_12345678")
         assert len(queue.client.lists[queue.QUEUED]) == 1
@@ -87,6 +90,7 @@ def test_redis_queue_renews_and_reclaims_stale_leases(monkeypatch, tmp_path, pri
         queue.ack(retried)
         assert queue.client.lists[queue.PROCESSING] == []
         assert queue.client.hashes[queue.LEASES] == {}
+        assert queue.client.hashes[queue.DISPATCHED] == {}
         assert queue.claim("worker-c") is None
 
 

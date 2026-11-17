@@ -218,7 +218,15 @@ def _heartbeat_interval(lease_seconds: int) -> float:
 
 def _heartbeat_loop(queue_backend, receipt, worker_id, stop_event, state, interval, lease_lost):
     while not stop_event.wait(interval):
-        if not queue_backend.heartbeat(receipt, worker_id):
+        try:
+            alive = queue_backend.heartbeat(receipt, worker_id)
+        except Exception as exc:
+            # Redis transport failures leave ownership unconfirmed. Do not
+            # let a dead heartbeat thread leave the executor trusting its lease.
+            lease_lost.set()
+            _LOG.error("job lease heartbeat failed: %s (%s)", receipt.job_id, type(exc).__name__)
+            return
+        if not alive:
             lease_lost.set()
             _LOG.error("job lease was lost: %s", receipt.job_id)
             return

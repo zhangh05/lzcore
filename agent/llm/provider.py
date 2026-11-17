@@ -639,7 +639,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     finish_reason = ""
     provider_model = ""
     usage = None
-    tool_calls_accum: list[dict] = [{}]
+    tool_calls_accum: dict[int, dict] = {}
     tool_names = {str((tool.get("function") or {}).get("name") or "") for tool in (req.tools or [])}
     reasoning_fields: dict = {}
     stream_done = False
@@ -771,17 +771,24 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
             tc_list = delta.get("tool_calls")
             if tc_list:
                 for tc in tc_list:
-                    idx = tc.get("index", 0)
-                    while len(tool_calls_accum) <= idx:
-                        tool_calls_accum.append({})
-                    tc_acc = tool_calls_accum[idx]
+                    idx = tc.get("index")
+                    idx = 0 if idx is None else idx
+                    if type(idx) is not int or not 0 <= idx < 1024:
+                        return _failed_stream_response(
+                            content_parts, cfg, model=provider_model, usage=usage,
+                            finish_reason=finish_reason, error_type=ERROR_TYPE_PROVIDER_UNKNOWN,
+                            detail="invalid tool call index", retryable=False,
+                        )
+                    tc_acc = tool_calls_accum.setdefault(idx, {})
                     # name may be at top level or inside function.name
                     fn_name = tc.get("function", {}).get("name") or tc.get("name")
                     if fn_name:
                         # Names can be streamed in fragments just like JSON.
                         # A published full name is also an authoritative
                         # snapshot for compatible providers that repeat it.
-                        tc_acc["name"] = fn_name if fn_name in tool_names else tc_acc.get("name", "") + fn_name
+                        previous_name = tc_acc.get("name", "")
+                        tc_acc["name"] = (fn_name if fn_name in tool_names or fn_name == previous_name
+                                          or fn_name.startswith(previous_name) else previous_name + fn_name)
                         tc_acc["function"] = tc.get("function", {})
                         tc_acc.setdefault("arguments", "")
                     if tc.get("id"):
@@ -823,7 +830,7 @@ def _api_generate_stream(url: str, body_dict: dict, cfg: dict, req: "LLMRequest"
     content = "".join(content_parts)
     tool_calls = []
     native_tool_calls = []
-    for tc_acc in tool_calls_accum:
+    for _, tc_acc in sorted(tool_calls_accum.items()):
         if tc_acc:
             native_tool_calls.append({
                 "id": tc_acc.get("id", ""), "type": "function",

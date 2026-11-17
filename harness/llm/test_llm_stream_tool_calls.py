@@ -29,6 +29,40 @@ def _stream(monkeypatch, deltas, finish_reason="tool_calls"):
     )
 
 
+@pytest.mark.parametrize("index", [None, 0])
+def test_stream_normalizes_missing_or_null_tool_index(monkeypatch, index):
+    call = {"id": "call-zero", "function": {"name": TOOL_NAME, "arguments": "{}"}}
+    if index is None:
+        call["index"] = None
+    result = _stream(monkeypatch, [{"tool_calls": [call]}])
+    assert result.error is None
+    assert [tool.id for tool in result.tool_calls] == ["call-zero"]
+
+
+@pytest.mark.parametrize("index", [-1, 1024, 10**12, "0", True])
+def test_stream_rejects_invalid_tool_indices_without_executable_proposals(monkeypatch, index):
+    result = _stream(monkeypatch, [{"tool_calls": [
+        {"index": 0, "function": {"name": TOOL_NAME, "arguments": "{}"}},
+        {"index": index, "function": {"name": TOOL_NAME, "arguments": "{}"}},
+    ]}])
+    assert result.error and "invalid tool call index" in result.error
+    assert result.metadata["retryable"] is False
+    assert result.tool_calls == [] and result.protocol == {}
+
+
+def test_stream_sorts_sparse_indices_and_deduplicates_unknown_names(monkeypatch):
+    result = _stream(monkeypatch, [
+        {"tool_calls": [{"index": 9, "id": "later", "function": {"name": "unknown__tool", "arguments": "{"}}]},
+        {"tool_calls": [{"index": 9, "function": {"name": "unknown__tool", "arguments": "}"}}]},
+        {"tool_calls": [{"index": 2, "id": "first", "function": {"name": "unknown__", "arguments": "{"}}]},
+        {"tool_calls": [{"index": 2, "function": {"name": "fragment", "arguments": "}"}}]},
+    ])
+    assert result.error is None
+    assert [(call.id, call.name, call.arguments) for call in result.tool_calls] == [
+        ("first", "unknown__fragment", {}), ("later", "unknown__tool", {}),
+    ]
+
+
 @pytest.mark.parametrize("finish_reason", ["length", "max_tokens", "content_length", "stream_truncated"])
 def test_reasoning_only_truncation_survives_unified_invocation(monkeypatch, finish_reason):
     from agent.llm.runtime import invoke_llm

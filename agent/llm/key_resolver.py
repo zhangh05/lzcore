@@ -2,21 +2,31 @@
 """Secure API key resolution — env vars and explicit file paths only."""
 
 import os
+import threading
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
 KEY_SOURCES = []
+_sources_lock = threading.Lock()
+_resolved_sources: ContextVar[tuple[str, ...] | None] = ContextVar("lzcore_key_sources", default=None)
+
+
+def _set_sources(*sources: str) -> None:
+    _resolved_sources.set(sources)
+    with _sources_lock:
+        KEY_SOURCES[:] = sources
 
 
 def resolve_api_key(env_name: str = "", file_path: str = "") -> Optional[str]:
     """Resolve API key from env var or an explicitly-configured file path."""
-    global KEY_SOURCES
-    KEY_SOURCES.clear()
+    _set_sources()
 
     # 1. Environment variable
-    if env_name and os.environ.get(env_name):
-        KEY_SOURCES.append(f"env:{env_name}")
-        return os.environ[env_name]
+    key = os.environ.get(env_name) if env_name else None
+    if key:
+        _set_sources(f"env:{env_name}")
+        return key
 
     # 2. Explicit file path
     if file_path:
@@ -24,7 +34,7 @@ def resolve_api_key(env_name: str = "", file_path: str = "") -> Optional[str]:
         if path.is_file():
             key = _read_key_from_file(str(path))
             if key:
-                KEY_SOURCES.append(f"file:{path}")
+                _set_sources(f"file:{path}")
                 return key
 
     return None
@@ -63,14 +73,18 @@ def _read_key_from_file(path: str) -> Optional[str]:
 
 def get_key_source() -> str:
     """Return where the key was loaded from (no key value)."""
-    if KEY_SOURCES:
-        return KEY_SOURCES[-1]
+    sources = _resolved_sources.get()
+    if sources is None:
+        with _sources_lock:
+            sources = tuple(KEY_SOURCES)
+    if sources:
+        return sources[-1]
     return "none"
 
 
 def is_key_loaded() -> bool:
     """Check if key was loaded."""
-    return len(KEY_SOURCES) > 0
+    return get_key_source() != "none"
 
 
 def mask_secret(value: str, show_chars: int = 4) -> str:

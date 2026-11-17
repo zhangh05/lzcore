@@ -989,3 +989,25 @@ def test_child_runtime_activity_keeps_raw_provider_data_out(monkeypatch):
     assert observed["progress"]["tool_results"] == 1
     assert observed["progress"]["tool"] == "data.manage"
     assert "private-provider-payload" not in str(read_subagent("activity-ws", identity))
+
+
+def test_start_failure_releases_worker_and_parent_cancellation(monkeypatch):
+    from agent.runtime.durable import subagent, subagent_control
+
+    ws = "ws_start_failure"
+    created = create_subagent_task("parent", ws, "s1", "research_agent", "Synthetic research",
+                                   cancel_check=lambda: False)
+    identity = created["subtask_id"]
+
+    def failed_start(_thread):
+        raise RuntimeError("synthetic thread start failure")
+
+    monkeypatch.setattr(subagent.threading.Thread, "start", failed_start)
+    result = start_subagent_task(identity, ws)
+    assert result == {"ok": False, "error": "subagent_worker_start_failed"}
+    assert subagent._load_task(ws, identity).status == "failed"
+    key = subagent._worker_key(ws, identity)
+    assert key not in subagent._WORKER_THREADS
+    assert key not in subagent._CANCEL_EVENTS
+    from storage.paths import workspace_root
+    assert (str(workspace_root(ws).resolve()), identity) not in subagent_control._PARENTS

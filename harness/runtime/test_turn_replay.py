@@ -4,8 +4,36 @@ from __future__ import annotations
 
 import json
 import time
+import pytest
 
 from agent.runtime.turn_replay import append_frame, frames_after, subscribe_turn
+
+
+@pytest.mark.parametrize("terminal_type", ["done", "error"])
+def test_pump_sends_terminal_appended_after_pending_snapshot(monkeypatch, tmp_path, terminal_type):
+    from agent.runtime.turn_replay import TurnLog, _Subscriber
+
+    log = TurnLog(tmp_path / "turn.jsonl")
+    log.append({"type": "token", "content": "one"}, session_id="s", client_request_id="r")
+    original_after = log.after
+    injected = False
+
+    def after(cursor):
+        nonlocal injected
+        pending = original_after(cursor)
+        if not injected:
+            injected = True
+            log.append({"type": "token", "content": "two"}, session_id="s", client_request_id="r")
+            log.append({"type": terminal_type}, session_id="s", client_request_id="r")
+        return pending
+
+    monkeypatch.setattr(log, "after", after)
+    sent, closed = [], []
+    sub = _Subscriber(lambda payload: sent.append(json.loads(payload)) or True, 0, lambda: closed.append(True))
+    log._pump(sub)
+    assert [frame["seq"] for frame in sent] == [1, 2, 3]
+    assert sent[-1]["type"] == terminal_type
+    assert sub.cursor == 3 and closed == [True]
 
 
 def test_done_gets_a_new_sequence_after_the_last_token(temp_dirs):

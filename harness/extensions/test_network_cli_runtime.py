@@ -238,6 +238,63 @@ def test_cli_runtime_handles_fragmented_pager_gb18030_and_prompt_completion():
     assert io.sent == [b"display version\r\n", b" "]
 
 
+def test_cli_output_limit_truncates_bytes_and_invalidates_session(monkeypatch):
+    from extensions.network_operations import cli_runtime
+
+    monkeypatch.setattr(cli_runtime, "MAX_OUTPUT_BYTES", 128)
+    driver, _ = resolve_driver("h3c")
+    io = ScriptedIO([b"x" * 100, b"y" * 100, b"\r\n<CE1>"])
+    session = InteractiveCLISession(send=io.send, receive=io.receive, driver=driver, initial_text="<CE1>")
+    result = session.run_command("display version")
+    assert result.error_code == "output_limit_exceeded"
+    assert result.truncated is True and result.complete is False
+    assert result.output == "x" * 100 + "y" * 28
+    assert session.synchronized is False
+    assert list(io.chunks) == [b"\r\n<CE1>"]
+
+
+def test_cli_bounded_tail_does_not_mistake_payload_suffix_for_prompt(monkeypatch):
+    from extensions.network_operations import cli_runtime
+
+    monkeypatch.setattr(cli_runtime, "SCAN_WINDOW_BYTES", 64)
+    raw = b"ordinary-output" * 10 + b" " * 64 + b"<CE1>"
+    io = ScriptedIO([raw])
+    driver, _ = resolve_driver("h3c")
+    session = InteractiveCLISession(send=io.send, receive=io.receive, driver=driver, initial_text="<CE1>")
+    result = session.run_command("display version")
+    assert result.complete is False and result.error_code == "prompt_timeout"
+    assert result.output == raw.decode()
+    assert session.synchronized is False
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "gb18030"])
+def test_cli_stream_scans_bounded_windows_and_preserves_exact_output(monkeypatch, encoding):
+    from extensions.network_operations import cli_runtime
+
+    monkeypatch.setattr(cli_runtime, "SCAN_WINDOW_BYTES", 256)
+    sizes = []
+    decode = cli_runtime.decode_terminal_bytes
+
+    def measured_decode(data, encodings):
+        sizes.append(len(data))
+        return decode(data, encodings)
+
+    monkeypatch.setattr(cli_runtime, "decode_terminal_bytes", measured_decode)
+    transcript = ("display version\r\n" + "line\r\n" * 90 + "---- \x1b[31mMore\x1b[0m ----\r\n"
+                  + "line\r\n" * 90 + "---- MoX\bre ----\r\n设备版本\r\n<CE1>")
+    raw = transcript.encode(encoding)
+    io = ScriptedIO([raw[:500], raw[500:507], raw[507:]])
+    driver, _ = resolve_driver("h3c")
+    session = InteractiveCLISession(send=io.send, receive=io.receive, driver=driver, initial_text="<CE1>")
+    result = session.run_command("display version")
+    assert result.complete is True and result.pages == 2
+    assert result.output == ("line\n" * 90 + "\n" + "line\n" * 90 + "\n设备版本")
+    assert result.encoding == encoding
+    assert io.sent == [b"display version\r\n", b" ", b" "]
+    assert sizes[-1] == len(raw)
+    assert all(size <= 256 for size in sizes[:-1])
+
+
 @pytest.mark.parametrize("encoding", ["utf-8", "gb18030"])
 def test_cli_sends_chinese_commands_in_the_current_session_encoding(encoding):
     driver, _ = resolve_driver("h3c")

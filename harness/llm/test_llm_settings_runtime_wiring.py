@@ -387,3 +387,26 @@ class TestOSSecretSanitizationAndFallback:
         assert data["ok"] is True
         assert data["config"]["key_configured"] is True
         assert data["config"]["api_key"] is None
+
+
+def test_key_source_and_loaded_state_stay_with_concurrent_resolution(monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from agent.llm.key_resolver import resolve_api_key, get_key_source, is_key_loaded
+
+    monkeypatch.setenv("SYNTHETIC_KEY_A", "synthetic-a")
+    monkeypatch.setenv("SYNTHETIC_KEY_B", "synthetic-b")
+    monkeypatch.delenv("SYNTHETIC_KEY_MISSING", raising=False)
+    barrier = threading.Barrier(3)
+
+    def resolve(name):
+        key = resolve_api_key(env_name=name)
+        barrier.wait(timeout=5)
+        return key, get_key_source(), is_key_loaded()
+
+    names = ["SYNTHETIC_KEY_A", "SYNTHETIC_KEY_B", "SYNTHETIC_KEY_MISSING"]
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(resolve, names))
+    assert results == [("synthetic-a", "env:SYNTHETIC_KEY_A", True),
+                       ("synthetic-b", "env:SYNTHETIC_KEY_B", True),
+                       (None, "none", False)]

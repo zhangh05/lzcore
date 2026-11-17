@@ -1,5 +1,6 @@
 """Offline queue fault probes; no Redis server or network is used."""
 import json
+import threading
 import pytest
 
 from jobs.queue import RedisJobQueue, QueueReceipt
@@ -16,10 +17,12 @@ class MemoryRedis:
         self.queued.insert(0, value)
 
     def lrem(self, _key, _count, value):
-        self.processing.remove(value)
+        if value in self.processing:
+            self.processing.remove(value)
 
     def hdel(self, _key, value):
-        self.leases.pop(value, None)
+        mapping = self.dispatched if _key == RedisJobQueue.DISPATCHED else self.leases
+        mapping.pop(value, None)
 
     def eval(self, _script, key_count, *args):
         if self.failure == "before":
@@ -55,6 +58,8 @@ class MemoryRedis:
 def queue():
     result = object.__new__(RedisJobQueue)
     result.client = MemoryRedis()
+    result._dispatch_lock = threading.Lock()
+    result._next_dispatch_at = 0.0
     return result
 
 
@@ -131,3 +136,59 @@ def test_dispatch_refuses_missing_record_without_creating_a_delivery(monkeypatch
     with pytest.raises(ValueError, match="missing or unreadable"):
         q.enqueue("team", "job_missing")
     assert q.client.queued == [] and q.client.dispatched == {}
+
+
+def test_ack_cleans_dispatch_marker_after_terminal_delivery(monkeypatch, tmp_path):
+    from jobs.manager import create_job
+    from jobs.store import update_job
+
+    monkeypatch.setenv("LZCORE_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr("storage.principal.known_storage_principals", list)
+    q = queue()
+    monkeypatch.setattr("jobs.queue.get_job_queue", lambda: q)
+    job = create_job("team", "workflow_run", payload={"workflow_id": "synthetic"})
+    receipt = q.claim("worker")
+    assert receipt.delivery_id in q.client.dispatched
+    update_job("team", job.job_id, {"status": "failed"})
+    q.ack(receipt)
+    q.ack(receipt)
+    q.dispatch_pending()
+    assert not q.client.dispatched and not q.client.leases
+    assert not q.client.processing and not q.client.queued
+
+
+def test_empty_claim_throttles_recovery_and_retries_interrupted_scans(monkeypatch):
+    q = queue()
+    now = [100.0]
+    scans = []
+    monkeypatch.setattr("time.monotonic", lambda: now[0])
+
+    def dispatch():
+        scans.append(now[0])
+        if len(scans) == 1:
+            raise OSError("interrupted recovery")
+
+    monkeypatch.setattr(q, "dispatch_pending", dispatch)
+    with pytest.raises(OSError):
+        q.claim("worker")
+    assert q.claim("worker") is None
+    for _ in range(10):
+        assert q.claim("worker") is None
+    now[0] += 30
+    assert q.claim("worker") is None
+    assert scans == [100.0, 100.0, 130.0]
+
+
+def test_polling_reuses_redis_queue_for_dispatch_throttle(monkeypatch):
+    import jobs.queue as queues
+
+    monkeypatch.setenv("LZCORE_QUEUE_MODE", "redis")
+    monkeypatch.setenv("LZCORE_QUEUE_URL", "redis://queue.invalid/test")
+    made = []
+    monkeypatch.setattr(queues, "RedisJobQueue", lambda url: made.append(url) or queue())
+    queues._redis_job_queue.cache_clear()
+    try:
+        assert queues.get_job_queue() is queues.get_job_queue()
+        assert made == ["redis://queue.invalid/test"]
+    finally:
+        queues._redis_job_queue.cache_clear()
