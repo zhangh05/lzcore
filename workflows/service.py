@@ -312,6 +312,12 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
     budget.begin_execution()
     nodes_by_id = {node["node_id"]: node for node in definition["nodes"]}
     failed = False
+    from jobs.worker import current_lease_lost
+    lease_lost = current_lease_lost()
+
+    def execution_stopped() -> bool:
+        return bool(lease_lost and lease_lost.is_set()) or _execution_stopped(workspace_id, run_id, job_id)
+
     def cancelled_node(node_id: str) -> tuple[dict[str, Any], dict[str, Any], bool]:
         return {
             "node_id": node_id, "tool_id": nodes_by_id[node_id]["tool_id"],
@@ -321,7 +327,7 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
 
     def execute_node(node_id: str) -> tuple[dict[str, Any], dict[str, Any], bool]:
         node = nodes_by_id[node_id]
-        if _cancel_requested(workspace_id, run_id, job_id):
+        if execution_stopped():
             return cancelled_node(node_id)
         try:
             scope = {"input": dict(inputs or {}), "nodes": {key: {"output": value} for key, value in outputs.items()}}
@@ -338,13 +344,13 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
             return entry, {}, False
         started_at = now_iso()
         from core.tools.context import ToolRuntimeContext
-        if _cancel_requested(workspace_id, run_id, job_id):
+        if execution_stopped():
             return cancelled_node(node_id)
         try:
             result = tool_client.invoke(
                 node["tool_id"],
                 arguments,
-                context=ToolRuntimeContext(workspace_id=workspace_id, run_id=run_id, job_id=job_id or None, module="workflow", requested_by="job_runner"),
+                context=ToolRuntimeContext(workspace_id=workspace_id, run_id=run_id, job_id=job_id or None, module="workflow", requested_by="job_runner", cancel_check=execution_stopped),
             )
         except Exception as exc:
             entry = {
@@ -369,8 +375,7 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
 
     from core.runtime_engine.contracts import is_read_only_call
     for layer_index, layer in enumerate(layers, start=1):
-        if _cancel_requested(workspace_id, run_id, job_id):
-            record["status"] = "cancelled"
+        if execution_stopped():
             break
 
         # Continue keeps independent branches alive; it never executes a node
@@ -427,6 +432,8 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
             groups.append((True, read_group))
 
         for parallel, node_ids in groups:
+            if execution_stopped():
+                break
             if parallel and len(node_ids) > 1:
                 with ContextThreadPoolExecutor(max_workers=min(5, len(node_ids)), thread_name_prefix="workflow-read") as pool:
                     futures = {node_id: pool.submit(execute_node, node_id) for node_id in node_ids}
@@ -448,9 +455,9 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
                     failed = True
             _save_run(record)
     budget.end_execution()
-    if _cancel_requested(workspace_id, run_id, job_id) or any(
+    if _cancel_requested(workspace_id, run_id, job_id) or (not execution_stopped() and any(
         node.get("status") == "cancelled" for node in record["nodes"]
-    ):
+    )):
         record["status"] = "cancelled"
     if record["status"] == "cancelled":
         finished_nodes = {node["node_id"] for node in record["nodes"]}
@@ -459,7 +466,11 @@ def execute_workflow(workspace_id: str, workflow_id: str, inputs: dict[str, Any]
                 if node_id not in finished_nodes:
                     record["nodes"].append(cancelled_node(node_id)[0])
     if record["status"] == "running":
-        record["status"] = "failed" if failed else "succeeded"
+        if execution_stopped():
+            record.update(status="failed", execution_outcome="unknown", recovery_required=True,
+                          error="workflow_execution_interrupted")
+        else:
+            record["status"] = "failed" if failed else "succeeded"
     record["finished_at"] = now_iso()
     _save_run(record)
     if record.get("status") == "failed":
@@ -615,6 +626,19 @@ def cancel_run(workspace_id: str, run_id: str) -> dict[str, Any]:
         # Review intake is supplementary; it must not change canonical run state.
         pass
     return record
+
+
+def _execution_stopped(workspace_id: str, run_id: str, job_id: str) -> bool:
+    run = _read_run_for_update(_run_path(workspace_id, run_id))
+    if run is None:
+        raise WorkflowError("workflow run not found")
+    if run.get("cancel_requested") or run.get("status") in _RUN_TERMINAL_STATUSES:
+        return True
+    if job_id:
+        from jobs.store import get_job
+        job = get_job(workspace_id, job_id)
+        return not job or job.cancel_requested or job.status in {"succeeded", "failed", "cancelled"}
+    return False
 
 
 def _cancel_requested(workspace_id: str, run_id: str, job_id: str) -> bool:

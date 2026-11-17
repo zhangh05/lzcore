@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 
@@ -76,6 +79,8 @@ class RedisJobQueue:
     def __init__(self, url: str):
         import redis
         self.client = redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
+        self._dispatch_lock = threading.Lock()
+        self._next_dispatch_at = 0.0
 
     @staticmethod
     def _payload(workspace_id: str, job_id: str, attempt: int = 1, principal: str = "", delivery_id: str = "") -> str:
@@ -117,8 +122,12 @@ class RedisJobQueue:
 
     def claim(self, worker_id: str) -> QueueReceipt | None:
         import json
-        import time
-        self.dispatch_pending()
+        # Keep the durable outbox recovery on startup and periodically, rather
+        # than walking every principal's job files on each empty poll.
+        with self._dispatch_lock:
+            if time.monotonic() >= self._next_dispatch_at:
+                self.dispatch_pending()
+                self._next_dispatch_at = time.monotonic() + 30.0
         payload = self.client.eval(
             """
             local payload = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
@@ -142,6 +151,8 @@ class RedisJobQueue:
     def ack(self, receipt: QueueReceipt) -> None:
         self.client.lrem(self.PROCESSING, 1, receipt.lease_id)
         self.client.hdel(self.LEASES, receipt.lease_id)
+        if receipt.delivery_id:
+            self.client.hdel(self.DISPATCHED, receipt.delivery_id)
 
     def retry(self, receipt: QueueReceipt, reason: str = "") -> None:
         self.client.eval(
@@ -209,6 +220,11 @@ class RedisJobQueue:
         return {"ok": bool(self.client.ping()), "mode": "redis"}
 
 
+@lru_cache(maxsize=4)
+def _redis_job_queue(url: str) -> RedisJobQueue:
+    return RedisJobQueue(url)
+
+
 def get_job_queue():
     import os
     mode = queue_mode()
@@ -216,5 +232,5 @@ def get_job_queue():
         url = os.environ.get("LZCORE_QUEUE_URL", "").strip()
         if not url:
             raise RuntimeError("LZCORE_QUEUE_URL is required for redis queue")
-        return RedisJobQueue(url)
+        return _redis_job_queue(url)
     return FileJobQueue()

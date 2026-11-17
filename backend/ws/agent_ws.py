@@ -437,7 +437,7 @@ def register_ws_routes(app):
         authenticated_role = ""
         authenticated_workspaces: list[str] = []
         authority = None
-        ws_key = ""
+        ws_keys: set[str] = set()
         active_cancel_event = None
         outbox = _SocketOutbox(ws)
         unsubscribers: dict[tuple[str, str, str], object] = {}
@@ -538,7 +538,8 @@ def register_ws_routes(app):
                     ):
                         ws.send(json.dumps({"type": "error", "message": "workspace_forbidden"}))
                         continue
-                    ws_key = f"{id(ws)}_{threading.current_thread().ident}"
+                    ws_key = f"{id(ws)}_{threading.current_thread().ident}:{workspace_id}"
+                    ws_keys.add(ws_key)
                     outbox.workspace_ids.add(workspace_id)
                     with _active_ws_lock:
                         _active_ws_connections[ws_key] = (authenticated_username, workspace_id, outbox)
@@ -662,6 +663,7 @@ def register_ws_routes(app):
                 try:
                     thread.start()
                 except Exception:
+                    outbox.detach_turn()
                     if gate:
                         gate.release()
                     raise
@@ -691,7 +693,7 @@ def register_ws_routes(app):
                 except Exception:
                     pass
             outbox.close()
-            if ws_key:
+            for ws_key in ws_keys:
                 _drop_broadcast_client(ws_key, outbox)
             _release_ws_slot(client_ip)
 

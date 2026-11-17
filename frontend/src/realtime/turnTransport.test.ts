@@ -191,5 +191,36 @@ describe("TurnTransport", () => {
       sockets[0].push({ type: "done", client_request_id: "cr1", metadata: { idempotent_redirect: { status: "succeeded" } } });
       expect(h.log).toContain("done");
     });
+
+    it("建连完成前连续 sendMessage 不会覆盖 onopen 丢弃先发消息", () => {
+      const { t, sockets } = rig();
+      const h1 = handlers();
+      const h2 = handlers();
+      t.sendMessage({ workspaceId: "w", sessionId: "s1", text: "第一条", clientRequestId: "cr1", handlers: h1 });
+      t.sendMessage({ workspaceId: "w", sessionId: "s2", text: "第二条", clientRequestId: "cr2", handlers: h2 });
+      sockets[0].open();
+      expect(sockets[0].sent).toEqual([
+        { type: "message", user_input: "第一条", session_id: "s1", workspace_id: "w", metadata: { client_request_id: "cr1" } },
+        { type: "message", user_input: "第二条", session_id: "s2", workspace_id: "w", metadata: { client_request_id: "cr2" } },
+      ]);
+      // 断线重连后不再重发 message，只发 resume
+      sockets[0].drop();
+      expect(t.sent.filter((f) => f.type === "message")).toHaveLength(2);
+    });
+
+    it("建连前已有 resumeTurn 再 sendMessage，连上后同时续传旧回合、首发新消息并触发 resumed", () => {
+      const { t, sockets } = rig();
+      const hOld = handlers();
+      const hNew = handlers();
+      t.resumeTurn({ workspaceId: "w", sessionId: "s1", clientRequestId: "cr_old", handlers: hOld });
+      t.sendMessage({ workspaceId: "w", sessionId: "s2", text: "新消息", clientRequestId: "cr_new", handlers: hNew });
+      sockets[0].open();
+      expect(sockets[0].sent).toEqual([
+        { type: "resume", workspace_id: "w", session_id: "s1", client_request_id: "cr_old", stream_seq: 0 },
+        { type: "message", user_input: "新消息", session_id: "s2", workspace_id: "w", metadata: { client_request_id: "cr_new" } },
+      ]);
+      expect(hOld.log).toContain("transport:resumed");
+      expect(hNew.log).not.toContain("transport:resumed");
+    });
   });
 });

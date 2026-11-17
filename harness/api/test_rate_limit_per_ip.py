@@ -56,6 +56,36 @@ def client(app_with_rate_limit):
     return app_with_rate_limit.test_client()
 
 
+@pytest.mark.parametrize("prefix,limit", [("/api/agent/message", 10), ("/api/widgets", 60)])
+def test_dynamic_ids_share_the_matched_rule_bucket(prefix, limit):
+    from backend.core.rate_limit import _get_limiter, _limiters
+
+    counter = _get_limiter(prefix + "/first", "192.0.2.1")
+    for index in range(limit):
+        limiter = _get_limiter(f"{prefix}/{index}", "192.0.2.1")
+        assert limiter is counter
+        assert limiter.allow()
+    assert not _get_limiter(prefix + "/new-id", "192.0.2.1").allow()
+    assert len(_limiters) == 1
+    assert _get_limiter(prefix + "/new-id", "192.0.2.2").allow()
+
+
+def test_default_limit_uses_route_pattern_and_preserves_independent_routes():
+    from flask import Flask
+    from backend.core.rate_limit import rate_limit_middleware, _limiters
+
+    app = Flask(__name__)
+    rate_limit_middleware(app)
+    app.add_url_rule("/api/widgets/<identity>", "widgets", lambda identity: {"ok": True})
+    app.add_url_rule("/api/other/<identity>", "other", lambda identity: {"ok": True})
+    client = app.test_client()
+    for index in range(60):
+        assert client.get(f"/api/widgets/{index}").status_code == 200
+    assert client.get("/api/widgets/new-id").status_code == 429
+    assert client.get("/api/other/new-id").status_code == 200
+    assert len(_limiters) == 2
+
+
 class TestSameIPSameEndpointLimit:
     """Same IP, same endpoint should get 429 when exceed limit."""
     

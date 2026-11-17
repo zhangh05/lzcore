@@ -701,6 +701,7 @@ def start_subagent_task(subtask_id: str, ws_id: str) -> dict:
             task.summary = "Subagent worker failed to start"
             task.errors.append(type(exc).__name__)
             _save_task(task)
+            _release_worker(ws_id, subtask_id)
             return {"ok": False, "error": "subagent_worker_start_failed"}
     return {"ok": True, "subtask_id": subtask_id, "status": "running"}
 

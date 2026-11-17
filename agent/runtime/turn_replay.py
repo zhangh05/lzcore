@@ -309,6 +309,8 @@ class TurnLog:
         return unsubscribe
 
     def _pump(self, sub: _Subscriber) -> None:
+        from storage.locking import FileLock
+
         try:
             while not sub.closed:
                 pending = self.after(sub.cursor)
@@ -326,8 +328,12 @@ class TurnLog:
                     if frame.get("type") in {"done", "error"}:
                         return
                 # A cursor at the terminal frame is already caught up.
-                if self.frames and self.frames[-1].get("type") in {"done", "error"}:
-                    return
+                with FileLock(self.path.with_suffix(".lock")):
+                    self._load_locked()
+                    last_frame = self.frames[-1] if self.frames else None
+                    if (last_frame and last_frame.get("type") in {"done", "error"}
+                            and sub.cursor >= int(last_frame["seq"])):
+                        return
                 sub.wake.wait(0.25)
                 sub.wake.clear()
         finally:

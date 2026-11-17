@@ -280,12 +280,6 @@ def handle_powershell_script(inv: ToolInvocation) -> dict:
 
 
 def _handle_powershell_script(inv: ToolInvocation) -> dict:
-    from storage.project_changes import workspace_files_lock
-    with workspace_files_lock(_caller_workspace(inv)):
-        return _handle_powershell_script(inv)
-
-
-def _handle_powershell_script(inv: ToolInvocation) -> dict:
     """PowerShell script execution on Windows.
 
     Accepts a PowerShell command string, executes via powershell -Command.

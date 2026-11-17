@@ -616,3 +616,86 @@ def test_ws_duplicate_result_lookup_failure_never_falls_through_to_execution(mon
     assert submits == []
     assert events.get()["error_code"] == "session_turn_claim_failed"
     assert agent_ws._active_turns[("", "default", "job-existing")] is active_turn
+
+
+@pytest.mark.parametrize("mode", ["multiple_workspaces", "start_failure"])
+def test_registered_ws_preserves_subscriptions_and_balances_failed_start(monkeypatch, mode):
+    import json
+    import threading
+    from flask import Flask
+    from backend.ws import agent_ws
+
+    for name in ("LZCORE_AUTH_ENABLED", "LZCORE_LOGIN_ENABLED", "LZCORE_IDENTITY_ENABLED"):
+        monkeypatch.setenv(name, "false")
+    monkeypatch.setattr("backend.core.auth.is_current_session_authenticated", lambda: False)
+    monkeypatch.setattr(agent_ws, "_same_origin_ws_request", lambda: True)
+    monkeypatch.setattr(agent_ws, "_ensure_broadcast_listener", lambda: None)
+    monkeypatch.setattr("agent.runtime.turn_replay.ensure_replay_listener", lambda: None)
+    monkeypatch.setattr(agent_ws, "_ws_workspace_allowed", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(agent_ws, "_normalize_ws_attachments", lambda *_args: [])
+    monkeypatch.setattr("backend.core.agent_contract.resolve_workbench_metadata", lambda value, *_args, **_kwargs: value)
+    monkeypatch.setattr(agent_ws, "_active_ws_connections", {})
+    monkeypatch.setattr(agent_ws, "_acquire_ws_slot", lambda _ip: True)
+    monkeypatch.setattr(agent_ws, "_release_ws_slot", lambda _ip: None)
+    handlers, boxes, observed, sent = {}, [], [], []
+
+    def route(path):
+        def register(handler):
+            handlers[path] = handler
+            return handler
+        return register
+
+    class Outbox:
+        attach_turn = agent_ws._SocketOutbox.attach_turn
+        detach_turn = agent_ws._SocketOutbox.detach_turn
+
+        def __init__(self, _socket):
+            self.workspace_ids = set()
+            self.authority = None
+            self.turn_count = 0
+            self.turn_started_at = None
+            self.closed = threading.Event()
+            boxes.append(self)
+
+        def send(self, payload):
+            sent.append(json.loads(payload))
+            return True
+
+        def close(self):
+            self.closed.set()
+
+    monkeypatch.setattr(agent_ws, "_SocketOutbox", Outbox)
+    monkeypatch.setattr(agent_ws, "sock", SimpleNamespace(init_app=lambda _app: None, route=route))
+    app = Flask(__name__)
+    agent_ws.register_ws_routes(app)
+    if mode == "multiple_workspaces":
+        messages = iter([{"type": "ping", "workspace_id": "ws_a"},
+                         {"type": "ping", "workspace_id": "ws_b"}])
+    else:
+        messages = iter([{"type": "message", "workspace_id": "ws_a", "user_input": "synthetic"}])
+        monkeypatch.setattr("agent.runtime.local_lifecycle.local_lifecycle", lambda: None)
+
+        def failed_start(_thread):
+            raise RuntimeError("synthetic thread start failure")
+
+        monkeypatch.setattr(threading.Thread, "start", failed_start)
+
+    def receive(**_kwargs):
+        try:
+            return json.dumps(next(messages))
+        except StopIteration:
+            for workspace in ("ws_a", "ws_b", "ws_other"):
+                agent_ws._deliver_broadcast("", workspace, workspace, "synthetic")
+            return None
+
+    monkeypatch.setattr(agent_ws, "_schedule_broadcast_recipient",
+                        lambda key, ws, coalesce, payload: observed.append(coalesce))
+    socket = SimpleNamespace(receive=receive, send=lambda raw: sent.append(json.loads(raw)))
+    with app.test_request_context("/ws/agent", base_url="http://127.0.0.1:8011"):
+        handlers["/ws/agent"](socket)
+    if mode == "multiple_workspaces":
+        assert observed == ["ws_a", "ws_b"]
+    else:
+        assert sent[-1]["message"] == "websocket_transport_error"
+        assert boxes[0].turn_count == 0 and boxes[0].turn_started_at is None
+    assert agent_ws._active_ws_connections == {}

@@ -13,7 +13,7 @@ Default limits:
 import os
 import time
 import threading
-from flask import request, jsonify
+from flask import request, jsonify, has_request_context
 
 
 # ─── Configuration ───
@@ -84,15 +84,17 @@ def _get_limiter(endpoint: str, client_ip: str) -> _WindowCounter:
     """
     # Find matching limit config (longest prefix match)
     matched = DEFAULT_LIMIT
+    matched_prefix = request.url_rule.rule if has_request_context() and request.url_rule else "/api/"
     matched_len = 0
     for prefix, limit in RATE_LIMITS.items():
         if endpoint.startswith(prefix) and len(prefix) > matched_len:
             matched = limit
+            matched_prefix = prefix
             matched_len = len(prefix)
 
     max_req, window = matched
     # Key includes client_ip to ensure per-IP rate limiting
-    key = f"{client_ip}:{endpoint}:{max_req}:{window}"
+    key = f"{client_ip}:{matched_prefix}:{max_req}:{window}"
     now = time.time()
 
     with _limiters_lock:

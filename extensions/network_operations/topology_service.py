@@ -578,11 +578,8 @@ def patch_topology(workspace_id: str, topology_id: str, payload: dict[str, Any])
             update["device_type"] = str(update.get("type") or update.get("role")).strip()
         if any(key in update for key in ("zone", "group_id", "group")):
             raise ValueError("topology_legacy_region_fields_use_region_id")
-        if "ip" in update and update["ip"] is not None:
-            try:
-                _normalize_node_ip(update["ip"])
-            except ValueError:
-                update["ip"] = None
+        if "ip" in update:
+            update["ip"] = _normalize_node_ip(update["ip"])
         nodes_by_id[node_id] = {**nodes_by_id.get(node_id, {}), **update, "node_id": node_id}
 
     # A fixed-link group has the same displacement semantics as a manual drag.

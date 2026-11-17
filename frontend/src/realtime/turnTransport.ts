@@ -44,6 +44,8 @@ interface LiveTurn {
   acked?: boolean;
   /** 本回合由 sendMessage 发起（首发 message），而不是 resumeTurn 接上。 */
   sentMessage?: boolean;
+  /** 连接尚未 OPEN 时待首次发送的 message 帧（发送一次后立即清除，绝不随重连重放）。 */
+  pendingFrame?: Frame;
   resumeRetries?: number;
   handlers: TurnHandlers;
 }
@@ -100,9 +102,15 @@ export class TurnTransport {
       this.retryDelay = 250;
       this.stopReadback();
       this.registerBroadcasts();
-      // 只续传，不重放：对每个未终结的回合发 resume。
+      // 首发仅发送一次 pendingFrame；已发过的未终结回合只发 resume，绝不重放 message。
       for (const t of this.turns.values()) {
         if (t.terminal) continue;
+        if (t.pendingFrame) {
+          const frame = t.pendingFrame;
+          delete t.pendingFrame;
+          this.raw(frame);
+          continue;
+        }
         this.raw({ type: "resume", workspace_id: t.workspaceId, session_id: t.sessionId, client_request_id: t.clientRequestId, stream_seq: t.cursor });
         t.handlers.onTransport("resumed");
       }
@@ -256,20 +264,7 @@ export class TurnTransport {
     };
     const ws = this.ensureSocket();
     if (ws.readyState === OPEN) this.raw(frame);
-    else {
-      const prevOpen = ws.onopen;
-      // 首次连接：在 open 时发送 message（这是首发，不是重放）。
-      ws.onopen = (ev) => {
-        ws.onopen = prevOpen;
-        this.registerBroadcasts();
-        this.raw(frame);
-        this.retryDelay = 250;
-        for (const t of this.turns.values()) if (!t.terminal && t.clientRequestId !== turn.clientRequestId) {
-          this.raw({ type: "resume", workspace_id: t.workspaceId, session_id: t.sessionId, client_request_id: t.clientRequestId, stream_seq: t.cursor });
-        }
-        void ev;
-      };
-    }
+    else turn.pendingFrame = frame;
     return turn.clientRequestId;
   }
 

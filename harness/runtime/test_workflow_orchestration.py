@@ -31,6 +31,46 @@ def _write_workflow(monkeypatch, tmp_path, invoke, *, nodes=None):
     return service
 
 
+@pytest.mark.parametrize("fence", ["run", "job", "lease"])
+def test_workflow_stops_write_nodes_and_runtime_after_execution_fence(monkeypatch, tmp_path, fence):
+    import threading
+    from jobs.schemas import JobRecord
+    from jobs.store import create_job, update_job
+    from jobs.worker import bind_lease_lost, reset_lease_lost
+
+    seen = []
+    lease_lost = threading.Event()
+
+    def invoke(arguments, context):
+        seen.append(arguments["node"])
+        assert context.cancel_check() is False
+        if fence == "run":
+            service.reconcile_interrupted_runs("default", "9999", "9999")
+        elif fence == "job":
+            update_job("default", job.job_id, {"status": "failed"})
+        else:
+            lease_lost.set()
+        assert context.cancel_check() is True
+
+    nodes = [
+        {"node_id": name, "tool_id": "synthetic.write", "arguments": {"node": name},
+         "depends_on": ["b"] if name == "c" else []}
+        for name in ("a", "b", "c")
+    ]
+    service = _write_workflow(monkeypatch, tmp_path, invoke, nodes=nodes)
+    job = create_job(JobRecord(job_type="workflow_run", status="running"))
+    token = bind_lease_lost(lease_lost)
+    try:
+        result = service.execute_workflow("default", "write_graph", job_id=job.job_id)
+    finally:
+        reset_lease_lost(token)
+    assert seen == ["a"]
+    assert result["status"] == "failed"
+    assert result["execution_outcome"] == "unknown"
+    assert result["recovery_required"] is True
+    assert service.get_run("default", result["run_id"]) == result
+
+
 @pytest.mark.parametrize("latest_status", ["running", "succeeded", "completed", "failed", "cancelled"])
 def test_cancel_workflow_reads_latest_evidence_inside_run_lock(monkeypatch, tmp_path, latest_status):
     from copy import deepcopy
