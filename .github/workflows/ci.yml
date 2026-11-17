@@ -225,6 +225,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.full == true
     runs-on: ubuntu-latest
     env:
+      LZCORE_PYTHON_PACKAGE_INDEX_URL: https://pypi.org/simple
       POSTGRES_PASSWORD: integration-password
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: integration-password

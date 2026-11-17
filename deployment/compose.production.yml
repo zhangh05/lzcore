@@ -37,6 +37,8 @@ services:
     build:
       context: ..
       dockerfile: deployment/backend.Dockerfile
+      args:
+        PYTHON_PACKAGE_INDEX_URL: ${LZCORE_PYTHON_PACKAGE_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}
     restart: unless-stopped
     environment: *backend-environment
     volumes:
@@ -71,6 +73,8 @@ services:
     build:
       context: ..
       dockerfile: deployment/backend.Dockerfile
+      args:
+        PYTHON_PACKAGE_INDEX_URL: ${LZCORE_PYTHON_PACKAGE_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}
     restart: unless-stopped
     command: ["python", "-c", "from jobs.worker import start_worker; start_worker()"]
     environment:
