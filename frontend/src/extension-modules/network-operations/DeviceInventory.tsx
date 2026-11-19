@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
-import { bodyOf } from "../../api/client";
+import { api, bodyOf, isOk } from "../../api/client";
+import { useOptionalShell } from "../../app/shellContext";
+import { workbookFromRows, type SheetSummary } from "../../pages/sheets/sheetsApi";
+import { useNavigate } from "../../router";
 import { Button } from "../../components/Button";
-import { IconPlus, IconRefresh, IconServer, IconShield, IconTrash, IconEdit, IconLink, IconCheckCircle } from "../../components/Icon";
+import { IconPlus, IconRefresh, IconServer, IconShield, IconTrash, IconEdit, IconLink, IconCheckCircle, IconSheet } from "../../components/Icon";
 import type { HttpOutcome } from "../../contracts/auth";
 import type { Loadable } from "../../kit/useApi";
 import { Chip, ConfirmDialog, FailureNote, JsonBlock, KeyValues, LoadState, fmtTime } from "../../kit/ui";
@@ -50,6 +53,28 @@ export function DeviceInventory({ ws, devices, devicesState, reloadDevices, conn
   });
   const counts = { all: devices.length, warn: devices.filter((d) => ["warn", "none"].includes(health(d))).length, untested: devices.filter((d) => health(d) === "neutral").length };
   const selected = devices.find((d) => d.device_id === selectedId) ?? visible[0] ?? devices[0] ?? null;
+  const shell = useOptionalShell();
+  const navigate = useNavigate();
+  const [exporting, setExporting] = useState(false);
+  const [exportFailure, setExportFailure] = useState<HttpOutcome | null>(null);
+
+  /** 把当前筛选出的台账复制成一张自由表格（单向复制，表格里的修改不会改动台账）。 */
+  async function exportToSheet() {
+    setExporting(true); setExportFailure(null);
+    const stamp = new Date().toLocaleDateString("zh-CN");
+    const name = `设备台账 ${stamp}`;
+    const rows = visible.map((d) => {
+      const conns = byDevice.get(d.device_id) ?? [];
+      return [d.name ?? d.device_id, d.host ?? "", VENDOR_ZH[d.vendor ?? ""] ?? d.vendor ?? "", d.device_model ?? "",
+        ROLE_ZH[d.device_type ?? ""] ?? d.device_type ?? "", regionName(d.region_id), conns.length, HEALTH_LABEL[health(d)]];
+    });
+    const workbook = workbookFromRows(name, "设备", ["名称", "管理地址", "厂商", "型号", "角色", "区域", "连接数", "连接健康"], rows);
+    const o = await api.post("/api/spreadsheets", { workspace_id: ws, name, workbook });
+    setExporting(false);
+    const sheet = bodyOf<{ spreadsheet?: SheetSummary }>(o)?.spreadsheet;
+    if (!isOk(o) || !sheet) { setExportFailure(o); return; }
+    navigate(shell ? shell.hrefFor(`/sheets/${enc(sheet.spreadsheet_id)}`) : `/sheets/${enc(sheet.spreadsheet_id)}?ws=${enc(ws)}`);
+  }
 
   return (
     <div className="inv" data-testid="net-devices">
@@ -59,10 +84,15 @@ export function DeviceInventory({ ws, devices, devicesState, reloadDevices, conn
           value: k, label, accessory: <span className="tab-count">{counts[k]}</span>,
         }))} />
         <span className="grow" />
+        <Button variant="ghost" onClick={() => void exportToSheet()} disabled={exporting || visible.length === 0} data-testid="devices-to-sheet"
+          title="把当前列表复制成一张表格，可自由增删列和记录；不会改动台账">
+          <IconSheet size={15} aria-hidden="true" />{exporting ? "导出中…" : "导出为表格"}
+        </Button>
         <Button onClick={() => setAddConn(selected?.device_id ?? "")} data-testid="connection-new"><IconLink size={15} aria-hidden="true" />添加连接</Button>
         <Button variant="primary" onClick={() => setEdit("new")} data-testid="device-new"><IconPlus size={15} aria-hidden="true" />登记设备</Button>
       </div>
       {note ? <SavedNote label={note.label} text={note.text} testId={note.testId} /> : null}
+      {exportFailure ? <FailureNote outcome={exportFailure} /> : null}
 
       <LoadState value={devicesState} onReload={reloadDevices}>{() => devices.length === 0 ? (
         <EmptyState title="还没有登记设备" icon={<IconServer size={20} />}

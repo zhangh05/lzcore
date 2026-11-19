@@ -1,10 +1,10 @@
 import {
   IconActivity, IconBackup, IconBook, IconBrain, IconChat, IconChecklist, IconCpu, IconDocument, IconFlow, IconFolder,
-  IconGauge, IconPackage, IconProbe, IconPuzzle, IconSettings, IconSliders, IconSparkle, IconTree, IconUsersRound, IconWorkspace,
+  IconGauge, IconPackage, IconProbe, IconPuzzle, IconSettings, IconSheet, IconSliders, IconSparkle, IconTree, IconUsersRound, IconWorkspace,
 } from "./Icon";
 
 const MAP = {
-  chat: IconChat, checklist: IconChecklist, folder: IconFolder, document: IconDocument,
+  chat: IconChat, checklist: IconChecklist, sheet: IconSheet, folder: IconFolder, document: IconDocument,
   book: IconBook, brain: IconBrain, flow: IconFlow, settings: IconSettings, gauge: IconGauge,
   probe: IconProbe, puzzle: IconPuzzle, activity: IconActivity, sliders: IconSliders, users: IconUsersRound,
   workspace: IconWorkspace, backup: IconBackup, package: IconPackage, cpu: IconCpu, spark: IconSparkle, sparkle: IconSparkle, network: IconTree, topology: IconTree,

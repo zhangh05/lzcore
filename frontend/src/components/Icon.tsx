@@ -99,4 +99,7 @@ export {
   Puzzle as IconPuzzle,
   Inbox as IconInbox,
   Command as IconCommand,
+  Upload as IconUpload,
+  ArrowLeft as IconArrowLeft,
+  FileSpreadsheet as IconSheet,
 } from "lucide-react";

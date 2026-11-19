@@ -18,6 +18,7 @@ export const NAMES = {
   knowledge: "知识",
   memory: "记忆",
   workflows: "工作流",
+  sheets: "表格",
   extensions: "扩展区",
   system: "系统",
   systemStatus: "系统状态",
@@ -72,6 +73,7 @@ export const CORE_NAV_BEFORE_EXTENSIONS: readonly NavSection[] = [
       { key: "memory", label: NAMES.memory, path: "/library/memory", icon: "brain" },
     ],
   },
+  { key: "sheets", label: NAMES.sheets, path: "/sheets", icon: "sheet" },
   { key: "workflows", label: NAMES.workflows, path: "/workflows", icon: "flow" },
 ];
 

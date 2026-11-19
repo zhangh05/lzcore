@@ -421,6 +421,11 @@ def _handle_report(inv: ToolInvocation) -> dict:
     return _unsupported(inv, "save|diff|document")
 
 
+def _handle_spreadsheet(inv: ToolInvocation) -> dict:
+    from core.tools.general_tools.spreadsheet_tools import handle_spreadsheet
+    return handle_spreadsheet(inv)
+
+
 def _handle_knowledge(inv: ToolInvocation) -> dict:
     from core.tools.general_tools.runtime_tools import (
         handle_knowledge_get_chunk_summary,
@@ -1100,6 +1105,16 @@ _RAW_REGISTRY: list[CanonicalToolEntry] = [
         "text_a": {"type": "string", "description": "Required for diff: original text; empty text is valid."},
         "text_b": {"type": "string", "description": "Required for diff: revised text; empty text is valid."},
     }, required=["action"], description="Report text operations: save persists content as a report artifact; diff compares text_a/text_b; document formats summary as Markdown without saving or generating a binary document."),
+    _entry("spreadsheet.manage", _handle_spreadsheet, {
+        **_COMMON, "action": {"type": "string", "enum": ["list", "read", "create", "write", "append_rows", "add_sheet"]},
+        "spreadsheet_id": {"type": "string", "description": "Required except for list/create; from list or create."},
+        "name": {"type": "string", "description": "create: spreadsheet name. add_sheet: new sheet name."},
+        "sheet": {"type": "string", "description": "Sheet name; defaults to the first sheet. create: name of the first sheet."},
+        "range": {"type": "string", "description": "read: A1 range such as A1:D20; defaults to the used range (at most 5000 cells)."},
+        "start_cell": {"type": "string", "description": "write/create: top-left A1 cell for values; default A1."},
+        "values": {"type": "array", "items": {"type": "array", "items": {}}, "description": "2D array of rows. Numbers/booleans stay typed; strings starting with = are formulas; null clears a cell."},
+        "base_revision": {"type": "integer", "minimum": 0, "description": "Optional optimistic lock from read; a newer saved revision rejects the write."},
+    }, required=["action"], risk="medium", description="Free-form workspace spreadsheets shown in the 表格 page (Excel-like workbooks the user also edits). list discovers spreadsheets; read returns values and formulas for a sheet range plus revision; create makes a spreadsheet optionally seeded with values; write overwrites a rectangular block from start_cell; append_rows appends rows after the last used row; add_sheet adds a sheet. Formula results are computed when the spreadsheet is opened in the editor, so freshly written formulas read back without values. Keeps cell styles; does not delete spreadsheets."),
     _entry("knowledge.manage", _handle_knowledge, {
         **_COMMON, "action": {"type": "string", "enum": ["search", "read", "list", "chunk", "import", "reindex"]},
         "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 200},
@@ -1313,6 +1328,14 @@ _REFERENCEABLE_OUTPUTS: dict[str, dict[str, list[str]]] = {
         "session_get": ["session_id", "title", "message_count"],
         "session_export": ["format", "export"],
         "session_snapshot": ["snapshot_id"], "session_checkpoint": ["checkpoint_id"],
+    },
+    "spreadsheet.manage": {
+        "list": ["spreadsheets", "count"],
+        "read": ["spreadsheet_id", "revision", "sheet", "range", "values", "formulas", "truncated"],
+        "create": ["spreadsheet_id", "revision", "written_range"],
+        "write": ["spreadsheet_id", "revision", "written_range"],
+        "append_rows": ["spreadsheet_id", "revision", "written_range"],
+        "add_sheet": ["spreadsheet_id", "revision", "added_sheet"],
     },
     "text.analyze": {
         "redact": ["redacted", "original_length"],

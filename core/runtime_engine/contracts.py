@@ -101,6 +101,16 @@ BUILTIN_CONTRACTS: dict[str, ToolContract] = {
         idempotent=True,
         timeout_seconds=60,
     ),
+    "spreadsheet.manage": ToolContract(
+        name="spreadsheet.manage",
+        display_name="Spreadsheet",
+        description="List, read, create and edit workspace spreadsheets.",
+        input_schema={"required": ["action"], "properties": {"action": {"type": "string"}}},
+        side_effect="write_file",
+        risk_level="medium",
+        idempotent=False,
+        timeout_seconds=30,
+    ),
     "knowledge.manage": ToolContract(
         name="knowledge.manage",
         display_name="Knowledge",

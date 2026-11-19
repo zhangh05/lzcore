@@ -8,6 +8,7 @@
 | --- | --- |
 | 工作台 | /workbench |
 | 任务 | /tasks |
+| 表格（列表、编辑） | /sheets、/sheets/<spreadsheet_id> |
 | 文件、知识、记忆 | /library/files、/library/knowledge、/library/memory |
 | 工作流 | /workflows |
 | 扩展目录 | /extensions |
@@ -17,6 +18,8 @@
 | 系统状态与设置 | /system、/system/settings |
 | 身份与工作区 | /system/users、/system/workspaces |
 | 备份、生态与 worker | /system/backups、/system/ecosystem、/system/workers |
+
+表格页（`pages/sheets/`）是可自由增删行列的 Excel 式工作簿，编辑器用 Univer（`@univerjs/preset-sheets-*` 1.3.1，Apache-2.0；Arc UI 没有电子表格组件），在 `UniverSheet.tsx` 里按需加载成独立分包。Univer 实例只在挂载时创建一次，父组件的保存状态变化不会让它重渲染；只有 `sheet.` 开头、非 `onlyLocal` 的 mutation 计为修改。修改停顿 1.2 秒后带 `base_revision` 自动保存；服务端返回 409 时停止自动保存，让用户选「载入最新版本」或「用我的版本覆盖」。没有本地修改时每 4 秒查一次版本号，智能体（`spreadsheet.manage`）或其他窗口写入后自动载入。列表页可选择或拖入 .xlsx/.csv 导入，导出走带本地令牌的请求再交给浏览器保存。viewer 角色只读。网络设备页的「导出为表格」把当前筛选的台账复制成一张新表格，是单向复制。
 
 网络扩展 UI 通过 `frontend/src/extension-modules/registry.tsx` 挂载。设备、连接、Skill 与图纸仍由扩展后端管理，前端不能授予权限。网络扩展的当前产品 UI 在 frontend/src/extension-modules/network-operations；旧版扩展前端已删除，清单里的 `frontend_modules` 只作为路由标识。三个入口来自扩展清单的三条 `frontend_routes`，互相独立，挂同一模块按挂载路径分派；旧深链 `/manage?tab=topologies` 跳到 `/topology`（保留 `topology`、`node`），`/manage?tab=skills|scripts` 跳到 `/skills`。改清单后需重启后端（扩展清单有缓存）。
 
@@ -28,7 +31,7 @@
 
 ## 版式
 
-- 主导航按「做事（工作台、任务、工作流）→ 资料（文件、知识、记忆）→ 扩展区 → 系统」分组平铺，每个入口常显，不靠展开子级寻找；可收起为图标栏（偏好存 `lzcore-next:nav-collapsed`）。资料的分类只在导航里，页内不再重复分类页签。
+- 主导航按「做事（工作台、任务、表格、工作流）→ 资料（文件、知识、记忆）→ 扩展区 → 系统」分组平铺，每个入口常显，不靠展开子级寻找；可收起为图标栏（偏好存 `lzcore-next:nav-collapsed`）。资料的分类只在导航里，页内不再重复分类页签。
 - 顶栏：工作区切换 │ 面包屑（`app/Breadcrumb.tsx`，从导航表与扩展目录推出「一级入口 › 子页」）… 命令入口、账户。不提供全局「待核对」收件箱；任务和工作台的「去核对」深链到 `/review?source=&id=` 的单条核对面板。
 - 页头：标题 + 一句面向用户的说明，页面级主操作放在页头右侧；单独一个主按钮的操作行靠右。
 - 系统等多子页入口用 `app/SystemLayout.tsx`：主导航只占一项，子页导航在页内左栏（非管理员看不到管理页），窄屏变为横向滚动条。

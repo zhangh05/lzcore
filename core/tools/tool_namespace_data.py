@@ -97,6 +97,12 @@ NS_DATA = [
         'report.manage',
     ),
     (
+        'spreadsheet.manage', 'data', 'spreadsheet', 'multi', '表格', 'spreadsheet.manage',
+        'Read or edit the free-form workspace spreadsheets the user keeps in the 表格 page: list, read a range, create, write a block, append rows or add a sheet. Read before writing and pass base_revision so concurrent edits by the user are not overwritten.',
+        'Use data.manage to compute over table text, workspace.filestore for uploaded .xlsx files that are not spreadsheets, and the user interface for formatting and deletion.',
+        'spreadsheet.manage',
+    ),
+    (
         'knowledge.manage', 'knowledge', 'kb', 'multi', '知识库', 'knowledge.manage',
         'Retrieve or index workspace knowledge sources and chunks. Search discovers supporting chunks; read verifies content and source identity. Indexed knowledge can be stale.',
         'Use memory.manage for preferences and reusable personal facts, web.manage for fresh public evidence, and workspace.file for unindexed source paths. Import requires an existing artifact_id.',

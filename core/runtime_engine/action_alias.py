@@ -147,6 +147,12 @@ CANONICAL_ALIASES_BY_TOOL: Final[dict[str, dict[str, tuple[str, str | None]]]] =
         "save_report": ("save", None),
     },
 
+    "spreadsheet.manage": {
+        "read_range": ("read", None),
+        "append": ("append_rows", None),
+        "update": ("write", None),
+    },
+
     "text.analyze": {
         "extract": ("extract_entities", None),
     },

@@ -537,4 +537,26 @@
   .sheet .probe { margin-top: 0; }
   @media (max-width: 760px) { .model-hero { padding: var(--space-4); } .model-hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (prefers-reduced-motion: reduce) { .live-indicator.is-ok, .probe-pulse, .probe { animation: none; } }
+
+  /* ── 表格：列表（可拖入导入）与 Univer 编辑页 ─────────────────────── */
+  .sheets-page { position: relative; }
+  .sheets-page.is-dragging .table-wrap, .sheets-page.is-dragging .table-empty { opacity: .4; }
+  .sheets-drop { position: absolute; inset: var(--space-4); display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: var(--r-card); background: var(--accent-soft); color: var(--accent); font-size: var(--fs-16); font-weight: var(--weight-heading); pointer-events: none; z-index: 2; }
+  .sheets-empty { padding: var(--space-6) 0; color: var(--text-3); }
+  .sheets-name { font-weight: var(--weight-label); color: var(--text); }
+  .sheets-page .sheets-col-name { min-width: 10em; }
+  .sheets-page .sheets-col-actions .row-actions { flex-wrap: nowrap; }
+  @media (max-width: 760px) { .sheets-page .sheets-col-tabs { display: none; } }
+  .wb-editor { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: var(--space-3) var(--space-4) var(--space-4); }
+  .wb-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-3); }
+  .wb-back { gap: var(--space-1); }
+  .wb-title { margin: 0; min-width: 0; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-display); font-size: var(--fs-16); font-weight: var(--weight-heading); }
+  .wb-status { color: var(--text-3); font-size: var(--fs-xs); }
+  .wb-status.is-dirty, .wb-status.is-saving { color: var(--text-2); }
+  .wb-status.is-conflict, .wb-status.is-failed { color: var(--warn); }
+  .wb-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .wb-failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .wb-canvas { position: relative; flex: 1 1 auto; min-height: 480px; border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; background: var(--surface); }
+  .univer-host, .univer-root { position: absolute; inset: 0; }
+  @media (max-width: 760px) { .wb-editor { padding: var(--space-2); } .wb-canvas { min-height: 70vh; } }
 }
