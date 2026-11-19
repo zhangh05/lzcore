@@ -26,6 +26,11 @@ ACTION_REQUIRED_ALL: dict[tuple[str, str], tuple[str, ...]] = {
     ("location.manage", "resolve"): ("query",),
     ("location.manage", "resolve_batch"): ("queries",),
     ("location.manage", "reverse"): ("latitude", "longitude"),
+    ("spreadsheet.manage", "read"): ("spreadsheet_id",),
+    ("spreadsheet.manage", "create"): ("name",),
+    ("spreadsheet.manage", "write"): ("spreadsheet_id", "values"),
+    ("spreadsheet.manage", "append_rows"): ("spreadsheet_id", "values"),
+    ("spreadsheet.manage", "add_sheet"): ("spreadsheet_id", "name"),
     ("data.manage", "distinct"): ("column",),
     ("data.manage", "filter"): ("conditions",),
     ("data.manage", "sort"): ("by",),
@@ -244,6 +249,8 @@ ACTION_EXECUTION_CONTRACTS.update(_contracts(
     "skill.manage", ("list", "find", "load", "inspect", "mcp_list_tools"), _READ,
 ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("skill.manage", ("mcp_call",), _EXECUTE))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("spreadsheet.manage", ("list", "read"), _READ))
+ACTION_EXECUTION_CONTRACTS.update(_contracts("spreadsheet.manage", ("create", "write", "append_rows", "add_sheet"), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("report.manage", ("diff", "document"), _READ))
 ACTION_EXECUTION_CONTRACTS.update(_contracts("report.manage", ("save",), _WRITE))
 ACTION_EXECUTION_CONTRACTS.update(_contracts(

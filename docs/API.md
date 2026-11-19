@@ -188,6 +188,17 @@ included. The field is optional for records produced by older versions.
 | `PUT` | `/api/review-items/<item_id>` | Update a review item. |
 | `GET/POST` | `/api/workspaces/<ws_id>/review-items` | Workspace review-item lifecycle. |
 
+### 表格
+
+Free-form workspace workbooks edited in the 表格 page and by `spreadsheet.manage`. The record stores the editor's workbook snapshot (Univer `IWorkbookData`) with `revision`; every write increments it. Viewers can read; writes need workspace write access.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET/POST` | `/api/spreadsheets` | List summaries (no workbook) or create `{workspace_id, name, workbook?}`; a blank one-sheet workbook is used when omitted. |
+| `POST` | `/api/spreadsheets/import` | Multipart `workspace_id`, `file` (.xlsx/.xlsm/.csv/.tsv, at most 30 MB) and optional `name`; converts values, formulas, number formats, fonts, fills, alignment, borders, merges, column widths, row heights and frozen panes. |
+| `GET/PUT/PATCH/DELETE` | `/api/spreadsheets/<spreadsheet_id>` | GET returns the workbook (`summary=1` omits it); PUT saves `{workbook, base_revision}` and returns 409 `spreadsheet_revision_conflict` with `current_revision` when stale; PATCH renames `{name}`; DELETE requires `confirm: "delete"` and is permanent. |
+| `GET` | `/api/spreadsheets/<spreadsheet_id>/export` | Download `format=xlsx` (whole workbook) or `format=csv` (one `sheet`, UTF-8 with BOM). Charts, images, comments, conditional formats and data validation are not exported. |
+
 Artifact hard deletion removes the artifact's live references from both run records
 (`artifact_refs`) and run artifact indexes before removing its metadata. Execution
 summaries and traces remain as history. Missing references left by older versions

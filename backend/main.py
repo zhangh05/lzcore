@@ -53,6 +53,7 @@ from backend.api.identity_routes import register_identity_routes
 from backend.api.extension_routes import register_extensions
 from backend.api.admin_routes import register_admin_routes
 from backend.api.workflow_routes import register_workflow_routes
+from backend.api.spreadsheet_routes import register_spreadsheet_routes
 from backend.core.settings import UNIFIED_PORT, API_MODE, BUILD_COMMIT
 from backend.core.rate_limit import rate_limit_middleware
 from storage.ids import validate_workspace_id
@@ -405,6 +406,7 @@ def create_app():
     register_admin_routes(app)     # /api/admin/production and verified backups
     register_identity_routes(app)  # /api/identity users, organizations, memberships
     register_workflow_routes(app)  # /api/workflows cross-extension DAG orchestration
+    register_spreadsheet_routes(app)  # /api/spreadsheets free-form workspace workbooks
 
     # Reconcile durable jobs/subagent tasks that were running when a previous
     # backend process stopped. Domain modules can register their own startup

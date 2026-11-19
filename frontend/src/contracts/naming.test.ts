@@ -5,7 +5,7 @@ const allCore = [...CORE_NAV_BEFORE_EXTENSIONS, ...CORE_NAV_AFTER_EXTENSIONS].fl
 
 describe("命名表", () => {
   it("一级导航顺序与名称固定", () => {
-    expect(CORE_NAV_BEFORE_EXTENSIONS.map((s) => s.label)).toEqual(["工作台", "任务", "资料", "工作流"]);
+    expect(CORE_NAV_BEFORE_EXTENSIONS.map((s) => s.label)).toEqual(["工作台", "任务", "资料", "表格", "工作流"]);
     expect(CORE_NAV_AFTER_EXTENSIONS.map((s) => s.label)).toEqual(["系统"]);
     expect(CORE_NAV_BEFORE_EXTENSIONS.find((s) => s.key === "library")?.children?.map((c) => c.label)).toEqual(["文件", "知识", "记忆"]);
   });

@@ -42,7 +42,7 @@ TaskState 负责服务端任务控制；execution_outcome 表示用户目标，t
 | --- | --- | --- |
 | 执行与委派 | agent.manage、exec.run、browser.manage | 独立任务、受控脚本和浏览器交互 |
 | 研究与定位 | web.manage、location.manage | 搜索/抓取、天气、地理编码 |
-| 结构化处理 | data.manage、text.analyze | 解析、合并、计算、脱敏与匹配 |
+| 结构化处理 | data.manage、text.analyze、spreadsheet.manage | 解析、合并、计算、脱敏与匹配；读写工作区表格 |
 | 工作区 | workspace.metadata.get、workspace.file、workspace.filestore、workspace.artifact | 身份、文件、托管引用和制品 |
 | 文档 | workspace.document.pdf.extract_text、report.manage | PDF 提取和报告产出 |
 | 知识与规则 | knowledge.manage、memory.manage、skill.manage | 检索、受治理记忆和 Skill/MCP |

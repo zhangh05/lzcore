@@ -2,6 +2,8 @@ import { ExtensionRoutePage, ExtensionsOverview } from "../pages/ExtensionPages"
 import { LibraryPage } from "../pages/library/LibraryPage";
 import { Placeholder } from "../pages/Placeholder";
 import { ReviewPage } from "../pages/ReviewPage";
+import { SheetEditorPage } from "../pages/sheets/SheetEditorPage";
+import { SheetsPage } from "../pages/sheets/SheetsPage";
 import { BackupsPage, EcosystemPage, SettingsPage, SystemStatusPage, UsersPage, WorkersPage, WorkspacesAdminPage } from "../pages/system/SystemPages";
 import { TasksPage } from "../pages/tasks/TasksPage";
 import { Workbench } from "../pages/workbench/Workbench";
@@ -18,6 +20,8 @@ export function RouteView() {
   if (pathname === "/workbench") return <Workbench />;
   if (pathname === "/tasks") return <TasksPage />;
   if (pathname === "/library" || pathname === "/library/files" || pathname === "/library/knowledge" || pathname === "/library/memory") return <LibraryPage />;
+  if (pathname === "/sheets") return <SheetsPage />;
+  if (pathname.startsWith("/sheets/")) return <SheetEditorPage spreadsheetId={decodeURIComponent(pathname.slice("/sheets/".length))} />;
   if (pathname === "/workflows") return <WorkflowsPage />;
   if (pathname === "/system") return <SystemLayout><SystemStatusPage /></SystemLayout>;
   if (pathname === "/system/settings") return <SystemLayout><SettingsPage /></SystemLayout>;

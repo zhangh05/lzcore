@@ -215,6 +215,20 @@
       },
       "options": { "action": { "save": "保存报告", "diff": "对比两段文本", "document": "生成文档文本" } }
     },
+    "spreadsheet.manage": {
+      "label": "表格",
+      "params": {
+        "spreadsheet_id": { "label": "表格 ID", "hint": "除列出和新建外必填，可从列出或新建的结果中获得。" },
+        "name": { "hint": "新建时是表格名称；添加工作表时是新工作表的名称。" },
+        "sheet": { "label": "工作表", "hint": "工作表名称，默认第一个工作表；新建时作为第一个工作表的名称。" },
+        "range": { "label": "范围", "hint": "读取范围，如 A1:D20；不填则读取已使用区域，最多 5000 个单元格。" },
+        "start_cell": { "label": "起始单元格", "hint": "写入的左上角单元格，默认 A1。" },
+        "values": { "hint": "按行排列的二维数组；以 = 开头的文本是公式，空值会清空单元格。" },
+        "base_revision": { "label": "基准版本", "hint": "读取时得到的版本号；表格在此之后被改过时拒绝写入。" },
+        "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" }
+      },
+      "options": { "action": { "list": "列出表格", "read": "读取", "create": "新建表格", "write": "写入单元格", "append_rows": "追加行", "add_sheet": "添加工作表" } }
+    },
     "skill.manage": {
       "label": "技能",
       "params": { "workspace_id": { "hint": "当前工作区，通常由系统自动填写。" } },

@@ -145,6 +145,17 @@ MANIFESTS: dict[str, CapabilityManifest] = {
         idempotency="unsafe_to_retry",
         timeout_seconds=300,
     ),
+    "spreadsheet.manage": CapabilityManifest(
+        tool_id="spreadsheet.manage",
+        category="data",
+        display_name="Spreadsheet",
+        description="List, read, create, write, append rows to, and add sheets in workspace spreadsheets.",
+        action_class="read",
+        risk_level="medium",
+        side_effects="workspace_by_action",
+        idempotency="unsafe_to_retry",
+        timeout_seconds=30,
+    ),
     "text.analyze": CapabilityManifest(
         tool_id="text.analyze",
         category="text",
